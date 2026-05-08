@@ -10,6 +10,8 @@ import {
   BANK_JOB_POLL_LIMIT_MS,
   BANK_JOB_TOAST_AUTO_CLEAR_MS,
 } from "@/lib/constants";
+import { formatDueRelative } from "@/lib/utils";
+import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
 import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
 import { HomeworkTab } from "@/components/school/teacher/homework-tab";
@@ -32,7 +34,7 @@ type TabKey =
 const TABS: { key: TabKey; label: string }[] = [
   { key: "sections", label: "Sections" },
   { key: "materials", label: "Materials" },
-  { key: "homework", label: "HW" },
+  { key: "homework", label: "Homework" },
   { key: "practice", label: "Practice" },
   { key: "submissions", label: "Submissions" },
   { key: "grades", label: "Grades" },
@@ -240,6 +242,11 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
             <GearIcon />
           </button>
         </div>
+        {/* Course-scoped status pills — same shape as the dashboard
+            so the eye learns the row once. Lets the teacher answer
+            "what's pressing in this course right now" without
+            clicking into the Submissions tab. */}
+        <CourseStatusRow course={course} />
       </motion.div>
 
       <div className="mt-6 flex gap-1 overflow-x-auto border-b border-border-light">
@@ -282,6 +289,33 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
         {tab === "grades" && <GradesTab courseId={course.id} />}
         {tab === "settings" && <SettingsTab course={course} onChanged={reloadCourse} />}
       </div>
+    </div>
+  );
+}
+
+function CourseStatusRow({ course }: { course: TeacherCourse }) {
+  const dueLabel = course.next_due_at ? formatDueRelative(course.next_due_at) : null;
+  const hasWork = course.to_review > 0 || course.flagged > 0;
+  // Suppress the row only when there's truly nothing to say — no work
+  // and no upcoming due date. With either signal present, render a
+  // pill row so the dashboard's gating and this page's gating agree;
+  // a course that's all-caught-up but has work coming up Thursday
+  // should look the same on both screens.
+  if (!hasWork && !dueLabel) return null;
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      {course.to_review > 0 && (
+        <StatusPill tone="amber" label={`${course.to_review} to review`} />
+      )}
+      {course.flagged > 0 && (
+        <StatusPill tone="red" label={`${course.flagged} flagged`} icon="⚑" />
+      )}
+      {!hasWork && (
+        <StatusPill tone="green" label="All caught up" icon="✓" />
+      )}
+      {dueLabel && (
+        <span className="text-xs font-medium text-text-muted">{dueLabel}</span>
+      )}
     </div>
   );
 }
