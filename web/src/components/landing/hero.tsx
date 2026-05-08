@@ -51,7 +51,7 @@ export function Hero() {
         </h1>
         <p className="mx-auto mt-7 max-w-xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
           Veradic measures what students actually understand, drafts the
-          grading, and writes the practice you don&rsquo;t have time to
+          grading, and writes the homework you don&rsquo;t have time to
           make.
         </p>
 
