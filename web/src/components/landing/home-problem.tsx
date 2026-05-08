@@ -70,7 +70,7 @@ export function HomeProblem() {
                   monospace font is loaded. */}
               <span
                 aria-hidden="true"
-                className="mt-0.5 w-7 shrink-0 text-sm font-bold uppercase tracking-[0.16em] text-[color:var(--color-primary-light)]"
+                className="mt-0.5 w-7 shrink-0 text-sm font-bold uppercase tracking-[0.16em] tabular-nums text-[color:var(--color-primary-light)]"
               >
                 {String(i + 1).padStart(2, "0")}
               </span>
