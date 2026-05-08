@@ -34,7 +34,7 @@ export function HomeIntegrity() {
       <div className="mt-14 md:mt-20">
         <IntegrityReviewCard
           studentName="Maya Chen"
-          className="Algebra II · Period 3"
+          periodLabel="Algebra II · Period 3"
           assignmentTitle="Problem set 4 — Trig identities"
           submittedAgo="2 hours ago"
           score={32}

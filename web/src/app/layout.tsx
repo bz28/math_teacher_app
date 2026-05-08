@@ -21,10 +21,16 @@ const inter = Inter({
 // headline size. All three axes must be loaded here so we can write
 // to them via font-variation-settings — an unloaded axis can't be
 // overridden in CSS.
+//
+// Both upright and italic styles are loaded so headlines that use
+// `italic` (e.g. the integrity verdict line) render with Fraunces'
+// real italic face, not the browser's synthesized slant on the
+// roman face.
 const fraunces = Fraunces({
   variable: "--font-fraunces",
   subsets: ["latin"],
   display: "swap",
+  style: ["normal", "italic"],
   axes: ["SOFT", "WONK", "opsz"],
 });
 
