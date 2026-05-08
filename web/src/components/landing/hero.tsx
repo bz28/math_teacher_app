@@ -51,8 +51,8 @@ export function Hero() {
         </h1>
         <p className="mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
           Veradic catches who actually did the work, drafts the grading,
-          and gives every student unlimited practice — so teachers can
-          stop racing the chatbot and get back to teaching.
+          and turns your textbook into endless practice — so teachers
+          can stop racing the chatbot and get back to teaching.
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
