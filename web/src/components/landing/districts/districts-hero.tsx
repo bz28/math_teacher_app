@@ -25,7 +25,7 @@ export function DistrictsHero() {
         </p>
         <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
           <Link
-            href="mailto:support@veradicai.com?subject=DPA%20%2B%20pilot%20info%20%E2%80%94%20[District%20name]"
+            href="mailto:support@veradicai.com?subject=DPA%20%2B%20pilot%20info%20%E2%80%94%20%5BDistrict%20name%5D"
             className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-[color:var(--color-primary)] px-8 text-base font-bold text-white transition-colors hover:bg-[color:var(--color-primary-dark)]"
           >
             Request DPA + pilot info
@@ -42,12 +42,28 @@ export function DistrictsHero() {
               <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
           </Link>
-          <Link
-            href="/safety"
+          {/* Anchor scroll to the in-page compliance grid rather than
+              sending district readers off to /safety — this page
+              already IS the compliance page for districts, so an
+              external link would dilute the funnel. */}
+          <a
+            href="#compliance"
             className="inline-flex h-14 items-center justify-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-8 text-base font-semibold text-[color:var(--color-text-secondary)] transition-colors hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]"
           >
-            Read the safety page
-          </Link>
+            Jump to compliance
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 5v14M5 12l7 7 7-7" />
+            </svg>
+          </a>
         </div>
       </div>
     </Section>

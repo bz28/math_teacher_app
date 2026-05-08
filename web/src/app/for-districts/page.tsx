@@ -8,7 +8,7 @@ import { ComplianceGrid } from "@/components/landing/districts/compliance-grid";
 import { DeploymentTimeline } from "@/components/landing/districts/deployment-timeline";
 import { PilotDataStrip } from "@/components/landing/districts/pilot-data-strip";
 import { PaperworkBlock } from "@/components/landing/districts/paperwork-block";
-import { districtFaqs, SITE_URL } from "@/lib/seo";
+import { districtFaqs, faqJsonLd, SITE_URL } from "@/lib/seo";
 
 export const metadata: Metadata = {
   title: "For school districts — Veradic AI",
@@ -43,6 +43,15 @@ export const metadata: Metadata = {
 export default function ForDistrictsPage() {
   return (
     <>
+      {/* FAQ JSON-LD scoped to the district FAQ set actually rendered
+          on this page — different from the homepage's set, so each
+          page exposes its own structured data. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(faqJsonLd(districtFaqs)),
+        }}
+      />
       <Navbar />
       <main>
         <DistrictsHero />

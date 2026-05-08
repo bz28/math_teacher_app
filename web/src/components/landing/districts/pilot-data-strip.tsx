@@ -25,7 +25,10 @@ export function PilotDataStrip() {
           data here as it lands — with sources, sample sizes, and the
           districts who let us name them.
         </p>
-        <p className="mx-auto mt-6 max-w-xl text-sm italic leading-relaxed text-[color:var(--color-text-muted)]">
+        {/* Closing punchline — uses text-secondary for AA contrast.
+            text-muted on white is only ~2:1, well below the 4.5:1
+            body-text threshold. */}
+        <p className="mx-auto mt-6 max-w-xl text-sm italic leading-relaxed text-[color:var(--color-text-secondary)]">
           We&rsquo;d rather show you nothing than show you fabricated
           numbers.
         </p>

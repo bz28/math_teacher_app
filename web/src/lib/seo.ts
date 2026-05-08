@@ -75,12 +75,15 @@ export const districtFaqs = [
   },
 ];
 
-/** JSON-LD for FAQPage schema */
-export function faqJsonLd() {
+/** JSON-LD for FAQPage schema. Caller passes the FAQ set the page
+ *  actually displays so search engines see the same Q&A the visitor
+ *  reads — different routes (homepage vs. /for-districts) render
+ *  different FAQs and need their own structured data. */
+export function faqJsonLd(items: { question: string; answer: string }[] = faqs) {
   return {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    mainEntity: faqs.map((faq) => ({
+    mainEntity: items.map((faq) => ({
       "@type": "Question",
       name: faq.question,
       acceptedAnswer: {

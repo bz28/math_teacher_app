@@ -16,7 +16,6 @@ const productLinks: LinkItem[] = [
 
 const schoolsLinks: LinkItem[] = [
   { label: "Book a demo", href: "/demo" },
-  { label: "For districts", href: "/for-districts" },
   { label: "Safety", href: "/safety" },
 ];
 
