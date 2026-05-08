@@ -139,8 +139,12 @@ function QuestionBankMock() {
           </div>
         ))}
       </div>
-      <div className="border-t border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] px-4 py-3 text-[11px] font-semibold text-[color:var(--color-primary)]">
-        + Generate 5 more like these
+      {/* Static caption-style row — was reading as a clickable
+          affordance because of the bg + accent color. Demoted to a
+          tracked uppercase footer label so it conveys the capability
+          without inviting a dead click. */}
+      <div className="border-t border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-[color:var(--color-text-muted)]">
+        Generate 5 more like these →
       </div>
     </div>
   );

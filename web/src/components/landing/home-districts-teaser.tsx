@@ -78,7 +78,10 @@ export function HomeDistrictsTeaser() {
         <ul className="rounded-[--radius-lg] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] divide-y divide-[color:var(--color-border-light)]">
           {CHIPS.map((c) => (
             <li key={c.label} className="px-6 py-5">
-              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[color:var(--color-text-muted)]">
+              {/* Label uses text-secondary for AA contrast on the
+                  cream surface — text-muted lands at ~3:1 against
+                  surface-alt, fails small-text contrast. */}
+              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
                 {c.label}
               </div>
               <div className="mt-1 text-sm font-medium leading-relaxed text-[color:var(--color-text)]">
