@@ -1,10 +1,7 @@
 import { Navbar } from "@/components/landing/navbar";
 import { Hero } from "@/components/landing/hero";
-import { Section } from "@/components/landing/section";
-import { Eyebrow } from "@/components/landing/eyebrow";
-import { StepsAnimation } from "@/components/landing/steps-animation";
-import { mathDemo } from "@/components/landing/demos/math-demo";
 import { HomeProblem } from "@/components/landing/home-problem";
+import { HomeIntegrity } from "@/components/landing/home-integrity";
 import { HomeSubjects } from "@/components/landing/home-subjects";
 import { HomeTeachers } from "@/components/landing/home-teachers";
 import { CtaBand } from "@/components/landing/cta-band";
@@ -19,24 +16,9 @@ export default function Home() {
 
         <HomeProblem />
 
-        <HomeTeachers />
+        <HomeIntegrity />
 
-        {/* ── Product demo — proof of what students experience ── */}
-        <Section variant="invert" id="demo">
-          <div className="mx-auto max-w-3xl text-center">
-            <Eyebrow variant="invert">See it in action</Eyebrow>
-            <h2 className="mt-6 text-display-md text-[color:var(--color-invert-text)]">
-              This is what your students see.
-            </h2>
-            <p className="mt-4 text-lg leading-relaxed text-[color:var(--color-invert-text-muted)]">
-              Every problem, broken into steps they can actually follow.
-              One at a time, at their own pace.
-            </p>
-          </div>
-          <div className="mx-auto mt-14 max-w-2xl">
-            <StepsAnimation data={mathDemo} />
-          </div>
-        </Section>
+        <HomeTeachers />
 
         <HomeSubjects />
 
