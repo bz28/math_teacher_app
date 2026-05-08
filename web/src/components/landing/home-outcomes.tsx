@@ -65,7 +65,11 @@ export function HomeOutcomes() {
             key={v.when}
             className="marketing-card rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] p-8"
           >
-            <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-[color:var(--color-primary)]">
+            {/* Tracked uppercase Inter rather than font-mono — no
+                monospace font is loaded via next/font, so font-mono
+                would fall through to a system stack that varies by
+                OS and breaks visual consistency. */}
+            <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-[color:var(--color-primary)]">
               {v.when}
             </div>
             <h3 className="mt-5 text-xl font-bold leading-snug text-[color:var(--color-text)] md:text-2xl">

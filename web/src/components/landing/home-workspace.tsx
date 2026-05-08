@@ -29,45 +29,74 @@ export function HomeWorkspace() {
         </p>
       </div>
 
-      {/* Workflow trio — three framed UI mocks, captioned between.
-          On desktop a horizontal flow with the centerpiece submissions
-          frame slightly enlarged. On mobile, a vertical stack with
-          captions becoming subheaders between frames. */}
+      {/* Workflow trio — three framed UI mocks, captioned. Frames and
+          captions render in two separate aligned grids on desktop so
+          the row of captions stays on a single horizontal baseline,
+          regardless of frame intrinsic heights. On mobile, frames
+          stack with their captions immediately below. */}
       <div className="mt-16 md:mt-20">
-        <div className="grid gap-8 md:grid-cols-[1fr_1.15fr_1fr] md:items-center md:gap-6">
-          <FrameWithCaption caption="The asset you build once.">
-            <QuestionBankMock />
-          </FrameWithCaption>
-          <FrameWithCaption caption="See who did it. See who's flagged." emphasized>
-            <SubmissionsQueueMock />
-          </FrameWithCaption>
-          <FrameWithCaption caption="Glance, override, publish.">
-            <GradingMock />
-          </FrameWithCaption>
+        {/* Desktop: split frame grid + caption grid. */}
+        <div className="hidden md:grid md:grid-cols-[1fr_1.15fr_1fr] md:items-end md:gap-6">
+          <FrameCard><QuestionBankMock /></FrameCard>
+          <FrameCard emphasized><SubmissionsQueueMock /></FrameCard>
+          <FrameCard><GradingMock /></FrameCard>
+        </div>
+        <div className="mt-6 hidden md:grid md:grid-cols-[1fr_1.15fr_1fr] md:gap-6">
+          <FrameCaption>The asset you build once.</FrameCaption>
+          <FrameCaption>See who did it. See who&rsquo;s flagged.</FrameCaption>
+          <FrameCaption>Glance, override, publish.</FrameCaption>
+        </div>
+
+        {/* Mobile: vertical stack, captions attached to their frames. */}
+        <div className="grid gap-10 md:hidden">
+          <div>
+            <FrameCard><QuestionBankMock /></FrameCard>
+            <div className="mt-4">
+              <FrameCaption>The asset you build once.</FrameCaption>
+            </div>
+          </div>
+          <div>
+            <FrameCard emphasized><SubmissionsQueueMock /></FrameCard>
+            <div className="mt-4">
+              <FrameCaption>See who did it. See who&rsquo;s flagged.</FrameCaption>
+            </div>
+          </div>
+          <div>
+            <FrameCard><GradingMock /></FrameCard>
+            <div className="mt-4">
+              <FrameCaption>Glance, override, publish.</FrameCaption>
+            </div>
+          </div>
         </div>
       </div>
     </Section>
   );
 }
 
-function FrameWithCaption({
+function FrameCard({
   children,
-  caption,
   emphasized,
 }: {
   children: React.ReactNode;
-  caption: string;
   emphasized?: boolean;
 }) {
   return (
-    <div className={emphasized ? "md:scale-[1.04]" : ""}>
-      <div className="overflow-hidden rounded-[--radius-lg] border border-[color:var(--color-invert-border)] bg-[color:var(--color-surface)] shadow-[0_20px_50px_-20px_rgba(0,0,0,0.5)]">
+    <div className={emphasized ? "md:scale-[1.03]" : ""}>
+      {/* Shadow uses the brand-green tint at low opacity. Black-on-
+          near-black blends invisibly against the dark inverted bg
+          and undermines the floating-card visual. */}
+      <div className="overflow-hidden rounded-[--radius-lg] border border-[color:var(--color-invert-border)] bg-[color:var(--color-surface)] shadow-[0_24px_60px_-24px_rgba(47,143,102,0.4)]">
         {children}
       </div>
-      <p className="mt-4 text-center text-sm leading-relaxed text-[color:var(--color-invert-text-muted)]">
-        {caption}
-      </p>
     </div>
+  );
+}
+
+function FrameCaption({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-center text-sm leading-relaxed text-[color:var(--color-invert-text-muted)]">
+      {children}
+    </p>
   );
 }
 
@@ -87,11 +116,14 @@ function QuestionBankMock() {
       <MockHeader breadcrumb="Algebra II · HW" title="Trig identities" />
       <div className="divide-y divide-[color:var(--color-border-light)]">
         {questions.map((q, i) => (
-          <div key={i} className="flex items-start gap-3 px-4 py-3">
+          <div key={i} className="flex min-w-0 items-start gap-3 px-4 py-3">
             <span className="mt-0.5 inline-flex shrink-0 rounded-full bg-[color:var(--color-primary-bg)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--color-primary)]">
               {q.chip}
             </span>
-            <span className="truncate text-xs leading-relaxed text-[color:var(--color-text-secondary)]">
+            {/* min-w-0 + flex-1 lets truncate actually take effect on
+                a flex child — without it the span keeps its intrinsic
+                width and overflows the row. */}
+            <span className="min-w-0 flex-1 truncate text-xs leading-relaxed text-[color:var(--color-text-secondary)]">
               {q.body}
             </span>
           </div>
@@ -132,7 +164,7 @@ function SubmissionsQueueMock() {
             key={r.name}
             className="grid grid-cols-[1.6fr_auto_auto] items-center gap-3 px-4 py-2.5"
           >
-            <span className="truncate text-xs font-medium text-[color:var(--color-text)]">
+            <span className="min-w-0 truncate text-xs font-medium text-[color:var(--color-text)]">
               {r.name}
             </span>
             <span className="shrink-0">
@@ -144,11 +176,15 @@ function SubmissionsQueueMock() {
                 </span>
               )}
             </span>
-            <span className="w-12 text-right">
+            <span className="w-14 text-right">
               {r.score === null ? (
                 <span className="text-[10px] text-[color:var(--color-text-muted)]">—</span>
               ) : r.flagged ? (
-                <span className="rounded px-1.5 py-0.5 text-[11px] font-bold text-[color:var(--color-error)]">
+                /* Flagged row uses three signals — icon, bg pill,
+                   and color — so it's distinguishable for users who
+                   can't perceive red as red. */
+                <span className="inline-flex items-center gap-1 rounded bg-[color:var(--color-error-light)] px-1.5 py-0.5 text-[11px] font-bold text-[color:var(--color-error)]">
+                  <FlagIcon />
                   {r.score}%
                 </span>
               ) : (
@@ -272,6 +308,19 @@ function CheckIcon() {
       aria-hidden="true"
     >
       <path d="M5 13l4 4L19 7" />
+    </svg>
+  );
+}
+
+function FlagIcon() {
+  return (
+    <svg
+      className="h-3 w-3"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M4 22V4a1 1 0 0 1 1-1h13l-2 5 2 5H6v9H4z" />
     </svg>
   );
 }

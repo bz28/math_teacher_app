@@ -40,7 +40,7 @@ const CHIPS: Chip[] = [
 
 export function HomeDistrictsTeaser() {
   return (
-    <Section variant="default" id="for-districts">
+    <Section variant="default" id="districts-teaser">
       <div className="mx-auto grid max-w-5xl gap-12 md:grid-cols-[1fr_1.1fr] md:items-center md:gap-16">
         <div>
           <Eyebrow>For district leaders</Eyebrow>
