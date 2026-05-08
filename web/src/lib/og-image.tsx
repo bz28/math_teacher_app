@@ -5,9 +5,9 @@ interface SubjectOgConfig {
   subtitle: string;
   url: string;
   tags: string[];
-  /** Primary color for accents, e.g. "#6C5CE7" */
+  /** Primary color for accents, e.g. "#0E5238" */
   color: string;
-  /** Lighter shade for text/dots, e.g. "#A29BFE" */
+  /** Lighter shade for text/dots, e.g. "#5BC298" */
   colorLight: string;
   /** Background gradient stops: [start, mid, end] */
   bgGradient: [string, string, string];

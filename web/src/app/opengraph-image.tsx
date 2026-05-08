@@ -14,7 +14,7 @@ export default function OpenGraphImage() {
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          background: "linear-gradient(135deg, #1A1630 0%, #0D0C14 60%, #1C1040 100%)",
+          background: "linear-gradient(135deg, #102018 0%, #0D0C14 55%, #0A2418 100%)",
           padding: "60px 80px",
           fontFamily: "Inter, sans-serif",
           position: "relative",
@@ -30,7 +30,7 @@ export default function OpenGraphImage() {
             width: 500,
             height: 500,
             borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(108,92,231,0.25) 0%, transparent 70%)",
+            background: "radial-gradient(circle, rgba(63,166,122,0.28) 0%, transparent 70%)",
             display: "flex",
           }}
         />
@@ -42,7 +42,7 @@ export default function OpenGraphImage() {
             width: 350,
             height: 350,
             borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(162,155,254,0.15) 0%, transparent 70%)",
+            background: "radial-gradient(circle, rgba(91,194,152,0.18) 0%, transparent 70%)",
             display: "flex",
           }}
         />
@@ -54,7 +54,7 @@ export default function OpenGraphImage() {
               width: 56,
               height: 56,
               borderRadius: 14,
-              background: "linear-gradient(135deg, #7C6FF0 0%, #5A4BD1 100%)",
+              background: "linear-gradient(135deg, #1F6B47 0%, #0A3D2A 100%)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -74,10 +74,10 @@ export default function OpenGraphImage() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
-              <circle cx="352" cy="148" r="18" fill="#A29BFE" opacity="0.9" />
+              <circle cx="352" cy="148" r="18" fill="#5BC298" opacity="0.9" />
             </svg>
           </div>
-          <span style={{ color: "#A29BFE", fontSize: 24, fontWeight: 600, letterSpacing: 1.5 }}>
+          <span style={{ color: "#5BC298", fontSize: 24, fontWeight: 600, letterSpacing: 1.5 }}>
             VERADIC AI
           </span>
         </div>
@@ -108,7 +108,7 @@ export default function OpenGraphImage() {
           <div
             style={{
               fontSize: 28,
-              color: "#9B95C5",
+              color: "#9DB5A6",
               lineHeight: 1.5,
               maxWidth: 900,
             }}
@@ -125,17 +125,17 @@ export default function OpenGraphImage() {
             justifyContent: "space-between",
           }}
         >
-          <span style={{ color: "#6C5CE7", fontSize: 20, fontWeight: 600 }}>veradicai.com</span>
+          <span style={{ color: "#5BC298", fontSize: 20, fontWeight: 600 }}>veradicai.com</span>
           <div style={{ display: "flex", gap: 12 }}>
             {["Integrity Checks", "AI Grading", "Endless Practice"].map((tag) => (
               <div
                 key={tag}
                 style={{
-                  background: "rgba(108,92,231,0.15)",
-                  border: "1px solid rgba(108,92,231,0.3)",
+                  background: "rgba(63,166,122,0.15)",
+                  border: "1px solid rgba(63,166,122,0.3)",
                   borderRadius: 100,
                   padding: "8px 20px",
-                  color: "#A29BFE",
+                  color: "#5BC298",
                   fontSize: 15,
                   fontWeight: 500,
                 }}
