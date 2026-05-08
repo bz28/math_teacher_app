@@ -39,9 +39,9 @@ export function HomeIntegrity() {
           submittedAgo="2 hours ago"
           score={32}
           verdict="FLAGGED"
-          headline="Used the double-angle identity correctly but couldn't explain why it applied."
+          headline="Used the double-angle identity correctly but couldn’t explain why it applied."
           evidenceBullets={[
-            "Couldn't recall what step 3 represented when asked.",
+            "Couldn’t recall what step 3 represented when asked.",
             "Said “I think I copied that part” about the substitution.",
           ]}
         />

@@ -2,10 +2,10 @@ import { Section } from "./section";
 import { Eyebrow } from "./eyebrow";
 
 const PAIN_POINTS = [
-  "Wishing you could give every student 1-on-1 time, but there's only one of you.",
-  "Wondering if your class actually got last week's lesson, or just nodded along.",
+  "Wishing you could give every student 1-on-1 time, but there’s only one of you.",
+  "Wondering if your class actually got last week’s lesson, or just nodded along.",
   "Spending Sunday nights building problem sets instead of recharging.",
-  "Staring at a pile of papers that won't grade themselves.",
+  "Staring at a pile of papers that won’t grade themselves.",
 ];
 
 export function HomeProblem() {
