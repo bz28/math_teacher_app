@@ -91,6 +91,124 @@ async def get_teacher_course(db: AsyncSession, course_id: uuid.UUID, teacher_id:
     return course
 
 
+# ─── Attention aggregates ─────────────────────────────────────────────
+#
+# to_review / flagged / next_due_at are surfaced on both the courses
+# list (Monday-morning dashboard) and the per-course detail (course
+# header). The math must mirror the Submissions inbox at
+# teacher_assignments.py:968 so what teachers see on the dashboard
+# always matches what they'd see clicking into the Submissions tab.
+# Defining the case-builders once keeps the two endpoints in lockstep
+# if the inbox semantics ever evolve.
+
+
+def _to_review_case() -> Any:
+    """Counts every submission that isn't published-and-clean —
+    ungraded, graded-but-unpublished, or published-but-dirty (any of
+    score / notes / breakdown drifted from the published snapshot)."""
+    return case(
+        # Ungraded (no SubmissionGrade row → NULL) AND
+        # graded-but-not-published (final_score set, grade_published_at NULL).
+        (SubmissionGrade.grade_published_at.is_(None), 1),
+        # Published but the live draft differs from the published
+        # snapshot — content-based so flipping back to the original
+        # value doesn't wrongly mark it dirty.
+        (
+            and_(
+                SubmissionGrade.grade_published_at.is_not(None),
+                or_(
+                    SubmissionGrade.final_score.is_distinct_from(
+                        SubmissionGrade.published_final_score,
+                    ),
+                    SubmissionGrade.teacher_notes.is_distinct_from(
+                        SubmissionGrade.published_teacher_notes,
+                    ),
+                    SubmissionGrade.breakdown.cast(JSONB).is_distinct_from(
+                        SubmissionGrade.published_breakdown.cast(JSONB),
+                    ),
+                ),
+            ),
+            1,
+        ),
+        else_=0,
+    )
+
+
+def _flagged_case() -> Any:
+    """Counts submissions needing teacher attention from the integrity
+    pipeline — flagged disposition, unreadable extraction, inconclusive
+    complete (turn cap / no sampled problems), or student-raised
+    'reader got something wrong' before confirm."""
+    return case(
+        (IntegrityCheckSubmission.disposition == "flag_for_review", 1),
+        (IntegrityCheckSubmission.status == "skipped_unreadable", 1),
+        (
+            and_(
+                IntegrityCheckSubmission.status == "complete",
+                IntegrityCheckSubmission.disposition.is_(None),
+            ),
+            1,
+        ),
+        (Submission.extraction_flagged_at.is_not(None), 1),
+        else_=0,
+    )
+
+
+async def _course_attention(
+    db: AsyncSession, teacher_id: uuid.UUID, course_id: uuid.UUID,
+) -> dict[str, Any]:
+    """Compute the (to_review, flagged, next_due_at) trio for a single
+    course. Same predicates as the courses list aggregate, narrowed to
+    one course so the course-detail endpoint can render header pills
+    without a second round-trip through the inbox."""
+    counts_row = (await db.execute(
+        select(
+            func.coalesce(func.sum(_to_review_case()).cast(Integer), 0).label("to_review"),
+            func.coalesce(func.sum(_flagged_case()).cast(Integer), 0).label("flagged"),
+        )
+        .select_from(Submission)
+        .join(Assignment, Assignment.id == Submission.assignment_id)
+        .join(User, User.id == Submission.student_id)
+        .join(
+            SectionEnrollment,
+            and_(
+                SectionEnrollment.student_id == Submission.student_id,
+                SectionEnrollment.section_id == Submission.section_id,
+            ),
+        )
+        .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .outerjoin(
+            IntegrityCheckSubmission,
+            IntegrityCheckSubmission.submission_id == Submission.id,
+        )
+        .where(
+            Assignment.course_id == course_id,
+            Assignment.teacher_id == teacher_id,
+            Assignment.type == "homework",
+            Assignment.status == "published",
+            User.is_preview.is_(False),
+        )
+    )).one()
+
+    next_due_at = (await db.execute(
+        select(func.min(Assignment.due_at))
+        .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
+        .where(
+            Assignment.course_id == course_id,
+            Assignment.teacher_id == teacher_id,
+            Assignment.type == "homework",
+            Assignment.status == "published",
+            Assignment.due_at >= func.now(),
+        )
+    )).scalar_one_or_none()
+
+    return {
+        "to_review": counts_row.to_review,
+        "flagged": counts_row.flagged,
+        "next_due_at": next_due_at.isoformat() if next_due_at else None,
+    }
+
+
 @router.post("/courses", status_code=status.HTTP_201_CREATED)
 async def create_course(
     body: CreateCourseRequest,
@@ -129,65 +247,15 @@ async def list_courses(
         .group_by(Unit.course_id).subquery()
     )
 
-    # Per-course attention aggregates: how many submissions still need
-    # teacher action and how many are integrity-flagged. Mirrors the
-    # math used by /courses/{id}/submissions-inbox so the dashboard
-    # counts match what the teacher sees inside the Submissions tab.
-    #
-    # to_review: every submission that isn't published-and-clean —
-    #   ungraded, graded-but-unpublished, or published-but-dirty.
-    # flagged: integrity check raised attention OR student flagged
-    #   the OCR before confirming.
-    to_review_case = case(
-        # Covers ungraded (no SubmissionGrade row → NULL) AND
-        # graded-but-not-published (final_score set, grade_published_at NULL).
-        (SubmissionGrade.grade_published_at.is_(None), 1),
-        # Published but the live draft differs from the published
-        # snapshot — teacher edited the grade and needs to republish.
-        # Content-based (not timestamp) so flipping back to the
-        # original value doesn't wrongly mark it dirty. Same predicate
-        # as the inbox dirty count.
-        (
-            and_(
-                SubmissionGrade.grade_published_at.is_not(None),
-                or_(
-                    SubmissionGrade.final_score.is_distinct_from(
-                        SubmissionGrade.published_final_score,
-                    ),
-                    SubmissionGrade.teacher_notes.is_distinct_from(
-                        SubmissionGrade.published_teacher_notes,
-                    ),
-                    SubmissionGrade.breakdown.cast(JSONB).is_distinct_from(
-                        SubmissionGrade.published_breakdown.cast(JSONB),
-                    ),
-                ),
-            ),
-            1,
-        ),
-        else_=0,
-    )
-    flagged_case = case(
-        (IntegrityCheckSubmission.disposition == "flag_for_review", 1),
-        (IntegrityCheckSubmission.status == "skipped_unreadable", 1),
-        (
-            and_(
-                IntegrityCheckSubmission.status == "complete",
-                IntegrityCheckSubmission.disposition.is_(None),
-            ),
-            1,
-        ),
-        (Submission.extraction_flagged_at.is_not(None), 1),
-        else_=0,
-    )
-
-    # SectionEnrollment guard mirrors the inbox query: if a student
-    # was unenrolled after submitting, drop their submission from
-    # course-level counts so the dashboard never shows phantom work.
+    # Per-course attention aggregates. SectionEnrollment guard mirrors
+    # the inbox query: if a student was unenrolled after submitting,
+    # drop their submission from course-level counts so the dashboard
+    # never shows phantom work.
     attention_counts = (
         select(
             Assignment.course_id.label("course_id"),
-            func.coalesce(func.sum(to_review_case).cast(Integer), 0).label("to_review"),
-            func.coalesce(func.sum(flagged_case).cast(Integer), 0).label("flagged"),
+            func.coalesce(func.sum(_to_review_case()).cast(Integer), 0).label("to_review"),
+            func.coalesce(func.sum(_flagged_case()).cast(Integer), 0).label("flagged"),
         )
         .select_from(Submission)
         .join(Assignment, Assignment.id == Submission.assignment_id)
@@ -275,10 +343,14 @@ async def get_course(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     course = await get_teacher_course(db, course_id, current_user.user_id)
+    attention = await _course_attention(db, current_user.user_id, course_id)
     return {
         "id": str(course.id), "name": course.name, "subject": course.subject,
         "grade_level": course.grade_level, "description": course.description,
         "status": course.status, "created_at": course.created_at.isoformat(),
+        "to_review": attention["to_review"],
+        "flagged": attention["flagged"],
+        "next_due_at": attention["next_due_at"],
     }
 
 
