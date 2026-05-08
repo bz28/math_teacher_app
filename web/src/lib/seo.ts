@@ -34,6 +34,47 @@ export const faqs = [
   },
 ];
 
+/** District-specific FAQ — used on /for-districts. Different audience
+ *  than the homepage FAQ; questions are about procurement, paperwork,
+ *  state laws, and pilot scope rather than classroom workflow. */
+export const districtFaqs = [
+  {
+    question: "What state-specific data privacy laws do you cover?",
+    answer:
+      "We work through any state addendum your district sends us. We've signed agreements covering NY Education Law §2-d, CA SOPIPA, IL SOPPA, and others. If your state has a custom rider, send it; we'll redline it and return within 5 business days.",
+  },
+  {
+    question: "Can we run a pilot with a single classroom first?",
+    answer:
+      "Yes. Most districts start by running one teacher with one class for 4-8 weeks before signing district-wide. We set up the school account, the teacher organizes their course, students join with a 6-character code. After the pilot, you decide whether to expand.",
+  },
+  {
+    question: "What does \"data isolation\" actually mean here?",
+    answer:
+      "Student work, AI conversations, integrity-check transcripts, and grades are scoped to your school account. They are never used to train AI models — ours or any third party's. They are treated as education records under FERPA and remain under your control. You can audit, export, or delete the data at any time.",
+  },
+  {
+    question: "Can we sign our own DPA instead of yours?",
+    answer:
+      "Yes. We don't require districts to use our paperwork; we work through whatever you use. Send us your standard DPA, we sign it. If you have a custom version, we'll redline it.",
+  },
+  {
+    question: "Do you support SSO?",
+    answer:
+      "Veradic uses 6-character join codes by default — no SSO project required. SSO integration (Google Workspace for Education, Clever, ClassLink) is on the roadmap; if it's a hard requirement for your district, tell us in the demo and we'll discuss timeline.",
+  },
+  {
+    question: "What does it cost?",
+    answer:
+      "Pricing is per-student per-year, with district volume tiers and a single-classroom pilot tier. Email us for current rates and a quote scoped to your enrollment.",
+  },
+  {
+    question: "Who runs Veradic?",
+    answer:
+      "Veradic is a small, independent team building classroom AI from first principles. We're not a side project of a larger AI company; what you see is the entire scope of what we ship.",
+  },
+];
+
 /** JSON-LD for FAQPage schema */
 export function faqJsonLd() {
   return {

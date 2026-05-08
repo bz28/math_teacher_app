@@ -13,6 +13,15 @@ export function Navbar() {
         </Link>
 
         <div className="ml-auto flex items-center gap-2 md:gap-3">
+          {/* For-Districts link — gives admins a one-click escape from
+              the teacher-pointed homepage. Hidden on small viewports
+              to keep the bar uncluttered. */}
+          <Link
+            href="/for-districts"
+            className="hidden text-sm font-semibold text-[color:var(--color-text-secondary)] transition-colors hover:text-[color:var(--color-primary)] sm:inline-block"
+          >
+            For Districts
+          </Link>
           <Link
             href="/login"
             className="text-sm font-semibold text-[color:var(--color-text-secondary)] transition-colors hover:text-[color:var(--color-primary)]"
