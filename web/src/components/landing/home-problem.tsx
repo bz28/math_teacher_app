@@ -63,9 +63,14 @@ export function HomeProblem() {
               key={point}
               className="flex items-start gap-6 border-t border-[color:var(--color-invert-border)] py-5 first:border-t-0 first:pt-0"
             >
+              {/* The 01-04 numerals are the visual anchor for the
+                  list. Tracked uppercase Inter at sm (was xs) gives
+                  them slightly more presence on the dark bg without
+                  overpowering the body text. font-mono dropped — no
+                  monospace font is loaded. */}
               <span
                 aria-hidden="true"
-                className="mt-0.5 shrink-0 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--color-primary-light)]"
+                className="mt-0.5 w-7 shrink-0 text-sm font-bold uppercase tracking-[0.16em] tabular-nums text-[color:var(--color-primary-light)]"
               >
                 {String(i + 1).padStart(2, "0")}
               </span>

@@ -347,13 +347,27 @@ html {
   }
 }
 
-/* ── Marketing: subtle hover lift for feature cards ── */
+/* ── Marketing: subtle hover lift for feature cards ──
+   Lifts on Y, sharpens the border to brand primary, and gains a
+   soft green-tinted shadow so the card reads as physically rising
+   off the surface rather than just changing color. */
 .marketing-card {
-  transition: transform 200ms ease, border-color 200ms ease;
+  transition:
+    transform 200ms ease,
+    border-color 200ms ease,
+    box-shadow 200ms ease;
 }
 .marketing-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   border-color: var(--color-primary);
+  box-shadow: 0 12px 32px -16px rgba(14, 82, 56, 0.18);
+}
+@media (prefers-reduced-motion: reduce) {
+  .marketing-card,
+  .marketing-card:hover {
+    transition: none;
+    transform: none;
+  }
 }
 
 /* ── Student dashboard: gentle stagger on card mount ── */

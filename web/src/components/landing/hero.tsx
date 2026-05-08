@@ -4,25 +4,26 @@ import { Eyebrow } from "./eyebrow";
 export function Hero() {
   return (
     <section className="relative flex min-h-[calc(100dvh_-_4rem)] items-center overflow-hidden bg-[color:var(--color-surface)] md:min-h-[calc(100dvh_-_5rem)]">
-      {/* Single ornamental V mark anchored bottom-right, ghosted at ~3%
-          opacity. Replaces the generic blurred gradient orbs from the
-          previous hero — a brand-anchored mark instead of decorative
-          AI-template noise. */}
+      {/* Single ornamental V-mark anchored bottom-right. Brand
+          ornament instead of generic blurred gradient orbs. Sits at
+          ~6% opacity so it's perceptibly present without competing
+          with the headline; the stroke is thinner than a wordmark V
+          to read as a typographic flourish, not a logo. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -bottom-32 -right-16 select-none text-[color:var(--color-primary)] opacity-[0.035] md:-bottom-40 md:-right-8"
+        className="pointer-events-none absolute -bottom-40 -right-20 select-none text-[color:var(--color-primary)] opacity-[0.06] md:-bottom-52 md:-right-12"
       >
         <svg
           width="640"
           height="640"
           viewBox="0 0 512 512"
           fill="none"
-          className="h-[24rem] w-[24rem] md:h-[40rem] md:w-[40rem]"
+          className="h-[26rem] w-[26rem] md:h-[44rem] md:w-[44rem]"
         >
           <path
             d="M120 100 L256 412 L392 100"
             stroke="currentColor"
-            strokeWidth="36"
+            strokeWidth="28"
             strokeLinecap="round"
             strokeLinejoin="round"
           />

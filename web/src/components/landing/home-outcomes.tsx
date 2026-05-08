@@ -63,8 +63,16 @@ export function HomeOutcomes() {
         {VIGNETTES.map((v) => (
           <article
             key={v.when}
-            className="marketing-card rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] p-8"
+            className="marketing-card relative overflow-hidden rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] p-8 pt-9"
           >
+            {/* Thin colored top edge — gives each card a journal-entry
+                feel (like a tabbed file in a folder) rather than a
+                generic feature card. Width and color are deliberately
+                short and brand-anchored, not a full-width band. */}
+            <span
+              aria-hidden="true"
+              className="absolute left-8 top-0 h-1 w-12 rounded-b-full bg-[color:var(--color-primary)]"
+            />
             {/* Tracked uppercase Inter rather than font-mono — no
                 monospace font is loaded via next/font, so font-mono
                 would fall through to a system stack that varies by

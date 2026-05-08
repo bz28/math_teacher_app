@@ -81,11 +81,21 @@ function FrameCard({
   emphasized?: boolean;
 }) {
   return (
-    <div className={emphasized ? "md:scale-[1.03]" : ""}>
+    <div className={emphasized ? "md:scale-[1.04]" : ""}>
       {/* Shadow uses the brand-green tint at low opacity. Black-on-
           near-black blends invisibly against the dark inverted bg
-          and undermines the floating-card visual. */}
-      <div className="overflow-hidden rounded-[--radius-lg] border border-[color:var(--color-invert-border)] bg-[color:var(--color-surface)] shadow-[0_24px_60px_-24px_rgba(47,143,102,0.4)]">
+          and undermines the floating-card visual. The emphasized
+          frame gets a deeper shadow for added presence. Scale stays
+          modest (1.04) — combined with the grid track already at
+          1.15fr, larger scales were overhanging the flanking
+          frames at the md breakpoint. */}
+      <div
+        className={`overflow-hidden rounded-[--radius-lg] border border-[color:var(--color-invert-border)] bg-[color:var(--color-surface)] ${
+          emphasized
+            ? "shadow-[0_36px_80px_-24px_rgba(47,143,102,0.5)]"
+            : "shadow-[0_24px_60px_-24px_rgba(47,143,102,0.4)]"
+        }`}
+      >
         {children}
       </div>
     </div>
