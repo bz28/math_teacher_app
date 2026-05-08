@@ -24,7 +24,7 @@ export function HomeWorkspace() {
           Sunday-night prep, done in five minutes.
         </h2>
         <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-[color:var(--color-invert-text-muted)] md:text-xl">
-          Pull a question bank from your textbook. Assign it. Watch the
+          Build a question bank in five minutes. Assign it. Watch the
           integrity scores roll in. Grade with one finger.
         </p>
       </div>

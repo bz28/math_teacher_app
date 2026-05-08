@@ -28,7 +28,7 @@ const VIGNETTES: Vignette[] = [
     when: "WEDNESDAY",
     headline: "Differentiation that doesn't take your evening.",
     scene:
-      "You pick a topic. Veradic builds a fresh problem set with per-student variants — generated from scratch or pulled from problems you've uploaded. You skim, approve, assign. The students who needed reps get more.",
+      "You pick a topic. Veradic builds a fresh problem set with per-student variants. You skim, approve, assign. The students who needed reps get more; the ones who didn't move on.",
   },
   {
     when: "FRIDAY · 4:00 pm",
