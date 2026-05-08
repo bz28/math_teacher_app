@@ -40,7 +40,7 @@ const VIGNETTES: Vignette[] = [
     when: "SUNDAY NIGHT",
     headline: "You’re not building problem sets anymore.",
     scene:
-      "Next week’s homework is already in the queue — drafted Wednesday, reviewed by you, ready to send. Sunday is yours again. You answer one Slack message and close the laptop.",
+      "Next week’s homework is already in the queue — drafted Wednesday, reviewed by you, ready to send. Sunday is yours again. The laptop stays closed.",
   },
 ];
 
