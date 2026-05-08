@@ -9,7 +9,8 @@ import { Eyebrow } from "./eyebrow";
 type FaqItem = { question: string; answer: string };
 
 interface FAQProps {
-  /** Override the question set. Defaults to the homepage `faqs`. */
+  /** Override the question set. Defaults to the general
+   *  teacher/admin `faqs` (rendered on /demo and the subject pages). */
   items?: FaqItem[];
   /** Override the section heading copy. */
   heading?: string;
@@ -40,7 +41,7 @@ export function FAQ({
               <button
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
                 aria-expanded={openIndex === i}
-                className="flex w-full items-center justify-between gap-4 rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] px-6 py-5 text-left transition-all hover:border-[color:var(--color-primary)]"
+                className="flex w-full items-center justify-between gap-4 rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] px-6 py-5 text-left transition-[border-color] duration-200 hover:border-[color:var(--color-primary)]"
               >
                 <span className="text-base font-semibold text-[color:var(--color-text)] md:text-lg">
                   {faq.question}
@@ -51,6 +52,7 @@ export function FAQ({
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary-bg)] text-[color:var(--color-primary)]"
                 >
                   <svg
+                    aria-hidden="true"
                     width="14"
                     height="14"
                     viewBox="0 0 14 14"

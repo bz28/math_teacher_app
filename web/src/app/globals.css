@@ -405,6 +405,11 @@ html {
 .text-display-sm {
   font-family: var(--font-fraunces), Georgia, "Times New Roman", serif;
   font-feature-settings: "liga", "kern";
+  /* Prevent widows: distribute line breaks evenly across multi-line
+     headlines instead of leaving a single short last line. Modern
+     browsers (Chrome 114+, Firefox 121+, Safari 17.5+); older
+     browsers ignore and fall back to default wrapping. */
+  text-wrap: balance;
 }
 .text-display-xl { font-size: var(--text-display-xl); line-height: 0.95; letter-spacing: -0.03em; font-weight: 700; font-variation-settings: "opsz" 144, "SOFT" 0, "WONK" 0; }
 .text-display-lg { font-size: var(--text-display-lg); line-height: 1.0; letter-spacing: -0.025em; font-weight: 700; font-variation-settings: "opsz" 96, "SOFT" 0, "WONK" 0; }

@@ -5,6 +5,7 @@ import { CtaBand } from "@/components/landing/cta-band";
 import { FAQ } from "@/components/landing/faq";
 import { DistrictsHero } from "@/components/landing/districts/districts-hero";
 import { ComplianceGrid } from "@/components/landing/districts/compliance-grid";
+import { DataModelSafety } from "@/components/landing/districts/data-model-safety";
 import { DeploymentTimeline } from "@/components/landing/districts/deployment-timeline";
 import { PilotDataStrip } from "@/components/landing/districts/pilot-data-strip";
 import { PaperworkBlock } from "@/components/landing/districts/paperwork-block";
@@ -56,6 +57,7 @@ export default function ForDistrictsPage() {
       <main>
         <DistrictsHero />
         <ComplianceGrid />
+        <DataModelSafety />
         <DeploymentTimeline />
         <PilotDataStrip />
         <PaperworkBlock />

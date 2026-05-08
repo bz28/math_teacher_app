@@ -13,22 +13,22 @@ type Vignette = {
 /**
  * Section #5 — "what you get back". Four vignettes anchored by
  * day-tags (MONDAY 8:14am, WEDNESDAY, FRIDAY 4pm, SUNDAY NIGHT) so
- * the section reads as moments in a real teacher's week, not a
+ * the section reads as moments in a real teacher’s week, not a
  * feature recap. No icons, no fake numbers — the day-tag is the
  * visual anchor and the bold outcome line does the headline work.
  */
 const VIGNETTES: Vignette[] = [
   {
     when: "MONDAY · 8:14 am",
-    headline: "You see who's silently confused — not just who skipped.",
+    headline: "You see who’s silently confused — not just who skipped.",
     scene:
-      "You open your dashboard with coffee. Three students completed Friday's set with low integrity scores. Two of them did the work — they just couldn't explain step three. You pull them aside before first period.",
+      "You open your dashboard with coffee. Three students completed Friday’s set with low integrity scores. Two of them did the work — they just couldn’t explain step three. You pull them aside before first period.",
   },
   {
     when: "WEDNESDAY",
-    headline: "Differentiation that doesn't take your evening.",
+    headline: "Differentiation that doesn’t take your evening.",
     scene:
-      "You pick a topic. Veradic builds a fresh problem set with per-student variants. You skim, approve, assign. The students who needed reps get more; the ones who didn't move on.",
+      "You pick a topic. Veradic builds a fresh problem set with per-student variants. You skim, approve, assign. The students who needed reps get more; the ones who didn’t move on.",
   },
   {
     when: "FRIDAY · 4:00 pm",
@@ -38,9 +38,9 @@ const VIGNETTES: Vignette[] = [
   },
   {
     when: "SUNDAY NIGHT",
-    headline: "You're not building problem sets anymore.",
+    headline: "You’re not building problem sets anymore.",
     scene:
-      "Next week's homework is already in the queue — drafted Wednesday, reviewed by you, ready to send. Sunday is yours again. You answer one Slack message and close the laptop.",
+      "Next week’s homework is already in the queue — drafted Wednesday, reviewed by you, ready to send. Sunday is yours again. The laptop stays closed.",
   },
 ];
 

@@ -3,7 +3,7 @@ import { Eyebrow } from "./eyebrow";
 
 export function Hero() {
   return (
-    <section className="relative flex min-h-[640px] items-center overflow-hidden bg-[color:var(--color-surface)] md:min-h-[min(80dvh,820px)]">
+    <section className="relative flex min-h-[calc(100dvh_-_4rem)] items-center overflow-hidden bg-[color:var(--color-surface)] md:min-h-[calc(100dvh_-_5rem)]">
       {/* Single ornamental V-mark anchored bottom-right. Brand
           ornament instead of generic blurred gradient orbs. Sits at
           ~6% opacity so it's perceptibly present without competing
@@ -31,7 +31,7 @@ export function Hero() {
       </div>
 
       <div className="relative mx-auto w-full max-w-5xl px-6 py-12 text-center md:px-8 md:py-16">
-        <Eyebrow>For school districts</Eyebrow>
+        <Eyebrow>For teachers</Eyebrow>
         {/* Headline uses a tighter clamp than text-display-xl. The
             standard utility caps at 6rem (96px), which is too large
             for a two-phrase headline of this length — at desktop
@@ -41,17 +41,23 @@ export function Hero() {
             md+ and balances cleanly via text-wrap on smaller widths.
             text-wrap-balance distributes wraps evenly when phrases
             do need to break (e.g. on phones). */}
+        {/* line-height 1.15 (loose enough that Fraunces descenders
+            on "y" / "g" / "p" / "j" fully render). bg-clip-text
+            spans clip text glyphs at the line-box, so each span
+            also gets its own pb-2 to add a hair of breathing room
+            below the baseline — without it the "y" tail on "your
+            side." gets cropped against the span's bg-clip bounds. */}
         <h1
-          className='mt-8 font-bold tracking-[-0.025em] text-[color:var(--color-text)] [font-family:var(--font-fraunces),Georgia,"Times_New_Roman",serif] [font-size:clamp(2.75rem,5.8vw,4.75rem)] [font-variation-settings:"opsz"_120,"SOFT"_0,"WONK"_0] [line-height:0.96] [text-wrap:balance]'
+          className='mt-8 font-bold tracking-[-0.025em] text-[color:var(--color-text)] [font-family:var(--font-fraunces),Georgia,"Times_New_Roman",serif] [font-size:clamp(2.75rem,5.8vw,4.75rem)] [font-variation-settings:"opsz"_120,"SOFT"_0,"WONK"_0] [line-height:1.15] [text-wrap:balance]'
         >
-          <span className="block">Your students already have AI.</span>
-          <span className="block bg-gradient-to-r from-[color:var(--color-primary)] to-[color:var(--color-primary-light)] bg-clip-text text-transparent">
+          <span className="block pb-2">Your students already have AI.</span>
+          <span className="block pb-2 bg-gradient-to-r from-[color:var(--color-primary)] to-[color:var(--color-primary-light)] bg-clip-text text-transparent">
             Give them one that&rsquo;s on your side.
           </span>
         </h1>
         <p className="mx-auto mt-7 max-w-xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
           Veradic measures what students actually understand, drafts the
-          grading, and writes the practice you don&rsquo;t have time to
+          grading, and writes the homework you don&rsquo;t have time to
           make.
         </p>
 
@@ -65,6 +71,7 @@ export function Hero() {
           >
             Book a 20-min demo
             <svg
+              aria-hidden="true"
               className="h-4 w-4"
               viewBox="0 0 24 24"
               fill="none"
@@ -86,6 +93,7 @@ export function Hero() {
           >
             See how it works
             <svg
+              aria-hidden="true"
               className="h-4 w-4 transition-transform duration-200 group-hover:translate-y-0.5"
               viewBox="0 0 24 24"
               fill="none"

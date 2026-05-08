@@ -3,20 +3,26 @@ import { LogoMark } from "@/components/shared/logo-mark";
 
 type LinkItem = { label: string; href: string };
 
-// Product column. Ordered audience-first: teachers (the buyer)
-// first, districts (procurement), then subjects, then students last.
-const productLinks: LinkItem[] = [
-  { label: "For Teachers", href: "/" },
+// Plan-based grouping: Schools (institutional, teacher-led) vs.
+// Personal (individual student, no teacher). The columns now carry
+// real meaning instead of audience-mixing the way "Product" did.
+//
+// Schools column also holds the "Book a demo" CTA — it's the
+// school-plan conversion link, so it belongs with the rest of the
+// school-plan surfaces, not in its own floating column.
+const schoolsLinks: LinkItem[] = [
   { label: "For Districts", href: "/for-districts" },
-  { label: "Math", href: "/subjects/math" },
-  { label: "Physics", href: "/subjects/physics" },
-  { label: "Chemistry", href: "/subjects/chemistry" },
+  { label: "Book a demo", href: "/demo" },
+];
+
+const personalLinks: LinkItem[] = [
   { label: "For Students", href: "/students" },
 ];
 
-const schoolsLinks: LinkItem[] = [
-  { label: "Book a demo", href: "/demo" },
-  { label: "Safety", href: "/safety" },
+const subjectsLinks: LinkItem[] = [
+  { label: "Math", href: "/subjects/math" },
+  { label: "Physics", href: "/subjects/physics" },
+  { label: "Chemistry", href: "/subjects/chemistry" },
 ];
 
 const accountLinks: LinkItem[] = [
@@ -62,7 +68,7 @@ export function Footer() {
   return (
     <footer className="border-t border-[color:var(--color-border-light)] bg-[color:var(--color-surface)]">
       <div className="mx-auto max-w-6xl px-6 py-16 md:px-8 md:py-20">
-        <div className="grid gap-12 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr]">
+        <div className="grid gap-x-8 gap-y-12 md:grid-cols-[1.5fr_repeat(5,1fr)]">
           {/* Brand */}
           <div className="md:pr-8">
             <div className="flex items-center gap-2.5">
@@ -78,8 +84,13 @@ export function Footer() {
             </p>
           </div>
 
-          <FooterColumn heading="Product" links={productLinks} />
+          {/* Plan-based grouping: Schools first (the institutional
+              path with district + book-a-demo CTA), Personal next
+              (the consumer/student-on-their-own path), Subjects as
+              supporting content, then utility columns. */}
           <FooterColumn heading="Schools" links={schoolsLinks} />
+          <FooterColumn heading="Personal" links={personalLinks} />
+          <FooterColumn heading="Subjects" links={subjectsLinks} />
           <FooterColumn heading="Account" links={accountLinks} />
           <FooterColumn heading="Legal" links={legalLinks} />
         </div>

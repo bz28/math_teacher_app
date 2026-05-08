@@ -350,7 +350,7 @@ export function StepsAnimation({
                                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                               </svg>
                               <span className="text-[11px] text-[color:var(--color-text-muted)]">
-                                Ask a question...
+                                Ask a question…
                               </span>
                             </div>
                             <button

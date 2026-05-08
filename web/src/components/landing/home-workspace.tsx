@@ -116,10 +116,10 @@ function FrameCaption({ children }: { children: React.ReactNode }) {
    ────────────────────────────────────────────────────────────────── */
 function QuestionBankMock() {
   const questions = [
-    { chip: "Identities", body: "Verify sin(2x) = 2 sin(x) cos(x)..." },
-    { chip: "Identities", body: "Simplify 1 − cos²(θ) using a Pythag..." },
-    { chip: "Equations", body: "Solve 2 sin²(x) − 1 = 0 on [0, 2π]..." },
-    { chip: "Identities", body: "Prove tan(x) + cot(x) = sec(x)csc(x)..." },
+    { chip: "Identities", body: "Verify sin(2x) = 2 sin(x) cos(x)…" },
+    { chip: "Identities", body: "Simplify 1 − cos²(θ) using a Pythag…" },
+    { chip: "Equations", body: "Solve 2 sin²(x) − 1 = 0 on [0, 2π]…" },
+    { chip: "Identities", body: "Prove tan(x) + cot(x) = sec(x)csc(x)…" },
   ];
   return (
     <div>

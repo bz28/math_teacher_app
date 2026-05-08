@@ -237,7 +237,7 @@ export default function DemoPage() {
                       onChange={(e) =>
                         setForm({ ...form, message: e.target.value })
                       }
-                      placeholder="e.g. how many students, what subjects, timeline..."
+                      placeholder="e.g. how many students, what subjects, timeline…"
                       rows={3}
                       className="mt-1.5 w-full resize-vertical rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition-colors placeholder:text-[color:var(--color-text-muted)] focus:border-[color:var(--color-primary)]"
                     />
@@ -247,7 +247,7 @@ export default function DemoPage() {
                     disabled={submitting}
                     className="w-full rounded-full bg-[color:var(--color-primary)] py-4 text-base font-bold text-white transition-colors hover:bg-[color:var(--color-primary-dark)] disabled:opacity-60"
                   >
-                    {submitting ? "Sending..." : "Request a Demo"}
+                    {submitting ? "Sending…" : "Request a Demo"}
                   </button>
                 </motion.form>
               </div>
