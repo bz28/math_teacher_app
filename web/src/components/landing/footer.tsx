@@ -3,11 +3,16 @@ import { LogoMark } from "@/components/shared/logo-mark";
 
 type LinkItem = { label: string; href: string };
 
-const platformLinks: LinkItem[] = [
-  { label: "For Students", href: "/students" },
+// Product column. Ordered audience-first: teachers (the buyer) at the
+// top of mind, then the subjects we cover, then the student-facing
+// surface last. The For-Districts link is added in PR 5 alongside
+// the page itself; we don't link to a route that doesn't exist yet.
+const productLinks: LinkItem[] = [
+  { label: "For Teachers", href: "/" },
   { label: "Math", href: "/subjects/math" },
   { label: "Physics", href: "/subjects/physics" },
   { label: "Chemistry", href: "/subjects/chemistry" },
+  { label: "For Students", href: "/students" },
 ];
 
 const schoolsLinks: LinkItem[] = [
@@ -72,7 +77,7 @@ export function Footer() {
             </p>
           </div>
 
-          <FooterColumn heading="Platform" links={platformLinks} />
+          <FooterColumn heading="Product" links={productLinks} />
           <FooterColumn heading="Schools" links={schoolsLinks} />
           <FooterColumn heading="Account" links={accountLinks} />
           <FooterColumn heading="Legal" links={legalLinks} />

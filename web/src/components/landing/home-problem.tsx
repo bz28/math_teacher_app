@@ -13,7 +13,7 @@ export function HomeProblem() {
     <Section variant="invert" id="why">
       <div className="grid gap-12 md:grid-cols-[1fr_1.2fr] md:items-center md:gap-16">
         <div>
-          <Eyebrow variant="invert">Why schools need a new kind of AI</Eyebrow>
+          <Eyebrow variant="invert">The new normal</Eyebrow>
           <h2 className="mt-6 text-display-md text-[color:var(--color-invert-text)]">
             AI chatbots are already in your classrooms.
             <br />
@@ -27,22 +27,23 @@ export function HomeProblem() {
           <p>
             Every student with a phone has a homework-solving AI in their
             pocket. Most of them will take the fastest path through it, and
-            that path doesn&rsquo;t end with learning anything.
+            that path doesn&rsquo;t end with learning anything. Teachers
+            can&rsquo;t tell anymore what a student actually did themselves.
           </p>
-          <p>
-            Teachers can&rsquo;t tell anymore what a student actually did
-            themselves. Banning the tools doesn&rsquo;t work; kids just use
-            them on the ride home. The gap between what&rsquo;s submitted and
-            what&rsquo;s understood keeps growing.
-          </p>
-          <p className="text-[color:var(--color-invert-text)] font-medium">
+          {/* Pull quote — the third paragraph, lifted out and given weight.
+              Breaks the visual monotony of three same-size paragraphs and
+              makes the section's argument unmissable on a quick skim. */}
+          <p className="border-l-2 border-[color:var(--color-primary)] pl-6 text-[color:var(--color-invert-text)] font-medium md:text-2xl">
             Schools don&rsquo;t need less AI in the classroom. They need an AI
             that&rsquo;s built to be on their side.
           </p>
         </div>
       </div>
 
-      {/* ── Teacher pain points — the other half of "why schools need this" ── */}
+      {/* Teacher pain points — rendered as a numbered editorial list
+          with hairline top borders per item, instead of pill cards.
+          Reads like the contents of a journal article, not a feature
+          grid. The 01-04 numerals carry the visual weight. */}
       <div className="mx-auto mt-20 max-w-3xl">
         <div className="text-center">
           <Eyebrow variant="invert">Meanwhile, in your week</Eyebrow>
@@ -51,16 +52,21 @@ export function HomeProblem() {
           </h3>
         </div>
 
-        <ul className="mt-8 space-y-3">
-          {PAIN_POINTS.map((point) => (
+        <ol className="mt-10">
+          {PAIN_POINTS.map((point, i) => (
             <li
               key={point}
-              className="rounded-2xl border border-[color:var(--color-invert-border)] bg-[color:var(--color-invert-alt)] px-6 py-4 text-base leading-relaxed text-[color:var(--color-invert-text-muted)]"
+              className="flex items-start gap-6 border-t border-[color:var(--color-invert-border)] py-5 first:border-t-0 first:pt-0"
             >
-              {point}
+              <span className="mt-0.5 shrink-0 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--color-primary-light)]">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <span className="text-base leading-relaxed text-[color:var(--color-invert-text-muted)] md:text-lg">
+                {point}
+              </span>
             </li>
           ))}
-        </ul>
+        </ol>
       </div>
     </Section>
   );
