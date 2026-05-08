@@ -50,8 +50,9 @@ export function Hero() {
           </span>
         </h1>
         <p className="mx-auto mt-7 max-w-xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
-          Veradic checks who did the work, drafts the grading, and writes
-          the practice you don&rsquo;t have time to make.
+          Veradic measures what students actually understand, drafts the
+          grading, and writes the practice you don&rsquo;t have time to
+          make.
         </p>
 
         {/* CTA hierarchy: primary green pill vs. secondary text link.
@@ -60,7 +61,7 @@ export function Hero() {
         <div className="mt-10 flex flex-col items-center gap-5 sm:flex-row sm:justify-center sm:gap-8">
           <Link
             href="/demo"
-            className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-[color:var(--color-primary)] px-8 text-base font-bold text-white shadow-[0_8px_24px_-8px_rgba(14,82,56,0.4)] transition-all hover:bg-[color:var(--color-primary-dark)] hover:shadow-[0_12px_28px_-8px_rgba(14,82,56,0.45)]"
+            className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-[color:var(--color-primary)] px-8 text-base font-bold text-white shadow-[0_8px_24px_-8px_rgba(14,82,56,0.32)] transition-[background-color,box-shadow,transform] duration-200 hover:bg-[color:var(--color-primary-dark)] hover:shadow-[0_12px_28px_-8px_rgba(14,82,56,0.38)]"
           >
             Book a 20-min demo
             <svg
