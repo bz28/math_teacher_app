@@ -193,10 +193,11 @@ export function StepsAnimation({
       : ((displayedStepIndex + 1) / totalSteps) * 100;
 
   return (
-    /* data-subject="math" forces the brand purple scope inside the
+    /* data-subject="math" forces the brand-color scope inside the
        animation, so physics/chemistry pages don't bleed their subject
        color into the step cards, tutor bubbles, etc. — matching how
-       the real app keeps the solve UI purple regardless of subject.
+       the real app keeps the solve UI on the brand color regardless
+       of subject.
 
        aria-hidden: the whole thing is a decorative auto-cycling demo
        with fake buttons, mock cursor clicks, and text that's already

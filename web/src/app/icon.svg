@@ -11,5 +11,5 @@
   </defs>
   <rect width="512" height="512" rx="108" fill="url(#bg)"/>
   <path d="M160 148 L256 380 L352 148" fill="none" stroke="url(#vGrad)" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="352" cy="148" r="18" fill="#5BC298" opacity="0.9"/>
+  <circle cx="352" cy="148" r="18" fill="#FFFFFF" opacity="0.95"/>
 </svg>

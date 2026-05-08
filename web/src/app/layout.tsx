@@ -18,9 +18,9 @@ const inter = Inter({
 // marketing pages via the .text-display-* utilities. Per-class
 // font-variation-settings in globals.css lock SOFT/WONK to 0 (the
 // "stately editorial" mode) and tune the optical-size axis to each
-// headline size. We load the optical-size axis here; SOFT and WONK
-// have static defaults that we override in CSS, so they don't need
-// to be loaded as separate axes.
+// headline size. All three axes must be loaded here so we can write
+// to them via font-variation-settings — an unloaded axis can't be
+// overridden in CSS.
 const fraunces = Fraunces({
   variable: "--font-fraunces",
   subsets: ["latin"],

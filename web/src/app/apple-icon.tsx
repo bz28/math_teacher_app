@@ -31,7 +31,7 @@ export default function AppleIcon() {
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-          <circle cx="352" cy="148" r="18" fill="#5BC298" opacity="0.9" />
+          <circle cx="352" cy="148" r="18" fill="#FFFFFF" opacity="0.95" />
         </svg>
       </div>
     ),

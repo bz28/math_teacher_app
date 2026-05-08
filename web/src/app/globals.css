@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
-/* ── Design tokens (mirrors mobile/src/theme.ts) ── */
+/* ── Design tokens ──
+   Web has diverged from mobile (mobile/src/theme.ts) on the brand
+   primary — web is academic green for the marketing/web brand;
+   mobile remains on the prior purple until that app is repainted. */
 :root {
   /* Primary — deep academic green. Schoolhouse / textbook heritage; sets
      marketing pages apart from the AI-startup-purple cliché and lets red
@@ -379,13 +382,15 @@ html {
    Fraunces variable serif locked to "stately editorial" mode (SOFT 0,
    WONK 0). Optical-size axis is set per class so headlines are tuned
    to their rendered size — opsz 144 for hero, scaled down for smaller
-   display sizes. Falls back to Inter if the font fails to load. */
+   display sizes. The next/font loader injects fallback declarations
+   adjacent to --font-fraunces, so if the file fails to load the
+   browser uses the metrics-matched fallback automatically. */
 .text-display-xl,
 .text-display-lg,
 .text-display-md,
 .text-display-sm {
-  font-family: var(--font-display, var(--font-inter), ui-sans-serif, system-ui);
-  font-feature-settings: "liga", "kern", "ss01";
+  font-family: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  font-feature-settings: "liga", "kern";
 }
 .text-display-xl { font-size: var(--text-display-xl); line-height: 0.95; letter-spacing: -0.03em; font-weight: 700; font-variation-settings: "opsz" 144, "SOFT" 0, "WONK" 0; }
 .text-display-lg { font-size: var(--text-display-lg); line-height: 1.0; letter-spacing: -0.025em; font-weight: 700; font-variation-settings: "opsz" 96, "SOFT" 0, "WONK" 0; }

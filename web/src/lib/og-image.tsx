@@ -73,7 +73,12 @@ export function createSubjectOgImage(config: SubjectOgConfig) {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ color, fontSize: 20, fontWeight: 600 }}>{url}</span>
+          {/* URL uses colorLight rather than color so subjects whose
+              primary brand color is dark (e.g. the new academic-green
+              math) still meet contrast on the dark OG gradient. The
+              dark `color` is reserved for chip backgrounds where it's
+              intentionally subtle. */}
+          <span style={{ color: colorLight, fontSize: 20, fontWeight: 600 }}>{url}</span>
           <div style={{ display: "flex", gap: 12 }}>
             {tags.map((tag) => (
               <div key={tag} style={{ background: `${color}26`, border: `1px solid ${color}4D`, borderRadius: 100, padding: "8px 20px", color: colorLight, fontSize: 15, fontWeight: 500 }}>
