@@ -31,7 +31,7 @@ export function Hero() {
       </div>
 
       <div className="relative mx-auto w-full max-w-5xl px-6 py-12 text-center md:px-8 md:py-16">
-        <Eyebrow>For school districts</Eyebrow>
+        <Eyebrow>For teachers</Eyebrow>
         {/* Headline uses a tighter clamp than text-display-xl. The
             standard utility caps at 6rem (96px), which is too large
             for a two-phrase headline of this length — at desktop
