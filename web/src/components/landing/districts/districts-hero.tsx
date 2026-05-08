@@ -42,10 +42,9 @@ export function DistrictsHero() {
               <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
           </Link>
-          {/* Anchor scroll to the in-page compliance grid rather than
-              sending district readers off to /safety — this page
-              already IS the compliance page for districts, so an
-              external link would dilute the funnel. */}
+          {/* Anchor scroll to the in-page compliance grid — this
+              page IS the compliance surface for districts (the
+              former /safety page has been merged in here). */}
           <a
             href="#compliance"
             className="inline-flex h-14 items-center justify-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-8 text-base font-semibold text-[color:var(--color-text-secondary)] transition-colors hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]"

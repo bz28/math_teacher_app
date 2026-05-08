@@ -59,12 +59,26 @@ export default function SupportPage() {
             <p className="mt-2 text-text-secondary">
               Find quick answers to common questions about Veradic.
             </p>
+            {/* Homepage no longer has an inline FAQ section; the
+                canonical FAQ surface lives at /demo (general) and
+                /for-districts (procurement-specific). Pointing
+                support traffic at the demo page since that's the
+                broader audience match. */}
             <Link
-              href="/#faq"
+              href="/demo#faq"
               className="mt-4 inline-flex items-center gap-2 text-primary font-semibold hover:underline"
             >
               View FAQ
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                aria-hidden="true"
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M5 12h14M12 5l7 7-7 7" />
               </svg>
             </Link>

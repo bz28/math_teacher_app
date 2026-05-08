@@ -3,10 +3,11 @@ import { LogoMark } from "@/components/shared/logo-mark";
 
 type LinkItem = { label: string; href: string };
 
-// Product column. Ordered audience-first: teachers (the buyer)
-// first, districts (procurement), then subjects, then students last.
+// Product column. The homepage IS the de-facto "for teachers" page,
+// so a self-link to "/" labeled "For Teachers" was circular noise.
+// Districts get their own page; subjects link to subject pages;
+// students get their own page last.
 const productLinks: LinkItem[] = [
-  { label: "For Teachers", href: "/" },
   { label: "For Districts", href: "/for-districts" },
   { label: "Math", href: "/subjects/math" },
   { label: "Physics", href: "/subjects/physics" },
@@ -14,9 +15,11 @@ const productLinks: LinkItem[] = [
   { label: "For Students", href: "/students" },
 ];
 
+// /safety was merged into /for-districts (which now carries all
+// compliance + safety content); the standalone Safety link was
+// redundant.
 const schoolsLinks: LinkItem[] = [
   { label: "Book a demo", href: "/demo" },
-  { label: "Safety", href: "/safety" },
 ];
 
 const accountLinks: LinkItem[] = [
