@@ -73,6 +73,8 @@ type RosterEntry = {
   submission: TeacherSubmissionRow | null;
 };
 
+type RosterFilter = "all" | "needs_me" | "flagged";
+
 export default function HomeworkSectionReviewPage({
   params,
 }: {
@@ -95,6 +97,12 @@ export default function HomeworkSectionReviewPage({
   // inside RubricSection would reset to collapsed every time.
   const [rubricOpen, setRubricOpen] = useState(false);
   const [roster, setRoster] = useState<RosterEntry[] | null>(null);
+  // Roster filter — narrows the left pane by verdict / status. The
+  // most useful default is "needs me" (anything flagged or ungraded);
+  // we keep it on "all" for now so teachers don't lose context on
+  // first land, but the filter chip is the fastest path from "show
+  // me everyone" to "show me only the cheaters".
+  const [rosterFilter, setRosterFilter] = useState<RosterFilter>("all");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   // Last-fetched detail, kept as-is across switches. Staleness for
   // the current selection is detected at render via a submission_id
@@ -618,18 +626,36 @@ export default function HomeworkSectionReviewPage({
         <div className="mt-5 grid gap-5 md:grid-cols-[280px_1fr]">
           {/* Student list */}
           <aside className="self-start rounded-[--radius-xl] border border-border-light bg-surface shadow-sm">
-            <div className="border-b border-border-light px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
-              Students · {submittedCount}/{totalRoster} submitted
+            <div className="flex items-center justify-between gap-2 border-b border-border-light px-4 py-2.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                Students · {submittedCount}/{totalRoster} submitted
+              </span>
+              <VerdictLegendTrigger />
             </div>
+            <RosterFilterBar
+              roster={roster}
+              value={rosterFilter}
+              onChange={setRosterFilter}
+            />
             <div className="max-h-[70vh] overflow-y-auto">
-              {roster.map((e) => (
-                <StudentRow
-                  key={e.student_id}
-                  entry={e}
-                  selected={e.student_id === selectedStudentId}
-                  onSelect={() => setSelectedStudentId(e.student_id)}
-                />
-              ))}
+              {applyRosterFilter(roster, rosterFilter).length === 0 ? (
+                <p className="px-4 py-6 text-center text-xs text-text-muted">
+                  {rosterFilter === "needs_me"
+                    ? "Nothing waiting on you here."
+                    : rosterFilter === "flagged"
+                      ? "No flagged submissions in this section."
+                      : "No students match this filter."}
+                </p>
+              ) : (
+                applyRosterFilter(roster, rosterFilter).map((e) => (
+                  <StudentRow
+                    key={e.student_id}
+                    entry={e}
+                    selected={e.student_id === selectedStudentId}
+                    onSelect={() => setSelectedStudentId(e.student_id)}
+                  />
+                ))
+              )}
             </div>
           </aside>
 
@@ -1028,6 +1054,143 @@ function RegradeConfirmDialog({
         </button>
       </div>
     </Modal>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Roster filter — narrows the left pane to "anything that needs me"
+// or "only the flagged ones". Default "all" keeps the section view.
+// `needs_me` is the scan-mode for grading mode: hides students whose
+// submissions are already published-and-clean. `flagged` is the
+// scan-mode for the integrity check, hiding everything that isn't
+// a verdict requiring teacher attention.
+// ────────────────────────────────────────────────────────────────────
+
+const FLAGGED_DISPOSITIONS = new Set([
+  "flag_for_review",
+  "tutor_pivot",
+]);
+
+function isFlagged(entry: RosterEntry): boolean {
+  const sub = entry.submission;
+  if (!sub) return false;
+  // Student-raised "reader got something wrong" routes straight to
+  // manual grading and is the strongest "needs your eyes" signal.
+  if (sub.extraction_flagged_at) return true;
+  const overview = sub.integrity_overview;
+  if (!overview) return false;
+  // `IntegrityOverview` exposes only `complete | in_progress`, so the
+  // `skipped_unreadable` granular state isn't directly visible from
+  // the row. The full `TeacherIntegrityDetail` (loaded only for the
+  // selected student) carries that signal — for the roster filter,
+  // we approximate via disposition + the extraction-flagged check
+  // above. The Submissions inbox flagged count counts skipped at the
+  // backend, so a `skipped_unreadable` student is still surfaced via
+  // the per-row CTA there.
+  if (!overview.disposition) return false;
+  return FLAGGED_DISPOSITIONS.has(overview.disposition);
+}
+
+function needsTeacher(entry: RosterEntry): boolean {
+  const sub = entry.submission;
+  if (!sub) return false;
+  // Settled state is a published-and-clean grade. Everything else —
+  // ungraded, graded-but-not-published, dirty, integrity-flagged — is
+  // work that wants the teacher's attention.
+  if (sub.grade_published_at !== null && !sub.grade_dirty) return false;
+  return true;
+}
+
+function applyRosterFilter(
+  roster: RosterEntry[],
+  filter: RosterFilter,
+): RosterEntry[] {
+  if (filter === "all") return roster;
+  if (filter === "needs_me") return roster.filter(needsTeacher);
+  return roster.filter(isFlagged);
+}
+
+function RosterFilterBar({
+  roster,
+  value,
+  onChange,
+}: {
+  roster: RosterEntry[];
+  value: RosterFilter;
+  onChange: (v: RosterFilter) => void;
+}) {
+  const flaggedCount = roster.filter(isFlagged).length;
+  const needsMeCount = roster.filter(needsTeacher).length;
+
+  // Auto-revert to "all" when the active filter's count drops to 0 —
+  // otherwise a teacher who clears the last flagged submission gets
+  // stranded on a disabled-yet-active chip with an empty roster and
+  // no obvious recovery. Live grading frequently transitions a row
+  // out of `needs_me` (publish a grade), so this guard fires often.
+  useEffect(() => {
+    if (value === "needs_me" && needsMeCount === 0) onChange("all");
+    if (value === "flagged" && flaggedCount === 0) onChange("all");
+  }, [value, needsMeCount, flaggedCount, onChange]);
+
+  return (
+    <div className="flex flex-wrap items-center gap-1 border-b border-border-light px-3 py-2">
+      <RosterChip label="All" active={value === "all"} onClick={() => onChange("all")} />
+      <RosterChip
+        label="Needs me"
+        count={needsMeCount}
+        active={value === "needs_me"}
+        disabled={needsMeCount === 0}
+        onClick={() => onChange("needs_me")}
+      />
+      <RosterChip
+        label="Flagged"
+        count={flaggedCount}
+        active={value === "flagged"}
+        disabled={flaggedCount === 0}
+        onClick={() => onChange("flagged")}
+      />
+    </div>
+  );
+}
+
+function RosterChip({
+  label,
+  count,
+  active,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  count?: number;
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1 rounded-[--radius-pill] border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+        active
+          ? "border-primary bg-primary-bg text-primary"
+          : disabled
+            ? "border-border-light bg-bg-subtle text-text-muted/60 cursor-not-allowed"
+            : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-text-primary"
+      }`}
+    >
+      {label}
+      {count !== undefined && count > 0 && (
+        <span
+          className={`rounded-[--radius-pill] px-1 text-[9px] tabular-nums ${
+            active ? "bg-primary text-white" : "bg-bg-subtle text-text-muted"
+          }`}
+        >
+          {count}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -2061,6 +2224,160 @@ const INTEGRITY_STYLE: Record<
     label: "Couldn't read student's work — review their submission",
   },
 };
+
+// ── Verdict legend ──────────────────────────────────────────────────
+//
+// Nine disposition / status states is a lot to learn from icons alone.
+// First-time teachers consistently asked "what does ↻ mean vs ⚑?" so
+// we surface a small affordance in the roster header that opens a
+// keyed reference card. Same icons + colors as the live banner, so
+// what the teacher learns here matches what they see on each row.
+//
+// The labels deliberately drop the implementation jargon (`pass` /
+// `tutor_pivot` / `flag_for_review`) — teachers see the meaning, not
+// the enum.
+
+const VERDICT_LEGEND_ITEMS: { key: IntegrityBannerKey; description: string }[] = [
+  { key: "pass", description: "Student explained their work clearly. Probably did the assignment themselves." },
+  { key: "needs_practice", description: "Got the right answer mechanically but couldn't show why it works. Worth revisiting in class." },
+  { key: "tutor_pivot", description: "Student got stuck and the AI walked them through it. Their submitted work doesn't reflect what they could do alone." },
+  { key: "flag_for_review", description: "Submitted work is correct but the student couldn't explain it. Most likely cheating signal — open the conversation to decide." },
+  { key: "needs_review", description: "Check ran but couldn't reach a verdict (e.g. ran out of turns). Manual review recommended." },
+  { key: "skipped_unreadable", description: "Vision couldn't read the student's submission. Grade manually, or have them re-submit." },
+  { key: "extracting", description: "Vision is still parsing the student's work. The verdict will arrive shortly." },
+  { key: "in_progress", description: "Student is actively chatting with the AI. Verdict pending." },
+  { key: "awaiting_student", description: "Student submitted but hasn't started the integrity conversation yet." },
+];
+
+function VerdictLegendTrigger() {
+  const [open, setOpen] = useState(false);
+  // Capture the trigger so we can restore focus on close — without
+  // this, after closing the modal focus jumps to <body> and the
+  // teacher loses their place in the page.
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1 rounded-[--radius-sm] px-1.5 py-0.5 text-[10px] font-semibold text-text-muted transition-colors hover:bg-bg-subtle hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        aria-label="Show integrity verdict legend"
+      >
+        <span aria-hidden>ℹ</span>
+        <span className="uppercase tracking-wider">Guide</span>
+      </button>
+      {open && (
+        <VerdictLegendModal
+          onClose={() => {
+            setOpen(false);
+            // Defer until after React unmounts the modal so the trigger
+            // is back in the document and focusable.
+            requestAnimationFrame(() => triggerRef.current?.focus());
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function VerdictLegendModal({ onClose }: { onClose: () => void }) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  // Escape closes — keyboard parity with the rest of the app's
+  // dialogs. Listener lives on document so it fires regardless of
+  // current focus inside the modal.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // Move focus into the dialog on open so screen readers announce
+  // the title and Tab cycles within the legend's controls. The
+  // wrapper has tabIndex={-1} purely to make it focusable.
+  useEffect(() => {
+    dialogRef.current?.focus();
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="verdict-legend-title"
+        className="w-full max-w-lg rounded-[--radius-xl] bg-surface p-6 shadow-xl focus:outline-none"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2
+              id="verdict-legend-title"
+              className="text-lg font-bold text-text-primary"
+            >
+              What the verdicts mean
+            </h2>
+            <p className="mt-1 text-xs text-text-muted">
+              Veradic asks each student to explain a sample of their work after
+              they submit. The verdict on each row is what the AI concluded
+              from that conversation.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-full p-1 text-text-muted transition-colors hover:bg-bg-subtle hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <span aria-hidden className="text-lg leading-none">×</span>
+          </button>
+        </div>
+        <ul className="mt-4 space-y-3">
+          {VERDICT_LEGEND_ITEMS.map(({ key, description }) => {
+            const style = INTEGRITY_STYLE[key];
+            return (
+              <li key={key} className="flex items-start gap-3">
+                <span
+                  className={`mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${style.iconBg}`}
+                  aria-hidden
+                >
+                  {style.icon}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-text-primary">
+                    {style.label}
+                  </p>
+                  <p className="mt-0.5 text-xs text-text-secondary">
+                    {description}
+                  </p>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Top-of-pane integrity verdict. Shows the overall badge + AI summary

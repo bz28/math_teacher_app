@@ -2,6 +2,7 @@
 
 import type { TeacherAssignment } from "@/lib/api";
 import { formatDate, formatDue } from "@/lib/utils";
+import { StatusPill } from "./status-pill";
 
 export type HomeworkBucket =
   | "needsGrading"
@@ -50,6 +51,11 @@ export function HomeworkCard({
       ? hw.section_names.join(", ")
       : "No sections";
   const overdueDays = bucket === "needsGrading" && hw.due_at ? daysOverdue(hw.due_at) : 0;
+  // Outstanding submissions = submitted but not yet graded. Headline
+  // signal for the NEEDS GRADING bucket: surface as a pill on the
+  // title row so a teacher can scan a stack of cards and pick the one
+  // with the largest queue without clicking in.
+  const ungraded = Math.max(0, hw.submitted - hw.graded);
 
   return (
     <button
@@ -63,11 +69,25 @@ export function HomeworkCard({
             : "border-border-light hover:border-primary/40"
       }`}
     >
-      {/* Title row */}
-      <div className="flex items-center gap-2">
+      {/* Title row — keeps publish state pill, surfaces the headline
+          attention pill (to-grade or overdue) so the eye lands on it
+          before reading metadata. */}
+      <div className="flex flex-wrap items-center gap-2">
         <h3 className="min-w-0 flex-1 truncate text-base font-bold text-text-primary">
           {hw.title}
         </h3>
+        {bucket === "needsGrading" && ungraded > 0 && (
+          <StatusPill
+            tone="amber"
+            label={`${ungraded} to grade`}
+          />
+        )}
+        {overdueDays > 0 && (
+          <StatusPill
+            tone="red"
+            label={overdueDays === 1 ? "1 day overdue" : `${overdueDays} days overdue`}
+          />
+        )}
         {isDraft ? (
           <span className="shrink-0 rounded-full border border-text-muted/40 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-text-muted">
             draft
@@ -77,14 +97,11 @@ export function HomeworkCard({
             published
           </span>
         )}
-        {overdueDays > 0 && (
-          <span className="shrink-0 text-[11px] font-semibold text-red-600 dark:text-red-400">
-            {overdueDays === 1 ? "1 day ago" : `${overdueDays} days ago`}
-          </span>
-        )}
       </div>
 
-      {/* Meta row: unit · due date · sections */}
+      {/* Meta row: unit · due date · sections. Overdue label is now
+          carried by the title-row pill, so this row stays short and
+          scannable. */}
       <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-text-muted">
         {unitLabel && (
           <>
@@ -92,13 +109,7 @@ export function HomeworkCard({
             <span aria-hidden>·</span>
           </>
         )}
-        <span className={hw.due_at ? "" : "italic"}>
-          {overdueDays > 0 ? (
-            <span className="text-red-600 dark:text-red-400">Overdue</span>
-          ) : (
-            dueLabel
-          )}
-        </span>
+        <span className={hw.due_at ? "" : "italic"}>{dueLabel}</span>
         <span aria-hidden>·</span>
         <span className={hw.section_names.length === 0 ? "italic" : ""}>
           {sectionLabel}
@@ -111,6 +122,19 @@ export function HomeworkCard({
           stay one-liners so the card doesn't balloon. */}
       <div className="mt-1 text-[11px] text-text-muted">
         {hw.problem_count} {hw.problem_count === 1 ? "problem" : "problems"}
+        {bucket === "needsGrading" &&
+          hw.submitted > 0 &&
+          ungraded === 0 &&
+          // Only fire when the whole class has actually submitted —
+          // otherwise this reads "all 3 graded — review & publish" on
+          // a 3-of-28-submitted HW, implying you're done when 25
+          // students still owe work. The bucket logic puts those rows
+          // here via `hasMissing`, not "ready to publish".
+          hw.submitted >= hw.total_students && (
+            <span className="ml-1 font-semibold text-text-secondary">
+              · all {hw.submitted} graded — review &amp; publish
+            </span>
+          )}
         {hw.pending_review > 0 && (
           <span className="ml-1 font-semibold text-amber-600 dark:text-amber-400">
             · {hw.pending_review} need{hw.pending_review === 1 ? "s" : ""} your approval
