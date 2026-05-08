@@ -65,6 +65,7 @@ export function Hero() {
           >
             Book a 20-min demo
             <svg
+              aria-hidden="true"
               className="h-4 w-4"
               viewBox="0 0 24 24"
               fill="none"
@@ -86,6 +87,7 @@ export function Hero() {
           >
             See how it works
             <svg
+              aria-hidden="true"
               className="h-4 w-4 transition-transform duration-200 group-hover:translate-y-0.5"
               viewBox="0 0 24 24"
               fill="none"

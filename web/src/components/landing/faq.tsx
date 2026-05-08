@@ -51,6 +51,7 @@ export function FAQ({
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary-bg)] text-[color:var(--color-primary)]"
                 >
                   <svg
+                    aria-hidden="true"
                     width="14"
                     height="14"
                     viewBox="0 0 14 14"
