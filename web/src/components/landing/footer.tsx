@@ -3,16 +3,17 @@ import { LogoMark } from "@/components/shared/logo-mark";
 
 type LinkItem = { label: string; href: string };
 
-// Product column. The homepage IS the de-facto "for teachers" page,
-// so a self-link to "/" labeled "For Teachers" was circular noise.
-// Districts get their own page; subjects link to subject pages;
-// students get their own page last.
+// Product column = audience-page surfaces (who is this for?).
+// Subjects are their own bucket — same product, different content.
 const productLinks: LinkItem[] = [
   { label: "For Districts", href: "/for-districts" },
+  { label: "For Students", href: "/students" },
+];
+
+const subjectsLinks: LinkItem[] = [
   { label: "Math", href: "/subjects/math" },
   { label: "Physics", href: "/subjects/physics" },
   { label: "Chemistry", href: "/subjects/chemistry" },
-  { label: "For Students", href: "/students" },
 ];
 
 // /safety was merged into /for-districts (which now carries all
@@ -65,7 +66,7 @@ export function Footer() {
   return (
     <footer className="border-t border-[color:var(--color-border-light)] bg-[color:var(--color-surface)]">
       <div className="mx-auto max-w-6xl px-6 py-16 md:px-8 md:py-20">
-        <div className="grid gap-12 md:grid-cols-[1.5fr_1fr_1fr_1fr_1fr]">
+        <div className="grid gap-x-8 gap-y-12 md:grid-cols-[1.5fr_repeat(5,1fr)]">
           {/* Brand */}
           <div className="md:pr-8">
             <div className="flex items-center gap-2.5">
@@ -82,6 +83,7 @@ export function Footer() {
           </div>
 
           <FooterColumn heading="Product" links={productLinks} />
+          <FooterColumn heading="Subjects" links={subjectsLinks} />
           <FooterColumn heading="Schools" links={schoolsLinks} />
           <FooterColumn heading="Account" links={accountLinks} />
           <FooterColumn heading="Legal" links={legalLinks} />
