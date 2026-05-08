@@ -82,9 +82,12 @@ export function Footer() {
             </p>
           </div>
 
+          {/* Order is by priority to a visitor: Product (where am I?)
+              → Schools (the primary CTA "Book a demo") → Subjects
+              (supporting content) → Account (utility) → Legal. */}
           <FooterColumn heading="Product" links={productLinks} />
-          <FooterColumn heading="Subjects" links={subjectsLinks} />
           <FooterColumn heading="Schools" links={schoolsLinks} />
+          <FooterColumn heading="Subjects" links={subjectsLinks} />
           <FooterColumn heading="Account" links={accountLinks} />
           <FooterColumn heading="Legal" links={legalLinks} />
         </div>
