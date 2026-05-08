@@ -3,7 +3,7 @@ import { Eyebrow } from "./eyebrow";
 
 export function Hero() {
   return (
-    <section className="relative flex min-h-[640px] items-center overflow-hidden bg-[color:var(--color-surface)] md:min-h-[min(80dvh,820px)]">
+    <section className="relative flex min-h-[calc(100dvh_-_4rem)] items-center overflow-hidden bg-[color:var(--color-surface)] md:min-h-[calc(100dvh_-_5rem)]">
       {/* Single ornamental V-mark anchored bottom-right. Brand
           ornament instead of generic blurred gradient orbs. Sits at
           ~6% opacity so it's perceptibly present without competing
@@ -41,8 +41,14 @@ export function Hero() {
             md+ and balances cleanly via text-wrap on smaller widths.
             text-wrap-balance distributes wraps evenly when phrases
             do need to break (e.g. on phones). */}
+        {/* line-height 1.06 (was 0.96) so descenders on "y" / "g" /
+            "p" / "j" fully render. The previous value was tight
+            enough to clip the bottom of "your" / "Give" on Fraunces.
+            pb-1 adds a hair of padding so the second-line gradient
+            text (which is bg-clip-text) doesn't crop its descenders
+            against the surrounding flex/section bounds either. */}
         <h1
-          className='mt-8 font-bold tracking-[-0.025em] text-[color:var(--color-text)] [font-family:var(--font-fraunces),Georgia,"Times_New_Roman",serif] [font-size:clamp(2.75rem,5.8vw,4.75rem)] [font-variation-settings:"opsz"_120,"SOFT"_0,"WONK"_0] [line-height:0.96] [text-wrap:balance]'
+          className='mt-8 pb-1 font-bold tracking-[-0.025em] text-[color:var(--color-text)] [font-family:var(--font-fraunces),Georgia,"Times_New_Roman",serif] [font-size:clamp(2.75rem,5.8vw,4.75rem)] [font-variation-settings:"opsz"_120,"SOFT"_0,"WONK"_0] [line-height:1.06] [text-wrap:balance]'
         >
           <span className="block">Your students already have AI.</span>
           <span className="block bg-gradient-to-r from-[color:var(--color-primary)] to-[color:var(--color-primary-light)] bg-clip-text text-transparent">
