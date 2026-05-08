@@ -80,6 +80,25 @@ export function formatDueShort(iso: string): string {
   return formatted ? `Due ${formatted}` : "No due date";
 }
 
+/** "Today" / "Tomorrow" / "Due Thu" / "Due Apr 12" — for status-board
+ *  contexts where the date is by definition upcoming and we want a
+ *  punchy label, not a full one. Returns "" for invalid input. */
+export function formatDueRelative(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const dueDay = new Date(d);
+  dueDay.setHours(0, 0, 0, 0);
+  const days = Math.round((dueDay.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+  if (days <= 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days < 7) {
+    return `Due ${d.toLocaleDateString(undefined, { weekday: "short" })}`;
+  }
+  return `Due ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+}
+
 /** Format bytes as "123 B" / "5 KB" / "1.2 MB". Returns "" for invalid input. */
 export function formatFileSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "";

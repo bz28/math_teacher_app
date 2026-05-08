@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { teacher, type TeacherCourse } from "@/lib/api";
+import { formatDueRelative } from "@/lib/utils";
 
 const subjectStyles: Record<string, { bg: string; text: string; label: string }> = {
   math: { bg: "bg-primary-bg", text: "text-primary", label: "Math" },
@@ -34,19 +35,37 @@ export default function SchoolTeacherDashboard() {
     reload();
   }, []);
 
+  // Roll-ups across every course — the "what needs me right now" line
+  // teachers want to see before they pick which course to open.
+  const totals = useMemo(
+    () =>
+      courses.reduce(
+        (acc, c) => ({
+          toReview: acc.toReview + c.to_review,
+          flagged: acc.flagged + c.flagged,
+        }),
+        { toReview: 0, flagged: 0 },
+      ),
+    [courses],
+  );
+
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-4xl">
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="flex items-baseline justify-between">
-          <div>
+        <div className="flex items-baseline justify-between gap-4">
+          <div className="min-w-0">
             <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">My Courses</h1>
-            <p className="mt-1 text-text-secondary">
-              {loading ? "Loading…" : `${courses.length} course${courses.length === 1 ? "" : "s"}`}
+            <p className="mt-1 text-sm text-text-secondary">
+              {loading
+                ? "Loading…"
+                : courses.length === 0
+                  ? "No courses yet"
+                  : describeWorkload(courses.length, totals)}
             </p>
           </div>
           <button
             type="button"
-            className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark"
+            className="shrink-0 rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark"
             onClick={() => setShowNewCourse(true)}
           >
             + New Course
@@ -77,40 +96,11 @@ export default function SchoolTeacherDashboard() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="mt-6 grid gap-4 sm:grid-cols-2"
+        className="mt-6 space-y-3"
       >
-        {courses.map((course) => {
-          const sub = subjectStyles[course.subject] ?? subjectStyles.math;
-          return (
-            <Link
-              key={course.id}
-              href={`/school/teacher/courses/${course.id}`}
-              className="group block rounded-[--radius-xl] border border-border-light bg-surface p-5 transition-all hover:border-primary/30 hover:shadow-sm"
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${sub.bg} ${sub.text}`}>
-                    {sub.label}
-                  </span>
-                  {course.grade_level && (
-                    <span className="text-xs text-text-muted">Grade {course.grade_level}</span>
-                  )}
-                </div>
-                <h2 className="mt-2 truncate text-lg font-bold text-text-primary group-hover:text-primary">
-                  {course.name}
-                </h2>
-                {course.description && (
-                  <p className="mt-1 line-clamp-1 text-xs text-text-muted">{course.description}</p>
-                )}
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-2 text-center">
-                <Stat label="Sections" value={course.section_count} />
-                <Stat label="Documents" value={course.doc_count} />
-              </div>
-            </Link>
-          );
-        })}
+        {courses.map((course) => (
+          <CourseRow key={course.id} course={course} />
+        ))}
       </motion.div>
       )}
 
@@ -127,12 +117,101 @@ export default function SchoolTeacherDashboard() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function describeWorkload(
+  courseCount: number,
+  totals: { toReview: number; flagged: number },
+): string {
+  const courseLabel = `${courseCount} course${courseCount === 1 ? "" : "s"}`;
+  const parts: string[] = [];
+  if (totals.toReview > 0) {
+    parts.push(`${totals.toReview} to review`);
+  }
+  if (totals.flagged > 0) {
+    parts.push(`${totals.flagged} flagged`);
+  }
+  if (parts.length === 0) return `${courseLabel} · all caught up`;
+  return `${courseLabel} · ${parts.join(" · ")}`;
+}
+
+function CourseRow({ course }: { course: TeacherCourse }) {
+  const sub = subjectStyles[course.subject] ?? subjectStyles.math;
+  const dueLabel = course.next_due_at ? formatDueRelative(course.next_due_at) : null;
+  const hasWork = course.to_review > 0 || course.flagged > 0;
+
   return (
-    <div>
-      <div className="text-base font-extrabold text-text-primary">{value}</div>
-      <div className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{label}</div>
-    </div>
+    <Link
+      href={`/school/teacher/courses/${course.id}`}
+      className="group flex flex-col gap-3 rounded-[--radius-xl] border border-border-light bg-surface p-5 transition-all hover:-translate-y-px hover:border-primary/30 hover:shadow-sm sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 text-xs text-text-muted">
+          <span className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${sub.bg} ${sub.text}`}>
+            {sub.label}
+          </span>
+          {course.grade_level && (
+            <>
+              <span>Grade {course.grade_level}</span>
+              <span aria-hidden>·</span>
+            </>
+          )}
+          <span className="text-text-secondary">
+            {course.section_count} section{course.section_count === 1 ? "" : "s"}
+          </span>
+        </div>
+        <h2 className="mt-1.5 truncate text-lg font-bold text-text-primary group-hover:text-primary">
+          {course.name}
+        </h2>
+      </div>
+
+      <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+        {course.to_review > 0 && (
+          <StatusPill
+            tone="amber"
+            label={`${course.to_review} to review`}
+          />
+        )}
+        {course.flagged > 0 && (
+          <StatusPill
+            tone="red"
+            label={`${course.flagged} flagged`}
+            icon="⚑"
+          />
+        )}
+        {!hasWork && (
+          <StatusPill tone="green" label="All caught up" icon="✓" />
+        )}
+        {dueLabel && (
+          <span className="text-xs font-medium text-text-muted">{dueLabel}</span>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+function StatusPill({
+  tone,
+  label,
+  icon,
+}: {
+  tone: "amber" | "red" | "green";
+  label: string;
+  icon?: string;
+}) {
+  const styles: Record<typeof tone, string> = {
+    amber:
+      "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300",
+    red:
+      "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300",
+    green:
+      "border-green-200 bg-green-50 text-green-700 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-300",
+  };
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-[--radius-pill] border px-2 py-0.5 text-[11px] font-semibold ${styles[tone]}`}
+    >
+      {icon && <span aria-hidden>{icon}</span>}
+      {label}
+    </span>
   );
 }
 
