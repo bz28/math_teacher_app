@@ -21,8 +21,8 @@ interface UnitRailProps {
 
 // Filter-by-unit sidebar shared by Question Bank and Homework tabs.
 // Mirrors the materials FolderTree visual language: rounded rows,
-// purple accent on the selected row, count pill on the right. Read-
-// only — unit creation/rename/delete lives in the materials tab.
+// brand-color accent on the selected row, count pill on the right.
+// Read-only — unit creation/rename/delete lives in the materials tab.
 //
 // Only top-level units are listed. Subfolders are an organizational
 // concept INSIDE a unit (used by the materials tab) and don't make

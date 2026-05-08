@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 
-const COLORS = ["#6C5CE7", "#A29BFE", "#00B894", "#FDCB6E", "#FF6B6B"];
+const COLORS = ["#0E5238", "#5BC298", "#FDCB6E", "#FF6B6B", "#1F4E73"];
 
 export function useConfetti() {
   const fire = useCallback(async (intense = false) => {

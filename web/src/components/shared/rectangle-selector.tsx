@@ -24,8 +24,8 @@ interface RectangleSelectorProps {
 
 const MIN_SIZE = 30;
 const HANDLE_SIZE = 10; // px in display space
-const RECT_FILL = "rgba(108, 92, 231, 0.2)";
-const RECT_BORDER_COLOR = "rgba(108, 92, 231, 0.9)";
+const RECT_FILL = "rgba(14, 82, 56, 0.2)";
+const RECT_BORDER_COLOR = "rgba(14, 82, 56, 0.9)";
 
 type InteractionMode =
   | { type: "idle" }

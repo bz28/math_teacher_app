@@ -1,12 +1,17 @@
 @import "tailwindcss";
 
-/* ── Design tokens (mirrors mobile/src/theme.ts) ── */
+/* ── Design tokens ──
+   Web has diverged from mobile (mobile/src/theme.ts) on the brand
+   primary — web is academic green for the marketing/web brand;
+   mobile remains on the prior purple until that app is repainted. */
 :root {
-  /* Primary */
-  --color-primary: #6C5CE7;
-  --color-primary-light: #A29BFE;
-  --color-primary-bg: #F0EDFF;
-  --color-primary-dark: #5A4BD1;
+  /* Primary — deep academic green. Schoolhouse / textbook heritage; sets
+     marketing pages apart from the AI-startup-purple cliché and lets red
+     integrity flags pop dramatically against it. */
+  --color-primary: #0E5238;
+  --color-primary-light: #2F8F66;
+  --color-primary-bg: #E6F0EA;
+  --color-primary-dark: #0A3D2A;
 
   /* Success */
   --color-success: #00B894;
@@ -51,29 +56,29 @@
   --color-invert-border: rgba(255, 255, 255, 0.12);
 
   /* Overlay */
-  --color-overlay: rgba(108, 92, 231, 0.08);
+  --color-overlay: rgba(14, 82, 56, 0.08);
 
   /* Gradients */
-  --gradient-primary: linear-gradient(135deg, #6C5CE7, #A29BFE);
-  --gradient-header: linear-gradient(135deg, #6C5CE7, #8B7CF7);
+  --gradient-primary: linear-gradient(135deg, #0E5238, #2F8F66);
+  --gradient-header: linear-gradient(135deg, #0E5238, #1F6B47);
   --gradient-success: linear-gradient(135deg, #00B894, #55EFC4);
   --gradient-warning: linear-gradient(135deg, #E17055, #FDCB6E);
-  --gradient-card: linear-gradient(135deg, #F8F7FF, #F0EDFF);
+  --gradient-card: linear-gradient(135deg, #F8FAF8, #E6F0EA);
 }
 
 /* ── Subject color overrides ── */
-/* Math maps back to the brand primary (#6C5CE7 / #A29BFE), matching the
-   mobile app's gradients.primary. Having an explicit rule lets us nest
+/* Math maps back to the brand primary, matching the mobile app's
+   gradients.primary. Having an explicit rule lets us nest
    data-subject="math" inside a physics/chemistry page to reset the
-   animation's colors back to the brand purple. */
+   animation's colors back to the brand. */
 [data-subject="math"] {
-  --color-primary: #6C5CE7;
-  --color-primary-light: #A29BFE;
-  --color-primary-bg: #F0EDFF;
-  --color-primary-dark: #5A4BD1;
-  --gradient-primary: linear-gradient(135deg, #6C5CE7, #A29BFE);
-  --gradient-header: linear-gradient(135deg, #6C5CE7, #8B7CF7);
-  --color-overlay: rgba(108, 92, 231, 0.08);
+  --color-primary: #0E5238;
+  --color-primary-light: #2F8F66;
+  --color-primary-bg: #E6F0EA;
+  --color-primary-dark: #0A3D2A;
+  --gradient-primary: linear-gradient(135deg, #0E5238, #2F8F66);
+  --gradient-header: linear-gradient(135deg, #0E5238, #1F6B47);
+  --color-overlay: rgba(14, 82, 56, 0.08);
 }
 
 [data-subject="physics"] {
@@ -98,10 +103,10 @@
 
 /* ── Dark theme ── */
 [data-theme="dark"] {
-  --color-primary: #7C6CF7;
-  --color-primary-light: #B0A4FF;
-  --color-primary-bg: #1E1A3A;
-  --color-primary-dark: #9B8FFF;
+  --color-primary: #3FA67A;
+  --color-primary-light: #5BC298;
+  --color-primary-bg: #0E2A1F;
+  --color-primary-dark: #5BC298;
 
   --color-success: #2ED8A3;
   --color-success-light: #0D2B22;
@@ -139,17 +144,17 @@
 
   --color-overlay: rgba(0, 0, 0, 0.3);
 
-  --gradient-card: linear-gradient(135deg, #16152A, #1E1A3A);
+  --gradient-card: linear-gradient(135deg, #16221C, #0E2A1F);
 }
 
 [data-theme="dark"][data-subject="math"] {
-  --color-primary: #7C6CF7;
-  --color-primary-light: #B0A4FF;
-  --color-primary-bg: #1E1A3A;
-  --color-primary-dark: #9B8FFF;
-  --gradient-primary: linear-gradient(135deg, #7C6CF7, #B0A4FF);
-  --gradient-header: linear-gradient(135deg, #7C6CF7, #8B7CF7);
-  --color-overlay: rgba(124, 108, 247, 0.1);
+  --color-primary: #3FA67A;
+  --color-primary-light: #5BC298;
+  --color-primary-bg: #0E2A1F;
+  --color-primary-dark: #5BC298;
+  --gradient-primary: linear-gradient(135deg, #3FA67A, #5BC298);
+  --gradient-header: linear-gradient(135deg, #3FA67A, #4FB68A);
+  --color-overlay: rgba(63, 166, 122, 0.1);
 }
 
 [data-theme="dark"][data-subject="physics"] {
@@ -175,6 +180,7 @@
 /* ── Tailwind theme extension ── */
 @theme inline {
   --font-sans: var(--font-inter);
+  --font-display: var(--font-fraunces);
 
   /* Colors */
   --color-primary: var(--color-primary);
@@ -221,10 +227,10 @@
   --text-display-md: clamp(1.875rem, 4vw, 3rem);      /* sub headlines, 30→48px */
   --text-display-sm: clamp(1.5rem, 3vw, 2.25rem);     /* small display, 24→36px */
 
-  /* Shadows (purple-tinted, matching mobile) */
-  --shadow-sm: 0 2px 8px rgba(108, 92, 231, 0.06);
-  --shadow-md: 0 4px 12px rgba(108, 92, 231, 0.1);
-  --shadow-lg: 0 8px 24px rgba(108, 92, 231, 0.15);
+  /* Shadows — green-tinted to match the new brand primary */
+  --shadow-sm: 0 2px 8px rgba(14, 82, 56, 0.06);
+  --shadow-md: 0 4px 12px rgba(14, 82, 56, 0.1);
+  --shadow-lg: 0 8px 24px rgba(14, 82, 56, 0.15);
 
   /* Border radius */
   --radius-sm: 8px;
@@ -372,8 +378,21 @@ html {
   }
 }
 
-/* ── Marketing: display typography utility ── */
-.text-display-xl { font-size: var(--text-display-xl); line-height: 0.95; letter-spacing: -0.03em; font-weight: 700; }
-.text-display-lg { font-size: var(--text-display-lg); line-height: 1.0; letter-spacing: -0.025em; font-weight: 700; }
-.text-display-md { font-size: var(--text-display-md); line-height: 1.1; letter-spacing: -0.02em; font-weight: 700; }
-.text-display-sm { font-size: var(--text-display-sm); line-height: 1.15; letter-spacing: -0.015em; font-weight: 700; }
+/* ── Marketing: display typography ──
+   Fraunces variable serif locked to "stately editorial" mode (SOFT 0,
+   WONK 0). Optical-size axis is set per class so headlines are tuned
+   to their rendered size — opsz 144 for hero, scaled down for smaller
+   display sizes. The next/font loader injects fallback declarations
+   adjacent to --font-fraunces, so if the file fails to load the
+   browser uses the metrics-matched fallback automatically. */
+.text-display-xl,
+.text-display-lg,
+.text-display-md,
+.text-display-sm {
+  font-family: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  font-feature-settings: "liga", "kern";
+}
+.text-display-xl { font-size: var(--text-display-xl); line-height: 0.95; letter-spacing: -0.03em; font-weight: 700; font-variation-settings: "opsz" 144, "SOFT" 0, "WONK" 0; }
+.text-display-lg { font-size: var(--text-display-lg); line-height: 1.0; letter-spacing: -0.025em; font-weight: 700; font-variation-settings: "opsz" 96, "SOFT" 0, "WONK" 0; }
+.text-display-md { font-size: var(--text-display-md); line-height: 1.1; letter-spacing: -0.02em; font-weight: 700; font-variation-settings: "opsz" 72, "SOFT" 0, "WONK" 0; }
+.text-display-sm { font-size: var(--text-display-sm); line-height: 1.15; letter-spacing: -0.015em; font-weight: 700; font-variation-settings: "opsz" 48, "SOFT" 0, "WONK" 0; }

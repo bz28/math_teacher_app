@@ -13,7 +13,7 @@ export default function AppleIcon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "linear-gradient(135deg, #7C6FF0 0%, #5A4BD1 100%)",
+          background: "linear-gradient(135deg, #1F6B47 0%, #0A3D2A 100%)",
           borderRadius: 38,
         }}
       >
@@ -31,7 +31,7 @@ export default function AppleIcon() {
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-          <circle cx="352" cy="148" r="18" fill="#A29BFE" opacity="0.9" />
+          <circle cx="352" cy="148" r="18" fill="#FFFFFF" opacity="0.95" />
         </svg>
       </div>
     ),
