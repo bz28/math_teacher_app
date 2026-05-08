@@ -7,6 +7,11 @@ import {
   type StudentGradesResponse,
 } from "@/lib/api";
 import { StudentGradeRow } from "@/components/school/student/student-grade-row";
+import {
+  percentTone,
+  STRONG_THRESHOLD,
+  STRUGGLING_THRESHOLD,
+} from "@/components/school/shared/percent-badge";
 
 type Sort = "date_desc" | "date_asc" | "score_desc" | "score_asc";
 
@@ -43,6 +48,15 @@ export default function StudentGradesPage() {
   }, [load]);
 
   const sorted = useMemo(() => sortGrades(data?.grades ?? [], sort), [data, sort]);
+  // Frontend-side average so the student gets the headline number
+  // without a backend round-trip. No course-scoping yet; v1 is the
+  // pooled across-courses figure, which matches the page scope.
+  const overallAverage = useMemo(() => {
+    const grades = data?.grades ?? [];
+    if (grades.length === 0) return null;
+    const sum = grades.reduce((acc, g) => acc + g.final_score, 0);
+    return Math.round(sum / grades.length);
+  }, [data]);
 
   if (error) {
     return (
@@ -104,6 +118,32 @@ export default function StudentGradesPage() {
           </select>
         )}
       </div>
+
+      {/* Headline stat — overall avg at a glance. Hidden when there's
+          nothing graded yet (the empty-state CTA covers that case).
+          Tone uses the shared `percentTone` so the headline number's
+          color matches what individual row pills (PercentBadge) show:
+          single source of truth for "what counts as strong vs
+          struggling" prevents the dashboard avg from disagreeing
+          visually with the rows below. */}
+      {!empty && overallAverage !== null && (
+        <div className="mb-5 rounded-[--radius-xl] border border-border-light bg-surface p-5">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+            Overall average
+          </div>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className={`text-4xl font-extrabold tabular-nums ${percentTone(overallAverage)}`}>
+              {overallAverage}
+            </span>
+            <span className="text-2xl font-semibold text-text-muted">%</span>
+            <span className="ml-2 text-xs text-text-muted">
+              across {sorted.length} {sorted.length === 1 ? "assignment" : "assignments"}
+              {" · "}
+              {`${STRONG_THRESHOLD}+ strong, under ${STRUGGLING_THRESHOLD} needs work`}
+            </span>
+          </div>
+        </div>
+      )}
 
       {empty ? (
         <div className="rounded-[--radius-xl] border border-dashed border-border-light bg-bg-subtle p-12 text-center">

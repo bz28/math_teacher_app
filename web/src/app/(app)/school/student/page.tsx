@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import {
   schoolStudent,
   type StudentDashboardResponse,
@@ -124,6 +125,26 @@ export default function SchoolStudentDashboard() {
             ))}
             {recently_graded.length === 0 && (
               <EmptyRow text="No graded work yet. Once your teacher publishes, scores show up here." />
+            )}
+            {recently_graded.length > 0 && (
+              <Link
+                href="/school/student/grades"
+                className="flex items-center justify-center gap-1 border-t border-border-light/60 px-5 py-3 text-xs font-semibold text-primary transition-colors hover:bg-surface-hover"
+              >
+                See all grades
+                <svg
+                  className="h-3.5 w-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </Link>
             )}
           </DashboardCard>
         </div>
