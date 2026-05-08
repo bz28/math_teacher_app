@@ -38,8 +38,12 @@ export function Section({
       className={`relative w-full ${bg[variant]} ${className}`}
       data-section-variant={variant}
     >
+      {/* Vertical padding bumped from py-14/20 → py-16/24. The
+          dense alternation between cream and ink sections needed
+          more breathing room — the previous spacing made adjacent
+          headings feel pushed-together on a long scroll. */}
       <div
-        className={`mx-auto w-full max-w-6xl px-6 py-14 md:px-8 md:py-20 ${containerClassName}`}
+        className={`mx-auto w-full max-w-6xl px-6 py-16 md:px-8 md:py-24 ${containerClassName}`}
       >
         {children}
       </div>

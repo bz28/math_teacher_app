@@ -3,7 +3,7 @@ import { Eyebrow } from "./eyebrow";
 
 export function Hero() {
   return (
-    <section className="relative flex min-h-[calc(100dvh_-_4rem)] items-center overflow-hidden bg-[color:var(--color-surface)] md:min-h-[calc(100dvh_-_5rem)]">
+    <section className="relative flex min-h-[640px] items-center overflow-hidden bg-[color:var(--color-surface)] md:min-h-[min(80dvh,820px)]">
       {/* Single ornamental V-mark anchored bottom-right. Brand
           ornament instead of generic blurred gradient orbs. Sits at
           ~6% opacity so it's perceptibly present without competing
@@ -11,14 +11,14 @@ export function Hero() {
           to read as a typographic flourish, not a logo. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -bottom-40 -right-20 select-none text-[color:var(--color-primary)] opacity-[0.06] md:-bottom-52 md:-right-12"
+        className="pointer-events-none absolute -bottom-24 -right-16 select-none text-[color:var(--color-primary)] opacity-[0.06] md:-bottom-52 md:-right-12"
       >
         <svg
           width="640"
           height="640"
           viewBox="0 0 512 512"
           fill="none"
-          className="h-[26rem] w-[26rem] md:h-[44rem] md:w-[44rem]"
+          className="h-[18rem] w-[18rem] md:h-[44rem] md:w-[44rem]"
         >
           <path
             d="M120 100 L256 412 L392 100"
@@ -49,17 +49,19 @@ export function Hero() {
             Give them one that&rsquo;s on your side.
           </span>
         </h1>
-        <p className="mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
-          Veradic catches who actually did the work, drafts the grading,
-          and gives every student more practice than you have time to
-          write — so teachers can stop racing the chatbot and get back
-          to teaching.
+        <p className="mx-auto mt-7 max-w-xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
+          Veradic measures what students actually understand, drafts the
+          grading, and writes the practice you don&rsquo;t have time to
+          make.
         </p>
 
-        <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+        {/* CTA hierarchy: primary green pill vs. secondary text link.
+            Previously two same-weight pills competed for the eye —
+            now there's a clear "do this / or read more" rhythm. */}
+        <div className="mt-10 flex flex-col items-center gap-5 sm:flex-row sm:justify-center sm:gap-8">
           <Link
             href="/demo"
-            className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-[color:var(--color-primary)] px-8 text-base font-bold text-white transition-colors hover:bg-[color:var(--color-primary-dark)]"
+            className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-[color:var(--color-primary)] px-8 text-base font-bold text-white shadow-[0_8px_24px_-8px_rgba(14,82,56,0.32)] transition-[background-color,box-shadow,transform] duration-200 hover:bg-[color:var(--color-primary-dark)] hover:shadow-[0_12px_28px_-8px_rgba(14,82,56,0.38)]"
           >
             Book a 20-min demo
             <svg
@@ -74,13 +76,17 @@ export function Hero() {
               <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
           </Link>
+          {/* Anchor jumps to the integrity card (the most demonstrative
+              section), not the problem framing — "see how it works"
+              should land on what the product DOES, not what's wrong
+              with the alternatives. */}
           <a
-            href="#why"
-            className="inline-flex h-14 items-center justify-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-8 text-base font-semibold text-[color:var(--color-text-secondary)] transition-colors hover:border-[color:var(--color-primary)]/40 hover:text-[color:var(--color-primary)]"
+            href="#integrity"
+            className="group inline-flex items-center gap-2 text-base font-semibold text-[color:var(--color-text-secondary)] transition-colors hover:text-[color:var(--color-primary)]"
           >
-            See why it matters
+            See how it works
             <svg
-              className="h-4 w-4"
+              className="h-4 w-4 transition-transform duration-200 group-hover:translate-y-0.5"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
