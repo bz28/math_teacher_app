@@ -70,10 +70,15 @@ export function HomeSubjects() {
                 {s.tagline}
               </p>
             </div>
-            <div className="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--color-primary)] transition-transform group-hover:translate-x-1">
-              Explore {s.name}
+            <div className="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--color-primary)]">
+              <span className="transition-transform duration-200 group-hover:-translate-x-0.5">
+                Explore {s.name}
+              </span>
+              {/* Arrow translates further (4px) and a touch faster
+                  than the label, creating a tiny lead/follow motion
+                  that reads as a guided eye toward the subject page. */}
               <svg
-                className="h-4 w-4"
+                className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1.5"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
