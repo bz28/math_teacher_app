@@ -41,7 +41,7 @@ export function Hero() {
             text-wrap-balance distributes wraps evenly when phrases
             do need to break (e.g. on phones). */}
         <h1
-          className="mt-8 font-bold tracking-[-0.025em] text-[color:var(--color-text)] [font-family:var(--font-fraunces),Georgia,serif] [font-size:clamp(2.75rem,5.8vw,4.75rem)] [font-variation-settings:'opsz'_120,'SOFT'_0,'WONK'_0] [line-height:1.0] [text-wrap:balance]"
+          className='mt-8 font-bold tracking-[-0.025em] text-[color:var(--color-text)] [font-family:var(--font-fraunces),Georgia,"Times_New_Roman",serif] [font-size:clamp(2.75rem,5.8vw,4.75rem)] [font-variation-settings:"opsz"_120,"SOFT"_0,"WONK"_0] [line-height:0.96] [text-wrap:balance]'
         >
           <span className="block">Your students already have AI.</span>
           <span className="block bg-gradient-to-r from-[color:var(--color-primary)] to-[color:var(--color-primary-light)] bg-clip-text text-transparent">
