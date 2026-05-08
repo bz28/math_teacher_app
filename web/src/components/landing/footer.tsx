@@ -3,10 +3,19 @@ import { LogoMark } from "@/components/shared/logo-mark";
 
 type LinkItem = { label: string; href: string };
 
-// Product column = audience-page surfaces (who is this for?).
-// Subjects are their own bucket — same product, different content.
-const productLinks: LinkItem[] = [
+// Plan-based grouping: Schools (institutional, teacher-led) vs.
+// Personal (individual student, no teacher). The columns now carry
+// real meaning instead of audience-mixing the way "Product" did.
+//
+// Schools column also holds the "Book a demo" CTA — it's the
+// school-plan conversion link, so it belongs with the rest of the
+// school-plan surfaces, not in its own floating column.
+const schoolsLinks: LinkItem[] = [
   { label: "For Districts", href: "/for-districts" },
+  { label: "Book a demo", href: "/demo" },
+];
+
+const personalLinks: LinkItem[] = [
   { label: "For Students", href: "/students" },
 ];
 
@@ -14,13 +23,6 @@ const subjectsLinks: LinkItem[] = [
   { label: "Math", href: "/subjects/math" },
   { label: "Physics", href: "/subjects/physics" },
   { label: "Chemistry", href: "/subjects/chemistry" },
-];
-
-// /safety was merged into /for-districts (which now carries all
-// compliance + safety content); the standalone Safety link was
-// redundant.
-const schoolsLinks: LinkItem[] = [
-  { label: "Book a demo", href: "/demo" },
 ];
 
 const accountLinks: LinkItem[] = [
@@ -82,11 +84,12 @@ export function Footer() {
             </p>
           </div>
 
-          {/* Order is by priority to a visitor: Product (where am I?)
-              → Schools (the primary CTA "Book a demo") → Subjects
-              (supporting content) → Account (utility) → Legal. */}
-          <FooterColumn heading="Product" links={productLinks} />
+          {/* Plan-based grouping: Schools first (the institutional
+              path with district + book-a-demo CTA), Personal next
+              (the consumer/student-on-their-own path), Subjects as
+              supporting content, then utility columns. */}
           <FooterColumn heading="Schools" links={schoolsLinks} />
+          <FooterColumn heading="Personal" links={personalLinks} />
           <FooterColumn heading="Subjects" links={subjectsLinks} />
           <FooterColumn heading="Account" links={accountLinks} />
           <FooterColumn heading="Legal" links={legalLinks} />
