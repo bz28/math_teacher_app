@@ -571,3 +571,162 @@ async def test_courses_next_due_excludes_unassigned_homework(
         "/v1/teacher/courses", headers=_auth(w["teacher_token"]),
     )).json()["courses"][0]
     assert c["next_due_at"] is None
+
+
+# ─── GET /courses/{course_id} now also returns attention aggregates ───
+#
+# Single-course version of the dashboard math, used by the course
+# detail page to render header pills without a second round-trip
+# through the inbox endpoint.
+
+
+async def test_course_detail_returns_attention_aggregates(
+    client: AsyncClient,
+) -> None:
+    w = await _seed_teacher_with_course()
+    hw_id = await _publish_homework(
+        course_id=w["course_id"], teacher_id=w["teacher_id"],
+        section_id=w["section_id"], unit_id=w["unit_id"],
+        due_at=None,
+    )
+    async with get_session_factory()() as s:
+        sub = Submission(
+            assignment_id=hw_id, student_id=w["student_id"],
+            section_id=w["section_id"], status="submitted",
+        )
+        s.add(sub)
+        await s.flush()
+        s.add(IntegrityCheckSubmission(
+            submission_id=sub.id,
+            status="complete",
+            disposition="flag_for_review",
+        ))
+        await s.commit()
+
+    r = await client.get(
+        f"/v1/teacher/courses/{w['course_id']}",
+        headers=_auth(w["teacher_token"]),
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["to_review"] == 1
+    assert body["flagged"] == 1
+    assert body["next_due_at"] is None
+
+
+async def test_course_detail_aggregates_match_list_aggregates(
+    client: AsyncClient,
+) -> None:
+    """Detail and list endpoints must agree — they share helpers, so
+    this is a guard against future drift if anyone forks the math."""
+    w = await _seed_teacher_with_course()
+    hw_id = await _publish_homework(
+        course_id=w["course_id"], teacher_id=w["teacher_id"],
+        section_id=w["section_id"], unit_id=w["unit_id"],
+        due_at=datetime.now(UTC) + timedelta(days=4),
+    )
+    async with get_session_factory()() as s:
+        sub = Submission(
+            assignment_id=hw_id, student_id=w["student_id"],
+            section_id=w["section_id"], status="submitted",
+        )
+        s.add(sub)
+        await s.flush()
+        s.add(SubmissionGrade(
+            submission_id=sub.id,
+            final_score=72.0,
+            published_final_score=72.0,
+            teacher_notes="edited after publish",
+            published_teacher_notes="original",
+            grade_published_at=datetime.now(UTC),
+        ))
+        await s.commit()
+
+    list_c = (await client.get(
+        "/v1/teacher/courses", headers=_auth(w["teacher_token"]),
+    )).json()["courses"][0]
+    detail_c = (await client.get(
+        f"/v1/teacher/courses/{w['course_id']}",
+        headers=_auth(w["teacher_token"]),
+    )).json()
+    assert list_c["to_review"] == detail_c["to_review"] == 1
+    assert list_c["flagged"] == detail_c["flagged"] == 0
+    assert list_c["next_due_at"] == detail_c["next_due_at"]
+
+
+async def test_course_detail_other_teacher_404(
+    client: AsyncClient,
+) -> None:
+    """Cross-teacher isolation on the detail endpoint — the helper
+    runs after the auth check so attention math never leaks."""
+    w1 = await _seed_teacher_with_course("Algebra")
+    w2 = await _seed_teacher_with_course("Geometry")
+    r = await client.get(
+        f"/v1/teacher/courses/{w1['course_id']}",
+        headers=_auth(w2["teacher_token"]),
+    )
+    assert r.status_code == 404
+
+
+async def test_course_detail_isolates_aggregates_across_teachers_courses(
+    client: AsyncClient,
+) -> None:
+    """Single teacher with two courses — the detail endpoint's
+    `Assignment.course_id == course_id` predicate must scope the
+    counts to exactly the requested course. Without it, work in
+    course B would leak into course A's pills."""
+    w_algebra = await _seed_teacher_with_course("Algebra")
+    # Seed a second course owned by the same teacher with its own
+    # section + enrollment + a homework that needs review.
+    async with get_session_factory()() as s:
+        from api.models.course import Course as CourseModel
+        from api.models.course import CourseTeacher as CTModel
+
+        course_b = CourseModel(name="Geometry-B", subject="math")
+        s.add(course_b)
+        await s.flush()
+        s.add(CTModel(
+            course_id=course_b.id,
+            teacher_id=w_algebra["teacher_id"],
+            role="owner",
+        ))
+        unit_b = Unit(course_id=course_b.id, name="Lines", position=0)
+        s.add(unit_b)
+        await s.flush()
+        section_b = Section(course_id=course_b.id, name="P2")
+        s.add(section_b)
+        await s.flush()
+        s.add(SectionEnrollment(
+            section_id=section_b.id,
+            course_id=course_b.id,
+            student_id=w_algebra["student_id"],
+        ))
+        course_b_id = course_b.id
+        section_b_id = section_b.id
+        unit_b_id = unit_b.id
+        await s.commit()
+
+    hw_b_id = await _publish_homework(
+        course_id=course_b_id, teacher_id=w_algebra["teacher_id"],
+        section_id=section_b_id, unit_id=unit_b_id,
+        due_at=None,
+    )
+    async with get_session_factory()() as s:
+        s.add(Submission(
+            assignment_id=hw_b_id, student_id=w_algebra["student_id"],
+            section_id=section_b_id, status="submitted",
+        ))
+        await s.commit()
+
+    # Course A has no submissions; the detail endpoint must report 0
+    # despite course B having outstanding work for the same teacher.
+    detail_a = (await client.get(
+        f"/v1/teacher/courses/{w_algebra['course_id']}",
+        headers=_auth(w_algebra["teacher_token"]),
+    )).json()
+    detail_b = (await client.get(
+        f"/v1/teacher/courses/{course_b_id}",
+        headers=_auth(w_algebra["teacher_token"]),
+    )).json()
+    assert detail_a["to_review"] == 0
+    assert detail_b["to_review"] == 1
