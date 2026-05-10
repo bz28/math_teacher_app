@@ -100,10 +100,16 @@ function cursorStartDelay(dwellMs: number): number {
 export function StepsAnimation({
   data,
   hideQuestions = false,
+  subject,
 }: {
   data: StepsAnimationData;
   /** If true, ask-a-question interactions are skipped (used on the homepage hero). */
   hideQuestions?: boolean;
+  /** Subject scope to apply to the demo. When set, scopes the brand
+   *  primary inside the animation to that subject's color. When
+   *  omitted, the demo inherits whatever subject scope (or default
+   *  brand color) the surrounding page provides. */
+  subject?: "math" | "physics" | "chemistry";
 }) {
   const { problem, answer, steps } = data;
   const [phase, setPhase] = useState<"solving" | "solved">("solving");
@@ -193,11 +199,11 @@ export function StepsAnimation({
       : ((displayedStepIndex + 1) / totalSteps) * 100;
 
   return (
-    /* data-subject="math" forces the brand-color scope inside the
-       animation, so physics/chemistry pages don't bleed their subject
-       color into the step cards, tutor bubbles, etc. — matching how
-       the real app keeps the solve UI on the brand color regardless
-       of subject.
+    /* data-subject scopes the brand color inside the animation to the
+       subject the demo is for — physics demos render in blue, chemistry
+       in teal, math (and unspecified) in the brand green. When the
+       prop is omitted, no attribute is set so the surrounding page's
+       subject scope (or the default brand) cascades through.
 
        aria-hidden: the whole thing is a decorative auto-cycling demo
        with fake buttons, mock cursor clicks, and text that's already
@@ -205,7 +211,7 @@ export function StepsAnimation({
        skip it instead of announcing every rotated step + fake CTA. */
     <div
       className="relative"
-      data-subject="math"
+      data-subject={subject}
       aria-hidden="true"
     >
       {/* Gradient halo */}

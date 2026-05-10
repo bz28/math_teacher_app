@@ -154,7 +154,7 @@ export function SubjectPage({
           </div>
 
           <div className="mx-auto mt-14 max-w-2xl">
-            <StepsAnimation data={demoData} />
+            <StepsAnimation data={demoData} subject={slug} />
           </div>
         </Section>
       )}
