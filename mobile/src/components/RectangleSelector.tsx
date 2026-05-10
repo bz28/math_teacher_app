@@ -581,7 +581,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   rectActive: {
     borderColor: colors.primary,
     borderWidth: 2.5,
-    backgroundColor: "rgba(108, 92, 231, 0.25)",
+    backgroundColor: "rgba(14, 82, 56, 0.25)",
   },
   rectLabel: {
     position: "absolute",

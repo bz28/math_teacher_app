@@ -16,9 +16,11 @@ export interface SubjectMeta {
   primaryBg: string;
 }
 
+// Subject colors mirror web/src/app/globals.css under [data-subject="..."]:
+// math = brand primary green, physics = blue, chemistry = teal.
 export const SUBJECTS: SubjectMeta[] = [
-  { key: "math",      label: "Math",      icon: "calculator", gradient: "math",      primary: "#7C3AED", primaryBg: "#EDE9FE" },
-  { key: "physics",   label: "Physics",   icon: "rocket",     gradient: "physics",   primary: "#0984E3", primaryBg: "#E3F2FD" },
+  { key: "math",      label: "Math",      icon: "calculator", gradient: "math",      primary: "#0E5238", primaryBg: "#E6F0EA" },
+  { key: "physics",   label: "Physics",   icon: "rocket",     gradient: "physics",   primary: "#0984E3", primaryBg: "#E8F4FD" },
   { key: "chemistry", label: "Chemistry", icon: "flask",      gradient: "chemistry", primary: "#00B894", primaryBg: "#E8F8F5" },
 ];
 
