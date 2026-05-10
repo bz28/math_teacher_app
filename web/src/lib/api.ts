@@ -611,6 +611,15 @@ export interface TeacherCourse {
   status: string;
   section_count: number;
   doc_count: number;
+  /** Submissions waiting on the teacher across all published HWs in
+   *  this course. Mirrors the math used by the Submissions tab inbox
+   *  so the courses dashboard never disagrees with what's inside. */
+  to_review: number;
+  /** Integrity-flagged submissions across all published HWs. */
+  flagged: number;
+  /** Soonest upcoming due date among published HWs in the course.
+   *  Null when nothing is upcoming (overdue is captured by to_review). */
+  next_due_at: string | null;
   created_at: string;
 }
 
