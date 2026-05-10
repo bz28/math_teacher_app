@@ -5,13 +5,22 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import AfterValidator, BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import Integer, and_, case, func, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
+from api.models.assignment import (
+    Assignment,
+    AssignmentSection,
+    Submission,
+    SubmissionGrade,
+)
 from api.models.course import Course, CourseTeacher, Document
+from api.models.integrity_check import IntegrityCheckSubmission
 from api.models.section import Section
+from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
 from api.models.user import User
 
@@ -119,14 +128,129 @@ async def list_courses(
         select(Unit.course_id, func.count().label("count"))
         .group_by(Unit.course_id).subquery()
     )
+
+    # Per-course attention aggregates: how many submissions still need
+    # teacher action and how many are integrity-flagged. Mirrors the
+    # math used by /courses/{id}/submissions-inbox so the dashboard
+    # counts match what the teacher sees inside the Submissions tab.
+    #
+    # to_review: every submission that isn't published-and-clean —
+    #   ungraded, graded-but-unpublished, or published-but-dirty.
+    # flagged: integrity check raised attention OR student flagged
+    #   the OCR before confirming.
+    to_review_case = case(
+        # Covers ungraded (no SubmissionGrade row → NULL) AND
+        # graded-but-not-published (final_score set, grade_published_at NULL).
+        (SubmissionGrade.grade_published_at.is_(None), 1),
+        # Published but the live draft differs from the published
+        # snapshot — teacher edited the grade and needs to republish.
+        # Content-based (not timestamp) so flipping back to the
+        # original value doesn't wrongly mark it dirty. Same predicate
+        # as the inbox dirty count.
+        (
+            and_(
+                SubmissionGrade.grade_published_at.is_not(None),
+                or_(
+                    SubmissionGrade.final_score.is_distinct_from(
+                        SubmissionGrade.published_final_score,
+                    ),
+                    SubmissionGrade.teacher_notes.is_distinct_from(
+                        SubmissionGrade.published_teacher_notes,
+                    ),
+                    SubmissionGrade.breakdown.cast(JSONB).is_distinct_from(
+                        SubmissionGrade.published_breakdown.cast(JSONB),
+                    ),
+                ),
+            ),
+            1,
+        ),
+        else_=0,
+    )
+    flagged_case = case(
+        (IntegrityCheckSubmission.disposition == "flag_for_review", 1),
+        (IntegrityCheckSubmission.status == "skipped_unreadable", 1),
+        (
+            and_(
+                IntegrityCheckSubmission.status == "complete",
+                IntegrityCheckSubmission.disposition.is_(None),
+            ),
+            1,
+        ),
+        (Submission.extraction_flagged_at.is_not(None), 1),
+        else_=0,
+    )
+
+    # SectionEnrollment guard mirrors the inbox query: if a student
+    # was unenrolled after submitting, drop their submission from
+    # course-level counts so the dashboard never shows phantom work.
+    attention_counts = (
+        select(
+            Assignment.course_id.label("course_id"),
+            func.coalesce(func.sum(to_review_case).cast(Integer), 0).label("to_review"),
+            func.coalesce(func.sum(flagged_case).cast(Integer), 0).label("flagged"),
+        )
+        .select_from(Submission)
+        .join(Assignment, Assignment.id == Submission.assignment_id)
+        .join(User, User.id == Submission.student_id)
+        .join(
+            SectionEnrollment,
+            and_(
+                SectionEnrollment.student_id == Submission.student_id,
+                SectionEnrollment.section_id == Submission.section_id,
+            ),
+        )
+        .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .outerjoin(
+            IntegrityCheckSubmission,
+            IntegrityCheckSubmission.submission_id == Submission.id,
+        )
+        .where(
+            Assignment.teacher_id == current_user.user_id,
+            Assignment.type == "homework",
+            Assignment.status == "published",
+            User.is_preview.is_(False),
+        )
+        .group_by(Assignment.course_id)
+        .subquery()
+    )
+
+    # Next upcoming due date among published HWs. Past-due is
+    # captured implicitly via to_review — surfacing overdue dates
+    # here would compete with that signal. AssignmentSection join
+    # mirrors the inbox at teacher_assignments.py:1000 — a published
+    # HW with no section assigned has no audience, so its due date
+    # shouldn't surface on the dashboard.
+    next_due_counts = (
+        select(
+            Assignment.course_id.label("course_id"),
+            func.min(Assignment.due_at).label("next_due_at"),
+        )
+        .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
+        .where(
+            Assignment.teacher_id == current_user.user_id,
+            Assignment.type == "homework",
+            Assignment.status == "published",
+            Assignment.due_at >= func.now(),
+        )
+        .group_by(Assignment.course_id)
+        .subquery()
+    )
+
     rows = (await db.execute(
-        select(Course,
-               func.coalesce(section_counts.c.count, 0).label("section_count"),
-               func.coalesce(doc_counts.c.count, 0).label("doc_count"),
-               func.coalesce(unit_counts.c.count, 0).label("unit_count"))
+        select(
+            Course,
+            func.coalesce(section_counts.c.count, 0).label("section_count"),
+            func.coalesce(doc_counts.c.count, 0).label("doc_count"),
+            func.coalesce(unit_counts.c.count, 0).label("unit_count"),
+            func.coalesce(attention_counts.c.to_review, 0).label("to_review"),
+            func.coalesce(attention_counts.c.flagged, 0).label("flagged"),
+            next_due_counts.c.next_due_at,
+        )
         .outerjoin(section_counts, section_counts.c.course_id == Course.id)
         .outerjoin(doc_counts, doc_counts.c.course_id == Course.id)
         .outerjoin(unit_counts, unit_counts.c.course_id == Course.id)
+        .outerjoin(attention_counts, attention_counts.c.course_id == Course.id)
+        .outerjoin(next_due_counts, next_due_counts.c.course_id == Course.id)
         .join(CourseTeacher, CourseTeacher.course_id == Course.id)
         .where(CourseTeacher.teacher_id == current_user.user_id)
         .order_by(Course.created_at.desc())
@@ -137,6 +261,9 @@ async def list_courses(
         "grade_level": r.Course.grade_level, "status": r.Course.status,
         "section_count": r.section_count, "doc_count": r.doc_count,
         "unit_count": r.unit_count,
+        "to_review": r.to_review,
+        "flagged": r.flagged,
+        "next_due_at": r.next_due_at.isoformat() if r.next_due_at else None,
         "created_at": r.Course.created_at.isoformat(),
     } for r in rows]}
 
