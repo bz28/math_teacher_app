@@ -41,14 +41,12 @@ export function Hero() {
             md+ and balances cleanly via text-wrap on smaller widths.
             text-wrap-balance distributes wraps evenly when phrases
             do need to break (e.g. on phones). */}
-        {/* line-height 1.15 (loose enough that Fraunces descenders
-            on "y" / "g" / "p" / "j" fully render). bg-clip-text
-            spans clip text glyphs at the line-box, so each span
-            also gets its own pb-2 to add a hair of breathing room
-            below the baseline — without it the "y" tail on "your
+        {/* line-height 1.15 leaves room for descenders. bg-clip-text
+            spans clip text glyphs at the line-box, so each span also
+            gets its own pb-2 — without it the "y" tail on "your
             side." gets cropped against the span's bg-clip bounds. */}
         <h1
-          className='mt-8 font-bold tracking-[-0.025em] text-[color:var(--color-text)] [font-family:var(--font-fraunces),Georgia,"Times_New_Roman",serif] [font-size:clamp(2.75rem,5.8vw,4.75rem)] [font-variation-settings:"opsz"_120,"SOFT"_0,"WONK"_0] [line-height:1.15] [text-wrap:balance]'
+          className="mt-8 font-bold tracking-[-0.025em] text-[color:var(--color-text)] [font-size:clamp(2.75rem,5.8vw,4.75rem)] [line-height:1.15] [text-wrap:balance]"
         >
           <span className="block pb-2">Your students already have AI.</span>
           <span className="block pb-2 bg-gradient-to-r from-[color:var(--color-primary)] to-[color:var(--color-primary-light)] bg-clip-text text-transparent">

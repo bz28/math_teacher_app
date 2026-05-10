@@ -180,7 +180,6 @@
 /* ── Tailwind theme extension ── */
 @theme inline {
   --font-sans: var(--font-inter);
-  --font-display: var(--font-fraunces);
 
   /* Colors */
   --color-primary: var(--color-primary);
@@ -393,25 +392,19 @@ html {
 }
 
 /* ── Marketing: display typography ──
-   Fraunces variable serif locked to "stately editorial" mode (SOFT 0,
-   WONK 0). Optical-size axis is set per class so headlines are tuned
-   to their rendered size — opsz 144 for hero, scaled down for smaller
-   display sizes. The next/font loader injects fallback declarations
-   adjacent to --font-fraunces, so if the file fails to load the
-   browser uses the metrics-matched fallback automatically. */
+   Headlines inherit the body sans (Inter) — the explicit Fraunces
+   serif treatment was reverted. Sizes/weights/tracking remain so
+   the visual rhythm of marketing pages is unchanged; only the
+   typeface returns to the simpler sans. */
 .text-display-xl,
 .text-display-lg,
 .text-display-md,
 .text-display-sm {
-  font-family: var(--font-fraunces), Georgia, "Times New Roman", serif;
-  font-feature-settings: "liga", "kern";
   /* Prevent widows: distribute line breaks evenly across multi-line
-     headlines instead of leaving a single short last line. Modern
-     browsers (Chrome 114+, Firefox 121+, Safari 17.5+); older
-     browsers ignore and fall back to default wrapping. */
+     headlines instead of leaving a single short last line. */
   text-wrap: balance;
 }
-.text-display-xl { font-size: var(--text-display-xl); line-height: 0.95; letter-spacing: -0.03em; font-weight: 700; font-variation-settings: "opsz" 144, "SOFT" 0, "WONK" 0; }
-.text-display-lg { font-size: var(--text-display-lg); line-height: 1.0; letter-spacing: -0.025em; font-weight: 700; font-variation-settings: "opsz" 96, "SOFT" 0, "WONK" 0; }
-.text-display-md { font-size: var(--text-display-md); line-height: 1.1; letter-spacing: -0.02em; font-weight: 700; font-variation-settings: "opsz" 72, "SOFT" 0, "WONK" 0; }
-.text-display-sm { font-size: var(--text-display-sm); line-height: 1.15; letter-spacing: -0.015em; font-weight: 700; font-variation-settings: "opsz" 48, "SOFT" 0, "WONK" 0; }
+.text-display-xl { font-size: var(--text-display-xl); line-height: 0.95; letter-spacing: -0.03em; font-weight: 700; }
+.text-display-lg { font-size: var(--text-display-lg); line-height: 1.0; letter-spacing: -0.025em; font-weight: 700; }
+.text-display-md { font-size: var(--text-display-md); line-height: 1.1; letter-spacing: -0.02em; font-weight: 700; }
+.text-display-sm { font-size: var(--text-display-sm); line-height: 1.15; letter-spacing: -0.015em; font-weight: 700; }

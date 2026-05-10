@@ -179,12 +179,11 @@ export function IntegrityReviewCard(props: IntegrityReviewCardProps) {
                 </div>
               </FadeIn>
 
-              {/* Big score number — Fraunces serif. The display utility
-                  class picks up Fraunces via globals.css; size renders
-                  per the text-display-md clamp (max 48px). No aria-live
-                  on the count-up — the parent figure's aria-label
-                  already announces the final score, so a live region
-                  here would noisily duplicate intermediate values. */}
+              {/* Big score number. Size renders per the text-display-md
+                  clamp (max 48px). No aria-live on the count-up — the
+                  parent figure's aria-label already announces the
+                  final score, so a live region here would noisily
+                  duplicate intermediate values. */}
               <div className="mt-2 text-display-md font-bold text-[color:var(--color-text)]">
                 <span>{displayScore}</span>
                 <span className="text-[color:var(--color-text-muted)]">%</span>
@@ -212,11 +211,7 @@ export function IntegrityReviewCard(props: IntegrityReviewCardProps) {
                 <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--color-text-muted)]">
                   Headline
                 </div>
-                {/* Fraunces italic via the display utility — letterform
-                    is what makes this read as an academic verdict, not
-                    a chat snippet. Curly quotes intentional. The italic
-                    face is loaded explicitly in layout.tsx so the
-                    browser doesn't fall back to a synthesized slant. */}
+                {/* Italic verdict line. Curly quotes intentional. */}
                 <p className="mt-2 text-display-sm italic leading-snug text-[color:var(--color-text)]">
                   &ldquo;{headline}&rdquo;
                 </p>
