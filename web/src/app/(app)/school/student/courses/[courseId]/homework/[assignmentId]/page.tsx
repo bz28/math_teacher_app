@@ -49,6 +49,12 @@ export default function HomeworkPage() {
   // naturally skips the confirm branch, so this flag only covers the
   // brief window before their first turn.
   const [confirmedThisSession, setConfirmedThisSession] = useState(false);
+  // Post-publish view filter — flips the problems list to show only
+  // partial/zero rows. Default off so the student lands on the
+  // complete record; flipping the toggle is the "go fix what I got
+  // wrong" mode. Page-level state so the toggle survives a re-fetch
+  // (visibility-change re-loads keep the filter intact).
+  const [missedOnly, setMissedOnly] = useState(false);
 
   // Load (or re-load) the homework + submission + integrity state.
   // Called on mount, after submit, and after the chat finishes so
@@ -301,36 +307,80 @@ export default function HomeworkPage() {
         />
       </div>
 
-      <div className="mt-6 space-y-4">
-        {hw.problems.map((p) => {
-          // Per-problem published grade entry, if the teacher has
-          // published grades. Backend only sets `breakdown` once
-          // grade_published_at is set, so finding an entry here is a
-          // safe signal that this problem is ready to show.
-          const gradeEntry =
-            hw.breakdown?.find((b) => b.problem_id === p.bank_item_id) ?? null;
-          return (
-            <div
-              key={p.bank_item_id}
-              className="rounded-[--radius-md] border border-border bg-surface p-6"
-            >
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-bg text-sm font-bold text-primary">
-                  {p.position}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-base text-text-primary">
-                    <MathText text={p.question} />
-                  </div>
+      {/* Post-publish hero — once the teacher publishes a grade, the
+          student's first question is "what'd I get and what should I
+          look at?" The hero answers both with a big score, a single
+          you-got-X-of-Y line, and a "show only what I missed" toggle
+          that filters the problems list below. Hidden pre-publish
+          where the timeline / submission flow is still the right
+          focus. */}
+      {hw.grade_published_at !== null && hw.breakdown && hw.breakdown.length > 0 && (
+        <GradedSummaryCard
+          finalScore={hw.final_score}
+          breakdown={hw.breakdown}
+          missedOnly={missedOnly}
+          onMissedOnlyChange={setMissedOnly}
+        />
+      )}
 
-                  {gradeEntry !== null && (
-                    <PublishedGradePanel entry={gradeEntry} />
-                  )}
+      <div className="mt-6 space-y-4">
+        {hw.problems
+          // Filter only when the toggle's on AND grades are published
+          // (no published grade = nothing to filter against; falling
+          // through to show all keeps the page coherent on the rare
+          // mid-publish race).
+          .filter((p) => {
+            if (!missedOnly) return true;
+            if (!hw.breakdown) return true;
+            const entry = hw.breakdown.find((b) => b.problem_id === p.bank_item_id);
+            if (!entry) return true;
+            return entry.score_status !== "full";
+          })
+          .map((p) => {
+            // Per-problem published grade entry, if the teacher has
+            // published grades. Backend only sets `breakdown` once
+            // grade_published_at is set, so finding an entry here is a
+            // safe signal that this problem is ready to show.
+            const gradeEntry =
+              hw.breakdown?.find((b) => b.problem_id === p.bank_item_id) ?? null;
+            return (
+              <div
+                key={p.bank_item_id}
+                className="rounded-[--radius-md] border border-border bg-surface p-6"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-bg text-sm font-bold text-primary">
+                    {p.position}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-base text-text-primary">
+                      <MathText text={p.question} />
+                    </div>
+
+                    {gradeEntry !== null && (
+                      <PublishedGradePanel entry={gradeEntry} />
+                    )}
+                  </div>
                 </div>
               </div>
+            );
+          })}
+        {missedOnly &&
+          hw.breakdown &&
+          hw.breakdown.every((b) => b.score_status === "full") && (
+            <div className="rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle/40 p-8 text-center">
+              <p className="text-sm font-bold text-text-primary">
+                Nothing missed — full credit on every problem.
+              </p>
+              <button
+                type="button"
+                onClick={() => setMissedOnly(false)}
+                className="mt-2 text-xs font-semibold text-primary hover:underline"
+              >
+                Show all problems
+              </button>
             </div>
-          );
-        })}
+          )}
       </div>
 
       {hw.submitted && submission ? (
@@ -378,6 +428,95 @@ const GRADE_TONE: Record<
     label: "No credit",
   },
 };
+
+/**
+ * Hero card that lands the post-publish moment: the headline percent,
+ * a one-line per-problem breakdown the student can scan in 2 seconds,
+ * and a one-click filter to focus on what they got wrong. Only renders
+ * when the teacher has published a grade with a per-problem breakdown
+ * — pre-publish, the AssignmentTimeline above carries the journey.
+ */
+function GradedSummaryCard({
+  finalScore,
+  breakdown,
+  missedOnly,
+  onMissedOnlyChange,
+}: {
+  finalScore: number | null;
+  breakdown: StudentProblemFeedback[];
+  missedOnly: boolean;
+  onMissedOnlyChange: (next: boolean) => void;
+}) {
+  const total = breakdown.length;
+  const full = breakdown.filter((b) => b.score_status === "full").length;
+  const partial = breakdown.filter((b) => b.score_status === "partial").length;
+  const zero = breakdown.filter((b) => b.score_status === "zero").length;
+  const missed = partial + zero;
+  // Same tone scale as the My Grades headline / individual rows. One
+  // source of truth for "what counts as a strong grade" so the
+  // headline number's color matches what the rows below show.
+  const scoreTone =
+    finalScore === null
+      ? "text-text-primary"
+      : finalScore >= 85
+        ? "text-green-700 dark:text-green-400"
+        : finalScore >= 70
+          ? "text-amber-700 dark:text-amber-400"
+          : "text-red-700 dark:text-red-400";
+  return (
+    <div className="mt-5 rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm">
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+            Your score
+          </div>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className={`text-5xl font-extrabold tabular-nums ${scoreTone}`}>
+              {finalScore !== null ? Math.round(finalScore) : "—"}
+            </span>
+            <span className="text-2xl font-semibold text-text-muted">%</span>
+          </div>
+          <p className="mt-1 text-sm text-text-secondary">
+            <span className="font-semibold text-text-primary">{full}</span> of{" "}
+            {total} full credit
+            {partial > 0 && (
+              <>
+                {" · "}
+                <span className="font-semibold text-amber-700 dark:text-amber-400">
+                  {partial} partial
+                </span>
+              </>
+            )}
+            {zero > 0 && (
+              <>
+                {" · "}
+                <span className="font-semibold text-red-700 dark:text-red-400">
+                  {zero} missed
+                </span>
+              </>
+            )}
+          </p>
+        </div>
+        {missed > 0 && (
+          <button
+            type="button"
+            onClick={() => onMissedOnlyChange(!missedOnly)}
+            aria-pressed={missedOnly}
+            className={`shrink-0 rounded-[--radius-md] border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+              missedOnly
+                ? "border-primary bg-primary text-white hover:bg-primary-dark"
+                : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary"
+            }`}
+          >
+            {missedOnly
+              ? `Showing ${missed} ${missed === 1 ? "problem" : "problems"} you missed · Show all`
+              : `Show only what I missed (${missed})`}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Per-problem published-grade panel — score status + teacher/AI
