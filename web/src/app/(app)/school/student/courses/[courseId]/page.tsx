@@ -169,7 +169,7 @@ function PracticeList({ courseId }: { courseId: string }) {
         </p>
         <p className="mt-1 text-xs text-text-muted">
           Your teacher publishes practice sets alongside homework. Come back
-          after you&rsquo;ve turned in a HW and see if there&rsquo;s something
+          after you&rsquo;ve turned in a homework and see if there&rsquo;s something
           ready here.
         </p>
       </div>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { teacher, type TeacherCourse } from "@/lib/api";
 import { formatDueRelative } from "@/lib/utils";
+import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
 
 const subjectStyles: Record<string, { bg: string; text: string; label: string }> = {
   math: { bg: "bg-primary-bg", text: "text-primary", label: "Math" },
@@ -185,33 +186,6 @@ function CourseRow({ course }: { course: TeacherCourse }) {
         )}
       </div>
     </Link>
-  );
-}
-
-function StatusPill({
-  tone,
-  label,
-  icon,
-}: {
-  tone: "amber" | "red" | "green";
-  label: string;
-  icon?: string;
-}) {
-  const styles: Record<typeof tone, string> = {
-    amber:
-      "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300",
-    red:
-      "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300",
-    green:
-      "border-green-200 bg-green-50 text-green-700 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-300",
-  };
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-[--radius-pill] border px-2 py-0.5 text-[11px] font-semibold ${styles[tone]}`}
-    >
-      {icon && <span aria-hidden>{icon}</span>}
-      {label}
-    </span>
   );
 }
 
