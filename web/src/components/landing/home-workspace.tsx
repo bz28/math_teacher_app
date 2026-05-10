@@ -43,7 +43,7 @@ export function HomeWorkspace() {
         </div>
         <div className="mt-6 hidden md:grid md:grid-cols-[1fr_1.15fr_1fr] md:gap-6">
           <FrameCaption>The asset you build once.</FrameCaption>
-          <FrameCaption>See who did it. See who&rsquo;s flagged.</FrameCaption>
+          <FrameCaption>A verdict per student, in plain English.</FrameCaption>
           <FrameCaption>Glance, override, publish.</FrameCaption>
         </div>
 
@@ -58,7 +58,7 @@ export function HomeWorkspace() {
           <div>
             <FrameCard emphasized><SubmissionsQueueMock /></FrameCard>
             <div className="mt-4">
-              <FrameCaption>See who did it. See who&rsquo;s flagged.</FrameCaption>
+              <FrameCaption>A verdict per student, in plain English.</FrameCaption>
             </div>
           </div>
           <div>
@@ -156,12 +156,22 @@ function QuestionBankMock() {
    the quietly meaningful detail of the whole composition.
    ────────────────────────────────────────────────────────────────── */
 function SubmissionsQueueMock() {
-  const rows = [
-    { name: "Maya Chen", done: true, score: 32, flagged: true },
-    { name: "Jordan Patel", done: true, score: 88, flagged: false },
-    { name: "Sam Rivera", done: true, score: 91, flagged: false },
-    { name: "Avery Kim", done: false, score: null, flagged: false },
-    { name: "Devin Brooks", done: true, score: 76, flagged: false },
+  // Verdict labels + colors mirror the disposition vocabulary in the
+  // real Submission Review screen — `flag_for_review` (red ⚑),
+  // `tutor_pivot` (amber ?), `pass` (green ✓), `needs_practice`
+  // (blue ↻). Keeping the marketing mock honest: a teacher who
+  // signs up sees this exact icon + label set in the product, not a
+  // marketing-only "Integrity score 88%" abstraction.
+  const rows: {
+    name: string;
+    done: boolean;
+    verdict: "flag" | "tutor" | "pass" | "needs_practice" | null;
+  }[] = [
+    { name: "Maya Chen", done: true, verdict: "flag" },
+    { name: "Jordan Patel", done: true, verdict: "pass" },
+    { name: "Sam Rivera", done: true, verdict: "pass" },
+    { name: "Avery Kim", done: false, verdict: null },
+    { name: "Devin Brooks", done: true, verdict: "needs_practice" },
   ];
   return (
     <div>
@@ -170,7 +180,7 @@ function SubmissionsQueueMock() {
       <div className="grid grid-cols-[1.6fr_auto_auto] items-center gap-3 border-b border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--color-text-muted)]">
         <span>Student</span>
         <span>Status</span>
-        <span className="w-12 text-right">Integrity</span>
+        <span className="w-20 text-right">Verdict</span>
       </div>
       <div className="divide-y divide-[color:var(--color-border-light)]">
         {rows.map((r) => (
@@ -190,27 +200,72 @@ function SubmissionsQueueMock() {
                 </span>
               )}
             </span>
-            <span className="w-14 text-right">
-              {r.score === null ? (
-                <span className="text-[10px] text-[color:var(--color-text-muted)]">—</span>
-              ) : r.flagged ? (
-                /* Flagged row uses three signals — icon, bg pill,
-                   and color — so it's distinguishable for users who
-                   can't perceive red as red. */
-                <span className="inline-flex items-center gap-1 rounded bg-[color:var(--color-error-light)] px-1.5 py-0.5 text-[11px] font-bold text-[color:var(--color-error)]">
-                  <FlagIcon />
-                  {r.score}%
-                </span>
-              ) : (
-                <span className="text-[11px] font-semibold text-[color:var(--color-text)]">
-                  {r.score}%
-                </span>
-              )}
+            <span className="w-20 text-right">
+              <VerdictPill verdict={r.verdict} />
             </span>
           </div>
         ))}
       </div>
     </div>
+  );
+}
+
+/** Compact disposition pill — same icon + tone family as the
+ *  platform's IntegrityBanner, just shrunk for the marketing roster. */
+function VerdictPill({
+  verdict,
+}: {
+  verdict: "flag" | "tutor" | "pass" | "needs_practice" | null;
+}) {
+  if (verdict === null) {
+    return <span className="text-[10px] text-[color:var(--color-text-muted)]">—</span>;
+  }
+  const styles: Record<
+    "flag" | "tutor" | "pass" | "needs_practice",
+    { bg: string; fg: string; icon: string; label: string }
+  > = {
+    flag: {
+      bg: "var(--color-error-light)",
+      fg: "var(--color-error)",
+      icon: "⚑",
+      // "Review" matches the actual platform label for the
+      // `flag_for_review` disposition. The earlier "Flag" looked
+      // punchier in the marketing mock but didn't match what teachers
+      // see in the product, so we'd be teaching them the wrong word.
+      label: "Review",
+    },
+    tutor: {
+      bg: "var(--color-warning-bg)",
+      fg: "var(--color-warning-dark)",
+      icon: "?",
+      label: "Tutored",
+    },
+    pass: {
+      bg: "var(--color-success-light)",
+      fg: "var(--color-success)",
+      icon: "✓",
+      label: "Pass",
+    },
+    needs_practice: {
+      // Hardcoded blue tokens to match the platform's IntegrityBanner
+      // — `--color-primary` is brand-green in this theme, so reusing
+      // `--color-primary-bg` painted the marketing pill green while
+      // the live UI shows blue. Mock now matches the product.
+      bg: "rgb(239 246 255)",
+      fg: "rgb(29 78 216)",
+      icon: "↻",
+      label: "Practice",
+    },
+  };
+  const s = styles[verdict];
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+      style={{ backgroundColor: s.bg, color: s.fg }}
+    >
+      <span aria-hidden>{s.icon}</span>
+      {s.label}
+    </span>
   );
 }
 
@@ -326,15 +381,3 @@ function CheckIcon() {
   );
 }
 
-function FlagIcon() {
-  return (
-    <svg
-      className="h-3 w-3"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <path d="M4 22V4a1 1 0 0 1 1-1h13l-2 5 2 5H6v9H4z" />
-    </svg>
-  );
-}

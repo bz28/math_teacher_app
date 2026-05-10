@@ -48,8 +48,8 @@ export function HomeIntegrity() {
       </div>
 
       <p className="mx-auto mt-10 max-w-2xl text-center text-sm leading-relaxed text-[color:var(--color-text-muted)]">
-        You see the score, the headline, the conversation, and you decide.
-        Veradic drafts; you publish.
+        You see the verdict, the headline, the full conversation, and you
+        decide. Veradic drafts; you publish.
       </p>
     </Section>
   );
