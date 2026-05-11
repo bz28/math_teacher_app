@@ -42,11 +42,13 @@ export interface ColorPalette {
 }
 
 export const lightColors: ColorPalette = {
-  // Primary
-  primary: "#6C5CE7",
-  primaryLight: "#A29BFE",
-  primaryBg: "#F0EDFF",
-  primaryDark: "#5A4BD1",
+  // Primary — deep academic green, matched to the web brand
+  // (--color-primary in web/src/app/globals.css). Replaces the
+  // earlier purple to keep mobile + web visually unified.
+  primary: "#0E5238",
+  primaryLight: "#2F8F66",
+  primaryBg: "#E6F0EA",
+  primaryDark: "#0A3D2A",
 
   // Success
   success: "#00B894",
@@ -81,19 +83,20 @@ export const lightColors: ColorPalette = {
 
   // Misc
   white: "#FFFFFF",
-  overlay: "rgba(108, 92, 231, 0.08)",
+  overlay: "rgba(14, 82, 56, 0.08)",
   overlayDark: "rgba(26, 26, 46, 0.6)",
-  primaryOverlay: "rgba(108, 92, 231, 0.18)",
-  primaryOverlayStrong: "rgba(108, 92, 231, 0.85)",
+  primaryOverlay: "rgba(14, 82, 56, 0.18)",
+  primaryOverlayStrong: "rgba(14, 82, 56, 0.85)",
   neutral300: "#D1D3D9",
 };
 
 export const darkColors: ColorPalette = {
-  // Primary stays vivid in dark mode
-  primary: "#A29BFE",
-  primaryLight: "#C7C0FF",
-  primaryBg: "#2A2542",
-  primaryDark: "#6C5CE7",
+  // Primary — softer green for legibility on dark surfaces, matched
+  // to the web dark-mode brand (--color-primary under [data-theme="dark"]).
+  primary: "#3FA67A",
+  primaryLight: "#5BC298",
+  primaryBg: "#0E2A1F",
+  primaryDark: "#5BC298",
 
   // Success
   success: "#00D9A0",
@@ -128,10 +131,10 @@ export const darkColors: ColorPalette = {
 
   // Misc
   white: "#1A1A2E", // "white" surfaces become dark cards in dark mode
-  overlay: "rgba(162, 155, 254, 0.12)",
+  overlay: "rgba(63, 166, 122, 0.12)",
   overlayDark: "rgba(0, 0, 0, 0.7)",
-  primaryOverlay: "rgba(162, 155, 254, 0.22)",
-  primaryOverlayStrong: "rgba(162, 155, 254, 0.85)",
+  primaryOverlay: "rgba(63, 166, 122, 0.22)",
+  primaryOverlayStrong: "rgba(63, 166, 122, 0.85)",
   neutral300: "#3A3A52",
 };
 
@@ -183,7 +186,7 @@ export const typography = {
 export const shadows: Record<string, ViewStyle> = {
   sm: Platform.select({
     ios: {
-      shadowColor: "#6C5CE7",
+      shadowColor: "#0E5238",
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.06,
       shadowRadius: 8,
@@ -192,7 +195,7 @@ export const shadows: Record<string, ViewStyle> = {
   }) as ViewStyle,
   md: Platform.select({
     ios: {
-      shadowColor: "#6C5CE7",
+      shadowColor: "#0E5238",
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.1,
       shadowRadius: 12,
@@ -201,7 +204,7 @@ export const shadows: Record<string, ViewStyle> = {
   }) as ViewStyle,
   lg: Platform.select({
     ios: {
-      shadowColor: "#6C5CE7",
+      shadowColor: "#0E5238",
       shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.15,
       shadowRadius: 24,
@@ -211,13 +214,17 @@ export const shadows: Record<string, ViewStyle> = {
 };
 
 // ── Gradient presets ────────────────────────────────────
+// Subject gradients (math, physics, chemistry) match the web brand
+// in web/src/app/globals.css under the corresponding [data-subject]
+// scope. Math is the brand primary green; physics is blue; chemistry
+// is teal.
 export const gradients = {
-  primary: ["#6C5CE7", "#A29BFE"] as const,
-  header: ["#6C5CE7", "#8B7CF7"] as const,
+  primary: ["#0E5238", "#2F8F66"] as const,
+  header: ["#0E5238", "#1F6B47"] as const,
   success: ["#00B894", "#55EFC4"] as const,
   warning: ["#E17055", "#FDCB6E"] as const,
-  math: ["#7C3AED", "#A78BFA"] as const,
+  math: ["#0E5238", "#2F8F66"] as const,
   chemistry: ["#00B894", "#55EFC4"] as const,
   physics: ["#0984E3", "#74B9FF"] as const,
-  card: ["#F8F7FF", "#F0EDFF"] as const,
+  card: ["#F8FAF8", "#E6F0EA"] as const,
 } as const;
