@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
 import { useEntitlementStore } from "@/stores/entitlements";
 import { purchasePlan, getManagementUrl, type PlanType } from "@/services/revenuecat";
 import { CheckIcon } from "@/components/ui/icons";
+
+type PlanView = "student" | "teacher";
 
 const plans: {
   id: PlanType;
@@ -49,9 +52,36 @@ const comparisons = [
 ];
 
 export default function PricingPage() {
+  // Suspense boundary so useSearchParams (CSR-only API) doesn't break
+  // Next.js's prerender step — same pattern the register page uses.
+  return (
+    <Suspense>
+      <PricingPageContent />
+    </Suspense>
+  );
+}
+
+function PricingPageContent() {
   const user = useAuthStore((s) => s.user);
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Toggle defaults to whichever matches the user's role, with a URL
+  // override (`?view=teacher` or `?view=student`) so a deep link can
+  // jump straight to the teacher card from the homepage or workspace.
+  const viewParam = searchParams.get("view");
+  const defaultView: PlanView = user?.role === "teacher" ? "teacher" : "student";
+  const view: PlanView = viewParam === "teacher" || viewParam === "student"
+    ? viewParam
+    : defaultView;
+
+  function setView(next: PlanView) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("view", next);
+    router.replace(`/pricing?${params.toString()}`);
+  }
 
   if (user?.is_pro) {
     return <ActiveSubscription />;
@@ -79,11 +109,33 @@ export default function PricingPage() {
       {/* Header */}
       <div className="text-center">
         <h1 className="text-3xl font-extrabold text-text-primary">
-          Unlock your full potential
+          {view === "teacher"
+            ? "Pricing for teachers"
+            : "Unlock your full potential"}
         </h1>
         <p className="mt-3 text-lg text-text-secondary">
-          No daily limits. No locked features. Just learn.
+          {view === "teacher"
+            ? "Run more practice. Grade smarter. Cancel anytime."
+            : "No daily limits. No locked features. Just learn."}
         </p>
+      </div>
+
+      {/* Role toggle — single pricing URL, two audiences. */}
+      <div className="mx-auto mt-6 flex max-w-xs rounded-[--radius-pill] border border-border-light bg-surface-alt p-1">
+        {(["student", "teacher"] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setView(v)}
+            className={`flex-1 rounded-[--radius-pill] px-4 py-2 text-sm font-semibold transition-colors ${
+              view === v
+                ? "bg-primary text-white shadow-sm"
+                : "text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            {v === "student" ? "I'm a student" : "I'm a teacher"}
+          </button>
+        ))}
       </div>
 
       {error && (
@@ -92,7 +144,9 @@ export default function PricingPage() {
         </div>
       )}
 
-      {/* Plan cards */}
+      {/* Student plan cards — RevenueCat (existing behavior). Hidden
+          when the teacher view is active; teacher card lives below. */}
+      {view === "student" && (
       <div className="mt-10 grid gap-6 sm:grid-cols-2">
         {plans.map((plan) => (
           <div
@@ -149,8 +203,13 @@ export default function PricingPage() {
           </div>
         ))}
       </div>
+      )}
 
-      {/* Free vs Pro comparison */}
+      {/* Teacher card lands here in the next commit. */}
+
+      {/* Free vs Pro comparison (student-only — the feature comparisons
+          describe student-side limits like "5 problem sessions/day"). */}
+      {view === "student" && (
       <div className="mt-12">
         <h2 className="text-center text-sm font-bold uppercase tracking-wide text-text-muted">
           Free vs Pro
@@ -181,6 +240,7 @@ export default function PricingPage() {
           </table>
         </div>
       </div>
+      )}
 
     </div>
   );
