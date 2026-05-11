@@ -1,5 +1,6 @@
 """Subscription webhooks — RevenueCat (students) and Stripe (teachers)."""
 
+import json
 import logging
 from datetime import UTC, datetime
 
@@ -187,7 +188,6 @@ async def stripe_webhook(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Stripe webhook not configured",
             )
-        import json
         event = json.loads(payload)
 
     event_type = event.get("type") if isinstance(event, dict) else event["type"]
