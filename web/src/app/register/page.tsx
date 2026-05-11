@@ -258,7 +258,16 @@ function RegisterPageContent() {
                 <button
                   key={r}
                   type="button"
-                  onClick={() => setRole(r)}
+                  onClick={() => {
+                    setRole(r);
+                    // Reset teacher-only fields when switching off
+                    // teacher so a previously-checked affirmation or
+                    // typed school name doesn't survive a toggle.
+                    if (r === "student") {
+                      setSchoolName("");
+                      setTeacherConfirmed(false);
+                    }
+                  }}
                   className={`flex-1 rounded-[--radius-sm] px-3 py-2 text-sm font-semibold transition-colors ${
                     role === r
                       ? "bg-primary text-white shadow-sm"
