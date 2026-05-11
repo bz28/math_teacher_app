@@ -28,9 +28,9 @@ Precedence: use `AskUserQuestion` for **distinct options to choose between** (ar
 - Admin-only screens for problems a one-off script can solve
 - Designing for hypothetical future requirements
 
-**Actively consider all archetypes — don't lock onto the first one that comes to mind.** The most expensive archetype is often the wrong choice if a cheaper one fits.
+**Actively consider all archetypes — don't lock onto the first one that comes to mind.**
 
-Present the plan to the user for discussion. Number any questions so the user can answer inline (e.g. "1. … 2. …"). Iterate on feedback until the user approves.
+Present the plan to the user for discussion. Number any open-ended questions inline (e.g. "1. … 2. …"). Iterate on feedback until the user approves.
 
 Keep the plan in the conversation. Do NOT save it to a file in the repo. Stale plan docs drift away from the code; the code is the source of truth once it ships.
 
