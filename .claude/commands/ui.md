@@ -6,6 +6,28 @@ The user will often share a screenshot of the current UI — treat it as the gro
 
 **Do not overengineer.** Ship the simplest, most intuitive version first. Flag "nice to haves" separately from the core change.
 
+**Before designing, name the interaction archetype.** Pick from:
+- **Inline edit** — mutates in place, no modal
+- **Modal / sheet** — single discrete action, focused context
+- **Wizard** — multi-step, must complete in order
+- **Dedicated page** — high-frequency or complex enough to deserve a URL
+- **Command surface** — keyboard shortcut / palette for power users
+- **Background / silent** — toast or status pill only, no interruption
+
+If the obvious answer is "modal," actively consider one of the others before committing. **Don't default to whichever pattern is most common in this part of the app.**
+
+**Use the `AskUserQuestion` tool** when presenting design alternatives. ASCII mockup previews work especially well for comparing layouts.
+
+Precedence: use `AskUserQuestion` for **distinct design alternatives to choose between** (layout A vs B, modal vs inline). Use numbered inline questions for **open-ended clarifications and final approval** (free-form input, sign-off on a single proposal).
+
+**Avoid by name:**
+- Toast confirmations for unrecoverable actions
+- Settings pages for a single toggle
+- Modals over modals
+- "Are you sure?" prompts for reversible actions
+- Loading spinners when an optimistic UI update would feel faster
+- Generic illustrations as empty states (write copy that names the next action instead)
+
 Consider:
 - Accessibility
 - Loading / error / empty states
