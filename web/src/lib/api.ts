@@ -2088,3 +2088,20 @@ export const contact = {
     });
   },
 };
+
+// Teacher Stripe billing (separate from RevenueCat-based student plans
+// in @/services/revenuecat). The backend endpoints are gated to
+// role=teacher (checkout) and to users with a stripe_customer_id
+// (portal) — the frontend mirrors that gating in /pricing.
+export const billing = {
+  teacherCheckout() {
+    return apiFetch<{ checkout_url: string }>("/billing/teacher-checkout", {
+      method: "POST",
+      body: "{}",
+    });
+  },
+
+  teacherPortal() {
+    return apiFetch<{ portal_url: string }>("/billing/teacher-portal");
+  },
+};
