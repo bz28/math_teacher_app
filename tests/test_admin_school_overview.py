@@ -89,15 +89,20 @@ async def seeded() -> dict[str, Any]:
     Internal: 2 LLM calls totaling $0.20, school_id=NULL.
 
     All `created_at` are pinned to a moment guaranteed to be inside the
-    current calendar month — typically `now - 1 hour`, but clamped up to
-    the first second of the month when the test runs in the first hour
-    of the new month (without the clamp, `now - 1h` spills back into
-    last month and the cost-this-month query returns 0).
+    current calendar month AND the current ISO week — typically
+    `now - 1 hour`, but clamped up to the first second of the month or
+    the Monday-midnight start of the week. Without the clamps, `now - 1h`
+    can spill back into last month (cost-this-month returns 0) or last
+    week (submissions_this_week / health.this_week return 0) when the
+    test runs in the first hour of a new month or week.
     """
     await _wipe()
     now = datetime.now(UTC)
     this_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    in_window = max(now - timedelta(hours=1), this_month_start)
+    this_week_start = (now - timedelta(days=now.weekday())).replace(
+        hour=0, minute=0, second=0, microsecond=0,
+    )
+    in_window = max(now - timedelta(hours=1), this_month_start, this_week_start)
 
     async with get_session_factory()() as s:
         # ── Admin user (no school) ──
