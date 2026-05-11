@@ -15,6 +15,7 @@ from api.middleware.rate_limit import limiter
 from api.middleware.setup import configure_middleware
 from api.routes.admin import router as admin_router
 from api.routes.auth import router as auth_router
+from api.routes.billing import router as billing_router
 from api.routes.contact import router as contact_router
 from api.routes.health import router as health_router
 from api.routes.image import router as image_router
@@ -109,6 +110,7 @@ app.include_router(image_router, prefix="/v1")
 app.include_router(work_router, prefix="/v1")
 app.include_router(admin_router, prefix="/v1")
 app.include_router(webhook_router, prefix="/v1")
+app.include_router(billing_router, prefix="/v1")
 app.include_router(contact_router, prefix="/v1")
 app.include_router(teacher_router, prefix="/v1")
 app.include_router(school_student_router, prefix="/v1")
