@@ -319,14 +319,15 @@ function RegisterPageContent() {
             autoComplete="new-password"
           />
 
-          {/* Grade picker — students only. Hidden for teacher invite
-              (auth.py forces role=teacher) AND for teacher self-signup
-              (the picker is irrelevant; we keep gradeLevel=8 in state
-              as a default the backend silently accepts). */}
-          {!isInviteFlow && role === "student" && (
+          {/* Grade picker — shown for every self-signup path and for
+              section-invite students. Hidden only for teacher-invite
+              (where the welcome card lives in its own branch). The
+              label flips for teachers so they read it as "what I
+              teach" instead of "what grade I'm in". */}
+          {!isInviteFlow && (
             <div className="flex flex-col gap-1.5">
               <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
-                Grade Level
+                {role === "teacher" ? "Grade level you teach" : "Grade Level"}
               </label>
               <div className="flex gap-2">
                 {GRADE_OPTIONS.map((opt) => (
