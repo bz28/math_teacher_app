@@ -13,6 +13,7 @@ class RegisterRequest(BaseModel):
     invite_token: str | None = None
     section_invite_token: str | None = None
     join_code: str | None = None
+    signup_school_name: str | None = None
 
     @field_validator("password")
     @classmethod
