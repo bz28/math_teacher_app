@@ -431,7 +431,7 @@ function RegisterPageContent() {
           <p className="text-sm text-text-secondary">
             Already have an account?{" "}
             <Link
-              href={role === "teacher" ? "/login?role=teacher" : "/login"}
+              href="/login"
               className="font-semibold text-primary hover:text-primary-dark"
             >
               Sign In
