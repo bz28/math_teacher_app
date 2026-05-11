@@ -193,6 +193,11 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         )).scalar_one_or_none()
         if join_course and join_course.school_id is not None:
             school_id = join_course.school_id
+        # Join codes are a student-only enrollment path. Force the role
+        # to student so a malicious caller can't combine role=teacher
+        # with a leaked join code to escalate into a teacher attached
+        # to that school. Mirrors the section_invite override above.
+        role = "student"
 
     user = User(
         email=body.email,

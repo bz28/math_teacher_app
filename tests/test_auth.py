@@ -193,6 +193,56 @@ async def test_teacher_self_signup_school_name_optional(client: AsyncClient) -> 
 
 
 @pytest.mark.asyncio
+async def test_join_code_with_teacher_role_forces_student(client: AsyncClient) -> None:
+    """role=teacher + a valid join_code must resolve to a student account.
+
+    Regression: with bare role=teacher self-signup now allowed, the
+    join_code branch needs its own role-override or a caller could use
+    a leaked code to escalate into a teacher attached to that school.
+    """
+    import uuid
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select
+
+    from api.database import get_session_factory
+    from api.models.course import Course
+    from api.models.section import Section
+    from api.models.user import User
+
+    tag = uuid.uuid4().hex[:6].upper()
+    async with get_session_factory()() as s:
+        course = Course(name=f"Algebra {tag}", subject="math")
+        s.add(course)
+        await s.flush()
+        section = Section(
+            course_id=course.id,
+            name="Period 1",
+            join_code=f"JC{tag}",
+            join_code_expires_at=datetime.now(UTC) + timedelta(days=7),
+        )
+        s.add(section)
+        await s.commit()
+
+    payload = {
+        "email": f"escalate_{tag.lower()}@test.com",
+        "password": "StrongPass1",
+        "name": "Escalator",
+        "grade_level": 8,
+        "role": "teacher",
+        "join_code": f"JC{tag}",
+    }
+    resp = await client.post(REGISTER_URL, json=payload)
+    assert resp.status_code == 201, resp.text
+
+    async with get_session_factory()() as s:
+        user = (await s.execute(
+            select(User).where(User.email == payload["email"])
+        )).scalar_one()
+        assert user.role == "student", "join_code must force student role"
+
+
+@pytest.mark.asyncio
 async def test_student_signup_ignores_school_name(client: AsyncClient) -> None:
     """signup_school_name is teacher-scoped — student rows stay NULL."""
     from sqlalchemy import select
