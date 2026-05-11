@@ -168,3 +168,91 @@ async def test_portal_returns_url(client: AsyncClient) -> None:
     assert resp.status_code == 200
     assert resp.json() == {"portal_url": "https://billing.stripe.com/p/test"}
     create_p.assert_called_once()
+
+
+# ── Stripe webhook ──────────────────────────────────────────────────────
+
+
+STRIPE_WEBHOOK_URL = "/v1/webhooks/stripe"
+
+
+@pytest.mark.asyncio
+async def test_stripe_webhook_checkout_completed_flips_to_pro(client: AsyncClient) -> None:
+    """A checkout.session.completed event for a known customer flips them to pro."""
+    user, _ = await _make_user(role="teacher", stripe_customer_id="cus_wh_1")
+
+    payload = {
+        "type": "checkout.session.completed",
+        "data": {"object": {"customer": "cus_wh_1"}},
+    }
+    # No signature header — dev-mode path (webhook_secret unset).
+    with patch.multiple(
+        "api.routes.webhook.settings",
+        stripe_webhook_secret="",
+        app_env="development",
+    ):
+        resp = await client.post(STRIPE_WEBHOOK_URL, json=payload)
+
+    assert resp.status_code == 200
+    async with get_session_factory()() as s:
+        refreshed = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert refreshed.subscription_tier == "pro"
+        assert refreshed.subscription_status == "active"
+        assert refreshed.subscription_provider == "stripe"
+
+
+@pytest.mark.asyncio
+async def test_stripe_webhook_subscription_deleted_flips_to_free(client: AsyncClient) -> None:
+    """A customer.subscription.deleted event reverts the user to free."""
+    user, _ = await _make_user(role="teacher", stripe_customer_id="cus_wh_2")
+    async with get_session_factory()() as s:
+        u = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
+        u.subscription_tier = "pro"
+        u.subscription_status = "active"
+        await s.commit()
+
+    payload = {
+        "type": "customer.subscription.deleted",
+        "data": {"object": {"customer": "cus_wh_2"}},
+    }
+    with patch.multiple(
+        "api.routes.webhook.settings",
+        stripe_webhook_secret="",
+        app_env="development",
+    ):
+        resp = await client.post(STRIPE_WEBHOOK_URL, json=payload)
+
+    assert resp.status_code == 200
+    async with get_session_factory()() as s:
+        refreshed = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert refreshed.subscription_tier == "free"
+        assert refreshed.subscription_status == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_stripe_webhook_unknown_customer_is_no_op(client: AsyncClient) -> None:
+    """An event for a customer we don't recognize is a clean no-op."""
+    payload = {
+        "type": "checkout.session.completed",
+        "data": {"object": {"customer": "cus_unknown_xxx"}},
+    }
+    with patch.multiple(
+        "api.routes.webhook.settings",
+        stripe_webhook_secret="",
+        app_env="development",
+    ):
+        resp = await client.post(STRIPE_WEBHOOK_URL, json=payload)
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_stripe_webhook_rejects_unconfigured_prod(client: AsyncClient) -> None:
+    """In production, an unset webhook secret must hard-fail (503), not silent-skip."""
+    payload = {"type": "checkout.session.completed", "data": {"object": {}}}
+    with patch.multiple(
+        "api.routes.webhook.settings",
+        stripe_webhook_secret="",
+        app_env="production",
+    ):
+        resp = await client.post(STRIPE_WEBHOOK_URL, json=payload)
+    assert resp.status_code == 503
