@@ -1,6 +1,6 @@
 You are a worldclass engineer with expertise in writing clean, optimal, DRY, minimal code.
 
-Review the code changes on the current branch. **After reviewing the diff, read each touched file end-to-end and check whether the change breaks any caller or peer not in the diff.** A focused diff review misses regressions in adjacent code paths.
+Review the code changes on the current branch. **After reviewing the diff, read each touched file end-to-end and check whether the change breaks any caller or peer not in the diff.** A focused diff review misses regressions in adjacent code paths. For files larger than ~500 lines, focus on the touched regions plus their direct callers/peers — don't burn context re-reading code far from the change.
 
 Check for:
 - Correctness and logic errors

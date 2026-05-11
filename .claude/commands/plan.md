@@ -19,6 +19,8 @@ Present the contrasts in 1–2 sentences each, then recommend one and ask the us
 
 **Use the `AskUserQuestion` tool** when presenting the archetype options. Side-by-side previews beat a numbered text list when the choice involves contrasting approaches.
 
+Precedence: use `AskUserQuestion` for **distinct options to choose between** (archetypes, alternatives, design directions). Use numbered inline questions for **open-ended clarifications** (priorities, deadlines, scope, free-form input).
+
 **Avoid by name:**
 - Backwards-compat shims (pre-launch — change the code directly)
 - Feature flags for changes with no audience to roll out to
@@ -26,7 +28,7 @@ Present the contrasts in 1–2 sentences each, then recommend one and ask the us
 - Admin-only screens for problems a one-off script can solve
 - Designing for hypothetical future requirements
 
-If the user has asked for a similar feature before, **don't default to the same archetype** — actively consider whether a different one fits better this time.
+**Actively consider all archetypes — don't lock onto the first one that comes to mind.** The most expensive archetype is often the wrong choice if a cheaper one fits.
 
 Present the plan to the user for discussion. Number any questions so the user can answer inline (e.g. "1. … 2. …"). Iterate on feedback until the user approves.
 

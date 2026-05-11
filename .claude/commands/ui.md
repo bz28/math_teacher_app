@@ -18,6 +18,8 @@ If the obvious answer is "modal," actively consider one of the others before com
 
 **Use the `AskUserQuestion` tool** when presenting design alternatives. ASCII mockup previews work especially well for comparing layouts.
 
+Precedence: use `AskUserQuestion` for **distinct design alternatives to choose between** (layout A vs B, modal vs inline). Use numbered inline questions for **open-ended clarifications and final approval** (free-form input, sign-off on a single proposal).
+
 **Avoid by name:**
 - Toast confirmations for unrecoverable actions
 - Settings pages for a single toggle
