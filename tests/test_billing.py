@@ -203,12 +203,19 @@ async def test_stripe_webhook_checkout_completed_flips_to_pro(client: AsyncClien
 
 @pytest.mark.asyncio
 async def test_stripe_webhook_subscription_deleted_flips_to_free(client: AsyncClient) -> None:
-    """A customer.subscription.deleted event reverts the user to free."""
+    """A customer.subscription.deleted event reverts the user to free.
+
+    Also asserts that subscription_expires_at is cleared — so a stale
+    period-end can't be misused if a future re-flip happens.
+    """
+    from datetime import UTC, datetime, timedelta
+
     user, _ = await _make_user(role="teacher", stripe_customer_id="cus_wh_2")
     async with get_session_factory()() as s:
         u = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
         u.subscription_tier = "pro"
         u.subscription_status = "active"
+        u.subscription_expires_at = datetime.now(UTC) + timedelta(days=30)
         await s.commit()
 
     payload = {
@@ -227,6 +234,7 @@ async def test_stripe_webhook_subscription_deleted_flips_to_free(client: AsyncCl
         refreshed = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
         assert refreshed.subscription_tier == "free"
         assert refreshed.subscription_status == "cancelled"
+        assert refreshed.subscription_expires_at is None
 
 
 @pytest.mark.asyncio

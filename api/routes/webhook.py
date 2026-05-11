@@ -249,6 +249,10 @@ async def stripe_webhook(
             return {"status": "ok"}
         user.subscription_tier = "free"
         user.subscription_status = "cancelled"
+        # Clear the period-end too so the entitlement grace window
+        # in is_pro() can't accidentally keep this user pro if any
+        # future code path relaxes the `tier == "pro"` guard.
+        user.subscription_expires_at = None
         await db.commit()
         logger.info("Stripe → user %s subscription deleted", user.id)
         return {"status": "ok"}

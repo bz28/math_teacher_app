@@ -13,6 +13,7 @@ import logging
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
@@ -38,18 +39,29 @@ def _require_stripe_configured() -> None:
 async def _ensure_stripe_customer(user: User, db: AsyncSession) -> str:
     """Return the user's Stripe customer id, creating one if absent.
 
-    Idempotent: re-running for the same user returns the existing id.
+    Serialized via `SELECT ... FOR UPDATE` on the user row. Without
+    the lock, two concurrent /teacher-checkout calls from a brand-new
+    teacher both pass the customer-check and create two Stripe
+    customers — one of which ends up on the user row, the other
+    orphaned. When the orphaned customer's checkout completes,
+    the webhook arrives with a customer id that doesn't match the
+    user row and the user silently never flips to Pro. That's a
+    quiet revenue bug, so serialize at the DB layer.
     """
-    if user.stripe_customer_id:
-        return user.stripe_customer_id
+    locked = (await db.execute(
+        select(User).where(User.id == user.id).with_for_update()
+    )).scalar_one()
+
+    if locked.stripe_customer_id:
+        return locked.stripe_customer_id
 
     customer = await asyncio.to_thread(
         stripe.Customer.create,
-        email=user.email,
-        name=user.name or user.email,
-        metadata={"user_id": str(user.id)},
+        email=locked.email,
+        name=locked.name or locked.email,
+        metadata={"user_id": str(locked.id)},
     )
-    user.stripe_customer_id = customer.id
+    locked.stripe_customer_id = customer.id
     await db.commit()
     return customer.id
 
