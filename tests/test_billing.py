@@ -19,6 +19,7 @@ from .conftest import auth_headers
 
 CHECKOUT_URL = "/v1/billing/teacher-checkout"
 PORTAL_URL = "/v1/billing/teacher-portal"
+USAGE_URL = "/v1/billing/teacher-usage"
 
 # Stripe settings have to be non-empty for `is_configured()` to pass.
 # The patch decorator stubs both fields; the real env stays unset.
@@ -404,3 +405,107 @@ async def test_stripe_webhook_rejects_unconfigured_prod(client: AsyncClient) -> 
     ):
         resp = await client.post(STRIPE_WEBHOOK_URL, json=payload)
     assert resp.status_code == 503
+
+
+# ── /billing/teacher-usage ──────────────────────────────────────────────
+
+
+async def _log_generate_problem(user_id: uuid.UUID, n: int) -> None:
+    """Insert N generate_problem LLMCall rows for `user_id` today."""
+    from datetime import UTC, datetime
+
+    from api.models.llm_call import LLMCall
+    async with get_session_factory()() as s:
+        for _ in range(n):
+            s.add(LLMCall(
+                user_id=user_id,
+                function="generate_problem",
+                model="claude-test",
+                input_tokens=0,
+                output_tokens=0,
+                latency_ms=0.0,
+                cost_usd=0.0,
+                success=True,
+                created_at=datetime.now(UTC),
+            ))
+        await s.commit()
+
+
+@pytest.mark.asyncio
+async def test_teacher_usage_rejects_student(client: AsyncClient) -> None:
+    """Students can't hit the teacher-usage endpoint (no meter pill on student side)."""
+    _, token = await _make_user(role="student")
+    resp = await client.get(USAGE_URL, headers=auth_headers(token))
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_teacher_usage_independent_teacher(client: AsyncClient) -> None:
+    """Independent free teacher: returns the live count + cap, bypass=False."""
+    user, token = await _make_user(role="teacher")
+    await _log_generate_problem(user.id, 3)
+
+    resp = await client.get(USAGE_URL, headers=auth_headers(token))
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["used"] == 3
+    assert body["limit"] == 10
+    assert body["bypass"] is False
+
+
+@pytest.mark.asyncio
+async def test_teacher_usage_pro_teacher_bypasses(client: AsyncClient) -> None:
+    """Pro teacher: bypass=True so the frontend hides the pill entirely."""
+    async with get_session_factory()() as s:
+        teacher = User(
+            email=f"pro_usage_{uuid.uuid4().hex[:6]}@t.com",
+            name="Pro",
+            password_hash=hash_password("StrongPass1"),
+            grade_level=12,
+            role="teacher",
+            subscription_tier="pro",
+            subscription_status="active",
+        )
+        s.add(teacher)
+        await s.commit()
+        await s.refresh(teacher)
+        teacher_id = teacher.id
+
+    token = create_access_token(str(teacher_id), "teacher")
+    resp = await client.get(USAGE_URL, headers=auth_headers(token))
+    assert resp.status_code == 200
+    assert resp.json()["bypass"] is True
+
+
+@pytest.mark.asyncio
+async def test_teacher_usage_school_teacher_bypasses(client: AsyncClient) -> None:
+    """School teacher (school_id set on active school): bypass=True."""
+    from api.models.school import School
+
+    async with get_session_factory()() as s:
+        school = School(
+            name="Bypass High",
+            contact_name="C",
+            contact_email="c@s.com",
+            is_active=True,
+        )
+        s.add(school)
+        await s.commit()
+        await s.refresh(school)
+        teacher = User(
+            email=f"school_usage_{uuid.uuid4().hex[:6]}@t.com",
+            name="School T",
+            password_hash=hash_password("StrongPass1"),
+            grade_level=12,
+            role="teacher",
+            school_id=school.id,
+        )
+        s.add(teacher)
+        await s.commit()
+        await s.refresh(teacher)
+        teacher_id = teacher.id
+
+    token = create_access_token(str(teacher_id), "teacher")
+    resp = await client.get(USAGE_URL, headers=auth_headers(token))
+    assert resp.status_code == 200
+    assert resp.json()["bypass"] is True
