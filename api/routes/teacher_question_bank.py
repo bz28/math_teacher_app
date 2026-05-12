@@ -14,13 +14,15 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.entitlements import Entitlement, check_entitlement
 from api.core.image_utils import validate_and_decode_upload
 from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
 from api.core.question_bank_generation import regenerate_one, schedule_generation_job, snapshot_history
 from api.database import get_db
-from api.middleware.auth import CurrentUser, require_teacher
+from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
 from api.models.course import Course
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
+from api.models.user import User
 from api.routes.teacher_assignments import get_teacher_assignment
 from api.routes.teacher_courses import get_teacher_course
 from api.services.bank import snapshot_bank_items, used_in_assignments_map, used_in_for_item
@@ -273,8 +275,12 @@ async def generate_bank_questions(
     course_id: uuid.UUID,
     body: GenerateRequest,
     current_user: CurrentUser = Depends(require_teacher),
+    user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    # Enforce the teacher daily generation cap. Independent free
+    # teachers get 10/day; pro and school-active teachers bypass.
+    await check_entitlement(db, user, Entitlement.GENERATE_PROBLEM)
     await get_teacher_course(db, course_id, current_user.user_id)
 
     # Validate the assignment belongs to this teacher + this course.
@@ -586,11 +592,13 @@ async def generate_similar_bank_questions(
     body: GenerateSimilarRequest,
     parent: QuestionBankItem = Depends(get_bank_item),
     current_user: CurrentUser = Depends(require_teacher),
+    user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Schedule a generation job seeded from an existing approved bank
     item. Children inherit unit + source docs from the parent and have
     parent_question_id set, building the variation tree."""
+    await check_entitlement(db, user, Entitlement.GENERATE_PROBLEM)
     if parent.parent_question_id is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
