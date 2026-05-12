@@ -40,16 +40,18 @@ export default function CheckoutSuccessPage() {
 
       <p className="mt-3 text-text-secondary">
         {ready && user?.is_pro
-          ? "You now have access to unlimited sessions, mock exams, work diagnosis, and more."
+          ? user?.role === "teacher"
+            ? "Unlimited AI problem generation, grading drafts, and reusable banks — no daily cap."
+            : "You now have access to unlimited sessions, mock exams, work diagnosis, and more."
           : "This usually takes just a moment."}
       </p>
 
       {ready && (
         <Link
-          href="/home"
+          href={user?.role === "teacher" ? "/school/teacher" : "/home"}
           className="mt-8 rounded-[--radius-pill] bg-primary px-8 py-3 text-sm font-bold text-white transition-colors hover:bg-primary-dark"
         >
-          Continue to Home
+          {user?.role === "teacher" ? "Continue to Workspace" : "Continue to Home"}
         </Link>
       )}
 
