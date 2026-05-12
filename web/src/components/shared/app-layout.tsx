@@ -8,6 +8,7 @@ import { teacher, enterPreviewMode } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/shared/logo-mark";
 import { SchoolStudentLayout } from "@/components/school/student/school-student-layout";
+import { TeacherUsagePill } from "@/components/shared/teacher-usage-pill";
 
 // ── Student nav items ──
 
@@ -196,6 +197,9 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
           })}
 
           <div className="my-3 border-t border-border-light" />
+
+          {/* Renders only for free independent teachers (server-gated). */}
+          <TeacherUsagePill />
 
           <button
             onClick={async () => {
