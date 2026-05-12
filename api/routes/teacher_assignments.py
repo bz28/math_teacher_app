@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.entitlements import Entitlement, check_entitlement
 from api.core.integrity_pipeline import (
     STATUS_COMPLETE as INTEGRITY_COMPLETE,
 )
@@ -19,7 +20,7 @@ from api.core.integrity_pipeline import (
 )
 from api.core.question_bank_generation import schedule_generation_job
 from api.database import get_db
-from api.middleware.auth import CurrentUser, require_teacher
+from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.integrity_check import (
     IntegrityCheckProblem,
@@ -482,6 +483,7 @@ async def create_assignment(
 async def clone_homework_as_practice(
     course_id: uuid.UUID, hw_id: uuid.UUID,
     current_user: CurrentUser = Depends(require_teacher),
+    user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Clone a homework's problem list into a new Practice assignment.
@@ -491,6 +493,11 @@ async def clone_homework_as_practice(
     The practice set starts as a draft with no content; the teacher
     publishes it explicitly after reviewing.
     """
+    # Each cloned problem fires its own generate_questions LLM call, so
+    # gate behind the same cap as direct generation — without this an
+    # independent free teacher can queue an entire HW's worth of jobs in
+    # one click and trivially exceed the 10/day quota.
+    await check_entitlement(db, user, Entitlement.GENERATE_PROBLEM)
     await get_teacher_course(db, course_id, current_user.user_id)
     source = await get_teacher_assignment(db, hw_id, current_user.user_id)
     # Cross-course clone would leak one course's content into another.
