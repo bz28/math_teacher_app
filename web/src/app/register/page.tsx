@@ -55,10 +55,17 @@ function RegisterPageContent() {
   const [inviteLoading, setInviteLoading] = useState(!!inviteToken || !!sectionInviteToken);
   const [inviteError, setInviteError] = useState("");
 
-  // Clear stale tokens so loadUser() doesn't fire "Session expired"
+  // Clear stale tokens so loadUser() doesn't fire "Session expired" —
+  // but only when no live session exists. A signed-in user navigating
+  // here (e.g. clicking a stale header link) shouldn't be silently
+  // logged out. Invite flows always clear so the invite's email
+  // takes over from any cached identity.
   useEffect(() => {
-    clearTokens();
-  }, []);
+    const live = useAuthStore.getState().user;
+    if (!live || inviteToken || sectionInviteToken) {
+      clearTokens();
+    }
+  }, [inviteToken, sectionInviteToken]);
 
   // Validate invite token on mount (teacher or section — mutually exclusive)
   useEffect(() => {
@@ -253,11 +260,16 @@ function RegisterPageContent() {
 
             {/* Role toggle — only on self-signup. Invite flows hide
                 this because the invite already determines role. */}
-            <div className="mt-5 flex rounded-[--radius-sm] border border-border-light bg-surface-alt p-1">
+            <div
+              role="group"
+              aria-label="Choose account type"
+              className="mt-5 flex rounded-[--radius-sm] border border-border-light bg-surface-alt p-1"
+            >
               {(["student", "teacher"] as const).map((r) => (
                 <button
                   key={r}
                   type="button"
+                  aria-pressed={role === r}
                   onClick={() => {
                     setRole(r);
                     // Reset teacher-only fields when switching off
