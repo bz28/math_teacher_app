@@ -353,9 +353,10 @@ function TeacherProCard() {
         loadingTimeoutRef.current = null;
       }
       // 401: session expired mid-flow. Route them to login with a
-      // return-to so they don't lose their place.
+      // redirect so they don't lose their place. Param name must be
+      // `redirect` — that's what `/login` reads (searchParams).
       if (e instanceof ApiError && e.status === 401) {
-        router.push("/login?return_to=/pricing?view=teacher");
+        router.push(`/login?redirect=${encodeURIComponent("/pricing?view=teacher")}`);
         return;
       }
       setError("Checkout is not available right now. Please try again later.");
