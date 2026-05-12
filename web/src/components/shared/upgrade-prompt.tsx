@@ -21,7 +21,18 @@ const FEATURE_LABELS: Record<string, { title: string; description: string }> = {
     title: "Daily Chat Limit Reached",
     description: `Free accounts are limited to ${FREE_DAILY_CHAT_LIMIT} chat messages per day. Upgrade to Pro for unlimited chat.`,
   },
+  generate_problem: {
+    title: "You've hit today's free limit",
+    description:
+      "Independent teacher accounts can generate 10 AI problems per day. Upgrade to Teacher Pro for unlimited generation.",
+  },
 };
+
+// Entitlements that belong to the teacher tier — the upgrade CTA
+// routes to /pricing?view=teacher so the teacher card is selected
+// on arrival. Everything else (student-facing entitlements) stays on
+// the default /pricing entry.
+const TEACHER_ENTITLEMENTS = new Set(["generate_problem"]);
 
 const DEFAULT_FEATURE = {
   title: "Pro Feature Required",
@@ -37,6 +48,9 @@ interface UpgradePromptProps {
 
 export function UpgradePrompt({ open, onClose, entitlement, message }: UpgradePromptProps) {
   const feature = entitlement ? FEATURE_LABELS[entitlement] ?? DEFAULT_FEATURE : DEFAULT_FEATURE;
+  const isTeacherTier = entitlement ? TEACHER_ENTITLEMENTS.has(entitlement) : false;
+  const ctaHref = isTeacherTier ? "/pricing?view=teacher" : "/pricing";
+  const ctaLabel = isTeacherTier ? "Upgrade — $19/mo" : "Upgrade to Pro";
 
   return (
     <Modal open={open} onClose={onClose}>
@@ -60,11 +74,11 @@ export function UpgradePrompt({ open, onClose, entitlement, message }: UpgradePr
             Maybe Later
           </button>
           <Link
-            href="/pricing"
+            href={ctaHref}
             onClick={onClose}
             className="flex-1 rounded-[--radius-pill] bg-primary py-2.5 text-center text-sm font-bold text-white transition-colors hover:bg-primary-dark"
           >
-            Upgrade to Pro
+            {ctaLabel}
           </Link>
         </div>
       </div>

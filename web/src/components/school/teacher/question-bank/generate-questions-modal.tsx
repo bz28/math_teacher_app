@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import {
   teacher,
+  EntitlementError,
   type BankJob,
   type TeacherDocument,
   type TeacherUnit,
 } from "@/lib/api";
 import { topUnits } from "@/lib/units";
 import { useDocumentUploads } from "@/hooks/use-document-uploads";
+import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { SelectableChip } from "../_pieces/selectable-chip";
 import { SourceMaterialPicker } from "../_pieces/source-material-picker";
 import { QUANTITY_CHIPS } from "./constants";
@@ -49,6 +51,7 @@ export function GenerateQuestionsModal({
   const [constraint, setConstraint] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
 
   const uploads = useDocumentUploads({
     courseId,
@@ -142,7 +145,11 @@ export function GenerateQuestionsModal({
       });
       onStarted(job);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to start generation");
+      if (e instanceof EntitlementError && e.isLimit) {
+        showUpgrade(e.entitlement, e.message);
+      } else {
+        setError(e instanceof Error ? e.message : "Failed to start generation");
+      }
       setSubmitting(false);
     }
   };
@@ -151,6 +158,8 @@ export function GenerateQuestionsModal({
   const pickerUnitIds = savedTo !== undefined ? [savedTo] : [];
 
   return (
+    <>
+    {UpgradeModal}
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={() => {
@@ -330,5 +339,6 @@ export function GenerateQuestionsModal({
         </div>
       </form>
     </div>
+    </>
   );
 }

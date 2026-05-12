@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   teacher,
+  EntitlementError,
   type TeacherAssignment,
   type TeacherDocument,
 } from "@/lib/api";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useDocumentUploads } from "@/hooks/use-document-uploads";
+import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import {
   AssignmentDetailsStep,
   AssignmentProblemsStep,
@@ -53,6 +55,7 @@ export function NewPracticeModal({
   const [step, setStep] = useState<Step>(1);
   const [sourceMode, setSourceMode] = useState<SourceMode>("clone");
   const { busy, error, setError, run } = useAsyncAction();
+  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
 
   // ── Step 1 state (clone-mode only) ──
   const [hws, setHws] = useState<TeacherAssignment[]>([]);
@@ -215,7 +218,11 @@ export function NewPracticeModal({
           constraint: topicHint.trim() || null,
         });
         sessionStorage.setItem(`hw-gen-${id}`, JSON.stringify([job.id]));
-      } catch {
+      } catch (e) {
+        if (e instanceof EntitlementError && e.isLimit) {
+          showUpgrade(e.entitlement, e.message);
+          return;
+        }
         startedGeneration = false;
       }
       onCreated(id, { startedGeneration });
@@ -231,6 +238,8 @@ export function NewPracticeModal({
   const totalSteps = sourceMode === "clone" ? 1 : 3;
 
   return (
+    <>
+    {UpgradeModal}
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={() => {
@@ -416,6 +425,7 @@ export function NewPracticeModal({
         </div>
       </div>
     </div>
+    </>
   );
 }
 

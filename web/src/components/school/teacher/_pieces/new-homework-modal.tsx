@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { teacher, type TeacherDocument, type TeacherUnit } from "@/lib/api";
+import { teacher, EntitlementError, type TeacherDocument, type TeacherUnit } from "@/lib/api";
+import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { topUnits } from "@/lib/units";
 import { fileToBase64, formatFileSize } from "@/lib/utils";
 import { ImageResizeError, resizeImageForUpload } from "@/lib/image-resize";
@@ -78,6 +79,7 @@ export function NewHomeworkModal({
   ) => void;
 }) {
   const { busy, error, run } = useAsyncAction();
+  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
 
   const [mode, setMode] = useState<Mode>("generate");
 
@@ -214,7 +216,15 @@ export function NewHomeworkModal({
           constraint: topicHint.trim() || null,
         });
         sessionStorage.setItem(`hw-gen-${id}`, JSON.stringify([job.id]));
-      } catch {
+      } catch (e) {
+        if (e instanceof EntitlementError && e.isLimit) {
+          // Cap hit: keep the user in the modal with the upgrade
+          // prompt so they don't get navigated to an empty draft.
+          // The assignment record persists; they can retry once
+          // they upgrade or come back tomorrow.
+          showUpgrade(e.entitlement, e.message);
+          return;
+        }
         startedGeneration = false;
       }
       onCreated(id, { startedGeneration });
@@ -364,6 +374,8 @@ export function NewHomeworkModal({
   const canExtract = canGenerate && validStagedCount > 0;
 
   return (
+    <>
+    {UpgradeModal}
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={() => {
@@ -588,6 +600,7 @@ export function NewHomeworkModal({
         </div>
       </div>
     </div>
+    </>
   );
 }
 
