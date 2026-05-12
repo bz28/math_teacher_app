@@ -25,6 +25,13 @@ class User(Base):
         nullable=True, index=True,
     )
 
+    # Self-reported school name from teacher self-signup. Free-text,
+    # not normalized — used as a sales signal (which schools have
+    # teachers organically trying Veradic) rather than as a real
+    # institutional link. The formal `school_id` FK above remains the
+    # source of truth for school membership.
+    signup_school_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
     # Shadow student for "Try as Student" preview mode.
     is_preview: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     preview_owner_id: Mapped[uuid.UUID | None] = mapped_column(
