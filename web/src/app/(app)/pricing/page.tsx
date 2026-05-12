@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
 import { useEntitlementStore } from "@/stores/entitlements";
-import { billing } from "@/lib/api";
+import { ApiError, billing } from "@/lib/api";
 import { purchasePlan, getManagementUrl, type PlanType } from "@/services/revenuecat";
 import { CheckIcon } from "@/components/ui/icons";
 
@@ -93,10 +93,13 @@ function PricingPageContent() {
   }
 
   // Pro users land on a status card instead of the plan picker.
-  // Teachers and students use different billing providers (Stripe vs
-  // RevenueCat) so the "Manage subscription" handlers are split.
+  // Teachers and students use different billing providers, so we
+  // route by subscription_provider (set by the webhook handler)
+  // rather than by current role — that way an admin who flipped a
+  // teacher's role to student doesn't accidentally route a Stripe-
+  // paying user through the RevenueCat portal.
   if (user?.is_pro) {
-    return user.role === "teacher" ? (
+    return user.subscription_provider === "stripe" ? (
       <ActiveTeacherSubscription />
     ) : (
       <ActiveSubscription />
@@ -319,16 +322,42 @@ function ActiveSubscription() {
 // mirrors the recommended student plan card so the page reads as
 // "one product, two audiences" rather than two unrelated layouts.
 function TeacherProCard() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+    };
+  }, []);
 
   async function startCheckout() {
     setLoading(true);
     setError(null);
+    // Fallback timeout: window.location.assign normally navigates
+    // away before this fires, but if Stripe is slow / blocked /
+    // popup-blocked, we re-enable the button after 8s with a
+    // helpful message rather than stranding the user on "Loading...".
+    loadingTimeoutRef.current = setTimeout(() => {
+      setLoading(false);
+      setError("Taking longer than expected. Please try again.");
+    }, 8000);
     try {
       const { checkout_url } = await billing.teacherCheckout();
       window.location.assign(checkout_url);
-    } catch {
+    } catch (e) {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+      // 401: session expired mid-flow. Route them to login with a
+      // return-to so they don't lose their place.
+      if (e instanceof ApiError && e.status === 401) {
+        router.push("/login?return_to=/pricing?view=teacher");
+        return;
+      }
       setError("Checkout is not available right now. Please try again later.");
       setLoading(false);
     }
@@ -390,6 +419,12 @@ function ActiveTeacherSubscription() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The portal endpoint 404s without a stripe_customer_id (e.g. an
+  // admin-set is_pro=true user, or a paid teacher whose customer
+  // row was wiped). Disable the button up-front rather than showing
+  // a generic error after the click.
+  const canManage = user?.has_stripe_customer === true;
+
   async function openPortal() {
     setLoading(true);
     setError(null);
@@ -423,8 +458,9 @@ function ActiveTeacherSubscription() {
         )}
         <button
           onClick={openPortal}
-          disabled={loading}
-          className="mt-6 rounded-[--radius-pill] border border-border-light px-6 py-2.5 text-sm font-bold text-text-primary transition-colors hover:bg-primary-bg disabled:opacity-50"
+          disabled={loading || !canManage}
+          title={canManage ? undefined : "Subscription management is unavailable for this account. Contact support if you need to make a change."}
+          className="mt-6 rounded-[--radius-pill] border border-border-light px-6 py-2.5 text-sm font-bold text-text-primary transition-colors hover:bg-primary-bg disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? "Loading..." : "Manage Subscription"}
         </button>
