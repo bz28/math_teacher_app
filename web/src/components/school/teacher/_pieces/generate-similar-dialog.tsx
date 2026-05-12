@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { teacher, type BankJob } from "@/lib/api";
+import { teacher, EntitlementError, type BankJob } from "@/lib/api";
+import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 
 /**
  * Small dialog: pick how many variations + optional constraint, then
@@ -22,6 +23,7 @@ export function GenerateSimilarDialog({
   const [constraint, setConstraint] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
 
   const submit = async () => {
     setBusy(true);
@@ -33,12 +35,18 @@ export function GenerateSimilarDialog({
       });
       onStarted(job);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to start");
+      if (e instanceof EntitlementError && e.isLimit) {
+        showUpgrade(e.entitlement, e.message);
+      } else {
+        setError(e instanceof Error ? e.message : "Failed to start");
+      }
       setBusy(false);
     }
   };
 
   return (
+    <>
+    {UpgradeModal}
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
       onClick={onClose}
@@ -122,5 +130,6 @@ export function GenerateSimilarDialog({
         </div>
       </form>
     </div>
+    </>
   );
 }
