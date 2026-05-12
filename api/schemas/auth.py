@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class RegisterRequest(BaseModel):
@@ -13,7 +13,10 @@ class RegisterRequest(BaseModel):
     invite_token: str | None = None
     section_invite_token: str | None = None
     join_code: str | None = None
-    signup_school_name: str | None = None
+    # Capped at the DB column width (User.signup_school_name is
+    # VARCHAR(200)). Without this, a >200 char POST bypasses Pydantic
+    # and surfaces as a 500 from asyncpg's StringDataRightTruncationError.
+    signup_school_name: str | None = Field(None, max_length=200)
 
     @field_validator("password")
     @classmethod
@@ -66,8 +69,13 @@ class UserResponse(BaseModel):
     school_name: str | None = None
     subscription_tier: str = "free"
     subscription_status: str = "none"
+    subscription_provider: str | None = None
     subscription_expires_at: datetime | None = None
     is_pro: bool = False
+    # True when the user has a stripe_customer_id on file. Lets the
+    # frontend conditionally render the "Manage Subscription" button
+    # without leaking the actual customer id to the client.
+    has_stripe_customer: bool = False
 
 
 class DeleteAccountRequest(BaseModel):

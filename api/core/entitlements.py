@@ -151,19 +151,32 @@ async def get_daily_decomp_count(db: AsyncSession, user_id: uuid.UUID, since: da
 
 
 async def get_daily_llm_call_count(
-    db: AsyncSession, user_id: uuid.UUID, function_name: str, since: datetime | None = None,
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    function_name: str,
+    since: datetime | None = None,
+    *,
+    success_only: bool = False,
 ) -> int:
-    """Count LLM calls today for a specific function."""
+    """Count LLM calls today for a specific function.
+
+    success_only=True filters to LLMCall.success=True — used for cap
+    enforcement so failed model calls don't burn a user's daily
+    allowance (a teacher whose 10 generation attempts all timed out
+    at the provider shouldn't see "0 problems / 10 used today").
+    """
     from api.models.llm_call import LLMCall
 
+    where_clauses = [
+        LLMCall.user_id == user_id,
+        LLMCall.function == function_name,
+        LLMCall.created_at >= (since or today_start()),
+    ]
+    if success_only:
+        where_clauses.append(LLMCall.success.is_(True))
+
     result = await db.execute(
-        select(func.count())
-        .select_from(LLMCall)
-        .where(
-            LLMCall.user_id == user_id,
-            LLMCall.function == function_name,
-            LLMCall.created_at >= (since or today_start()),
-        )
+        select(func.count()).select_from(LLMCall).where(*where_clauses)
     )
     return result.scalar_one()
 
@@ -251,7 +264,20 @@ async def check_entitlement(
         # silently lift other caps for school teachers.
         if await is_school_active_teacher(db, user):
             return
-        count = await get_daily_llm_call_count(db, user_id, _GENERATE_FUNCTION, cutoff)
+        # Known TOCTOU limitation: the LLMCall row this counts is
+        # written by the async generation worker AFTER the route
+        # returns. N concurrent /generate requests for the same
+        # teacher all read the same pre-call count and all pass.
+        # Mitigations today: the route's slowapi rate limit (3/min
+        # on /question-bank/generate via teacher_question_bank.py)
+        # and the soft 10/day cap on a still-small user base. A
+        # proper fix (reservation counter on User incremented in the
+        # gate transaction) is tracked separately.
+        # success_only=True so a teacher whose attempts failed at
+        # the model doesn't burn their daily allowance.
+        count = await get_daily_llm_call_count(
+            db, user_id, _GENERATE_FUNCTION, cutoff, success_only=True,
+        )
         if count >= TEACHER_DAILY_GENERATION_LIMIT:
             raise EntitlementError(
                 entitlement,

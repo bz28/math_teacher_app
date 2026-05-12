@@ -26,8 +26,10 @@ export interface User {
   school_name: string | null;
   subscription_tier: string;
   subscription_status: string;
+  subscription_provider: string | null;
   subscription_expires_at: string | null;
   is_pro: boolean;
+  has_stripe_customer: boolean;
 }
 
 export interface InviteData {

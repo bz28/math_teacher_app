@@ -393,8 +393,10 @@ async def me(
         school_name=school_name,
         subscription_tier=user.subscription_tier,
         subscription_status=user.subscription_status,
+        subscription_provider=user.subscription_provider,
         subscription_expires_at=user.subscription_expires_at,
         is_pro=is_pro(user),
+        has_stripe_customer=bool(user.stripe_customer_id),
     )
 
 
