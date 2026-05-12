@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
 from api.core.entitlements import (
+    _GENERATE_FUNCTION,
     TEACHER_DAILY_GENERATION_LIMIT,
     get_daily_llm_call_count,
     is_pro,
@@ -145,7 +146,7 @@ async def teacher_usage(
         return UsageResponse(used=0, limit=TEACHER_DAILY_GENERATION_LIMIT, bypass=True)
 
     cutoff = usage_cutoff(user)
-    used = await get_daily_llm_call_count(db, user.id, "generate_problem", cutoff)
+    used = await get_daily_llm_call_count(db, user.id, _GENERATE_FUNCTION, cutoff)
     return UsageResponse(
         used=used,
         limit=TEACHER_DAILY_GENERATION_LIMIT,

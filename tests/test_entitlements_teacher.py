@@ -69,7 +69,7 @@ async def _log_generate_problem(user_id: uuid.UUID, n: int) -> None:
         for _ in range(n):
             session.add(LLMCall(
                 user_id=user_id,
-                function="generate_problem",
+                function="generate_questions",
                 model="claude-test",
                 input_tokens=0,
                 output_tokens=0,
