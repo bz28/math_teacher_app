@@ -28,6 +28,7 @@ from api.models.question_bank import QuestionBankItem
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.session import Session  # noqa: F401 — register models with Base
+from api.models.stripe_event import StripeProcessedEvent  # noqa: F401 — register
 from api.models.unit import Unit
 from api.models.user import User
 from api.routes.school_student_practice import drain_integrity_background_tasks
