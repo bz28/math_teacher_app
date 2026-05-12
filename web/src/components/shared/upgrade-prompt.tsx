@@ -53,7 +53,11 @@ export function UpgradePrompt({ open, onClose, entitlement, message }: UpgradePr
   const ctaLabel = isTeacherTier ? "Upgrade — $19/mo" : "Upgrade to Pro";
 
   return (
-    <Modal open={open} onClose={onClose}>
+    // outerClassName: z-[80] so the upgrade prompt paints above a host
+    // modal (some of which sit at z-50, some at z-[60]). Without this
+    // override the prompt would be hidden behind the modal that
+    // triggered it.
+    <Modal open={open} onClose={onClose} outerClassName="z-[80]">
       <div className="text-center">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary-bg">
           <svg className="h-7 w-7 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
