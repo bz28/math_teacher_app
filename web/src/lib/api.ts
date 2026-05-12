@@ -2104,4 +2104,10 @@ export const billing = {
   teacherPortal() {
     return apiFetch<{ portal_url: string }>("/billing/teacher-portal");
   },
+
+  teacherUsage() {
+    return apiFetch<{ used: number; limit: number; bypass: boolean }>(
+      "/billing/teacher-usage",
+    );
+  },
 };
