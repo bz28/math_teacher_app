@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import stripe
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
@@ -150,6 +151,46 @@ def _ts_to_dt(ts: int | None) -> datetime | None:
     return datetime.fromtimestamp(ts, tz=UTC)
 
 
+async def _claim_event(db: AsyncSession, event_id: str, event_type: str) -> bool:
+    """Insert an idempotency row for `event_id`. Returns True if this is
+    the first time we've seen the event, False if it's a redelivery.
+
+    Stripe retries any non-2xx and may also redeliver already-2xx'd
+    events during outages — the API contract is at-least-once. We
+    dedup at the PK level so handlers don't double-apply state.
+    """
+    from api.models.stripe_event import StripeProcessedEvent
+
+    db.add(StripeProcessedEvent(event_id=event_id, event_type=event_type))
+    try:
+        await db.commit()
+        return True
+    except IntegrityError:
+        # PK collision = already processed. Roll back the failed
+        # insert so the session is usable for the handler returning
+        # OK to Stripe.
+        await db.rollback()
+        return False
+
+
+def _is_active_subscription(user: User, event_sub_id: str | None) -> bool:
+    """True if the event's subscription matches the user's tracked one
+    (or the user has none yet — first-time setup).
+
+    Prevents a late `customer.subscription.updated(active)` for an
+    OLD subscription id from re-promoting a user whose current sub
+    was deleted. Falls through on null (a checkout.session.completed
+    sets the tracking id; updates before then are first-touch).
+    """
+    if not user.stripe_subscription_id:
+        return True
+    if not event_sub_id:
+        # Old test fixtures or partial payloads — fall back to
+        # processing rather than swallowing silently.
+        return True
+    return user.stripe_subscription_id == event_sub_id
+
+
 @router.post("/webhooks/stripe", status_code=200)
 @limiter.limit("60/minute")
 async def stripe_webhook(
@@ -160,9 +201,16 @@ async def stripe_webhook(
     """Handle Stripe subscription lifecycle for teacher accounts.
 
     Events we care about:
-      - checkout.session.completed       → flip to Pro + active
-      - customer.subscription.updated    → reflect current_period_end / status
-      - customer.subscription.deleted    → flip back to free
+      - checkout.session.completed       → flip to Pro + active, track sub id
+      - customer.subscription.updated    → reflect status (only for current sub)
+      - customer.subscription.deleted    → flip back to free, clear sub id
+
+    Hardened against (a) redelivery — every event_id is recorded in
+    stripe_processed_events and reprocessing short-circuits — and
+    (b) out-of-order delivery — `customer.subscription.updated` only
+    acts when the event's subscription id matches the user's tracked
+    `stripe_subscription_id`, so a late `active` event for an
+    already-deleted sub can't re-promote a cancelled user.
 
     Signature verification is enforced in production. In dev (no
     webhook secret configured) we skip it so the Stripe CLI can fire
@@ -191,36 +239,65 @@ async def stripe_webhook(
         event = json.loads(payload)
 
     event_type = event.get("type") if isinstance(event, dict) else event["type"]
+    event_id = event.get("id") if isinstance(event, dict) else event["id"]
     data_object = (
         event.get("data", {}).get("object", {})
         if isinstance(event, dict)
         else event["data"]["object"]
     )
 
-    logger.info("Stripe event received: type=%s", event_type)
+    # Idempotency check — only if Stripe sent an id (dev-mode test
+    # payloads without ids skip dedup so unit tests can re-fire the
+    # same payload shape without contaminating state).
+    if event_id:
+        first_time = await _claim_event(db, event_id, event_type or "")
+        if not first_time:
+            logger.info("Stripe redelivery skipped: id=%s type=%s", event_id, event_type)
+            return {"status": "ok"}
+
+    logger.info("Stripe event received: id=%s type=%s", event_id, event_type)
 
     if event_type == "checkout.session.completed":
         # The Checkout Session carries the customer id and (when mode=
         # subscription) the resulting subscription id. We flip the user
-        # to Pro on this event; subsequent updates land via
-        # customer.subscription.updated.
-        user = await _resolve_user_by_customer(db, data_object.get("customer"))
+        # to Pro on this event and store the sub id so subsequent
+        # updates can be scoped to it.
+        customer_id = data_object.get("customer")
+        user = await _resolve_user_by_customer(db, customer_id)
         if user is None:
             logger.warning(
                 "Stripe checkout.session.completed for unknown customer: %s",
-                data_object.get("customer"),
+                customer_id,
             )
             return {"status": "ok"}
         user.subscription_tier = "pro"
         user.subscription_status = "active"
         user.subscription_provider = "stripe"
+        sub_id = data_object.get("subscription")
+        if sub_id:
+            user.stripe_subscription_id = sub_id
         await db.commit()
-        logger.info("Stripe → user %s flipped to pro/active", user.id)
+        logger.info(
+            "Stripe → user %s flipped to pro/active (sub=%s)",
+            user.id, sub_id,
+        )
         return {"status": "ok"}
 
     if event_type == "customer.subscription.updated":
-        user = await _resolve_user_by_customer(db, data_object.get("customer"))
+        customer_id = data_object.get("customer")
+        user = await _resolve_user_by_customer(db, customer_id)
         if user is None:
+            logger.warning(
+                "Stripe subscription.updated for unknown customer: %s", customer_id,
+            )
+            return {"status": "ok"}
+        event_sub_id = data_object.get("id")
+        if not _is_active_subscription(user, event_sub_id):
+            logger.info(
+                "Stripe subscription.updated for non-current sub ignored: user=%s "
+                "tracked=%s event_sub=%s",
+                user.id, user.stripe_subscription_id, event_sub_id,
+            )
             return {"status": "ok"}
         sub_status = data_object.get("status")  # active / past_due / canceled / etc.
         period_end = _ts_to_dt(data_object.get("current_period_end"))
@@ -231,9 +308,11 @@ async def stripe_webhook(
             user.subscription_status = "billing_issue"
         elif sub_status == "canceled":
             user.subscription_status = "cancelled"
-        # Always carry the freshest period end so the grace window in
-        # is_pro() reflects the latest billing cycle.
-        if period_end is not None:
+        # Carry the freshest period end so the grace window in is_pro()
+        # reflects the latest billing cycle. Skip when the sub is
+        # already-deleted (tier=free) so a late update for a stale sub
+        # can't resurrect a future expiry.
+        if period_end is not None and user.subscription_tier == "pro":
             user.subscription_expires_at = period_end
         user.subscription_provider = "stripe"
         await db.commit()
@@ -244,15 +323,29 @@ async def stripe_webhook(
         return {"status": "ok"}
 
     if event_type == "customer.subscription.deleted":
-        user = await _resolve_user_by_customer(db, data_object.get("customer"))
+        customer_id = data_object.get("customer")
+        user = await _resolve_user_by_customer(db, customer_id)
         if user is None:
+            logger.warning(
+                "Stripe subscription.deleted for unknown customer: %s", customer_id,
+            )
+            return {"status": "ok"}
+        event_sub_id = data_object.get("id")
+        if not _is_active_subscription(user, event_sub_id):
+            logger.info(
+                "Stripe subscription.deleted for non-current sub ignored: user=%s "
+                "tracked=%s event_sub=%s",
+                user.id, user.stripe_subscription_id, event_sub_id,
+            )
             return {"status": "ok"}
         user.subscription_tier = "free"
         user.subscription_status = "cancelled"
-        # Clear the period-end too so the entitlement grace window
-        # in is_pro() can't accidentally keep this user pro if any
-        # future code path relaxes the `tier == "pro"` guard.
+        # Clear period-end and the tracking sub id so the entitlement
+        # grace window in is_pro() can't keep this user pro and so
+        # future events for this dead sub are correctly ignored as
+        # stale.
         user.subscription_expires_at = None
+        user.stripe_subscription_id = None
         await db.commit()
         logger.info("Stripe → user %s subscription deleted", user.id)
         return {"status": "ok"}

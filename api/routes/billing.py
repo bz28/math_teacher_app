@@ -44,6 +44,17 @@ def _require_stripe_configured() -> None:
         )
 
 
+async def _create_stripe_customer(user: User) -> str:
+    """Call Stripe to create a Customer and return its id."""
+    customer = await asyncio.to_thread(
+        stripe.Customer.create,
+        email=user.email,
+        name=user.name or user.email,
+        metadata={"user_id": str(user.id)},
+    )
+    return customer.id
+
+
 async def _ensure_stripe_customer(user: User, db: AsyncSession) -> str:
     """Return the user's Stripe customer id, creating one if absent.
 
@@ -63,15 +74,65 @@ async def _ensure_stripe_customer(user: User, db: AsyncSession) -> str:
     if locked.stripe_customer_id:
         return locked.stripe_customer_id
 
-    customer = await asyncio.to_thread(
-        stripe.Customer.create,
-        email=locked.email,
-        name=locked.name or locked.email,
-        metadata={"user_id": str(locked.id)},
-    )
-    locked.stripe_customer_id = customer.id
+    customer_id = await _create_stripe_customer(locked)
+    locked.stripe_customer_id = customer_id
     await db.commit()
-    return customer.id
+    return customer_id
+
+
+async def _create_checkout_session_with_recovery(
+    db: AsyncSession, user: User, customer_id: str,
+) -> stripe.checkout.Session:
+    """Create a Checkout Session, recovering from a stale customer id.
+
+    If a Stripe customer was deleted server-side (admin cleanup), the
+    customer id stored on the user row is dead. `Session.create` then
+    raises `InvalidRequestError` — without recovery this would bubble
+    as a 500 and the teacher is stuck. Here we catch the specific
+    error, null the stale id, mint a fresh customer, and retry once.
+    """
+    try:
+        return await asyncio.to_thread(
+            stripe.checkout.Session.create,
+            mode="subscription",
+            customer=customer_id,
+            line_items=[
+                {"price": settings.teacher_pro_stripe_price_id, "quantity": 1},
+            ],
+            success_url=settings.stripe_checkout_success_url,
+            cancel_url=settings.stripe_checkout_cancel_url,
+            client_reference_id=str(user.id),
+        )
+    except stripe.InvalidRequestError as e:  # type: ignore[attr-defined]
+        # Stripe's error message format: "No such customer: 'cus_xxx'".
+        # Be defensive — match on the message rather than a code that
+        # may differ across SDK versions.
+        if "no such customer" not in str(e).lower():
+            raise
+        logger.warning(
+            "Stripe customer %s missing for user %s; recreating", customer_id, user.id,
+        )
+        # Re-lock the user row, null the stale id, mint a new customer,
+        # commit, retry. Wrapped in its own transaction so the failed
+        # session.create above doesn't poison this one.
+        relocked = (await db.execute(
+            select(User).where(User.id == user.id).with_for_update()
+        )).scalar_one()
+        relocked.stripe_customer_id = None
+        new_customer_id = await _create_stripe_customer(relocked)
+        relocked.stripe_customer_id = new_customer_id
+        await db.commit()
+        return await asyncio.to_thread(
+            stripe.checkout.Session.create,
+            mode="subscription",
+            customer=new_customer_id,
+            line_items=[
+                {"price": settings.teacher_pro_stripe_price_id, "quantity": 1},
+            ],
+            success_url=settings.stripe_checkout_success_url,
+            cancel_url=settings.stripe_checkout_cancel_url,
+            client_reference_id=str(user.id),
+        )
 
 
 @router.post(
@@ -97,16 +158,7 @@ async def teacher_checkout(
         )
 
     customer_id = await _ensure_stripe_customer(user, db)
-
-    session = await asyncio.to_thread(
-        stripe.checkout.Session.create,
-        mode="subscription",
-        customer=customer_id,
-        line_items=[{"price": settings.teacher_pro_stripe_price_id, "quantity": 1}],
-        success_url=settings.stripe_checkout_success_url,
-        cancel_url=settings.stripe_checkout_cancel_url,
-        client_reference_id=str(user.id),
-    )
+    session = await _create_checkout_session_with_recovery(db, user, customer_id)
 
     logger.info("Stripe checkout created: user=%s session=%s", user.id, session.id)
     return CheckoutResponse(checkout_url=session.url or "")
