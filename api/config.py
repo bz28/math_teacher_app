@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     revenuecat_webhook_secret: str = ""
     bypass_subscription: bool = False
 
+    # Stripe (teacher self-serve subscription)
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    teacher_pro_stripe_price_id: str = ""
+    stripe_checkout_success_url: str = "https://veradicai.com/pricing/success"
+    stripe_checkout_cancel_url: str = "https://veradicai.com/pricing"
+    stripe_portal_return_url: str = "https://veradicai.com/pricing"
+
     @field_validator("cors_origins", "admin_alert_emails", mode="before")
     @classmethod
     def parse_string_list(cls, v: str | list[str]) -> list[str]:
