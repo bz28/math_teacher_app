@@ -38,6 +38,11 @@ export default function AccountPage() {
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
 
   const [portalLoading, setPortalLoading] = useState(false);
+  const [portalError, setPortalError] = useState<string | null>(null);
+  // Stripe portal 404s without a stripe_customer_id (admin-set is_pro=true
+  // user, wiped customer row). Disable up-front rather than silent-fail
+  // mid-click — mirrors ActiveTeacherSubscription on /pricing.
+  const canManageStripe = !useStripePortal || user?.has_stripe_customer === true;
 
   // Delete account state
   const [showConfirm, setShowConfirm] = useState(false);
@@ -54,16 +59,21 @@ export default function AccountPage() {
   async function openPortal() {
     if (!user) return;
     setPortalLoading(true);
+    setPortalError(null);
     try {
       if (useStripePortal) {
         const { portal_url } = await billing.teacherPortal();
         window.location.assign(portal_url);
       } else {
         const url = await getManagementUrl(user.id);
-        if (url) window.location.assign(url);
+        if (!url) {
+          setPortalError("Couldn't open the management portal. Please try again later.");
+          return;
+        }
+        window.location.assign(url);
       }
     } catch {
-      // Silently fail
+      setPortalError("Couldn't open the management portal. Please try again later.");
     } finally {
       setPortalLoading(false);
     }
@@ -152,10 +162,14 @@ export default function AccountPage() {
               </div>
             )}
           </div>
+          {portalError && (
+            <p className="mt-4 text-sm text-error">{portalError}</p>
+          )}
           <button
             onClick={openPortal}
-            disabled={portalLoading}
-            className="mt-4 w-full rounded-[--radius-pill] border border-border-light py-2.5 text-sm font-bold text-text-primary transition-colors hover:bg-primary-bg disabled:opacity-50"
+            disabled={portalLoading || !canManageStripe}
+            title={canManageStripe ? undefined : "Subscription management is unavailable for this account. Contact support if you need to make a change."}
+            className="mt-4 w-full rounded-[--radius-pill] border border-border-light py-2.5 text-sm font-bold text-text-primary transition-colors hover:bg-primary-bg disabled:cursor-not-allowed disabled:opacity-50"
           >
             {portalLoading ? "Loading..." : "Manage Subscription"}
           </button>
