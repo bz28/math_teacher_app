@@ -137,11 +137,16 @@ function PricingPageContent() {
       </div>
 
       {/* Role toggle — single pricing URL, two audiences. */}
-      <div className="mx-auto mt-6 flex max-w-xs rounded-[--radius-pill] border border-border-light bg-surface-alt p-1">
+      <div
+        role="group"
+        aria-label="Choose pricing view"
+        className="mx-auto mt-6 flex max-w-xs rounded-[--radius-pill] border border-border-light bg-surface-alt p-1"
+      >
         {(["student", "teacher"] as const).map((v) => (
           <button
             key={v}
             type="button"
+            aria-pressed={view === v}
             onClick={() => setView(v)}
             className={`flex-1 rounded-[--radius-pill] px-4 py-2 text-sm font-semibold transition-colors ${
               view === v
