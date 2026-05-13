@@ -41,6 +41,13 @@ function RegisterPageContent() {
   // Invite flow (teacher invite OR section invite — not both)
   const inviteToken = searchParams.get("invite");
   const sectionInviteToken = searchParams.get("section_invite");
+
+  // Self-signup role. URL drives the initial value (`?role=teacher`
+  // from the homepage "Start free" CTA) but the in-page toggle below
+  // lets the user switch without changing URLs. Invite flows ignore
+  // this — the invite is authoritative on role.
+  const initialRole = searchParams.get("role") === "teacher" ? "teacher" : "student";
+  const [role, setRole] = useState<"student" | "teacher">(initialRole);
   const [invite, setInvite] = useState<InviteData | null>(null);
   const [sectionInvite, setSectionInvite] = useState<SectionInviteData | null>(null);
   const [inviteLoading, setInviteLoading] = useState(!!inviteToken || !!sectionInviteToken);
@@ -225,8 +232,29 @@ function RegisterPageContent() {
               Create your account
             </h1>
             <p className="mt-1 text-sm text-text-secondary">
-              Start mastering any subject
+              {role === "teacher"
+                ? "Start using Veradic in your classroom"
+                : "Start mastering any subject"}
             </p>
+
+            {/* Role toggle — only on self-signup. Invite flows hide
+                this because the invite already determines role. */}
+            <div className="mt-5 flex rounded-[--radius-sm] border border-border-light bg-surface-alt p-1">
+              {(["student", "teacher"] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRole(r)}
+                  className={`flex-1 rounded-[--radius-sm] px-3 py-2 text-sm font-semibold transition-colors ${
+                    role === r
+                      ? "bg-primary text-white shadow-sm"
+                      : "text-text-secondary hover:text-text-primary"
+                  }`}
+                >
+                  {r === "student" ? "I'm a student" : "I'm a teacher"}
+                </button>
+              ))}
+            </div>
           </>
         )}
 
@@ -351,7 +379,7 @@ function RegisterPageContent() {
           <p className="text-sm text-text-secondary">
             Already have an account?{" "}
             <Link
-              href="/login"
+              href={role === "teacher" ? "/login?role=teacher" : "/login"}
               className="font-semibold text-primary hover:text-primary-dark"
             >
               Sign In
