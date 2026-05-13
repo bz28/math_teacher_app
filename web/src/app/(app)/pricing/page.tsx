@@ -1,13 +1,22 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
 import { useEntitlementStore } from "@/stores/entitlements";
+import { billing } from "@/lib/api";
 import { purchasePlan, getManagementUrl, type PlanType } from "@/services/revenuecat";
 import { CheckIcon } from "@/components/ui/icons";
 
 type PlanView = "student" | "teacher";
+
+const TEACHER_PRO_FEATURES = [
+  "Unlimited generated practice problems",
+  "Unlimited AI grading drafts",
+  "Save and reuse problem banks",
+  "Cancel anytime — no commitment",
+];
 
 const plans: {
   id: PlanType;
@@ -83,8 +92,15 @@ function PricingPageContent() {
     router.replace(`/pricing?${params.toString()}`);
   }
 
+  // Pro users land on a status card instead of the plan picker.
+  // Teachers and students use different billing providers (Stripe vs
+  // RevenueCat) so the "Manage subscription" handlers are split.
   if (user?.is_pro) {
-    return <ActiveSubscription />;
+    return user.role === "teacher" ? (
+      <ActiveTeacherSubscription />
+    ) : (
+      <ActiveSubscription />
+    );
   }
 
   async function handlePurchase(plan: (typeof plans)[number]) {
@@ -205,7 +221,8 @@ function PricingPageContent() {
       </div>
       )}
 
-      {/* Teacher card lands here in the next commit. */}
+      {/* Teacher Pro card — Stripe Checkout for solo teachers. */}
+      {view === "teacher" && <TeacherProCard />}
 
       {/* Free vs Pro comparison (student-only — the feature comparisons
           describe student-side limits like "5 problem sessions/day"). */}
@@ -281,6 +298,124 @@ function ActiveSubscription() {
             </>
           )}
         </p>
+        <button
+          onClick={openPortal}
+          disabled={loading}
+          className="mt-6 rounded-[--radius-pill] border border-border-light px-6 py-2.5 text-sm font-bold text-text-primary transition-colors hover:bg-primary-bg disabled:opacity-50"
+        >
+          {loading ? "Loading..." : "Manage Subscription"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Teacher Pro card — single SKU, $19/mo, Stripe Checkout. Visually
+// mirrors the recommended student plan card so the page reads as
+// "one product, two audiences" rather than two unrelated layouts.
+function TeacherProCard() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function startCheckout() {
+    setLoading(true);
+    setError(null);
+    try {
+      const { checkout_url } = await billing.teacherCheckout();
+      window.location.assign(checkout_url);
+    } catch {
+      setError("Checkout is not available right now. Please try again later.");
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto mt-10 max-w-md">
+      {error && (
+        <div className="mb-4 rounded-[--radius-md] bg-error/10 px-4 py-3 text-sm text-error">
+          {error}
+        </div>
+      )}
+
+      <div className="relative flex flex-col rounded-[--radius-xl] border-2 border-primary bg-surface p-7 shadow-xl shadow-primary/10">
+        <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full bg-primary px-5 py-1.5 text-xs font-bold text-white shadow-md">
+          For solo teachers
+        </span>
+
+        <h3 className="text-base font-bold text-text-secondary">Teacher Pro</h3>
+        <p className="mt-1 text-sm text-text-muted">Unlimited AI problem generation</p>
+
+        <div className="mt-3 flex items-baseline gap-1">
+          <span className="text-5xl font-extrabold tracking-tight text-text-primary">$19</span>
+          <span className="text-base text-text-muted">/month</span>
+        </div>
+
+        <ul className="mt-5 space-y-2.5">
+          {TEACHER_PRO_FEATURES.map((f) => (
+            <li key={f} className="flex items-start gap-2 text-sm text-text-primary">
+              <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+              <span>{f}</span>
+            </li>
+          ))}
+        </ul>
+
+        <button
+          onClick={startCheckout}
+          disabled={loading}
+          className="mt-6 w-full rounded-[--radius-pill] bg-primary py-3.5 text-sm font-bold text-white shadow-md shadow-primary/25 transition-all hover:bg-primary-dark hover:shadow-lg hover:shadow-primary/30 disabled:opacity-50"
+        >
+          {loading ? "Loading..." : "Upgrade to Pro"}
+        </button>
+
+        <p className="mt-4 text-center text-xs text-text-muted">
+          School-wide pricing?{" "}
+          <Link href="/demo" className="font-semibold text-primary hover:text-primary-dark">
+            Book a demo →
+          </Link>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Pro teacher's status card. Mirrors ActiveSubscription but uses the
+// Stripe customer portal (the student path goes through RevenueCat).
+function ActiveTeacherSubscription() {
+  const user = useAuthStore((s) => s.user);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function openPortal() {
+    setLoading(true);
+    setError(null);
+    try {
+      const { portal_url } = await billing.teacherPortal();
+      window.location.assign(portal_url);
+    } catch {
+      setError("Couldn't open the management portal. Please try again later.");
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-lg px-4 py-10 text-center">
+      <div className="rounded-[--radius-xl] border border-success/30 bg-success/5 p-8">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
+          <CheckIcon className="inline h-8 w-8 shrink-0 text-success" />
+        </div>
+        <h1 className="text-2xl font-extrabold text-text-primary">Teacher Pro Active</h1>
+        <p className="mt-2 text-text-secondary">
+          Status: <span className="font-medium capitalize">{user?.subscription_status}</span>
+          {user?.subscription_expires_at && (
+            <>
+              {" "}&middot; Renews{" "}
+              {new Date(user.subscription_expires_at).toLocaleDateString()}
+            </>
+          )}
+        </p>
+        {error && (
+          <p className="mt-4 text-sm text-error">{error}</p>
+        )}
         <button
           onClick={openPortal}
           disabled={loading}
