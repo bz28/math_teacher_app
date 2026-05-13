@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
 import { useEntitlementStore } from "@/stores/entitlements";
 import { getManagementUrl } from "@/services/revenuecat";
+import { billing } from "@/lib/api";
 import { Badge, Button, Modal, PasswordInput } from "@/components/ui";
 
 export default function AccountPage() {
@@ -16,13 +17,17 @@ export default function AccountPage() {
   const router = useRouter();
 
   const isPro = useEntitlementStore((s) => s.isPro);
-  // School-linked students (including teacher "View as Student"
-  // previews, which inherit school_id from their teacher) have no
-  // personal subscription, no per-day quota, and nothing to upgrade.
-  // Gate every subscription-oriented UI piece on this flag instead
-  // of on isPro, because a preview whose teacher has no section
-  // enrollments yet still reads back as isPro=false from /entitlements.
-  const isSchoolStudent = !!user?.school_id;
+  // School-linked accounts (real students AND school teachers — the
+  // school pays, no personal sub to manage) have no personal sub, no
+  // per-day quota, and nothing to upgrade. Gate every sub-oriented
+  // UI on this rather than on isPro, because a teacher preview whose
+  // teacher has no section enrollments still reads is_pro=false from
+  // /entitlements yet should hide all upgrade affordances.
+  const isSchoolAffiliated = !!user?.school_id;
+  const isTeacher = user?.role === "teacher";
+  // Stripe-paying teachers must route to the Stripe Customer Portal,
+  // not RevenueCat — RevenueCat doesn't know about them.
+  const useStripePortal = user?.subscription_provider === "stripe";
   const loaded = useEntitlementStore((s) => s.loaded);
   const dailySessionsUsed = useEntitlementStore((s) => s.dailySessionsUsed);
   const dailySessionsLimit = useEntitlementStore((s) => s.dailySessionsLimit);
@@ -50,8 +55,13 @@ export default function AccountPage() {
     if (!user) return;
     setPortalLoading(true);
     try {
-      const url = await getManagementUrl(user.id);
-      if (url) window.location.assign(url);
+      if (useStripePortal) {
+        const { portal_url } = await billing.teacherPortal();
+        window.location.assign(portal_url);
+      } else {
+        const url = await getManagementUrl(user.id);
+        if (url) window.location.assign(url);
+      }
     } catch {
       // Silently fail
     } finally {
@@ -105,7 +115,7 @@ export default function AccountPage() {
         <h1 className="mt-4 text-xl font-bold text-text-primary">{user.name}</h1>
         <p className="mt-1 text-sm text-text-muted">{user.email}</p>
         <div className="mt-3">
-          {isSchoolStudent ? (
+          {isSchoolAffiliated ? (
             <Badge variant="muted">School</Badge>
           ) : (
             <Badge variant={isPro ? "success" : "muted"}>
@@ -118,7 +128,7 @@ export default function AccountPage() {
 
       {/* Subscription card — hidden for school students (no personal
           subscription to manage). */}
-      {isPro && !isSchoolStudent && (
+      {isPro && !isSchoolAffiliated && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -152,9 +162,11 @@ export default function AccountPage() {
         </motion.div>
       )}
 
-      {/* Usage card — personal free users only. School-linked users
-          (including previews) don't have per-day quotas to show. */}
-      {!isPro && !isSchoolStudent && loaded && dailySessionsLimit < Infinity && (
+      {/* Usage card — free students only. Teachers have a totally
+          different cap shape (10 problem generations/day, surfaced by
+          the sidebar meter pill), and these student counters
+          (Problems/Scans/Chats) don't apply to them at all. */}
+      {!isTeacher && !isPro && !isSchoolAffiliated && loaded && dailySessionsLimit < Infinity && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -172,7 +184,7 @@ export default function AccountPage() {
 
       {/* Upgrade button — personal free users only. School-linked
           users (including previews) have nothing to upgrade. */}
-      {!isPro && !isSchoolStudent && (
+      {!isPro && !isSchoolAffiliated && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
