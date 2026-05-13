@@ -262,12 +262,16 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
               {user?.school_name || "Teacher"}
             </span>
           </Link>
-          <button
-            onClick={logout}
-            className="rounded-[--radius-sm] px-2 py-1 text-xs font-medium text-text-muted hover:text-error"
-          >
-            Sign Out
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Compact meter for free teachers — same gating as the sidebar pill. */}
+            <TeacherUsagePill compact />
+            <button
+              onClick={logout}
+              className="rounded-[--radius-sm] px-2 py-1 text-xs font-medium text-text-muted hover:text-error"
+            >
+              Sign Out
+            </button>
+          </div>
         </header>
 
         <main id="main-content" className="flex-1 px-6 py-8">
