@@ -12,6 +12,7 @@ from api.config import settings
 FREE_DAILY_SESSION_LIMIT = 5
 FREE_DAILY_CHAT_LIMIT = 20
 FREE_DAILY_IMAGE_SCAN_LIMIT = 3
+TEACHER_DAILY_GENERATION_LIMIT = 10
 
 
 class Entitlement(enum.StrEnum):
@@ -19,6 +20,7 @@ class Entitlement(enum.StrEnum):
     CHAT_MESSAGE = "chat_message"
     IMAGE_SCAN = "image_scan"
     WORK_DIAGNOSIS = "work_diagnosis"
+    GENERATE_PROBLEM = "generate_problem"
 
 
 class EntitlementError(Exception):
@@ -48,6 +50,27 @@ def is_pro(user: object) -> bool:
         return True
 
     return False
+
+
+async def is_school_active_teacher(db: AsyncSession, user: object) -> bool:
+    """Check if a teacher belongs to an active school.
+
+    Teachers carry `school_id` directly on the user row (unlike students,
+    who link via SectionEnrollment), so this is a single-table lookup.
+    Used to bypass free-tier quotas for teachers whose school is paying.
+    """
+    from api.models.school import School
+
+    role = getattr(user, "role", "")
+    school_id = getattr(user, "school_id", None)
+    if role != "teacher" or school_id is None:
+        return False
+
+    result = await db.execute(
+        select(School.is_active).where(School.id == school_id)
+    )
+    row = result.first()
+    return bool(row and row.is_active)
 
 
 async def is_school_enrolled(db: AsyncSession, user_id: uuid.UUID) -> bool:
@@ -169,6 +192,10 @@ async def check_entitlement(
     if await is_school_enrolled(db, user_id):
         return
 
+    # School teachers also bypass — their school covers them
+    if await is_school_active_teacher(db, user):
+        return
+
     cutoff = usage_cutoff(user)
 
     if entitlement == Entitlement.CREATE_SESSION:
@@ -209,3 +236,18 @@ async def check_entitlement(
 
     if entitlement == Entitlement.WORK_DIAGNOSIS:
         raise EntitlementError(entitlement, "Work diagnosis requires a Pro subscription")
+
+    if entitlement == Entitlement.GENERATE_PROBLEM:
+        # Teacher-only cap for now. Other roles fall through (no quota).
+        # When a student-side cap is needed, branch here on user.role.
+        if getattr(user, "role", "") != "teacher":
+            return
+        count = await get_daily_llm_call_count(db, user_id, "generate_problem", cutoff)
+        if count >= TEACHER_DAILY_GENERATION_LIMIT:
+            raise EntitlementError(
+                entitlement,
+                f"Free plan limited to {TEACHER_DAILY_GENERATION_LIMIT} problems per day."
+                " Upgrade to Pro for unlimited generation.",
+                is_limit=True,
+            )
+        return
