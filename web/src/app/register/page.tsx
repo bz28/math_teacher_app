@@ -35,7 +35,7 @@ function RegisterPageContent() {
   const [teacherConfirmed, setTeacherConfirmed] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [checkingEmail, setCheckingEmail] = useState(false);
-  const { register, loading, error, clearError } = useAuthStore();
+  const { register, loading, error, clearError, user } = useAuthStore();
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToast();
@@ -71,6 +71,21 @@ function RegisterPageContent() {
       clearTokens();
     }
   }, [inviteToken, sectionInviteToken]);
+
+  // Redirect signed-in users away from /register so they can't
+  // silently create a second account. The previous guard only
+  // controlled clearTokens; nothing stopped them from filling the
+  // form and submitting — auth.register would create a new user
+  // and saveTokens() would overwrite the old session, orphaning
+  // the first account. Invite flows are the exception: a signed-in
+  // user accepting an invite is intentionally switching identities,
+  // so let them through.
+  useEffect(() => {
+    if (loading) return;
+    if (!user) return;
+    if (inviteToken || sectionInviteToken) return;
+    router.replace(user.role === "teacher" ? "/school/teacher" : "/home");
+  }, [user, loading, inviteToken, sectionInviteToken, router]);
 
   // Validate invite token on mount (teacher or section — mutually exclusive)
   useEffect(() => {
