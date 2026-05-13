@@ -163,15 +163,12 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         if section_course and section_course.school_id is not None:
             school_id = section_course.school_id
 
-    # A bare "role=teacher" (no invite) is always rejected. Done AFTER the
-    # invite blocks so a section invite with role=teacher gets the clearer
-    # "section invite forces student role" outcome — the invite wins and
-    # the role is overridden to student above.
-    if role == "teacher" and not body.invite_token:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Teacher registration requires a school invite",
-        )
+    # Teacher self-signup is now allowed (no invite required). A solo
+    # teacher lands here with role=teacher and no invite/section/join
+    # token — we let them through. They get school_id=NULL, which
+    # makes the entitlement layer treat them as an independent free
+    # teacher (daily generation cap applies). The teacher-via-invite
+    # branch above still sets school_id when an invite is present.
 
     # Join code (student): validate up-front so we don't create a user if
     # the code is bad. Mutually exclusive with invite flows (either invite
@@ -204,6 +201,7 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         grade_level=body.grade_level,
         role=role,
         school_id=school_id,
+        signup_school_name=(body.signup_school_name if role == "teacher" else None),
     )
     db.add(user)
     await db.flush()
