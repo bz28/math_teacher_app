@@ -52,6 +52,13 @@ class User(Base):
     stripe_customer_id: Mapped[str | None] = mapped_column(
         String(255), nullable=True, unique=True, index=True
     )
+    # Latest active Stripe subscription id. Webhook handlers use this
+    # to ignore events for older / superseded subscriptions — without
+    # it, a late-arriving subscription.updated(active) after
+    # subscription.deleted would re-promote a cancelled user.
+    stripe_subscription_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True,
+    )
 
     # Daily limit reset (admin override — shifts the "start of day" for usage counting)
     daily_limit_reset_at: Mapped[datetime | None] = mapped_column(

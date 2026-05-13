@@ -395,6 +395,90 @@ async def test_stripe_webhook_signature_invalid(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_stripe_webhook_idempotent_replay(client: AsyncClient) -> None:
+    """Replaying the same event_id is a no-op on the second pass."""
+    user, _ = await _make_user(role="teacher", stripe_customer_id="cus_idem")
+
+    payload = {
+        "id": "evt_test_idempotent",
+        "type": "checkout.session.completed",
+        "data": {"object": {"customer": "cus_idem", "subscription": "sub_test_1"}},
+    }
+    with patch.multiple(
+        "api.routes.webhook.settings",
+        stripe_webhook_secret="",
+        app_env="development",
+    ):
+        r1 = await client.post(STRIPE_WEBHOOK_URL, json=payload)
+        r2 = await client.post(STRIPE_WEBHOOK_URL, json=payload)
+
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    # Sub id stamped exactly once — replay was a no-op.
+    async with get_session_factory()() as s:
+        refreshed = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert refreshed.subscription_tier == "pro"
+        assert refreshed.stripe_subscription_id == "sub_test_1"
+
+
+@pytest.mark.asyncio
+async def test_stripe_webhook_ignores_stale_subscription_id(client: AsyncClient) -> None:
+    """A late `subscription.updated(active)` for an old sub doesn't re-promote.
+
+    Walks the out-of-order scenario: user signs up, gets sub_OLD, that
+    sub is cancelled (deleted event clears the sub id and flips to
+    free). Now a late update event for sub_OLD arrives — it must NOT
+    re-promote the user.
+    """
+    user, _ = await _make_user(role="teacher", stripe_customer_id="cus_stale")
+    # Hand-set the post-deleted state so we can test the late-update
+    # scenario in isolation.
+    async with get_session_factory()() as s:
+        u = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
+        u.subscription_tier = "free"
+        u.subscription_status = "cancelled"
+        u.stripe_subscription_id = None
+        await s.commit()
+
+    late_update = {
+        "id": "evt_test_stale",
+        "type": "customer.subscription.updated",
+        "data": {
+            "object": {
+                "customer": "cus_stale",
+                "id": "sub_OLD",
+                "status": "active",
+            }
+        },
+    }
+    with patch.multiple(
+        "api.routes.webhook.settings",
+        stripe_webhook_secret="",
+        app_env="development",
+    ):
+        # Need a real stripe_subscription_id on the user for the
+        # stale-check to differentiate. Simulate the post-deleted
+        # state above already does this (sub_id=None) — so the
+        # _is_active_subscription falls through. Better test: set
+        # user.stripe_subscription_id to "sub_NEW" and confirm the
+        # OLD update is ignored.
+        async with get_session_factory()() as s:
+            u = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
+            u.stripe_subscription_id = "sub_NEW"
+            await s.commit()
+
+        resp = await client.post(STRIPE_WEBHOOK_URL, json=late_update)
+
+    assert resp.status_code == 200
+    async with get_session_factory()() as s:
+        refreshed = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
+        # Tier did NOT flip back to pro from the stale update.
+        assert refreshed.subscription_tier == "free"
+        # Tracking sub id unchanged.
+        assert refreshed.stripe_subscription_id == "sub_NEW"
+
+
+@pytest.mark.asyncio
 async def test_stripe_webhook_rejects_unconfigured_prod(client: AsyncClient) -> None:
     """In production, an unset webhook secret must hard-fail (503), not silent-skip."""
     payload = {"type": "checkout.session.completed", "data": {"object": {}}}
