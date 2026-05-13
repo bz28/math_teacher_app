@@ -138,7 +138,12 @@ function RegisterPageContent() {
     // auth.register would create a brand-new account and
     // saveTokens() would overwrite the live session, orphaning the
     // original user. Invite flows are the intentional exception.
-    if (user && !inviteToken && !sectionInviteToken) return;
+    //
+    // Also covers the loadUser-in-flight race: on a fresh mount with
+    // stored tokens, `user` is null until AuthProvider's loadUser
+    // resolves. Checking `hasStoredTokens()` synchronously catches a
+    // submit during that window.
+    if ((user || hasStoredTokens()) && !inviteToken && !sectionInviteToken) return;
 
     // Self-signup teacher (no invite). Role gets posted explicitly so
     // the backend creates a teacher account, and signup_school_name
@@ -191,9 +196,11 @@ function RegisterPageContent() {
   // Signed-in non-invite landing: redirect-useEffect will fire on the
   // next tick. Render a spinner instead of the form so the user can't
   // (a) see a confusing prefilled UI flash for one render, or (b) race
-  // the redirect by submitting before it lands. The handleSubmit guard
-  // covers the same race defensively.
-  if (user && !inviteToken && !sectionInviteToken) {
+  // the redirect by submitting before it lands. Catches both the
+  // already-loaded user case AND the loadUser-in-flight case (tokens
+  // present, user still null mid-request) — both are "this person is
+  // signed in, don't show them a signup form."
+  if ((user || hasStoredTokens()) && !inviteToken && !sectionInviteToken) {
     return (
       <div className="flex flex-1 items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
