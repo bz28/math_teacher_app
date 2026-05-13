@@ -419,7 +419,7 @@ async def _log_generate_problem(user_id: uuid.UUID, n: int) -> None:
         for _ in range(n):
             s.add(LLMCall(
                 user_id=user_id,
-                function="generate_problem",
+                function="generate_questions",
                 model="claude-test",
                 input_tokens=0,
                 output_tokens=0,
@@ -475,6 +475,63 @@ async def test_teacher_usage_pro_teacher_bypasses(client: AsyncClient) -> None:
     resp = await client.get(USAGE_URL, headers=auth_headers(token))
     assert resp.status_code == 200
     assert resp.json()["bypass"] is True
+
+
+@pytest.mark.asyncio
+async def test_generate_bank_questions_blocked_at_cap(client: AsyncClient) -> None:
+    """The generate-bank route now enforces the teacher daily cap.
+
+    With 10 generate_questions LLMCall rows from today, the 11th request
+    returns the EntitlementError contract (status 400, is_limit=True).
+    """
+
+    from api.models.assignment import Assignment
+    from api.models.course import Course
+    from api.models.unit import Unit
+
+    # Set up: a teacher with a course/unit/assignment + 10 prior calls.
+    user, token = await _make_user(role="teacher")
+    async with get_session_factory()() as s:
+        course = Course(name="Algebra", subject="math")
+        s.add(course)
+        await s.flush()
+        unit = Unit(course_id=course.id, name="U1", position=0)
+        s.add(unit)
+        await s.flush()
+        assignment = Assignment(
+            course_id=course.id,
+            unit_ids=[unit.id],
+            teacher_id=user.id,
+            title="HW",
+            type="homework",
+            status="draft",
+            content={"problems": []},
+        )
+        s.add(assignment)
+        await s.commit()
+        course_id = course.id
+        unit_id = unit.id
+        assignment_id = assignment.id
+
+    await _log_generate_problem(user.id, 10)  # at the cap
+
+    resp = await client.post(
+        f"/v1/teacher/courses/{course_id}/question-bank/generate",
+        headers=auth_headers(token),
+        json={
+            "count": 5,
+            "assignment_id": str(assignment_id),
+            "unit_id": str(unit_id),
+            "document_ids": [],
+            "constraint": None,
+        },
+    )
+    # The EntitlementError handler maps cap-hits to 403 with the
+    # entitlement body for the frontend to surface via UpgradePrompt.
+    body = resp.json()
+    assert resp.status_code == 403, resp.text
+    assert body.get("entitlement") == "generate_problem"
+    assert body.get("is_limit") is True
 
 
 @pytest.mark.asyncio

@@ -14,6 +14,14 @@ FREE_DAILY_CHAT_LIMIT = 20
 FREE_DAILY_IMAGE_SCAN_LIMIT = 3
 TEACHER_DAILY_GENERATION_LIMIT = 10
 
+# LLMCall.function string emitted by the teacher generation pipeline
+# (LLMMode.GENERATE_QUESTIONS in api/core/llm_client.py). Counted toward
+# the teacher daily-generation cap. Kept as a constant because the
+# entitlement enum value ("generate_problem") is intentionally the
+# *product* identifier shown to the frontend, distinct from the
+# *function* identifier in LLMCall rows.
+_GENERATE_FUNCTION = "generate_questions"
+
 
 class Entitlement(enum.StrEnum):
     CREATE_SESSION = "create_session"
@@ -243,7 +251,7 @@ async def check_entitlement(
         # silently lift other caps for school teachers.
         if await is_school_active_teacher(db, user):
             return
-        count = await get_daily_llm_call_count(db, user_id, "generate_problem", cutoff)
+        count = await get_daily_llm_call_count(db, user_id, _GENERATE_FUNCTION, cutoff)
         if count >= TEACHER_DAILY_GENERATION_LIMIT:
             raise EntitlementError(
                 entitlement,
