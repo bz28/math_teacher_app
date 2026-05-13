@@ -76,6 +76,11 @@ class UserResponse(BaseModel):
     # frontend conditionally render the "Manage Subscription" button
     # without leaking the actual customer id to the client.
     has_stripe_customer: bool = False
+    # Shadow-student preview marker. Lets the student app's layout
+    # guard admit preview accounts even when school_id is null (solo
+    # teachers don't have one), so the "Try as Student" flow works
+    # for independent teachers too.
+    is_preview: bool = False
 
 
 class DeleteAccountRequest(BaseModel):

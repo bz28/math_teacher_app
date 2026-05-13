@@ -397,6 +397,7 @@ async def me(
         subscription_expires_at=user.subscription_expires_at,
         is_pro=is_pro(user),
         has_stripe_customer=bool(user.stripe_customer_id),
+        is_preview=user.is_preview,
     )
 
 
