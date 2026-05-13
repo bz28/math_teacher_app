@@ -4,6 +4,7 @@ import { HomeProblem } from "@/components/landing/home-problem";
 import { HomeIntegrity } from "@/components/landing/home-integrity";
 import { HomeWorkspace } from "@/components/landing/home-workspace";
 import { HomeOutcomes } from "@/components/landing/home-outcomes";
+import { HomeSoloTeachersTeaser } from "@/components/landing/home-solo-teachers-teaser";
 import { HomeDistrictsTeaser } from "@/components/landing/home-districts-teaser";
 import { CtaBand } from "@/components/landing/cta-band";
 import { Footer } from "@/components/landing/footer";
@@ -18,6 +19,7 @@ export default function Home() {
         <HomeIntegrity />
         <HomeWorkspace />
         <HomeOutcomes />
+        <HomeSoloTeachersTeaser />
         <HomeDistrictsTeaser />
         <CtaBand
           eyebrow="Ready when you are"
