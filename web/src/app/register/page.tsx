@@ -31,6 +31,8 @@ function RegisterPageContent() {
   const [password, setPassword] = useState("");
   const [gradeLevel, setGradeLevel] = useState(8);
   const [joinCode, setJoinCode] = useState("");
+  const [schoolName, setSchoolName] = useState("");
+  const [teacherConfirmed, setTeacherConfirmed] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [checkingEmail, setCheckingEmail] = useState(false);
   const { register, loading, error, clearError } = useAuthStore();
@@ -104,19 +106,31 @@ function RegisterPageContent() {
     e.preventDefault();
     if (emailError) return;
 
+    // Self-signup teacher (no invite). Role gets posted explicitly so
+    // the backend creates a teacher account, and signup_school_name
+    // travels along when provided. The "I am a teacher" affirmation
+    // is form-only — the backend doesn't store the checkbox state.
+    const isTeacherSelfSignup =
+      role === "teacher" && !inviteToken && !sectionInviteToken;
+
     const trimmedCode = joinCode.trim().toUpperCase();
+    const trimmedSchool = schoolName.trim();
     try {
       await register({
         email,
         password,
         name,
         grade_level: gradeLevel,
+        ...(isTeacherSelfSignup ? { role: "teacher" as const } : {}),
+        ...(isTeacherSelfSignup && trimmedSchool
+          ? { signup_school_name: trimmedSchool }
+          : {}),
         ...(inviteToken ? { invite_token: inviteToken } : {}),
         ...(sectionInviteToken ? { section_invite_token: sectionInviteToken } : {}),
         ...(trimmedCode ? { join_code: trimmedCode } : {}),
       });
       router.replace(
-        invite
+        invite || isTeacherSelfSignup
           ? "/school/teacher"
           : sectionInvite || trimmedCode
             ? "/school/student"
@@ -305,8 +319,11 @@ function RegisterPageContent() {
             autoComplete="new-password"
           />
 
-          {/* Grade picker — students only (hidden for teacher invite) */}
-          {!isInviteFlow && (
+          {/* Grade picker — students only. Hidden for teacher invite
+              (auth.py forces role=teacher) AND for teacher self-signup
+              (the picker is irrelevant; we keep gradeLevel=8 in state
+              as a default the backend silently accepts). */}
+          {!isInviteFlow && role === "student" && (
             <div className="flex flex-col gap-1.5">
               <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
                 Grade Level
@@ -330,8 +347,8 @@ function RegisterPageContent() {
             </div>
           )}
 
-          {/* Join code — students self-signing up; hidden for invite flows */}
-          {!lockEmail && (
+          {/* Join code — students only; hidden for invite + teacher flows */}
+          {!lockEmail && role === "student" && (
             <div>
               <Input
                 label="Join code (optional)"
@@ -349,12 +366,47 @@ function RegisterPageContent() {
             </div>
           )}
 
+          {/* Teacher-only fields — self-signup only (teacher invite
+              has its own welcome card and doesn't show these). */}
+          {!lockEmail && role === "teacher" && (
+            <>
+              <div>
+                <Input
+                  label="School (optional)"
+                  placeholder="e.g. Lincoln High School"
+                  value={schoolName}
+                  onChange={(e) => setSchoolName(e.target.value)}
+                  maxLength={200}
+                />
+                <p className="mt-1 text-xs text-text-muted">
+                  Helps us understand who&apos;s joining. We won&apos;t contact your school.
+                </p>
+              </div>
+
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-[--radius-sm] border border-border-light bg-surface-alt px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 cursor-pointer accent-primary"
+                  checked={teacherConfirmed}
+                  onChange={(e) => setTeacherConfirmed(e.target.checked)}
+                  required
+                />
+                <span className="text-sm text-text-secondary">
+                  I am a teacher and intend to use Veradic with my own students.
+                </span>
+              </label>
+            </>
+          )}
+
           <Button
             type="submit"
             loading={loading}
             gradient
             className="w-full"
-            disabled={!!emailError}
+            disabled={
+              !!emailError ||
+              (role === "teacher" && !lockEmail && !teacherConfirmed)
+            }
           >
             {isInviteFlow
               ? "Set Up Your Account"
