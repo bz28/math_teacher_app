@@ -62,5 +62,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [loadUser, fetchEntitlements]);
 
+  // Refresh on tab-foreground so subscription state stays in sync after
+  // a webhook lands while the tab is in the background. Covers:
+  //  - Stripe cancel via the customer portal → user comes back as
+  //    free, meter pill reappears, no manual reload needed.
+  //  - Admin demote → next focus picks up the new tier.
+  //  - Long-idle sessions where the token grant changed elsewhere.
+  // Debounced to once every 30s so flipping between tabs doesn't
+  // hammer /auth/me — fresh-enough for state checks of this kind.
+  useEffect(() => {
+    let lastRefresh = Date.now();
+    const REFRESH_DEBOUNCE_MS = 30_000;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!useAuthStore.getState().user) return;
+      const now = Date.now();
+      if (now - lastRefresh < REFRESH_DEBOUNCE_MS) return;
+      lastRefresh = now;
+      loadUser().then(() => {
+        if (useAuthStore.getState().user) fetchEntitlements();
+      });
+    };
+    window.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [loadUser, fetchEntitlements]);
+
   return <>{children}</>;
 }
