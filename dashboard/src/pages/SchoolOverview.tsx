@@ -128,14 +128,14 @@ function Sparkline({
         role="img"
         aria-label={ariaLabel}
       >
-        <path d={path} fill="none" stroke="#6366f1" strokeWidth={2} />
+        <path d={path} fill="none" stroke="#b8431a" strokeWidth={2} />
         {points.map((p, i) => (
           <circle
             key={i}
             cx={i * dx}
             cy={h - (p.cost / max) * h}
             r={2}
-            fill="#6366f1"
+            fill="#b8431a"
           >
             <title>
               {p.week_start ?? "?"} — {fmtCost(p.cost)}
@@ -233,12 +233,15 @@ export default function SchoolOverview() {
   if (error) {
     return (
       <div>
-        <h1>School Overview</h1>
-        <p style={{ color: "#dc2626" }}>{error}</p>
+        <div className="page-header">
+          <span className="eyebrow">School</span>
+          <h1>School overview</h1>
+        </div>
+        <p style={{ color: "var(--danger)" }}>{error}</p>
       </div>
     );
   }
-  if (!data) return <p>Loading…</p>;
+  if (!data) return <p className="loading">Loading…</p>;
 
   const { cost, top_spenders, quality, health, is_internal } = data;
   const monthDelta = cost.this_month - cost.last_month;
@@ -246,9 +249,10 @@ export default function SchoolOverview() {
 
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ marginBottom: 4 }}>{data.school_name}</h1>
-        <p style={{ color: "#64748b", fontSize: 14, margin: 0 }}>
+      <div className="page-header">
+        <span className="eyebrow">School</span>
+        <h1>{data.school_name}</h1>
+        <p>
           {is_internal
             ? "Founder, test, and non-school user calls — class/teacher tiles are hidden because there's no school context to roll up to."
             : "Per-school cost, quality, and health rollup."}
@@ -361,7 +365,7 @@ export default function SchoolOverview() {
                             to={`/school/${schoolId}/submissions/${s.submission_id}/trace`}
                             style={{
                               fontWeight: 600,
-                              color: "#6366f1",
+                              color: "#b8431a",
                               fontFamily: "ui-monospace, monospace",
                             }}
                             title="Open flight-recorder timeline"
@@ -458,7 +462,7 @@ export default function SchoolOverview() {
                   <td
                     style={{
                       textAlign: "right",
-                      color: t.rate >= 0.1 ? "#dc2626" : "#0f172a",
+                      color: t.rate >= 0.1 ? "var(--danger)" : "var(--ink)",
                       fontWeight: t.rate >= 0.1 ? 700 : 400,
                     }}
                   >
