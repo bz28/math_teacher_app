@@ -268,11 +268,13 @@ async def check_entitlement(
         # written by the async generation worker AFTER the route
         # returns. N concurrent /generate requests for the same
         # teacher all read the same pre-call count and all pass.
-        # Mitigations today: the route's slowapi rate limit (3/min
-        # on /question-bank/generate via teacher_question_bank.py)
-        # and the soft 10/day cap on a still-small user base. A
-        # proper fix (reservation counter on User incremented in the
-        # gate transaction) is tracked separately.
+        # Mitigations today: every route that hits this gate carries
+        # a slowapi @limiter.limit("3/minute") (generate_bank_questions,
+        # generate_similar_bank_questions, clone_homework_as_practice),
+        # bounding the worst-case race window to ~3 parallel
+        # requests, and the soft 10/day cap on a still-small user
+        # base. A proper fix (reservation counter on User incremented
+        # in the gate transaction) is tracked separately.
         # success_only=True so a teacher whose attempts failed at
         # the model doesn't burn their daily allowance.
         count = await get_daily_llm_call_count(

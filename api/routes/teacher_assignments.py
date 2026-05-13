@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
@@ -21,6 +21,7 @@ from api.core.integrity_pipeline import (
 from api.core.question_bank_generation import schedule_generation_job
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
+from api.middleware.rate_limit import limiter
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.integrity_check import (
     IntegrityCheckProblem,
@@ -480,7 +481,9 @@ async def create_assignment(
     "/courses/{course_id}/assignments/{hw_id}/clone-as-practice",
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("3/minute")
 async def clone_homework_as_practice(
+    request: Request,
     course_id: uuid.UUID, hw_id: uuid.UUID,
     current_user: CurrentUser = Depends(require_teacher),
     user: User = Depends(get_current_user_full),
