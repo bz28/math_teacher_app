@@ -132,6 +132,13 @@ function RegisterPageContent() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (emailError) return;
+    // Belt for the suspender redirect-useEffect: that effect fires
+    // AFTER render, so a fast user could still submit the form in
+    // the window before router.replace lands. Without this guard,
+    // auth.register would create a brand-new account and
+    // saveTokens() would overwrite the live session, orphaning the
+    // original user. Invite flows are the intentional exception.
+    if (user && !inviteToken && !sectionInviteToken) return;
 
     // Self-signup teacher (no invite). Role gets posted explicitly so
     // the backend creates a teacher account, and signup_school_name
@@ -177,6 +184,19 @@ function RegisterPageContent() {
           <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           <p className="text-sm text-text-secondary">Verifying your invite...</p>
         </div>
+      </div>
+    );
+  }
+
+  // Signed-in non-invite landing: redirect-useEffect will fire on the
+  // next tick. Render a spinner instead of the form so the user can't
+  // (a) see a confusing prefilled UI flash for one render, or (b) race
+  // the redirect by submitting before it lands. The handleSubmit guard
+  // covers the same race defensively.
+  if (user && !inviteToken && !sectionInviteToken) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
       </div>
     );
   }
