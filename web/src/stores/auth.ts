@@ -25,9 +25,11 @@ interface AuthState {
     password: string;
     name: string;
     grade_level: number;
+    role?: "student" | "teacher";
     invite_token?: string;
     section_invite_token?: string;
     join_code?: string;
+    signup_school_name?: string;
   }) => Promise<void>;
 
   logout: () => void;
