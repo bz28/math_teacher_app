@@ -33,7 +33,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // routes (/home, /history, /learn, /practice), the regular top-bar
   // layout keeps its nav coherent: otherwise a school student on
   // /home would see a sidebar whose nav items point nowhere useful.
-  const isSchoolStudent = user?.role === "student" && !!user?.school_id;
+  //
+  // Preview shadows of solo teachers (no school_id) also belong in
+  // this shell — the whole point of Try as Student is to see the
+  // school-student experience, not the personal study app's nav.
+  const isSchoolStudent =
+    user?.role === "student" && (!!user?.school_id || user.is_preview);
   const inSchoolWorld =
     pathname.startsWith("/school/student") || pathname === "/account";
 
