@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
-import { auth, clearTokens, type InviteData, type SectionInviteData } from "@/lib/api";
+import { auth, clearTokens, hasStoredTokens, type InviteData, type SectionInviteData } from "@/lib/api";
 import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
 
@@ -60,9 +60,14 @@ function RegisterPageContent() {
   // here (e.g. clicking a stale header link) shouldn't be silently
   // logged out. Invite flows always clear so the invite's email
   // takes over from any cached identity.
+  //
+  // Check `hasStoredTokens()` (synchronous, reads localStorage) instead
+  // of the auth store's `user`: on a fresh page load the AuthProvider's
+  // `loadUser()` hasn't populated `user` yet (child effects run before
+  // parent effects), so `useAuthStore.getState().user` is still null and
+  // we'd wrongly clear tokens of a signed-in visitor.
   useEffect(() => {
-    const live = useAuthStore.getState().user;
-    if (!live || inviteToken || sectionInviteToken) {
+    if (!hasStoredTokens() || inviteToken || sectionInviteToken) {
       clearTokens();
     }
   }, [inviteToken, sectionInviteToken]);
