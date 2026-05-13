@@ -206,7 +206,11 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         grade_level=body.grade_level,
         role=role,
         school_id=school_id,
-        signup_school_name=(body.signup_school_name if role == "teacher" else None),
+        signup_school_name=(
+            body.signup_school_name
+            if role == "teacher" and not body.invite_token
+            else None
+        ),
     )
     db.add(user)
     await db.flush()
