@@ -30,6 +30,7 @@ export interface User {
   subscription_expires_at: string | null;
   is_pro: boolean;
   has_stripe_customer: boolean;
+  is_preview: boolean;
 }
 
 export interface InviteData {

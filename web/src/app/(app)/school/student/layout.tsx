@@ -21,14 +21,24 @@ export default function SchoolStudentLayout({
   const { user, loading, loadUser } = useAuthStore();
   const preview = typeof window !== "undefined" && isInPreviewMode();
 
+  // Shadow-student previews (Try as Student) get school_id=null when
+  // the owning teacher is solo (no school). Admit them anyway — the
+  // dashboard is enrollment-driven and the preview banner gives them
+  // a way back. Without this, a solo teacher who clicks Try as Student
+  // gets bounced to /home stranded as the shadow, no exit affordance.
+  const allowed =
+    !!user &&
+    user.role === "student" &&
+    (!!user.school_id || user.is_preview);
+
   useEffect(() => {
     if (loading || !user) return;
-    if (user.role !== "student" || !user.school_id) {
+    if (!allowed) {
       router.replace("/home");
     }
-  }, [user, loading, router]);
+  }, [user, loading, allowed, router]);
 
-  if (loading || !user || user.role !== "student" || !user.school_id) {
+  if (loading || !allowed) {
     return (
       <div className="flex flex-1 items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
