@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
+import { exitPreviewMode, isInPreviewMode } from "@/lib/api";
 import { LogoMark } from "@/components/shared/logo-mark";
 import { MobileSidebarDrawer, Sidebar } from "./sidebar";
 
@@ -18,11 +20,34 @@ import { MobileSidebarDrawer, Sidebar } from "./sidebar";
  * this layer is pure chrome.
  */
 export function SchoolStudentLayout({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuthStore();
+  const { user, logout, loadUser } = useAuthStore();
+  const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Banner lives at the shell level so a previewing teacher always
+  // has a way back, including on shared routes like /account.
+  // Previously it was inside the inner /school/student/layout.tsx and
+  // disappeared when navigating off /school/student/*, stranding the
+  // teacher in a shadow session.
+  const preview = typeof window !== "undefined" && isInPreviewMode();
 
   return (
-    <div className="flex flex-1">
+    <div className="flex flex-1 flex-col">
+      {preview && (
+        <div className="sticky top-0 z-50 flex items-center justify-center gap-3 bg-primary px-4 py-2 text-sm font-medium text-white">
+          <span>Previewing as student</span>
+          <button
+            onClick={async () => {
+              exitPreviewMode();
+              await loadUser();
+              router.push("/school/teacher");
+            }}
+            className="rounded-full border border-white/30 px-3 py-0.5 text-xs font-bold hover:bg-white/20"
+          >
+            Back to teacher view
+          </button>
+        </div>
+      )}
+      <div className="flex flex-1">
       <Sidebar />
       <MobileSidebarDrawer
         open={drawerOpen}
@@ -64,6 +89,7 @@ export function SchoolStudentLayout({ children }: { children: React.ReactNode })
         <main id="main-content" className="flex-1 px-6 py-8">
           {children}
         </main>
+      </div>
       </div>
     </div>
   );
