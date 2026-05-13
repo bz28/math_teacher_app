@@ -50,6 +50,7 @@ export function TeacherUsagePill({ compact = false }: { compact?: boolean }) {
   if (!couldBeGated || !data || data.bypass) return null;
 
   const { used, limit } = data;
+  const remaining = Math.max(0, limit - used);
   const near = used >= limit - 2;          // visual warning at 8+/10
   const hit = used >= limit;               // visual hard-stop at 10/10
 
@@ -71,16 +72,18 @@ export function TeacherUsagePill({ compact = false }: { compact?: boolean }) {
     );
   }
 
+  // Status-weight strip: parent (bottom of sidebar) controls horizontal
+  // margin so the pill aligns with the Account link below it. Frames as
+  // "what you have left + action" rather than "plan name + count used"
+  // — actionable info first.
   return (
     <Link
       href="/pricing?view=teacher"
       title="Free teacher plan — 10 AI problem generations per day. Click to upgrade."
-      className={`mx-3 mb-2 flex items-center justify-between gap-2 rounded-[--radius-sm] border px-3 py-2 text-xs font-semibold transition-colors ${toneClasses}`}
+      className={`mb-2 flex items-center justify-between gap-2 rounded-[--radius-sm] border px-3 py-2 text-xs font-medium transition-colors ${toneClasses}`}
     >
-      <span>Free plan</span>
-      <span className="tabular-nums">
-        {used} / {limit} today
-      </span>
+      <span className="tabular-nums">{remaining} left today</span>
+      <span className="font-semibold">Upgrade →</span>
     </Link>
   );
 }

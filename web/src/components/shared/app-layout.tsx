@@ -198,9 +198,6 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
 
           <div className="my-3 border-t border-border-light" />
 
-          {/* Renders only for free independent teachers (server-gated). */}
-          <TeacherUsagePill />
-
           <button
             onClick={async () => {
               if (previewLoading) return;
@@ -226,6 +223,11 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
 
         {/* Bottom */}
         <div className="border-t border-border-light px-3 py-3">
+          {/* Status-weight meter for free independent teachers — sits with
+              identity at the bottom, matches SaaS convention (Linear/Vercel/
+              Stripe). Server-gated; renders null for school / Pro / non-teacher. */}
+          <TeacherUsagePill />
+
           <Link
             href="/account"
             className={cn(
