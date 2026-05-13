@@ -115,3 +115,104 @@ async def test_me_without_token(client: AsyncClient) -> None:
 async def test_me_with_invalid_token(client: AsyncClient) -> None:
     resp = await client.get(ME_URL, headers={"Authorization": "Bearer invalid.token.here"})
     assert resp.status_code == 401
+
+
+# ── Teacher self-signup ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_teacher_self_signup_no_invite(client: AsyncClient) -> None:
+    """A teacher can self-register without any invite token."""
+    payload = {
+        "email": "solo_teacher@test.com",
+        "password": "StrongPass1",
+        "name": "Solo Teacher",
+        "grade_level": 12,
+        "role": "teacher",
+    }
+    resp = await client.post(REGISTER_URL, json=payload)
+    assert resp.status_code == 201, resp.text
+    token = resp.json()["access_token"]
+
+    me = await client.get(ME_URL, headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    me_data = me.json()
+    assert me_data["role"] == "teacher"
+    assert me_data["school_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_teacher_self_signup_persists_school_name(client: AsyncClient) -> None:
+    """signup_school_name lands on the user row when provided."""
+    from sqlalchemy import select
+
+    from api.database import get_session_factory
+    from api.models.user import User
+
+    payload = {
+        "email": "with_school@test.com",
+        "password": "StrongPass1",
+        "name": "Named Teacher",
+        "grade_level": 12,
+        "role": "teacher",
+        "signup_school_name": "Lincoln High School",
+    }
+    resp = await client.post(REGISTER_URL, json=payload)
+    assert resp.status_code == 201, resp.text
+
+    async with get_session_factory()() as session:
+        user = (await session.execute(
+            select(User).where(User.email == "with_school@test.com")
+        )).scalar_one()
+        assert user.signup_school_name == "Lincoln High School"
+
+
+@pytest.mark.asyncio
+async def test_teacher_self_signup_school_name_optional(client: AsyncClient) -> None:
+    """Omitting signup_school_name leaves the column NULL."""
+    from sqlalchemy import select
+
+    from api.database import get_session_factory
+    from api.models.user import User
+
+    payload = {
+        "email": "noschool_teacher@test.com",
+        "password": "StrongPass1",
+        "name": "Anon Teacher",
+        "grade_level": 12,
+        "role": "teacher",
+    }
+    resp = await client.post(REGISTER_URL, json=payload)
+    assert resp.status_code == 201, resp.text
+
+    async with get_session_factory()() as session:
+        user = (await session.execute(
+            select(User).where(User.email == "noschool_teacher@test.com")
+        )).scalar_one()
+        assert user.signup_school_name is None
+
+
+@pytest.mark.asyncio
+async def test_student_signup_ignores_school_name(client: AsyncClient) -> None:
+    """signup_school_name is teacher-scoped — student rows stay NULL."""
+    from sqlalchemy import select
+
+    from api.database import get_session_factory
+    from api.models.user import User
+
+    payload = {
+        "email": "student_with_school@test.com",
+        "password": "StrongPass1",
+        "name": "Student",
+        "grade_level": 8,
+        "role": "student",
+        "signup_school_name": "Should Be Ignored",
+    }
+    resp = await client.post(REGISTER_URL, json=payload)
+    assert resp.status_code == 201, resp.text
+
+    async with get_session_factory()() as session:
+        user = (await session.execute(
+            select(User).where(User.email == "student_with_school@test.com")
+        )).scalar_one()
+        assert user.signup_school_name is None
