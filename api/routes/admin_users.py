@@ -363,6 +363,7 @@ async def update_user_subscription(
     # consistent (rather than DB-says-free + Stripe-says-active).
     is_demote_to_free = body.tier == "free" and old_tier == "pro"
     stripe_sub_id = user.stripe_subscription_id
+    stripe_cancelled = False
     if (
         is_demote_to_free
         and user.subscription_provider == "stripe"
@@ -375,6 +376,7 @@ async def update_user_subscription(
                 current_user.user_id, stripe_sub_id, user_id,
             )
             user.stripe_subscription_id = None
+            stripe_cancelled = True
         except stripe.StripeError as e:  # type: ignore[attr-defined]
             logger.error(
                 "Stripe cancel failed for user=%s sub=%s: %s — aborting demote",
@@ -386,7 +388,11 @@ async def update_user_subscription(
             ) from e
 
     user.subscription_tier = body.tier
-    user.subscription_status = body.status
+    # If we actually cancelled the Stripe sub, force status='cancelled'
+    # regardless of what the admin posted — otherwise an admin POSTing
+    # tier=free + status=active would leave the user in a nonsensical
+    # 'free + active' state. The cancel is the source of truth.
+    user.subscription_status = "cancelled" if stripe_cancelled else body.status
     if body.tier == "pro" and body.status == "active":
         user.subscription_provider = user.subscription_provider or "admin"
     user.updated_by_id = current_user.user_id
@@ -394,9 +400,9 @@ async def update_user_subscription(
     await db.commit()
     logger.info(
         "AUDIT: admin=%s changed subscription of user=%s from tier='%s'/status='%s' to tier='%s'/status='%s'",
-        current_user.user_id, user_id, old_tier, old_status, body.tier, body.status,
+        current_user.user_id, user_id, old_tier, old_status, user.subscription_tier, user.subscription_status,
     )
-    return {"status": "ok", "tier": body.tier, "subscription_status": body.status}
+    return {"status": "ok", "tier": user.subscription_tier, "subscription_status": user.subscription_status}
 
 
 @router.delete("/users/{user_id}")
