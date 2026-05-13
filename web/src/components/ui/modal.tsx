@@ -11,6 +11,11 @@ interface ModalProps {
   className?: string;
   /** Close on Escape key and backdrop click. Defaults to true. */
   dismissible?: boolean;
+  /** Override the outer container's z-index Tailwind class. Use when
+   *  this modal must paint above another modal that's already at z-50
+   *  (e.g. the teacher upgrade prompt opening above a workshop dialog
+   *  at z-[60]). */
+  outerClassName?: string;
 }
 
 const FOCUSABLE_SELECTOR =
@@ -22,6 +27,7 @@ export function Modal({
   children,
   className,
   dismissible = true,
+  outerClassName,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -84,7 +90,12 @@ export function Modal({
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div
+          className={cn(
+            "fixed inset-0 z-50 flex items-center justify-center p-4",
+            outerClassName,
+          )}
+        >
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}

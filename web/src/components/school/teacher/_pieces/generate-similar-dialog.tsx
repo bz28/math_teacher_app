@@ -46,7 +46,6 @@ export function GenerateSimilarDialog({
 
   return (
     <>
-    {UpgradeModal}
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
       onClick={onClose}
@@ -130,6 +129,7 @@ export function GenerateSimilarDialog({
         </div>
       </form>
     </div>
+    {UpgradeModal}
     </>
   );
 }
