@@ -163,7 +163,7 @@ export default function AccountPage() {
             )}
           </div>
           {portalError && (
-            <p className="mt-4 text-sm text-error">{portalError}</p>
+            <p role="alert" className="mt-4 text-sm text-error">{portalError}</p>
           )}
           <button
             onClick={openPortal}
