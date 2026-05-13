@@ -31,6 +31,7 @@ from api.core.entitlements import (
     get_daily_decomp_count,
     get_daily_llm_call_count,
     is_pro,
+    is_school_active_teacher,
     is_school_enrolled,
     usage_cutoff,
 )
@@ -384,14 +385,15 @@ async def me(
         school_name = school
 
     # Single source of truth for is_pro across the frontend: fold in
-    # is_school_enrolled so a school-paid student/teacher reads back as
-    # pro from /auth/me, not just /entitlements. Without this, the
-    # pricing page (reads user.is_pro) treats school-enrolled users as
-    # free and shows them the upgrade flow while the account page
-    # (reads entitlement-store isPro, which already folds enrollment)
-    # treats them as pro. is_pro_via_sub|tier covers self-pay; the OR
-    # adds school-coverage.
-    is_pro_via_school = await is_school_enrolled(db, user.id)
+    # BOTH school-paid paths so a school-covered user reads back as
+    # pro from /auth/me. Without this, the pricing page (reads
+    # user.is_pro) treats school-covered users as free and shows them
+    # the upgrade flow.
+    #   - is_school_enrolled: students linked via SectionEnrollment
+    #   - is_school_active_teacher: teachers carrying school_id directly
+    # is_pro(user) covers self-pay (Stripe/RevenueCat); the OR-chain
+    # adds school-coverage for both audiences.
+    is_pro_via_school = await is_school_enrolled(db, user.id) or await is_school_active_teacher(db, user)
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -463,7 +465,13 @@ async def entitlements(
     db: AsyncSession = Depends(get_db),
 ) -> EntitlementsResponse:
     """Return the current user's entitlement state."""
-    user_is_pro = is_pro(user) or await is_school_enrolled(db, user.id)
+    # Match /auth/me's is_pro fold so the two endpoints agree on
+    # school-covered users (both students AND teachers).
+    user_is_pro = (
+        is_pro(user)
+        or await is_school_enrolled(db, user.id)
+        or await is_school_active_teacher(db, user)
+    )
     cutoff = usage_cutoff(user)
     problems_used = await get_daily_decomp_count(db, user.id, cutoff)
     scans_used = await get_daily_llm_call_count(db, user.id, "image_extract", cutoff)
