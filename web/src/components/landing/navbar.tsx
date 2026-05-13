@@ -19,11 +19,15 @@ export function Navbar() {
           >
             Sign In
           </Link>
+          {/* Primary nav CTA leads with the wider funnel — solo teachers
+              self-serving. School/district buyers still have a path
+              (footer link + the audience-teaser section + hero secondary),
+              just not occupying the most-clicked surface. */}
           <Link
-            href="/demo"
+            href="/register?role=teacher"
             className="rounded-full bg-[color:var(--color-primary)] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[color:var(--color-primary-dark)] md:px-5 md:py-2.5"
           >
-            Book a demo
+            Start free
           </Link>
         </div>
       </div>
