@@ -47,25 +47,25 @@ export default function Login() {
     <div className="login-page">
       {showForgot ? (
         <div className="login-form">
-          <h1 style={{ fontSize: 20 }}>Reset Password</h1>
+          <h1>Reset password</h1>
+          <p className="login-eyebrow">Operations</p>
           {forgotSent ? (
             <div style={{ textAlign: "center" }}>
-              <p style={{ color: "#16a34a", fontWeight: 600, marginBottom: 8 }}>Check your email</p>
-              <p style={{ color: "#64748b", fontSize: 14, marginBottom: 16 }}>
+              <p style={{ color: "var(--ok)", fontWeight: 600, marginBottom: 8, fontFamily: "var(--font-sans)" }}>
+                Check your email
+              </p>
+              <p style={{ color: "var(--muted)", fontSize: 13, marginBottom: 16, fontFamily: "var(--font-sans)" }}>
                 If an account exists for <strong>{forgotEmail}</strong>, we sent a reset link.
               </p>
               <button
                 onClick={() => { setShowForgot(false); setForgotSent(false); setForgotEmail(""); }}
-                style={{ color: "#6366f1", fontWeight: 600, background: "none", border: "none", cursor: "pointer" }}
+                style={{ color: "var(--accent)", fontWeight: 500, background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-sans)" }}
               >
-                Back to Login
+                Back to sign-in
               </button>
             </div>
           ) : (
             <>
-              <p style={{ color: "#64748b", fontSize: 14, marginBottom: 16, marginTop: -16, textAlign: "center" }}>
-                Enter your email to receive a reset link.
-              </p>
               <form onSubmit={handleForgotPassword}>
                 <input
                   type="email"
@@ -75,15 +75,15 @@ export default function Login() {
                   required
                 />
                 <button type="submit" disabled={forgotLoading}>
-                  {forgotLoading ? "Sending..." : "Send Reset Link"}
+                  {forgotLoading ? "Sending…" : "Send reset link"}
                 </button>
               </form>
-              <div style={{ textAlign: "center", marginTop: 12 }}>
+              <div style={{ textAlign: "center", marginTop: 14 }}>
                 <button
                   onClick={() => setShowForgot(false)}
-                  style={{ color: "#64748b", fontSize: 13, background: "none", border: "none", cursor: "pointer" }}
+                  style={{ color: "var(--muted)", fontSize: 12, background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-sans)" }}
                 >
-                  Back to Login
+                  Back to sign-in
                 </button>
               </div>
             </>
@@ -91,19 +91,17 @@ export default function Login() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="login-form">
-          <h1>Veradic AI</h1>
-          <p style={{ textAlign: "center", color: "#64748b", marginBottom: 20, marginTop: -16 }}>
-            Admin Dashboard
-          </p>
+          <h1>Veradic</h1>
+          <p className="login-eyebrow">Operations / Sign in</p>
           {error && <p className="error">{error}</p>}
           <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          <button type="submit">Login</button>
-          <div style={{ textAlign: "center", marginTop: 8 }}>
+          <button type="submit">Sign in</button>
+          <div style={{ textAlign: "center", marginTop: 14 }}>
             <button
               type="button"
               onClick={() => setShowForgot(true)}
-              style={{ color: "#64748b", fontSize: 13, background: "none", border: "none", cursor: "pointer" }}
+              style={{ color: "var(--muted)", fontSize: 12, background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-sans)" }}
             >
               Forgot password?
             </button>

@@ -8,10 +8,10 @@ import StatCard from "../components/StatCard";
 const STATUS_OPTIONS = ["new", "contacted", "converted", "declined"] as const;
 
 const STATUS_STYLES: Record<string, React.CSSProperties> = {
-  new: { background: "#dbeafe", color: "#2563eb" },
-  contacted: { background: "#fef3c7", color: "#b45309" },
-  converted: { background: "#dcfce7", color: "#16a34a" },
-  declined: { background: "#f1f5f9", color: "#94a3b8" },
+  new: { background: "var(--info-soft)", color: "var(--info)" },
+  contacted: { background: "var(--warn-soft)", color: "var(--warn)" },
+  converted: { background: "var(--ok-soft)", color: "var(--ok)" },
+  declined: { background: "transparent", color: "var(--muted-2)" },
 };
 
 export default function Leads() {
@@ -108,7 +108,7 @@ export default function Leads() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<"active" | "all">("active");
 
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <p className="loading">Loading…</p>;
 
   const newCount = leads.filter((l) => l.status === "new").length;
   const contactedCount = leads.filter((l) => l.status === "contacted").length;
@@ -120,7 +120,17 @@ export default function Leads() {
 
   return (
     <div>
-      <h1>Leads</h1>
+      <div className="page-header">
+        <span className="eyebrow">Pipeline</span>
+        <h1>Leads</h1>
+        <p>
+          {newCount === 0 && contactedCount === 0
+            ? leads.length === 0
+              ? "Nothing inbound yet."
+              : "Nothing active. All leads converted or declined."
+            : `${newCount} new. ${contactedCount} contacted.`}
+        </p>
+      </div>
 
       <div className="stat-grid">
         <StatCard label="New" value={newCount} />
@@ -135,16 +145,17 @@ export default function Leads() {
             {filter === "active" ? "Active Leads" : "All Leads"}
             <span style={{ fontWeight: 400, color: "#94a3b8", marginLeft: 8 }}>({filteredLeads.length})</span>
           </h3>
-          <div style={{ display: "flex", gap: 4, background: "#f1f5f9", borderRadius: 6, padding: 2 }}>
+          <div style={{ display: "flex", gap: 0, background: "var(--paper-2)", borderRadius: 3, padding: 2, border: "1px solid var(--rule)" }}>
             {(["active", "all"] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
                 style={{
-                  padding: "6px 14px", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                  background: filter === f ? "#fff" : "transparent",
-                  color: filter === f ? "#1e293b" : "#94a3b8",
-                  boxShadow: filter === f ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+                  padding: "6px 14px", border: "none", borderRadius: 2, fontSize: 11, fontWeight: 600, cursor: "pointer",
+                  textTransform: "uppercase", letterSpacing: "1.2px",
+                  fontFamily: "var(--font-sans)",
+                  background: filter === f ? "var(--surface)" : "transparent",
+                  color: filter === f ? "var(--ink)" : "var(--muted)",
                 }}
               >
                 {f === "active" ? `Active (${newCount + contactedCount})` : `All (${leads.length})`}
@@ -178,14 +189,17 @@ export default function Leads() {
             {filteredLeads.map((lead) => (
               <tr key={lead.id} style={{ opacity: lead.status === "declined" ? 0.55 : 1 }}>
                 <td>
-                  <span style={{ fontWeight: 600 }}>{lead.school_name}</span>
+                  <span style={{ fontFamily: "var(--font-display)", fontSize: 17, color: "var(--ink)" }}>
+                    {lead.school_name}
+                  </span>
                   {lead.status === "converted" && lead.school_id && (
                     <div>
                       <button
                         onClick={() => navigate(`/schools?detail=${lead.school_id}`)}
-                        style={{ fontSize: 11, color: "#6366f1", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 600 }}
+                        className="link-btn"
+                        style={{ fontSize: 11 }}
                       >
-                        View School &rarr;
+                        View school &rarr;
                       </button>
                     </div>
                   )}
@@ -245,17 +259,24 @@ export default function Leads() {
             ))}
             {filteredLeads.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ textAlign: "center", padding: 48 }}>
-                  <div style={{ color: "#94a3b8" }}>
+                <td colSpan={7}>
+                  <div className="empty-state">
                     {filter === "active" && leads.length > 0 ? (
                       <>
-                        <div style={{ fontSize: 20, marginBottom: 8 }}>No active leads</div>
-                        <div style={{ fontSize: 14 }}>All leads have been converted or declined. <button onClick={() => setFilter("all")} style={{ color: "#6366f1", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 14 }}>View all leads</button></div>
+                        <div className="empty-state-title">No active leads.</div>
+                        <div className="empty-state-sub">
+                          All leads converted or declined.{" "}
+                          <button onClick={() => setFilter("all")} className="link-btn">
+                            View all leads
+                          </button>
+                        </div>
                       </>
                     ) : (
                       <>
-                        <div style={{ fontSize: 32, marginBottom: 8 }}>No leads yet</div>
-                        <div style={{ fontSize: 14 }}>Leads will appear here when schools submit the contact form on the /teachers page.</div>
+                        <div className="empty-state-title">Nothing inbound yet.</div>
+                        <div className="empty-state-sub">
+                          Leads will appear when schools submit the contact form on the /teachers page.
+                        </div>
                       </>
                     )}
                   </div>

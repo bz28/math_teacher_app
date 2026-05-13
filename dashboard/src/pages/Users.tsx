@@ -149,11 +149,15 @@ export default function Users() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <h1 style={{ marginBottom: 0 }}>Users</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
+        <div className="page-header" style={{ marginBottom: 0 }}>
+          <span className="eyebrow">All users</span>
+          <h1>Users</h1>
+          <p>Cross-cutting view across every account in the system.</p>
+        </div>
         {!showInvite && (
           <button onClick={() => { setShowInvite(true); setInviteSuccess(null); }} className="btn-primary">
-            + Invite Admin
+            + Invite admin
           </button>
         )}
       </div>

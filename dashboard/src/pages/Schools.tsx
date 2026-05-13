@@ -217,7 +217,7 @@ export default function Schools() {
     }
   };
 
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <p className="loading">Loading…</p>;
 
   const totalSchools = schools.length;
   const activeSchools = schools.filter((s) => s.is_active).length;
@@ -225,17 +225,25 @@ export default function Schools() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <h1 style={{ marginBottom: 0 }}>Schools</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
+        <div className="page-header" style={{ marginBottom: 0 }}>
+          <span className="eyebrow">Audience</span>
+          <h1>Schools</h1>
+          <p>
+            {totalSchools === 0
+              ? "No schools yet."
+              : `${totalSchools} school${totalSchools === 1 ? "" : "s"}. ${activeSchools} active.`}
+          </p>
+        </div>
         {!showCreate && (
-          <button onClick={() => setShowCreate(true)} style={btnPrimary}>
-            + Add School
+          <button onClick={() => setShowCreate(true)} className="btn-primary">
+            + Add school
           </button>
         )}
       </div>
 
       <div className="stat-grid">
-        <StatCard label="Total Schools" value={totalSchools} />
+        <StatCard label="Total schools" value={totalSchools} />
         <StatCard label="Active" value={activeSchools} />
         <StatCard label="Teachers" value={totalTeachers} />
       </div>
@@ -383,11 +391,8 @@ export default function Schools() {
                 </td>
                 <td style={{ fontWeight: 600 }}>{s.teacher_count}</td>
                 <td>
-                  <span className="badge" style={
-                    s.is_active
-                      ? { background: "#dcfce7", color: "#16a34a" }
-                      : { background: "#fef2f2", color: "#dc2626" }
-                  }>
+                  <span className="list-row-status">
+                    <span className={`dot ${s.is_active ? "dot-ok" : "dot-muted"}`}>●</span>
                     {s.is_active ? "Active" : "Inactive"}
                   </span>
                 </td>
@@ -445,10 +450,10 @@ export default function Schools() {
             ))}
             {schools.length === 0 && (
               <tr>
-                <td colSpan={8} style={{ textAlign: "center", padding: 48 }}>
-                  <div style={{ color: "#94a3b8" }}>
-                    <div style={{ fontSize: 32, marginBottom: 8 }}>No schools yet</div>
-                    <div style={{ fontSize: 14 }}>Click "+ Add School" when you close your first deal.</div>
+                <td colSpan={8}>
+                  <div className="empty-state">
+                    <div className="empty-state-title">No schools yet.</div>
+                    <div className="empty-state-sub">Click "+ Add school" when you close your first deal.</div>
                   </div>
                 </td>
               </tr>
