@@ -41,26 +41,47 @@ async def users(
     limit: int = Query(default=25, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     search: str | None = Query(default=None, max_length=100),
+    role: str | None = Query(default=None, pattern=r"^(student|teacher|admin)$"),
+    no_school: bool = Query(default=False),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     since = time_range(hours)
 
-    # Total users (excludes preview/shadow accounts created by "View as Student")
+    # Scope filters — applied to every aggregate and the list so the
+    # Independent students / Independent teachers pages see consistent
+    # numbers across stats and rows. `role` and `no_school` are no-ops
+    # when unset, so the default (unfiltered) Users page is unchanged.
+    scope_filters: list[Any] = [User.is_preview.is_(False)]
+    if role:
+        scope_filters.append(User.role == role)
+    if no_school:
+        scope_filters.append(User.school_id.is_(None))
+
+    # Subquery of user IDs in scope — referenced by the spend and
+    # active-user aggregates so they only count users we're showing.
+    scope_user_ids = select(User.id).where(*scope_filters).subquery()
+
     total_users = (await db.execute(
-        select(func.count()).select_from(User).where(User.is_preview.is_(False))
+        select(func.count()).select_from(User).where(*scope_filters)
     )).scalar() or 0
 
     # Active users (7d)
     active_7d = (await db.execute(
         select(func.count(func.distinct(Session.user_id)))
-        .where(Session.created_at >= time_range(168))
+        .where(
+            Session.created_at >= time_range(168),
+            Session.user_id.in_(select(scope_user_ids.c.id)),
+        )
     )).scalar() or 0
 
-    # Total spend (all users, in period)
+    # Total spend (scope-filtered, in period)
     total_spend = (await db.execute(
         select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0))
-        .where(LLMCall.created_at >= since)
+        .where(
+            LLMCall.created_at >= since,
+            LLMCall.user_id.in_(select(scope_user_ids.c.id)),
+        )
     )).scalar() or 0.0
 
     # Registrations over time
@@ -151,8 +172,8 @@ async def users(
         "name": User.name.asc(),
     }
 
-    # Filters — also hide preview/shadow accounts from the admin user list.
-    search_filters: list[Any] = [User.is_preview.is_(False)]
+    # Filters — extend scope_filters with optional search.
+    search_filters: list[Any] = list(scope_filters)
     if search:
         term = f"%{search}%"
         search_filters.append(User.name.ilike(term) | User.email.ilike(term))
