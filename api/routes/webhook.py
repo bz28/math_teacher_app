@@ -361,6 +361,19 @@ async def stripe_webhook(
             await db.commit()
             return {"status": "ok"}
         event_sub_id = data_object.get("id")
+        # Defensive: a malformed delete payload with no sub id should
+        # NOT demote anyone — the null-fallback in _is_active_subscription
+        # is for first-touch updates where there's no tracked id yet, not
+        # for deletes where the whole point is "stop charging this id".
+        # Real Stripe events always include id; this guards test fixtures
+        # and partial payloads from accidentally clearing pro state.
+        if not event_sub_id:
+            logger.warning(
+                "Stripe subscription.deleted with no event id for user=%s — ignoring",
+                user.id,
+            )
+            await db.commit()
+            return {"status": "ok"}
         if not _is_active_subscription(user, event_sub_id):
             logger.info(
                 "Stripe subscription.deleted for non-current sub ignored: user=%s "
