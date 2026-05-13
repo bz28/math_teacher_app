@@ -139,28 +139,34 @@ function PricingPageContent() {
         </p>
       </div>
 
-      {/* Role toggle — single pricing URL, two audiences. */}
-      <div
-        role="group"
-        aria-label="Choose pricing view"
-        className="mx-auto mt-6 flex max-w-xs rounded-[--radius-pill] border border-border-light bg-surface-alt p-1"
-      >
-        {(["student", "teacher"] as const).map((v) => (
-          <button
-            key={v}
-            type="button"
-            aria-pressed={view === v}
-            onClick={() => setView(v)}
-            className={`flex-1 rounded-[--radius-pill] px-4 py-2 text-sm font-semibold transition-colors ${
-              view === v
-                ? "bg-primary text-white shadow-sm"
-                : "text-text-secondary hover:text-text-primary"
-            }`}
-          >
-            {v === "student" ? "I'm a student" : "I'm a teacher"}
-          </button>
-        ))}
-      </div>
+      {/* Role toggle — only shown to anonymous visitors. A signed-in
+          user already has a role; showing them the other side's pricing
+          is irrelevant noise (a teacher doesn't need to compare against
+          student plans). The ?view= URL param still drives the view for
+          deep-links if needed. */}
+      {!user?.role && (
+        <div
+          role="group"
+          aria-label="Choose pricing view"
+          className="mx-auto mt-6 flex max-w-xs rounded-[--radius-pill] border border-border-light bg-surface-alt p-1"
+        >
+          {(["student", "teacher"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={view === v}
+              onClick={() => setView(v)}
+              className={`flex-1 rounded-[--radius-pill] px-4 py-2 text-sm font-semibold transition-colors ${
+                view === v
+                  ? "bg-primary text-white shadow-sm"
+                  : "text-text-secondary hover:text-text-primary"
+              }`}
+            >
+              {v === "student" ? "I'm a student" : "I'm a teacher"}
+            </button>
+          ))}
+        </div>
+      )}
 
       {error && (
         <div className="mt-6 rounded-[--radius-md] bg-error/10 px-4 py-3 text-sm text-error">
