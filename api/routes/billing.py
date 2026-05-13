@@ -146,7 +146,12 @@ async def teacher_usage(
         return UsageResponse(used=0, limit=TEACHER_DAILY_GENERATION_LIMIT, bypass=True)
 
     cutoff = usage_cutoff(user)
-    used = await get_daily_llm_call_count(db, user.id, _GENERATE_FUNCTION, cutoff)
+    # success_only=True for the displayed count too — keeps the meter
+    # and the gate in lockstep (a failed-at-model attempt shouldn't
+    # tick the pill).
+    used = await get_daily_llm_call_count(
+        db, user.id, _GENERATE_FUNCTION, cutoff, success_only=True,
+    )
     return UsageResponse(
         used=used,
         limit=TEACHER_DAILY_GENERATION_LIMIT,
