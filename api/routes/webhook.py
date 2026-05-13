@@ -1,8 +1,9 @@
-"""RevenueCat webhook endpoint for subscription lifecycle events."""
+"""Subscription webhooks — RevenueCat (students) and Stripe (teachers)."""
 
 import logging
 from datetime import UTC, datetime
 
+import stripe
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -124,4 +125,133 @@ async def revenuecat_webhook(
         user.subscription_status,
     )
 
+    return {"status": "ok"}
+
+
+# ── Stripe webhook (teacher self-serve subscriptions) ──────────────────
+
+
+async def _resolve_user_by_customer(
+    db: AsyncSession, customer_id: str | None
+) -> User | None:
+    """Look up a user by their Stripe customer id."""
+    if not customer_id:
+        return None
+    result = await db.execute(
+        select(User).where(User.stripe_customer_id == customer_id)
+    )
+    return result.scalar_one_or_none()
+
+
+def _ts_to_dt(ts: int | None) -> datetime | None:
+    if not ts:
+        return None
+    return datetime.fromtimestamp(ts, tz=UTC)
+
+
+@router.post("/webhooks/stripe", status_code=200)
+@limiter.limit("60/minute")
+async def stripe_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    stripe_signature: str | None = Header(default=None, alias="stripe-signature"),
+) -> dict[str, str]:
+    """Handle Stripe subscription lifecycle for teacher accounts.
+
+    Events we care about:
+      - checkout.session.completed       → flip to Pro + active
+      - customer.subscription.updated    → reflect current_period_end / status
+      - customer.subscription.deleted    → flip back to free
+
+    Signature verification is enforced in production. In dev (no
+    webhook secret configured) we skip it so the Stripe CLI can fire
+    test events without setup overhead.
+    """
+    payload = await request.body()
+
+    if settings.stripe_webhook_secret:
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, stripe_signature or "", settings.stripe_webhook_secret,
+            )
+        except (ValueError, stripe.SignatureVerificationError) as e:  # type: ignore[attr-defined]
+            logger.warning("Stripe webhook signature failed: %s", e)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Invalid signature",
+            ) from e
+    else:
+        # Dev mode — accept the raw payload without verification.
+        if settings.app_env != "development":
+            logger.error("Stripe webhook secret not configured in non-dev env")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Stripe webhook not configured",
+            )
+        import json
+        event = json.loads(payload)
+
+    event_type = event.get("type") if isinstance(event, dict) else event["type"]
+    data_object = (
+        event.get("data", {}).get("object", {})
+        if isinstance(event, dict)
+        else event["data"]["object"]
+    )
+
+    logger.info("Stripe event received: type=%s", event_type)
+
+    if event_type == "checkout.session.completed":
+        # The Checkout Session carries the customer id and (when mode=
+        # subscription) the resulting subscription id. We flip the user
+        # to Pro on this event; subsequent updates land via
+        # customer.subscription.updated.
+        user = await _resolve_user_by_customer(db, data_object.get("customer"))
+        if user is None:
+            logger.warning(
+                "Stripe checkout.session.completed for unknown customer: %s",
+                data_object.get("customer"),
+            )
+            return {"status": "ok"}
+        user.subscription_tier = "pro"
+        user.subscription_status = "active"
+        user.subscription_provider = "stripe"
+        await db.commit()
+        logger.info("Stripe → user %s flipped to pro/active", user.id)
+        return {"status": "ok"}
+
+    if event_type == "customer.subscription.updated":
+        user = await _resolve_user_by_customer(db, data_object.get("customer"))
+        if user is None:
+            return {"status": "ok"}
+        sub_status = data_object.get("status")  # active / past_due / canceled / etc.
+        period_end = _ts_to_dt(data_object.get("current_period_end"))
+        if sub_status == "active":
+            user.subscription_tier = "pro"
+            user.subscription_status = "active"
+        elif sub_status == "past_due":
+            user.subscription_status = "billing_issue"
+        elif sub_status == "canceled":
+            user.subscription_status = "cancelled"
+        # Always carry the freshest period end so the grace window in
+        # is_pro() reflects the latest billing cycle.
+        if period_end is not None:
+            user.subscription_expires_at = period_end
+        user.subscription_provider = "stripe"
+        await db.commit()
+        logger.info(
+            "Stripe → user %s subscription updated: %s",
+            user.id, sub_status,
+        )
+        return {"status": "ok"}
+
+    if event_type == "customer.subscription.deleted":
+        user = await _resolve_user_by_customer(db, data_object.get("customer"))
+        if user is None:
+            return {"status": "ok"}
+        user.subscription_tier = "free"
+        user.subscription_status = "cancelled"
+        await db.commit()
+        logger.info("Stripe → user %s subscription deleted", user.id)
+        return {"status": "ok"}
+
+    logger.info("Stripe event ignored: %s", event_type)
     return {"status": "ok"}
