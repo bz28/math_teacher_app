@@ -7,6 +7,7 @@ import uuid
 from unittest.mock import patch
 
 import pytest
+import stripe
 from httpx import AsyncClient
 from sqlalchemy import select
 
@@ -239,7 +240,21 @@ async def test_stripe_webhook_subscription_deleted_flips_to_free(client: AsyncCl
 
 @pytest.mark.asyncio
 async def test_stripe_webhook_unknown_customer_is_no_op(client: AsyncClient) -> None:
-    """An event for a customer we don't recognize is a clean no-op."""
+    """An event for a customer we don't recognize is a clean no-op.
+
+    Asserts both the 200 response AND that no user state mutated —
+    a previously-tautological test was strengthened to verify
+    no side-effects on any user row.
+    """
+    # Seed a known user with a different customer id so we can confirm
+    # they weren't touched.
+    user, _ = await _make_user(role="teacher", stripe_customer_id="cus_known")
+    async with get_session_factory()() as s:
+        u = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
+        u.subscription_tier = "free"
+        u.subscription_status = "none"
+        await s.commit()
+
     payload = {
         "type": "checkout.session.completed",
         "data": {"object": {"customer": "cus_unknown_xxx"}},
@@ -251,6 +266,131 @@ async def test_stripe_webhook_unknown_customer_is_no_op(client: AsyncClient) -> 
     ):
         resp = await client.post(STRIPE_WEBHOOK_URL, json=payload)
     assert resp.status_code == 200
+
+    # Untouched.
+    async with get_session_factory()() as s:
+        refreshed = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert refreshed.subscription_tier == "free"
+        assert refreshed.subscription_status == "none"
+
+
+@pytest.mark.asyncio
+async def test_stripe_webhook_subscription_updated_active(client: AsyncClient) -> None:
+    """customer.subscription.updated with status=active sets tier=pro + refreshes period_end."""
+    from datetime import UTC, datetime
+
+    user, _ = await _make_user(role="teacher", stripe_customer_id="cus_upd_active")
+    new_period_end = int(datetime(2027, 1, 1, tzinfo=UTC).timestamp())
+
+    payload = {
+        "type": "customer.subscription.updated",
+        "data": {
+            "object": {
+                "customer": "cus_upd_active",
+                "status": "active",
+                "current_period_end": new_period_end,
+            }
+        },
+    }
+    with patch.multiple(
+        "api.routes.webhook.settings",
+        stripe_webhook_secret="",
+        app_env="development",
+    ):
+        resp = await client.post(STRIPE_WEBHOOK_URL, json=payload)
+    assert resp.status_code == 200
+
+    async with get_session_factory()() as s:
+        refreshed = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert refreshed.subscription_tier == "pro"
+        assert refreshed.subscription_status == "active"
+        assert refreshed.subscription_provider == "stripe"
+        assert refreshed.subscription_expires_at is not None
+        assert int(refreshed.subscription_expires_at.timestamp()) == new_period_end
+
+
+@pytest.mark.asyncio
+async def test_stripe_webhook_subscription_updated_past_due(client: AsyncClient) -> None:
+    """status=past_due sets subscription_status=billing_issue, keeps tier."""
+    user, _ = await _make_user(role="teacher", stripe_customer_id="cus_upd_past")
+    async with get_session_factory()() as s:
+        u = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
+        u.subscription_tier = "pro"
+        u.subscription_status = "active"
+        await s.commit()
+
+    payload = {
+        "type": "customer.subscription.updated",
+        "data": {"object": {"customer": "cus_upd_past", "status": "past_due"}},
+    }
+    with patch.multiple(
+        "api.routes.webhook.settings",
+        stripe_webhook_secret="",
+        app_env="development",
+    ):
+        resp = await client.post(STRIPE_WEBHOOK_URL, json=payload)
+    assert resp.status_code == 200
+
+    async with get_session_factory()() as s:
+        refreshed = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert refreshed.subscription_status == "billing_issue"
+
+
+@pytest.mark.asyncio
+async def test_stripe_webhook_signature_valid(client: AsyncClient) -> None:
+    """With a webhook secret configured, a valid signature lets the event through."""
+    user, _ = await _make_user(role="teacher", stripe_customer_id="cus_sig_ok")
+
+    # construct_event returns the parsed event dict on success.
+    fake_event = {
+        "type": "checkout.session.completed",
+        "data": {"object": {"customer": "cus_sig_ok"}},
+    }
+    with (
+        patch.multiple(
+            "api.routes.webhook.settings",
+            stripe_webhook_secret="whsec_test",
+            app_env="production",
+        ),
+        patch("stripe.Webhook.construct_event", return_value=fake_event),
+    ):
+        resp = await client.post(
+            STRIPE_WEBHOOK_URL,
+            content=b"{}",
+            headers={
+                "Content-Type": "application/json",
+                "stripe-signature": "t=1,v1=anything",
+            },
+        )
+    assert resp.status_code == 200
+    async with get_session_factory()() as s:
+        refreshed = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert refreshed.subscription_tier == "pro"
+
+
+@pytest.mark.asyncio
+async def test_stripe_webhook_signature_invalid(client: AsyncClient) -> None:
+    """A bad signature must 403, not accept the payload."""
+    def _raise(*_args, **_kwargs):
+        raise stripe.SignatureVerificationError("bad sig", "sig_header")
+
+    with (
+        patch.multiple(
+            "api.routes.webhook.settings",
+            stripe_webhook_secret="whsec_test",
+            app_env="production",
+        ),
+        patch("stripe.Webhook.construct_event", side_effect=_raise),
+    ):
+        resp = await client.post(
+            STRIPE_WEBHOOK_URL,
+            content=b"{}",
+            headers={
+                "Content-Type": "application/json",
+                "stripe-signature": "t=1,v1=forged",
+            },
+        )
+    assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
