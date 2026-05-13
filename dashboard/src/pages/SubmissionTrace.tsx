@@ -10,7 +10,6 @@ import {
 } from "../lib/format";
 import { PIPELINE_BUCKETS, bucketFor } from "../lib/llm_modes";
 import MetadataChips from "../components/MetadataChips";
-import { useScope } from "../lib/scope-context";
 
 // Per-submission flight recorder. Pulls every LLM call stamped with
 // the given submission_id and renders them as a vertical chronological
@@ -22,14 +21,7 @@ import { useScope } from "../lib/scope-context";
 
 export default function SubmissionTrace() {
   const { submissionId } = useParams<{ submissionId: string }>();
-  const { scope } = useScope();
-  // Scope-aware "back" path — when the user came in via a school
-  // route the trail returns to that school's LLM Calls list, not
-  // the admin one. Avoids silently bouncing them into Admin scope.
-  const llmCallsPath =
-    scope.kind === "school"
-      ? `/school/${scope.schoolId}/llm-calls`
-      : "/admin/llm-calls";
+  const llmCallsPath = "/llm-calls";
   const [data, setData] = useState<LLMCallsData | null>(null);
   const [error, setError] = useState<string | null>(null);
 

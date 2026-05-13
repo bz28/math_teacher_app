@@ -10,7 +10,6 @@ import { formatRelativeDate, shortModel } from "../lib/format";
 import StatCard from "../components/StatCard";
 import MetadataChips from "../components/MetadataChips";
 import { Pagination } from "../components/Pagination";
-import { useScope } from "../lib/scope-context";
 
 const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
 
@@ -19,15 +18,8 @@ const PAGE_SIZE = 25;
 
 export default function LLMCalls() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { apiSchoolFilter, scope } = useScope();
-  const schoolFilter = apiSchoolFilter() ?? "";
-  // Scope-aware deep-link to the per-submission flight recorder so a
-  // user drilled into a school stays in school scope when they jump
-  // into a trace.
   const tracePathFor = (submissionId: string) =>
-    scope.kind === "school"
-      ? `/school/${scope.schoolId}/submissions/${submissionId}/trace`
-      : `/admin/submissions/${submissionId}/trace`;
+    `/submissions/${submissionId}/trace`;
   const [data, setData] = useState<LLMCallsData | null>(null);
   const [hours, setHours] = useState("24");
   const [fnFilter, setFnFilter] = useState("");
@@ -52,12 +44,11 @@ export default function LLMCalls() {
       function: fnFilter,
       user_id: userFilter,
       submission_id: submissionFilter,
-      school_id: schoolFilter,
       limit: String(PAGE_SIZE),
       offset: String(offset),
     }).then((d) => { if (!cancelled) setData(d); });
     return () => { cancelled = true; };
-  }, [hours, fnFilter, userFilter, submissionFilter, schoolFilter, offset]);
+  }, [hours, fnFilter, userFilter, submissionFilter, offset]);
 
   // Reset offset whenever any non-pagination filter changes so a deep
   // link (?submission=…, ?user=…) or a scope flip never lands past the
@@ -68,7 +59,7 @@ export default function LLMCalls() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOffset(0);
-  }, [schoolFilter, userFilter, submissionFilter, fnFilter, hours]);
+  }, [userFilter, submissionFilter, fnFilter, hours]);
 
   // Local-state handlers — offset reset is handled by the effect
   // above, so we don't duplicate it here.

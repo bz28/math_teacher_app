@@ -348,8 +348,8 @@ export default function Users() {
                       }}
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <button onClick={() => { setOpenMenu(null); navigate(`/admin/llm-calls?user=${u.id}`); }}>
-                        View Calls
+                      <button onClick={() => { setOpenMenu(null); navigate(`/llm-calls?user=${u.id}`); }}>
+                        View calls
                       </button>
                       <button onClick={() => { setOpenMenu(null); handleToggleSubscription(u.id, u.subscription_tier); }}>
                         {u.subscription_tier === "pro" ? "Downgrade Plan" : "Upgrade Plan"}
