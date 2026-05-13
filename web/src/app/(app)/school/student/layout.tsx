@@ -3,14 +3,15 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
-import { exitPreviewMode, isInPreviewMode } from "@/lib/api";
 
 /**
  * Role guard for the school-student section. Sends users who aren't
- * school-affiliated students back to the personal home.
+ * school-affiliated students (or shadow previews) back to the personal home.
  *
- * When the teacher is in preview mode (shadow student), a sticky banner
- * renders at the top with a "Back to teacher view" button.
+ * The "Previewing as student / Back to teacher view" banner used to live
+ * here but is now hoisted to the outer SchoolStudentLayout shell so a
+ * previewing teacher keeps the exit affordance on shared routes like
+ * /account (which doesn't render this inner Next layout).
  */
 export default function SchoolStudentLayout({
   children,
@@ -18,14 +19,12 @@ export default function SchoolStudentLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { user, loading, loadUser } = useAuthStore();
-  const preview = typeof window !== "undefined" && isInPreviewMode();
+  const { user, loading } = useAuthStore();
 
   // Shadow-student previews (Try as Student) get school_id=null when
   // the owning teacher is solo (no school). Admit them anyway — the
-  // dashboard is enrollment-driven and the preview banner gives them
-  // a way back. Without this, a solo teacher who clicks Try as Student
-  // gets bounced to /home stranded as the shadow, no exit affordance.
+  // dashboard is enrollment-driven and the outer shell's preview banner
+  // gives them a way back.
   const allowed =
     !!user &&
     user.role === "student" &&
@@ -46,24 +45,5 @@ export default function SchoolStudentLayout({
     );
   }
 
-  return (
-    <>
-      {preview && (
-        <div className="sticky top-0 z-50 flex items-center justify-center gap-3 bg-primary px-4 py-2 text-sm font-medium text-white">
-          <span>Previewing as student</span>
-          <button
-            onClick={async () => {
-              exitPreviewMode();
-              await loadUser();
-              router.push("/school/teacher");
-            }}
-            className="rounded-full border border-white/30 px-3 py-0.5 text-xs font-bold hover:bg-white/20"
-          >
-            Back to teacher view
-          </button>
-        </div>
-      )}
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }
