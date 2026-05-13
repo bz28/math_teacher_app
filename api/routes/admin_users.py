@@ -50,8 +50,11 @@ async def users(
 
     # Scope filters — applied to every aggregate and the list so the
     # Independent students / Independent teachers pages see consistent
-    # numbers across stats and rows. `role` and `no_school` are no-ops
-    # when unset, so the default (unfiltered) Users page is unchanged.
+    # numbers across stats and rows. `is_preview=False` always
+    # applies, even with no role/no_school filter, so `total_spend`
+    # and `active_7d` on the (hidden) /users page now exclude preview
+    # accounts and LLM calls with NULL user_id — matching how the
+    # row population was already filtered pre-PR.
     scope_filters: list[Any] = [User.is_preview.is_(False)]
     if role:
         scope_filters.append(User.role == role)
