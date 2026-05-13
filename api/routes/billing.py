@@ -17,11 +17,18 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
+from api.core.entitlements import (
+    TEACHER_DAILY_GENERATION_LIMIT,
+    get_daily_llm_call_count,
+    is_pro,
+    is_school_active_teacher,
+    usage_cutoff,
+)
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
 from api.middleware.rate_limit import limiter
 from api.models.user import User
-from api.schemas.billing import CheckoutResponse, PortalResponse
+from api.schemas.billing import CheckoutResponse, PortalResponse, UsageResponse
 from api.services.stripe_client import is_configured
 
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -102,6 +109,48 @@ async def teacher_checkout(
 
     logger.info("Stripe checkout created: user=%s session=%s", user.id, session.id)
     return CheckoutResponse(checkout_url=session.url or "")
+
+
+@router.get(
+    "/teacher-usage",
+    response_model=UsageResponse,
+    status_code=status.HTTP_200_OK,
+)
+@limiter.limit("60/minute")
+async def teacher_usage(
+    request: Request,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> UsageResponse:
+    """Today's generate_problem usage for a teacher.
+
+    Teacher-only — students hit 403 because the meter pill is a
+    teacher-only UX surface. The `bypass` flag tells the frontend
+    when to hide the pill entirely (school teachers, pro, dev
+    bypass) so we don't show a stale "0 / 10" to someone who isn't
+    actually gated.
+    """
+    if user.role != "teacher":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Teacher-only.",
+        )
+
+    bypass = (
+        settings.bypass_subscription
+        or is_pro(user)
+        or await is_school_active_teacher(db, user)
+    )
+    if bypass:
+        return UsageResponse(used=0, limit=TEACHER_DAILY_GENERATION_LIMIT, bypass=True)
+
+    cutoff = usage_cutoff(user)
+    used = await get_daily_llm_call_count(db, user.id, "generate_problem", cutoff)
+    return UsageResponse(
+        used=used,
+        limit=TEACHER_DAILY_GENERATION_LIMIT,
+        bypass=False,
+    )
 
 
 @router.get(
