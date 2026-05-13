@@ -192,10 +192,6 @@ async def check_entitlement(
     if await is_school_enrolled(db, user_id):
         return
 
-    # School teachers also bypass — their school covers them
-    if await is_school_active_teacher(db, user):
-        return
-
     cutoff = usage_cutoff(user)
 
     if entitlement == Entitlement.CREATE_SESSION:
@@ -241,6 +237,11 @@ async def check_entitlement(
         # Teacher-only cap for now. Other roles fall through (no quota).
         # When a student-side cap is needed, branch here on user.role.
         if getattr(user, "role", "") != "teacher":
+            return
+        # Teachers backed by an active school skip the cap — their
+        # school is paying. Scoped to this entitlement so we don't
+        # silently lift other caps for school teachers.
+        if await is_school_active_teacher(db, user):
             return
         count = await get_daily_llm_call_count(db, user_id, "generate_problem", cutoff)
         if count >= TEACHER_DAILY_GENERATION_LIMIT:
