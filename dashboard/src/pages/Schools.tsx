@@ -256,7 +256,7 @@ export default function Schools() {
             <button onClick={() => { setShowCreate(false); setCreateError(null); }} style={btnGhost}>Cancel</button>
           </div>
           {createError && (
-            <div style={{ marginBottom: 12, padding: "8px 12px", background: "#fef2f2", borderRadius: 6, border: "1px solid #fecaca", fontSize: 13, color: "#dc2626" }}>
+            <div style={{ marginBottom: 12, padding: "8px 12px", background: "var(--danger-soft)", borderRadius: 6, border: "1px solid rgba(138, 35, 23, 0.3)", fontSize: 13, color: "var(--danger)" }}>
               {createError}
             </div>
           )}
@@ -379,7 +379,7 @@ export default function Schools() {
                       {s.name}
                     </button>
                     {(s.city || s.state) && (
-                      <div style={{ fontSize: 12, color: "#64748b" }}>
+                      <div style={{ fontSize: 12, color: "var(--muted)" }}>
                         {[s.city, s.state].filter(Boolean).join(", ")}
                       </div>
                     )}
@@ -387,35 +387,35 @@ export default function Schools() {
                 </td>
                 <td>
                   <div style={{ fontSize: 13 }}>{s.contact_name}</div>
-                  <div style={{ fontSize: 11, color: "#64748b" }}>{s.contact_email}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.contact_email}</div>
                 </td>
                 <td style={{ fontWeight: 600 }}>{s.teacher_count}</td>
                 <td>
                   <span className="list-row-status">
-                    <span className={`dot ${s.is_active ? "dot-ok" : "dot-muted"}`}>●</span>
+                    <span aria-hidden="true" className={`dot ${s.is_active ? "dot-ok" : "dot-muted"}`}>●</span>
                     {s.is_active ? "Active" : "Inactive"}
                   </span>
                 </td>
                 <td>
                   {s.notes ? (
-                    <div style={{ fontSize: 12, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.notes}>
+                    <div style={{ fontSize: 12, color: "var(--ink-soft)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.notes}>
                       {s.notes}
                     </div>
                   ) : (
-                    <span style={{ color: "#cbd5e1", fontSize: 12 }}>—</span>
+                    <span style={{ color: "var(--muted-2)", fontSize: 12 }}>—</span>
                   )}
                 </td>
                 <td>
                   {s.updated_by ? (
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 500 }}>{s.updated_by}</div>
-                      <div style={{ fontSize: 11, color: "#94a3b8" }}>{s.updated_at ? formatRelativeDate(s.updated_at) : ""}</div>
+                      <div style={{ fontSize: 11, color: "var(--muted-2)" }}>{s.updated_at ? formatRelativeDate(s.updated_at) : ""}</div>
                     </div>
                   ) : (
-                    <span style={{ color: "#cbd5e1", fontSize: 12 }}>—</span>
+                    <span style={{ color: "var(--muted-2)", fontSize: 12 }}>—</span>
                   )}
                 </td>
-                <td style={{ fontSize: 12, color: "#64748b" }}>{formatRelativeDate(s.created_at)}</td>
+                <td style={{ fontSize: 12, color: "var(--muted)" }}>{formatRelativeDate(s.created_at)}</td>
                 <td>
                   <button
                     ref={(el) => { menuToggleRefs.current[s.id] = el; }}
@@ -466,11 +466,11 @@ export default function Schools() {
       {deleteTarget && (
         <div style={overlay} onClick={() => !deleting && setDeleteTarget(null)}>
           <div className="table-card" style={{ ...modalCard, maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginBottom: 8, color: "#dc2626" }}>Delete School</h2>
-            <p style={{ color: "#475569", marginBottom: 16 }}>
+            <h2 style={{ marginBottom: 8, color: "var(--danger)" }}>Delete School</h2>
+            <p style={{ color: "var(--ink-soft)", marginBottom: 16 }}>
               Permanently delete <strong>{deleteTarget.name}</strong>?
             </p>
-            <ul style={{ color: "#64748b", fontSize: 13, marginBottom: 20, paddingLeft: 20 }}>
+            <ul style={{ color: "var(--muted)", fontSize: 13, marginBottom: 20, paddingLeft: 20 }}>
               <li>{deleteTarget.teacher_count} teacher{deleteTarget.teacher_count !== 1 ? "s" : ""} will be unlinked from this school</li>
               <li>All pending invites will be cancelled</li>
               <li>This cannot be undone</li>
@@ -480,7 +480,7 @@ export default function Schools() {
               <button
                 onClick={handleDelete}
                 disabled={deleting}
-                style={{ ...btnPrimary, background: "#dc2626", opacity: deleting ? 0.6 : 1 }}
+                style={{ ...btnPrimary, background: "var(--danger)", opacity: deleting ? 0.6 : 1 }}
               >
                 {deleting ? "Deleting..." : "Delete School"}
               </button>
@@ -494,7 +494,7 @@ export default function Schools() {
         <div style={overlay} onClick={() => { setDetail(null); setInviteResult(null); }}>
           <div className="table-card" style={modalCard} onClick={(e) => e.stopPropagation()}>
             {loadingDetail ? (
-              <p style={{ textAlign: "center", padding: 24, color: "#94a3b8" }}>Loading...</p>
+              <p style={{ textAlign: "center", padding: 24, color: "var(--muted-2)" }}>Loading...</p>
             ) : detail && (
               <>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
@@ -538,12 +538,12 @@ export default function Schools() {
                   ) : (
                     <div>
                       <h2 style={{ marginBottom: 4 }}>{detail.name}</h2>
-                      <div style={{ fontSize: 13, color: "#64748b" }}>
+                      <div style={{ fontSize: 13, color: "var(--muted)" }}>
                         {detail.contact_name} · {detail.contact_email}
                         {(detail.city || detail.state) && ` · ${[detail.city, detail.state].filter(Boolean).join(", ")}`}
                       </div>
                       {detail.notes && (
-                        <div style={{ marginTop: 8, padding: "8px 12px", background: "#f8fafc", borderRadius: 6, fontSize: 13, color: "#475569" }}>
+                        <div style={{ marginTop: 8, padding: "8px 12px", background: "var(--paper-2)", borderRadius: 6, fontSize: 13, color: "var(--ink-soft)" }}>
                           {detail.notes}
                         </div>
                       )}
@@ -559,7 +559,7 @@ export default function Schools() {
                 <div style={{ marginBottom: 24 }}>
                   <h3 style={{ marginBottom: 12 }}>
                     Teachers
-                    <span style={{ fontWeight: 400, color: "#94a3b8", marginLeft: 8 }}>({detail.teachers.length})</span>
+                    <span style={{ fontWeight: 400, color: "var(--muted-2)", marginLeft: 8 }}>({detail.teachers.length})</span>
                   </h3>
                   {detail.teachers.length > 0 ? (
                     <table>
@@ -570,14 +570,14 @@ export default function Schools() {
                         {detail.teachers.map((t) => (
                           <tr key={t.id}>
                             <td style={{ fontWeight: 500 }}>{t.name || "—"}</td>
-                            <td style={{ fontSize: 13, color: "#64748b" }}>{t.email}</td>
-                            <td style={{ fontSize: 12, color: "#64748b" }}>{formatRelativeDate(t.joined_at)}</td>
+                            <td style={{ fontSize: 13, color: "var(--muted)" }}>{t.email}</td>
+                            <td style={{ fontSize: 12, color: "var(--muted)" }}>{formatRelativeDate(t.joined_at)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   ) : (
-                    <p style={{ color: "#94a3b8", fontSize: 13 }}>No teachers yet. Send an invite below.</p>
+                    <p style={{ color: "var(--muted-2)", fontSize: 13 }}>No teachers yet. Send an invite below.</p>
                   )}
                 </div>
 
@@ -586,7 +586,7 @@ export default function Schools() {
                   <div style={{ marginBottom: 24 }}>
                     <h3 style={{ marginBottom: 12 }}>
                       Pending Invites
-                      <span style={{ fontWeight: 400, color: "#94a3b8", marginLeft: 8 }}>({detail.pending_invites.length})</span>
+                      <span style={{ fontWeight: 400, color: "var(--muted-2)", marginLeft: 8 }}>({detail.pending_invites.length})</span>
                     </h3>
                     <table>
                       <thead>
@@ -596,8 +596,8 @@ export default function Schools() {
                         {detail.pending_invites.map((inv) => (
                           <tr key={inv.id}>
                             <td style={{ fontSize: 13 }}>{inv.email}</td>
-                            <td style={{ fontSize: 12, color: "#64748b" }}>{formatRelativeDate(inv.created_at)}</td>
-                            <td style={{ fontSize: 12, color: "#64748b" }}>{formatRelativeDate(inv.expires_at)}</td>
+                            <td style={{ fontSize: 12, color: "var(--muted)" }}>{formatRelativeDate(inv.created_at)}</td>
+                            <td style={{ fontSize: 12, color: "var(--muted)" }}>{formatRelativeDate(inv.expires_at)}</td>
                             <td>
                               <button onClick={() => handleCancelInvite(inv.id)} style={{ ...btnSmall, color: "#ef4444" }}>
                                 Cancel
@@ -611,7 +611,7 @@ export default function Schools() {
                 )}
 
                 {/* Invite teacher form */}
-                <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 16 }}>
+                <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 16 }}>
                   <h3 style={{ marginBottom: 12 }}>Invite Teacher</h3>
                   <form onSubmit={handleInvite} style={{ display: "flex", gap: 8 }}>
                     <input
@@ -627,15 +627,15 @@ export default function Schools() {
                     </button>
                   </form>
                   {inviteResult && (
-                    <div style={{ marginTop: 12, padding: "10px 14px", background: "#f0fdf4", borderRadius: 6, border: "1px solid #bbf7d0" }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "#16a34a", marginBottom: 4 }}>Invite created!</div>
+                    <div style={{ marginTop: 12, padding: "10px 14px", background: "var(--ok-soft)", borderRadius: 6, border: "1px solid rgba(74, 107, 58, 0.3)" }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ok)", marginBottom: 4 }}>Invite created!</div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <code style={{ fontSize: 12, color: "#475569", flex: 1, wordBreak: "break-all" }}>
+                        <code style={{ fontSize: 12, color: "var(--ink-soft)", flex: 1, wordBreak: "break-all" }}>
                           {inviteResult}
                         </code>
                         <button
                           onClick={() => handleCopy(inviteResult, "invite-url")}
-                          style={{ ...btnSmall, color: copiedId === "invite-url" ? "#16a34a" : "#6366f1" }}
+                          style={{ ...btnSmall, color: copiedId === "invite-url" ? "var(--ok)" : "var(--accent)" }}
                         >
                           {copiedId === "invite-url" ? "Copied!" : "Copy"}
                         </button>
@@ -657,7 +657,7 @@ export default function Schools() {
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-      <label style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b", letterSpacing: 0.5 }}>
+      <label style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "var(--muted)", letterSpacing: 0.5 }}>
         {label}
       </label>
       {children}

@@ -25,7 +25,7 @@ function HealthBadge({ errorRate, latency }: { errorRate: number; latency: numbe
 
   return (
     <span className="list-row-status" style={{ fontSize: 13 }}>
-      <span className={`dot ${dotClass}`}>●</span>
+      <span aria-hidden="true" className={`dot ${dotClass}`}>●</span>
       {label}
     </span>
   );

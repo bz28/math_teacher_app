@@ -18,8 +18,8 @@
   --surface: #fcfaf4;
   --ink: #14130f;
   --ink-soft: #2a2926;
-  --muted: #6b6862;
-  --muted-2: #97938b;
+  --muted: #5c554c;       /* WCAG AA at 14px on --paper */
+  --muted-2: #7d7669;     /* WCAG AA-Large only — use for 18px+ or labels */
   --rule: rgba(20, 19, 15, 0.10);
   --rule-strong: rgba(20, 19, 15, 0.18);
 
@@ -50,6 +50,29 @@ body { min-height: 100vh; background: var(--paper); }
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
+
+/* Keyboard focus — visible accent ring everywhere a user can land.
+   Mouse focus stays clean because we key off :focus-visible only. */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+button:focus-visible,
+.nav-link:focus-visible,
+.action-toggle:focus-visible,
+.link-btn:focus-visible,
+.logout-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 
 /* Tabular numerals for anything in mono — keeps columns aligned. */
 .mono, .stat-value, td.num, .num {
