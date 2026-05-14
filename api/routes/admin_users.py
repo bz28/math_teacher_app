@@ -48,6 +48,14 @@ async def users(
     search: str | None = Query(default=None, max_length=100),
     role: str | None = Query(default=None, pattern=r"^(student|teacher|admin)$"),
     no_school: bool = Query(default=False),
+    # Teacher-only conversion-prospect filters. has_classroom limits
+    # to teachers running at least one section with students enrolled;
+    # active_classroom further requires a submission in the last 30d.
+    # Both no-op when applied to non-teachers (their classroom counts
+    # are always 0), so it's safe to send them blindly from the
+    # frontend.
+    has_classroom: bool = Query(default=False),
+    active_classroom: bool = Query(default=False),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -222,6 +230,28 @@ async def users(
     if search:
         term = f"%{search}%"
         search_filters.append(User.name.ilike(term) | User.email.ilike(term))
+
+    # Teacher-only refinements via EXISTS — leaves aggregate band
+    # unchanged (it still reflects the full population) while
+    # narrowing the row list and filtered_count together.
+    if has_classroom:
+        search_filters.append(
+            select(SectionEnrollment.id)
+            .join(Section, Section.id == SectionEnrollment.section_id)
+            .join(CourseTeacher, CourseTeacher.course_id == Section.course_id)
+            .where(CourseTeacher.teacher_id == User.id)
+            .exists()
+        )
+    if active_classroom:
+        search_filters.append(
+            select(Submission.id)
+            .join(Assignment, Assignment.id == Submission.assignment_id)
+            .where(
+                Assignment.teacher_id == User.id,
+                Submission.submitted_at >= time_range(24 * 30),
+            )
+            .exists()
+        )
 
     # Count of users matching search (for pagination)
     count_query = select(func.count()).select_from(User).where(*search_filters)
