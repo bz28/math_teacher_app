@@ -64,7 +64,7 @@ export function Hero() {
             the school-buyer motion gets a deliberate, low-friction
             secondary path. Microcopy beneath the primary reassures
             visitors that 'free' is genuine. */}
-        <div className="mt-10 flex flex-col items-center gap-5 sm:flex-row sm:justify-center sm:gap-8">
+        <div className="mt-10 flex flex-col items-center gap-5 sm:flex-row sm:items-start sm:justify-center sm:gap-8">
           <div className="flex flex-col items-center gap-2">
             <Link
               href="/register?role=teacher"
@@ -88,9 +88,14 @@ export function Hero() {
               No credit card &middot; Cancel anytime
             </p>
           </div>
+          {/* sm:mt-4 aligns the secondary link's text-row with the
+              vertical center of the h-14 primary button (button top=0,
+              center=28px; link line-height ~24px → top at 16px = mt-4).
+              Parent uses sm:items-start so primary's microcopy doesn't
+              drag the cross-axis alignment baseline downward. */}
           <Link
             href="/demo"
-            className="group inline-flex items-center gap-2 text-base font-semibold text-[color:var(--color-text-secondary)] transition-colors hover:text-[color:var(--color-primary)]"
+            className="group inline-flex items-center gap-2 text-base font-semibold text-[color:var(--color-text-secondary)] transition-colors hover:text-[color:var(--color-primary)] sm:mt-4"
           >
             or book a 20-min demo
             <svg
