@@ -377,7 +377,7 @@ async def update_user_subscription(
             )
             user.stripe_subscription_id = None
             stripe_cancelled = True
-        except stripe.StripeError as e:  # type: ignore[attr-defined]
+        except stripe.StripeError as e:
             logger.error(
                 "Stripe cancel failed for user=%s sub=%s: %s — aborting demote",
                 user_id, stripe_sub_id, e,

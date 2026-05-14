@@ -235,10 +235,10 @@ async def stripe_webhook(
 
     if settings.stripe_webhook_secret:
         try:
-            event = stripe.Webhook.construct_event(
+            event = stripe.Webhook.construct_event(  # type: ignore[no-untyped-call]
                 payload, stripe_signature or "", settings.stripe_webhook_secret,
             )
-        except (ValueError, stripe.SignatureVerificationError) as e:  # type: ignore[attr-defined]
+        except (ValueError, stripe.SignatureVerificationError) as e:
             logger.warning("Stripe webhook signature failed: %s", e)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Invalid signature",

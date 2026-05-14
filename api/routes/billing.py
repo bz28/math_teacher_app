@@ -103,7 +103,7 @@ async def _create_checkout_session_with_recovery(
             cancel_url=settings.stripe_checkout_cancel_url,
             client_reference_id=str(user.id),
         )
-    except stripe.InvalidRequestError as e:  # type: ignore[attr-defined]
+    except stripe.InvalidRequestError as e:
         # Stripe's error message format: "No such customer: 'cus_xxx'".
         # Be defensive — match on the message rather than a code that
         # may differ across SDK versions.
@@ -140,7 +140,7 @@ async def _create_checkout_session_with_recovery(
                 cancel_url=settings.stripe_checkout_cancel_url,
                 client_reference_id=str(user.id),
             )
-        except stripe.StripeError as retry_err:  # type: ignore[attr-defined]
+        except stripe.StripeError as retry_err:
             logger.error(
                 "Stripe Session.create retry failed for user %s: %s",
                 user.id, retry_err,
