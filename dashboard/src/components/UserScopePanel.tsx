@@ -224,16 +224,21 @@ export default function UserScopePanel({
       <div className="table-card">
         <div className="table-scroll">
           <table>
-            <colgroup>
-              <col style={{ width: showClassroom ? "22%" : "28%" }} />
-              <col style={{ width: "8%" }} />
-              {showDailyUsage && <col style={{ width: "22%" }} />}
-              {showClassroom && <col style={{ width: "22%" }} />}
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: classroomColWidth(showDailyUsage, showClassroom) }} />
-              <col style={{ width: "8%" }} />
-            </colgroup>
+            {(() => {
+              const w = columnWidths(showDailyUsage, showClassroom);
+              return (
+                <colgroup>
+                  <col style={{ width: w.user }} />
+                  <col style={{ width: w.plan }} />
+                  {showDailyUsage && <col style={{ width: w.dailyUsage }} />}
+                  {showClassroom && <col style={{ width: w.classroom }} />}
+                  <col style={{ width: w.sessions }} />
+                  <col style={{ width: w.cost }} />
+                  <col style={{ width: w.joined }} />
+                  <col style={{ width: w.action }} />
+                </colgroup>
+              );
+            })()}
             <thead>
               <tr>
                 <th>User</th>
@@ -539,14 +544,43 @@ function FilterChip({
   );
 }
 
-function classroomColWidth(
+// Per-config column widths. Each map sums to 100% so the table
+// fills the container exactly — the previous version's widths
+// summed to anywhere from 88% (no flags) to 112% (both flags) which
+// either left empty space or overflowed.
+function columnWidths(
   showDailyUsage: boolean,
   showClassroom: boolean,
-): string {
-  // Squeeze the "Joined / active" column when the row already has
-  // both Today's usage and Classroom cells. Otherwise keep some
-  // breathing room for the date pair.
-  if (showDailyUsage && showClassroom) return "12%";
-  if (showDailyUsage || showClassroom) return "14%";
-  return "26%";
+): {
+  user: string;
+  plan: string;
+  dailyUsage: string;
+  classroom: string;
+  sessions: string;
+  cost: string;
+  joined: string;
+  action: string;
+} {
+  if (showDailyUsage && showClassroom) {
+    return {
+      user: "20%", plan: "8%", dailyUsage: "20%", classroom: "22%",
+      sessions: "6%", cost: "8%", joined: "8%", action: "8%",
+    };
+  }
+  if (showDailyUsage) {
+    return {
+      user: "26%", plan: "10%", dailyUsage: "22%", classroom: "0%",
+      sessions: "8%", cost: "10%", joined: "16%", action: "8%",
+    };
+  }
+  if (showClassroom) {
+    return {
+      user: "22%", plan: "10%", dailyUsage: "0%", classroom: "24%",
+      sessions: "8%", cost: "10%", joined: "18%", action: "8%",
+    };
+  }
+  return {
+    user: "30%", plan: "10%", dailyUsage: "0%", classroom: "0%",
+    sessions: "8%", cost: "12%", joined: "32%", action: "8%",
+  };
 }
