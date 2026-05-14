@@ -85,6 +85,7 @@ export const api = {
   // Schools
   schools: () => request<{ schools: SchoolListItem[] }>("/admin/schools"),
   school: (id: string) => request<SchoolDetail>(`/admin/schools/${id}`),
+  schoolOverview: (id: string) => request<SchoolOverviewData>(`/admin/schools/${id}/overview`),
   createSchool: (body: CreateSchoolBody) => mutate<{ id: string; status: string }>("/admin/schools", "POST", body),
   updateSchool: (id: string, body: UpdateSchoolBody) => mutate<{ status: string }>(`/admin/schools/${id}`, "PATCH", body),
   inviteTeacher: (schoolId: string, email: string) =>
@@ -232,6 +233,9 @@ export interface SchoolListItem {
   contact_email: string;
   is_active: boolean;
   teacher_count: number;
+  cost_30d: number;
+  cost_prev_30d: number;
+  last_activity_at: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string | null;
@@ -250,6 +254,33 @@ export interface SchoolDetail {
   created_at: string;
   teachers: { id: string; name: string; email: string; joined_at: string }[];
   pending_invites: { id: string; email: string; expires_at: string; created_at: string }[];
+}
+
+export interface ActivityCounts {
+  active_classes: number;
+  active_teachers: number;
+  active_students: number;
+  hws_published: number;
+  submissions: number;
+}
+
+export interface SchoolOverviewData {
+  school_id: string;
+  school_name: string;
+  is_internal: boolean;
+  generated_at: string;
+  cost: {
+    this_month: number;
+    last_month: number;
+    projected_month_end: number;
+    trend_12_weeks: { week_start: string | null; cost: number }[];
+  };
+  activity: {
+    this_week: ActivityCounts;
+    last_week: ActivityCounts;
+  };
+  failed_calls_24h: number;
+  failed_calls_7d: number;
 }
 
 export interface CreateSchoolBody {

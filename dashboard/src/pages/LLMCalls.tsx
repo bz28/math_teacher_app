@@ -25,6 +25,9 @@ export default function LLMCalls() {
   const [fnFilter, setFnFilter] = useState("");
   const [userFilter, setUserFilter] = useState(searchParams.get("user") ?? "");
   const submissionFilter = searchParams.get("submission") ?? "";
+  // school filter is URL-driven so deep links from the School detail
+  // page (?school=:id&tab=failures&hours=168) land on a filtered view.
+  const schoolFilter = searchParams.get("school") ?? "";
   // Tab is URL-driven so deep links like ?tab=failures from the
   // Overview "View failures →" link land on the right view.
   const tab: Tab = searchParams.get("tab") === "failures" ? "failures" : "all";
@@ -44,11 +47,12 @@ export default function LLMCalls() {
       function: fnFilter,
       user_id: userFilter,
       submission_id: submissionFilter,
+      school_id: schoolFilter,
       limit: String(PAGE_SIZE),
       offset: String(offset),
     }).then((d) => { if (!cancelled) setData(d); });
     return () => { cancelled = true; };
-  }, [hours, fnFilter, userFilter, submissionFilter, offset]);
+  }, [hours, fnFilter, userFilter, submissionFilter, schoolFilter, offset]);
 
   // Reset offset whenever any non-pagination filter changes so a deep
   // link (?submission=…, ?user=…) or a scope flip never lands past the
@@ -59,7 +63,7 @@ export default function LLMCalls() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOffset(0);
-  }, [userFilter, submissionFilter, fnFilter, hours]);
+  }, [userFilter, submissionFilter, schoolFilter, fnFilter, hours]);
 
   // Local-state handlers — offset reset is handled by the effect
   // above, so we don't duplicate it here.
@@ -69,6 +73,11 @@ export default function LLMCalls() {
   const clearSubmissionFilter = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("submission");
+    setSearchParams(next);
+  };
+  const clearSchoolFilter = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("school");
     setSearchParams(next);
   };
   const handleSubmissionChipClick = (id: string) => {
@@ -111,6 +120,16 @@ export default function LLMCalls() {
         {userFilter && (
           <button className="filter-badge" onClick={() => handleUserFilter("")} style={{ cursor: "pointer", border: "none" }}>
             Filtered by user ✕
+          </button>
+        )}
+        {schoolFilter && (
+          <button
+            className="filter-badge"
+            onClick={clearSchoolFilter}
+            style={{ cursor: "pointer", border: "none" }}
+            title={schoolFilter}
+          >
+            School: {schoolFilter.slice(0, 8)}… ✕
           </button>
         )}
         {submissionFilter && (
