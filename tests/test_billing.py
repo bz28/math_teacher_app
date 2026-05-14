@@ -635,7 +635,7 @@ async def test_generate_bank_questions_blocked_at_cap(client: AsyncClient) -> No
     """The generate-bank route now enforces the teacher daily cap.
 
     With 10 generate_questions LLMCall rows from today, the 11th request
-    returns the EntitlementError contract (status 400, is_limit=True).
+    returns the EntitlementError contract (status 403, is_limit=True).
     """
 
     from api.models.assignment import Assignment
