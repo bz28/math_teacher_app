@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 import stripe
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
@@ -152,25 +151,41 @@ def _ts_to_dt(ts: int | None) -> datetime | None:
 
 
 async def _claim_event(db: AsyncSession, event_id: str, event_type: str) -> bool:
-    """Insert an idempotency row for `event_id`. Returns True if this is
-    the first time we've seen the event, False if it's a redelivery.
+    """Stage an idempotency row for `event_id` in the current session.
+    Returns True on first sight (caller MUST commit later — the row is
+    NOT committed here, so any subsequent handler failure rolls it back
+    alongside its state changes). Returns False on replay so the
+    caller short-circuits without re-running the handler.
+
+    Why the two-phase commit matters: the previous implementation
+    committed the dedup row before the handler ran, so any commit
+    failure mid-handler (e.g. DB transient error during the state
+    mutation) left the dedup row persisted with state unchanged —
+    Stripe's retry then short-circuited to no-op and the user stayed
+    on the stale tier forever. Now the row only lands when the whole
+    handler's commit succeeds; if it doesn't, retries re-process.
+
+    Concurrent processing of the same event_id is bounded by the
+    PK unique constraint: both sessions stage the row + mutate state,
+    one commit lands, the other's commit raises IntegrityError and
+    rolls back including its state changes. Net effect: processed
+    once.
 
     Stripe retries any non-2xx and may also redeliver already-2xx'd
-    events during outages — the API contract is at-least-once. We
-    dedup at the PK level so handlers don't double-apply state.
+    events during outages — the API contract is at-least-once.
     """
     from api.models.stripe_event import StripeProcessedEvent
 
-    db.add(StripeProcessedEvent(event_id=event_id, event_type=event_type))
-    try:
-        await db.commit()
-        return True
-    except IntegrityError:
-        # PK collision = already processed. Roll back the failed
-        # insert so the session is usable for the handler returning
-        # OK to Stripe.
-        await db.rollback()
+    existing = (await db.execute(
+        select(StripeProcessedEvent.event_id).where(
+            StripeProcessedEvent.event_id == event_id,
+        )
+    )).scalar_one_or_none()
+    if existing is not None:
         return False
+
+    db.add(StripeProcessedEvent(event_id=event_id, event_type=event_type))
+    return True
 
 
 def _is_active_subscription(user: User, event_sub_id: str | None) -> bool:
