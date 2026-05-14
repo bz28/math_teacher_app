@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { api, type SchoolListItem, type SchoolDetail } from "../lib/api";
+import { Link, useNavigate } from "react-router-dom";
+import { api, type SchoolListItem } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
-import { btnGhost, btnPrimary, btnSmall, inputStyle, overlay } from "../lib/styles";
+import { btnGhost, btnPrimary, inputStyle, overlay } from "../lib/styles";
 import StatCard from "../components/StatCard";
 
+const AT_RISK_DAYS = 14;
+
 export default function Schools() {
+  const navigate = useNavigate();
   const [schools, setSchools] = useState<SchoolListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -15,31 +18,13 @@ export default function Schools() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  // Detail modal
-  const [detail, setDetail] = useState<SchoolDetail | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-
-  // Edit mode
-  const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: "", contact_name: "", contact_email: "", city: "", state: "", notes: "" });
-  const [saving, setSaving] = useState(false);
-
-  // Invite form
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviting, setInviting] = useState(false);
-  const [inviteResult, setInviteResult] = useState<string | null>(null);
-
   // Delete modal
   const [deleteTarget, setDeleteTarget] = useState<SchoolListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Copied feedback
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
   const menuToggleRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-
-  const [searchParams, setSearchParams] = useSearchParams();
 
   const reload = () => {
     setLoading(true);
@@ -47,15 +32,6 @@ export default function Schools() {
   };
 
   useEffect(() => { reload(); }, []);
-
-  // Auto-open detail modal from query param (e.g. /schools?detail=xxx)
-  useEffect(() => {
-    const detailId = searchParams.get("detail");
-    if (detailId && !detail && !loadingDetail) {
-      handleViewDetail(detailId);
-      setSearchParams({}, { replace: true });
-    }
-  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function openMenuFor(schoolId: string) {
     if (openMenu === schoolId) { setOpenMenu(null); return; }
@@ -105,100 +81,15 @@ export default function Schools() {
     }
   };
 
-  const handleViewDetail = async (schoolId: string) => {
-    setLoadingDetail(true);
-    setDetail(null);
-    setEditing(false);
-    setInviteEmail("");
-    setInviteResult(null);
-    try {
-      const data = await api.school(schoolId);
-      setDetail(data);
-    } catch (e) {
-      alert((e as Error).message);
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
-
-  const startEditing = () => {
-    if (!detail) return;
-    setEditForm({
-      name: detail.name,
-      contact_name: detail.contact_name,
-      contact_email: detail.contact_email,
-      city: detail.city || "",
-      state: detail.state || "",
-      notes: detail.notes || "",
-    });
-    setEditing(true);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!detail) return;
-    setSaving(true);
-    try {
-      await api.updateSchool(detail.id, {
-        name: editForm.name.trim(),
-        contact_name: editForm.contact_name.trim(),
-        contact_email: editForm.contact_email.trim(),
-        city: editForm.city.trim() || undefined,
-        state: editForm.state.trim() || undefined,
-        notes: editForm.notes.trim() || undefined,
-      });
-      setEditing(false);
-      handleViewDetail(detail.id);
-      reload();
-    } catch (e) {
-      alert((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleToggleActive = async (school: SchoolListItem) => {
     const action = school.is_active ? "Deactivate" : "Activate";
     if (!confirm(`${action} "${school.name}"? ${school.is_active ? "All teachers and students will lose access." : ""}`)) return;
     try {
       await api.updateSchool(school.id, { is_active: !school.is_active });
       reload();
-      if (detail?.id === school.id) handleViewDetail(school.id);
     } catch (e) {
       alert((e as Error).message);
     }
-  };
-
-  const handleInvite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!detail) return;
-    setInviting(true);
-    setInviteResult(null);
-    try {
-      const res = await api.inviteTeacher(detail.id, inviteEmail.trim());
-      setInviteResult(res.invite_url);
-      setInviteEmail("");
-      handleViewDetail(detail.id);
-    } catch (e) {
-      alert((e as Error).message);
-    } finally {
-      setInviting(false);
-    }
-  };
-
-  const handleCancelInvite = async (inviteId: string) => {
-    if (!detail || !confirm("Cancel this invite?")) return;
-    try {
-      await api.cancelInvite(detail.id, inviteId);
-      handleViewDetail(detail.id);
-    } catch (e) {
-      alert((e as Error).message);
-    }
-  };
-
-  const handleCopy = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 1500);
   };
 
   const handleDelete = async () => {
@@ -207,7 +98,6 @@ export default function Schools() {
     try {
       await api.deleteSchool(deleteTarget.id);
       setDeleteTarget(null);
-      if (detail?.id === deleteTarget.id) setDetail(null);
       reload();
       alert("School deleted. If this was converted from a lead, don't forget to update the lead status in the Leads tab.");
     } catch (e) {
@@ -219,9 +109,15 @@ export default function Schools() {
 
   if (loading) return <p className="loading">Loading…</p>;
 
+  // Aggregates over the (current) school list — all displayed numbers
+  // come from the same payload so the band is internally consistent.
   const totalSchools = schools.length;
   const activeSchools = schools.filter((s) => s.is_active).length;
-  const totalTeachers = schools.reduce((sum, s) => sum + s.teacher_count, 0);
+  const costThisWindow = schools.reduce((s, x) => s + x.cost_30d, 0);
+  const costPrevWindow = schools.reduce((s, x) => s + x.cost_prev_30d, 0);
+  const atRiskCount = schools.filter((s) =>
+    s.is_active && isAtRisk(s.last_activity_at),
+  ).length;
 
   return (
     <div>
@@ -232,7 +128,7 @@ export default function Schools() {
           <p>
             {totalSchools === 0
               ? "No schools yet."
-              : `${totalSchools} school${totalSchools === 1 ? "" : "s"}. ${activeSchools} active.`}
+              : `${totalSchools} school${totalSchools === 1 ? "" : "s"}. ${activeSchools} active.${atRiskCount > 0 ? ` ${atRiskCount} at risk.` : ""}`}
           </p>
         </div>
         {!showCreate && (
@@ -245,86 +141,56 @@ export default function Schools() {
       <div className="stat-grid">
         <StatCard label="Total schools" value={totalSchools} />
         <StatCard label="Active" value={activeSchools} />
-        <StatCard label="Teachers" value={totalTeachers} />
+        <StatCard
+          label="Cost (30d)"
+          value={`$${costThisWindow.toFixed(2)}`}
+          sub={costPrevWindow > 0 ? deltaSub(costThisWindow, costPrevWindow) : "no prior data"}
+        />
+        <StatCard
+          label="At risk"
+          value={atRiskCount}
+          sub={`no activity ${AT_RISK_DAYS}d`}
+        />
       </div>
 
       {/* ── Create form ─────────────────────────────────────────── */}
       {showCreate && (
         <div className="table-card" style={{ marginBottom: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <h3 style={{ marginBottom: 0 }}>Add New School</h3>
+            <h3 style={{ marginBottom: 0 }}>Add new school</h3>
             <button onClick={() => { setShowCreate(false); setCreateError(null); }} style={btnGhost}>Cancel</button>
           </div>
           {createError && (
-            <div style={{ marginBottom: 12, padding: "8px 12px", background: "var(--danger-soft)", borderRadius: 6, border: "1px solid rgba(138, 35, 23, 0.3)", fontSize: 13, color: "var(--danger)" }}>
+            <div style={{ marginBottom: 12, padding: "8px 12px", background: "var(--danger-soft)", borderRadius: 3, border: "1px solid rgba(138, 35, 23, 0.3)", fontSize: 13, color: "var(--danger)" }}>
               {createError}
             </div>
           )}
           <form onSubmit={handleCreate} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            <FormField label="School Name">
-              <input
-                type="text"
-                value={createForm.name}
-                onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                placeholder="Lincoln High School"
-                required
-                style={inputStyle}
-              />
+            <FormField label="School name">
+              <input type="text" value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} placeholder="Lincoln High School" required style={inputStyle} />
             </FormField>
-            <FormField label="Contact Name">
-              <input
-                type="text"
-                value={createForm.contact_name}
-                onChange={(e) => setCreateForm({ ...createForm, contact_name: e.target.value })}
-                placeholder="Jane Smith"
-                required
-                style={inputStyle}
-              />
+            <FormField label="Contact name">
+              <input type="text" value={createForm.contact_name} onChange={(e) => setCreateForm({ ...createForm, contact_name: e.target.value })} placeholder="Jane Smith" required style={inputStyle} />
             </FormField>
-            <FormField label="Contact Email">
-              <input
-                type="email"
-                value={createForm.contact_email}
-                onChange={(e) => setCreateForm({ ...createForm, contact_email: e.target.value })}
-                placeholder="jsmith@school.edu"
-                required
-                style={inputStyle}
-              />
+            <FormField label="Contact email">
+              <input type="email" value={createForm.contact_email} onChange={(e) => setCreateForm({ ...createForm, contact_email: e.target.value })} placeholder="jsmith@school.edu" required style={inputStyle} />
             </FormField>
             <div style={{ display: "flex", gap: 12 }}>
               <FormField label="City">
-                <input
-                  type="text"
-                  value={createForm.city}
-                  onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
-                  placeholder="San Francisco"
-                  style={inputStyle}
-                />
+                <input type="text" value={createForm.city} onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })} placeholder="San Francisco" style={inputStyle} />
               </FormField>
               <FormField label="State">
-                <input
-                  type="text"
-                  value={createForm.state}
-                  onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
-                  placeholder="CA"
-                  style={{ ...inputStyle, maxWidth: 80 }}
-                />
+                <input type="text" value={createForm.state} onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })} placeholder="CA" style={{ ...inputStyle, maxWidth: 80 }} />
               </FormField>
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
-              <FormField label="Internal Notes (optional)">
-                <textarea
-                  value={createForm.notes}
-                  onChange={(e) => setCreateForm({ ...createForm, notes: e.target.value })}
-                  placeholder="Deal context, pricing, etc."
-                  rows={2}
-                  style={{ ...inputStyle, resize: "vertical" }}
-                />
+              <FormField label="Internal notes (optional)">
+                <textarea value={createForm.notes} onChange={(e) => setCreateForm({ ...createForm, notes: e.target.value })} placeholder="Deal context, pricing, etc." rows={2} style={{ ...inputStyle, resize: "vertical" }} />
               </FormField>
             </div>
             <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
               <button type="submit" disabled={creating} style={{ ...btnPrimary, opacity: creating ? 0.6 : 1 }}>
-                {creating ? "Creating..." : "Add School"}
+                {creating ? "Creating…" : "Add school"}
               </button>
             </div>
           </form>
@@ -335,61 +201,76 @@ export default function Schools() {
       <div className="table-card">
         <table>
           <colgroup>
-            <col style={{ width: "18%" }} />
-            <col style={{ width: "18%" }} />
+            <col style={{ width: "20%" }} />
             <col style={{ width: "8%" }} />
-            <col style={{ width: "9%" }} />
-            <col style={{ width: "13%" }} />
+            <col style={{ width: "11%" }} />
             <col style={{ width: "13%" }} />
             <col style={{ width: "12%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "12%" }} />
             <col style={{ width: "9%" }} />
+            <col style={{ width: "5%" }} />
           </colgroup>
           <thead>
             <tr>
               <th>School</th>
-              <th>Contact</th>
               <th>Teachers</th>
+              <th>Cost (30d)</th>
+              <th>vs prev</th>
+              <th>Last activity</th>
               <th>Status</th>
               <th>Notes</th>
-              <th>Updated</th>
               <th>Added</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {schools.map((s) => (
-              <tr key={s.id} style={{ opacity: s.is_active ? 1 : 0.55 }}>
+              <tr
+                key={s.id}
+                className="clickable"
+                style={{ opacity: s.is_active ? 1 : 0.55 }}
+                onClick={() => navigate(`/schools/${s.id}`)}
+              >
                 <td>
                   <div>
-                    <button
-                      onClick={() => handleViewDetail(s.id)}
-                      title={`View ${s.name} details`}
+                    <Link
+                      to={`/schools/${s.id}`}
                       style={{
-                        background: "none",
-                        border: "none",
-                        padding: 0,
-                        fontWeight: 600,
                         color: "var(--ink)",
-                        cursor: "pointer",
-                        fontSize: "inherit",
-                        textAlign: "left",
                         fontFamily: "var(--font-display)",
+                        fontSize: 17,
+                        textDecoration: "none",
                       }}
                     >
                       {s.name}
-                    </button>
+                    </Link>
+                    <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>
+                      {s.contact_name} · {s.contact_email}
+                    </div>
                     {(s.city || s.state) && (
-                      <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                      <div style={{ fontSize: 11, color: "var(--muted-2)" }}>
                         {[s.city, s.state].filter(Boolean).join(", ")}
                       </div>
                     )}
                   </div>
                 </td>
-                <td>
-                  <div style={{ fontSize: 13 }}>{s.contact_name}</div>
-                  <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.contact_email}</div>
+                <td className="num">{s.teacher_count}</td>
+                <td className="num" style={{ color: s.cost_30d > 0 ? "var(--ink)" : "var(--muted-2)" }}>
+                  ${s.cost_30d.toFixed(2)}
                 </td>
-                <td style={{ fontWeight: 600 }}>{s.teacher_count}</td>
+                <td className="num" style={{ fontSize: 12 }}>
+                  {s.cost_prev_30d > 0 ? deltaInline(s.cost_30d, s.cost_prev_30d) : <span style={{ color: "var(--muted-2)" }}>—</span>}
+                </td>
+                <td style={{ fontSize: 12 }}>
+                  {s.last_activity_at ? (
+                    <span style={{ color: isAtRisk(s.last_activity_at) ? "var(--accent)" : "var(--ink-soft)" }}>
+                      {formatRelativeDate(s.last_activity_at)}
+                    </span>
+                  ) : (
+                    <span style={{ color: "var(--muted-2)" }}>none yet</span>
+                  )}
+                </td>
                 <td>
                   <span className="list-row-status">
                     <span aria-hidden="true" className={`dot ${s.is_active ? "dot-ok" : "dot-muted"}`}>●</span>
@@ -405,24 +286,14 @@ export default function Schools() {
                     <span style={{ color: "var(--muted-2)", fontSize: 12 }}>—</span>
                   )}
                 </td>
-                <td>
-                  {s.updated_by ? (
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 500 }}>{s.updated_by}</div>
-                      <div style={{ fontSize: 11, color: "var(--muted-2)" }}>{s.updated_at ? formatRelativeDate(s.updated_at) : ""}</div>
-                    </div>
-                  ) : (
-                    <span style={{ color: "var(--muted-2)", fontSize: 12 }}>—</span>
-                  )}
-                </td>
                 <td style={{ fontSize: 12, color: "var(--muted)" }}>{formatRelativeDate(s.created_at)}</td>
-                <td>
+                <td onClick={(e) => e.stopPropagation()}>
                   <button
                     ref={(el) => { menuToggleRefs.current[s.id] = el; }}
                     className="action-toggle"
                     onClick={(e) => { e.stopPropagation(); openMenuFor(s.id); }}
                   >
-                    ...
+                    …
                   </button>
                   {openMenu === s.id && (
                     <div
@@ -434,14 +305,14 @@ export default function Schools() {
                       }}
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <button onClick={() => { setOpenMenu(null); handleViewDetail(s.id); }}>
+                      <button onClick={() => { setOpenMenu(null); navigate(`/schools/${s.id}`); }}>
                         View details
                       </button>
                       <button onClick={() => { setOpenMenu(null); handleToggleActive(s); }}>
                         {s.is_active ? "Deactivate" : "Activate"}
                       </button>
                       <button className="danger" onClick={() => { setOpenMenu(null); setDeleteTarget(s); }}>
-                        Delete School
+                        Delete school
                       </button>
                     </div>
                   )}
@@ -450,7 +321,7 @@ export default function Schools() {
             ))}
             {schools.length === 0 && (
               <tr>
-                <td colSpan={8}>
+                <td colSpan={9}>
                   <div className="empty-state">
                     <div className="empty-state-title">No schools yet.</div>
                     <div className="empty-state-sub">Click "+ Add school" when you close your first deal.</div>
@@ -465,8 +336,8 @@ export default function Schools() {
       {/* ── Delete confirmation modal ──────────────────────────── */}
       {deleteTarget && (
         <div style={overlay} onClick={() => !deleting && setDeleteTarget(null)}>
-          <div className="table-card" style={{ ...modalCard, maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginBottom: 8, color: "var(--danger)" }}>Delete School</h2>
+          <div className="table-card" style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginBottom: 8, color: "var(--danger)" }}>Delete school</h2>
             <p style={{ color: "var(--ink-soft)", marginBottom: 16 }}>
               Permanently delete <strong>{deleteTarget.name}</strong>?
             </p>
@@ -482,173 +353,39 @@ export default function Schools() {
                 disabled={deleting}
                 style={{ ...btnPrimary, background: "var(--danger)", opacity: deleting ? 0.6 : 1 }}
               >
-                {deleting ? "Deleting..." : "Delete School"}
+                {deleting ? "Deleting…" : "Delete school"}
               </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* ── School detail modal ─────────────────────────────────── */}
-      {(detail || loadingDetail) && (
-        <div style={overlay} onClick={() => { setDetail(null); setInviteResult(null); }}>
-          <div className="table-card" style={modalCard} onClick={(e) => e.stopPropagation()}>
-            {loadingDetail ? (
-              <p style={{ textAlign: "center", padding: 24, color: "var(--muted-2)" }}>Loading...</p>
-            ) : detail && (
-              <>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
-                  {editing ? (
-                    <div style={{ flex: 1, marginRight: 12 }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-                        <FormField label="School Name">
-                          <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required style={inputStyle} />
-                        </FormField>
-                        <FormField label="Contact Name">
-                          <input type="text" value={editForm.contact_name} onChange={(e) => setEditForm({ ...editForm, contact_name: e.target.value })} required style={inputStyle} />
-                        </FormField>
-                        <FormField label="Contact Email">
-                          <input type="email" value={editForm.contact_email} onChange={(e) => setEditForm({ ...editForm, contact_email: e.target.value })} required style={inputStyle} />
-                        </FormField>
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <FormField label="City">
-                            <input type="text" value={editForm.city} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} style={inputStyle} />
-                          </FormField>
-                          <FormField label="State">
-                            <input type="text" value={editForm.state} onChange={(e) => setEditForm({ ...editForm, state: e.target.value })} style={{ ...inputStyle, maxWidth: 80 }} />
-                          </FormField>
-                        </div>
-                      </div>
-                      <FormField label="Notes">
-                        <textarea
-                          value={editForm.notes}
-                          onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                          placeholder="Deal context, pricing, etc."
-                          rows={3}
-                          style={{ ...inputStyle, resize: "vertical" }}
-                        />
-                      </FormField>
-                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
-                        <button onClick={() => setEditing(false)} disabled={saving} style={btnGhost}>Cancel</button>
-                        <button onClick={handleSaveEdit} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.6 : 1 }}>
-                          {saving ? "Saving..." : "Save Changes"}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <h2 style={{ marginBottom: 4 }}>{detail.name}</h2>
-                      <div style={{ fontSize: 13, color: "var(--muted)" }}>
-                        {detail.contact_name} · {detail.contact_email}
-                        {(detail.city || detail.state) && ` · ${[detail.city, detail.state].filter(Boolean).join(", ")}`}
-                      </div>
-                      {detail.notes && (
-                        <div style={{ marginTop: 8, padding: "8px 12px", background: "var(--paper-2)", borderRadius: 6, fontSize: 13, color: "var(--ink-soft)" }}>
-                          {detail.notes}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div style={{ display: "flex", gap: 8 }}>
-                    {!editing && <button onClick={startEditing} style={btnSmall}>Edit</button>}
-                    <button onClick={() => { setDetail(null); setEditing(false); setInviteResult(null); }} style={btnGhost}>Close</button>
-                  </div>
-                </div>
-
-                {/* Teachers */}
-                <div style={{ marginBottom: 24 }}>
-                  <h3 style={{ marginBottom: 12 }}>
-                    Teachers
-                    <span style={{ fontWeight: 400, color: "var(--muted-2)", marginLeft: 8 }}>({detail.teachers.length})</span>
-                  </h3>
-                  {detail.teachers.length > 0 ? (
-                    <table>
-                      <thead>
-                        <tr><th>Name</th><th>Email</th><th>Joined</th></tr>
-                      </thead>
-                      <tbody>
-                        {detail.teachers.map((t) => (
-                          <tr key={t.id}>
-                            <td style={{ fontWeight: 500 }}>{t.name || "—"}</td>
-                            <td style={{ fontSize: 13, color: "var(--muted)" }}>{t.email}</td>
-                            <td style={{ fontSize: 12, color: "var(--muted)" }}>{formatRelativeDate(t.joined_at)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <p style={{ color: "var(--muted-2)", fontSize: 13 }}>No teachers yet. Send an invite below.</p>
-                  )}
-                </div>
-
-                {/* Pending Invites */}
-                {detail.pending_invites.length > 0 && (
-                  <div style={{ marginBottom: 24 }}>
-                    <h3 style={{ marginBottom: 12 }}>
-                      Pending Invites
-                      <span style={{ fontWeight: 400, color: "var(--muted-2)", marginLeft: 8 }}>({detail.pending_invites.length})</span>
-                    </h3>
-                    <table>
-                      <thead>
-                        <tr><th>Email</th><th>Sent</th><th>Expires</th><th></th></tr>
-                      </thead>
-                      <tbody>
-                        {detail.pending_invites.map((inv) => (
-                          <tr key={inv.id}>
-                            <td style={{ fontSize: 13 }}>{inv.email}</td>
-                            <td style={{ fontSize: 12, color: "var(--muted)" }}>{formatRelativeDate(inv.created_at)}</td>
-                            <td style={{ fontSize: 12, color: "var(--muted)" }}>{formatRelativeDate(inv.expires_at)}</td>
-                            <td>
-                              <button onClick={() => handleCancelInvite(inv.id)} style={{ ...btnSmall, color: "#ef4444" }}>
-                                Cancel
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {/* Invite teacher form */}
-                <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 16 }}>
-                  <h3 style={{ marginBottom: 12 }}>Invite Teacher</h3>
-                  <form onSubmit={handleInvite} style={{ display: "flex", gap: 8 }}>
-                    <input
-                      type="email"
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      placeholder="teacher@school.edu"
-                      required
-                      style={{ ...inputStyle, flex: 1 }}
-                    />
-                    <button type="submit" disabled={inviting} style={{ ...btnPrimary, opacity: inviting ? 0.6 : 1, whiteSpace: "nowrap" }}>
-                      {inviting ? "Sending..." : "Send Invite"}
-                    </button>
-                  </form>
-                  {inviteResult && (
-                    <div style={{ marginTop: 12, padding: "10px 14px", background: "var(--ok-soft)", borderRadius: 6, border: "1px solid rgba(74, 107, 58, 0.3)" }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ok)", marginBottom: 4 }}>Invite created!</div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <code style={{ fontSize: 12, color: "var(--ink-soft)", flex: 1, wordBreak: "break-all" }}>
-                          {inviteResult}
-                        </code>
-                        <button
-                          onClick={() => handleCopy(inviteResult, "invite-url")}
-                          style={{ ...btnSmall, color: copiedId === "invite-url" ? "var(--ok)" : "var(--accent)" }}
-                        >
-                          {copiedId === "invite-url" ? "Copied!" : "Copy"}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
+  );
+}
+
+/* ── Helpers ───────────────────────────────────────────────────── */
+
+function isAtRisk(lastActivityAt: string | null): boolean {
+  if (!lastActivityAt) return true;
+  const age = Date.now() - new Date(lastActivityAt).getTime();
+  return age > AT_RISK_DAYS * 24 * 60 * 60 * 1000;
+}
+
+function deltaSub(curr: number, prev: number): string {
+  if (prev === 0) return "no prior data";
+  const pct = ((curr - prev) / prev) * 100;
+  const arrow = pct > 0 ? "↑" : pct < 0 ? "↓" : "→";
+  return `${arrow} ${Math.abs(pct).toFixed(0)}% vs prev`;
+}
+
+function deltaInline(curr: number, prev: number) {
+  if (prev === 0) return <span style={{ color: "var(--muted-2)" }}>—</span>;
+  const pct = ((curr - prev) / prev) * 100;
+  const up = pct > 0;
+  return (
+    <span style={{ color: up ? "var(--accent)" : pct < 0 ? "var(--ok)" : "var(--muted)" }}>
+      {up ? "↑" : pct < 0 ? "↓" : "→"} {Math.abs(pct).toFixed(0)}%
+    </span>
   );
 }
 
@@ -666,8 +403,11 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
 }
 
 const modalCard: React.CSSProperties = {
-  maxWidth: 720,
+  maxWidth: 480,
   width: "90%",
   maxHeight: "80vh",
   overflow: "auto",
+  background: "var(--surface)",
+  border: "1px solid var(--rule-strong)",
+  boxShadow: "0 16px 48px rgba(20, 19, 15, 0.18)",
 };

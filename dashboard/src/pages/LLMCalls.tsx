@@ -5,7 +5,7 @@ import {
   PieChart, Pie, Cell, Legend,
   LineChart, Line,
 } from "recharts";
-import { api, type LLMCallsData } from "../lib/api";
+import { api, type LLMCallsData, type SchoolListItem } from "../lib/api";
 import { formatRelativeDate, shortModel } from "../lib/format";
 import StatCard from "../components/StatCard";
 import MetadataChips from "../components/MetadataChips";
@@ -25,6 +25,9 @@ export default function LLMCalls() {
   const [fnFilter, setFnFilter] = useState("");
   const [userFilter, setUserFilter] = useState(searchParams.get("user") ?? "");
   const submissionFilter = searchParams.get("submission") ?? "";
+  // school filter is URL-driven so deep links from the School detail
+  // page (?school=:id&tab=failures&hours=168) land on a filtered view.
+  const schoolFilter = searchParams.get("school") ?? "";
   // Tab is URL-driven so deep links like ?tab=failures from the
   // Overview "View failures →" link land on the right view.
   const tab: Tab = searchParams.get("tab") === "failures" ? "failures" : "all";
@@ -36,6 +39,17 @@ export default function LLMCalls() {
   };
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
+  // Schools list used to populate the School dropdown. Loaded once
+  // on mount — cheap query and rarely changes. If it fails the
+  // dropdown just hides; the URL filter still works.
+  const [schools, setSchools] = useState<SchoolListItem[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    api.schools()
+      .then((d) => { if (!cancelled) setSchools(d.schools); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,11 +58,12 @@ export default function LLMCalls() {
       function: fnFilter,
       user_id: userFilter,
       submission_id: submissionFilter,
+      school_id: schoolFilter,
       limit: String(PAGE_SIZE),
       offset: String(offset),
     }).then((d) => { if (!cancelled) setData(d); });
     return () => { cancelled = true; };
-  }, [hours, fnFilter, userFilter, submissionFilter, offset]);
+  }, [hours, fnFilter, userFilter, submissionFilter, schoolFilter, offset]);
 
   // Reset offset whenever any non-pagination filter changes so a deep
   // link (?submission=…, ?user=…) or a scope flip never lands past the
@@ -59,7 +74,7 @@ export default function LLMCalls() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOffset(0);
-  }, [userFilter, submissionFilter, fnFilter, hours]);
+  }, [userFilter, submissionFilter, schoolFilter, fnFilter, hours]);
 
   // Local-state handlers — offset reset is handled by the effect
   // above, so we don't duplicate it here.
@@ -69,6 +84,17 @@ export default function LLMCalls() {
   const clearSubmissionFilter = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("submission");
+    setSearchParams(next);
+  };
+  const clearSchoolFilter = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("school");
+    setSearchParams(next);
+  };
+  const handleSchoolFilter = (id: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (id) next.set("school", id);
+    else next.delete("school");
     setSearchParams(next);
   };
   const handleSubmissionChipClick = (id: string) => {
@@ -103,14 +129,32 @@ export default function LLMCalls() {
           <option value="720">Last 30 days</option>
         </select>
         <select value={userFilter} onChange={(e) => handleUserFilter(e.target.value)}>
-          <option value="">All Users</option>
+          <option value="">All users</option>
           {data.users.map((u) => (
             <option key={u.id} value={u.id}>{u.email}</option>
           ))}
         </select>
+        {schools.length > 0 && (
+          <select value={schoolFilter} onChange={(e) => handleSchoolFilter(e.target.value)}>
+            <option value="">All schools</option>
+            {schools.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        )}
         {userFilter && (
           <button className="filter-badge" onClick={() => handleUserFilter("")} style={{ cursor: "pointer", border: "none" }}>
             Filtered by user ✕
+          </button>
+        )}
+        {schoolFilter && (
+          <button
+            className="filter-badge"
+            onClick={clearSchoolFilter}
+            style={{ cursor: "pointer", border: "none" }}
+            title={schoolFilter}
+          >
+            School: {schoolLabel(schoolFilter, schools)} ✕
           </button>
         )}
         {submissionFilter && (
@@ -403,5 +447,10 @@ export default function LLMCalls() {
       </div>
     </div>
   );
+}
+
+function schoolLabel(id: string, schools: SchoolListItem[]): string {
+  const match = schools.find((s) => s.id === id);
+  return match ? match.name : `${id.slice(0, 8)}…`;
 }
 

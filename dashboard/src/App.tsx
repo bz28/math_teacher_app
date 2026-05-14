@@ -8,6 +8,7 @@ import Quality from "./pages/Quality";
 import Users from "./pages/Users";
 import Leads from "./pages/Leads";
 import Schools from "./pages/Schools";
+import SchoolDetail from "./pages/SchoolDetail";
 import IndependentStudents from "./pages/IndependentStudents";
 import IndependentTeachers from "./pages/IndependentTeachers";
 import SubmissionTrace from "./pages/SubmissionTrace";
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/leads" replace />} />
           <Route path="/leads" element={<Leads />} />
           <Route path="/schools" element={<Schools />} />
+          <Route path="/schools/:schoolId" element={<SchoolDetail />} />
           <Route
             path="/students/independent"
             element={<IndependentStudents />}

@@ -1,0 +1,780 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip,
+} from "recharts";
+import {
+  api,
+  type SchoolDetail as SchoolDetailData,
+  type SchoolOverviewData,
+} from "../lib/api";
+import { formatRelativeDate } from "../lib/format";
+import { btnGhost, btnPrimary, btnSmall, inputStyle } from "../lib/styles";
+
+// Dedicated per-school deep page. Lives at /schools/:schoolId. Two
+// API fetches in parallel:
+//   - /admin/schools/:id           teachers + invites + CRUD shape
+//   - /admin/schools/:id/overview  cost, activity, health
+// We render four numbered sections so the page scans top-to-bottom
+// even on a single column. Section 03 (health) deep-links to
+// /llm-calls with the school + failures filters preset — we don't
+// duplicate the LLM Calls rendering here.
+
+interface EditForm {
+  name: string;
+  contact_name: string;
+  contact_email: string;
+  city: string;
+  state: string;
+  notes: string;
+}
+
+export default function SchoolDetail() {
+  const { schoolId } = useParams<{ schoolId: string }>();
+  const navigate = useNavigate();
+
+  const [detail, setDetail] = useState<SchoolDetailData | null>(null);
+  const [overview, setOverview] = useState<SchoolOverviewData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Edit (inline)
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState<EditForm | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Invite
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const reload = async () => {
+    if (!schoolId) return;
+    try {
+      const [d, o] = await Promise.all([
+        api.school(schoolId),
+        api.schoolOverview(schoolId),
+      ]);
+      setDetail(d);
+      setOverview(o);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  useEffect(() => {
+    // Reset every per-school piece of state — mid-edit nav from
+    // school A to school B shouldn't leave A's form fields mounted
+    // under B's header. `handleSaveEdit` guards on `!detail` so a
+    // stale form can't post against the wrong id, but the UI was
+    // showing the wrong values briefly until reload landed.
+    setDetail(null);
+    setOverview(null);
+    setError(null);
+    setEditing(false);
+    setEditForm(null);
+    setSaving(false);
+    setInviteEmail("");
+    setInviteUrl(null);
+    setCopied(false);
+    setInviting(false);
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schoolId]);
+
+  const startEditing = () => {
+    if (!detail) return;
+    setEditForm({
+      name: detail.name,
+      contact_name: detail.contact_name,
+      contact_email: detail.contact_email,
+      city: detail.city || "",
+      state: detail.state || "",
+      notes: detail.notes || "",
+    });
+    setEditing(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!detail || !editForm) return;
+    setSaving(true);
+    try {
+      await api.updateSchool(detail.id, {
+        name: editForm.name.trim(),
+        contact_name: editForm.contact_name.trim(),
+        contact_email: editForm.contact_email.trim(),
+        city: editForm.city.trim() || undefined,
+        state: editForm.state.trim() || undefined,
+        notes: editForm.notes.trim() || undefined,
+      });
+      setEditing(false);
+      reload();
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleActive = async () => {
+    if (!detail) return;
+    const next = !detail.is_active;
+    if (!confirm(`${next ? "Activate" : "Deactivate"} "${detail.name}"? ${detail.is_active ? "All teachers and students will lose access." : ""}`)) return;
+    try {
+      await api.updateSchool(detail.id, { is_active: next });
+      reload();
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!detail) return;
+    if (!confirm(`Permanently delete ${detail.name}? ${detail.teachers.length} teacher(s) will be unlinked. This cannot be undone.`)) return;
+    try {
+      await api.deleteSchool(detail.id);
+      navigate("/schools");
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  };
+
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!detail) return;
+    setInviting(true);
+    try {
+      const res = await api.inviteTeacher(detail.id, inviteEmail.trim());
+      setInviteUrl(res.invite_url);
+      setInviteEmail("");
+      reload();
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const handleCancelInvite = async (inviteId: string) => {
+    if (!detail || !confirm("Cancel this invite?")) return;
+    try {
+      await api.cancelInvite(detail.id, inviteId);
+      reload();
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  };
+
+  const handleCopyInvite = () => {
+    if (!inviteUrl) return;
+    navigator.clipboard.writeText(inviteUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const trendChartData = useMemo(
+    () =>
+      overview?.cost.trend_12_weeks.map((p) => ({
+        week: p.week_start ?? "",
+        cost: p.cost,
+      })) ?? [],
+    [overview],
+  );
+
+  if (error) {
+    const isNotFound = error.includes("404");
+    return (
+      <div>
+        <div className="page-header">
+          <Link to="/schools" className="link-btn">← Schools</Link>
+          <h1 style={{ marginTop: 8 }}>
+            {isNotFound ? "School not found" : "Couldn't load school"}
+          </h1>
+          <p style={{ color: "var(--danger)" }}>
+            {isNotFound ? "This school may have been deleted." : error}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!detail || !overview) return <p className="loading">Loading…</p>;
+
+  const monthDeltaPct =
+    overview.cost.last_month > 0
+      ? ((overview.cost.this_month - overview.cost.last_month) /
+          overview.cost.last_month) *
+        100
+      : null;
+
+  return (
+    <div>
+      {/* Back trail */}
+      <div style={{ marginBottom: 16 }}>
+        <Link to="/schools" className="link-btn">← Schools</Link>
+      </div>
+
+      {/* ── Header (editorial) ───────────────────────────────────── */}
+      {editing && editForm ? (
+        <EditHeader
+          form={editForm}
+          onChange={setEditForm}
+          onSubmit={handleSaveEdit}
+          onCancel={() => setEditing(false)}
+          saving={saving}
+        />
+      ) : (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 36, gap: 24 }}>
+          <div className="page-header" style={{ marginBottom: 0, flex: 1 }}>
+            <span className="eyebrow">School</span>
+            <h1 style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+              {detail.name}
+              <span
+                style={{
+                  fontFamily: "var(--font-sans)",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  letterSpacing: 1.4,
+                  textTransform: "uppercase",
+                  color: detail.is_active ? "var(--ok)" : "var(--muted-2)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <span aria-hidden="true" className={`dot ${detail.is_active ? "dot-ok" : "dot-muted"}`}>●</span>
+                {detail.is_active ? "Active" : "Inactive"}
+              </span>
+            </h1>
+            <p>
+              {detail.contact_name} · {detail.contact_email}
+              {(detail.city || detail.state) && ` · ${[detail.city, detail.state].filter(Boolean).join(", ")}`}
+            </p>
+            {detail.notes && (
+              <p style={{ marginTop: 8, fontStyle: "normal", fontFamily: "var(--font-sans)", fontSize: 13.5, color: "var(--ink-soft)", maxWidth: "72ch", lineHeight: 1.6 }}>
+                {detail.notes}
+              </p>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={startEditing} style={btnGhost}>Edit</button>
+            <button onClick={handleToggleActive} style={btnGhost}>
+              {detail.is_active ? "Deactivate" : "Activate"}
+            </button>
+            <button onClick={handleDelete} style={{ ...btnGhost, color: "var(--danger)", borderColor: "rgba(138, 35, 23, 0.3)" }}>
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── 01 — COST ───────────────────────────────────────────── */}
+      <Section
+        number="01"
+        label="Cost"
+        action={
+          <Link
+            to={`/llm-calls?school=${detail.id}&hours=720`}
+            className="link-btn"
+            style={{ fontSize: 12 }}
+          >
+            View all calls (30d) →
+          </Link>
+        }
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 32, marginBottom: 28 }}>
+          <DataBlock
+            label="This month"
+            value={`$${overview.cost.this_month.toFixed(2)}`}
+            sub={
+              monthDeltaPct === null
+                ? "first month of data"
+                : `${monthDeltaPct > 0 ? "↑" : monthDeltaPct < 0 ? "↓" : "→"} ${Math.abs(monthDeltaPct).toFixed(0)}% vs last month`
+            }
+            subColor={
+              monthDeltaPct === null
+                ? "var(--muted)"
+                : monthDeltaPct > 0
+                  ? "var(--accent)"
+                  : monthDeltaPct < 0
+                    ? "var(--ok)"
+                    : "var(--muted)"
+            }
+          />
+          <DataBlock
+            label="Last month"
+            value={`$${overview.cost.last_month.toFixed(2)}`}
+          />
+          <DataBlock
+            label="Projected end of month"
+            value={`$${overview.cost.projected_month_end.toFixed(2)}`}
+            sub="if usage stays flat"
+          />
+        </div>
+
+        {trendChartData.length > 1 && (
+          <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 18 }}>
+            <h3 style={{ marginBottom: 10 }}>12-week trend</h3>
+            <ResponsiveContainer width="100%" height={120}>
+              <AreaChart data={trendChartData}>
+                <XAxis dataKey="week" tick={{ fontSize: 10 }} />
+                <YAxis hide />
+                <Tooltip
+                  formatter={(v) => `$${Number(v).toFixed(2)}`}
+                  labelFormatter={(l) => `Week of ${l}`}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="cost"
+                  stroke="var(--accent)"
+                  fill="var(--accent-soft)"
+                  strokeWidth={1.5}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </Section>
+
+      {/* ── 02 — ACTIVITY ───────────────────────────────────────── */}
+      {!overview.is_internal && (
+        <Section number="02" label="Activity (this week vs last)">
+          <ActivityRow
+            label="Active classes"
+            curr={overview.activity.this_week.active_classes}
+            prev={overview.activity.last_week.active_classes}
+          />
+          <ActivityRow
+            label="Active teachers"
+            curr={overview.activity.this_week.active_teachers}
+            prev={overview.activity.last_week.active_teachers}
+          />
+          <ActivityRow
+            label="Active students"
+            curr={overview.activity.this_week.active_students}
+            prev={overview.activity.last_week.active_students}
+          />
+          <ActivityRow
+            label="HWs published"
+            curr={overview.activity.this_week.hws_published}
+            prev={overview.activity.last_week.hws_published}
+          />
+          <ActivityRow
+            label="Submissions"
+            curr={overview.activity.this_week.submissions}
+            prev={overview.activity.last_week.submissions}
+          />
+        </Section>
+      )}
+
+      {/* ── 03 — HEALTH ─────────────────────────────────────────── */}
+      <Section number="03" label="Health">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
+          <HealthBlock
+            label="Failed calls (24h)"
+            count={overview.failed_calls_24h}
+            href={`/llm-calls?school=${detail.id}&tab=failures&hours=24`}
+          />
+          <HealthBlock
+            label="Failed calls (7d)"
+            count={overview.failed_calls_7d}
+            href={`/llm-calls?school=${detail.id}&tab=failures&hours=168`}
+          />
+        </div>
+      </Section>
+
+      {/* ── 04 — TEACHERS ───────────────────────────────────────── */}
+      <Section number="04" label={`Teachers (${detail.teachers.length})`}>
+        {detail.teachers.length > 0 ? (
+          <div className="list" style={{ marginBottom: 24 }}>
+            {detail.teachers.map((t) => (
+              <div
+                key={t.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1.4fr 1.6fr auto",
+                  gap: 18,
+                  alignItems: "center",
+                  padding: "14px 0",
+                  borderBottom: "1px solid var(--rule)",
+                }}
+              >
+                <div style={{ fontFamily: "var(--font-display)", fontSize: 17, color: "var(--ink)" }}>
+                  {t.name || "—"}
+                </div>
+                <div style={{ fontSize: 12.5, color: "var(--muted)" }}>{t.email}</div>
+                <div style={{ fontSize: 12, color: "var(--muted-2)" }}>
+                  joined {formatRelativeDate(t.joined_at)}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ color: "var(--muted)", fontStyle: "italic", marginBottom: 24 }}>
+            No teachers yet. Send an invite below.
+          </p>
+        )}
+
+        {/* Pending invites — only if any */}
+        {detail.pending_invites.length > 0 && (
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ marginBottom: 12 }}>Pending invites ({detail.pending_invites.length})</h3>
+            <div className="list">
+              {detail.pending_invites.map((inv) => (
+                <div
+                  key={inv.id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1.4fr 1fr 1fr auto",
+                    gap: 18,
+                    alignItems: "center",
+                    padding: "12px 0",
+                    borderBottom: "1px solid var(--rule)",
+                  }}
+                >
+                  <div style={{ fontSize: 13 }}>{inv.email}</div>
+                  <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                    sent {formatRelativeDate(inv.created_at)}
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                    expires {formatRelativeDate(inv.expires_at)}
+                  </div>
+                  <button onClick={() => handleCancelInvite(inv.id)} style={{ ...btnSmall, color: "var(--danger)" }}>
+                    Cancel
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Invite form */}
+        <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 18 }}>
+          <h3 style={{ marginBottom: 12 }}>Invite a teacher</h3>
+          <form onSubmit={handleInvite} style={{ display: "flex", gap: 8 }}>
+            <input
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="teacher@school.edu"
+              required
+              style={{ ...inputStyle, flex: 1 }}
+            />
+            <button type="submit" disabled={inviting} style={{ ...btnPrimary, opacity: inviting ? 0.6 : 1, whiteSpace: "nowrap" }}>
+              {inviting ? "Sending…" : "Send invite"}
+            </button>
+          </form>
+          {inviteUrl && (
+            <div style={{ marginTop: 14, padding: "12px 14px", background: "var(--ok-soft)", border: "1px solid rgba(74, 107, 58, 0.3)", borderRadius: 3 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ok)", marginBottom: 6, letterSpacing: 1.2, textTransform: "uppercase" }}>
+                Invite created
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <code style={{ fontSize: 12, color: "var(--ink-soft)", flex: 1, wordBreak: "break-all", fontFamily: "var(--font-mono)" }}>
+                  {inviteUrl}
+                </code>
+                <button onClick={handleCopyInvite} style={{ ...btnSmall, color: copied ? "var(--ok)" : "var(--accent)" }}>
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+/* ── Subcomponents ─────────────────────────────────────────────── */
+
+function Section({
+  number,
+  label,
+  action,
+  children,
+}: {
+  number: string;
+  label: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section style={{ marginBottom: 56 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          gap: 14,
+          paddingBottom: 12,
+          marginBottom: 20,
+          borderBottom: "2px solid var(--ink)",
+        }}
+      >
+        <span
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 13,
+            color: "var(--muted-2)",
+            letterSpacing: 0.5,
+          }}
+        >
+          {number}
+        </span>
+        <h2
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 26,
+            color: "var(--ink)",
+            margin: 0,
+            letterSpacing: -0.3,
+          }}
+        >
+          {label}
+        </h2>
+        {action && <div style={{ marginLeft: "auto" }}>{action}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function DataBlock({
+  label,
+  value,
+  sub,
+  subColor,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: string;
+  subColor?: string;
+}) {
+  return (
+    <div>
+      <div
+        style={{
+          fontFamily: "var(--font-sans)",
+          fontSize: 10,
+          fontWeight: 600,
+          textTransform: "uppercase",
+          letterSpacing: 1.6,
+          color: "var(--muted)",
+          marginBottom: 10,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 32,
+          color: "var(--ink)",
+          letterSpacing: -0.5,
+          lineHeight: 1,
+        }}
+      >
+        {value}
+      </div>
+      {sub && (
+        <div
+          style={{
+            fontFamily: "var(--font-sans)",
+            fontSize: 12,
+            color: subColor ?? "var(--muted)",
+            marginTop: 8,
+          }}
+        >
+          {sub}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActivityRow({
+  label,
+  curr,
+  prev,
+}: {
+  label: string;
+  curr: number;
+  prev: number;
+}) {
+  const delta = curr - prev;
+  const pct = prev > 0 ? (delta / prev) * 100 : null;
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1.4fr 0.6fr 0.6fr 1fr",
+        alignItems: "baseline",
+        padding: "14px 0",
+        borderBottom: "1px solid var(--rule)",
+        fontFamily: "var(--font-sans)",
+      }}
+    >
+      <div style={{ fontSize: 14, color: "var(--ink)" }}>{label}</div>
+      <div
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 22,
+          color: curr > 0 ? "var(--ink)" : "var(--muted-2)",
+          textAlign: "right",
+        }}
+      >
+        {curr.toLocaleString()}
+      </div>
+      <div
+        style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 13,
+          color: "var(--muted-2)",
+          textAlign: "right",
+        }}
+      >
+        ({prev.toLocaleString()})
+      </div>
+      <div
+        style={{
+          fontSize: 12,
+          color:
+            delta > 0
+              ? "var(--ok)"
+              : delta < 0
+                ? "var(--accent)"
+                : "var(--muted-2)",
+          textAlign: "right",
+        }}
+      >
+        {delta === 0 ? "→ no change" : `${delta > 0 ? "↑" : "↓"} ${Math.abs(delta).toLocaleString()}${pct !== null ? ` (${Math.abs(pct).toFixed(0)}%)` : ""}`}
+      </div>
+    </div>
+  );
+}
+
+function HealthBlock({
+  label,
+  count,
+  href,
+}: {
+  label: string;
+  count: number;
+  href: string;
+}) {
+  const danger = count > 0;
+  return (
+    <div>
+      <div
+        style={{
+          fontFamily: "var(--font-sans)",
+          fontSize: 10,
+          fontWeight: 600,
+          textTransform: "uppercase",
+          letterSpacing: 1.6,
+          color: "var(--muted)",
+          marginBottom: 10,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 16 }}>
+        <span
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 32,
+            color: danger ? "var(--danger)" : "var(--ok)",
+            letterSpacing: -0.5,
+            lineHeight: 1,
+          }}
+        >
+          {count}
+        </span>
+        {danger && (
+          <Link to={href} className="link-btn" style={{ fontSize: 13 }}>
+            View {count} trace{count === 1 ? "" : "s"} →
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EditHeader({
+  form,
+  onChange,
+  onSubmit,
+  onCancel,
+  saving,
+}: {
+  form: EditForm;
+  onChange: (f: EditForm) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  onCancel: () => void;
+  saving: boolean;
+}) {
+  return (
+    <form
+      onSubmit={onSubmit}
+      style={{
+        marginBottom: 36,
+        padding: 20,
+        border: "1px solid var(--rule-strong)",
+        background: "var(--surface)",
+        borderRadius: 3,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h3 style={{ marginBottom: 0 }}>Edit school</h3>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" onClick={onCancel} disabled={saving} style={btnGhost}>Cancel</button>
+          <button type="submit" disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.6 : 1 }}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <Field label="School name">
+          <input type="text" value={form.name} onChange={(e) => onChange({ ...form, name: e.target.value })} required style={inputStyle} />
+        </Field>
+        <Field label="Contact name">
+          <input type="text" value={form.contact_name} onChange={(e) => onChange({ ...form, contact_name: e.target.value })} required style={inputStyle} />
+        </Field>
+        <Field label="Contact email">
+          <input type="email" value={form.contact_email} onChange={(e) => onChange({ ...form, contact_email: e.target.value })} required style={inputStyle} />
+        </Field>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Field label="City">
+            <input type="text" value={form.city} onChange={(e) => onChange({ ...form, city: e.target.value })} style={inputStyle} />
+          </Field>
+          <Field label="State">
+            <input type="text" value={form.state} onChange={(e) => onChange({ ...form, state: e.target.value })} style={{ ...inputStyle, maxWidth: 80 }} />
+          </Field>
+        </div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <Field label="Internal notes">
+            <textarea
+              value={form.notes}
+              onChange={(e) => onChange({ ...form, notes: e.target.value })}
+              rows={2}
+              placeholder="Deal context, pricing, etc."
+              style={{ ...inputStyle, resize: "vertical" }}
+            />
+          </Field>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+      <label style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", color: "var(--muted)", letterSpacing: 1.6 }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
