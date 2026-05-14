@@ -7,6 +7,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import stripe
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import Date, cast, func, select
@@ -353,6 +354,37 @@ async def update_user_subscription(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     old_tier, old_status = user.subscription_tier, user.subscription_status
+
+    # Pro → free for a Stripe-paying teacher: cancel the live Stripe
+    # subscription before the DB flip, otherwise we keep charging their
+    # card while hiding the manage-portal button in the UI. Demote and
+    # the bill keeps coming. Belt-and-suspenders: try Stripe first; if
+    # cancellation fails we abort the DB change so admin/billing stay
+    # consistent (rather than DB-says-free + Stripe-says-active).
+    is_demote_to_free = body.tier == "free" and old_tier == "pro"
+    stripe_sub_id = user.stripe_subscription_id
+    if (
+        is_demote_to_free
+        and user.subscription_provider == "stripe"
+        and stripe_sub_id
+    ):
+        try:
+            await asyncio.to_thread(stripe.Subscription.cancel, stripe_sub_id)
+            logger.info(
+                "AUDIT: admin=%s cancelled Stripe sub=%s for user=%s",
+                current_user.user_id, stripe_sub_id, user_id,
+            )
+            user.stripe_subscription_id = None
+        except stripe.StripeError as e:  # type: ignore[attr-defined]
+            logger.error(
+                "Stripe cancel failed for user=%s sub=%s: %s — aborting demote",
+                user_id, stripe_sub_id, e,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to cancel Stripe subscription; demote aborted.",
+            ) from e
+
     user.subscription_tier = body.tier
     user.subscription_status = body.status
     if body.tier == "pro" and body.status == "active":
