@@ -383,6 +383,15 @@ async def me(
         school = (await db.execute(select(School.name).where(School.id == user.school_id))).scalar_one_or_none()
         school_name = school
 
+    # Single source of truth for is_pro across the frontend: fold in
+    # is_school_enrolled so a school-paid student/teacher reads back as
+    # pro from /auth/me, not just /entitlements. Without this, the
+    # pricing page (reads user.is_pro) treats school-enrolled users as
+    # free and shows them the upgrade flow while the account page
+    # (reads entitlement-store isPro, which already folds enrollment)
+    # treats them as pro. is_pro_via_sub|tier covers self-pay; the OR
+    # adds school-coverage.
+    is_pro_via_school = await is_school_enrolled(db, user.id)
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -395,7 +404,7 @@ async def me(
         subscription_status=user.subscription_status,
         subscription_provider=user.subscription_provider,
         subscription_expires_at=user.subscription_expires_at,
-        is_pro=is_pro(user),
+        is_pro=is_pro(user) or is_pro_via_school,
         has_stripe_customer=bool(user.stripe_customer_id),
         is_preview=user.is_preview,
     )
