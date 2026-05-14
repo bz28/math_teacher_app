@@ -281,9 +281,9 @@ async def generate_bank_questions(
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    # Enforce the teacher daily generation cap. Independent free
-    # teachers get 10/day; pro and school-active teachers bypass.
-    await check_entitlement(db, user, Entitlement.GENERATE_PROBLEM)
+    # Ownership/existence checks first so a teacher poking at someone
+    # else's resource gets 404, not a misleading 429-style 'limit
+    # reached today' that confirms the resource exists.
     await get_teacher_course(db, course_id, current_user.user_id)
 
     # Validate the assignment belongs to this teacher + this course.
@@ -295,6 +295,10 @@ async def generate_bank_questions(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Assignment does not belong to this course",
         )
+
+    # Enforce the teacher daily generation cap. Independent free
+    # teachers get 10/day; pro and school-active teachers bypass.
+    await check_entitlement(db, user, Entitlement.GENERATE_PROBLEM)
 
     # Defense in depth: bank questions only live at the top-unit level.
     # Frontend gates this in the generate-questions-modal but a stale UI

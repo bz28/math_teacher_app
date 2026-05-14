@@ -496,11 +496,9 @@ async def clone_homework_as_practice(
     The practice set starts as a draft with no content; the teacher
     publishes it explicitly after reviewing.
     """
-    # Each cloned problem fires its own generate_questions LLM call, so
-    # gate behind the same cap as direct generation — without this an
-    # independent free teacher can queue an entire HW's worth of jobs in
-    # one click and trivially exceed the 10/day quota.
-    await check_entitlement(db, user, Entitlement.GENERATE_PROBLEM)
+    # Ownership/existence checks first so a teacher poking at someone
+    # else's homework gets 404, not a misleading 'limit reached' that
+    # would confirm the resource exists.
     await get_teacher_course(db, course_id, current_user.user_id)
     source = await get_teacher_assignment(db, hw_id, current_user.user_id)
     # Cross-course clone would leak one course's content into another.
@@ -527,6 +525,14 @@ async def clone_homework_as_practice(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Source homework has no problems to clone",
         )
+
+    # Each cloned problem fires its own generate_questions LLM call, so
+    # gate behind the same cap as direct generation — without this an
+    # independent free teacher can queue an entire HW's worth of jobs in
+    # one click and trivially exceed the 10/day quota. Runs AFTER
+    # ownership + content checks so a 'limit reached' message doesn't
+    # leak the existence of resources the teacher couldn't have touched.
+    await check_entitlement(db, user, Entitlement.GENERATE_PROBLEM)
 
     # Pull the source items to copy unit_id + source_doc_ids per job.
     # snapshot_bank_items already enforces approved+primary+course_id
