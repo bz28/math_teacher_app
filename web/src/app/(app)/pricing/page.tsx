@@ -280,17 +280,21 @@ function PricingPageContent() {
 function ActiveSubscription() {
   const user = useAuthStore((s) => s.user);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function openPortal() {
     if (!user) return;
     setLoading(true);
+    setError(null);
     try {
       const url = await getManagementUrl(user.id);
-      if (url) {
-        window.location.assign(url);
+      if (!url) {
+        setError("Couldn't open the management portal. Please try again later.");
+        return;
       }
+      window.location.assign(url);
     } catch {
-      // Silently fail — button re-enables
+      setError("Couldn't open the management portal. Please try again later.");
     } finally {
       setLoading(false);
     }
@@ -312,6 +316,9 @@ function ActiveSubscription() {
             </>
           )}
         </p>
+        {error && (
+          <p role="alert" className="mt-4 text-sm text-error">{error}</p>
+        )}
         <button
           onClick={openPortal}
           disabled={loading}
