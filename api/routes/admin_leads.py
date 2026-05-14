@@ -101,8 +101,15 @@ async def update_lead(
     lead.updated_by_id = current_user.user_id
     lead.updated_by_name = current_user.name
     await db.commit()
+    # Log the actual values, not just the field names — forensics on
+    # "who set this school's notes to X" needs the value too. Notes
+    # can be long; truncate to keep log lines bounded.
+    audit_values = {
+        k: (v[:120] + "…" if isinstance(v, str) and len(v) > 120 else v)
+        for k, v in fields.items()
+    }
     logger.info(
         "AUDIT: admin=%s updated lead=%s fields=%s",
-        current_user.user_id, lead_id, sorted(fields.keys()),
+        current_user.user_id, lead_id, audit_values,
     )
     return {"status": "ok"}

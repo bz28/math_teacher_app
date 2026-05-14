@@ -25,20 +25,21 @@ export default function DemoPage() {
     setSubmitting(true);
     try {
       // Parse approx_students leniently — empty stays undefined,
-      // anything non-numeric just drops to undefined too. The
-      // backend's optional `int | None` accepts NULL.
-      const studentsParsed = form.approx_students.trim()
-        ? Number(form.approx_students)
-        : undefined;
+      // non-numeric drops to undefined, decimals get rounded to the
+      // nearest integer (backend column is INT). Backend column
+      // accepts NULL so omitting it is fine.
+      const trimmed = form.approx_students.trim();
+      const parsed = trimmed ? Number(trimmed) : NaN;
+      const students =
+        Number.isFinite(parsed) && parsed >= 0
+          ? Math.round(parsed)
+          : undefined;
       await contact.submitLead({
         school_name: form.school_name.trim(),
         contact_name: form.contact_name.trim(),
         contact_email: form.contact_email.trim(),
         role: "teacher",
-        approx_students:
-          typeof studentsParsed === "number" && Number.isFinite(studentsParsed)
-            ? studentsParsed
-            : undefined,
+        approx_students: students,
         message: form.message.trim() || undefined,
       });
       setSubmitted(true);
@@ -246,6 +247,7 @@ export default function DemoPage() {
                     <input
                       type="number"
                       min={0}
+                      step={1}
                       inputMode="numeric"
                       value={form.approx_students}
                       onChange={(e) =>

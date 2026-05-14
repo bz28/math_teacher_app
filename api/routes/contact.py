@@ -4,7 +4,7 @@ import asyncio
 import logging
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
@@ -22,7 +22,10 @@ class ContactFormRequest(BaseModel):
     contact_name: str
     contact_email: EmailStr
     role: str = "teacher"
-    approx_students: int | None = None
+    # Bounded to non-negative and well under postgres int — symmetric
+    # with the admin PATCH validator. Stops obviously bogus inbound
+    # numbers (-5, 99_999_999_999) from landing in the DB.
+    approx_students: int | None = Field(default=None, ge=0, le=1_000_000)
     message: str | None = None
 
 

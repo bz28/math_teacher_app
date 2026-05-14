@@ -1,7 +1,7 @@
 """add notes column to contact_leads
 
-Revision ID: aa1000018
-Revises: z1000017
+Revision ID: bm1000056
+Revises: bl1000055
 Create Date: 2026-05-14 00:00:00.000000
 
 """
@@ -10,8 +10,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "aa1000018"
-down_revision: str | None = "z1000017"
+revision: str = "bm1000056"
+down_revision: str | None = "bl1000055"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
