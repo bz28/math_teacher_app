@@ -6,36 +6,28 @@ import { api, type OverviewData } from "../lib/api";
 import StatCard from "../components/StatCard";
 
 const MODE_COLORS: Record<string, string> = {
-  learn: "#6366f1",
-  practice: "#10b981",
-  mock_test: "#f59e0b",
+  learn: "#14130f",
+  practice: "#4a6b3a",
+  mock_test: "#b8431a",
 };
 
 const SUBJECT_COLORS: Record<string, string> = {
-  math: "#6366f1",
-  chemistry: "#10b981",
+  math: "#14130f",
+  chemistry: "#4a6b3a",
 };
 
 function HealthBadge({ errorRate, latency }: { errorRate: number; latency: number }) {
   const isDegraded = errorRate >= 5 || latency >= 5000;
   const isDown = errorRate >= 20;
 
-  const color = isDown ? "#ef4444" : isDegraded ? "#f59e0b" : "#10b981";
+  const dotClass = isDown ? "dot-danger" : isDegraded ? "dot-warn" : "dot-ok";
   const label = isDown ? "Unhealthy" : isDegraded ? "Degraded" : "Healthy";
 
   return (
-    <div style={{
-      display: "inline-flex", alignItems: "center", gap: 8,
-      padding: "6px 14px", borderRadius: 20,
-      background: `${color}15`, border: `1px solid ${color}30`,
-      fontSize: 13, fontWeight: 600, color,
-    }}>
-      <span style={{
-        width: 8, height: 8, borderRadius: 4, background: color,
-        boxShadow: `0 0 6px ${color}80`,
-      }} />
+    <span className="list-row-status" style={{ fontSize: 13 }}>
+      <span aria-hidden="true" className={`dot ${dotClass}`}>●</span>
       {label}
-    </div>
+    </span>
   );
 }
 
@@ -51,7 +43,7 @@ export default function Overview() {
     return () => clearInterval(interval);
   }, [hours, grade]);
 
-  if (!data) return <p>Loading...</p>;
+  if (!data) return <p className="loading">Loading…</p>;
 
   const modeMap = Object.fromEntries(data.by_mode.map((m) => [m.mode, m.count]));
   const latencyStr = data.avg_latency_ms >= 1000
@@ -60,10 +52,11 @@ export default function Overview() {
 
   return (
     <div className="platform-overview">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-        <div>
-          <h1 style={{ marginBottom: 4 }}>Overview</h1>
-          <p style={{ color: "#64748b", fontSize: 14, margin: 0 }}>System health and usage at a glance</p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 28 }}>
+        <div className="page-header" style={{ marginBottom: 0 }}>
+          <span className="eyebrow">Diagnostic</span>
+          <h1>Overview</h1>
+          <p>System health and usage at a glance.</p>
         </div>
         <HealthBadge errorRate={data.error_rate} latency={data.avg_latency_ms} />
       </div>
@@ -103,7 +96,7 @@ export default function Overview() {
         <StatCard
           label="Error Rate"
           value={
-            <span style={{ color: data.error_rate >= 5 ? "#ef4444" : data.error_rate > 0 ? "#f59e0b" : "#10b981" }}>
+            <span style={{ color: data.error_rate >= 5 ? "var(--danger)" : data.error_rate > 0 ? "var(--warn)" : "var(--ok)" }}>
               {data.error_rate}%
             </span>
           }
@@ -113,59 +106,59 @@ export default function Overview() {
 
       <div className="chart-row">
         <div className="chart-card">
-          <h3>Sessions / Day</h3>
-          <ResponsiveContainer width="100%" height={250}>
+          <h3>Sessions / day</h3>
+          <ResponsiveContainer width="100%" height={240}>
             <AreaChart data={data.sessions_by_day}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" tick={{ fontSize: 12 }} />
+              <CartesianGrid strokeDasharray="2 4" />
+              <XAxis dataKey="day" tick={{ fontSize: 11 }} />
               <YAxis />
               <Tooltip />
-              <Area type="monotone" dataKey="count" stroke="#6366f1" fill="#6366f140" />
+              <Area type="monotone" dataKey="count" stroke="#14130f" fill="#14130f1a" strokeWidth={1.5} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
 
         <div className="chart-card">
-          <h3>Cost / Day ($)</h3>
-          <ResponsiveContainer width="100%" height={250}>
+          <h3>Cost / day ($)</h3>
+          <ResponsiveContainer width="100%" height={240}>
             <AreaChart data={data.cost_by_day}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" tick={{ fontSize: 12 }} />
+              <CartesianGrid strokeDasharray="2 4" />
+              <XAxis dataKey="day" tick={{ fontSize: 11 }} />
               <YAxis />
               <Tooltip formatter={(v) => `$${Number(v).toFixed(4)}`} />
-              <Area type="monotone" dataKey="cost" stroke="#10b981" fill="#10b98140" />
+              <Area type="monotone" dataKey="cost" stroke="#b8431a" fill="#b8431a1a" strokeWidth={1.5} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       <div style={{
-        display: "flex", gap: 24, marginBottom: 24, padding: "16px 20px",
-        background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0",
+        display: "flex", gap: 28, marginBottom: 28, padding: "18px 0",
+        borderTop: "1px solid var(--rule)", borderBottom: "1px solid var(--rule)",
         flexWrap: "wrap", alignItems: "center",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <h3 style={{ marginBottom: 0, whiteSpace: "nowrap" }}>By Mode</h3>
+        <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+          <h3 style={{ marginBottom: 0, whiteSpace: "nowrap" }}>By mode</h3>
           {["learn", "practice", "mock_test"].map((mode) => (
-            <div key={mode} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 3, background: MODE_COLORS[mode] }} />
-              <span style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>
-                {mode === "mock_test" ? "Mock Test" : mode.charAt(0).toUpperCase() + mode.slice(1)}
+            <div key={mode} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <span style={{ width: 7, height: 7, background: MODE_COLORS[mode] }} />
+              <span style={{ fontSize: 13, color: "var(--ink-soft)" }}>
+                {mode === "mock_test" ? "Mock test" : mode.charAt(0).toUpperCase() + mode.slice(1)}
               </span>
-              <span style={{ fontSize: 13, color: "#94a3b8" }}>{modeMap[mode] ?? 0}</span>
+              <span className="num" style={{ fontSize: 13, color: "var(--ink)" }}>{modeMap[mode] ?? 0}</span>
             </div>
           ))}
         </div>
-        <div style={{ width: 1, height: 24, background: "#e2e8f0" }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <h3 style={{ marginBottom: 0, whiteSpace: "nowrap" }}>By Subject</h3>
+        <div style={{ width: 1, height: 24, background: "var(--rule)" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+          <h3 style={{ marginBottom: 0, whiteSpace: "nowrap" }}>By subject</h3>
           {data.by_subject.map((s) => (
-            <div key={s.subject} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 3, background: SUBJECT_COLORS[s.subject] ?? "#94a3b8" }} />
-              <span style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>
+            <div key={s.subject} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <span style={{ width: 7, height: 7, background: SUBJECT_COLORS[s.subject] ?? "var(--muted-2)" }} />
+              <span style={{ fontSize: 13, color: "var(--ink-soft)" }}>
                 {s.subject.charAt(0).toUpperCase() + s.subject.slice(1)}
               </span>
-              <span style={{ fontSize: 13, color: "#94a3b8" }}>{s.count}</span>
+              <span className="num" style={{ fontSize: 13, color: "var(--ink)" }}>{s.count}</span>
             </div>
           ))}
         </div>

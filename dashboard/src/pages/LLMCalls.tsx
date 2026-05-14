@@ -10,24 +10,16 @@ import { formatRelativeDate, shortModel } from "../lib/format";
 import StatCard from "../components/StatCard";
 import MetadataChips from "../components/MetadataChips";
 import { Pagination } from "../components/Pagination";
-import { useScope } from "../lib/scope-context";
 
-const COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"];
+const COLORS = ["#14130f", "#4a6b3a", "#b8431a", "#3d5a78", "#a66b15", "#6b21a8"];
 
 type Tab = "all" | "failures";
 const PAGE_SIZE = 25;
 
 export default function LLMCalls() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { apiSchoolFilter, scope } = useScope();
-  const schoolFilter = apiSchoolFilter() ?? "";
-  // Scope-aware deep-link to the per-submission flight recorder so a
-  // user drilled into a school stays in school scope when they jump
-  // into a trace.
   const tracePathFor = (submissionId: string) =>
-    scope.kind === "school"
-      ? `/school/${scope.schoolId}/submissions/${submissionId}/trace`
-      : `/admin/submissions/${submissionId}/trace`;
+    `/submissions/${submissionId}/trace`;
   const [data, setData] = useState<LLMCallsData | null>(null);
   const [hours, setHours] = useState("24");
   const [fnFilter, setFnFilter] = useState("");
@@ -52,12 +44,11 @@ export default function LLMCalls() {
       function: fnFilter,
       user_id: userFilter,
       submission_id: submissionFilter,
-      school_id: schoolFilter,
       limit: String(PAGE_SIZE),
       offset: String(offset),
     }).then((d) => { if (!cancelled) setData(d); });
     return () => { cancelled = true; };
-  }, [hours, fnFilter, userFilter, submissionFilter, schoolFilter, offset]);
+  }, [hours, fnFilter, userFilter, submissionFilter, offset]);
 
   // Reset offset whenever any non-pagination filter changes so a deep
   // link (?submission=…, ?user=…) or a scope flip never lands past the
@@ -68,7 +59,7 @@ export default function LLMCalls() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOffset(0);
-  }, [schoolFilter, userFilter, submissionFilter, fnFilter, hours]);
+  }, [userFilter, submissionFilter, fnFilter, hours]);
 
   // Local-state handlers — offset reset is handled by the effect
   // above, so we don't duplicate it here.
@@ -86,7 +77,7 @@ export default function LLMCalls() {
     setSearchParams(next);
   };
 
-  if (!data) return <p>Loading...</p>;
+  if (!data) return <p className="loading">Loading…</p>;
 
   const totalCalls = data.by_function.reduce((s, r) => s + r.count, 0);
   const totalCost = data.by_function.reduce((s, r) => s + r.total_cost, 0);
@@ -97,7 +88,11 @@ export default function LLMCalls() {
 
   return (
     <div>
-      <h1>LLM Calls</h1>
+      <div className="page-header">
+        <span className="eyebrow">Diagnostic</span>
+        <h1>LLM calls</h1>
+        <p>Every model call the pipeline made — searchable by user, submission, or function.</p>
+      </div>
 
       <div className="filters" style={{ display: "flex", gap: 12, alignItems: "center" }}>
         <select value={hours} onChange={(e) => handleHoursChange(e.target.value)}>
@@ -139,21 +134,21 @@ export default function LLMCalls() {
 
       <div className="chart-row">
         <div className="chart-card">
-          <h3>Calls / Day</h3>
-          <ResponsiveContainer width="100%" height={250}>
+          <h3>Calls / day</h3>
+          <ResponsiveContainer width="100%" height={240}>
             <BarChart data={data.by_day}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" tick={{ fontSize: 12 }} />
+              <CartesianGrid strokeDasharray="2 4" />
+              <XAxis dataKey="day" tick={{ fontSize: 11 }} />
               <YAxis />
               <Tooltip />
-              <Bar dataKey="count" fill="#6366f1" />
+              <Bar dataKey="count" fill="#14130f" />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
         <div className="chart-card">
-          <h3>Cost by Model</h3>
-          <ResponsiveContainer width="100%" height={250}>
+          <h3>Cost by model</h3>
+          <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie
                 data={data.by_model}
@@ -177,22 +172,22 @@ export default function LLMCalls() {
 
       <div className="chart-row">
         <div className="chart-card" style={{ gridColumn: "1 / -1" }}>
-          <h3>Avg Latency / Day (ms)</h3>
+          <h3>Avg latency / day (ms)</h3>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={data.by_day}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" tick={{ fontSize: 12 }} />
+              <CartesianGrid strokeDasharray="2 4" />
+              <XAxis dataKey="day" tick={{ fontSize: 11 }} />
               <YAxis />
               <Tooltip formatter={(v) => `${Number(v).toFixed(0)}ms`} />
-              <Line type="monotone" dataKey="avg_latency" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="avg_latency" stroke="#b8431a" strokeWidth={1.5} dot={{ r: 2 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       {data.recent_failures.length > 0 && (
-        <div className="table-card" style={{ borderLeft: "3px solid #ef4444" }}>
-          <h3 style={{ color: "#ef4444" }}>Recent Failures ({data.recent_failures.length})</h3>
+        <div className="table-card" style={{ borderTop: "1px solid var(--danger)" }}>
+          <h3 style={{ color: "var(--danger)" }}>Recent failures ({data.recent_failures.length})</h3>
           <div className="table-scroll">
           <table>
             <colgroup>

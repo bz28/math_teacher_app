@@ -11,14 +11,15 @@ import { Pagination } from "../components/Pagination";
 const PAGE_SIZE = 25;
 
 function ScoreBadge({ score }: { score: number }) {
-  const color = score >= 4 ? "#10b981" : score >= 3 ? "#f59e0b" : "#ef4444";
+  const color = score >= 4 ? "var(--ok)" : score >= 3 ? "var(--warn)" : "var(--danger)";
   return (
     <span
       style={{
         display: "inline-block",
         width: 28,
         textAlign: "center",
-        fontWeight: 600,
+        fontFamily: "var(--font-mono)",
+        fontWeight: 500,
         color,
       }}
     >
@@ -49,20 +50,24 @@ export default function Quality() {
   const handleHoursChange = (v: string) => { setHours(v); setOffset(0); };
   const handleFailedToggle = (v: boolean) => { setOnlyFailed(v); setOffset(0); };
 
-  if (!data) return <p>Loading...</p>;
+  if (!data) return <p className="loading">Loading…</p>;
 
   const { summary } = data;
 
   const avgChartData = [
-    { name: "Correctness", score: summary.avg_correctness ?? 0, fill: "#10b981" },
-    { name: "Optimality", score: summary.avg_optimality ?? 0, fill: "#6366f1" },
-    { name: "Clarity", score: summary.avg_clarity ?? 0, fill: "#f59e0b" },
-    { name: "Flow", score: summary.avg_flow ?? 0, fill: "#06b6d4" },
+    { name: "Correctness", score: summary.avg_correctness ?? 0, fill: "#4a6b3a" },
+    { name: "Optimality", score: summary.avg_optimality ?? 0, fill: "#14130f" },
+    { name: "Clarity", score: summary.avg_clarity ?? 0, fill: "#a66b15" },
+    { name: "Flow", score: summary.avg_flow ?? 0, fill: "#3d5a78" },
   ];
 
   return (
     <div>
-      <h1>Solution Quality</h1>
+      <div className="page-header">
+        <span className="eyebrow">Diagnostic</span>
+        <h1>Solution quality</h1>
+        <p>Sampled solver runs scored on correctness, optimality, clarity, and flow.</p>
+      </div>
 
       <div className="filters">
         <select value={hours} onChange={(e) => handleHoursChange(e.target.value)}>

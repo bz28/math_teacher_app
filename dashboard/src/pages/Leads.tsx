@@ -8,10 +8,10 @@ import StatCard from "../components/StatCard";
 const STATUS_OPTIONS = ["new", "contacted", "converted", "declined"] as const;
 
 const STATUS_STYLES: Record<string, React.CSSProperties> = {
-  new: { background: "#dbeafe", color: "#2563eb" },
-  contacted: { background: "#fef3c7", color: "#b45309" },
-  converted: { background: "#dcfce7", color: "#16a34a" },
-  declined: { background: "#f1f5f9", color: "#94a3b8" },
+  new: { background: "var(--info-soft)", color: "var(--info)" },
+  contacted: { background: "var(--warn-soft)", color: "var(--warn)" },
+  converted: { background: "var(--ok-soft)", color: "var(--ok)" },
+  declined: { background: "transparent", color: "var(--muted-2)" },
 };
 
 export default function Leads() {
@@ -108,7 +108,7 @@ export default function Leads() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<"active" | "all">("active");
 
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <p className="loading">Loading…</p>;
 
   const newCount = leads.filter((l) => l.status === "new").length;
   const contactedCount = leads.filter((l) => l.status === "contacted").length;
@@ -120,7 +120,17 @@ export default function Leads() {
 
   return (
     <div>
-      <h1>Leads</h1>
+      <div className="page-header">
+        <span className="eyebrow">Pipeline</span>
+        <h1>Leads</h1>
+        <p>
+          {newCount === 0 && contactedCount === 0
+            ? leads.length === 0
+              ? "Nothing inbound yet."
+              : "Nothing active. All leads converted or declined."
+            : `${newCount} new. ${contactedCount} contacted.`}
+        </p>
+      </div>
 
       <div className="stat-grid">
         <StatCard label="New" value={newCount} />
@@ -133,18 +143,19 @@ export default function Leads() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <h3 style={{ marginBottom: 0 }}>
             {filter === "active" ? "Active Leads" : "All Leads"}
-            <span style={{ fontWeight: 400, color: "#94a3b8", marginLeft: 8 }}>({filteredLeads.length})</span>
+            <span style={{ fontWeight: 400, color: "var(--muted-2)", marginLeft: 8 }}>({filteredLeads.length})</span>
           </h3>
-          <div style={{ display: "flex", gap: 4, background: "#f1f5f9", borderRadius: 6, padding: 2 }}>
+          <div style={{ display: "flex", gap: 0, background: "var(--paper-2)", borderRadius: 3, padding: 2, border: "1px solid var(--rule)" }}>
             {(["active", "all"] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
                 style={{
-                  padding: "6px 14px", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                  background: filter === f ? "#fff" : "transparent",
-                  color: filter === f ? "#1e293b" : "#94a3b8",
-                  boxShadow: filter === f ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+                  padding: "6px 14px", border: "none", borderRadius: 2, fontSize: 11, fontWeight: 600, cursor: "pointer",
+                  textTransform: "uppercase", letterSpacing: "1.2px",
+                  fontFamily: "var(--font-sans)",
+                  background: filter === f ? "var(--surface)" : "transparent",
+                  color: filter === f ? "var(--ink)" : "var(--muted)",
                 }}
               >
                 {f === "active" ? `Active (${newCount + contactedCount})` : `All (${leads.length})`}
@@ -178,30 +189,33 @@ export default function Leads() {
             {filteredLeads.map((lead) => (
               <tr key={lead.id} style={{ opacity: lead.status === "declined" ? 0.55 : 1 }}>
                 <td>
-                  <span style={{ fontWeight: 600 }}>{lead.school_name}</span>
+                  <span style={{ fontFamily: "var(--font-display)", fontSize: 17, color: "var(--ink)" }}>
+                    {lead.school_name}
+                  </span>
                   {lead.status === "converted" && lead.school_id && (
                     <div>
                       <button
-                        onClick={() => navigate(`/admin/schools?detail=${lead.school_id}`)}
-                        style={{ fontSize: 11, color: "#6366f1", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 600 }}
+                        onClick={() => navigate(`/schools?detail=${lead.school_id}`)}
+                        className="link-btn"
+                        style={{ fontSize: 11 }}
                       >
-                        View School &rarr;
+                        View school &rarr;
                       </button>
                     </div>
                   )}
                 </td>
                 <td>
                   <div style={{ fontSize: 13 }}>{lead.contact_name}</div>
-                  <div style={{ fontSize: 11, color: "#64748b" }}>{lead.contact_email}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted)" }}>{lead.contact_email}</div>
                 </td>
                 <td style={{ fontSize: 13, textTransform: "capitalize" }}>{lead.role}</td>
                 <td>
                   {lead.message ? (
-                    <div style={{ fontSize: 12, color: "#475569", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={lead.message}>
+                    <div style={{ fontSize: 12, color: "var(--ink-soft)", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={lead.message}>
                       {lead.message}
                     </div>
                   ) : (
-                    <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
+                    <span style={{ color: "var(--muted-2)", fontSize: 12 }}>—</span>
                   )}
                 </td>
                 <td>
@@ -215,7 +229,7 @@ export default function Leads() {
                       onChange={(e) => handleStatusChange(lead.id, e.target.value, lead)}
                       style={{
                         ...STATUS_STYLES[lead.status],
-                        border: "1px solid #e2e8f0",
+                        border: "1px solid var(--rule)",
                         borderRadius: 4,
                         padding: "3px 8px",
                         fontSize: 12,
@@ -234,28 +248,35 @@ export default function Leads() {
                   {lead.updated_by ? (
                     <div>
                       <div style={{ fontSize: 12, fontWeight: 500 }}>{lead.updated_by}</div>
-                      <div style={{ fontSize: 11, color: "#94a3b8" }}>{lead.updated_at ? formatRelativeDate(lead.updated_at) : ""}</div>
+                      <div style={{ fontSize: 11, color: "var(--muted-2)" }}>{lead.updated_at ? formatRelativeDate(lead.updated_at) : ""}</div>
                     </div>
                   ) : (
-                    <span style={{ color: "#cbd5e1", fontSize: 12 }}>—</span>
+                    <span style={{ color: "var(--muted-2)", fontSize: 12 }}>—</span>
                   )}
                 </td>
-                <td style={{ fontSize: 12, color: "#64748b" }}>{formatRelativeDate(lead.created_at)}</td>
+                <td style={{ fontSize: 12, color: "var(--muted)" }}>{formatRelativeDate(lead.created_at)}</td>
               </tr>
             ))}
             {filteredLeads.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ textAlign: "center", padding: 48 }}>
-                  <div style={{ color: "#94a3b8" }}>
+                <td colSpan={7}>
+                  <div className="empty-state">
                     {filter === "active" && leads.length > 0 ? (
                       <>
-                        <div style={{ fontSize: 20, marginBottom: 8 }}>No active leads</div>
-                        <div style={{ fontSize: 14 }}>All leads have been converted or declined. <button onClick={() => setFilter("all")} style={{ color: "#6366f1", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontSize: 14 }}>View all leads</button></div>
+                        <div className="empty-state-title">No active leads.</div>
+                        <div className="empty-state-sub">
+                          All leads converted or declined.{" "}
+                          <button onClick={() => setFilter("all")} className="link-btn">
+                            View all leads
+                          </button>
+                        </div>
                       </>
                     ) : (
                       <>
-                        <div style={{ fontSize: 32, marginBottom: 8 }}>No leads yet</div>
-                        <div style={{ fontSize: 14 }}>Leads will appear here when schools submit the contact form on the /teachers page.</div>
+                        <div className="empty-state-title">Nothing inbound yet.</div>
+                        <div className="empty-state-sub">
+                          Leads will appear when schools submit the contact form on the /teachers page.
+                        </div>
                       </>
                     )}
                   </div>
@@ -276,21 +297,21 @@ export default function Leads() {
               <div style={{ textAlign: "center", padding: 16 }}>
                 <div style={{ fontSize: 48, marginBottom: 12 }}>&#9989;</div>
                 <h3 style={{ marginBottom: 4 }}>School Created!</h3>
-                <p style={{ color: "#64748b", fontSize: 14, marginBottom: 16 }}>
+                <p style={{ color: "var(--muted)", fontSize: 14, marginBottom: 16 }}>
                   <strong>{convertForm.name}</strong> has been added to your schools.
                 </p>
                 {convertResult.invite_url && (
-                  <div style={{ marginBottom: 16, padding: "12px 16px", background: "#f0fdf4", borderRadius: 8, border: "1px solid #bbf7d0", textAlign: "left" }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#16a34a", marginBottom: 6 }}>
+                  <div style={{ marginBottom: 16, padding: "12px 16px", background: "var(--ok-soft)", borderRadius: 8, border: "1px solid rgba(74, 107, 58, 0.3)", textAlign: "left" }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ok)", marginBottom: 6 }}>
                       Invite sent to {convertForm.contact_email}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <code style={{ fontSize: 11, color: "#475569", flex: 1, wordBreak: "break-all" }}>
+                      <code style={{ fontSize: 11, color: "var(--ink-soft)", flex: 1, wordBreak: "break-all" }}>
                         {convertResult.invite_url}
                       </code>
                       <button
                         onClick={() => handleCopy(convertResult.invite_url!, "convert-url")}
-                        style={{ ...btnSmall, color: copiedId === "convert-url" ? "#16a34a" : "#6366f1" }}
+                        style={{ ...btnSmall, color: copiedId === "convert-url" ? "var(--ok)" : "var(--accent)" }}
                       >
                         {copiedId === "convert-url" ? "Copied!" : "Copy"}
                       </button>
@@ -307,14 +328,14 @@ export default function Leads() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                   <div>
                     <h3 style={{ marginBottom: 2 }}>Convert Lead to School</h3>
-                    <div style={{ fontSize: 13, color: "#64748b" }}>
+                    <div style={{ fontSize: 13, color: "var(--muted)" }}>
                       Create a school and optionally invite the contact as the first teacher.
                     </div>
                   </div>
                   <button onClick={() => { setConvertLead(null); setConvertError(null); }} style={btnGhost}>Cancel</button>
                 </div>
                 {convertError && (
-                  <div style={{ marginBottom: 12, padding: "8px 12px", background: "#fef2f2", borderRadius: 6, border: "1px solid #fecaca", fontSize: 13, color: "#dc2626" }}>
+                  <div style={{ marginBottom: 12, padding: "8px 12px", background: "var(--danger-soft)", borderRadius: 6, border: "1px solid rgba(138, 35, 23, 0.3)", fontSize: 13, color: "var(--danger)" }}>
                     {convertError}
                   </div>
                 )}
@@ -362,7 +383,7 @@ export default function Leads() {
                       type="checkbox"
                       checked={sendInvite}
                       onChange={(e) => setSendInvite(e.target.checked)}
-                      style={{ width: 16, height: 16, accentColor: "#6366f1" }}
+                      style={{ width: 16, height: 16, accentColor: "var(--accent)" }}
                     />
                     <span style={{ fontSize: 13, fontWeight: 500 }}>
                       Send teacher invite to {convertForm.contact_email || "contact email"}
@@ -387,7 +408,7 @@ export default function Leads() {
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <label style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b", letterSpacing: 0.5 }}>
+      <label style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "var(--muted)", letterSpacing: 0.5 }}>
         {label}
       </label>
       {children}

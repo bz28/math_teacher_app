@@ -10,7 +10,6 @@ import {
 } from "../lib/format";
 import { PIPELINE_BUCKETS, bucketFor } from "../lib/llm_modes";
 import MetadataChips from "../components/MetadataChips";
-import { useScope } from "../lib/scope-context";
 
 // Per-submission flight recorder. Pulls every LLM call stamped with
 // the given submission_id and renders them as a vertical chronological
@@ -22,14 +21,7 @@ import { useScope } from "../lib/scope-context";
 
 export default function SubmissionTrace() {
   const { submissionId } = useParams<{ submissionId: string }>();
-  const { scope } = useScope();
-  // Scope-aware "back" path — when the user came in via a school
-  // route the trail returns to that school's LLM Calls list, not
-  // the admin one. Avoids silently bouncing them into Admin scope.
-  const llmCallsPath =
-    scope.kind === "school"
-      ? `/school/${scope.schoolId}/llm-calls`
-      : "/admin/llm-calls";
+  const llmCallsPath = "/llm-calls";
   const [data, setData] = useState<LLMCallsData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,12 +50,15 @@ export default function SubmissionTrace() {
   if (error) {
     return (
       <div>
-        <h1>Submission trace</h1>
-        <p style={{ color: "#dc2626" }}>{error}</p>
+        <div className="page-header">
+          <span className="eyebrow">Diagnostic</span>
+          <h1>Submission trace</h1>
+        </div>
+        <p style={{ color: "var(--danger)" }}>{error}</p>
       </div>
     );
   }
-  if (!data) return <p>Loading…</p>;
+  if (!data) return <p className="loading">Loading…</p>;
 
   // Backend returns DESC; flight recorder is ASC chronological.
   const calls = [...data.calls].sort(
@@ -73,11 +68,13 @@ export default function SubmissionTrace() {
   if (calls.length === 0) {
     return (
       <div>
-        <h1 style={{ marginBottom: 4 }}>Submission trace</h1>
-        <p style={{ color: "#94a3b8", fontSize: 14, margin: 0 }}>
-          No LLM calls found for submission{" "}
-          <code>{submissionId?.slice(0, 8)}</code>.
-        </p>
+        <div className="page-header">
+          <span className="eyebrow">Diagnostic</span>
+          <h1>Submission trace</h1>
+          <p>
+            No LLM calls found for submission <code>{submissionId?.slice(0, 8)}</code>.
+          </p>
+        </div>
       </div>
     );
   }
@@ -114,14 +111,15 @@ export default function SubmissionTrace() {
 
   return (
     <div>
-      <div style={{ marginBottom: 16 }}>
-        <h1 style={{ marginBottom: 4 }}>Submission trace</h1>
-        <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
+      <div className="page-header">
+        <span className="eyebrow">Diagnostic</span>
+        <h1>Submission trace</h1>
+        <p style={{ fontFamily: "var(--font-mono)", fontStyle: "normal", fontSize: 13, color: "var(--muted)" }}>
           <code>{submissionId}</code>
         </p>
         {truncated && (
-          <p style={{ color: "#b45309", fontSize: 12, marginTop: 6 }}>
-            ⚠️ Showing {calls.length} of {data.total_count} calls — only
+          <p style={{ color: "var(--warn)", fontSize: 12, marginTop: 6, fontFamily: "var(--font-sans)", fontStyle: "normal" }}>
+            Showing {calls.length} of {data.total_count} calls — only
             the most recent slice is rendered.
           </p>
         )}
@@ -156,9 +154,8 @@ export default function SubmissionTrace() {
           <div className="trace-summary-label">Failures</div>
           <div
             className="trace-summary-value"
-            style={{ color: failures > 0 ? "#dc2626" : "#10b981" }}
+            style={{ color: failures > 0 ? "var(--danger)" : "var(--ok)" }}
           >
-            {failures > 0 && <span aria-hidden>⚠️ </span>}
             {failures}
           </div>
         </div>
@@ -216,12 +213,12 @@ export default function SubmissionTrace() {
                   <span>{c.latency_ms.toFixed(0)}ms</span>
                   <span>{fmtCost(c.cost_usd)}</span>
                   {c.retry_count > 0 && (
-                    <span style={{ color: "#f59e0b" }}>
+                    <span style={{ color: "var(--warn)" }}>
                       {c.retry_count} retries
                     </span>
                   )}
                   {!c.success && (
-                    <span style={{ color: "#dc2626", fontWeight: 700 }}>FAILED</span>
+                    <span style={{ color: "var(--danger)", fontWeight: 600 }}>FAILED</span>
                   )}
                 </div>
                 <div className="trace-row-meta">

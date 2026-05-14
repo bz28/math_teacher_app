@@ -1,91 +1,68 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { getToken, setToken } from "../lib/api";
-import { INTERNAL_SCHOOL_ID, useScope } from "../lib/scope-context";
-import ScopePicker from "./ScopePicker";
 
 interface NavItem {
   to: string;
   label: string;
-  icon: string;
 }
 
-// Cross-school god-view. Schools and Leads only show here — they're
-// noise inside a single school's scope.
-const ADMIN_NAV: NavItem[] = [
-  { to: "/admin/overview", label: "Overview", icon: "📊" },
-  { to: "/admin/llm-calls", label: "LLM Calls", icon: "🤖" },
-  { to: "/admin/users", label: "Users", icon: "👥" },
-  { to: "/admin/quality", label: "Quality", icon: "✅" },
-  { to: "/admin/schools", label: "Schools", icon: "🏫" },
-  { to: "/admin/leads", label: "Leads", icon: "📩" },
+// Two groups in the sidebar — audiences first (the three scopes you
+// run the business through, plus the Leads funnel that feeds them),
+// then a divider, then the engineer-facing diagnostic tools below.
+const AUDIENCE_NAV: NavItem[] = [
+  { to: "/leads", label: "Leads" },
+  { to: "/schools", label: "Schools" },
+  { to: "/students/independent", label: "Independent students" },
+  { to: "/teachers/independent", label: "Independent teachers" },
 ];
 
-function buildSchoolNav(schoolId: string): NavItem[] {
-  // Per-school nav — Overview lands first; everything else is the
-  // scoped slice of the same data the admin can see globally. Real
-  // metric pages (per-class, per-teacher, etc.) ship in PR D.
-  return [
-    { to: `/school/${schoolId}/overview`, label: "Overview", icon: "📊" },
-    { to: `/school/${schoolId}/llm-calls`, label: "LLM Calls", icon: "🤖" },
-  ];
-}
+const DIAGNOSTIC_NAV: NavItem[] = [
+  { to: "/llm-calls", label: "LLM calls" },
+  { to: "/quality", label: "Quality" },
+];
 
 export default function Layout() {
-  const { scope } = useScope();
-  const nav =
-    scope.kind === "admin" ? ADMIN_NAV : buildSchoolNav(scope.schoolId);
-
-  // Top-of-content scope chip so the user can see which world they
-  // are in without having to read the small picker label. We render
-  // the scope *kind* (Admin / Internal / School) only — the page's
-  // own h1 carries the specific school name when relevant, so naming
-  // the school here would just duplicate the h1.
-  let scopeChipLabel: string;
-  let scopeChipKind: "admin" | "internal" | "school";
-  if (scope.kind === "admin") {
-    scopeChipLabel = "Admin (everything)";
-    scopeChipKind = "admin";
-  } else if (scope.schoolId === INTERNAL_SCHOOL_ID) {
-    scopeChipLabel = "Internal · no-school";
-    scopeChipKind = "internal";
-  } else {
-    scopeChipLabel = "School";
-    scopeChipKind = "school";
-  }
-
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <nav className="sidebar">
         <div className="sidebar-header">
-          <div className="sidebar-brand">Veradic AI</div>
-          <div className="sidebar-brand-sub">Admin Dashboard</div>
+          <div className="sidebar-brand">Veradic</div>
+          <div className="sidebar-brand-sub">Operations</div>
         </div>
-        <ScopePicker />
-        {nav.map((n) => (
+
+        {AUDIENCE_NAV.map((n) => (
           <NavLink
             key={n.to}
             to={n.to}
             className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-            end={n.to === "/admin/overview"}
           >
-            <span className="nav-icon">{n.icon}</span>
             {n.label}
           </NavLink>
         ))}
+
+        <div className="nav-divider" />
+
+        {DIAGNOSTIC_NAV.map((n) => (
+          <NavLink
+            key={n.to}
+            to={n.to}
+            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+          >
+            {n.label}
+          </NavLink>
+        ))}
+
         {getToken() && (
           <button
             className="logout-btn"
+            style={{ marginTop: "auto" }}
             onClick={() => { setToken(null); window.location.href = "/login"; }}
           >
-            Logout
+            Sign out
           </button>
         )}
       </nav>
       <main className="main-content">
-        <div className={`scope-banner scope-banner-${scopeChipKind}`}>
-          <span className="scope-banner-eyebrow">Scope</span>
-          <span className="scope-banner-value">{scopeChipLabel}</span>
-        </div>
         <Outlet />
       </main>
     </div>
