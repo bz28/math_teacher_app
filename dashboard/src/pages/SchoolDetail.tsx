@@ -63,9 +63,21 @@ export default function SchoolDetail() {
   };
 
   useEffect(() => {
+    // Reset every per-school piece of state — mid-edit nav from
+    // school A to school B shouldn't leave A's form fields mounted
+    // under B's header. `handleSaveEdit` guards on `!detail` so a
+    // stale form can't post against the wrong id, but the UI was
+    // showing the wrong values briefly until reload landed.
     setDetail(null);
     setOverview(null);
     setError(null);
+    setEditing(false);
+    setEditForm(null);
+    setSaving(false);
+    setInviteEmail("");
+    setInviteUrl(null);
+    setCopied(false);
+    setInviting(false);
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId]);
@@ -171,12 +183,17 @@ export default function SchoolDetail() {
   );
 
   if (error) {
+    const isNotFound = error.includes("404");
     return (
       <div>
         <div className="page-header">
           <Link to="/schools" className="link-btn">← Schools</Link>
-          <h1 style={{ marginTop: 8 }}>School not found</h1>
-          <p style={{ color: "var(--danger)" }}>{error}</p>
+          <h1 style={{ marginTop: 8 }}>
+            {isNotFound ? "School not found" : "Couldn't load school"}
+          </h1>
+          <p style={{ color: "var(--danger)" }}>
+            {isNotFound ? "This school may have been deleted." : error}
+          </p>
         </div>
       </div>
     );
@@ -253,7 +270,19 @@ export default function SchoolDetail() {
       )}
 
       {/* ── 01 — COST ───────────────────────────────────────────── */}
-      <Section number="01" label="Cost">
+      <Section
+        number="01"
+        label="Cost"
+        action={
+          <Link
+            to={`/llm-calls?school=${detail.id}&hours=720`}
+            className="link-btn"
+            style={{ fontSize: 12 }}
+          >
+            View all calls (30d) →
+          </Link>
+        }
+      >
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 32, marginBottom: 28 }}>
           <DataBlock
             label="This month"
@@ -286,16 +315,7 @@ export default function SchoolDetail() {
 
         {trendChartData.length > 1 && (
           <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 18 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-              <h3 style={{ marginBottom: 0 }}>12-week trend</h3>
-              <Link
-                to={`/llm-calls?school=${detail.id}&hours=720`}
-                className="link-btn"
-                style={{ fontSize: 12 }}
-              >
-                View all calls (30d) →
-              </Link>
-            </div>
+            <h3 style={{ marginBottom: 10 }}>12-week trend</h3>
             <ResponsiveContainer width="100%" height={120}>
               <AreaChart data={trendChartData}>
                 <XAxis dataKey="week" tick={{ fontSize: 10 }} />
@@ -471,10 +491,12 @@ export default function SchoolDetail() {
 function Section({
   number,
   label,
+  action,
   children,
 }: {
   number: string;
   label: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -510,6 +532,7 @@ function Section({
         >
           {label}
         </h2>
+        {action && <div style={{ marginLeft: "auto" }}>{action}</div>}
       </div>
       {children}
     </section>

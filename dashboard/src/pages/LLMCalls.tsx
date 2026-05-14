@@ -5,7 +5,7 @@ import {
   PieChart, Pie, Cell, Legend,
   LineChart, Line,
 } from "recharts";
-import { api, type LLMCallsData } from "../lib/api";
+import { api, type LLMCallsData, type SchoolListItem } from "../lib/api";
 import { formatRelativeDate, shortModel } from "../lib/format";
 import StatCard from "../components/StatCard";
 import MetadataChips from "../components/MetadataChips";
@@ -39,6 +39,17 @@ export default function LLMCalls() {
   };
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
+  // Schools list used to populate the School dropdown. Loaded once
+  // on mount — cheap query and rarely changes. If it fails the
+  // dropdown just hides; the URL filter still works.
+  const [schools, setSchools] = useState<SchoolListItem[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    api.schools()
+      .then((d) => { if (!cancelled) setSchools(d.schools); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +91,12 @@ export default function LLMCalls() {
     next.delete("school");
     setSearchParams(next);
   };
+  const handleSchoolFilter = (id: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (id) next.set("school", id);
+    else next.delete("school");
+    setSearchParams(next);
+  };
   const handleSubmissionChipClick = (id: string) => {
     const next = new URLSearchParams(searchParams);
     next.set("submission", id);
@@ -112,11 +129,19 @@ export default function LLMCalls() {
           <option value="720">Last 30 days</option>
         </select>
         <select value={userFilter} onChange={(e) => handleUserFilter(e.target.value)}>
-          <option value="">All Users</option>
+          <option value="">All users</option>
           {data.users.map((u) => (
             <option key={u.id} value={u.id}>{u.email}</option>
           ))}
         </select>
+        {schools.length > 0 && (
+          <select value={schoolFilter} onChange={(e) => handleSchoolFilter(e.target.value)}>
+            <option value="">All schools</option>
+            {schools.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        )}
         {userFilter && (
           <button className="filter-badge" onClick={() => handleUserFilter("")} style={{ cursor: "pointer", border: "none" }}>
             Filtered by user ✕
@@ -129,7 +154,7 @@ export default function LLMCalls() {
             style={{ cursor: "pointer", border: "none" }}
             title={schoolFilter}
           >
-            School: {schoolFilter.slice(0, 8)}… ✕
+            School: {schoolLabel(schoolFilter, schools)} ✕
           </button>
         )}
         {submissionFilter && (
@@ -422,5 +447,10 @@ export default function LLMCalls() {
       </div>
     </div>
   );
+}
+
+function schoolLabel(id: string, schools: SchoolListItem[]): string {
+  const match = schools.find((s) => s.id === id);
+  return match ? match.name : `${id.slice(0, 8)}…`;
 }
 
