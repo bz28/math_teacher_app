@@ -29,6 +29,12 @@ export interface UserScopePanelProps {
    * are a student-flow concept; for teachers they're noise.
    */
   showDailyUsage?: boolean;
+  /**
+   * When true, surface the Classroom column (sections / students /
+   * 30d submissions) and the "Has classroom" / "Active 30d" filter
+   * chips. Only meaningful when role === "teacher".
+   */
+  showClassroom?: boolean;
   emptyMessage: string;
 }
 
@@ -38,6 +44,7 @@ export default function UserScopePanel({
   subtitle,
   role,
   showDailyUsage = false,
+  showClassroom = false,
   emptyMessage,
 }: UserScopePanelProps) {
   const navigate = useNavigate();
@@ -46,6 +53,8 @@ export default function UserScopePanel({
   const [sortBy, setSortBy] = useState<SortKey>("total_cost");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
+  const [hasClassroom, setHasClassroom] = useState(false);
+  const [activeClassroom, setActiveClassroom] = useState(false);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{
     top?: number;
@@ -64,6 +73,8 @@ export default function UserScopePanel({
         role,
         no_school: "true",
         ...(search ? { search } : {}),
+        ...(hasClassroom ? { has_classroom: "true" } : {}),
+        ...(activeClassroom ? { active_classroom: "true" } : {}),
       })
       .then(setData);
 
@@ -102,11 +113,13 @@ export default function UserScopePanel({
   }, [openMenu]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { reload(); }, [hours, sortBy, search, offset, role]);
+  useEffect(() => { reload(); }, [hours, sortBy, search, offset, role, hasClassroom, activeClassroom]);
 
   const handleSearchChange = (v: string) => { setSearch(v); setOffset(0); };
   const handleSortChange = (v: SortKey) => { setSortBy(v); setOffset(0); };
   const handleHoursChange = (v: string) => { setHours(v); setOffset(0); };
+  const toggleHasClassroom = () => { setHasClassroom((v) => !v); setOffset(0); };
+  const toggleActiveClassroom = () => { setActiveClassroom((v) => !v); setOffset(0); };
 
   const handleToggleSubscription = async (
     userId: string,
@@ -183,6 +196,22 @@ export default function UserScopePanel({
           <option value="last_active">Sort by last active</option>
           <option value="name">Sort by name</option>
         </select>
+        {showClassroom && (
+          <>
+            <FilterChip
+              active={hasClassroom}
+              onClick={toggleHasClassroom}
+              label="Has classroom"
+              title="Has at least one section with enrolled students"
+            />
+            <FilterChip
+              active={activeClassroom}
+              onClick={toggleActiveClassroom}
+              label="Active 30d"
+              title="At least one submission graded on their assignments in the last 30 days"
+            />
+          </>
+        )}
       </div>
 
       <div className="stat-grid">
@@ -196,12 +225,13 @@ export default function UserScopePanel({
         <div className="table-scroll">
           <table>
             <colgroup>
-              <col style={{ width: "28%" }} />
-              <col style={{ width: "10%" }} />
+              <col style={{ width: showClassroom ? "22%" : "28%" }} />
+              <col style={{ width: "8%" }} />
               {showDailyUsage && <col style={{ width: "22%" }} />}
+              {showClassroom && <col style={{ width: "22%" }} />}
               <col style={{ width: "8%" }} />
               <col style={{ width: "10%" }} />
-              <col style={{ width: showDailyUsage ? "14%" : "26%" }} />
+              <col style={{ width: classroomColWidth(showDailyUsage, showClassroom) }} />
               <col style={{ width: "8%" }} />
             </colgroup>
             <thead>
@@ -209,6 +239,7 @@ export default function UserScopePanel({
                 <th>User</th>
                 <th>Plan</th>
                 {showDailyUsage && <th>Today's usage</th>}
+                {showClassroom && <th>Classroom</th>}
                 <th>Sessions</th>
                 <th>Cost</th>
                 <th>Joined / active</th>
@@ -302,6 +333,11 @@ export default function UserScopePanel({
                       </div>
                     </td>
                   )}
+                  {showClassroom && (
+                    <td>
+                      <ClassroomCell classroom={u.classroom} />
+                    </td>
+                  )}
                   <td className="num">{u.session_count}</td>
                   <td className="num" style={{ color: u.total_cost > 0 ? "var(--ink)" : "var(--muted-2)" }}>
                     ${u.total_cost.toFixed(4)}
@@ -366,7 +402,7 @@ export default function UserScopePanel({
               ))}
               {data.users.length === 0 && (
                 <tr>
-                  <td colSpan={showDailyUsage ? 7 : 6}>
+                  <td colSpan={6 + (showDailyUsage ? 1 : 0) + (showClassroom ? 1 : 0)}>
                     <div className="empty-state">
                       <div className="empty-state-title">{emptyMessage}</div>
                       <div className="empty-state-sub">
@@ -439,4 +475,78 @@ function UsagePill({
       {isUnlimited ? "/∞" : `/${limit}`}
     </span>
   );
+}
+
+function ClassroomCell({
+  classroom,
+}: {
+  classroom: { sections: number; students: number; submissions_30d: number };
+}) {
+  const empty = classroom.sections === 0 && classroom.students === 0;
+  if (empty) {
+    return <span style={{ color: "var(--muted-2)", fontSize: 12 }}>—</span>;
+  }
+  return (
+    <div style={{ fontFamily: "var(--font-mono)", fontSize: 12.5, color: "var(--ink-soft)", lineHeight: 1.6 }}>
+      <div>
+        <span style={{ color: "var(--ink)" }}>{classroom.sections}</span>{" "}
+        <span style={{ color: "var(--muted)" }}>section{classroom.sections === 1 ? "" : "s"}</span>
+        {" · "}
+        <span style={{ color: "var(--ink)" }}>{classroom.students.toLocaleString()}</span>{" "}
+        <span style={{ color: "var(--muted)" }}>student{classroom.students === 1 ? "" : "s"}</span>
+      </div>
+      <div style={{ color: "var(--muted)" }}>
+        <span style={{ color: classroom.submissions_30d > 0 ? "var(--ink-soft)" : "var(--muted-2)" }}>
+          {classroom.submissions_30d.toLocaleString()}
+        </span>{" "}
+        submission{classroom.submissions_30d === 1 ? "" : "s"} (30d)
+      </div>
+    </div>
+  );
+}
+
+function FilterChip({
+  active,
+  onClick,
+  label,
+  title,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      style={{
+        padding: "7px 14px",
+        border: `1px solid ${active ? "var(--accent)" : "var(--rule-strong)"}`,
+        background: active ? "var(--accent-soft)" : "var(--surface)",
+        color: active ? "var(--accent)" : "var(--ink-soft)",
+        borderRadius: 3,
+        fontFamily: "var(--font-sans)",
+        fontSize: 11.5,
+        fontWeight: 600,
+        letterSpacing: 0.5,
+        cursor: "pointer",
+      }}
+    >
+      {label} {active ? "✕" : ""}
+    </button>
+  );
+}
+
+function classroomColWidth(
+  showDailyUsage: boolean,
+  showClassroom: boolean,
+): string {
+  // Squeeze the "Joined / active" column when the row already has
+  // both Today's usage and Classroom cells. Otherwise keep some
+  // breathing room for the date pair.
+  if (showDailyUsage && showClassroom) return "12%";
+  if (showDailyUsage || showClassroom) return "14%";
+  return "26%";
 }
