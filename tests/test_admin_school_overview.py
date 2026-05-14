@@ -273,43 +273,15 @@ async def test_school_a_overview_reflects_seeded_data(
 
     # 5 calls × $1.00 = $5.00 this month.
     assert data["cost"]["this_month"] == pytest.approx(5.0)
-    # All 5 calls share the same submission → cost-per-submission == $5.
-    assert data["cost"]["cost_per_submission"] == pytest.approx(5.0)
-    # by_function should have exactly one row, ai_grading, count=5.
-    by_fn = data["cost"]["by_function"]
-    assert len(by_fn) == 1
-    assert by_fn[0]["function"] == "ai_grading"
-    assert by_fn[0]["count"] == 5
-    assert by_fn[0]["cost"] == pytest.approx(5.0)
-
-    # Top classes → exactly one section with $5 spend.
-    classes = data["top_spenders"]["classes"]
-    assert len(classes) == 1
-    assert classes[0]["section_id"] == seeded["section_a_id"]
-    assert classes[0]["section_name"] == "Period 1"
-    assert classes[0]["course_name"] == "Algebra A"
-    assert classes[0]["cost"] == pytest.approx(5.0)
-
-    # Top teachers → exactly Teacher A.
-    teachers = data["top_spenders"]["teachers"]
-    assert len(teachers) == 1
-    assert teachers[0]["teacher_id"] == seeded["teacher_a_id"]
-    assert teachers[0]["cost"] == pytest.approx(5.0)
-
-    # Top submissions this week → exactly the one we seeded, with 5 calls.
-    top_subs = data["top_spenders"]["submissions_this_week"]
-    assert len(top_subs) == 1
-    assert top_subs[0]["submission_id"] == seeded["submission_a_id"]
-    assert top_subs[0]["call_count"] == 5
 
     # 1 of the 5 calls was failed; counts hit both 24h and 7d windows.
-    assert data["quality"]["failed_calls_24h"] == 1
-    assert data["quality"]["failed_calls_7d"] == 1
+    assert data["failed_calls_24h"] == 1
+    assert data["failed_calls_7d"] == 1
 
-    # Health this week — 1 active section, 1 teacher, 1 student, 1 HW
+    # Activity this week — 1 active section, 1 teacher, 1 student, 1 HW
     # published, 1 submission.
-    h = data["health"]["this_week"]
-    assert h == {
+    a = data["activity"]["this_week"]
+    assert a == {
         "active_classes": 1,
         "active_teachers": 1,
         "active_students": 1,
@@ -329,14 +301,9 @@ async def test_cross_school_isolation(
     assert r.status_code == 200
     data = r.json()
     assert data["school_name"] == "School B"
-    # School B seeded with 2 × $0.25 = $0.50.
+    # School B seeded with 2 × $0.25 = $0.50. The cost scope itself is
+    # the isolation check now that we no longer return top-spender rows.
     assert data["cost"]["this_month"] == pytest.approx(0.5)
-    # And the only top-class/teacher should belong to School B's section.
-    classes = data["top_spenders"]["classes"]
-    assert len(classes) == 1
-    assert classes[0]["course_name"] == "Algebra B"
-    # No School A teachers/sections leaked in.
-    assert all(c["section_id"] != seeded["section_a_id"] for c in classes)
 
 
 async def test_internal_scope(
@@ -354,20 +321,10 @@ async def test_internal_scope(
     assert data["school_name"] == "Internal (no-school)"
     # 2 × $0.10 = $0.20.
     assert data["cost"]["this_month"] == pytest.approx(0.2)
-    # No submission_id on internal calls → 0 cost-per-submission.
-    assert data["cost"]["cost_per_submission"] == pytest.approx(0.0)
 
-    # Per-school surfaces are intentionally empty in internal scope.
-    assert data["top_spenders"]["classes"] == []
-    assert data["top_spenders"]["teachers"] == []
-    assert data["top_spenders"]["submissions_this_week"] == []
-    assert data["quality"]["integrity_disposition"] == []
-    assert data["quality"]["unreadable_per_teacher"] == []
-    assert data["quality"]["ai_override_rate"] is None
-
-    # Health zeros (internal scope has no submissions).
-    h = data["health"]["this_week"]
-    assert h == {
+    # Activity counts zero out in internal scope (no school submissions).
+    a = data["activity"]["this_week"]
+    assert a == {
         "active_classes": 0,
         "active_teachers": 0,
         "active_students": 0,
