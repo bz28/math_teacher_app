@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
-import { teacher, enterPreviewMode } from "@/lib/api";
+import { teacher, enterPreviewMode, exitPreviewMode, isInPreviewMode } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/shared/logo-mark";
 import { SchoolStudentLayout } from "@/components/school/student/school-student-layout";
@@ -43,13 +43,49 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const inSchoolWorld =
     pathname.startsWith("/school/student") || pathname === "/account";
 
+  let inner: React.ReactNode;
   if (isTeacher) {
-    return <TeacherLayout>{children}</TeacherLayout>;
+    inner = <TeacherLayout>{children}</TeacherLayout>;
+  } else if (isSchoolStudent && inSchoolWorld) {
+    inner = <SchoolStudentLayout>{children}</SchoolStudentLayout>;
+  } else {
+    inner = <StudentLayout>{children}</StudentLayout>;
   }
-  if (isSchoolStudent && inSchoolWorld) {
-    return <SchoolStudentLayout>{children}</SchoolStudentLayout>;
-  }
-  return <StudentLayout>{children}</StudentLayout>;
+
+  // Preview banner hoisted out of SchoolStudentLayout so a previewing
+  // teacher always sees the exit affordance — including on routes
+  // that don't land in the school-student shell (e.g. /pricing, /home,
+  // /history, /learn). Previously the banner only existed inside
+  // SchoolStudentLayout, so a preview teacher navigating off
+  // /school/student/* + /account was stranded with no way back.
+  const preview = typeof window !== "undefined" && isInPreviewMode();
+  if (!preview) return inner;
+  return (
+    <div className="flex flex-1 flex-col">
+      <PreviewBanner />
+      {inner}
+    </div>
+  );
+}
+
+function PreviewBanner() {
+  const router = useRouter();
+  const loadUser = useAuthStore((s) => s.loadUser);
+  return (
+    <div className="sticky top-0 z-50 flex items-center justify-center gap-3 bg-primary px-4 py-2 text-sm font-medium text-white">
+      <span>Previewing as student</span>
+      <button
+        onClick={async () => {
+          exitPreviewMode();
+          await loadUser();
+          router.push("/school/teacher");
+        }}
+        className="rounded-full border border-white/30 px-3 py-0.5 text-xs font-bold hover:bg-white/20"
+      >
+        Back to teacher view
+      </button>
+    </div>
+  );
 }
 
 // ── Student layout (existing top bar + bottom tabs) ──
