@@ -153,6 +153,19 @@
   --gradient-header: linear-gradient(135deg, #3FA67A, #4FB68A);
 }
 
+/* Dark-mode math reset — handles the case where data-subject="math"
+   is nested inside a physics/chemistry page that's already in dark
+   theme. Without this, the light-mode [data-subject="math"] rule above
+   would leak the light-green primary into a dark page. */
+[data-theme="dark"][data-subject="math"] {
+  --color-primary: #3FA67A;
+  --color-primary-light: #5BC298;
+  --color-primary-bg: #14241C;
+  --color-primary-dark: #5BC298;
+  --gradient-primary: linear-gradient(135deg, #3FA67A, #5BC298);
+  --gradient-header: linear-gradient(135deg, #3FA67A, #4FB68A);
+}
+
 [data-theme="dark"][data-subject="physics"] {
   --color-primary: #74B9FF;
   --color-primary-light: #A3D1FF;
@@ -401,12 +414,14 @@ html {
 }
 
 /* Small-caps eyebrow — dashboard parity. Used above big headlines and
-   over section labels. <Eyebrow> component renders this class. */
+   over section labels. Uses --color-text-secondary (not --color-text-muted)
+   because eyebrow is 11px and AA requires 4.5:1 below the AA-Large size
+   threshold; --color-text-muted only meets AA-Large. */
 .eyebrow {
   font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
 }
