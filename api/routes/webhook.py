@@ -284,6 +284,10 @@ async def stripe_webhook(
                 "Stripe checkout.session.completed for unknown customer: %s",
                 customer_id,
             )
+            # Commit the staged dedup row so Stripe doesn't redeliver
+            # this no-op event in a loop. The no-state-mutation path
+            # still needs to record that we've seen the id.
+            await db.commit()
             return {"status": "ok"}
         user.subscription_tier = "pro"
         user.subscription_status = "active"
@@ -305,6 +309,7 @@ async def stripe_webhook(
             logger.warning(
                 "Stripe subscription.updated for unknown customer: %s", customer_id,
             )
+            await db.commit()
             return {"status": "ok"}
         event_sub_id = data_object.get("id")
         if not _is_active_subscription(user, event_sub_id):
@@ -313,6 +318,7 @@ async def stripe_webhook(
                 "tracked=%s event_sub=%s",
                 user.id, user.stripe_subscription_id, event_sub_id,
             )
+            await db.commit()
             return {"status": "ok"}
         sub_status = data_object.get("status")  # active / past_due / canceled / etc.
         period_end = _ts_to_dt(data_object.get("current_period_end"))
@@ -344,6 +350,7 @@ async def stripe_webhook(
             logger.warning(
                 "Stripe subscription.deleted for unknown customer: %s", customer_id,
             )
+            await db.commit()
             return {"status": "ok"}
         event_sub_id = data_object.get("id")
         if not _is_active_subscription(user, event_sub_id):
@@ -352,6 +359,7 @@ async def stripe_webhook(
                 "tracked=%s event_sub=%s",
                 user.id, user.stripe_subscription_id, event_sub_id,
             )
+            await db.commit()
             return {"status": "ok"}
         user.subscription_tier = "free"
         user.subscription_status = "cancelled"
@@ -366,4 +374,5 @@ async def stripe_webhook(
         return {"status": "ok"}
 
     logger.info("Stripe event ignored: %s", event_type)
+    await db.commit()
     return {"status": "ok"}
