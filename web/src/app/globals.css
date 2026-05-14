@@ -1,76 +1,83 @@
 @import "tailwindcss";
 
 /* ── Design tokens ──
-   Web has diverged from mobile (mobile/src/theme.ts) on the brand
-   primary — web is academic green for the marketing/web brand;
-   mobile remains on the prior purple until that app is repainted. */
+   Editorial cousin of the admin dashboard's "Operator's Console"
+   (dashboard/src/index.css). Warm-paper palette with hairlines
+   instead of card chrome. Academic green stays as the single
+   decisive accent — same role the dashboard's burnt sienna plays.
+   Aesthetic: university press / editorial; school-appropriate.
+   Inter for body, Instrument Serif for display, Geist Mono for
+   numerics — wired in app/layout.tsx, exposed via @theme below. */
 :root {
-  /* Primary — deep academic green. Schoolhouse / textbook heritage; sets
-     marketing pages apart from the AI-startup-purple cliché and lets red
-     integrity flags pop dramatically against it. */
+  /* Primary — deep academic green. Schoolhouse / textbook heritage.
+     The marketing brand color; lets red integrity flags pop and
+     keeps us out of the AI-startup-purple cliché. */
   --color-primary: #0E5238;
   --color-primary-light: #2F8F66;
   --color-primary-bg: #E6F0EA;
   --color-primary-dark: #0A3D2A;
 
-  /* Success */
-  --color-success: #00B894;
-  --color-success-light: #E8F8F5;
-  --color-success-border: #B2DFDB;
+  /* Status — warm-palette family (matches dashboard --ok/--warn/
+     --danger/--info rather than the prior tropical/teal scheme). */
+  --color-success: #4A6B3A;
+  --color-success-light: #E8EAD9;
+  --color-success-border: #C4CCA8;
 
-  /* Error */
-  --color-error: #FF6B6B;
-  --color-error-light: #FFF0F0;
-  --color-error-border: #FFCDD2;
+  --color-error: #8A2317;
+  --color-error-light: #F0D7D1;
+  --color-error-border: #D9B5AE;
 
-  /* Warning */
-  --color-warning: #FDCB6E;
-  --color-warning-dark: #E17055;
-  --color-warning-bg: #FFF8E1;
+  --color-warning: #A66B15;
+  --color-warning-dark: #8C5610;
+  --color-warning-bg: #F5E8C7;
 
-  /* Text */
-  --color-text: #2D3436;
-  --color-text-secondary: #636E72;
-  --color-text-muted: #B2BEC3;
+  /* Ink & paper text — warm muted browns. --color-text-secondary
+     is WCAG AA at 14px on --color-bg; --color-text-muted is AA-Large
+     only, intended for ≥18px labels and small caps. */
+  --color-text: #14130F;
+  --color-text-secondary: #5C554C;
+  --color-text-muted: #7D7669;
   --color-text-on-primary: #FFFFFF;
 
-  /* Backgrounds */
-  --color-bg: #FAFAFE;
-  --color-card: #F8F7FF;
-  --color-input-bg: #F5F4FB;
+  /* Backgrounds — paper-warm. --color-bg is the page; --color-surface
+     is the slightly-lighter content surface (cards, inputs). */
+  --color-bg: #F7F5F0;
+  --color-card: #FCFAF4;
+  --color-input-bg: #FCFAF4;
 
-  /* Borders */
-  --color-border: #E8E5F0;
-  --color-border-light: #F0EEF8;
+  /* Hairline borders — alpha black, not opaque, so they soften over
+     warm paper without producing a grey halo. */
+  --color-border: rgba(20, 19, 15, 0.18);
+  --color-border-light: rgba(20, 19, 15, 0.10);
 
-  /* Surface (white in light, dark in dark) */
-  --color-surface: #FFFFFF;
+  /* Surface — slightly lighter than --color-bg, for floating content. */
+  --color-surface: #FCFAF4;
 
-  /* Marketing surfaces — warm off-white for section alternation, deep near-black for invert sections */
-  --color-surface-alt: #FAFAF7;
-  --color-surface-alt-2: #F4F2EC;
-  --color-invert: #0E0E12;
-  --color-invert-alt: #17171F;
-  --color-invert-text: #F5F5F7;
-  --color-invert-text-muted: #9A9AA8;
-  --color-invert-border: rgba(255, 255, 255, 0.12);
+  /* Marketing surfaces. --surface-alt is paper-1 (same family as bg);
+     --surface-alt-2 is paper-2 (a beat deeper) for section alternation. */
+  --color-surface-alt: #F7F5F0;
+  --color-surface-alt-2: #EFECE4;
 
-  /* Overlay */
-  --color-overlay: rgba(14, 82, 56, 0.08);
+  /* Invert (dark sections in marketing). Warm ink, not blue-black. */
+  --color-invert: #1A1813;
+  --color-invert-alt: #24221C;
+  --color-invert-text: #F7F5F0;
+  --color-invert-text-muted: #B5AC9F;
+  --color-invert-border: rgba(247, 245, 240, 0.12);
 
-  /* Gradients */
+  /* Overlay — for modal scrim. */
+  --color-overlay: rgba(20, 19, 15, 0.40);
+
+  /* Gradients — kept for the rare surfaces that legitimately need
+     them. Most surfaces use flat color now. */
   --gradient-primary: linear-gradient(135deg, #0E5238, #2F8F66);
   --gradient-header: linear-gradient(135deg, #0E5238, #1F6B47);
-  --gradient-success: linear-gradient(135deg, #00B894, #55EFC4);
-  --gradient-warning: linear-gradient(135deg, #E17055, #FDCB6E);
-  --gradient-card: linear-gradient(135deg, #F8FAF8, #E6F0EA);
 }
 
-/* ── Subject color overrides ── */
-/* Math maps back to the brand primary, matching the mobile app's
-   gradients.primary. Having an explicit rule lets us nest
-   data-subject="math" inside a physics/chemistry page to reset the
-   animation's colors back to the brand. */
+/* ── Subject color overrides ──
+   Math = brand primary. Physics/chemistry override primary so the
+   subject pages and animations pick up their own palette while
+   cascading through the rest of the design system. */
 [data-subject="math"] {
   --color-primary: #0E5238;
   --color-primary-light: #2F8F66;
@@ -78,7 +85,6 @@
   --color-primary-dark: #0A3D2A;
   --gradient-primary: linear-gradient(135deg, #0E5238, #2F8F66);
   --gradient-header: linear-gradient(135deg, #0E5238, #1F6B47);
-  --color-overlay: rgba(14, 82, 56, 0.08);
 }
 
 [data-subject="physics"] {
@@ -88,73 +94,63 @@
   --color-primary-dark: #0773C5;
   --gradient-primary: linear-gradient(135deg, #0984E3, #74B9FF);
   --gradient-header: linear-gradient(135deg, #0984E3, #4BA3ED);
-  --color-overlay: rgba(9, 132, 227, 0.08);
 }
 
 [data-subject="chemistry"] {
-  --color-primary: #00B894;
-  --color-primary-light: #55EFC4;
-  --color-primary-bg: #E8F8F5;
-  --color-primary-dark: #00A381;
-  --gradient-primary: linear-gradient(135deg, #00B894, #55EFC4);
-  --gradient-header: linear-gradient(135deg, #00B894, #2ED8A3);
-  --color-overlay: rgba(0, 184, 148, 0.08);
+  --color-primary: #00876A;
+  --color-primary-light: #2FB39A;
+  --color-primary-bg: #E0F1EC;
+  --color-primary-dark: #006E55;
+  --gradient-primary: linear-gradient(135deg, #00876A, #2FB39A);
+  --gradient-header: linear-gradient(135deg, #00876A, #1F9A82);
 }
 
-/* ── Dark theme ── */
+/* ── Dark theme — warm ink, not cool indigo. Mirrors the warm-paper
+   light theme by inverting the paper relationship: deep warm
+   near-black background, slightly-lighter warm surface, cream ink. */
 [data-theme="dark"] {
   --color-primary: #3FA67A;
   --color-primary-light: #5BC298;
-  --color-primary-bg: #0E2A1F;
+  --color-primary-bg: #14241C;
   --color-primary-dark: #5BC298;
 
-  --color-success: #2ED8A3;
-  --color-success-light: #0D2B22;
-  --color-success-border: #1A4D3A;
+  --color-success: #7A9B5C;
+  --color-success-light: #1E2418;
+  --color-success-border: #3A4A2C;
 
-  --color-error: #FF7B7B;
-  --color-error-light: #2B0F0F;
-  --color-error-border: #4D1A1A;
+  --color-error: #C25E4F;
+  --color-error-light: #2B1714;
+  --color-error-border: #4D2A24;
 
-  --color-warning: #FDCB6E;
-  --color-warning-dark: #F0965A;
-  --color-warning-bg: #2B2210;
+  --color-warning: #D49B3E;
+  --color-warning-dark: #C28530;
+  --color-warning-bg: #2A2010;
 
-  --color-text: #EFEFEF;
-  --color-text-secondary: #C0C0D9;
-  --color-text-muted: #8A8AA4;
-  --color-text-on-primary: #FFFFFF;
+  --color-text: #F1EFE9;
+  --color-text-secondary: #BAB2A4;
+  --color-text-muted: #8A8377;
+  --color-text-on-primary: #14130F;
 
-  --color-bg: #0D0C14;
-  --color-card: #16152A;
-  --color-input-bg: #1C1B30;
-  --color-surface: #1A1926;
+  --color-bg: #14130F;
+  --color-card: #1F1D18;
+  --color-input-bg: #1F1D18;
+  --color-surface: #1F1D18;
 
-  /* Marketing surfaces in dark mode */
-  --color-surface-alt: #131222;
-  --color-surface-alt-2: #1B1A30;
-  --color-invert: #040409;
-  --color-invert-alt: #0B0A14;
-  --color-invert-text: #F5F5F7;
-  --color-invert-text-muted: #9A9AA8;
-  --color-invert-border: rgba(255, 255, 255, 0.1);
+  --color-surface-alt: #1A1813;
+  --color-surface-alt-2: #24221C;
+  --color-invert: #050402;
+  --color-invert-alt: #0E0D09;
+  --color-invert-text: #F1EFE9;
+  --color-invert-text-muted: #8A8377;
+  --color-invert-border: rgba(241, 239, 233, 0.10);
 
-  --color-border: #2E2D42;
-  --color-border-light: #232238;
+  --color-border: rgba(241, 239, 233, 0.18);
+  --color-border-light: rgba(241, 239, 233, 0.10);
 
-  --color-overlay: rgba(0, 0, 0, 0.3);
+  --color-overlay: rgba(0, 0, 0, 0.55);
 
-  --gradient-card: linear-gradient(135deg, #16221C, #0E2A1F);
-}
-
-[data-theme="dark"][data-subject="math"] {
-  --color-primary: #3FA67A;
-  --color-primary-light: #5BC298;
-  --color-primary-bg: #0E2A1F;
-  --color-primary-dark: #5BC298;
   --gradient-primary: linear-gradient(135deg, #3FA67A, #5BC298);
   --gradient-header: linear-gradient(135deg, #3FA67A, #4FB68A);
-  --color-overlay: rgba(63, 166, 122, 0.1);
 }
 
 [data-theme="dark"][data-subject="physics"] {
@@ -164,22 +160,22 @@
   --color-primary-dark: #A3D1FF;
   --gradient-primary: linear-gradient(135deg, #74B9FF, #A3D1FF);
   --gradient-header: linear-gradient(135deg, #74B9FF, #A3D1FF);
-  --color-overlay: rgba(116, 185, 255, 0.08);
 }
 
 [data-theme="dark"][data-subject="chemistry"] {
-  --color-primary: #2ED8A3;
-  --color-primary-light: #55EFC4;
-  --color-primary-bg: #0D2B22;
-  --color-primary-dark: #55EFC4;
-  --gradient-primary: linear-gradient(135deg, #2ED8A3, #55EFC4);
-  --gradient-header: linear-gradient(135deg, #2ED8A3, #55EFC4);
-  --color-overlay: rgba(46, 216, 163, 0.08);
+  --color-primary: #5FC4A6;
+  --color-primary-light: #88D6BE;
+  --color-primary-bg: #0E241D;
+  --color-primary-dark: #88D6BE;
+  --gradient-primary: linear-gradient(135deg, #5FC4A6, #88D6BE);
+  --gradient-header: linear-gradient(135deg, #5FC4A6, #6FCEB2);
 }
 
 /* ── Tailwind theme extension ── */
 @theme inline {
   --font-sans: var(--font-inter);
+  --font-serif: var(--font-instrument-serif);
+  --font-mono: var(--font-geist-mono);
 
   /* Colors */
   --color-primary: var(--color-primary);
@@ -220,22 +216,23 @@
   --color-invert-text-muted: var(--color-invert-text-muted);
   --color-invert-border: var(--color-invert-border);
 
-  /* Display typography scale — big, bold, tight */
-  --text-display-xl: clamp(3.5rem, 7vw, 6rem);         /* hero headlines, 56→96px */
-  --text-display-lg: clamp(2.25rem, 5.5vw, 4.5rem);   /* section headlines, 36→72px */
-  --text-display-md: clamp(1.875rem, 4vw, 3rem);      /* sub headlines, 30→48px */
-  --text-display-sm: clamp(1.5rem, 3vw, 2.25rem);     /* small display, 24→36px */
+  /* Display typography scale — large, tight, balanced. Inherits Inter
+     by default; pages opt into serif by adding `font-serif`. */
+  --text-display-xl: clamp(3.5rem, 7vw, 5.5rem);
+  --text-display-lg: clamp(2.25rem, 5.5vw, 4rem);
+  --text-display-md: clamp(1.875rem, 4vw, 2.75rem);
+  --text-display-sm: clamp(1.5rem, 3vw, 2rem);
 
-  /* Shadows — green-tinted to match the new brand primary */
-  --shadow-sm: 0 2px 8px rgba(14, 82, 56, 0.06);
-  --shadow-md: 0 4px 12px rgba(14, 82, 56, 0.1);
-  --shadow-lg: 0 8px 24px rgba(14, 82, 56, 0.15);
+  /* Shadows — warm-ink alpha, no green tint. Dashboard family. */
+  --shadow-sm: 0 1px 2px rgba(20, 19, 15, 0.04);
+  --shadow-md: 0 4px 12px rgba(20, 19, 15, 0.06);
+  --shadow-lg: 0 8px 24px rgba(20, 19, 15, 0.10);
 
-  /* Border radius */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  /* Border radius — sharper, dashboard-adjacent. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
   --radius-pill: 100px;
 }
 
@@ -243,6 +240,13 @@
 body {
   background-color: var(--color-bg);
   color: var(--color-text);
+  /* Tabular numerals globally — stats, prices, counters, timers stop
+     jittering as digits change. Surfaces that want proportional figures
+     opt out with font-variant-numeric: normal. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ── Smooth scrolling ── */
@@ -280,22 +284,6 @@ html {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);
-}
-
-/* ── Button ripple animation ── */
-@keyframes ripple {
-  from {
-    transform: scale(0);
-    opacity: 0.4;
-  }
-  to {
-    transform: scale(1);
-    opacity: 0;
-  }
-}
-
-.animate-ripple {
-  animation: ripple 0.6s ease-out forwards;
 }
 
 /* ── Materials bulk-action bar slide-in ── */
@@ -346,20 +334,18 @@ html {
   }
 }
 
-/* ── Marketing: subtle hover lift for feature cards ──
-   Lifts on Y, sharpens the border to brand primary, and gains a
-   soft green-tinted shadow so the card reads as physically rising
-   off the surface rather than just changing color. */
+/* ── Marketing: hairline lift for feature cards ──
+   Cards no longer carry shadow chrome by default. On hover they
+   gain a single hairline accent and lift 2px — quieter than the
+   previous shadow-bloom, matches dashboard restraint. */
 .marketing-card {
   transition:
     transform 200ms ease,
-    border-color 200ms ease,
-    box-shadow 200ms ease;
+    border-color 200ms ease;
 }
 .marketing-card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   border-color: var(--color-primary);
-  box-shadow: 0 12px 32px -16px rgba(14, 82, 56, 0.18);
 }
 @media (prefers-reduced-motion: reduce) {
   .marketing-card,
@@ -392,19 +378,35 @@ html {
 }
 
 /* ── Marketing: display typography ──
-   Headlines inherit the body sans (Inter) — the explicit Fraunces
-   serif treatment was reverted. Sizes/weights/tracking remain so
-   the visual rhythm of marketing pages is unchanged; only the
-   typeface returns to the simpler sans. */
+   text-wrap-balance prevents widow lines on multi-line headlines.
+   Sizes/weights are set on the @theme display scale; this just
+   tunes line-height + letter-spacing per step. */
 .text-display-xl,
 .text-display-lg,
 .text-display-md,
 .text-display-sm {
-  /* Prevent widows: distribute line breaks evenly across multi-line
-     headlines instead of leaving a single short last line. */
   text-wrap: balance;
 }
-.text-display-xl { font-size: var(--text-display-xl); line-height: 0.95; letter-spacing: -0.03em; font-weight: 700; }
-.text-display-lg { font-size: var(--text-display-lg); line-height: 1.0; letter-spacing: -0.025em; font-weight: 700; }
+.text-display-xl { font-size: var(--text-display-xl); line-height: 0.98; letter-spacing: -0.03em; font-weight: 700; }
+.text-display-lg { font-size: var(--text-display-lg); line-height: 1.02; letter-spacing: -0.025em; font-weight: 700; }
 .text-display-md { font-size: var(--text-display-md); line-height: 1.1; letter-spacing: -0.02em; font-weight: 700; }
 .text-display-sm { font-size: var(--text-display-sm); line-height: 1.15; letter-spacing: -0.015em; font-weight: 700; }
+
+/* ── Editorial serif utility — Instrument Serif for emphasis phrases,
+   subtitles, and italic display moments. Pages opt in explicitly via
+   `font-serif` or `<span className="font-serif italic">…</span>`. */
+.font-serif {
+  font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+  letter-spacing: -0.01em;
+}
+
+/* Small-caps eyebrow — dashboard parity. Used above big headlines and
+   over section labels. <Eyebrow> component renders this class. */
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
