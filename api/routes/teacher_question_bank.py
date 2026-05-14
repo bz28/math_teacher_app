@@ -9,7 +9,7 @@ The frontend polls the job row for status.
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,7 @@ from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
 from api.core.question_bank_generation import regenerate_one, schedule_generation_job, snapshot_history
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
+from api.middleware.rate_limit import limiter
 from api.models.course import Course
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
 from api.models.user import User
@@ -271,7 +272,9 @@ async def list_bank_items(
 
 
 @router.post("/courses/{course_id}/question-bank/generate", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("3/minute")
 async def generate_bank_questions(
+    request: Request,
     course_id: uuid.UUID,
     body: GenerateRequest,
     current_user: CurrentUser = Depends(require_teacher),
@@ -588,7 +591,9 @@ async def regenerate_bank_item(
 
 
 @router.post("/question-bank/{item_id}/generate-similar", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("3/minute")
 async def generate_similar_bank_questions(
+    request: Request,
     body: GenerateSimilarRequest,
     parent: QuestionBankItem = Depends(get_bank_item),
     current_user: CurrentUser = Depends(require_teacher),
