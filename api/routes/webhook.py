@@ -336,6 +336,14 @@ async def stripe_webhook(
         if period_end is not None and user.subscription_tier == "pro":
             user.subscription_expires_at = period_end
         user.subscription_provider = "stripe"
+        # First-touch case: if this is the first event we've accepted
+        # for this user (no tracked sub id yet, _is_active_subscription
+        # passed via the null-fallback), stamp the id now so the
+        # staleness guard works for any subsequent event. Otherwise a
+        # late stale-sub update could re-promote a freshly-cancelled
+        # user since their tracking id would still be null.
+        if not user.stripe_subscription_id and event_sub_id:
+            user.stripe_subscription_id = event_sub_id
         await db.commit()
         logger.info(
             "Stripe → user %s subscription updated: %s",
