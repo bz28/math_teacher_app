@@ -218,10 +218,15 @@ export function NewHomeworkModal({
         sessionStorage.setItem(`hw-gen-${id}`, JSON.stringify([job.id]));
       } catch (e) {
         if (e instanceof EntitlementError && e.isLimit) {
-          // Cap hit: keep the user in the modal with the upgrade
-          // prompt so they don't get navigated to an empty draft.
-          // The assignment record persists; they can retry once
-          // they upgrade or come back tomorrow.
+          // Cap hit: roll back the draft we just created so the
+          // teacher's course doesn't get littered with empty drafts
+          // they have to manually delete. Best-effort — if delete
+          // also fails the orphan is at least visible on next load.
+          try {
+            await teacher.deleteAssignment(id);
+          } catch {
+            // Non-fatal — orphan persists, teacher can delete later.
+          }
           showUpgrade(e.entitlement, e.message);
           return;
         }

@@ -220,6 +220,14 @@ export function NewPracticeModal({
         sessionStorage.setItem(`hw-gen-${id}`, JSON.stringify([job.id]));
       } catch (e) {
         if (e instanceof EntitlementError && e.isLimit) {
+          // Cap hit: roll back the draft we just created so the
+          // teacher's course doesn't get littered with empty drafts.
+          // Best-effort — orphan visible on next load if delete fails.
+          try {
+            await teacher.deleteAssignment(id);
+          } catch {
+            // Non-fatal.
+          }
           showUpgrade(e.entitlement, e.message);
           return;
         }
