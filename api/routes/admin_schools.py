@@ -16,7 +16,11 @@ from api.config import settings
 from api.core.email import send_email
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
+from api.models.assignment import Submission
+from api.models.course import Course
+from api.models.llm_call import LLMCall
 from api.models.school import School
+from api.models.section import Section
 from api.models.teacher_invite import TeacherInvite
 from api.models.user import User
 
@@ -61,6 +65,10 @@ async def list_schools(
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    now = datetime.now(UTC)
+    cost_30d_start = now - timedelta(days=30)
+    cost_60d_start = now - timedelta(days=60)
+
     # Teacher count per school
     teacher_counts = (
         select(User.school_id, func.count().label("teacher_count"))
@@ -69,12 +77,66 @@ async def list_schools(
         .subquery()
     )
 
+    # Cost in the last 30 days per school. LLMCall.school_id is the
+    # denormalized column populated when a submission is processed —
+    # exactly what we want for "what is each school costing us".
+    cost_30d_q = (
+        select(
+            LLMCall.school_id,
+            func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("cost_30d"),
+        )
+        .where(
+            LLMCall.school_id.isnot(None),
+            LLMCall.created_at >= cost_30d_start,
+        )
+        .group_by(LLMCall.school_id)
+        .subquery()
+    )
+
+    # Cost in the previous 30-day window so the frontend can show a
+    # trend delta. Same shape; just shifted back.
+    cost_prev_30d_q = (
+        select(
+            LLMCall.school_id,
+            func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("cost_prev_30d"),
+        )
+        .where(
+            LLMCall.school_id.isnot(None),
+            LLMCall.created_at >= cost_60d_start,
+            LLMCall.created_at < cost_30d_start,
+        )
+        .group_by(LLMCall.school_id)
+        .subquery()
+    )
+
+    # Last student-submission timestamp per school — the "is this
+    # deal warm or stale?" signal. We go Submission → Section →
+    # Course → school_id so a school with zero submissions returns
+    # NULL (which the frontend renders as "no activity yet").
+    last_activity_q = (
+        select(
+            Course.school_id,
+            func.max(Submission.submitted_at).label("last_activity_at"),
+        )
+        .join(Section, Section.id == Submission.section_id)
+        .join(Course, Course.id == Section.course_id)
+        .where(Course.school_id.isnot(None))
+        .group_by(Course.school_id)
+        .subquery()
+    )
+
     rows = (await db.execute(
         select(
             School,
             func.coalesce(teacher_counts.c.teacher_count, 0).label("teacher_count"),
+            func.coalesce(cost_30d_q.c.cost_30d, 0.0).label("cost_30d"),
+            func.coalesce(cost_prev_30d_q.c.cost_prev_30d, 0.0).label("cost_prev_30d"),
+            last_activity_q.c.last_activity_at,
         )
         .outerjoin(teacher_counts, teacher_counts.c.school_id == School.id)
+        .outerjoin(cost_30d_q, cost_30d_q.c.school_id == School.id)
+        .outerjoin(cost_prev_30d_q, cost_prev_30d_q.c.school_id == School.id)
+        .outerjoin(last_activity_q, last_activity_q.c.school_id == School.id)
         .order_by(School.created_at.desc())
     )).all()
 
@@ -89,12 +151,15 @@ async def list_schools(
                 "contact_email": s.contact_email,
                 "is_active": s.is_active,
                 "teacher_count": int(tc),
+                "cost_30d": round(c30, 4),
+                "cost_prev_30d": round(c60, 4),
+                "last_activity_at": la.isoformat() if la else None,
                 "notes": s.notes,
                 "created_at": s.created_at.isoformat(),
                 "updated_at": s.updated_at.isoformat() if s.updated_at else None,
                 "updated_by": s.updated_by_name,
             }
-            for s, tc in rows
+            for s, tc, c30, c60, la in rows
         ]
     }
 
