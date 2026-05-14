@@ -461,7 +461,7 @@ function ActiveTeacherSubscription() {
           )}
         </p>
         {error && (
-          <p className="mt-4 text-sm text-error">{error}</p>
+          <p role="alert" className="mt-4 text-sm text-error">{error}</p>
         )}
         <button
           onClick={openPortal}
