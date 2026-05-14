@@ -105,7 +105,6 @@ export default function PracticePage() {
         </div>
         <div className="flex flex-col gap-3">
           <Button
-            gradient
             onClick={beginPractice}
             className="w-full py-3 text-base"
           >

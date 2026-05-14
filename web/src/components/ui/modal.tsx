@@ -96,26 +96,30 @@ export function Modal({
             outerClassName,
           )}
         >
-          {/* Backdrop */}
+          {/* Backdrop — warm-ink scrim using design-system overlay token
+              instead of opaque black, so the page tint shows through. */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            transition={{ duration: 0.12 }}
+            className="absolute inset-0 bg-[color:var(--color-overlay)] backdrop-blur-sm"
             onClick={dismissible ? onClose : undefined}
             aria-hidden
           />
 
-          {/* Panel */}
+          {/* Panel — hairline-bordered card on warm surface. Quieter
+              entrance than the prior spring scale; the dashboard has
+              no modal motion to reference, so we settle for an opacity
+              fade + 4px rise. */}
           <motion.div
             ref={panelRef}
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ type: "spring", stiffness: 350, damping: 25 }}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.14, ease: "easeOut" }}
             className={cn(
-              "relative z-10 w-full max-w-lg rounded-[--radius-xl] bg-surface p-6 shadow-lg",
+              "relative z-10 w-full max-w-lg rounded-[--radius-md] border border-border bg-surface p-6 shadow-md",
               className,
             )}
             role="dialog"

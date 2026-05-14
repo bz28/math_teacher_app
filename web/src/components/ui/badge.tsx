@@ -8,6 +8,9 @@ interface BadgeProps {
   className?: string;
 }
 
+// Small-caps editorial badge. Flat tint with hairline border. 2px corner
+// radius reads as a label rather than a pill. Mirrors the dashboard
+// .badge family — tracked uppercase, 10.5px / 600.
 const variantStyles: Record<BadgeVariant, string> = {
   success: "bg-success-light text-success border-success-border",
   error: "bg-error-light text-error border-error-border",
@@ -20,7 +23,8 @@ export function Badge({ variant = "info", children, className }: BadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-[--radius-pill] border px-2.5 py-0.5 text-xs font-semibold",
+        "inline-flex items-center gap-1 rounded-[2px] border px-2 py-[3px]",
+        "text-[10.5px] font-semibold uppercase tracking-[0.06em]",
         variantStyles[variant],
         className,
       )}

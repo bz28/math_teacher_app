@@ -119,7 +119,7 @@ function SetPasswordContent() {
             required
             autoComplete="new-password"
           />
-          <Button type="submit" loading={loading} gradient className="w-full">
+          <Button type="submit" loading={loading} className="w-full">
             Set Password
           </Button>
         </form>

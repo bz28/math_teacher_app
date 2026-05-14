@@ -159,7 +159,6 @@ function LoginPageContent() {
           <Button
             type="submit"
             loading={loading}
-            gradient
             className="w-full"
           >
             Sign In
@@ -230,7 +229,7 @@ function LoginPageContent() {
                     >
                       Cancel
                     </button>
-                    <Button type="submit" loading={forgotLoading} gradient className="flex-1">
+                    <Button type="submit" loading={forgotLoading} className="flex-1">
                       Send Link
                     </Button>
                   </div>

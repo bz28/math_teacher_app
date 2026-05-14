@@ -4,7 +4,7 @@ import { type ReactNode, forwardRef } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
-type CardVariant = "elevated" | "flat" | "interactive" | "gradient";
+type CardVariant = "flat" | "elevated" | "interactive";
 
 interface CardProps {
   variant?: CardVariant;
@@ -13,19 +13,22 @@ interface CardProps {
   onClick?: () => void;
 }
 
+// Hairline-first card system. Default `flat` is the workhorse: surface
+// background with a single 1px border, no shadow. `elevated` keeps a
+// softer shadow for things that genuinely float (popovers, modals).
+// `interactive` strengthens the border on hover and lifts 2px — quieter
+// than the prior shadow-bloom.
 const variantStyles: Record<CardVariant, string> = {
-  elevated: "bg-surface shadow-md border border-border-light",
-  flat: "bg-card border border-border-light",
+  flat: "bg-surface border border-border-light",
+  elevated: "bg-surface border border-border-light shadow-sm",
   interactive:
-    "bg-surface shadow-sm border border-border-light hover:shadow-md hover:border-primary/20 cursor-pointer transition-all",
-  gradient:
-    "bg-gradient-to-br from-card to-primary-bg border border-border-light",
+    "bg-surface border border-border-light hover:border-primary cursor-pointer transition-colors",
 };
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(
-  ({ variant = "elevated", className, children, onClick }, ref) => {
+  ({ variant = "flat", className, children, onClick }, ref) => {
     const classes = cn(
-      "rounded-[--radius-lg] p-5",
+      "rounded-[--radius-md] p-5",
       variantStyles[variant],
       className,
     );

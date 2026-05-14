@@ -402,7 +402,6 @@ export function RectangleSelector({
           </>
         )}
         <Button
-          gradient
           size="sm"
           onClick={() => onConfirm(rectangles)}
           disabled={rectangles.length === 0}
