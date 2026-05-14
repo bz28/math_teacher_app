@@ -20,6 +20,10 @@ class ContactLead(Base):
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="teacher")
     approx_students: Mapped[int | None] = mapped_column(Integer, nullable=True)
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Admin-owned freeform notes (call logs, deal context, etc.).
+    # Separate from the inbound `message` so the lead's original
+    # submission is preserved verbatim.
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="new")
     school_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("schools.id", ondelete="SET NULL"), nullable=True

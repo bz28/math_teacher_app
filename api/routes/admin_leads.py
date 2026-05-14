@@ -5,7 +5,7 @@ import uuid as _uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,9 +20,18 @@ router = APIRouter()
 VALID_STATUSES = ("new", "contacted", "converted", "declined")
 
 
-class UpdateLeadStatusRequest(BaseModel):
-    status: str
+class UpdateLeadRequest(BaseModel):
+    """All admin-editable fields on a lead.
+
+    `status` is the original (and most common) edit; the rest are
+    discovery-context the operator picks up after the form submission
+    and wants to record without touching the inbound `message`.
+    """
+
+    status: str | None = None
     school_id: str | None = None
+    approx_students: int | None = Field(default=None, ge=0)
+    notes: str | None = None
 
 
 @router.get("/leads")
@@ -44,6 +53,7 @@ async def list_leads(
                 "role": lead.role,
                 "approx_students": lead.approx_students,
                 "message": lead.message,
+                "notes": lead.notes,
                 "status": lead.status,
                 "created_at": lead.created_at.isoformat(),
                 "updated_at": lead.updated_at.isoformat() if lead.updated_at else None,
@@ -56,28 +66,43 @@ async def list_leads(
 
 
 @router.patch("/leads/{lead_id}")
-async def update_lead_status(
+async def update_lead(
     lead_id: str,
-    body: UpdateLeadStatusRequest,
+    body: UpdateLeadRequest,
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    if body.status not in VALID_STATUSES:
+    if body.status is not None and body.status not in VALID_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Status must be one of: {', '.join(VALID_STATUSES)}",
         )
 
-    lead = (await db.execute(select(ContactLead).where(ContactLead.id == lead_id))).scalar_one_or_none()
+    lead = (await db.execute(
+        select(ContactLead).where(ContactLead.id == lead_id)
+    )).scalar_one_or_none()
     if not lead:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
 
-    lead.status = body.status
-    if body.school_id:
-        lead.school_id = _uuid.UUID(body.school_id)
+    # Pull patch_fields out of body.model_dump so we touch only the
+    # keys the client actually sent — pydantic's `exclude_unset` keeps
+    # unset fields from clobbering existing values with None.
+    fields = body.model_dump(exclude_unset=True)
+    if "status" in fields:
+        lead.status = fields["status"]
+    if "school_id" in fields and fields["school_id"]:
+        lead.school_id = _uuid.UUID(fields["school_id"])
+    if "approx_students" in fields:
+        lead.approx_students = fields["approx_students"]
+    if "notes" in fields:
+        lead.notes = fields["notes"]
+
     lead.updated_at = func.now()
     lead.updated_by_id = current_user.user_id
     lead.updated_by_name = current_user.name
     await db.commit()
-    logger.info("AUDIT: admin=%s updated lead=%s status to '%s'", current_user.user_id, lead_id, body.status)
+    logger.info(
+        "AUDIT: admin=%s updated lead=%s fields=%s",
+        current_user.user_id, lead_id, sorted(fields.keys()),
+    )
     return {"status": "ok"}
