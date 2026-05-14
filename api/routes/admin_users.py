@@ -23,7 +23,11 @@ from api.core.entitlements import (
 )
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
+from api.models.assignment import Assignment, Submission
+from api.models.course import CourseTeacher
 from api.models.llm_call import LLMCall
+from api.models.section import Section
+from api.models.section_enrollment import SectionEnrollment
 from api.models.session import Session
 from api.models.user import User
 from api.routes.admin_helpers import time_range
@@ -168,6 +172,43 @@ async def users(
         .subquery()
     )
 
+    # Teacher classroom stats — the "is this independent teacher
+    # secretly running a classroom-sized operation?" signal. Same
+    # subquery pattern as cost/sessions: built unconditionally so the
+    # main query doesn't branch, but only the IndependentTeachers
+    # page surfaces these fields.
+    teacher_sections = (
+        select(
+            CourseTeacher.teacher_id.label("user_id"),
+            func.count(func.distinct(Section.id)).label("section_count"),
+        )
+        .join(Section, Section.course_id == CourseTeacher.course_id)
+        .group_by(CourseTeacher.teacher_id)
+        .subquery()
+    )
+
+    teacher_students = (
+        select(
+            CourseTeacher.teacher_id.label("user_id"),
+            func.count(func.distinct(SectionEnrollment.student_id)).label("student_count"),
+        )
+        .join(Section, Section.course_id == CourseTeacher.course_id)
+        .join(SectionEnrollment, SectionEnrollment.section_id == Section.id)
+        .group_by(CourseTeacher.teacher_id)
+        .subquery()
+    )
+
+    teacher_submissions_30d = (
+        select(
+            Assignment.teacher_id.label("user_id"),
+            func.count(Submission.id).label("submissions_30d"),
+        )
+        .join(Submission, Submission.assignment_id == Assignment.id)
+        .where(Submission.submitted_at >= time_range(24 * 30))
+        .group_by(Assignment.teacher_id)
+        .subquery()
+    )
+
     # Sort column mapping
     sort_columns = {
         "total_cost": func.coalesce(user_cost.c.total_cost, 0.0).desc(),
@@ -204,12 +245,18 @@ async def users(
             func.coalesce(daily_sessions.c.daily_sessions, 0).label("daily_sessions"),
             func.coalesce(daily_chats.c.daily_chats, 0).label("daily_chats"),
             func.coalesce(daily_scans.c.daily_scans, 0).label("daily_scans"),
+            func.coalesce(teacher_sections.c.section_count, 0).label("section_count"),
+            func.coalesce(teacher_students.c.student_count, 0).label("student_count"),
+            func.coalesce(teacher_submissions_30d.c.submissions_30d, 0).label("submissions_30d"),
         )
         .outerjoin(user_cost, user_cost.c.user_id == User.id)
         .outerjoin(user_sessions, user_sessions.c.user_id == User.id)
         .outerjoin(daily_sessions, daily_sessions.c.user_id == User.id)
         .outerjoin(daily_chats, daily_chats.c.user_id == User.id)
         .outerjoin(daily_scans, daily_scans.c.user_id == User.id)
+        .outerjoin(teacher_sections, teacher_sections.c.user_id == User.id)
+        .outerjoin(teacher_students, teacher_students.c.user_id == User.id)
+        .outerjoin(teacher_submissions_30d, teacher_submissions_30d.c.user_id == User.id)
         .where(*search_filters)
     )
     users_query = (
@@ -251,6 +298,11 @@ async def users(
                     "chats_limit": None if r.subscription_tier == "pro" else FREE_DAILY_CHAT_LIMIT,
                     "scans": r.daily_scans,
                     "scans_limit": None if r.subscription_tier == "pro" else FREE_DAILY_IMAGE_SCAN_LIMIT,
+                },
+                "classroom": {
+                    "sections": r.section_count,
+                    "students": r.student_count,
+                    "submissions_30d": r.submissions_30d,
                 },
             }
             for r in all_users
