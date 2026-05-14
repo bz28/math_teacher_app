@@ -456,12 +456,9 @@ async def test_stripe_webhook_ignores_stale_subscription_id(client: AsyncClient)
         stripe_webhook_secret="",
         app_env="development",
     ):
-        # Need a real stripe_subscription_id on the user for the
-        # stale-check to differentiate. Simulate the post-deleted
-        # state above already does this (sub_id=None) — so the
-        # _is_active_subscription falls through. Better test: set
-        # user.stripe_subscription_id to "sub_NEW" and confirm the
-        # OLD update is ignored.
+        # Stamp the user with a fresh tracked sub id (sub_NEW) so the
+        # subsequent late update for the OLD (sub_OLD) sub is correctly
+        # rejected by _is_active_subscription's id-mismatch guard.
         async with get_session_factory()() as s:
             u = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
             u.stripe_subscription_id = "sub_NEW"
