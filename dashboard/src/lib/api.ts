@@ -80,8 +80,8 @@ export const api = {
   inviteAdmin: (email: string, name: string) => mutate<{ status: string }>("/admin/users/invite", "POST", { email, name }),
   // Leads
   leads: () => request<{ leads: ContactLeadData[] }>("/admin/leads"),
-  updateLeadStatus: (leadId: string, status: string, schoolId?: string) =>
-    mutate<{ status: string }>(`/admin/leads/${leadId}`, "PATCH", { status, ...(schoolId ? { school_id: schoolId } : {}) }),
+  updateLead: (leadId: string, patch: UpdateLeadBody) =>
+    mutate<{ status: string }>(`/admin/leads/${leadId}`, "PATCH", patch),
   // Schools
   schools: () => request<{ schools: SchoolListItem[] }>("/admin/schools"),
   school: (id: string) => request<SchoolDetail>(`/admin/schools/${id}`),
@@ -216,11 +216,19 @@ export interface ContactLeadData {
   role: string;
   approx_students: number | null;
   message: string | null;
+  notes: string | null;
   status: string;
   created_at: string;
   updated_at: string | null;
   updated_by: string | null;
   school_id: string | null;
+}
+
+export interface UpdateLeadBody {
+  status?: string;
+  school_id?: string;
+  approx_students?: number | null;
+  notes?: string | null;
 }
 
 // School types
