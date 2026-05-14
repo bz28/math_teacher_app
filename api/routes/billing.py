@@ -122,17 +122,33 @@ async def _create_checkout_session_with_recovery(
         new_customer_id = await _create_stripe_customer(relocked)
         relocked.stripe_customer_id = new_customer_id
         await db.commit()
-        return await asyncio.to_thread(
-            stripe.checkout.Session.create,
-            mode="subscription",
-            customer=new_customer_id,
-            line_items=[
-                {"price": settings.teacher_pro_stripe_price_id, "quantity": 1},
-            ],
-            success_url=settings.stripe_checkout_success_url,
-            cancel_url=settings.stripe_checkout_cancel_url,
-            client_reference_id=str(user.id),
-        )
+        # Wrap the retry too — if Stripe is having a bad minute, the
+        # second create can also fail with any StripeError (transient
+        # APIConnectionError, RateLimitError, etc.). Without this the
+        # exception bubbles as a 500 and the user gets no recourse.
+        # Surface a clean 503 so the frontend's existing 'try again
+        # later' copy fires.
+        try:
+            return await asyncio.to_thread(
+                stripe.checkout.Session.create,
+                mode="subscription",
+                customer=new_customer_id,
+                line_items=[
+                    {"price": settings.teacher_pro_stripe_price_id, "quantity": 1},
+                ],
+                success_url=settings.stripe_checkout_success_url,
+                cancel_url=settings.stripe_checkout_cancel_url,
+                client_reference_id=str(user.id),
+            )
+        except stripe.StripeError as retry_err:  # type: ignore[attr-defined]
+            logger.error(
+                "Stripe Session.create retry failed for user %s: %s",
+                user.id, retry_err,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Checkout is temporarily unavailable. Please try again.",
+            ) from retry_err
 
 
 @router.post(
