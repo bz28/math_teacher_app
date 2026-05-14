@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/shared/logo-mark";
 import { SchoolStudentLayout } from "@/components/school/student/school-student-layout";
 import { TeacherUsagePill } from "@/components/shared/teacher-usage-pill";
+import { useToast } from "@/components/ui";
 
 // ── Student nav items ──
 
@@ -163,6 +164,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout, loadUser } = useAuthStore();
+  const toast = useToast();
   const [previewLoading, setPreviewLoading] = useState(false);
 
   return (
@@ -213,7 +215,9 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
                 await loadUser();
                 router.push("/school/student");
               } catch {
-                // Silently fail — teacher stays where they are
+                // Surface feedback so the click doesn't look broken —
+                // teacher stays on the teacher view, can retry.
+                toast.error("Couldn't switch to student preview. Try again in a moment.");
               } finally {
                 setPreviewLoading(false);
               }
