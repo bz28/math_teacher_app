@@ -144,6 +144,75 @@ async def test_checkout_reuses_existing_customer(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_checkout_recovers_from_stale_customer(client: AsyncClient) -> None:
+    """If Stripe's customer was deleted server-side, the route should
+    self-heal: null the stale id, mint a fresh customer, retry the
+    Session.create, and return success. Covers
+    _create_checkout_session_with_recovery."""
+    user, token = await _make_user(role="teacher", stripe_customer_id="cus_stale")
+    fake_new_customer = _FakeCustomer(cid="cus_recovered")
+    fake_session = _FakeSession(url="https://checkout.stripe.com/session/recovered")
+
+    # First Session.create raises "No such customer", second succeeds.
+    session_create = patch(
+        "stripe.checkout.Session.create",
+        side_effect=[
+            stripe.InvalidRequestError("No such customer: 'cus_stale'", param="customer"),
+            fake_session,
+        ],
+    )
+    s1, s2 = _patch_settings()
+    with (
+        s1,
+        s2,
+        patch("stripe.Customer.create", return_value=fake_new_customer) as create_cust,
+        session_create as create_sess,
+    ):
+        resp = await client.post(CHECKOUT_URL, headers=auth_headers(token))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"checkout_url": "https://checkout.stripe.com/session/recovered"}
+    # New customer minted exactly once after the stale-id error.
+    create_cust.assert_called_once()
+    # Session.create called twice — initial attempt + retry.
+    assert create_sess.call_count == 2
+    # Second call uses the new customer id.
+    assert create_sess.call_args_list[1].kwargs["customer"] == "cus_recovered"
+    # User row picked up the fresh id.
+    async with get_session_factory()() as s:
+        refreshed = (await s.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert refreshed.stripe_customer_id == "cus_recovered"
+
+
+@pytest.mark.asyncio
+async def test_checkout_recovery_retry_fails_returns_503(client: AsyncClient) -> None:
+    """If the post-recover Session.create itself fails, surface a clean
+    503 instead of a 500. Covers the nested-error path that previously
+    bubbled as an unhandled StripeError."""
+    _, token = await _make_user(role="teacher", stripe_customer_id="cus_stale")
+    fake_new_customer = _FakeCustomer(cid="cus_recovered_but_doomed")
+
+    session_create = patch(
+        "stripe.checkout.Session.create",
+        side_effect=[
+            stripe.InvalidRequestError("No such customer: 'cus_stale'", param="customer"),
+            stripe.APIConnectionError("Stripe is having a moment"),
+        ],
+    )
+    s1, s2 = _patch_settings()
+    with (
+        s1,
+        s2,
+        patch("stripe.Customer.create", return_value=fake_new_customer),
+        session_create,
+    ):
+        resp = await client.post(CHECKOUT_URL, headers=auth_headers(token))
+
+    assert resp.status_code == 503
+    assert "temporarily unavailable" in resp.text.lower()
+
+
+@pytest.mark.asyncio
 async def test_portal_404_without_customer(client: AsyncClient) -> None:
     """A teacher with no stripe_customer_id can't open the portal."""
     _, token = await _make_user(role="teacher")
@@ -218,11 +287,14 @@ async def test_stripe_webhook_subscription_deleted_flips_to_free(client: AsyncCl
         u.subscription_tier = "pro"
         u.subscription_status = "active"
         u.subscription_expires_at = datetime.now(UTC) + timedelta(days=30)
+        u.stripe_subscription_id = "sub_wh_2"
         await s.commit()
 
     payload = {
         "type": "customer.subscription.deleted",
-        "data": {"object": {"customer": "cus_wh_2"}},
+        # Real Stripe events always include id; the handler refuses
+        # to demote without one (defensive against malformed payloads).
+        "data": {"object": {"id": "sub_wh_2", "customer": "cus_wh_2"}},
     }
     with patch.multiple(
         "api.routes.webhook.settings",
@@ -567,7 +639,7 @@ async def test_generate_bank_questions_blocked_at_cap(client: AsyncClient) -> No
     """
 
     from api.models.assignment import Assignment
-    from api.models.course import Course
+    from api.models.course import Course, CourseTeacher
     from api.models.unit import Unit
 
     # Set up: a teacher with a course/unit/assignment + 10 prior calls.
@@ -576,6 +648,11 @@ async def test_generate_bank_questions_blocked_at_cap(client: AsyncClient) -> No
         course = Course(name="Algebra", subject="math")
         s.add(course)
         await s.flush()
+        # Associate the teacher with the course so the ownership check
+        # passes — without this we'd 404 before reaching the cap-gate
+        # (route now checks ownership first to avoid leaking that a
+        # resource exists via a misleading 'limit reached' status).
+        s.add(CourseTeacher(course_id=course.id, teacher_id=user.id))
         unit = Unit(course_id=course.id, name="U1", position=0)
         s.add(unit)
         await s.flush()
