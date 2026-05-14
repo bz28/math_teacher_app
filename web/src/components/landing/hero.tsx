@@ -59,13 +59,14 @@ export function Hero() {
           make.
         </p>
 
-        {/* CTA hierarchy: primary green pill for self-serve, secondary
-            text link for schools. Solo teachers are the wider funnel;
-            the school-buyer motion gets a deliberate, low-friction
-            secondary path. Microcopy beneath the primary reassures
-            visitors that 'free' is genuine. */}
-        <div className="mt-10 flex flex-col items-center gap-5 sm:flex-row sm:items-start sm:justify-center sm:gap-8">
-          <div className="flex flex-col items-center gap-2">
+        {/* CTA hierarchy: filled primary pill (self-serve, wider funnel)
+            + outlined secondary pill (book-a-demo for schools). Equal
+            heights so the row reads as a balanced pair instead of a
+            heavy button orphaning a thin text link. Microcopy below
+            the whole row, centered — applies to the free path but
+            visually anchors the dual CTA. */}
+        <div className="mt-10 flex flex-col items-center gap-4">
+          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4">
             <Link
               href="/register?role=teacher"
               className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-[color:var(--color-primary)] px-8 text-base font-bold text-white shadow-[0_8px_24px_-8px_rgba(14,82,56,0.32)] transition-[background-color,box-shadow,transform] duration-200 hover:bg-[color:var(--color-primary-dark)] hover:shadow-[0_12px_28px_-8px_rgba(14,82,56,0.38)]"
@@ -84,33 +85,16 @@ export function Hero() {
                 <path d="M5 12h14M12 5l7 7-7 7" />
               </svg>
             </Link>
-            <p className="text-xs font-medium text-[color:var(--color-text-muted)]">
-              No credit card &middot; Cancel anytime
-            </p>
-          </div>
-          {/* sm:mt-4 aligns the secondary link's text-row with the
-              vertical center of the h-14 primary button (button top=0,
-              center=28px; link line-height ~24px → top at 16px = mt-4).
-              Parent uses sm:items-start so primary's microcopy doesn't
-              drag the cross-axis alignment baseline downward. */}
-          <Link
-            href="/demo"
-            className="group inline-flex items-center gap-2 text-base font-semibold text-[color:var(--color-text-secondary)] transition-colors hover:text-[color:var(--color-primary)] sm:mt-4"
-          >
-            or book a 20-min demo
-            <svg
-              aria-hidden="true"
-              className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+            <Link
+              href="/demo"
+              className="inline-flex h-14 items-center justify-center gap-2 rounded-full border border-[color:var(--color-border)] bg-transparent px-8 text-base font-semibold text-[color:var(--color-text)] transition-colors hover:border-[color:var(--color-primary)]/40 hover:bg-[color:var(--color-primary-bg)] hover:text-[color:var(--color-primary)]"
             >
-              <path d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          </Link>
+              Book a 20-min demo
+            </Link>
+          </div>
+          <p className="text-xs font-medium text-[color:var(--color-text-muted)]">
+            No credit card &middot; Cancel anytime
+          </p>
         </div>
       </div>
     </section>
