@@ -205,13 +205,20 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   }, [id]);
 
   if (loading) {
-    return <div className="mx-auto max-w-6xl text-sm text-text-muted">Loading…</div>;
+    return (
+      <div className="mx-auto max-w-6xl font-serif italic text-[16px] text-text-muted">
+        Loading…
+      </div>
+    );
   }
   if (error || !course) {
     return (
       <div className="mx-auto max-w-4xl">
-        <p className="text-sm text-red-600">{error ?? "Course not found."}</p>
-        <Link href="/school/teacher" className="mt-4 inline-block text-sm font-semibold text-primary">
+        <p className="text-sm text-[color:var(--color-error)]">{error ?? "Course not found."}</p>
+        <Link
+          href="/school/teacher"
+          className="mt-4 inline-block font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-text-muted transition-colors hover:text-text-primary"
+        >
           ← Back to courses
         </Link>
       </div>
@@ -220,43 +227,49 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
 
   return (
     <div className="mx-auto max-w-6xl">
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
         <Link
           href="/school/teacher"
-          className="inline-flex items-center gap-1 text-xs font-semibold text-text-muted hover:text-primary"
+          className="inline-flex items-center gap-1 font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-text-muted transition-colors hover:text-text-primary"
         >
           ← My Courses
         </Link>
-        <div className="mt-2 flex items-baseline justify-between gap-4">
-          <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">{course.name}</h1>
+        <div className="mt-3 flex items-baseline justify-between gap-4">
+          <h1 className="font-serif text-[40px] leading-[1.05] tracking-[-0.02em] text-text-primary">
+            {course.name}
+          </h1>
           <button
             type="button"
             onClick={() => setTab("settings")}
             aria-label="Course settings"
-            className={`shrink-0 rounded-full p-2 transition-colors ${
+            className={`shrink-0 rounded-[--radius-sm] border p-2 transition-colors ${
               tab === "settings"
-                ? "bg-primary/10 text-primary"
-                : "text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+                ? "border-[color:var(--color-primary)] text-[color:var(--color-primary)]"
+                : "border-transparent text-text-muted hover:border-border hover:text-text-primary"
             }`}
           >
             <GearIcon />
           </button>
         </div>
-        {/* Course-scoped status pills — same shape as the dashboard
+        {/* Course-scoped status pills — same shape as the courses-list
             so the eye learns the row once. Lets the teacher answer
             "what's pressing in this course right now" without
             clicking into the Submissions tab. */}
         <CourseStatusRow course={course} />
       </motion.div>
 
-      <div className="mt-6 flex gap-1 overflow-x-auto border-b border-border-light">
+      {/* Editorial tab bar — underline-on-active matches the student
+          top-bar and app-shell grammar. No tinted pill backgrounds. */}
+      <div className="mt-8 flex gap-6 overflow-x-auto border-b border-border-light">
         {TABS.map((t) => (
           <button
             key={t.key}
             type="button"
             onClick={() => setTab(t.key)}
-            className={`relative shrink-0 px-4 py-2.5 text-sm font-semibold transition-colors ${
-              tab === t.key ? "text-primary" : "text-text-muted hover:text-text-primary"
+            className={`relative shrink-0 py-3 text-sm font-medium transition-colors ${
+              tab === t.key
+                ? "font-semibold text-text-primary"
+                : "text-text-secondary hover:text-text-primary"
             }`}
           >
             <span className="inline-flex items-center gap-1.5">
@@ -274,7 +287,10 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
               )}
             </span>
             {tab === t.key && (
-              <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-primary" />
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 -bottom-px h-[2px] bg-[color:var(--color-primary)]"
+              />
             )}
           </button>
         ))}
@@ -314,7 +330,7 @@ function CourseStatusRow({ course }: { course: TeacherCourse }) {
         <StatusPill tone="green" label="All caught up" icon="✓" />
       )}
       {dueLabel && (
-        <span className="text-xs font-medium text-text-muted">{dueLabel}</span>
+        <span className="font-mono text-[12px] text-text-muted">{dueLabel}</span>
       )}
     </div>
   );

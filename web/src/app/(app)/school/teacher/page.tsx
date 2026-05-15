@@ -7,10 +7,12 @@ import { teacher, type TeacherCourse } from "@/lib/api";
 import { formatDueRelative } from "@/lib/utils";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
 
+// Subject chip color hooks. Flat tinted tag (no pill), 2px radius,
+// uppercase tracked label — matches the dashboard badge family.
 const subjectStyles: Record<string, { bg: string; text: string; label: string }> = {
-  math: { bg: "bg-primary-bg", text: "text-primary", label: "Math" },
-  physics: { bg: "bg-blue-50 dark:bg-blue-500/10", text: "text-blue-600", label: "Physics" },
-  chemistry: { bg: "bg-green-50 dark:bg-green-500/10", text: "text-green-600", label: "Chemistry" },
+  math: { bg: "bg-[color:var(--color-primary-bg)]", text: "text-[color:var(--color-primary-dark)]", label: "Math" },
+  physics: { bg: "bg-[color:#E8F4FD] dark:bg-[#0D1F2B]", text: "text-[color:#0773C5] dark:text-[#A3D1FF]", label: "Physics" },
+  chemistry: { bg: "bg-[color:#E0F1EC] dark:bg-[#0E241D]", text: "text-[color:#006E55] dark:text-[#5FC4A6]", label: "Chemistry" },
 };
 
 export default function SchoolTeacherDashboard() {
@@ -52,40 +54,49 @@ export default function SchoolTeacherDashboard() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      {/* Editorial page header — eyebrow → serif h1 → italic-serif sub.
+          Same rhythm as the dashboard's page-header pattern. */}
+      <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
         <div className="flex items-baseline justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">My Courses</h1>
-            <p className="mt-1 text-sm text-text-secondary">
+            <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+              Teacher
+            </span>
+            <h1 className="mt-2 font-serif text-[40px] leading-[1.05] tracking-[-0.02em] text-text-primary">
+              My Courses
+            </h1>
+            <p className="mt-2 font-serif italic text-[16px] leading-snug text-text-secondary">
               {loading
                 ? "Loading…"
                 : courses.length === 0
-                  ? "No courses yet"
+                  ? "Nothing here yet."
                   : describeWorkload(courses.length, totals)}
             </p>
           </div>
           <button
             type="button"
-            className="shrink-0 rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark"
+            className="shrink-0 rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-semibold tracking-[0.01em] text-white transition-colors hover:bg-primary-dark"
             onClick={() => setShowNewCourse(true)}
           >
-            + New Course
+            New Course
           </button>
         </div>
       </motion.div>
 
       {error && (
-        <div className="mt-4 rounded-[--radius-md] border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10">
+        <div className="mt-4 rounded-[--radius-sm] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] p-3 text-sm text-[color:var(--color-error)]">
           {error}
         </div>
       )}
 
       {!loading && courses.length === 0 && !error && (
-        <div className="mt-8 rounded-[--radius-xl] border border-dashed border-border-light bg-bg-subtle p-10 text-center">
-          <p className="text-sm text-text-muted">No courses yet.</p>
+        <div className="mt-10 border-t border-b border-border-light px-0 py-20 text-center">
+          <p className="font-serif italic text-[20px] text-text-muted">
+            No courses yet.
+          </p>
           <button
             onClick={() => setShowNewCourse(true)}
-            className="mt-3 text-sm font-bold text-primary hover:underline"
+            className="mt-4 text-sm font-semibold tracking-[0.01em] text-primary hover:underline"
           >
             Create your first course →
           </button>
@@ -94,10 +105,10 @@ export default function SchoolTeacherDashboard() {
 
       {courses.length > 0 && (
       <motion.div
-        initial={{ opacity: 0, y: 10 }}
+        initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="mt-6 space-y-3"
+        transition={{ delay: 0.08, duration: 0.2 }}
+        className="mt-8 border-t border-border-light"
       >
         {courses.map((course) => (
           <CourseRow key={course.id} course={course} />
@@ -139,27 +150,29 @@ function CourseRow({ course }: { course: TeacherCourse }) {
   const dueLabel = course.next_due_at ? formatDueRelative(course.next_due_at) : null;
   const hasWork = course.to_review > 0 || course.flagged > 0;
 
+  // Hairline list row — same grammar as dashboard's .list-row pattern:
+  // serif primary line, sans secondary, paper-2 hover, no shadow lift.
   return (
     <Link
       href={`/school/teacher/courses/${course.id}`}
-      className="group flex flex-col gap-3 rounded-[--radius-xl] border border-border-light bg-surface p-5 transition-all hover:-translate-y-px hover:border-primary/30 hover:shadow-sm sm:flex-row sm:items-center sm:justify-between"
+      className="group flex flex-col gap-3 border-b border-border-light px-1 py-5 transition-colors hover:bg-[color:var(--color-surface-alt-2)] sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 text-xs text-text-muted">
-          <span className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${sub.bg} ${sub.text}`}>
+        <div className="flex items-center gap-2.5 text-[11px] text-text-muted">
+          <span className={`rounded-[2px] px-1.5 py-[2px] text-[10px] font-semibold uppercase tracking-[0.08em] ${sub.bg} ${sub.text}`}>
             {sub.label}
           </span>
           {course.grade_level && (
             <>
-              <span>Grade {course.grade_level}</span>
-              <span aria-hidden>·</span>
+              <span className="font-medium uppercase tracking-[0.08em]">Grade {course.grade_level}</span>
+              <span aria-hidden className="text-[color:var(--color-border)]">·</span>
             </>
           )}
-          <span className="text-text-secondary">
+          <span className="font-medium uppercase tracking-[0.08em] text-text-secondary">
             {course.section_count} section{course.section_count === 1 ? "" : "s"}
           </span>
         </div>
-        <h2 className="mt-1.5 truncate text-lg font-bold text-text-primary group-hover:text-primary">
+        <h2 className="mt-1.5 truncate font-serif text-[22px] leading-tight tracking-[-0.01em] text-text-primary transition-colors group-hover:text-primary">
           {course.name}
         </h2>
       </div>
@@ -182,7 +195,7 @@ function CourseRow({ course }: { course: TeacherCourse }) {
           <StatusPill tone="green" label="All caught up" icon="✓" />
         )}
         {dueLabel && (
-          <span className="text-xs font-medium text-text-muted">{dueLabel}</span>
+          <span className="font-mono text-[12px] text-text-muted">{dueLabel}</span>
         )}
       </div>
     </Link>
@@ -226,18 +239,18 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[color:var(--color-overlay)] p-4" onClick={onClose}>
       <form
-        className="w-full max-w-md rounded-[--radius-xl] bg-surface p-6 shadow-xl"
+        className="w-full max-w-md rounded-[--radius-md] border border-border bg-surface p-6"
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault();
           submit();
         }}
       >
-        <h2 className="text-lg font-bold text-text-primary">New Course</h2>
+        <h2 className="font-serif text-[24px] leading-tight tracking-[-0.01em] text-text-primary">New course</h2>
 
-        <div className="mt-4 space-y-4">
+        <div className="mt-5 space-y-4">
           <Field label="Course name *">
             <input
               type="text"
@@ -245,7 +258,7 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
               onChange={(e) => setName(e.target.value)}
               maxLength={200}
               placeholder="e.g. Algebra 1"
-              className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+              className="w-full rounded-[--radius-sm] border border-border bg-surface px-3 py-2 text-[15px] text-text-primary transition-colors focus:border-primary"
               autoFocus
             />
           </Field>
@@ -254,7 +267,7 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
             <select
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+              className="w-full rounded-[--radius-sm] border border-border bg-surface px-3 py-2 text-[15px] text-text-primary transition-colors focus:border-primary"
             >
               <option value="math">Math</option>
               <option value="physics">Physics</option>
@@ -270,7 +283,7 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
               placeholder="9"
               min={1}
               max={12}
-              className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+              className="w-full rounded-[--radius-sm] border border-border bg-surface px-3 py-2 text-[15px] text-text-primary transition-colors focus:border-primary"
             />
           </Field>
 
@@ -280,28 +293,28 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
               maxLength={1000}
-              className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+              className="w-full rounded-[--radius-sm] border border-border bg-surface px-3 py-2 text-[15px] text-text-primary transition-colors focus:border-primary"
             />
           </Field>
         </div>
 
-        {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+        {error && <p className="mt-3 text-xs text-[color:var(--color-error)]">{error}</p>}
 
         <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="rounded-[--radius-md] border border-border-light px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+            className="rounded-[--radius-sm] border border-border bg-transparent px-4 py-2 text-sm font-semibold tracking-[0.01em] text-text-secondary transition-colors hover:border-text-primary hover:text-text-primary disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={submitting}
-            className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+            className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-semibold tracking-[0.01em] text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
           >
-            {submitting ? "Creating…" : "Create Course"}
+            {submitting ? "Creating…" : "Create course"}
           </button>
         </div>
       </form>
@@ -312,8 +325,8 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-bold uppercase tracking-wider text-text-muted">{label}</label>
-      <div className="mt-1">{children}</div>
+      <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-text-secondary">{label}</label>
+      <div className="mt-1.5">{children}</div>
     </div>
   );
 }
