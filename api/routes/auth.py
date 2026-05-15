@@ -236,6 +236,47 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
 
     access_token = create_access_token(str(user.id), user.role)
     refresh_token = await create_refresh_token(db, user.id)
+
+    # Fire-and-forget signup notification to the admin team. Early-
+    # user visibility: see new activations in inbox without watching
+    # the dashboard. Wrapped so an email outage never blocks signup.
+    if settings.admin_alert_emails:
+        signup_path = (
+            "Teacher invite" if body.invite_token else
+            "Section invite" if body.section_invite_token else
+            "Join code" if body.join_code else
+            "Self-signup"
+        )
+        school_line = (
+            f"<li><strong>School:</strong> {body.signup_school_name}</li>"
+            if role == "teacher" and body.signup_school_name else ""
+        )
+        grade_line = (
+            f"<li><strong>Grade:</strong> {body.grade_level}</li>"
+            if body.grade_level else ""
+        )
+        dashboard_path = (
+            "teachers/independent" if role == "teacher"
+            else "students/independent" if role == "student"
+            else "admins"
+        )
+        asyncio.create_task(send_email(
+            to=settings.admin_alert_emails,
+            subject=f"New signup: {body.name} ({role})",
+            html=(
+                f"<h2>New {role} signup</h2>"
+                f"<ul>"
+                f"<li><strong>Name:</strong> {body.name}</li>"
+                f"<li><strong>Email:</strong> {body.email}</li>"
+                f"<li><strong>Role:</strong> {role}</li>"
+                f"{school_line}"
+                f"{grade_line}"
+                f"<li><strong>Signup path:</strong> {signup_path}</li>"
+                f"</ul>"
+                f'<p><a href="https://admin.veradicai.com/{dashboard_path}">View in dashboard</a></p>'
+            ),
+        ))
+
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
