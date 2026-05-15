@@ -149,7 +149,7 @@ export default function DemoPage() {
 
                   {/* Phase 2: Getting set up */}
                   <div className="border-t border-[color:var(--color-border-light)] pt-6">
-                    <h3 className="text-sm font-bold uppercase tracking-widest text-[color:var(--color-text-muted)]">
+                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
                       Then we get you set up
                     </h3>
                     <div className="mt-5 space-y-5">

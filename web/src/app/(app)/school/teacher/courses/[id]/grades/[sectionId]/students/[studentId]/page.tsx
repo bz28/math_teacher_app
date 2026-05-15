@@ -172,7 +172,7 @@ function SummaryStat({
       : "text-xl font-bold text-text-primary";
   return (
     <div className="rounded-[--radius-md] border border-border-light bg-surface p-4">
-      <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
         {label}
       </div>
       <div className={`mt-1 ${valueCls}`}>{value}</div>
@@ -212,7 +212,7 @@ function PublishedHwRow({
         )}
       </div>
       {hw.final_score === null ? (
-        <span className="shrink-0 rounded-[--radius-pill] border border-border-light bg-[color:var(--color-surface-alt-2)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+        <span className="shrink-0 rounded-[--radius-pill] border border-border-light bg-[color:var(--color-surface-alt-2)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           Not graded yet
         </span>
       ) : (

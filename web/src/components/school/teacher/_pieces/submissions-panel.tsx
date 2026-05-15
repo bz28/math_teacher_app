@@ -1079,7 +1079,7 @@ function GalleryZoomModal({
       className="max-h-[90vh] w-full max-w-5xl bg-surface p-3"
     >
       <div className="flex items-center justify-between gap-2 pb-2">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           {studentName}&apos;s {label}
         </p>
         <button

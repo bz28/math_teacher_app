@@ -115,7 +115,7 @@ export function GradingSetupCard({
   return (
     <section className="mt-6 rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-sm">
       <header className="border-b border-border-light pb-3">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-text-muted">
+        <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           Grading setup
         </h2>
         <p className="mt-1 text-xs text-text-secondary">
@@ -260,7 +260,7 @@ function OptionalDetails({
       onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
       className="rounded-[--radius-md] border border-border-light bg-bg-subtle/40"
     >
-      <summary className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-text-muted hover:text-text-primary">
+      <summary className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)] hover:text-text-primary">
         <span aria-hidden className="text-xs">{open ? "▾" : "▸"}</span>
         Optional details
         <span className="font-normal normal-case tracking-normal text-text-muted/80">
@@ -301,7 +301,7 @@ function OptionalField({
       <div className="flex items-baseline justify-between gap-2">
         <label
           htmlFor={id}
-          className="text-[10px] font-bold uppercase tracking-wider text-text-muted"
+          className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]"
         >
           {label}
         </label>

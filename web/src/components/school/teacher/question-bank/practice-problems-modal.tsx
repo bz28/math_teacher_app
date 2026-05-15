@@ -72,7 +72,7 @@ export function PracticeProblemsModal({
         <div className="border-b border-border-light px-6 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
                 Practice problems for
               </div>
               <h2 className="mt-1 line-clamp-2 text-base font-bold text-text-primary">

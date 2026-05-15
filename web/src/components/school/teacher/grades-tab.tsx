@@ -286,7 +286,7 @@ export function GradesTab({ courseId }: { courseId: string }) {
         <div className="overflow-hidden rounded-[--radius-md] border border-border-light bg-surface">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border-light bg-[color:var(--color-surface-alt-2)] text-left text-[11px] font-bold uppercase tracking-wider text-text-muted">
+              <tr className="border-b border-border-light bg-[color:var(--color-surface-alt-2)] text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
                 <SortableHeader
                   label="Name"
                   active={sort.key === "name"}

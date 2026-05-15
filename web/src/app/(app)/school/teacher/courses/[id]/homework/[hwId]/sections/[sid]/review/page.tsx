@@ -627,7 +627,7 @@ export default function HomeworkSectionReviewPage({
           {/* Student list */}
           <aside className="self-start rounded-[--radius-xl] border border-border-light bg-surface shadow-sm">
             <div className="flex items-center justify-between gap-2 border-b border-border-light px-4 py-2.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
                 Students · {submittedCount}/{totalRoster} submitted
               </span>
               <VerdictLegendTrigger />
@@ -1493,7 +1493,7 @@ function SubmissionDetailPanel({
           lightbox lives in the page header (one click away from any
           problem). */}
       <div className="rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           Problems · {totalProblems}
         </p>
         <div className="mt-3">
@@ -1566,7 +1566,7 @@ function RubricSection({
       <div className="space-y-2 border-t border-border-light px-3 py-2.5">
         {fields.map((f) => (
           <div key={f.label}>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
               {f.label}
             </p>
             <div className="mt-0.5 text-xs leading-relaxed text-text-primary">
@@ -1633,7 +1633,7 @@ function StudentStepRow({
         )}
         {step.edited && hasOriginal && showOriginal && (
           <div className="mt-1 rounded-[--radius-sm] border border-border-light bg-[color:var(--color-surface-alt-2)]/40 px-2 py-1.5 text-xs">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
               Originally read
             </div>
             <div className="mt-0.5 text-text-secondary">
@@ -1880,7 +1880,7 @@ function ProblemGradeRow({
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             Student answer
           </p>
           <div className="mt-1 rounded-[--radius-sm] bg-surface px-2 py-1 text-sm text-text-primary">
@@ -1895,7 +1895,7 @@ function ProblemGradeRow({
           </div>
         </div>
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             Answer key
           </p>
           <div className="mt-1 rounded-[--radius-sm] bg-surface px-2 py-1 text-sm text-text-primary">
@@ -1916,7 +1916,7 @@ function ProblemGradeRow({
           this submission. */}
       {stepCount > 0 && (
         <div className="mt-3 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2.5">
-          <p className="flex items-baseline gap-1.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          <p className="flex items-baseline gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             Student&apos;s work
             <span className="font-normal normal-case tracking-normal text-text-muted/80">
               · {stepCount} {stepCount === 1 ? "step" : "steps"}
@@ -2069,7 +2069,7 @@ function ProblemGradeRow({
           teachers can accept, edit, or clear — no UI fanfare either
           way. The published text is the teacher's voice to the student. */}
       <div className="mt-3">
-        <label className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+        <label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           Feedback <span className="font-normal normal-case tracking-normal text-text-muted/80">· shown to student when published</span>
         </label>
         <textarea
@@ -2680,7 +2680,7 @@ function StudentWorkThumbButton({ files }: { files: SubmissionFile[] }) {
       </button>
       <Modal open={open} onClose={() => setOpen(false)} className="max-w-4xl bg-surface p-3">
         <div className="flex items-center justify-between pb-2">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             Student&apos;s work
             {files.length > 1 ? ` · ${files.length} pages` : ""}
           </p>

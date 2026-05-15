@@ -728,7 +728,7 @@ export function WorkshopModal({
                   : "border-border-light bg-surface"
               }`}
             >
-              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-text-muted">
+              <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
                 <span>Question</span>
                 {questionChanged && (
                   <span className="text-blue-700 dark:text-blue-300">Preview</span>
@@ -758,7 +758,7 @@ export function WorkshopModal({
               <button
                 type="button"
                 onClick={() => setSolutionOpen(!solutionOpen)}
-                className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-text-muted hover:text-text-primary"
+                className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)] hover:text-text-primary"
               >
                 <span>{solutionOpen ? "▾" : "▸"}</span>
                 {solutionOpen ? "Hide" : "Show"} solution

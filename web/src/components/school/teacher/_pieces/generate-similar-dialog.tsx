@@ -64,7 +64,7 @@ export function GenerateSimilarDialog({
           Pending queue for review.
         </p>
 
-        <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-text-muted">
+        <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           How many?
         </label>
         <div className="mt-1 flex gap-1">
@@ -96,7 +96,7 @@ export function GenerateSimilarDialog({
           />
         </div>
 
-        <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-text-muted">
+        <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           Optional constraint
         </label>
         <textarea

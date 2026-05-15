@@ -39,7 +39,7 @@ export function UnitRail({
 
   return (
     <div>
-      <div className="mb-2 px-2 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+      <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
         Filter by unit
       </div>
       <RailRow

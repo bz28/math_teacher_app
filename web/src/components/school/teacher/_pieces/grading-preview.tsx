@@ -28,7 +28,7 @@ export function GradingPreview({
       aria-live="polite"
       className="rounded-[--radius-md] border border-border-light bg-bg-subtle/40 p-4 md:sticky md:top-4"
     >
-      <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-text-muted">
+      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
         <span aria-hidden>🤖</span>
         How the AI will grade this
       </p>

@@ -381,7 +381,7 @@ function SectionCard({
               </div>
 
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
                   Roster ({detail.students.length})
                 </div>
                 <div className="mt-2 space-y-1.5">
@@ -409,7 +409,7 @@ function SectionCard({
 
                 {detail.pending_invites.length > 0 && (
                   <div className="mt-4">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
                       Pending invites ({detail.pending_invites.length})
                     </div>
                     <div className="mt-2 space-y-1.5">
@@ -587,7 +587,7 @@ function BulkInviteForm({
     <div className="mt-4">
       <label
         htmlFor={`bulk-invite-${sectionId}`}
-        className="block text-[10px] font-bold uppercase tracking-wider text-text-muted"
+        className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]"
       >
         Invite students
       </label>

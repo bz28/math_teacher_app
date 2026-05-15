@@ -388,7 +388,7 @@ function LearnPageContent() {
       {/* Queued problems — vertical card list */}
       {problemQueue.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-bold uppercase tracking-wider text-primary">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
             {problemQueue.length} queued
           </p>
           <div className="space-y-2">
