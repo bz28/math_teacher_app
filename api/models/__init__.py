@@ -4,6 +4,8 @@ from api.models import (  # noqa: F401
     assignment,
     contact_lead,
     course,
+    lead_meeting,
+    lead_note,
     llm_call,
     quality_score,
     school,

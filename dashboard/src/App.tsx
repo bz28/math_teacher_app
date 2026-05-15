@@ -6,6 +6,7 @@ import Overview from "./pages/Overview";
 import LLMCalls from "./pages/LLMCalls";
 import Quality from "./pages/Quality";
 import Users from "./pages/Users";
+import LeadDetail from "./pages/LeadDetail";
 import Leads from "./pages/Leads";
 import Schools from "./pages/Schools";
 import SchoolDetail from "./pages/SchoolDetail";
@@ -33,6 +34,7 @@ export default function App() {
           {/* Primary destinations — each is its own audience. */}
           <Route path="/" element={<Navigate to="/leads" replace />} />
           <Route path="/leads" element={<Leads />} />
+          <Route path="/leads/:leadId" element={<LeadDetail />} />
           <Route path="/schools" element={<Schools />} />
           <Route path="/schools/:schoolId" element={<SchoolDetail />} />
           <Route

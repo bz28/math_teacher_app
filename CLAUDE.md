@@ -30,9 +30,14 @@
 
 - DRY: don't extract abstractions beyond what the task requires. Three similar lines is better than a premature abstraction. Inverse — extract a helper when at least 2 of these are true: (1) duplicated 3+ times, (2) the logic is complex enough that a name conveys real insight, (3) the call sites are likely to evolve together, (4) the duplication is where bugs cluster historically. If the only argument is "it's repeated," leave it inline.
 
+## Frontend design
+
+- For new UI surfaces (pages, modals, dialogs, significant components), invoke `/frontend-design:frontend-design` before writing styles. Skip for small tweaks (single property edits, copy changes, layout nudges). The goal: every new surface gets a deliberate aesthetic pass before it lands, instead of relying on defaults.
+
 ## Skills
 
 - `/plan` — draft an approach in conversation before starting a non-trivial feature
 - `/review` — two-pass code review with confirmed/suspected labels; no fixes until approved
 - `/autopilot` — autonomous multi-commit execution on a well-scoped task
 - `/explain-simple` — one-paragraph plain-English summary for a non-technical audience (what changed and why), typically invoked right after a feature ships
+- `/frontend-design:frontend-design` — deliberate aesthetic pass on new UI surfaces (see Frontend design)
