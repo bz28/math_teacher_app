@@ -8,20 +8,21 @@ import { InviteAdminForm } from "../components/InviteAdminForm";
  * jumping over to the (hidden) cross-cutting Users page.
  */
 export default function Admins() {
-  // Bumping this forces UserScopePanel to reload after a new
-  // invite lands. Cheaper than wiring a callback through the
-  // panel's internal state.
-  const [reloadKey, setReloadKey] = useState(0);
+  // Bumping this signal forces UserScopePanel to refetch via its
+  // useEffect dependency, WITHOUT remounting. An earlier version
+  // used `key={n}` — that wiped the operator's search, sort,
+  // hours, and pagination state on every invite.
+  const [reloadSignal, setReloadSignal] = useState(0);
 
   return (
     <UserScopePanel
-      key={reloadKey}
       eyebrow="Internal"
       title="Admins"
       subtitle="Operators with access to this dashboard. Invite teammates here — they'll get an email to set their password."
       role="admin"
       emptyMessage="No admin accounts in this window."
-      headerSlot={<InviteAdminForm onInvited={() => setReloadKey((k) => k + 1)} />}
+      headerSlot={<InviteAdminForm onInvited={() => setReloadSignal((n) => n + 1)} />}
+      reloadSignal={reloadSignal}
     />
   );
 }

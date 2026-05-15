@@ -6,20 +6,24 @@ interface NavItem {
   label: string;
 }
 
-// Two groups in the sidebar — audiences first (the three scopes you
-// run the business through, plus the Leads funnel that feeds them),
-// then a divider, then the engineer-facing diagnostic tools below.
+// Three groups in the sidebar — audiences first (the scopes you run
+// the business through, plus the Leads funnel that feeds them), then
+// the diagnostic tools, then a final internal group for operator
+// management. Admins are internal teammates, not an audience.
 const AUDIENCE_NAV: NavItem[] = [
   { to: "/leads", label: "Leads" },
   { to: "/schools", label: "Schools" },
   { to: "/students/independent", label: "Independent students" },
   { to: "/teachers/independent", label: "Independent teachers" },
-  { to: "/admins", label: "Admins" },
 ];
 
 const DIAGNOSTIC_NAV: NavItem[] = [
   { to: "/llm-calls", label: "LLM calls" },
   { to: "/quality", label: "Quality" },
+];
+
+const INTERNAL_NAV: NavItem[] = [
+  { to: "/admins", label: "Admins" },
 ];
 
 export default function Layout() {
@@ -44,6 +48,18 @@ export default function Layout() {
         <div className="nav-divider" />
 
         {DIAGNOSTIC_NAV.map((n) => (
+          <NavLink
+            key={n.to}
+            to={n.to}
+            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+          >
+            {n.label}
+          </NavLink>
+        ))}
+
+        <div className="nav-divider" />
+
+        {INTERNAL_NAV.map((n) => (
           <NavLink
             key={n.to}
             to={n.to}
