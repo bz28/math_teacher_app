@@ -474,13 +474,14 @@ function AddLeadModal({
     <EditorialModal
       eyebrow="Intake"
       title="Add lead"
+      titleSize={32}
       subtitle="Log a warm intro, outbound prospect, or event contact. They won't be emailed."
       maxWidth={620}
       onClose={() => !submitting && onClose()}
     >
       {error && (
         <div style={{
-          margin: "18px 40px 0", padding: "10px 14px",
+          margin: "18px 36px 0", padding: "10px 14px",
           background: "var(--danger-soft)", borderLeft: "2px solid var(--danger)",
           fontSize: 13, color: "var(--danger)",
         }}>
@@ -488,7 +489,7 @@ function AddLeadModal({
         </div>
       )}
 
-      <form onSubmit={handleSubmit} style={{ padding: "26px 40px 0" }}>
+      <form onSubmit={handleSubmit} style={{ padding: "26px 36px 0" }}>
           <SectionHeader number="I." title="Contact" />
           <FormField label="School name">
             <input

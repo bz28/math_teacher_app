@@ -20,26 +20,27 @@ import { overlay } from "../lib/styles";
 export function EditorialModal({
   eyebrow,
   title,
+  titleSize = 26,
   subtitle,
   onClose,
   maxWidth = 560,
-  closeOnBackdrop = true,
   children,
 }: {
   eyebrow?: string;
   title: string;
+  /** Title font-size in px. The Add Lead intake card uses 32px for
+   *  hero emphasis; smaller modals (Schedule, Note, Convert) use
+   *  the 26px default which sits closer to body type. */
+  titleSize?: number;
   subtitle?: string;
   onClose: () => void;
   maxWidth?: number;
-  closeOnBackdrop?: boolean;
   children: ReactNode;
 }) {
   return (
     <div
       style={overlay}
-      onClick={() => {
-        if (closeOnBackdrop) onClose();
-      }}
+      onClick={onClose}
     >
       <div
         style={{
@@ -79,7 +80,7 @@ export function EditorialModal({
         </button>
         <div style={{ padding: "28px 36px 0" }}>
           {eyebrow && <span className="eyebrow" style={{ marginBottom: 8 }}>{eyebrow}</span>}
-          <h2 style={{ marginBottom: subtitle ? 6 : 0, fontSize: 26, letterSpacing: "-0.3px" }}>
+          <h2 style={{ marginBottom: subtitle ? 6 : 0, fontSize: titleSize, letterSpacing: "-0.3px" }}>
             {title}
           </h2>
           {subtitle && (
