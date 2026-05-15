@@ -59,6 +59,9 @@ class UpdateLeadRequest(BaseModel):
     referred_by: str | None = None
     school_id: str | None = None
     approx_students: int | None = Field(default=None, ge=0, le=1_000_000)
+    school_name: str | None = Field(default=None, min_length=1, max_length=200)
+    contact_name: str | None = Field(default=None, min_length=1, max_length=200)
+    contact_email: EmailStr | None = None
 
 
 class CreateMeetingRequest(BaseModel):
@@ -356,6 +359,12 @@ async def update_lead(
             raise HTTPException(status_code=400, detail="Invalid school_id") from e
     if "approx_students" in fields:
         lead.approx_students = fields["approx_students"]
+    if "school_name" in fields and fields["school_name"]:
+        lead.school_name = fields["school_name"].strip()
+    if "contact_name" in fields and fields["contact_name"]:
+        lead.contact_name = fields["contact_name"].strip()
+    if "contact_email" in fields and fields["contact_email"]:
+        lead.contact_email = fields["contact_email"].lower().strip()
 
     lead.updated_at = func.now()
     lead.updated_by_id = current_user.user_id
