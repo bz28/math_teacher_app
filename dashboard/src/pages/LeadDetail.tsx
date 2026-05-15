@@ -786,7 +786,20 @@ function MeetingModal({
     setSubmitting(true);
     setError(null);
     try {
+      const now = new Date();
       const isoSched = new Date(scheduledAt).toISOString();
+      // Touchpoints log events that have already happened, so their
+      // timestamp can never sit in the future. If the user opened
+      // the modal as "Schedule meeting" (which defaults scheduledAt
+      // to tomorrow), then flipped the type to a touchpoint without
+      // touching the date field, isoSched still reads as tomorrow —
+      // clamp both scheduled_at and held_at to "now" so we don't
+      // write a future-dated touchpoint. The user can still pick an
+      // explicit past time and we preserve it.
+      const effectiveScheduled =
+        isTouchpoint(type) && new Date(isoSched) > now
+          ? now.toISOString()
+          : isoSched;
       // Touchpoints are always after-the-fact by definition, so
       // they ALWAYS write held_at even when the user opened the
       // modal as a meeting and then switched the type dropdown
@@ -797,9 +810,9 @@ function MeetingModal({
       const effectiveHeld = isTouchpoint(type) || alreadyHappened;
       await onSubmit({
         type,
-        scheduled_at: isoSched,
+        scheduled_at: effectiveScheduled,
         agenda: agenda.trim() || null,
-        held_at: effectiveHeld ? (meeting?.held_at ?? isoSched) : null,
+        held_at: effectiveHeld ? (meeting?.held_at ?? effectiveScheduled) : null,
         outcome: effectiveHeld && outcome.trim() ? outcome.trim() : null,
       });
     } catch (e) {

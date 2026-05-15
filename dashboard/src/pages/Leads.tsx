@@ -50,6 +50,11 @@ const MEETING_LABEL: Record<MeetingType, string> = {
   follow_up: "Follow-up",
   onboarding: "Onboarding",
   other: "Meeting",
+  email: "Email",
+  call: "Call",
+  dm: "DM",
+  text: "Text",
+  linkedin: "LinkedIn",
 };
 
 const SOURCES_NEEDING_REFERRER: LeadSource[] = ["warm_intro", "outbound"];
