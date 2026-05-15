@@ -286,6 +286,42 @@ async def test_update_lead_clears_referred_by_with_null(
     assert detail["referred_by"] is None
 
 
+async def test_update_lead_editable_identity_fields(
+    client: AsyncClient, seeded: dict[str, Any],
+) -> None:
+    """school_name / contact_name / contact_email are patchable on a lead."""
+    res = await client.patch(
+        f"/v1/admin/leads/{seeded['inbound_id']}",
+        headers=auth_headers(seeded["admin_token"]),
+        json={
+            "school_name": "  Renamed Academy  ",  # leading/trailing trimmed
+            "contact_name": "Updated Contact",
+            "contact_email": "UPDATED@Example.COM",  # lowercased
+        },
+    )
+    assert res.status_code == 200
+
+    detail = (await client.get(
+        f"/v1/admin/leads/{seeded['inbound_id']}",
+        headers=auth_headers(seeded["admin_token"]),
+    )).json()
+    assert detail["school_name"] == "Renamed Academy"
+    assert detail["contact_name"] == "Updated Contact"
+    assert detail["contact_email"] == "updated@example.com"
+
+
+async def test_update_lead_rejects_whitespace_only_school_name(
+    client: AsyncClient, seeded: dict[str, Any],
+) -> None:
+    """Whitespace-only string must not bypass min_length=1 and persist empty."""
+    res = await client.patch(
+        f"/v1/admin/leads/{seeded['inbound_id']}",
+        headers=auth_headers(seeded["admin_token"]),
+        json={"school_name": "   "},
+    )
+    assert res.status_code == 422
+
+
 # ── Delete ───────────────────────────────────────────────────────────────────
 
 

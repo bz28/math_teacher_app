@@ -32,22 +32,31 @@ export function EditableText({
   const [draft, setDraft] = useState(value);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Single-flight guard: Enter triggers commit, then the input
+  // losing focus fires onBlur which would call commit again. The
+  // ref lets a second commit short-circuit during an in-flight save.
+  const committingRef = useRef(false);
 
   useEffect(() => {
     if (editing) inputRef.current?.focus();
   }, [editing]);
 
   // Keep draft in sync if the underlying value changes while not
-  // editing (e.g., parent reloaded after a different field updated).
+  // editing AND no save is in flight. The busy guard prevents a
+  // parent reload (triggered by an unrelated field) from clobbering
+  // the user's just-committed retry context.
   useEffect(() => {
-    if (!editing) setDraft(value);
-  }, [value, editing]);
+    if (!editing && !busy) setDraft(value);
+  }, [value, editing, busy]);
 
   const commit = async () => {
+    if (committingRef.current) return;
+    committingRef.current = true;
     const next = draft.trim();
     if (!next || next === value) {
       setDraft(value);
       setEditing(false);
+      committingRef.current = false;
       return;
     }
     setBusy(true);
@@ -59,6 +68,7 @@ export function EditableText({
       setEditing(false);
     } finally {
       setBusy(false);
+      committingRef.current = false;
     }
   };
 
@@ -101,6 +111,11 @@ export function EditableText({
     <span
       onClick={() => setEditing(true)}
       style={{
+        // inline-block keeps the hover swatch confined to the
+        // content box — without it, an EditableText sitting inside
+        // a tall line-height container (e.g. an <h1>) renders the
+        // background across the entire line-box vertically.
+        display: "inline-block",
         cursor: "text",
         padding: "1px 6px",
         margin: "-1px -6px",

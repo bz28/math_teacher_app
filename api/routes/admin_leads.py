@@ -359,10 +359,18 @@ async def update_lead(
             raise HTTPException(status_code=400, detail="Invalid school_id") from e
     if "approx_students" in fields:
         lead.approx_students = fields["approx_students"]
+    # Strip then re-check non-empty so "   " (whitespace-only) doesn't
+    # bypass pydantic's min_length=1 and persist an empty string.
     if "school_name" in fields and fields["school_name"]:
-        lead.school_name = fields["school_name"].strip()
+        stripped = fields["school_name"].strip()
+        if not stripped:
+            raise HTTPException(status_code=422, detail="school_name cannot be blank")
+        lead.school_name = stripped
     if "contact_name" in fields and fields["contact_name"]:
-        lead.contact_name = fields["contact_name"].strip()
+        stripped = fields["contact_name"].strip()
+        if not stripped:
+            raise HTTPException(status_code=422, detail="contact_name cannot be blank")
+        lead.contact_name = stripped
     if "contact_email" in fields and fields["contact_email"]:
         lead.contact_email = fields["contact_email"].lower().strip()
 
