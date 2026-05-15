@@ -206,7 +206,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-6xl font-serif italic text-[16px] text-text-muted">
+      <div className="mx-auto max-w-6xl font-serif italic text-[16px] text-text-secondary">
         Loading…
       </div>
     );
@@ -330,7 +330,7 @@ function CourseStatusRow({ course }: { course: TeacherCourse }) {
         <StatusPill tone="green" label="All caught up" icon="✓" />
       )}
       {dueLabel && (
-        <span className="font-mono text-[12px] text-text-muted">{dueLabel}</span>
+        <span className="font-mono text-[12px] text-text-secondary">{dueLabel}</span>
       )}
     </div>
   );

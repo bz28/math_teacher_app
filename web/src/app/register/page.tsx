@@ -256,7 +256,7 @@ function RegisterPageContent() {
           <span className="text-lg font-bold tracking-[-0.01em] text-text-primary">
             Veradic AI
           </span>
-          <span className="mt-1 font-serif italic text-[13px] text-text-muted">
+          <span className="mt-1 font-serif italic text-[13px] text-text-secondary">
             classroom AI, teacher-controlled
           </span>
         </span>
@@ -369,7 +369,7 @@ function RegisterPageContent() {
               className={lockEmail ? "opacity-60" : ""}
             />
             {checkingEmail && (
-              <p className="mt-1 text-xs text-text-muted">Checking availability...</p>
+              <p className="mt-1 text-xs text-text-secondary">Checking availability...</p>
             )}
           </div>
 
@@ -428,7 +428,7 @@ function RegisterPageContent() {
                 autoCorrect="off"
                 spellCheck={false}
               />
-              <p className="mt-1 text-xs text-text-muted">
+              <p className="mt-1 text-xs text-text-secondary">
                 Got one from your teacher? We&apos;ll add you to the class.
               </p>
             </div>
@@ -446,7 +446,7 @@ function RegisterPageContent() {
                   onChange={(e) => setSchoolName(e.target.value)}
                   maxLength={200}
                 />
-                <p className="mt-1 text-xs text-text-muted">
+                <p className="mt-1 text-xs text-text-secondary">
                   Helps us understand who&apos;s joining. We won&apos;t contact your school.
                 </p>
               </div>
@@ -482,7 +482,7 @@ function RegisterPageContent() {
                 : "Create Account"}
           </Button>
 
-          <p className="mt-4 text-center text-xs text-text-muted">
+          <p className="mt-4 text-center text-xs text-text-secondary">
             By signing up, you agree to our{" "}
             <Link href="/terms" className="text-primary hover:underline">
               Terms of Service

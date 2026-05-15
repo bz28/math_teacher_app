@@ -132,7 +132,7 @@ function SectionInviteContent() {
             >
               Create account
             </Button>
-            <p className="mt-3 text-center text-xs text-text-muted">
+            <p className="mt-3 text-center text-xs text-text-secondary">
               Already have an account?{" "}
               <Link
                 href={`/login?redirect=${encodeURIComponent(`/invite/section?token=${token}`)}`}
