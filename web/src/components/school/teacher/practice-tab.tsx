@@ -135,9 +135,9 @@ export function PracticeTab({ courseId }: { courseId: string }) {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-baseline gap-3">
-          <h2 className="text-lg font-bold text-text-primary">Practice</h2>
+          <h2 className="font-serif text-[24px] leading-tight tracking-[-0.01em] text-text-primary">Practice</h2>
           {practices.length > 0 && (
-            <p className="text-xs text-text-muted">
+            <p className="font-mono text-[12px] text-text-muted">
               {publishedCount} published · {draftCount}{" "}
               {draftCount === 1 ? "draft" : "drafts"}
             </p>
@@ -145,14 +145,14 @@ export function PracticeTab({ courseId }: { courseId: string }) {
         </div>
         <button
           type="button"
-          className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark"
+          className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-semibold tracking-[0.01em] text-white transition-colors hover:bg-primary-dark"
           onClick={() => setShowNew(true)}
         >
           + New Practice
         </button>
       </div>
 
-      {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-xs text-[color:var(--color-error)]">{error}</p>}
 
       <div className="mt-4">
         <div className="relative">
@@ -230,7 +230,7 @@ export function PracticeTab({ courseId }: { courseId: string }) {
         ) : practices.length === 0 ? (
           <EmptyState text="No practice sets yet. Click + New Practice to create one — you can clone from a homework or start from scratch." />
         ) : filtered.length === 0 ? (
-          <div className="mt-4 rounded-[--radius-lg] border border-dashed border-border-light bg-bg-subtle p-8 text-center text-sm text-text-muted">
+          <div className="mt-4 rounded-[--radius-lg] border border-border-light bg-[color:var(--color-surface-alt-2)] p-8 text-center text-sm text-text-muted">
             No practice sets match your filters.{" "}
             <button
               type="button"
@@ -345,7 +345,7 @@ function PracticeCard({
         {practice.pending_review > 0 && (
           <>
             {" · "}
-            <span className="font-semibold text-amber-600 dark:text-amber-400">
+            <span className="font-semibold text-[color:var(--color-warning-dark)]">
               {practice.pending_review} pending review
             </span>
           </>

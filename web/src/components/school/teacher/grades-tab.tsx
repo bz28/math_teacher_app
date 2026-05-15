@@ -151,7 +151,7 @@ export function GradesTab({ courseId }: { courseId: string }) {
   }, [sectionScoped, search, sort, filterMode]);
 
   if (error) {
-    return <p className="mt-6 text-sm text-red-600">{error}</p>;
+    return <p className="mt-6 text-sm text-[color:var(--color-error)]">{error}</p>;
   }
 
   if (data === null) {
@@ -225,7 +225,7 @@ export function GradesTab({ courseId }: { courseId: string }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search students"
-            className="w-full rounded-[--radius-md] border border-border-light bg-bg-base py-2 pl-9 pr-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+            className="w-full rounded-[--radius-md] border border-border-light bg-surface py-2 pl-9 pr-3 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
         </div>
         <button
@@ -252,7 +252,7 @@ export function GradesTab({ courseId }: { courseId: string }) {
         </button>
       </div>
       {exportError && (
-        <p className="text-xs text-red-600 dark:text-red-400">{exportError}</p>
+        <p className="text-xs text-[color:var(--color-error)]">{exportError}</p>
       )}
 
       <div className="flex flex-wrap items-center gap-1.5">
@@ -286,7 +286,7 @@ export function GradesTab({ courseId }: { courseId: string }) {
         <div className="overflow-hidden rounded-[--radius-md] border border-border-light bg-surface">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border-light bg-bg-subtle text-left text-[11px] font-bold uppercase tracking-wider text-text-muted">
+              <tr className="border-b border-border-light bg-[color:var(--color-surface-alt-2)] text-left text-[11px] font-bold uppercase tracking-wider text-text-muted">
                 <SortableHeader
                   label="Name"
                   active={sort.key === "name"}
@@ -363,7 +363,7 @@ function ClassSummary({ summary }: { summary: SummaryStats }) {
       {withAvg > 0 && (
         <div className="mt-2.5">
           <div
-            className="flex h-1.5 overflow-hidden rounded-full bg-bg-subtle"
+            className="flex h-1.5 overflow-hidden rounded-full bg-[color:var(--color-surface-alt-2)]"
             role="img"
             aria-label={`Grade distribution: ${strong} students at or above ${STRONG_THRESHOLD} percent, ${ok} between ${STRUGGLING_THRESHOLD} and ${STRONG_THRESHOLD - 1} percent, ${struggling} below ${STRUGGLING_THRESHOLD} percent`}
           >
@@ -383,7 +383,7 @@ function ClassSummary({ summary }: { summary: SummaryStats }) {
             )}
             {struggling > 0 && (
               <div
-                className="bg-red-500"
+                className="bg-[color:var(--color-error-light)]0"
                 style={{ width: `${(struggling / withAvg) * 100}%` }}
                 title={`${struggling} student${struggling === 1 ? "" : "s"} below ${STRUGGLING_THRESHOLD}%`}
               />
@@ -392,7 +392,7 @@ function ClassSummary({ summary }: { summary: SummaryStats }) {
           <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-text-muted">
             <DistributionLegend dot="bg-green-500" label={`≥${STRONG_THRESHOLD}%`} count={strong} />
             <DistributionLegend dot="bg-amber-400" label={`${STRUGGLING_THRESHOLD}-${STRONG_THRESHOLD - 1}%`} count={ok} />
-            <DistributionLegend dot="bg-red-500" label={`<${STRUGGLING_THRESHOLD}%`} count={struggling} />
+            <DistributionLegend dot="bg-[color:var(--color-error-light)]0" label={`<${STRUGGLING_THRESHOLD}%`} count={struggling} />
           </div>
         </div>
       )}
@@ -514,7 +514,7 @@ function FilterChip({
         active
           ? "border-primary bg-primary-bg text-primary"
           : disabled
-            ? "border-border-light bg-bg-subtle text-text-muted/60 cursor-not-allowed"
+            ? "border-border-light bg-[color:var(--color-surface-alt-2)] text-text-muted/60 cursor-not-allowed"
             : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-text-primary"
       }`}
     >
@@ -522,7 +522,7 @@ function FilterChip({
       {count !== undefined && count > 0 && (
         <span
           className={`rounded-[--radius-pill] px-1.5 text-[10px] tabular-nums ${
-            active ? "bg-primary text-white" : "bg-bg-subtle text-text-muted"
+            active ? "bg-primary text-white" : "bg-[color:var(--color-surface-alt-2)] text-text-muted"
           }`}
         >
           {count}
@@ -608,7 +608,7 @@ function RosterRow({
       // focus-visible ring + Enter/Space handlers are enough to
       // communicate "this row is actionable."
       aria-label={`View ${row.name}'s grades`}
-      className="cursor-pointer border-t border-border-light transition-colors hover:bg-bg-subtle/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
+      className="cursor-pointer border-t border-border-light transition-colors hover:bg-[color:var(--color-surface-alt-2)]/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
     >
       <td className="px-4 py-3 font-semibold text-text-primary">{row.name}</td>
       {showSection && (
@@ -619,7 +619,7 @@ function RosterRow({
         {" / "}
         {row.assigned_count}
         {row.missing_count > 0 && (
-          <span className="ml-2 rounded-[--radius-pill] border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+          <span className="ml-2 rounded-[--radius-pill] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-error)]  dark:bg-[color:var(--color-error-light)] ">
             {row.missing_count} missing
           </span>
         )}

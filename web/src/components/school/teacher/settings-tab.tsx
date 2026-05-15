@@ -68,23 +68,23 @@ export function SettingsTab({ course, onChanged }: { course: TeacherCourse; onCh
 
   return (
     <div className="max-w-xl">
-      <h2 className="text-lg font-bold text-text-primary">Course Settings</h2>
+      <h2 className="font-serif text-[24px] leading-tight tracking-[-0.01em] text-text-primary">Course settings</h2>
 
-      <div className="mt-4 space-y-4 rounded-[--radius-lg] border border-border-light bg-surface p-5">
+      <div className="mt-4 space-y-4 rounded-[--radius-md] border border-border-light bg-surface p-5">
         <Field label="Course name">
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={200}
-            className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+            className="w-full rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
         </Field>
         <Field label="Subject">
           <select
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+            className="w-full rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
           >
             <option value="math">Math</option>
             <option value="physics">Physics</option>
@@ -98,7 +98,7 @@ export function SettingsTab({ course, onChanged }: { course: TeacherCourse; onCh
             onChange={(e) => setGradeLevel(e.target.value)}
             min={1}
             max={12}
-            className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+            className="w-full rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
         </Field>
         <Field label="Description">
@@ -107,11 +107,11 @@ export function SettingsTab({ course, onChanged }: { course: TeacherCourse; onCh
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
             maxLength={1000}
-            className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+            className="w-full rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
         </Field>
 
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-[color:var(--color-error)]">{error}</p>}
 
         <div className="flex items-center justify-between">
           <span className="text-xs text-text-muted">
@@ -127,26 +127,26 @@ export function SettingsTab({ course, onChanged }: { course: TeacherCourse; onCh
         </div>
       </div>
 
-      <div className="mt-6 rounded-[--radius-lg] border border-red-200 bg-red-50 p-4 dark:border-red-500/30 dark:bg-red-500/10">
-        <h3 className="text-sm font-bold text-red-800 dark:text-red-300">Danger zone</h3>
-        <p className="mt-1 text-xs text-red-700 dark:text-red-300/80">
+      <div className="mt-6 rounded-[--radius-md] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] p-4">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--color-error)]">Danger zone</h3>
+        <p className="mt-2 text-xs text-[color:var(--color-error)]">
           Permanently delete &ldquo;{course.name}&rdquo; and everything inside it. This affects all
           sections, materials, and student data and cannot be undone.
         </p>
         {confirmingDelete ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-bold text-red-800 dark:text-red-300">Are you sure?</span>
+            <span className="text-xs font-bold text-[color:var(--color-error)]">Are you sure?</span>
             <button
               onClick={deleteCourse}
               disabled={deleting}
-              className="rounded-[--radius-sm] bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+              className="rounded-[--radius-sm] bg-[color:var(--color-error)] px-3 py-1.5 text-xs font-bold text-white hover:bg-[color:var(--color-error)]/85 disabled:opacity-50"
             >
               {deleting ? "Deleting…" : "Yes, delete forever"}
             </button>
             <button
               onClick={() => setConfirmingDelete(false)}
               disabled={deleting}
-              className="rounded-[--radius-sm] border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+              className="rounded-[--radius-sm] border border-[color:var(--color-error-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--color-error)] hover:bg-[color:var(--color-error-light)] disabled:opacity-50"
             >
               Cancel
             </button>
@@ -154,7 +154,7 @@ export function SettingsTab({ course, onChanged }: { course: TeacherCourse; onCh
         ) : (
           <button
             onClick={() => setConfirmingDelete(true)}
-            className="mt-3 rounded-[--radius-sm] bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700"
+            className="mt-3 rounded-[--radius-sm] bg-[color:var(--color-error)] px-3 py-1.5 text-xs font-bold text-white hover:bg-[color:var(--color-error)]/85"
           >
             Delete course
           </button>
