@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type SchoolListItem } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
-import { btnGhost, btnPrimary, inputStyle, overlay } from "../lib/styles";
+import { btnGhost, btnPrimary, inputStyle } from "../lib/styles";
 import StatCard from "../components/StatCard";
+import { useConfirm } from "../lib/confirm";
 
 const AT_RISK_DAYS = 14;
 
 export default function Schools() {
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const [schools, setSchools] = useState<SchoolListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,13 +20,15 @@ export default function Schools() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  // Delete modal
-  const [deleteTarget, setDeleteTarget] = useState<SchoolListItem | null>(null);
-  const [deleting, setDeleting] = useState(false);
-
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
   const menuToggleRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  // Row id currently being deleted — drives the in-flight "Deleting…"
+  // affordance after the confirm modal closes but before reload() lands.
+  // Without this, a slow delete leaves the row visually idle while the
+  // network is in motion, inviting a double-click.
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const reload = () => {
     setLoading(true);
@@ -83,7 +87,14 @@ export default function Schools() {
 
   const handleToggleActive = async (school: SchoolListItem) => {
     const action = school.is_active ? "Deactivate" : "Activate";
-    if (!confirm(`${action} "${school.name}"? ${school.is_active ? "All teachers and students will lose access." : ""}`)) return;
+    if (!(await confirm({
+      title: `${action} ${school.name}?`,
+      message: school.is_active
+        ? "All teachers and students will lose access until the school is reactivated."
+        : "Teachers and students will regain access on their next sign-in.",
+      confirmLabel: action,
+      variant: school.is_active ? "danger" : "primary",
+    }))) return;
     try {
       await api.updateSchool(school.id, { is_active: !school.is_active });
       reload();
@@ -92,18 +103,26 @@ export default function Schools() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
+  const handleDelete = async (school: SchoolListItem) => {
+    if (!(await confirm({
+      title: `Delete ${school.name}?`,
+      message: (
+        <>
+          <strong>{school.teacher_count}</strong> teacher{school.teacher_count !== 1 ? "s" : ""} will be unlinked,
+          all pending invites will be cancelled, and this can&apos;t be undone.
+          {" "}If this school was converted from a lead, remember to update the lead status in the Leads tab.
+        </>
+      ),
+      confirmLabel: "Delete school",
+    }))) return;
+    setDeletingId(school.id);
     try {
-      await api.deleteSchool(deleteTarget.id);
-      setDeleteTarget(null);
+      await api.deleteSchool(school.id);
       reload();
-      alert("School deleted. If this was converted from a lead, don't forget to update the lead status in the Leads tab.");
     } catch (e) {
       alert((e as Error).message);
     } finally {
-      setDeleting(false);
+      setDeletingId(null);
     }
   };
 
@@ -225,11 +244,13 @@ export default function Schools() {
             </tr>
           </thead>
           <tbody>
-            {schools.map((s) => (
+            {schools.map((s) => {
+              const isDeleting = deletingId === s.id;
+              return (
               <tr
                 key={s.id}
                 className="clickable"
-                style={{ opacity: s.is_active ? 1 : 0.55 }}
+                style={{ opacity: isDeleting ? 0.4 : s.is_active ? 1 : 0.55, pointerEvents: isDeleting ? "none" : undefined }}
                 onClick={() => navigate(`/schools/${s.id}`)}
               >
                 <td>
@@ -291,9 +312,10 @@ export default function Schools() {
                   <button
                     ref={(el) => { menuToggleRefs.current[s.id] = el; }}
                     className="action-toggle"
+                    disabled={isDeleting}
                     onClick={(e) => { e.stopPropagation(); openMenuFor(s.id); }}
                   >
-                    …
+                    {isDeleting ? "Deleting…" : "…"}
                   </button>
                   {openMenu === s.id && (
                     <div
@@ -311,14 +333,15 @@ export default function Schools() {
                       <button onClick={() => { setOpenMenu(null); handleToggleActive(s); }}>
                         {s.is_active ? "Deactivate" : "Activate"}
                       </button>
-                      <button className="danger" onClick={() => { setOpenMenu(null); setDeleteTarget(s); }}>
+                      <button className="danger" onClick={() => { setOpenMenu(null); handleDelete(s); }}>
                         Delete school
                       </button>
                     </div>
                   )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {schools.length === 0 && (
               <tr>
                 <td colSpan={9}>
@@ -333,32 +356,6 @@ export default function Schools() {
         </table>
       </div>
 
-      {/* ── Delete confirmation modal ──────────────────────────── */}
-      {deleteTarget && (
-        <div style={overlay} onClick={() => !deleting && setDeleteTarget(null)}>
-          <div className="table-card" style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginBottom: 8, color: "var(--danger)" }}>Delete school</h2>
-            <p style={{ color: "var(--ink-soft)", marginBottom: 16 }}>
-              Permanently delete <strong>{deleteTarget.name}</strong>?
-            </p>
-            <ul style={{ color: "var(--muted)", fontSize: 13, marginBottom: 20, paddingLeft: 20 }}>
-              <li>{deleteTarget.teacher_count} teacher{deleteTarget.teacher_count !== 1 ? "s" : ""} will be unlinked from this school</li>
-              <li>All pending invites will be cancelled</li>
-              <li>This cannot be undone</li>
-            </ul>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button onClick={() => setDeleteTarget(null)} disabled={deleting} style={btnGhost}>Cancel</button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                style={{ ...btnPrimary, background: "var(--danger)", opacity: deleting ? 0.6 : 1 }}
-              >
-                {deleting ? "Deleting…" : "Delete school"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -402,12 +399,3 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-const modalCard: React.CSSProperties = {
-  maxWidth: 480,
-  width: "90%",
-  maxHeight: "80vh",
-  overflow: "auto",
-  background: "var(--surface)",
-  border: "1px solid var(--rule-strong)",
-  boxShadow: "0 16px 48px rgba(20, 19, 15, 0.18)",
-};

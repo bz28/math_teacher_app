@@ -10,9 +10,10 @@ import {
   type MeetingType,
 } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
-import { btnGhost, btnPrimary, btnSmall, inputStyle, overlay } from "../lib/styles";
+import { btnGhost, btnPrimary, btnSmall, inputStyle } from "../lib/styles";
 import { Checkbox } from "../components/Checkbox";
 import { EditorialModal } from "../components/EditorialModal";
+import { useConfirm } from "../lib/confirm";
 import ConvertLeadModal from "../components/ConvertLeadModal";
 
 const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
@@ -69,7 +70,7 @@ export default function LeadDetail() {
   const [showAddNote, setShowAddNote] = useState(false);
   const [editingNote, setEditingNote] = useState<LeadNote | null>(null);
   const [showConvert, setShowConvert] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const confirm = useConfirm();
 
   const reload = async () => {
     try {
@@ -123,6 +124,11 @@ export default function LeadDetail() {
   };
 
   const handleDelete = async () => {
+    if (!(await confirm({
+      title: "Delete this lead?",
+      message: <><strong>{lead.school_name}</strong> will be removed permanently, along with all its meetings and notes. This can't be undone.</>,
+      confirmLabel: "Delete",
+    }))) return;
     try {
       await api.deleteLead(lead.id);
       navigate("/leads");
@@ -140,7 +146,7 @@ export default function LeadDetail() {
         onStatusChange={handleStatusChange}
         onApproxStudentsChange={handleApproxStudentsChange}
         onConvert={() => setShowConvert(true)}
-        onDelete={() => setConfirmingDelete(true)}
+        onDelete={handleDelete}
       />
 
       {lead.source === "inbound_form" && lead.message && (
@@ -180,12 +186,20 @@ export default function LeadDetail() {
             reload();
           }}
           onDeleteMeeting={async (m) => {
-            if (!confirm("Delete this meeting? This can't be undone.")) return;
+            if (!(await confirm({
+              title: "Delete this meeting?",
+              message: "This can't be undone.",
+              confirmLabel: "Delete",
+            }))) return;
             await api.deleteLeadMeeting(lead.id, m.id);
             reload();
           }}
           onDeleteNote={async (n) => {
-            if (!confirm("Delete this note? This can't be undone.")) return;
+            if (!(await confirm({
+              title: "Delete this note?",
+              message: "This can't be undone.",
+              confirmLabel: "Delete",
+            }))) return;
             await api.deleteLeadNote(lead.id, n.id);
             reload();
           }}
@@ -244,13 +258,6 @@ export default function LeadDetail() {
             setShowConvert(false);
             reload();
           }}
-        />
-      )}
-      {confirmingDelete && (
-        <ConfirmDelete
-          schoolName={lead.school_name}
-          onCancel={() => setConfirmingDelete(false)}
-          onConfirm={handleDelete}
         />
       )}
     </div>
@@ -870,34 +877,6 @@ function NoteModal({
   );
 }
 
-/* ── Delete confirm ────────────────────────────────────────────── */
-
-function ConfirmDelete({
-  schoolName,
-  onCancel,
-  onConfirm,
-}: {
-  schoolName: string;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div style={overlay} onClick={onCancel}>
-      <div className="table-card" style={{ ...modalCard, maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ marginBottom: 8 }}>Delete this lead?</h3>
-        <p style={{ fontSize: 13.5, color: "var(--muted)", marginBottom: 16 }}>
-          <strong>{schoolName}</strong> will be removed permanently, along with all its meetings and notes.
-          This can't be undone.
-        </p>
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button onClick={onCancel} style={btnGhost}>Cancel</button>
-          <button onClick={onConfirm} style={{ ...btnPrimary, background: "var(--danger)" }}>Delete</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ── Shared bits ────────────────────────────────────────────── */
 
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
@@ -910,13 +889,3 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
     </div>
   );
 }
-
-const modalCard: React.CSSProperties = {
-  maxWidth: 560,
-  width: "90%",
-  maxHeight: "85vh",
-  overflow: "auto",
-  background: "var(--surface)",
-  border: "1px solid var(--rule-strong)",
-  boxShadow: "0 16px 48px rgba(20, 19, 15, 0.18)",
-};

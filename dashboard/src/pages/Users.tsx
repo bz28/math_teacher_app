@@ -4,12 +4,14 @@ import { api, type UsersData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
 import StatCard from "../components/StatCard";
 import { Pagination, SearchInput } from "../components/Pagination";
+import { useConfirm } from "../lib/confirm";
 
 type SortKey = "total_cost" | "session_count" | "last_active" | "name";
 const PAGE_SIZE = 25;
 
 export default function Users() {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [data, setData] = useState<UsersData | null>(null);
   const [hours, setHours] = useState("720");
   const [sortBy, setSortBy] = useState<SortKey>("total_cost");
@@ -83,7 +85,12 @@ export default function Users() {
   const topSpender = data.users.length > 0 ? data.users[0] : null;
 
   const handleChangeRole = async (userId: string, newRole: string) => {
-    if (!confirm(`Change this user's role to "${newRole}"?`)) return;
+    if (!(await confirm({
+      title: `Change role to ${newRole}?`,
+      message: "The user will see different routes and permissions next time they sign in.",
+      confirmLabel: "Change role",
+      variant: "primary",
+    }))) return;
     try {
       await api.updateUserRole(userId, newRole);
       reload();
@@ -94,8 +101,15 @@ export default function Users() {
 
   const handleToggleSubscription = async (userId: string, currentTier: string) => {
     const isPro = currentTier === "pro";
-    const action = isPro ? "downgrade to Free" : "upgrade to Pro";
-    if (!confirm(`${action} for this user?`)) return;
+    const action = isPro ? "Downgrade to Free" : "Upgrade to Pro";
+    if (!(await confirm({
+      title: `${action} for this user?`,
+      message: isPro
+        ? "Daily usage limits will apply on the next session."
+        : "Daily limits will be lifted on the next session.",
+      confirmLabel: action,
+      variant: "primary",
+    }))) return;
     try {
       await api.updateUserSubscription(
         userId,
@@ -109,7 +123,12 @@ export default function Users() {
   };
 
   const handleResetLimit = async (userId: string) => {
-    if (!confirm("Reset this user's daily usage limits? They'll be able to use the app as if the day just started.")) return;
+    if (!(await confirm({
+      title: "Reset daily limits?",
+      message: "They'll be able to use the app as if the day just started.",
+      confirmLabel: "Reset",
+      variant: "primary",
+    }))) return;
     try {
       await api.resetDailyLimit(userId);
       reload();
@@ -119,7 +138,11 @@ export default function Users() {
   };
 
   const handleDelete = async (userId: string, email: string) => {
-    if (!confirm(`Delete user ${email}? This cannot be undone.`)) return;
+    if (!(await confirm({
+      title: "Delete user?",
+      message: <><strong>{email}</strong> will be removed permanently. This can't be undone.</>,
+      confirmLabel: "Delete",
+    }))) return;
     try {
       await api.deleteUser(userId);
       reload();

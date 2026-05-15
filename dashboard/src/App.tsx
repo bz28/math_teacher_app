@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getToken } from "./lib/api";
 import Layout from "./components/Layout";
+import { ConfirmProvider } from "./components/ConfirmProvider";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import LLMCalls from "./pages/LLMCalls";
@@ -22,6 +23,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <ConfirmProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
@@ -62,6 +64,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/leads" replace />} />
         </Route>
       </Routes>
+      </ConfirmProvider>
     </BrowserRouter>
   );
 }
