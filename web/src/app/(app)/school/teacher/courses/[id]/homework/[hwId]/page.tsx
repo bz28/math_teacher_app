@@ -716,7 +716,7 @@ export default function HomeworkDetailPage({
                   onChange={(e) => setTitleDraft(e.target.value)}
                   autoFocus
                   maxLength={300}
-                  className="flex-1 rounded-[--radius-md] border border-primary bg-bg-base px-3 py-2 text-xl font-extrabold text-text-primary focus:outline-none"
+                  className="flex-1 rounded-[--radius-md] border border-primary bg-surface px-3 py-2 text-xl font-extrabold text-text-primary focus:outline-none"
                 />
                 <button
                   type="submit"
@@ -731,7 +731,7 @@ export default function HomeworkDetailPage({
                     setEditingTitle(false);
                     setTitleDraft(hw?.title ?? "");
                   }}
-                  className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
+                  className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)]"
                 >
                   Cancel
                 </button>
@@ -838,7 +838,7 @@ export default function HomeworkDetailPage({
           {pending.length > 0 && (
             <Link
               href={reviewHref}
-              className="mt-4 flex items-center justify-between gap-3 rounded-[--radius-xl] border border-amber-300 bg-amber-50 px-5 py-4 shadow-sm transition-all hover:border-amber-400 hover:bg-amber-100 hover:shadow dark:border-amber-500/40 dark:bg-amber-500/10 dark:hover:bg-amber-500/20"
+              className="mt-4 flex items-center justify-between gap-3 rounded-[--radius-xl] border border-amber-300 bg-[color:var(--color-warning-bg)] px-5 py-4 shadow-sm transition-all hover:border-amber-400 hover:bg-amber-100 hover:shadow dark:border-amber-500/40 dark:bg-[color:var(--color-warning-bg)]0/10 dark:hover:bg-[color:var(--color-warning-bg)]0/20"
             >
               <div className="flex items-center gap-3">
                 <span className="text-2xl" aria-hidden="true">🔔</span>
@@ -890,7 +890,7 @@ export default function HomeworkDetailPage({
                         ? "Nothing to remove"
                         : "Remove problems from this homework in bulk"
                   }
-                  className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-red-300 hover:text-red-600 disabled:opacity-50 disabled:hover:border-border-light disabled:hover:text-text-secondary"
+                  className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-[color:var(--color-error-border)] hover:text-[color:var(--color-error)] disabled:opacity-50 disabled:hover:border-border-light disabled:hover:text-text-secondary"
                 >
                   Remove problems
                 </button>
@@ -994,9 +994,9 @@ export default function HomeworkDetailPage({
             </CollapsibleSection>
           </div>
 
-          {error && <p className="mt-4 text-xs text-red-600">{error}</p>}
+          {error && <p className="mt-4 text-xs text-[color:var(--color-error)]">{error}</p>}
           {workshopError && (
-            <p className="mt-4 text-xs text-red-600">{workshopError}</p>
+            <p className="mt-4 text-xs text-[color:var(--color-error)]">{workshopError}</p>
           )}
 
           {/* Delete — subtle affordance at the bottom right. Red
@@ -1004,13 +1004,13 @@ export default function HomeworkDetailPage({
           <div className="mt-8 flex justify-end">
             {confirmingDelete ? (
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-red-700 dark:text-red-400">
+                <span className="text-xs font-semibold text-[color:var(--color-error)] ">
                   Delete this homework?
                 </span>
                 <button
                   type="button"
                   onClick={() => setConfirmingDelete(false)}
-                  className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
+                  className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)]"
                 >
                   Cancel
                 </button>
@@ -1018,7 +1018,7 @@ export default function HomeworkDetailPage({
                   type="button"
                   onClick={remove}
                   disabled={busy}
-                  className="rounded-[--radius-md] bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                  className="rounded-[--radius-md] bg-[color:var(--color-error)] px-3 py-1.5 text-xs font-bold text-white hover:bg-[color:var(--color-error)]/85 disabled:opacity-50"
                 >
                   Yes, delete
                 </button>
@@ -1029,7 +1029,7 @@ export default function HomeworkDetailPage({
                 onClick={() => setConfirmingDelete(true)}
                 disabled={isPublished}
                 title={isPublished ? "Unpublish before deleting" : "Delete this homework"}
-                className="text-xs font-semibold text-text-muted hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="text-xs font-semibold text-text-muted hover:text-[color:var(--color-error)] disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 🗑 Delete homework
               </button>
@@ -1158,7 +1158,7 @@ function ProblemsEmptyHero({
   onGenerate: () => void;
 }) {
   return (
-    <div className="mt-5 rounded-[--radius-xl] border border-dashed border-border-light bg-bg-subtle/50 px-8 py-12 text-center">
+    <div className="mt-5 rounded-[--radius-xl] border border-border-light bg-[color:var(--color-surface-alt-2)]/50 px-8 py-12 text-center">
       <div className="text-5xl" aria-hidden="true">✨</div>
       <h3 className="mt-4 text-lg font-bold text-text-primary">
         Let&apos;s add some problems
@@ -1239,7 +1239,7 @@ function ConfigBlock({
   onChangeSections: (next: string[]) => void;
 }) {
   return (
-    <div className="space-y-5 rounded-[--radius-md] border border-border-light bg-bg-base/30 p-4">
+    <div className="space-y-5 rounded-[--radius-md] border border-border-light bg-surface/30 p-4">
       {/* Units */}
       <Field
         label="Units"
@@ -1297,7 +1297,7 @@ function ConfigBlock({
                   className={`rounded-[--radius-pill] border px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-50 ${
                     active
                       ? "border-primary bg-primary text-white"
-                      : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:bg-bg-subtle"
+                      : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:bg-[color:var(--color-surface-alt-2)]"
                   }`}
                 >
                   {active && <span className="mr-1">✓</span>}
@@ -1408,7 +1408,7 @@ function DueDatePicker({
           onChange(d.toISOString());
         }}
         disabled={disabled}
-        className="rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
+        className="rounded-[--radius-md] border border-border-light bg-surface px-2 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
       />
       {value && !disabled && (
         <button
@@ -1420,7 +1420,7 @@ function DueDatePicker({
         </button>
       )}
       {isPast && !disabled && (
-        <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+        <span className="text-[10px] font-semibold text-[color:var(--color-warning-dark)]">
           ⚠ in the past
         </span>
       )}
@@ -1547,7 +1547,7 @@ function RemoveProblemsView({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+            className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)] disabled:opacity-50"
           >
             Cancel
           </button>
@@ -1562,7 +1562,7 @@ function RemoveProblemsView({
                   ? "Click × on a problem to mark it for removal"
                   : `Remove ${markCount} problem${markCount === 1 ? "" : "s"}`
             }
-            className="rounded-[--radius-md] bg-red-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed dark:disabled:bg-gray-600"
+            className="rounded-[--radius-md] bg-[color:var(--color-error)] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-[color:var(--color-error)]/85 disabled:bg-gray-400 disabled:cursor-not-allowed dark:disabled:bg-gray-600"
           >
             {busy
               ? "Saving…"
@@ -1574,7 +1574,7 @@ function RemoveProblemsView({
       </div>
 
       {wouldLeaveEmpty && markCount > 0 && (
-        <p className="mt-3 rounded-[--radius-md] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-text-primary dark:border-amber-500/30 dark:bg-amber-500/10">
+        <p className="mt-3 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-3 py-2 text-xs text-text-primary dark:border-amber-500/30 dark:bg-[color:var(--color-warning-bg)]0/10">
           You&apos;ve marked every problem. Keep at least one, or{" "}
           <span className="font-semibold">delete the homework</span> instead if
           you want to start over.
@@ -1614,7 +1614,7 @@ function RemovableProblemRow({
     <div
       className={`flex items-start gap-3 rounded-[--radius-md] border px-4 py-3 transition-all ${
         marked
-          ? "border-red-200 bg-red-50/60 opacity-60 dark:border-red-500/30 dark:bg-red-500/10"
+          ? "border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)]/60 opacity-60  dark:bg-[color:var(--color-error-light)]"
           : "border-border-light bg-surface"
       }`}
     >
@@ -1640,7 +1640,7 @@ function RemovableProblemRow({
             {problem.difficulty}
           </span>
           {marked && (
-            <span className="text-[10px] font-semibold text-red-700 dark:text-red-400">
+            <span className="text-[10px] font-semibold text-[color:var(--color-error)] ">
               · marked for removal
             </span>
           )}
@@ -1654,7 +1654,7 @@ function RemovableProblemRow({
         className={`shrink-0 rounded-full p-1.5 text-xs font-bold transition-colors disabled:opacity-50 ${
           marked
             ? "bg-surface text-primary hover:text-primary-dark"
-            : "text-text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+            : "text-text-muted hover:bg-[color:var(--color-error-light)] hover:text-[color:var(--color-error)] dark:hover:bg-[color:var(--color-error-light)]"
         }`}
         title={marked ? "Undo" : "Mark for removal"}
       >
@@ -1714,7 +1714,7 @@ function SubmissionStrip({
     return (
       <Link
         href={reviewHref(rows[0].section_id)}
-        className="mt-4 flex items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-bg-subtle/40 px-4 py-2.5 text-xs font-semibold text-text-secondary transition-colors hover:border-primary/30 hover:bg-bg-subtle"
+        className="mt-4 flex items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)]/40 px-4 py-2.5 text-xs font-semibold text-text-secondary transition-colors hover:border-primary/30 hover:bg-[color:var(--color-surface-alt-2)]"
       >
         <span>{summary}</span>
         <span className="shrink-0 text-primary">View submissions →</span>
@@ -1726,12 +1726,12 @@ function SubmissionStrip({
   // section to grade rather than landing in a default they didn't ask
   // for. Counts live on each row so the choice is informed.
   return (
-    <div className="mt-4 rounded-[--radius-md] border border-border-light bg-bg-subtle/40">
+    <div className="mt-4 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)]/40">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
+        className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-xs font-semibold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)]"
       >
         <span>{summary}</span>
         <span className="shrink-0 text-primary">
@@ -1746,7 +1746,7 @@ function SubmissionStrip({
               <Link
                 key={r.section_id}
                 href={reviewHref(r.section_id)}
-                className="flex items-center justify-between gap-3 px-4 py-2 text-xs hover:bg-bg-subtle"
+                className="flex items-center justify-between gap-3 px-4 py-2 text-xs hover:bg-[color:var(--color-surface-alt-2)]"
               >
                 <span className="font-semibold text-text-primary">
                   {r.section_name}
@@ -1766,7 +1766,7 @@ function SubmissionStrip({
                     <>
                       {" "}
                       ·{" "}
-                      <span className="font-semibold text-red-600 dark:text-red-400">
+                      <span className="font-semibold text-[color:var(--color-error)]">
                         ⚑ {r.flagged}
                       </span>
                     </>
@@ -1835,7 +1835,7 @@ function ActionBar({
                 type="button"
                 onClick={onConfirmCancel}
                 disabled={busy}
-                className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-bold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+                className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-bold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)] disabled:opacity-50"
               >
                 Add due date
               </button>
@@ -1870,7 +1870,7 @@ function ActionBar({
                   type="button"
                   onClick={onUnpublish}
                   disabled={busy}
-                  className="rounded-[--radius-md] border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+                  className="rounded-[--radius-md] border border-amber-300 bg-[color:var(--color-warning-bg)] px-4 py-2 text-sm font-bold text-[color:var(--color-warning-dark)] hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:bg-[color:var(--color-warning-bg)]0/10 dark:text-amber-300"
                 >
                   Unpublish
                 </button>
@@ -1997,7 +1997,7 @@ function InstructionsBlock({
           <button
             type="button"
             onClick={startEditing}
-            className="block w-full rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle/40 px-3 py-2 text-left text-sm text-text-muted transition-colors hover:border-primary/40 hover:bg-bg-subtle hover:text-text-primary"
+            className="block w-full rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)]/40 px-3 py-2 text-left text-sm text-text-muted transition-colors hover:border-primary/40 hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary"
           >
             + Add instructions students will see (e.g. &ldquo;Show all
             work, no calculators.&rdquo;)
@@ -2029,7 +2029,7 @@ function InstructionsBlock({
               startEditing();
             }
           }}
-          className="block w-full cursor-pointer rounded-[--radius-md] border border-border-light bg-bg-base/50 px-3 py-2 text-left text-sm text-text-primary transition-colors hover:border-primary/40 hover:bg-bg-subtle"
+          className="block w-full cursor-pointer rounded-[--radius-md] border border-border-light bg-surface/50 px-3 py-2 text-left text-sm text-text-primary transition-colors hover:border-primary/40 hover:bg-[color:var(--color-surface-alt-2)]"
           title="Click to edit"
         >
           <div className="whitespace-pre-wrap">
@@ -2064,7 +2064,7 @@ function InstructionsBlock({
         rows={3}
         maxLength={2000}
         placeholder='e.g. "Show all work and circle final answers. No calculators."'
-        className="w-full rounded-[--radius-md] border border-primary bg-bg-base px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+        className="w-full rounded-[--radius-md] border border-primary bg-surface px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
       />
       <div className="mt-1 flex items-center justify-between text-[11px] text-text-muted">
         <span>Visible to students. Supports inline LaTeX like $x^2$.</span>

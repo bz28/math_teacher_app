@@ -583,14 +583,14 @@ export default function HomeworkSectionReviewPage({
       <div className="pt-3">
         <Link
           href={backHref}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-text-muted hover:text-primary"
+          className="inline-flex items-center gap-1 font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-text-muted transition-colors hover:text-text-primary"
         >
           ← Back to submissions
         </Link>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-        <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
+      <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+        <h1 className="font-serif text-[34px] leading-tight tracking-[-0.015em] text-text-primary">
           {pageTitle}
         </h1>
         {roster !== null && (
@@ -604,7 +604,7 @@ export default function HomeworkSectionReviewPage({
       </div>
 
       {error && (
-        <p className="mt-4 text-sm text-red-600">{error}</p>
+        <p className="mt-4 text-sm text-[color:var(--color-error)]">{error}</p>
       )}
 
       {roster === null && !error && (
@@ -612,7 +612,7 @@ export default function HomeworkSectionReviewPage({
       )}
 
       {roster !== null && roster.length === 0 && (
-        <div className="mt-6 rounded-[--radius-xl] border border-dashed border-border-light bg-bg-subtle p-10 text-center">
+        <div className="mt-6 rounded-[--radius-xl] border border-border-light bg-[color:var(--color-surface-alt-2)] p-10 text-center">
           <p className="text-sm font-bold text-text-primary">
             No students in this section yet
           </p>
@@ -662,7 +662,7 @@ export default function HomeworkSectionReviewPage({
           {/* Detail */}
           <section className="min-w-0">
             {!selectedEntry && (
-              <div className="rounded-[--radius-xl] border border-dashed border-border-light bg-bg-subtle p-10 text-center text-sm text-text-muted">
+              <div className="rounded-[--radius-xl] border border-border-light bg-[color:var(--color-surface-alt-2)] p-10 text-center text-sm text-text-muted">
                 Pick a student on the left to see their work.
               </div>
             )}
@@ -673,7 +673,7 @@ export default function HomeworkSectionReviewPage({
               <p className="text-sm text-text-muted">Loading student work…</p>
             )}
             {selectedEntry?.submission && currentFetchError && (
-              <p className="text-sm text-red-600">{currentFetchError}</p>
+              <p className="text-sm text-[color:var(--color-error)]">{currentFetchError}</p>
             )}
             {detailIsCurrent && detail && selectedEntry?.submission && (
               <SubmissionDetailPanel
@@ -783,13 +783,13 @@ function PublishButton({
   if (toRelease === 0) {
     if (gradedTotal === 0) {
       return (
-        <span className="inline-flex items-center gap-1.5 rounded-[--radius-pill] bg-bg-subtle px-3 py-1.5 text-xs font-semibold text-text-muted">
+        <span className="inline-flex items-center gap-1.5 rounded-[--radius-pill] bg-[color:var(--color-surface-alt-2)] px-3 py-1.5 text-xs font-semibold text-text-muted">
           No grades to publish
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-[--radius-pill] bg-bg-subtle px-3 py-1.5 text-xs font-semibold text-text-muted">
+      <span className="inline-flex items-center gap-1.5 rounded-[--radius-pill] bg-[color:var(--color-surface-alt-2)] px-3 py-1.5 text-xs font-semibold text-text-muted">
         <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
         All grades published
       </span>
@@ -854,20 +854,20 @@ function PublishConfirmDialog({
       </h2>
       <p className="mt-2 text-sm text-text-secondary">{body}</p>
       {dirtyTotal > 0 && pendingTotal > 0 && (
-        <p className="mt-3 rounded-[--radius-md] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+        <p className="mt-3 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-[color:var(--color-warning-bg)]0/10 dark:text-amber-200">
           <span className="font-semibold">{dirtyTotal}</span>{" "}
           {dirtyTotal === 1 ? "is an edit" : "are edits"} to already-published grades.
         </p>
       )}
       {otherSections > 0 && (
-        <p className="mt-3 rounded-[--radius-md] border border-border-light bg-bg-subtle px-3 py-2 text-xs text-text-secondary">
+        <p className="mt-3 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)] px-3 py-2 text-xs text-text-secondary">
           This includes <span className="font-semibold">{otherSections}</span>{" "}
           {otherSections === 1 ? "grade" : "grades"} from other sections
           of this homework.
         </p>
       )}
       {error && (
-        <p className="mt-3 text-sm font-semibold text-red-600 dark:text-red-400">
+        <p className="mt-3 text-sm font-semibold text-[color:var(--color-error)]">
           {error}
         </p>
       )}
@@ -933,7 +933,7 @@ function RubricDriftBanner({
   if (snapshot.notes) snapshotFields.push({ label: "Notes", text: snapshot.notes });
 
   return (
-    <div className="rounded-[--radius-xl] border border-amber-200 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-500/10">
+    <div className="rounded-[--radius-xl] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] p-4 dark:border-amber-500/30 dark:bg-[color:var(--color-warning-bg)]0/10">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-amber-900 dark:text-amber-200">
@@ -949,7 +949,7 @@ function RubricDriftBanner({
           type="button"
           onClick={onRegrade}
           disabled={regrading}
-          className="shrink-0 rounded-[--radius-md] bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-amber-500 dark:hover:bg-amber-400 dark:text-amber-950"
+          className="shrink-0 rounded-[--radius-md] bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[color:var(--color-warning-bg)]0 dark:hover:bg-amber-400 dark:text-amber-950"
         >
           {regrading ? "Regrading…" : "Regrade"}
         </button>
@@ -962,10 +962,10 @@ function RubricDriftBanner({
           }
           className="mt-3 text-xs"
         >
-          <summary className="cursor-pointer font-semibold text-amber-900 hover:text-amber-700 dark:text-amber-200 dark:hover:text-amber-300">
+          <summary className="cursor-pointer font-semibold text-amber-900 hover:text-[color:var(--color-warning-dark)] dark:text-amber-200 dark:hover:text-amber-300">
             {showSnapshot ? "Hide" : "View"} rubric at grading time
           </summary>
-          <div className="mt-2 space-y-2 rounded-[--radius-md] border border-amber-200/70 bg-white/60 p-3 dark:border-amber-500/20 dark:bg-amber-950/30">
+          <div className="mt-2 space-y-2 rounded-[--radius-md] border border-[color:var(--color-warning)]/30/70 bg-white/60 p-3 dark:border-amber-500/20 dark:bg-amber-950/30">
             {snapshotFields.map((f) => (
               <div key={f.label}>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-amber-900/70 dark:text-amber-200/70">
@@ -980,7 +980,7 @@ function RubricDriftBanner({
         </details>
       )}
       {error && (
-        <p className="mt-2 text-xs font-semibold text-red-700 dark:text-red-400">
+        <p className="mt-2 text-xs font-semibold text-[color:var(--color-error)] ">
           {error}
         </p>
       )}
@@ -1025,13 +1025,13 @@ function RegradeConfirmDialog({
         will be replaced.
       </p>
       {published && (
-        <p className="mt-3 rounded-[--radius-md] border border-border-light bg-bg-subtle px-3 py-2 text-xs text-text-secondary">
+        <p className="mt-3 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)] px-3 py-2 text-xs text-text-secondary">
           This grade is already published. The student will keep seeing
           the old grade until you republish.
         </p>
       )}
       {error && (
-        <p className="mt-3 rounded-[--radius-md] border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+        <p className="mt-3 rounded-[--radius-md] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] px-3 py-2 text-xs font-semibold text-[color:var(--color-error)]  dark:bg-[color:var(--color-error-light)] ">
           {error}
         </p>
       )}
@@ -1048,7 +1048,7 @@ function RegradeConfirmDialog({
           type="button"
           onClick={onConfirm}
           disabled={regrading}
-          className="rounded-[--radius-md] bg-amber-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-amber-500 dark:hover:bg-amber-400 dark:text-amber-950"
+          className="rounded-[--radius-md] bg-amber-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[color:var(--color-warning-bg)]0 dark:hover:bg-amber-400 dark:text-amber-950"
         >
           {regrading ? "Regrading…" : "Regrade"}
         </button>
@@ -1176,7 +1176,7 @@ function RosterChip({
         active
           ? "border-primary bg-primary-bg text-primary"
           : disabled
-            ? "border-border-light bg-bg-subtle text-text-muted/60 cursor-not-allowed"
+            ? "border-border-light bg-[color:var(--color-surface-alt-2)] text-text-muted/60 cursor-not-allowed"
             : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-text-primary"
       }`}
     >
@@ -1184,7 +1184,7 @@ function RosterChip({
       {count !== undefined && count > 0 && (
         <span
           className={`rounded-[--radius-pill] px-1 text-[9px] tabular-nums ${
-            active ? "bg-primary text-white" : "bg-bg-subtle text-text-muted"
+            active ? "bg-primary text-white" : "bg-[color:var(--color-surface-alt-2)] text-text-muted"
           }`}
         >
           {count}
@@ -1204,7 +1204,7 @@ function NotSubmittedCard({ entry }: { entry: RosterEntry }) {
     <div className="rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-sm">
       <h2 className="text-lg font-bold text-text-primary">{entry.student_name}</h2>
       <p className="text-xs text-text-muted">{entry.student_email}</p>
-      <div className="mt-5 rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle/60 px-6 py-10 text-center">
+      <div className="mt-5 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)]/60 px-6 py-10 text-center">
         <p className="text-sm font-bold text-text-primary">Not submitted</p>
         <p className="mt-1 text-xs text-text-muted">
           This student hasn&apos;t turned in this homework yet.
@@ -1244,7 +1244,7 @@ function StudentRow({
       type="button"
       onClick={onSelect}
       className={`flex w-full flex-col gap-1.5 border-b border-border-light px-4 py-2.5 text-left text-sm transition-colors last:border-b-0 ${
-        selected ? "bg-primary-bg/40" : "hover:bg-bg-subtle"
+        selected ? "bg-primary-bg/40" : "hover:bg-[color:var(--color-surface-alt-2)]"
       }`}
     >
       <div className="flex min-w-0 items-baseline justify-between gap-2">
@@ -1264,7 +1264,7 @@ function StudentRow({
           <span
             className={`shrink-0 text-xs font-bold ${
               sub!.grade_published_at && !sub!.grade_dirty
-                ? "text-green-700 dark:text-green-400"
+                ? "text-[color:var(--color-success)] dark:text-green-400"
                 : "text-text-secondary"
             }`}
           >
@@ -1278,7 +1278,7 @@ function StudentRow({
         />
         <span className="truncate">{statusLabel.text}</span>
         {sub?.is_late && (
-          <span className="ml-1 shrink-0 font-semibold text-red-600 dark:text-red-400">
+          <span className="ml-1 shrink-0 font-semibold text-[color:var(--color-error)]">
             · late
           </span>
         )}
@@ -1314,12 +1314,12 @@ function rowStatusLabel(entry: RosterEntry): {
   }
   if (sub.grade_published_at) {
     if (sub.grade_dirty) {
-      return { text: "Edited · not yet sent", dotClass: "bg-amber-500" };
+      return { text: "Edited · not yet sent", dotClass: "bg-[color:var(--color-warning-bg)]0" };
     }
     return { text: "Published", dotClass: "bg-green-500" };
   }
   if (sub.final_score !== null) {
-    return { text: "Graded, not published", dotClass: "bg-amber-500" };
+    return { text: "Graded, not published", dotClass: "bg-[color:var(--color-warning-bg)]0" };
   }
   return { text: "Needs review", dotClass: "bg-gray-400" };
 }
@@ -1402,13 +1402,13 @@ function SubmissionDetailPanel({
               minute: "2-digit",
             })}
             {detail.is_late && (
-              <span className="ml-1.5 font-semibold text-red-600 dark:text-red-400">
+              <span className="ml-1.5 font-semibold text-[color:var(--color-error)]">
                 · late
               </span>
             )}
             {row?.extraction_flagged_at && (
               <span
-                className="ml-1.5 font-semibold text-red-700 dark:text-red-400"
+                className="ml-1.5 font-semibold text-[color:var(--color-error)] "
                 title="Student flagged: 'Reader got something wrong' — no AI grading ran"
               >
                 · student-flagged reading · grade manually
@@ -1417,7 +1417,7 @@ function SubmissionDetailPanel({
             <span className="mx-1.5 text-text-muted/60" aria-hidden>·</span>
             {published && row?.grade_published_at ? (
               detail.grade_dirty ? (
-                <span className="font-semibold text-amber-700 dark:text-amber-400">
+                <span className="font-semibold text-[color:var(--color-warning-dark)] ">
                   Edited since publish · republish to update students
                 </span>
               ) : (
@@ -1440,7 +1440,7 @@ function SubmissionDetailPanel({
             )}
           </p>
           {saveError && (
-            <p className="mt-1 text-[11px] font-semibold text-red-600 dark:text-red-400">
+            <p className="mt-1 text-[11px] font-semibold text-[color:var(--color-error)]">
               {saveError}
             </p>
           )}
@@ -1463,7 +1463,7 @@ function SubmissionDetailPanel({
             onClick={onSelectNext}
             disabled={!nextStudent}
             title={!nextStudent ? "No more students to review" : undefined}
-            className="rounded-[--radius-md] border border-primary/30 bg-primary-bg px-3.5 py-1.5 text-xs font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-border-light disabled:bg-bg-subtle disabled:text-text-muted"
+            className="rounded-[--radius-md] border border-primary/30 bg-primary-bg px-3.5 py-1.5 text-xs font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-border-light disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted"
           >
             {nextStudent ? "Next student →" : "No more students"}
           </button>
@@ -1557,7 +1557,7 @@ function RubricSection({
     <details
       open={open}
       onToggle={(e) => onToggle((e.target as HTMLDetailsElement).open)}
-      className="rounded-[--radius-md] border border-border-light bg-bg-subtle/40"
+      className="rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)]/40"
     >
       <summary className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-text-secondary hover:text-text-primary">
         <span aria-hidden>{open ? "▾" : "▸"}</span>
@@ -1632,7 +1632,7 @@ function StudentStepRow({
           </div>
         )}
         {step.edited && hasOriginal && showOriginal && (
-          <div className="mt-1 rounded-[--radius-sm] border border-border-light bg-bg-subtle/40 px-2 py-1.5 text-xs">
+          <div className="mt-1 rounded-[--radius-sm] border border-border-light bg-[color:var(--color-surface-alt-2)]/40 px-2 py-1.5 text-xs">
             <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
               Originally read
             </div>
@@ -1827,7 +1827,7 @@ function ProblemGradeRow({
     : null;
 
   return (
-    <div className="rounded-[--radius-md] border border-border-light bg-bg-base/40 p-4">
+    <div className="rounded-[--radius-md] border border-border-light bg-surface/40 p-4">
       <div className="flex items-baseline gap-2">
         <span className="text-xs font-bold text-text-muted">{problem.position}.</span>
         <div className="min-w-0 flex-1">
@@ -1887,7 +1887,7 @@ function ProblemGradeRow({
             {problem.student_answer ? (
               <MathText text={problem.student_answer} />
             ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-400">
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-[color:var(--color-warning-dark)] ">
                 <span aria-hidden>⚠</span>
                 No answer extracted — refer to submitted work
               </span>
@@ -1975,7 +1975,7 @@ function ProblemGradeRow({
             <span>{aiGradeLabel}</span>
             {aiGrade.confidence !== null && aiGrade.confidence < 0.6 && (
               <span
-                className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
+                className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-amber-300 bg-[color:var(--color-warning-bg)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)] dark:border-amber-500/40 dark:bg-[color:var(--color-warning-bg)]0/10 dark:text-amber-200"
                 title="AI reported low confidence — review this one carefully"
               >
                 <span aria-hidden>⚠</span>
@@ -2013,7 +2013,7 @@ function ProblemGradeRow({
           Partial
         </GradeBtn>
         {current === "partial" && (
-          <div className="inline-flex items-center gap-1 rounded-[--radius-md] border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+          <div className="inline-flex items-center gap-1 rounded-[--radius-md] border border-amber-300 bg-[color:var(--color-warning-bg)] px-2 py-1 text-xs font-semibold text-[color:var(--color-warning-dark)] dark:border-amber-500/40 dark:bg-[color:var(--color-warning-bg)]0/10 dark:text-amber-200">
             <input
               ref={setInputRef}
               type="number"
@@ -2088,7 +2088,7 @@ function ProblemGradeRow({
               ? "Pick Full / Partial / No credit first — then you can leave feedback."
               : "Add a sentence the student will see…"
           }
-          className="mt-1 w-full resize-y rounded-[--radius-sm] border border-border-light bg-surface px-2.5 py-1.5 text-xs leading-relaxed text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:bg-bg-subtle disabled:text-text-muted"
+          className="mt-1 w-full resize-y rounded-[--radius-sm] border border-border-light bg-surface px-2.5 py-1.5 text-xs leading-relaxed text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted"
         />
       </div>
     </div>
@@ -2113,8 +2113,8 @@ function GradeBtn({
 }) {
   const activeCls = {
     green: "border-green-500 bg-green-500 text-white",
-    amber: "border-amber-500 bg-amber-500 text-white",
-    red: "border-red-500 bg-red-500 text-white",
+    amber: "border-amber-500 bg-[color:var(--color-warning-bg)]0 text-white",
+    red: "border-[color:var(--color-error)] bg-[color:var(--color-error-light)] text-white",
   }[tone];
   const inactiveCls = aiPick
     ? "border-primary/40 bg-primary-bg text-text-primary hover:border-primary/60"
@@ -2161,7 +2161,7 @@ type IntegrityBannerKey =
   | "needs_review";
 
 const NEUTRAL_STYLE = {
-  bg: "bg-bg-subtle",
+  bg: "bg-[color:var(--color-surface-alt-2)]",
   border: "border-border-light",
   iconBg: "bg-gray-400 text-white dark:bg-gray-500",
 };
@@ -2185,16 +2185,16 @@ const INTEGRITY_STYLE: Record<
     label: "Procedural knowledge — consider revisiting the concept",
   },
   tutor_pivot: {
-    bg: "bg-amber-50 dark:bg-amber-900/20",
-    border: "border-amber-200 dark:border-amber-900/40",
+    bg: "bg-[color:var(--color-warning-bg)] dark:bg-amber-900/20",
+    border: "border-[color:var(--color-warning)]/30 dark:border-amber-900/40",
     iconBg: "bg-amber-600 text-white",
     icon: "?",
     label: "Student was lost — got tutored through it",
   },
   flag_for_review: {
-    bg: "bg-red-50 dark:bg-red-900/20",
-    border: "border-red-200 dark:border-red-900/40",
-    iconBg: "bg-red-600 text-white",
+    bg: "bg-[color:var(--color-error-light)] ",
+    border: "border-[color:var(--color-error-border)] ",
+    iconBg: "bg-[color:var(--color-error)] text-white",
     icon: "⚑",
     label: "Review — correct work but couldn't explain it",
   },
@@ -2261,7 +2261,7 @@ function VerdictLegendTrigger() {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-[--radius-sm] px-1.5 py-0.5 text-[10px] font-semibold text-text-muted transition-colors hover:bg-bg-subtle hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        className="inline-flex items-center gap-1 rounded-[--radius-sm] px-1.5 py-0.5 text-[10px] font-semibold text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         aria-label="Show integrity verdict legend"
       >
         <span aria-hidden>ℹ</span>
@@ -2337,7 +2337,7 @@ function VerdictLegendModal({ onClose }: { onClose: () => void }) {
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-full p-1 text-text-muted transition-colors hover:bg-bg-subtle hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="rounded-full p-1 text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             <span aria-hidden className="text-lg leading-none">×</span>
           </button>
@@ -2573,7 +2573,7 @@ function ConversationModal({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+          className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary"
           aria-label="Close"
         >
           Close ✕
@@ -2607,7 +2607,7 @@ function TranscriptTurn({
           className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
             isAgent
               ? "bg-primary text-white"
-              : "bg-bg-subtle text-text-secondary"
+              : "bg-[color:var(--color-surface-alt-2)] text-text-secondary"
           }`}
           aria-hidden
         >
@@ -2617,7 +2617,7 @@ function TranscriptTurn({
           className={`max-w-[80%] rounded-[--radius-md] px-3 py-2 text-xs leading-relaxed ${
             isAgent
               ? "bg-primary-bg text-text-primary"
-              : "bg-bg-subtle text-text-primary"
+              : "bg-[color:var(--color-surface-alt-2)] text-text-primary"
           }`}
         >
           <MathText text={turn.content} />
@@ -2664,7 +2664,7 @@ function StudentWorkThumbButton({ files }: { files: SubmissionFile[] }) {
         className="group inline-flex items-center gap-1.5 rounded-[--radius-md] border border-border-light bg-surface px-2 py-1 text-xs font-semibold text-text-secondary transition-all hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
         aria-label="View student's handwritten work full size"
       >
-        <span className="relative block h-7 w-10 shrink-0 overflow-hidden rounded-[--radius-sm] border border-border-light bg-bg-subtle">
+        <span className="relative block h-7 w-10 shrink-0 overflow-hidden rounded-[--radius-sm] border border-border-light bg-[color:var(--color-surface-alt-2)]">
           {firstIsPdf ? (
             <span className="flex h-full w-full items-center justify-center text-[9px] font-bold text-text-muted">
               PDF
@@ -2687,7 +2687,7 @@ function StudentWorkThumbButton({ files }: { files: SubmissionFile[] }) {
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+            className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary"
             aria-label="Close"
           >
             Close ✕
