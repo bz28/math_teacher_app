@@ -568,7 +568,7 @@ export function WorkshopModal({
               </span>
             )}
             <span
-              className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
+              className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] ${
                 STATUS_BADGE[liveItem.status] ?? ""
               }`}
             >

@@ -59,7 +59,7 @@ function DispositionPill({
   return (
     <span
       className={cn(
-        "rounded-full px-2 py-[3px] text-[10.5px] font-semibold uppercase tracking-[0.06em]",
+        "rounded-full px-2 py-[3px] text-[10.5px] font-semibold",
         subtle ? "bg-[color:var(--color-border-light)] text-[color:var(--color-text-secondary)]" : cfg.cls,
       )}
     >
