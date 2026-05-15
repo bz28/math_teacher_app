@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { btnGhost, btnPrimary, overlay } from "../lib/styles";
 
 /**
@@ -12,9 +12,16 @@ import { btnGhost, btnPrimary, overlay } from "../lib/styles";
  * non-destructive confirms (e.g., "Activate this school?").
  *
  * Smaller chrome than the form modals — no eyebrow, no accent bar,
- * just a tight title + message + button row. Auto-focuses the
- * confirm button so a teacher can hit Enter; Escape cancels for
- * parity with the native dialog.
+ * just a tight title + message + button row. Escape cancels for
+ * parity with the native dialog. For `variant="primary"` we
+ * auto-focus the confirm button so Enter is a one-tap accept; for
+ * `variant="danger"` we auto-focus Cancel so a stray Enter doesn't
+ * delete anything.
+ *
+ * `role="dialog"` + `aria-modal` + `aria-labelledby` / `-describedby`
+ * tie the modal into screen-reader announcements; focus is returned
+ * to whatever the user had focused at mount-time when the modal
+ * unmounts.
  */
 export function ConfirmModal({
   title,
@@ -33,26 +40,36 @@ export function ConfirmModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const titleId = useId();
+  const messageId = useId();
+  const triggerRef = useRef<HTMLElement | null>(null);
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
+
+  useEffect(() => {
+    triggerRef.current = document.activeElement as HTMLElement | null;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancelRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      triggerRef.current?.focus?.();
+    };
+  }, []);
+
   const confirmStyle =
     variant === "danger"
       ? { ...btnPrimary, background: "var(--danger)" }
       : btnPrimary;
 
-  // Escape-to-cancel for native-confirm() parity. Bound to the
-  // window so the user doesn't have to be focused on a specific
-  // element — common case is they Tab away from the confirm button
-  // and still expect Escape to dismiss.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
   return (
     <div style={overlay} onClick={onCancel}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={messageId}
         className="table-card"
         style={{
           maxWidth: 440,
@@ -64,15 +81,15 @@ export function ConfirmModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 style={{ marginBottom: 8 }}>{title}</h3>
-        <div style={{ fontSize: 13.5, color: "var(--muted)", lineHeight: 1.5, marginBottom: 18 }}>
+        <h3 id={titleId} style={{ marginBottom: 8 }}>{title}</h3>
+        <div id={messageId} style={{ fontSize: 13.5, color: "var(--muted)", lineHeight: 1.5, marginBottom: 18 }}>
           {message}
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button onClick={onCancel} style={btnGhost}>
+          <button autoFocus={variant === "danger"} onClick={onCancel} style={btnGhost}>
             {cancelLabel}
           </button>
-          <button autoFocus onClick={onConfirm} style={confirmStyle}>
+          <button autoFocus={variant !== "danger"} onClick={onConfirm} style={confirmStyle}>
             {confirmLabel}
           </button>
         </div>

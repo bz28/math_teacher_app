@@ -1,6 +1,8 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import { ConfirmModal } from "./ConfirmModal";
 import { ConfirmContext, type ConfirmFn, type ConfirmOptions } from "../lib/confirm";
+
+type Pending = ConfirmOptions & { resolve: (value: boolean) => void };
 
 /**
  * Drop-in async replacement for `window.confirm()`. Mount once at
@@ -15,9 +17,13 @@ import { ConfirmContext, type ConfirmFn, type ConfirmOptions } from "../lib/conf
  * is a 1-line edit per call site. The hook lives in lib/confirm.ts.
  */
 export function ConfirmProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<
-    (ConfirmOptions & { resolve: (value: boolean) => void }) | null
-  >(null);
+  const [state, setState] = useState<Pending | null>(null);
+
+  // Track the live pending prompt via a ref so we can resolve it
+  // synchronously *outside* the setState updater. Mutating in the
+  // updater fires twice under React StrictMode in dev and would
+  // resolve a fresh prompt to false the instant it lands.
+  const pendingRef = useRef<Pending | null>(null);
 
   // Resolve the previous prompt to false before showing a new one,
   // so a programmatic double-fire (or a fast double-click that races
@@ -26,19 +32,21 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   // gets a clean false instead of hanging forever.
   const confirm = useCallback<ConfirmFn>((options) => {
     return new Promise((resolve) => {
-      setState((prev) => {
-        prev?.resolve(false);
-        return { ...options, resolve };
-      });
+      pendingRef.current?.resolve(false);
+      const next: Pending = { ...options, resolve };
+      pendingRef.current = next;
+      setState(next);
     });
   }, []);
 
   const handleCancel = () => {
-    state?.resolve(false);
+    pendingRef.current?.resolve(false);
+    pendingRef.current = null;
     setState(null);
   };
   const handleConfirm = () => {
-    state?.resolve(true);
+    pendingRef.current?.resolve(true);
+    pendingRef.current = null;
     setState(null);
   };
 

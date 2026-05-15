@@ -24,6 +24,12 @@ export default function Schools() {
   const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
   const menuToggleRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
+  // Row id currently being deleted — drives the in-flight "Deleting…"
+  // affordance after the confirm modal closes but before reload() lands.
+  // Without this, a slow delete leaves the row visually idle while the
+  // network is in motion, inviting a double-click.
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const reload = () => {
     setLoading(true);
     api.schools().then((d) => setSchools(d.schools)).finally(() => setLoading(false));
@@ -109,11 +115,14 @@ export default function Schools() {
       ),
       confirmLabel: "Delete school",
     }))) return;
+    setDeletingId(school.id);
     try {
       await api.deleteSchool(school.id);
       reload();
     } catch (e) {
       alert((e as Error).message);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -235,11 +244,13 @@ export default function Schools() {
             </tr>
           </thead>
           <tbody>
-            {schools.map((s) => (
+            {schools.map((s) => {
+              const isDeleting = deletingId === s.id;
+              return (
               <tr
                 key={s.id}
                 className="clickable"
-                style={{ opacity: s.is_active ? 1 : 0.55 }}
+                style={{ opacity: isDeleting ? 0.4 : s.is_active ? 1 : 0.55, pointerEvents: isDeleting ? "none" : undefined }}
                 onClick={() => navigate(`/schools/${s.id}`)}
               >
                 <td>
@@ -301,9 +312,10 @@ export default function Schools() {
                   <button
                     ref={(el) => { menuToggleRefs.current[s.id] = el; }}
                     className="action-toggle"
+                    disabled={isDeleting}
                     onClick={(e) => { e.stopPropagation(); openMenuFor(s.id); }}
                   >
-                    …
+                    {isDeleting ? "Deleting…" : "…"}
                   </button>
                   {openMenu === s.id && (
                     <div
@@ -328,7 +340,8 @@ export default function Schools() {
                   )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {schools.length === 0 && (
               <tr>
                 <td colSpan={9}>
