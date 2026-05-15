@@ -1,9 +1,9 @@
 import type { ChangeEvent, ReactNode } from "react";
 
 /**
- * Styled checkbox matching the Operator's Console palette — hairline
- * --rule border on --surface, --primary background + custom check
- * glyph when checked. Wraps the native input with a fully-styled
+ * Styled checkbox matching the Operator's Console palette —
+ * --rule-strong border on --surface when off, --accent fill + paper
+ * check glyph when on. Wraps the native input with a fully-styled
  * pseudo-control so the appearance is consistent across browsers
  * (the native control's accent-color tint varies and bleeds into
  * the warm-paper palette).
