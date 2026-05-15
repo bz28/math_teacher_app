@@ -35,6 +35,12 @@ export interface UserScopePanelProps {
    * chips. Only meaningful when role === "teacher".
    */
   showClassroom?: boolean;
+  /**
+   * When true, surface the three student-attention chips (At limit
+   * today / Free heavy / Pro inactive). Only meaningful when
+   * role === "student".
+   */
+  showStudentChips?: boolean;
   emptyMessage: string;
 }
 
@@ -45,6 +51,7 @@ export default function UserScopePanel({
   role,
   showDailyUsage = false,
   showClassroom = false,
+  showStudentChips = false,
   emptyMessage,
 }: UserScopePanelProps) {
   const navigate = useNavigate();
@@ -55,6 +62,9 @@ export default function UserScopePanel({
   const [offset, setOffset] = useState(0);
   const [hasClassroom, setHasClassroom] = useState(false);
   const [activeClassroom, setActiveClassroom] = useState(false);
+  const [atLimitToday, setAtLimitToday] = useState(false);
+  const [freeHeavy, setFreeHeavy] = useState(false);
+  const [proInactive, setProInactive] = useState(false);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{
     top?: number;
@@ -75,6 +85,9 @@ export default function UserScopePanel({
         ...(search ? { search } : {}),
         ...(hasClassroom ? { has_classroom: "true" } : {}),
         ...(activeClassroom ? { active_classroom: "true" } : {}),
+        ...(atLimitToday ? { at_limit_today: "true" } : {}),
+        ...(freeHeavy ? { free_heavy: "true" } : {}),
+        ...(proInactive ? { pro_inactive: "true" } : {}),
       })
       .then(setData);
 
@@ -113,13 +126,16 @@ export default function UserScopePanel({
   }, [openMenu]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { reload(); }, [hours, sortBy, search, offset, role, hasClassroom, activeClassroom]);
+  useEffect(() => { reload(); }, [hours, sortBy, search, offset, role, hasClassroom, activeClassroom, atLimitToday, freeHeavy, proInactive]);
 
   const handleSearchChange = (v: string) => { setSearch(v); setOffset(0); };
   const handleSortChange = (v: SortKey) => { setSortBy(v); setOffset(0); };
   const handleHoursChange = (v: string) => { setHours(v); setOffset(0); };
   const toggleHasClassroom = () => { setHasClassroom((v) => !v); setOffset(0); };
   const toggleActiveClassroom = () => { setActiveClassroom((v) => !v); setOffset(0); };
+  const toggleAtLimitToday = () => { setAtLimitToday((v) => !v); setOffset(0); };
+  const toggleFreeHeavy = () => { setFreeHeavy((v) => !v); setOffset(0); };
+  const toggleProInactive = () => { setProInactive((v) => !v); setOffset(0); };
 
   const handleToggleSubscription = async (
     userId: string,
@@ -209,6 +225,28 @@ export default function UserScopePanel({
               onClick={toggleActiveClassroom}
               label="Active 30d"
               title="At least one submission graded on their assignments in the last 30 days"
+            />
+          </>
+        )}
+        {showStudentChips && (
+          <>
+            <FilterChip
+              active={atLimitToday}
+              onClick={toggleAtLimitToday}
+              label="At limit today"
+              title="Free user who hit any daily cap (sessions / chats / scans) today — Pro conversion candidate"
+            />
+            <FilterChip
+              active={freeHeavy}
+              onClick={toggleFreeHeavy}
+              label="Free · heavy"
+              title="Free user with 3+ sessions in the last 7 days — about to hit the wall"
+            />
+            <FilterChip
+              active={proInactive}
+              onClick={toggleProInactive}
+              label="Pro · inactive 14d"
+              title="Paying user with no session in 14 days — silent churn risk"
             />
           </>
         )}

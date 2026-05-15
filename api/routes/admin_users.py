@@ -56,6 +56,15 @@ async def users(
     # frontend.
     has_classroom: bool = Query(default=False),
     active_classroom: bool = Query(default=False),
+    # Student-attention filters powering the Independent Students chips.
+    # at_limit_today: free users who hit any daily cap today — the
+    #   right-now Pro-conversion list.
+    # free_heavy: free users with 3+ sessions in the last 7d — about
+    #   to hit the wall; upgrade outreach candidates.
+    # pro_inactive: Pro users with no session in 14d — silent churn.
+    at_limit_today: bool = Query(default=False),
+    free_heavy: bool = Query(default=False),
+    pro_inactive: bool = Query(default=False),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -249,6 +258,96 @@ async def users(
             .where(
                 Assignment.teacher_id == User.id,
                 Submission.submitted_at >= time_range(24 * 30),
+            )
+            .exists()
+        )
+
+    # Student-attention refinements. All three only meaningfully match
+    # students, but the conditions are subscription-tier-scoped so
+    # applying them to teachers/admins just filters them out — safe to
+    # send blindly. Same EXISTS / scalar-subquery pattern as the
+    # teacher chips so they affect search_filters but not the band.
+    if at_limit_today:
+        # Lower bound matches `entitlements.usage_cutoff()`: midnight
+        # UTC OR the user's daily_limit_reset_at when an admin reset
+        # their counters later today. `GREATEST(today, reset_at)` in
+        # Postgres ignores NULLs, so this also handles users who've
+        # never been reset. Without this the chip would diverge from
+        # the live cap engine — a user whose limits were reset would
+        # still show "at limit".
+        #
+        # group_by(user_id) is required for HAVING + COUNT to evaluate
+        # per-user. Without it Postgres treats the whole subquery as
+        # one aggregate group, the non-aggregated SELECT column makes
+        # the query ill-formed, and the planner can short-circuit
+        # EXISTS to true for users with zero matching rows.
+        cutoff = func.greatest(today, User.daily_limit_reset_at)
+        search_filters.append(
+            User.subscription_tier != "pro",
+        )
+        search_filters.append(
+            (
+                select(LLMCall.user_id)
+                .where(
+                    LLMCall.user_id == User.id,
+                    LLMCall.created_at >= cutoff,
+                    LLMCall.function.in_(["decompose", "decompose_diagnosis"]),
+                )
+                .group_by(LLMCall.user_id)
+                .having(func.count() >= FREE_DAILY_SESSION_LIMIT)
+                .exists()
+            )
+            | (
+                select(LLMCall.user_id)
+                .where(
+                    LLMCall.user_id == User.id,
+                    LLMCall.created_at >= cutoff,
+                    LLMCall.function.in_(["step_chat", "judge"]),
+                )
+                .group_by(LLMCall.user_id)
+                .having(func.count() >= FREE_DAILY_CHAT_LIMIT)
+                .exists()
+            )
+            | (
+                select(LLMCall.user_id)
+                .where(
+                    LLMCall.user_id == User.id,
+                    LLMCall.created_at >= cutoff,
+                    LLMCall.function == "image_extract",
+                )
+                .group_by(LLMCall.user_id)
+                .having(func.count() >= FREE_DAILY_IMAGE_SCAN_LIMIT)
+                .exists()
+            )
+        )
+    if free_heavy:
+        # Free user with 3+ sessions in the last 7 days. "Sessions"
+        # here is rows in `sessions`, same source as the existing
+        # session_count column. group_by required for HAVING — see
+        # at_limit_today block above.
+        search_filters.append(User.subscription_tier != "pro")
+        search_filters.append(
+            select(Session.user_id)
+            .where(
+                Session.user_id == User.id,
+                Session.created_at >= time_range(168),
+            )
+            .group_by(Session.user_id)
+            .having(func.count() >= 3)
+            .exists()
+        )
+    if pro_inactive:
+        # Pro AND currently paying (matches entitlements.is_pro:
+        # active or trial). A user with tier=pro but status=cancelled
+        # is no longer paying for us and shouldn't count as "silent
+        # churn" — they've already churned.
+        search_filters.append(User.subscription_tier == "pro")
+        search_filters.append(User.subscription_status.in_(("active", "trial")))
+        search_filters.append(
+            ~select(Session.id)
+            .where(
+                Session.user_id == User.id,
+                Session.created_at >= time_range(24 * 14),
             )
             .exists()
         )

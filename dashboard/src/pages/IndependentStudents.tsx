@@ -5,9 +5,10 @@ export default function IndependentStudents() {
     <UserScopePanel
       eyebrow="Audience"
       title="Independent students"
-      subtitle="Students with no school affiliation — consumer learners and founder/test accounts."
+      subtitle="Consumer learners with no school affiliation — find the conversion-ready, the heavy users, and the silent churners."
       role="student"
       showDailyUsage
+      showStudentChips
       emptyMessage="No independent students for this window."
     />
   );
