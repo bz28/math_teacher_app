@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, type ContactLeadData } from "../lib/api";
 import { btnGhost, btnPrimary, inputStyle, overlay } from "../lib/styles";
+import { Checkbox } from "./Checkbox";
 
 /**
  * Convert a lead to a school. Creates the school, links the lead,
@@ -129,17 +130,11 @@ export default function ConvertLeadModal({
                   style={{ ...inputStyle, resize: "vertical" }}
                 />
               </Field>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={sendInvite}
-                  onChange={(e) => setSendInvite(e.target.checked)}
-                  style={{ width: 16, height: 16, accentColor: "var(--accent)" }}
-                />
-                <span style={{ fontSize: 13, fontWeight: 500 }}>
-                  Send teacher invite to {form.contact_email || "contact email"}
-                </span>
-              </label>
+              <Checkbox
+                checked={sendInvite}
+                onChange={setSendInvite}
+                label={`Send teacher invite to ${form.contact_email || "contact email"}`}
+              />
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
                 <button type="button" onClick={onClose} style={btnGhost}>Cancel</button>
                 <button type="submit" disabled={submitting} style={{ ...btnPrimary, opacity: submitting ? 0.6 : 1 }}>
