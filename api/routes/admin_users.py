@@ -268,10 +268,14 @@ async def users(
     # send blindly. Same EXISTS / scalar-subquery pattern as the
     # teacher chips so they affect search_filters but not the band.
     if at_limit_today:
-        # Today's per-user counts mirror the existing daily_sessions/
-        # daily_chats/daily_scans subqueries; we reuse those via a
-        # union of equality conditions on the user's tier and the
-        # per-cap thresholds.
+        # Lower bound matches `entitlements.usage_cutoff()`: midnight
+        # UTC OR the user's daily_limit_reset_at when an admin reset
+        # their counters later today. `GREATEST(today, reset_at)` in
+        # Postgres ignores NULLs, so this also handles users who've
+        # never been reset. Without this the chip would diverge from
+        # the live cap engine — a user whose limits were reset would
+        # still show "at limit".
+        cutoff = func.greatest(today, User.daily_limit_reset_at)
         search_filters.append(
             User.subscription_tier != "pro",
         )
@@ -280,10 +284,9 @@ async def users(
                 select(LLMCall.id)
                 .where(
                     LLMCall.user_id == User.id,
-                    LLMCall.created_at >= today,
+                    LLMCall.created_at >= cutoff,
                     LLMCall.function.in_(["decompose", "decompose_diagnosis"]),
                 )
-                .group_by(LLMCall.user_id)
                 .having(func.count() >= FREE_DAILY_SESSION_LIMIT)
                 .exists()
             )
@@ -291,10 +294,9 @@ async def users(
                 select(LLMCall.id)
                 .where(
                     LLMCall.user_id == User.id,
-                    LLMCall.created_at >= today,
+                    LLMCall.created_at >= cutoff,
                     LLMCall.function.in_(["step_chat", "judge"]),
                 )
-                .group_by(LLMCall.user_id)
                 .having(func.count() >= FREE_DAILY_CHAT_LIMIT)
                 .exists()
             )
@@ -302,10 +304,9 @@ async def users(
                 select(LLMCall.id)
                 .where(
                     LLMCall.user_id == User.id,
-                    LLMCall.created_at >= today,
+                    LLMCall.created_at >= cutoff,
                     LLMCall.function == "image_extract",
                 )
-                .group_by(LLMCall.user_id)
                 .having(func.count() >= FREE_DAILY_IMAGE_SCAN_LIMIT)
                 .exists()
             )
@@ -321,14 +322,16 @@ async def users(
                 Session.user_id == User.id,
                 Session.created_at >= time_range(168),
             )
-            .group_by(Session.user_id)
             .having(func.count() >= 3)
             .exists()
         )
     if pro_inactive:
-        # Pro user with no session in the last 14 days. Negation via
-        # `~exists()` — silent churn risk.
+        # Pro AND currently paying (matches entitlements.is_pro:
+        # active or trial). A user with tier=pro but status=cancelled
+        # is no longer paying for us and shouldn't count as "silent
+        # churn" — they've already churned.
         search_filters.append(User.subscription_tier == "pro")
+        search_filters.append(User.subscription_status.in_(("active", "trial")))
         search_filters.append(
             ~select(Session.id)
             .where(
