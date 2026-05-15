@@ -4,7 +4,6 @@ import { HomeProblem } from "@/components/landing/home-problem";
 import { HomeIntegrity } from "@/components/landing/home-integrity";
 import { HomeWorkspace } from "@/components/landing/home-workspace";
 import { HomeOutcomes } from "@/components/landing/home-outcomes";
-import { HomeDistrictsTeaser } from "@/components/landing/home-districts-teaser";
 import { CtaBand } from "@/components/landing/cta-band";
 import { Footer } from "@/components/landing/footer";
 
@@ -18,7 +17,12 @@ export default function Home() {
         <HomeIntegrity />
         <HomeWorkspace />
         <HomeOutcomes />
-        <HomeDistrictsTeaser />
+        {/* Districts-teaser dropped — district leaders land on
+            /for-districts directly via sales emails, never by
+            scrolling the homepage. The teaser stole real estate
+            from the teacher-focused message and the eyebrow
+            "FOR DISTRICT LEADERS" actively signalled to the
+            visiting teacher that this section wasn't for them. */}
         {/* Final-CTA reframe to match the lead-with-self-serve hero.
             Previously pitched 'Bring Veradic to your school. Book a
             walkthrough' — single school-focused ask that orphaned every

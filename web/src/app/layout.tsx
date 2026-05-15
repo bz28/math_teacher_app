@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Instrument_Serif, Geist_Mono } from "next/font/google";
+import { Inter, Instrument_Serif, Fraunces, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -21,6 +21,21 @@ const instrumentSerif = Instrument_Serif({
   subsets: ["latin"],
   weight: ["400"],
   style: ["normal", "italic"],
+  display: "swap",
+});
+
+// Heavier editorial display serif used for high-emphasis headline
+// phrases (hero second-line, subject hero second-line). Instrument
+// Serif only ships weight 400, which reads as "magazine subhead" —
+// too quiet against bold sans first lines on a conversion page.
+// Fraunces supports weights through 900 and was designed for display
+// use, so we can pair an italic 600 second phrase with a bold first
+// phrase and keep the editorial voice without losing punch.
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  weight: ["600", "700"],
+  style: ["italic"],
   display: "swap",
 });
 
@@ -100,7 +115,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${instrumentSerif.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${instrumentSerif.variable} ${fraunces.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>
