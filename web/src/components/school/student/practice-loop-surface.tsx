@@ -204,7 +204,7 @@ export function PracticeLoopSurface({
         // generated (LLM failure → stored as null) would otherwise
         // render a single button and trap the student. Surface the
         // problem clearly and let them move on.
-        <div className="rounded-[--radius-md] border border-amber-500 bg-amber-50 p-4 text-sm text-amber-700 ">
+        <div className="rounded-[--radius-md] border border-amber-500 bg-amber-50 p-4 text-sm text-amber-700 dark:bg-amber-500/10">
           This practice problem doesn&apos;t have multiple-choice options yet.
           Try the next one.
         </div>
@@ -262,7 +262,7 @@ export function PracticeLoopSurface({
               className={cn(
                 "ml-auto inline-flex items-center gap-1.5 rounded-[--radius-sm] border px-3 py-1.5 text-sm font-medium transition-colors",
                 flagged
-                  ? "border-amber-500 bg-amber-50 text-amber-600 "
+                  ? "border-amber-500 bg-amber-50 text-amber-600 dark:bg-amber-500/10"
                   : "border-border text-text-secondary hover:border-amber-500 hover:text-amber-600",
               )}
               title={flagged ? "Flagged for review" : "Flag this for review"}

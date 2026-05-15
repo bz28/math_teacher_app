@@ -445,13 +445,13 @@ export function IntegrityCheckChat({
                 <div
                   role="status"
                   aria-live="polite"
-                  className="mb-2 flex items-center justify-between gap-2 rounded-[--radius-sm] border border-[color:var(--color-warning)]/30 bg-amber-50 px-3 py-2 text-xs text-[color:var(--color-warning-dark)] dark:border-amber-700 dark:bg-amber-950/30 "
+                  className="mb-2 flex items-center justify-between gap-2 rounded-[--radius-sm] border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
                 >
                   <span>Still there? Take your time.</span>
                   <button
                     type="button"
                     onClick={handleNeedMoreTime}
-                    className="rounded-full bg-amber-100 px-2 py-0.5 font-bold text-[color:var(--color-warning-dark)] hover:bg-amber-200 dark:bg-amber-800/40 dark:text-amber-100"
+                    className="rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-800 hover:bg-amber-200 dark:bg-amber-800/40 dark:text-amber-100"
                   >
                     I need more time
                   </button>

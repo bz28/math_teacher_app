@@ -40,7 +40,7 @@ export function PercentBadge({
  *  surfaces (Grades tab class summary, distribution chips) match
  *  PercentBadge's tone thresholds without redefining them. */
 export function percentTone(percent: number): string {
-  if (percent >= STRONG_THRESHOLD) return "text-green-700 ";
+  if (percent >= STRONG_THRESHOLD) return "text-green-700 dark:text-green-400";
   if (percent >= STRUGGLING_THRESHOLD) return "text-text-primary";
   return "text-red-700 dark:text-red-400";
 }

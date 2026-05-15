@@ -13,7 +13,7 @@ export function UrgencyPill({ dueAt }: { dueAt: string | null }) {
     tone === "red"
       ? "bg-error-light text-error"
       : tone === "amber"
-      ? "bg-amber-50 text-amber-700 dark:bg-amber-900/30 "
+      ? "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
       : "bg-transparent text-text-muted";
   return (
     <span
