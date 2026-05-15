@@ -167,12 +167,12 @@ export default function HomeworkReviewPage({
       <div className="mx-auto max-w-6xl px-4 pt-3">
         <Link
           href={backHref}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-text-muted hover:text-primary"
+          className="inline-flex items-center gap-1 font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-text-muted transition-colors hover:text-text-primary"
         >
           ← Back to homework
         </Link>
         {hwTitle && (
-          <h1 className="mt-1 text-xl font-extrabold tracking-tight text-text-primary">
+          <h1 className="mt-2 font-serif text-[32px] leading-tight tracking-[-0.015em] text-text-primary">
             {hwTitle}
           </h1>
         )}
@@ -185,14 +185,14 @@ export default function HomeworkReviewPage({
       )}
 
       {phase.kind === "error" && (
-        <p className="mx-auto mt-8 max-w-6xl px-4 text-sm text-red-600">
+        <p className="mx-auto mt-8 max-w-6xl px-4 text-sm text-[color:var(--color-error)]">
           {phase.message}
         </p>
       )}
 
       {phase.kind === "empty" && (
         <div className="mx-auto mt-8 max-w-3xl px-4">
-          <div className="rounded-[--radius-xl] border border-dashed border-border-light bg-bg-subtle p-10 text-center">
+          <div className="rounded-[--radius-xl] border border-border-light bg-[color:var(--color-surface-alt-2)] p-10 text-center">
             <p className="text-sm font-bold text-text-primary">Nothing to review yet.</p>
             <p className="mt-1 text-xs text-text-muted">
               Problems may still be generating, or you&apos;ve already reviewed

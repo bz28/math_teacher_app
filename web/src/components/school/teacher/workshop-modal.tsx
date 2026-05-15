@@ -19,7 +19,7 @@ import { InlineTitleEdit } from "./_pieces/inline-title-edit";
 import { SimilarJobStrip } from "./_pieces/similar-job-strip";
 
 const STATUS_BADGE: Record<string, string> = {
-  pending: "bg-amber-50 text-amber-700 dark:bg-amber-500/10",
+  pending: "bg-[color:var(--color-warning-bg)] text-[color:var(--color-warning-dark)] ",
   approved: "bg-green-50 text-green-700 dark:bg-green-500/10",
   rejected: "bg-gray-100 text-gray-500 dark:bg-gray-500/10",
   archived: "bg-gray-100 text-gray-500 dark:bg-gray-500/10",
@@ -643,7 +643,7 @@ export function WorkshopModal({
 
         {/* Lock banner */}
         {isLocked && (
-          <div className="border-b border-amber-200 bg-amber-50 px-6 py-2 text-xs font-semibold text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+          <div className="border-b border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-6 py-2 text-xs font-semibold text-[color:var(--color-warning-dark)]   ">
             🔒 This question is in published homework
             {liveItem.used_in.length > 0 && ` (${liveItem.used_in.map((u) => u.title).join(", ")})`}
             . Unpublish it to make changes.
@@ -687,9 +687,9 @@ export function WorkshopModal({
                 parent (gated when a proposal is pending so unsaved
                 chat doesn't get lost). */}
             {liveItem.parent_question_id && (
-              <div className="mb-4 rounded-[--radius-md] border border-amber-300 bg-amber-50 px-4 py-3 text-xs dark:border-amber-500/40 dark:bg-amber-500/10">
+              <div className="mb-4 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-4 py-3 text-xs  ">
                 <div className="flex items-baseline justify-between gap-3">
-                  <div className="font-bold text-amber-900 dark:text-amber-200">
+                  <div className="font-bold text-[color:var(--color-warning-dark)] ">
                     ✨ Practice problem
                   </div>
                   {parentTitle && onJumpToParent && (
@@ -702,18 +702,18 @@ export function WorkshopModal({
                         }
                         onJumpToParent();
                       }}
-                      className="text-[11px] font-semibold text-amber-900 underline-offset-2 hover:underline dark:text-amber-200"
+                      className="text-[11px] font-semibold text-[color:var(--color-warning-dark)] underline-offset-2 hover:underline "
                     >
                       View parent question →
                     </button>
                   )}
                 </div>
                 {parentTitle && (
-                  <div className="mt-1 text-[12px] font-semibold text-amber-800 dark:text-amber-300">
+                  <div className="mt-1 text-[12px] font-semibold text-[color:var(--color-warning-dark)] ">
                     Practice for: <span className="font-bold">{parentTitle}</span>
                   </div>
                 )}
-                <div className="mt-1 text-amber-800/90 dark:text-amber-300/80">
+                <div className="mt-1 text-[color:var(--color-warning-dark)]/90 /80">
                   Approving this makes it available as practice scaffolding —
                   served via the student practice loop, not added to a homework.
                 </div>
@@ -1270,7 +1270,7 @@ function ChatPanel({
           <span className="text-sm font-bold text-text-primary">AI Workshop</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`text-[10px] font-semibold ${atSoftCap ? "text-amber-600" : "text-text-muted"}`}>
+          <span className={`text-[10px] font-semibold ${atSoftCap ? "text-[color:var(--color-warning-dark)]" : "text-text-muted"}`}>
             {teacherMessageCount}/{item.chat_soft_cap}
           </span>
           <button
@@ -1318,7 +1318,7 @@ function ChatPanel({
       </div>
 
       {atSoftCap && (
-        <div className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+        <div className="border-t border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-4 py-2 text-[11px] text-[color:var(--color-warning-dark)]   ">
           You&rsquo;ve sent a lot of messages — consider clearing the chat or starting fresh.
         </div>
       )}
@@ -1502,7 +1502,7 @@ function ChatMessageBubble({
             </div>
           )}
           {proposalState === "accepted" && (
-            <div className="mt-1 text-[10px] font-bold text-green-700 dark:text-green-400">
+            <div className="mt-1 text-[10px] font-bold text-green-700 ">
               ✓ Accepted
             </div>
           )}
@@ -1550,7 +1550,7 @@ function CompletionModal({
         You reviewed {total} question{total === 1 ? "" : "s"}
       </p>
       <div className="mt-4 flex justify-center gap-4 text-sm">
-        <span className="font-semibold text-green-700 dark:text-green-400">
+        <span className="font-semibold text-green-700 ">
           ✓ {counts.approved} approved
         </span>
         <span className="font-semibold text-red-700 dark:text-red-400">

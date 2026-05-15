@@ -53,7 +53,7 @@ export default function StudentGradesPage({
     return (
       <div className="mx-auto max-w-4xl px-6 py-8">
         <BackLink href={backHref} />
-        <p className="mt-6 text-sm text-red-600">{error}</p>
+        <p className="mt-6 text-sm text-[color:var(--color-error)]">{error}</p>
       </div>
     );
   }
@@ -71,19 +71,19 @@ export default function StudentGradesPage({
     <div className="mx-auto max-w-4xl px-6 py-8">
       <BackLink href={backHref} />
 
-      <header className="mt-4">
-        <h1 className="text-2xl font-bold text-text-primary">{data.student.name}</h1>
-        <p className="mt-0.5 text-sm text-text-muted">{data.student.section_name}</p>
+      <header className="mt-3">
+        <h1 className="font-serif text-[34px] leading-tight tracking-[-0.015em] text-text-primary">{data.student.name}</h1>
+        <p className="mt-1 font-serif italic text-[15px] text-text-muted">{data.student.section_name}</p>
       </header>
 
       <SummaryBar data={data} />
 
       <section className="mt-10">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted">
+        <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary">
           Published homework
         </h2>
         {data.published_hws.length === 0 ? (
-          <p className="mt-3 rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle p-6 text-center text-xs text-text-muted">
+          <p className="mt-3 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)] p-6 text-center text-xs text-text-muted">
             No grades published yet for this student.
           </p>
         ) : (
@@ -102,7 +102,7 @@ export default function StudentGradesPage({
 
       {data.missing_hws.length > 0 && (
         <section className="mt-10">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-text-muted">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary">
             Missing
           </h2>
           <div className="mt-3 space-y-2">
@@ -168,7 +168,7 @@ function SummaryStat({
   const valueCls = emphasize
     ? "text-3xl font-bold text-text-primary"
     : tone === "red"
-      ? "text-xl font-bold text-red-700 dark:text-red-400"
+      ? "text-xl font-bold text-[color:var(--color-error)] "
       : "text-xl font-bold text-text-primary";
   return (
     <div className="rounded-[--radius-md] border border-border-light bg-surface p-4">
@@ -212,7 +212,7 @@ function PublishedHwRow({
         )}
       </div>
       {hw.final_score === null ? (
-        <span className="shrink-0 rounded-[--radius-pill] border border-border-light bg-bg-subtle px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+        <span className="shrink-0 rounded-[--radius-pill] border border-border-light bg-[color:var(--color-surface-alt-2)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
           Not graded yet
         </span>
       ) : (
@@ -224,7 +224,7 @@ function PublishedHwRow({
 
 function MissingHwRow({ hw }: { hw: StudentGradesResponse["missing_hws"][number] }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-[--radius-md] border border-border-light bg-bg-subtle px-4 py-3 opacity-75">
+    <div className="flex items-center justify-between gap-4 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)] px-4 py-3 opacity-75">
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold text-text-secondary">{hw.title}</div>
         {hw.due_at && (
@@ -233,7 +233,7 @@ function MissingHwRow({ hw }: { hw: StudentGradesResponse["missing_hws"][number]
           </div>
         )}
       </div>
-      <span className="shrink-0 rounded-[--radius-pill] border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+      <span className="shrink-0 rounded-[--radius-pill] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-error)]  dark:bg-[color:var(--color-error-light)] ">
         Missing
       </span>
     </div>

@@ -136,12 +136,12 @@ export function HomeworkCard({
             </span>
           )}
         {hw.pending_review > 0 && (
-          <span className="ml-1 font-semibold text-amber-600 dark:text-amber-400">
+          <span className="ml-1 font-semibold text-[color:var(--color-warning-dark)] ">
             · {hw.pending_review} need{hw.pending_review === 1 ? "s" : ""} your approval
           </span>
         )}
         {isDraft && needsVariationsCount !== null && needsVariationsCount > 0 && (
-          <span className="ml-1 font-semibold text-amber-600 dark:text-amber-400">
+          <span className="ml-1 font-semibold text-[color:var(--color-warning-dark)] ">
             · {needsVariationsCount} need variation
             {needsVariationsCount === 1 ? "" : "s"}
           </span>
