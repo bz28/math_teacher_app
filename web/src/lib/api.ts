@@ -255,37 +255,43 @@ export function isInPreviewMode(): boolean {
 
 // ── Refresh deduplication ──
 
-let refreshPromise: Promise<boolean> | null = null;
-/** Whether the last refresh failure was a definitive auth rejection (401) vs transient error */
-let lastRefreshWasAuthRejection = false;
+/**
+ * Structured outcome of a refresh attempt. The previous design used a
+ * boolean return plus a module-level `lastRefreshWasAuthRejection`
+ * flag to communicate the second bit of information. That flag was
+ * racy: it lived outside any single request's lifecycle, so when
+ * multiple in-flight 401s converged on a shared refresh promise, a
+ * later refresh could mutate the flag between an earlier caller's
+ * "did it succeed?" check and its "should I clear tokens?" check —
+ * occasionally clearing tokens after a transient failure (silent
+ * logout) or leaving stale tokens after a real auth rejection.
+ *
+ * Returning the outcome through the promise eliminates the shared
+ * state: each caller awaits and reads its own answer.
+ */
+type RefreshResult = "success" | "auth_rejected" | "transient_error";
 
-async function refreshAccessToken(): Promise<boolean> {
+let refreshPromise: Promise<RefreshResult> | null = null;
+
+async function refreshAccessToken(): Promise<RefreshResult> {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
     const rt = getRefreshToken();
-    if (!rt) return false;
+    if (!rt) return "auth_rejected" as const;
     try {
       const res = await fetch(`${BASE_URL}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: rt }),
       });
-      if (res.status === 401) {
-        lastRefreshWasAuthRejection = true;
-        return false;
-      }
-      if (!res.ok) {
-        lastRefreshWasAuthRejection = false;
-        return false;
-      }
-      lastRefreshWasAuthRejection = false;
+      if (res.status === 401) return "auth_rejected" as const;
+      if (!res.ok) return "transient_error" as const;
       const data: TokenPair = await res.json();
       saveTokens(data);
-      return true;
+      return "success" as const;
     } catch {
-      lastRefreshWasAuthRejection = false;
-      return false;
+      return "transient_error" as const;
     } finally {
       refreshPromise = null;
     }
@@ -324,14 +330,15 @@ async function apiFetch<T>(
       // mean invalid credentials, not expired sessions
       const isAuthEndpoint = path.startsWith("/auth/");
       if (!isAuthEndpoint) {
-        const refreshed = await refreshAccessToken();
-        if (refreshed) {
+        const result = await refreshAccessToken();
+        if (result === "success") {
           clearTimeout(timer);
           return apiFetch(path, options);
         }
-        // Only clear tokens on definitive 401 from refresh endpoint.
-        // Network errors / 5xx leave tokens intact so a later retry can succeed.
-        if (lastRefreshWasAuthRejection) {
+        // Only clear tokens on a definitive auth rejection. Transient
+        // errors (network blip, 5xx) leave tokens intact so a later
+        // retry can succeed without forcing a re-login.
+        if (result === "auth_rejected") {
           clearTokens();
         }
       }
