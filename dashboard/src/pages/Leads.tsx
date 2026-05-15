@@ -53,10 +53,16 @@ const MEETING_LABEL: Record<MeetingType, string> = {
 
 const SOURCES_NEEDING_REFERRER: LeadSource[] = ["warm_intro", "outbound"];
 
-// "Stale" = an active lead (new/contacted/engaged) untouched for this
-// long. Demo-held and converted leads don't age.
+// "Stale" = an active lead untouched for this long. Converted and
+// declined leads don't age.
 const STALE_DAYS = 5;
-const ACTIVE_STATUSES: LeadStatus[] = ["new", "contacted", "engaged"];
+// Active = anything not yet terminal. Defined as the negation of
+// converted/declined so any in-progress status (engaged, demo_held,
+// and future ones) flows through Active automatically. Before this,
+// demo_held silently dropped off the view.
+const TERMINAL_STATUSES: LeadStatus[] = ["converted", "declined"];
+const isActive = (lead: ContactLeadData): boolean =>
+  !TERMINAL_STATUSES.includes(lead.status);
 
 export default function Leads() {
   const navigate = useNavigate();
@@ -103,7 +109,7 @@ export default function Leads() {
   }), [leads]);
 
   const filteredLeads = useMemo(() => {
-    if (filter === "active") return leads.filter((l) => ACTIVE_STATUSES.includes(l.status));
+    if (filter === "active") return leads.filter(isActive);
     if (filter === "stale") return leads.filter(isStale);
     return leads;
   }, [leads, filter]);
@@ -411,7 +417,7 @@ function isInPast(iso: string): boolean {
 }
 
 function isStale(lead: ContactLeadData): boolean {
-  if (!ACTIVE_STATUSES.includes(lead.status)) return false;
+  if (!isActive(lead)) return false;
   return daysSince(lead.last_touch_at) > STALE_DAYS;
 }
 
