@@ -63,7 +63,11 @@ export function EditableText({
     try {
       await onSave(next);
       setEditing(false);
-    } catch {
+    } catch (e) {
+      // Surface the failure (matches the alert pattern used by sibling
+      // field handlers in LeadDetail); silently reverting hides 422s
+      // like an invalid email from the operator.
+      alert((e as Error).message);
       setDraft(value);
       setEditing(false);
     } finally {
@@ -109,7 +113,15 @@ export function EditableText({
 
   return (
     <span
+      role="button"
+      tabIndex={0}
       onClick={() => setEditing(true)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setEditing(true);
+        }
+      }}
       style={{
         // inline-block keeps the hover swatch confined to the
         // content box — without it, an EditableText sitting inside
