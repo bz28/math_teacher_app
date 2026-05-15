@@ -1,7 +1,8 @@
-/** Compact status pill used across teacher views (courses dashboard,
- *  course header, eventually per-HW rows). Three tones are enough for
- *  the workload semantics we surface: amber = needs attention,
- *  red = harder failure, green = caught up.
+/** Status label used across teacher views (courses list, course header,
+ *  per-HW rows). Three tones express workload state: amber = needs
+ *  attention, red = harder failure, green = caught up. Editorial flat
+ *  badge family — same grammar as the dashboard .badge: small-caps,
+ *  tracked, design-token tinted, sharp 2px radius.
  *
  *  Single source of truth so all surfaces stay visually identical and
  *  any palette tweak lands in one place. */
@@ -16,15 +17,15 @@ export function StatusPill({
 }) {
   const styles: Record<typeof tone, string> = {
     amber:
-      "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300",
+      "border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] text-[color:var(--color-warning-dark)]",
     red:
-      "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300",
+      "border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] text-[color:var(--color-error)]",
     green:
-      "border-green-200 bg-green-50 text-green-700 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-300",
+      "border-[color:var(--color-success-border)] bg-[color:var(--color-success-light)] text-[color:var(--color-success)]",
   };
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-[--radius-pill] border px-2 py-0.5 text-[11px] font-semibold ${styles[tone]}`}
+      className={`inline-flex items-center gap-1 rounded-[2px] border px-2 py-[3px] text-[10.5px] font-semibold uppercase tracking-[0.06em] ${styles[tone]}`}
     >
       {icon && <span aria-hidden>{icon}</span>}
       {label}
