@@ -32,7 +32,7 @@ export function ComingSoon({
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15 }}
-        className="mt-2 inline-flex items-center gap-1.5 rounded-[--radius-pill] bg-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-600 dark:bg-amber-500/10"
+        className="mt-2 inline-flex items-center gap-1.5 rounded-[--radius-pill] bg-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-600 "
       >
         Coming Soon
       </motion.div>

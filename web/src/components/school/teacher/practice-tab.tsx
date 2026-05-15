@@ -148,7 +148,7 @@ export function PracticeTab({ courseId }: { courseId: string }) {
           className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-semibold tracking-[0.01em] text-white transition-colors hover:bg-primary-dark"
           onClick={() => setShowNew(true)}
         >
-          + New Practice
+          New practice
         </button>
       </div>
 
@@ -228,7 +228,7 @@ export function PracticeTab({ courseId }: { courseId: string }) {
         {loading ? (
           <p className="text-sm text-text-muted">Loading…</p>
         ) : practices.length === 0 ? (
-          <EmptyState text="No practice sets yet. Click + New Practice to create one — you can clone from a homework or start from scratch." />
+          <EmptyState text="No practice sets yet. Click New practice to create one — you can clone from a homework or start from scratch." />
         ) : filtered.length === 0 ? (
           <div className="mt-4 rounded-[--radius-lg] border border-border-light bg-[color:var(--color-surface-alt-2)] p-8 text-center text-sm text-text-muted">
             No practice sets match your filters.{" "}

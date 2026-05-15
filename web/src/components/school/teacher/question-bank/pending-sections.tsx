@@ -186,10 +186,10 @@ function VariationGroupRow({
   const parentMissing = parentLoaded && !parent;
 
   return (
-    <div className="rounded-[--radius-md] border border-amber-200 bg-amber-50/40 p-3 transition-all hover:border-amber-300 dark:border-amber-500/30 dark:bg-amber-500/5">
-      <div className="flex items-baseline justify-between gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+    <div className="rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)]/40 p-3 transition-all hover:border-[color:var(--color-warning)]/30  dark:bg-[color:var(--color-warning-bg)]0/5">
+      <div className="flex items-baseline justify-between gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)] ">
         <span>↳ Practice problems for</span>
-        <span className="text-amber-700 dark:text-amber-300">
+        <span className="text-[color:var(--color-warning-dark)] ">
           {pendingCount} pending
         </span>
       </div>
@@ -198,7 +198,7 @@ function VariationGroupRow({
         <button
           type="button"
           onClick={onViewParent}
-          className="group mt-1.5 block w-full rounded-[--radius-sm] px-1 py-1 text-left transition-colors hover:bg-amber-100/40 dark:hover:bg-amber-500/10"
+          className="group mt-1.5 block w-full rounded-[--radius-sm] px-1 py-1 text-left transition-colors hover:bg-[color:var(--color-warning-bg)]/40 dark:hover:bg-[color:var(--color-warning-bg)]0/10"
           title="View the original problem"
         >
           <div className="line-clamp-1 text-sm font-bold text-text-primary group-hover:text-primary">
@@ -221,7 +221,7 @@ function VariationGroupRow({
       ) : (
         <div className="mt-1.5 flex items-center gap-2 px-1 py-1">
           <span
-            className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-amber-300 border-t-amber-700"
+            className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-[color:var(--color-warning)]/30 border-t-[color:var(--color-warning-dark)]"
             aria-hidden
           />
           <span className="text-xs text-text-muted">Loading parent question…</span>
@@ -241,7 +241,7 @@ function VariationGroupRow({
         <button
           type="button"
           onClick={onReview}
-          className="rounded-[--radius-md] bg-amber-600 px-3 py-1 text-white hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-400"
+          className="rounded-[--radius-md] bg-[color:var(--color-warning-dark)] px-3 py-1 text-white hover:bg-[color:var(--color-warning)] dark:bg-[color:var(--color-warning-bg)]0 "
         >
           Review practice →
         </button>

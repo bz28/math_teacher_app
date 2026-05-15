@@ -39,7 +39,7 @@ const DISPOSITION_CONFIG: Record<
   tutor_pivot: {
     label: "Tutored",
     icon: "?",
-    cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/20",
+    cls: "bg-[color:var(--color-warning-bg)] text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning-bg)]0/20",
   },
   flag_for_review: {
     label: "Review",
@@ -104,8 +104,8 @@ const RUBRIC_DIM_LABELS: Record<keyof IntegrityRubric, string> = {
 
 const RUBRIC_SCORE_STYLES: Record<string, string> = {
   low: "text-red-600 dark:text-red-400",
-  mid: "text-amber-600 dark:text-amber-400",
-  high: "text-green-600 dark:text-green-400",
+  mid: "text-[color:var(--color-warning-dark)] ",
+  high: "text-green-600 ",
   not_probed: "text-text-muted italic",
   not_observed: "text-text-muted italic",
 };
@@ -220,7 +220,7 @@ const ROW_DISPOSITION_COPY: Partial<
   },
   tutor_pivot: {
     text: "Tutored",
-    style: "bg-amber-600 text-white dark:bg-amber-500",
+    style: "bg-[color:var(--color-warning-dark)] text-white dark:bg-[color:var(--color-warning-bg)]0",
   },
 };
 
@@ -884,7 +884,7 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
                   </div>
                   <div className="flex items-center gap-2 text-xs text-text-muted">
                     {r.is_late && (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-700 dark:bg-amber-500/20">
+                      <span className="rounded-full bg-[color:var(--color-warning-bg)] px-2 py-0.5 font-bold text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning-bg)]0/20">
                         LATE
                       </span>
                     )}
@@ -908,7 +908,7 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
               <div className="text-xs text-text-muted">
                 Submitted {new Date(detail.submitted_at).toLocaleString()}
                 {detail.is_late && (
-                  <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-700 dark:bg-amber-500/20">
+                  <span className="ml-2 rounded-full bg-[color:var(--color-warning-bg)] px-2 py-0.5 font-bold text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning-bg)]0/20">
                     LATE
                   </span>
                 )}

@@ -311,7 +311,7 @@ export function GenerateQuestionsModal({
           )}
 
           {onlyPdfsSelected && (
-            <p className="text-[11px] text-amber-600">
+            <p className="text-[11px] text-[color:var(--color-warning-dark)]">
               Heads up: every selected doc is a PDF, which isn&apos;t
               readable yet. Pick at least one image or unselect everything.
             </p>

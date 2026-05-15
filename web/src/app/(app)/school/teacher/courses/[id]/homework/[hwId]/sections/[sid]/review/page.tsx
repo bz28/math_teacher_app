@@ -854,7 +854,7 @@ function PublishConfirmDialog({
       </h2>
       <p className="mt-2 text-sm text-text-secondary">{body}</p>
       {dirtyTotal > 0 && pendingTotal > 0 && (
-        <p className="mt-3 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-[color:var(--color-warning-bg)]0/10 dark:text-amber-200">
+        <p className="mt-3 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-3 py-2 text-xs text-[color:var(--color-warning-dark)]  dark:bg-[color:var(--color-warning)]/10 ">
           <span className="font-semibold">{dirtyTotal}</span>{" "}
           {dirtyTotal === 1 ? "is an edit" : "are edits"} to already-published grades.
         </p>
@@ -933,13 +933,13 @@ function RubricDriftBanner({
   if (snapshot.notes) snapshotFields.push({ label: "Notes", text: snapshot.notes });
 
   return (
-    <div className="rounded-[--radius-xl] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] p-4 dark:border-amber-500/30 dark:bg-[color:var(--color-warning-bg)]0/10">
+    <div className="rounded-[--radius-xl] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] p-4  dark:bg-[color:var(--color-warning)]/10">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-amber-900 dark:text-amber-200">
+          <p className="text-sm font-bold text-[color:var(--color-warning-dark)] ">
             Rubric edited since this was graded
           </p>
-          <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-200/80">
+          <p className="mt-1 text-xs text-[color:var(--color-warning-dark)]/80 /80">
             The AI graded against an earlier version of your rubric.
             Regrade to apply your current criteria — your edits on this
             submission will be replaced.
@@ -949,7 +949,7 @@ function RubricDriftBanner({
           type="button"
           onClick={onRegrade}
           disabled={regrading}
-          className="shrink-0 rounded-[--radius-md] bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[color:var(--color-warning-bg)]0 dark:hover:bg-amber-400 dark:text-amber-950"
+          className="shrink-0 rounded-[--radius-md] bg-[color:var(--color-warning-dark)] px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-[color:var(--color-warning)] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[color:var(--color-warning)]  "
         >
           {regrading ? "Regrading…" : "Regrade"}
         </button>
@@ -962,16 +962,16 @@ function RubricDriftBanner({
           }
           className="mt-3 text-xs"
         >
-          <summary className="cursor-pointer font-semibold text-amber-900 hover:text-[color:var(--color-warning-dark)] dark:text-amber-200 dark:hover:text-amber-300">
+          <summary className="cursor-pointer font-semibold text-[color:var(--color-warning-dark)] hover:text-[color:var(--color-warning-dark)]  ">
             {showSnapshot ? "Hide" : "View"} rubric at grading time
           </summary>
-          <div className="mt-2 space-y-2 rounded-[--radius-md] border border-[color:var(--color-warning)]/30/70 bg-white/60 p-3 dark:border-amber-500/20 dark:bg-amber-950/30">
+          <div className="mt-2 space-y-2 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-white/60 p-3 dark:border-[color:var(--color-warning)]/20 ">
             {snapshotFields.map((f) => (
               <div key={f.label}>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-amber-900/70 dark:text-amber-200/70">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)]/70 /70">
                   {f.label}
                 </p>
-                <p className="mt-0.5 whitespace-pre-wrap leading-relaxed text-amber-950 dark:text-amber-100">
+                <p className="mt-0.5 whitespace-pre-wrap leading-relaxed text-[color:var(--color-warning-dark)]">
                   {f.text}
                 </p>
               </div>
@@ -1048,7 +1048,7 @@ function RegradeConfirmDialog({
           type="button"
           onClick={onConfirm}
           disabled={regrading}
-          className="rounded-[--radius-md] bg-amber-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[color:var(--color-warning-bg)]0 dark:hover:bg-amber-400 dark:text-amber-950"
+          className="rounded-[--radius-md] bg-[color:var(--color-warning-dark)] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[color:var(--color-warning)] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[color:var(--color-warning)]  "
         >
           {regrading ? "Regrading…" : "Regrade"}
         </button>
@@ -1264,7 +1264,7 @@ function StudentRow({
           <span
             className={`shrink-0 text-xs font-bold ${
               sub!.grade_published_at && !sub!.grade_dirty
-                ? "text-[color:var(--color-success)] dark:text-green-400"
+                ? "text-[color:var(--color-success)] "
                 : "text-text-secondary"
             }`}
           >
@@ -1314,12 +1314,12 @@ function rowStatusLabel(entry: RosterEntry): {
   }
   if (sub.grade_published_at) {
     if (sub.grade_dirty) {
-      return { text: "Edited · not yet sent", dotClass: "bg-[color:var(--color-warning-bg)]0" };
+      return { text: "Edited · not yet sent", dotClass: "bg-[color:var(--color-warning)]" };
     }
     return { text: "Published", dotClass: "bg-green-500" };
   }
   if (sub.final_score !== null) {
-    return { text: "Graded, not published", dotClass: "bg-[color:var(--color-warning-bg)]0" };
+    return { text: "Graded, not published", dotClass: "bg-[color:var(--color-warning)]" };
   }
   return { text: "Needs review", dotClass: "bg-gray-400" };
 }
@@ -1975,7 +1975,7 @@ function ProblemGradeRow({
             <span>{aiGradeLabel}</span>
             {aiGrade.confidence !== null && aiGrade.confidence < 0.6 && (
               <span
-                className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-amber-300 bg-[color:var(--color-warning-bg)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)] dark:border-amber-500/40 dark:bg-[color:var(--color-warning-bg)]0/10 dark:text-amber-200"
+                className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)]  dark:bg-[color:var(--color-warning)]/10 "
                 title="AI reported low confidence — review this one carefully"
               >
                 <span aria-hidden>⚠</span>
@@ -2013,7 +2013,7 @@ function ProblemGradeRow({
           Partial
         </GradeBtn>
         {current === "partial" && (
-          <div className="inline-flex items-center gap-1 rounded-[--radius-md] border border-amber-300 bg-[color:var(--color-warning-bg)] px-2 py-1 text-xs font-semibold text-[color:var(--color-warning-dark)] dark:border-amber-500/40 dark:bg-[color:var(--color-warning-bg)]0/10 dark:text-amber-200">
+          <div className="inline-flex items-center gap-1 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-2 py-1 text-xs font-semibold text-[color:var(--color-warning-dark)]  dark:bg-[color:var(--color-warning)]/10 ">
             <input
               ref={setInputRef}
               type="number"
@@ -2113,7 +2113,7 @@ function GradeBtn({
 }) {
   const activeCls = {
     green: "border-green-500 bg-green-500 text-white",
-    amber: "border-amber-500 bg-[color:var(--color-warning-bg)]0 text-white",
+    amber: "border-[color:var(--color-warning)] bg-[color:var(--color-warning)] text-white",
     red: "border-[color:var(--color-error)] bg-[color:var(--color-error-light)] text-white",
   }[tone];
   const inactiveCls = aiPick
@@ -2185,9 +2185,9 @@ const INTEGRITY_STYLE: Record<
     label: "Procedural knowledge — consider revisiting the concept",
   },
   tutor_pivot: {
-    bg: "bg-[color:var(--color-warning-bg)] dark:bg-amber-900/20",
-    border: "border-[color:var(--color-warning)]/30 dark:border-amber-900/40",
-    iconBg: "bg-amber-600 text-white",
+    bg: "bg-[color:var(--color-warning-bg)]",
+    border: "border-[color:var(--color-warning)]/30",
+    iconBg: "bg-[color:var(--color-warning-dark)] text-white",
     icon: "?",
     label: "Student was lost — got tutored through it",
   },

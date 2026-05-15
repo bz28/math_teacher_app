@@ -8,7 +8,7 @@ import { MathText } from "@/components/shared/math-text";
 import { DIFFICULTY_STYLE } from "./constants";
 
 const STATUS_CHIP: Record<string, string> = {
-  pending: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  pending: "bg-[color:var(--color-warning-bg)] text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning-bg)]0/15 ",
   approved: "bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-300",
   rejected: "bg-gray-100 text-gray-500 dark:bg-gray-500/15",
   archived: "bg-gray-100 text-gray-500 dark:bg-gray-500/15",

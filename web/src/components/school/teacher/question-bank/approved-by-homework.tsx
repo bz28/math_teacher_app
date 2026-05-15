@@ -180,7 +180,7 @@ function HomeworkGroup({
                 {group.title}
               </h3>
               {group.status && group.status !== "published" && (
-                <span className="rounded-[--radius-pill] bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                <span className="rounded-[--radius-pill] bg-[color:var(--color-warning-bg)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning-bg)]0/15 ">
                   {group.status}
                 </span>
               )}
@@ -266,7 +266,7 @@ function PracticeLine({
         >
           {approvedCount} practice problem{approvedCount === 1 ? "" : "s"}
           {pendingCount > 0 && (
-            <span className="ml-1 rounded-[--radius-pill] bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+            <span className="ml-1 rounded-[--radius-pill] bg-[color:var(--color-warning-bg)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning-bg)]0/15 ">
               +{pendingCount} pending
             </span>
           )}
@@ -280,7 +280,7 @@ function PracticeLine({
               e.stopPropagation();
               onReview();
             }}
-            className="text-[11px] font-semibold text-amber-700 hover:underline dark:text-amber-300"
+            className="text-[11px] font-semibold text-[color:var(--color-warning-dark)] hover:underline "
           >
             Review pending
           </button>

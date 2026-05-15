@@ -46,7 +46,7 @@ export function InlineSavedHint({
   }
   if (state === "saved") {
     return (
-      <span className="text-[10px] font-semibold text-green-600 dark:text-green-400">
+      <span className="text-[10px] font-semibold text-green-600 ">
         ✓ Saved
       </span>
     );

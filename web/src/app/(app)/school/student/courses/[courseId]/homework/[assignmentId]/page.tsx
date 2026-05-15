@@ -416,7 +416,7 @@ const GRADE_TONE: Record<
   partial: {
     bg: "bg-amber-50 dark:bg-amber-900/20",
     border: "border-amber-200 dark:border-amber-900/40",
-    text: "text-amber-800 dark:text-amber-300",
+    text: "text-[color:var(--color-warning-dark)] ",
     icon: "◐",
     label: "Partial credit",
   },
@@ -459,9 +459,9 @@ function GradedSummaryCard({
     finalScore === null
       ? "text-text-primary"
       : finalScore >= 85
-        ? "text-green-700 dark:text-green-400"
+        ? "text-green-700 "
         : finalScore >= 70
-          ? "text-amber-700 dark:text-amber-400"
+          ? "text-amber-700 "
           : "text-red-700 dark:text-red-400";
   return (
     <div className="mt-5 rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm">
@@ -482,7 +482,7 @@ function GradedSummaryCard({
             {partial > 0 && (
               <>
                 {" · "}
-                <span className="font-semibold text-amber-700 dark:text-amber-400">
+                <span className="font-semibold text-amber-700 ">
                   {partial} partial
                 </span>
               </>

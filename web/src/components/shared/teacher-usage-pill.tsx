@@ -57,7 +57,7 @@ export function TeacherUsagePill({ compact = false }: { compact?: boolean }) {
   const toneClasses = hit
     ? "border-error/40 bg-error/10 text-error hover:bg-error/15"
     : near
-      ? "border-amber-500/40 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300"
+      ? "border-amber-500/40 bg-amber-50 text-amber-700 hover:bg-[color:var(--color-warning-bg)]  "
       : "border-border-light bg-surface-alt text-text-secondary hover:border-primary/40 hover:text-primary";
 
   if (compact) {

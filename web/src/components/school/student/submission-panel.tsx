@@ -237,7 +237,7 @@ export function SubmissionPanel({
       </p>
 
       {isLate && (
-        <div className="mt-4 rounded-[--radius-sm] border border-amber-500 bg-amber-50 p-3 text-sm text-amber-700 dark:bg-amber-500/10">
+        <div className="mt-4 rounded-[--radius-sm] border border-amber-500 bg-amber-50 p-3 text-sm text-amber-700 ">
           ⚠ This homework is past due. You can still submit, but it will be marked late.
         </div>
       )}
@@ -391,7 +391,7 @@ export function SubmissionPanel({
             disabled={!canSubmit}
             className={cn(
               "rounded-[--radius-sm] px-5 py-2 text-sm font-bold text-white disabled:opacity-50",
-              isLate ? "bg-amber-600 hover:bg-amber-700" : "bg-primary hover:bg-primary/90",
+              isLate ? "bg-[color:var(--color-warning-dark)] hover:bg-[color:var(--color-warning)]" : "bg-primary hover:bg-primary/90",
             )}
           >
             Submit homework{isLate ? " (late)" : ""}

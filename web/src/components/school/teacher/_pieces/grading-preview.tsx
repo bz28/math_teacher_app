@@ -35,13 +35,13 @@ export function GradingPreview({
       <div className="mt-3 space-y-3 text-xs leading-relaxed text-text-primary">
         <PreviewLine
           icon="✓"
-          iconClassName="text-green-700 dark:text-green-400"
+          iconClassName="text-green-700 "
           heading="Full credit when"
           body={fullCredit}
         />
         <PreviewLine
           icon="◐"
-          iconClassName="text-amber-700 dark:text-amber-400"
+          iconClassName="text-[color:var(--color-warning-dark)] "
           heading="Partial credit when"
           body={partialCredit}
         />

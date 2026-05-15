@@ -135,7 +135,7 @@ function HomeworkList({ courseId }: { courseId: string }) {
                 Submitted ✓
               </span>
             ) : (
-              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-600 dark:bg-amber-500/10">
+              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-600 ">
                 Not started
               </span>
             )}

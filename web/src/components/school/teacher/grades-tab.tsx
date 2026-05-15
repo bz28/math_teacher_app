@@ -383,7 +383,7 @@ function ClassSummary({ summary }: { summary: SummaryStats }) {
             )}
             {struggling > 0 && (
               <div
-                className="bg-[color:var(--color-error-light)]0"
+                className="bg-[color:var(--color-error)]"
                 style={{ width: `${(struggling / withAvg) * 100}%` }}
                 title={`${struggling} student${struggling === 1 ? "" : "s"} below ${STRUGGLING_THRESHOLD}%`}
               />
@@ -392,7 +392,7 @@ function ClassSummary({ summary }: { summary: SummaryStats }) {
           <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-text-muted">
             <DistributionLegend dot="bg-green-500" label={`≥${STRONG_THRESHOLD}%`} count={strong} />
             <DistributionLegend dot="bg-amber-400" label={`${STRUGGLING_THRESHOLD}-${STRONG_THRESHOLD - 1}%`} count={ok} />
-            <DistributionLegend dot="bg-[color:var(--color-error-light)]0" label={`<${STRUGGLING_THRESHOLD}%`} count={struggling} />
+            <DistributionLegend dot="bg-[color:var(--color-error)]" label={`<${STRUGGLING_THRESHOLD}%`} count={struggling} />
           </div>
         </div>
       )}

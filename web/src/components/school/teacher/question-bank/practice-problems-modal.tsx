@@ -161,7 +161,7 @@ function PracticeRow({
           <span
             className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
               isPending
-                ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20"
+                ? "bg-[color:var(--color-warning-bg)] text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning-bg)]0/20"
                 : "bg-primary-bg text-primary"
             }`}
           >
@@ -175,7 +175,7 @@ function PracticeRow({
               <span
                 className={`rounded-[--radius-pill] px-1.5 py-0.5 uppercase tracking-wider ${
                   isPending
-                    ? "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+                    ? "bg-[color:var(--color-warning-bg)] text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning-bg)]0/15 "
                     : "bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-300"
                 }`}
               >

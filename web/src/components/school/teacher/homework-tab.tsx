@@ -243,7 +243,7 @@ export function HomeworkTab({ courseId }: { courseId: string }) {
         {loading ? (
           <p className="text-sm text-text-muted">Loading…</p>
         ) : homeworks.length === 0 ? (
-          <EmptyState text="No homework yet. Click + New Homework to create one from your approved questions." />
+          <EmptyState text="No homework yet. Click New homework to create one from your approved questions." />
         ) : totalBucketed === 0 ? (
           <div className="mt-4 rounded-[--radius-lg] border border-border-light bg-[color:var(--color-surface-alt-2)] p-8 text-center text-sm text-text-muted">
             No homeworks match your filters.{" "}

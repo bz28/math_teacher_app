@@ -489,7 +489,7 @@ export function SubmissionExtractionConfirmView({
       </p>
 
       {blankPageCount > 0 && (
-        <div className="mt-4 rounded-[--radius-sm] border border-amber-500 bg-amber-50 p-3 text-sm text-amber-700 dark:bg-amber-500/10">
+        <div className="mt-4 rounded-[--radius-sm] border border-amber-500 bg-amber-50 p-3 text-sm text-amber-700 ">
           We couldn&apos;t read problems on{" "}
           {blankPageCount === 1 ? "1 of your pages" : `${blankPageCount} of your pages`}
           . Make sure each photo is clear and your work is visible.

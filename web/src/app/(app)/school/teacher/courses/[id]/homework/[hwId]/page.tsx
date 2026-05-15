@@ -838,7 +838,7 @@ export default function HomeworkDetailPage({
           {pending.length > 0 && (
             <Link
               href={reviewHref}
-              className="mt-4 flex items-center justify-between gap-3 rounded-[--radius-xl] border border-amber-300 bg-[color:var(--color-warning-bg)] px-5 py-4 shadow-sm transition-all hover:border-amber-400 hover:bg-amber-100 hover:shadow dark:border-amber-500/40 dark:bg-[color:var(--color-warning-bg)]0/10 dark:hover:bg-[color:var(--color-warning-bg)]0/20"
+              className="mt-4 flex items-center justify-between gap-3 rounded-[--radius-xl] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-5 py-4 shadow-sm transition-all hover:border-[color:var(--color-warning)]/50 hover:bg-[color:var(--color-warning-bg)] hover:shadow  dark:bg-[color:var(--color-warning)]/10 dark:hover:bg-[color:var(--color-warning)]/20"
             >
               <div className="flex items-center gap-3">
                 <span className="text-2xl" aria-hidden="true">🔔</span>
@@ -851,7 +851,7 @@ export default function HomeworkDetailPage({
                   </p>
                 </div>
               </div>
-              <span className="shrink-0 rounded-[--radius-md] bg-amber-600 px-4 py-2 text-xs font-bold text-white">
+              <span className="shrink-0 rounded-[--radius-md] bg-[color:var(--color-warning-dark)] px-4 py-2 text-xs font-bold text-white">
                 Review ▸
               </span>
             </Link>
@@ -1574,7 +1574,7 @@ function RemoveProblemsView({
       </div>
 
       {wouldLeaveEmpty && markCount > 0 && (
-        <p className="mt-3 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-3 py-2 text-xs text-text-primary dark:border-amber-500/30 dark:bg-[color:var(--color-warning-bg)]0/10">
+        <p className="mt-3 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-3 py-2 text-xs text-text-primary  dark:bg-[color:var(--color-warning)]/10">
           You&apos;ve marked every problem. Keep at least one, or{" "}
           <span className="font-semibold">delete the homework</span> instead if
           you want to start over.
@@ -1826,7 +1826,7 @@ function ActionBar({
       <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-3 gap-y-2">
         {confirmingNoDueDate ? (
           <>
-            <span className="min-w-0 flex-1 text-xs font-semibold text-amber-900 dark:text-amber-200">
+            <span className="min-w-0 flex-1 text-xs font-semibold text-[color:var(--color-warning-dark)] ">
               ⚠ Publish without a due date? Students will see &ldquo;no
               due date&rdquo;.
             </span>
@@ -1870,7 +1870,7 @@ function ActionBar({
                   type="button"
                   onClick={onUnpublish}
                   disabled={busy}
-                  className="rounded-[--radius-md] border border-amber-300 bg-[color:var(--color-warning-bg)] px-4 py-2 text-sm font-bold text-[color:var(--color-warning-dark)] hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:bg-[color:var(--color-warning-bg)]0/10 dark:text-amber-300"
+                  className="rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-4 py-2 text-sm font-bold text-[color:var(--color-warning-dark)] hover:bg-[color:var(--color-warning-bg)] disabled:opacity-50  dark:bg-[color:var(--color-warning)]/10 "
                 >
                   Unpublish
                 </button>

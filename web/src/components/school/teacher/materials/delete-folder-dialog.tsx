@@ -31,7 +31,7 @@ export function DeleteFolderDialog({
         {blocked ? (
           <span
             aria-hidden
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-amber-600 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30"
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--color-warning-bg)] text-[color:var(--color-warning-dark)] ring-1 ring-[color:var(--color-warning)]/30  "
           >
             <AlertTriangleIcon className="h-7 w-7" strokeWidth={2.5} />
           </span>
