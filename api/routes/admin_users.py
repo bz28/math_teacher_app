@@ -275,38 +275,47 @@ async def users(
         # never been reset. Without this the chip would diverge from
         # the live cap engine — a user whose limits were reset would
         # still show "at limit".
+        #
+        # group_by(user_id) is required for HAVING + COUNT to evaluate
+        # per-user. Without it Postgres treats the whole subquery as
+        # one aggregate group, the non-aggregated SELECT column makes
+        # the query ill-formed, and the planner can short-circuit
+        # EXISTS to true for users with zero matching rows.
         cutoff = func.greatest(today, User.daily_limit_reset_at)
         search_filters.append(
             User.subscription_tier != "pro",
         )
         search_filters.append(
             (
-                select(LLMCall.id)
+                select(LLMCall.user_id)
                 .where(
                     LLMCall.user_id == User.id,
                     LLMCall.created_at >= cutoff,
                     LLMCall.function.in_(["decompose", "decompose_diagnosis"]),
                 )
+                .group_by(LLMCall.user_id)
                 .having(func.count() >= FREE_DAILY_SESSION_LIMIT)
                 .exists()
             )
             | (
-                select(LLMCall.id)
+                select(LLMCall.user_id)
                 .where(
                     LLMCall.user_id == User.id,
                     LLMCall.created_at >= cutoff,
                     LLMCall.function.in_(["step_chat", "judge"]),
                 )
+                .group_by(LLMCall.user_id)
                 .having(func.count() >= FREE_DAILY_CHAT_LIMIT)
                 .exists()
             )
             | (
-                select(LLMCall.id)
+                select(LLMCall.user_id)
                 .where(
                     LLMCall.user_id == User.id,
                     LLMCall.created_at >= cutoff,
                     LLMCall.function == "image_extract",
                 )
+                .group_by(LLMCall.user_id)
                 .having(func.count() >= FREE_DAILY_IMAGE_SCAN_LIMIT)
                 .exists()
             )
@@ -314,14 +323,16 @@ async def users(
     if free_heavy:
         # Free user with 3+ sessions in the last 7 days. "Sessions"
         # here is rows in `sessions`, same source as the existing
-        # session_count column.
+        # session_count column. group_by required for HAVING — see
+        # at_limit_today block above.
         search_filters.append(User.subscription_tier != "pro")
         search_filters.append(
-            select(Session.id)
+            select(Session.user_id)
             .where(
                 Session.user_id == User.id,
                 Session.created_at >= time_range(168),
             )
+            .group_by(Session.user_id)
             .having(func.count() >= 3)
             .exists()
         )
