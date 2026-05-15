@@ -44,7 +44,12 @@ export function EditorialModal({
   const titleId = useId();
   const triggerRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  // Always-fresh callback ref. Updated inside an effect (not in render)
+  // to satisfy react-hooks/refs — mutating ref.current during render is
+  // flagged because it can cause stale-render bugs in concurrent mode.
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     triggerRef.current = document.activeElement as HTMLElement | null;

@@ -44,7 +44,12 @@ export function ConfirmModal({
   const messageId = useId();
   const triggerRef = useRef<HTMLElement | null>(null);
   const onCancelRef = useRef(onCancel);
-  onCancelRef.current = onCancel;
+  // Always-fresh callback ref. Updated inside an effect (not in render)
+  // to satisfy react-hooks/refs — mutating ref.current during render is
+  // flagged because it can cause stale-render bugs in concurrent mode.
+  useEffect(() => {
+    onCancelRef.current = onCancel;
+  });
 
   useEffect(() => {
     triggerRef.current = document.activeElement as HTMLElement | null;
