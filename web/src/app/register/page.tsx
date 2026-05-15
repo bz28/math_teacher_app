@@ -223,7 +223,7 @@ function RegisterPageContent() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
             </svg>
           </div>
-          <h1 className="text-xl font-bold text-text-primary">Invite Not Valid</h1>
+          <h1 className="font-serif text-[24px] leading-tight tracking-[-0.01em] text-text-primary">Invite not valid.</h1>
           <p className="mt-2 text-sm text-text-secondary">{inviteError}</p>
           <p className="mt-4 text-sm text-text-secondary">
             Contact your school administrator to request a new invite.

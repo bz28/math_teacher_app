@@ -95,7 +95,7 @@ export function Hero() {
               Book a 20-min demo
             </Link>
           </div>
-          <p className="text-xs font-medium text-[color:var(--color-text-muted)]">
+          <p className="text-xs font-medium text-[color:var(--color-text-secondary)]">
             No credit card &middot; Cancel anytime
           </p>
         </div>

@@ -217,7 +217,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
         <p className="text-sm text-[color:var(--color-error)]">{error ?? "Course not found."}</p>
         <Link
           href="/school/teacher"
-          className="mt-4 inline-block font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-text-muted transition-colors hover:text-text-primary"
+          className="mt-4 inline-block font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-text-secondary transition-colors hover:text-text-primary"
         >
           ← Back to courses
         </Link>
@@ -230,7 +230,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
       <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
         <Link
           href="/school/teacher"
-          className="inline-flex items-center gap-1 font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-text-muted transition-colors hover:text-text-primary"
+          className="inline-flex items-center gap-1 font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-text-secondary transition-colors hover:text-text-primary"
         >
           ← My Courses
         </Link>

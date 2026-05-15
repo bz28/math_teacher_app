@@ -80,7 +80,7 @@ export function Footer() {
                 <span className="text-lg font-bold tracking-[-0.01em] text-[color:var(--color-text)]">
                   Veradic AI
                 </span>
-                <span className="mt-1 font-serif italic text-[13px] text-[color:var(--color-text-muted)]">
+                <span className="mt-1 font-serif italic text-[13px] text-[color:var(--color-text-secondary)]">
                   classroom AI, teacher-controlled
                 </span>
               </span>
@@ -104,10 +104,10 @@ export function Footer() {
 
         {/* Bottom bar */}
         <div className="mt-16 flex flex-col items-start gap-4 border-t border-[color:var(--color-border-light)] pt-8 md:flex-row md:items-center md:justify-between">
-          <p className="text-xs text-[color:var(--color-text-muted)]">
+          <p className="text-xs text-[color:var(--color-text-secondary)]">
             &copy; {new Date().getFullYear()} Veradic LLC. All rights reserved.
           </p>
-          <p className="text-xs text-[color:var(--color-text-muted)]">
+          <p className="text-xs text-[color:var(--color-text-secondary)]">
             Made for classrooms in the United States.
           </p>
         </div>
