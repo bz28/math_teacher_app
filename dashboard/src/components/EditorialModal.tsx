@@ -1,16 +1,20 @@
-import type { ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { overlay } from "../lib/styles";
 
 /**
  * Editorial modal shell — the chrome that wraps every form modal in
  * the admin console. Standardizes:
  *
- * - Backdrop tap-to-close (gated by `closeOnBackdrop`).
+ * - Backdrop tap and Escape key both dismiss via `onClose`.
  * - Top accent bar in --accent (the burnt-sienna mark that signals
  *   "this is an intake surface").
  * - Eyebrow label / serif h2 title / italic-serif subtitle stack —
  *   the editorial pattern established by the Add Lead intake card.
  * - Close button in the top-right corner.
+ * - role="dialog" + aria-modal + aria-labelledby wired to the title.
+ * - Focus returns to whatever was focused at mount time when the
+ *   modal unmounts, so keyboard users don't get stranded at the
+ *   document root after a dismiss.
  *
  * The form body lives inside `children`. Pages typically pad it with
  * `style={{ padding: "26px 36px 32px" }}` to match the intake-card
@@ -37,12 +41,32 @@ export function EditorialModal({
   maxWidth?: number;
   children: ReactNode;
 }) {
+  const titleId = useId();
+  const triggerRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    triggerRef.current = document.activeElement as HTMLElement | null;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCloseRef.current();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      triggerRef.current?.focus?.();
+    };
+  }, []);
+
   return (
     <div
       style={overlay}
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         style={{
           position: "relative",
           maxWidth,
@@ -80,7 +104,7 @@ export function EditorialModal({
         </button>
         <div style={{ padding: "28px 36px 0" }}>
           {eyebrow && <span className="eyebrow" style={{ marginBottom: 8 }}>{eyebrow}</span>}
-          <h2 style={{ marginBottom: subtitle ? 6 : 0, fontSize: titleSize, letterSpacing: "-0.3px" }}>
+          <h2 id={titleId} style={{ marginBottom: subtitle ? 6 : 0, fontSize: titleSize, letterSpacing: "-0.3px" }}>
             {title}
           </h2>
           {subtitle && (
