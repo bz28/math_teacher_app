@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import html
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -240,6 +241,12 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
     # Fire-and-forget signup notification to the admin team. Early-
     # user visibility: see new activations in inbox without watching
     # the dashboard. Wrapped so an email outage never blocks signup.
+    #
+    # Every user-controlled field is run through html.escape because
+    # the /auth/register endpoint is public — an attacker can submit
+    # name='<a href="evil">Click here</a>' and the unescaped HTML
+    # would render verbatim in admin inboxes. The subject line is
+    # escaped too so header-shaping characters don't leak through.
     if settings.admin_alert_emails:
         signup_path = (
             "Teacher invite" if body.invite_token else
@@ -247,8 +254,10 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
             "Join code" if body.join_code else
             "Self-signup"
         )
+        safe_name = html.escape(body.name)
+        safe_email = html.escape(body.email)
         school_line = (
-            f"<li><strong>School:</strong> {body.signup_school_name}</li>"
+            f"<li><strong>School:</strong> {html.escape(body.signup_school_name)}</li>"
             if role == "teacher" and body.signup_school_name else ""
         )
         grade_line = (
@@ -257,17 +266,16 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         )
         dashboard_path = (
             "teachers/independent" if role == "teacher"
-            else "students/independent" if role == "student"
-            else "admins"
+            else "students/independent"
         )
         asyncio.create_task(send_email(
             to=settings.admin_alert_emails,
-            subject=f"New signup: {body.name} ({role})",
+            subject=f"New signup: {safe_name} ({role})",
             html=(
                 f"<h2>New {role} signup</h2>"
                 f"<ul>"
-                f"<li><strong>Name:</strong> {body.name}</li>"
-                f"<li><strong>Email:</strong> {body.email}</li>"
+                f"<li><strong>Name:</strong> {safe_name}</li>"
+                f"<li><strong>Email:</strong> {safe_email}</li>"
                 f"<li><strong>Role:</strong> {role}</li>"
                 f"{school_line}"
                 f"{grade_line}"
