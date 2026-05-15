@@ -144,7 +144,7 @@ function StudentLayout({ children }: { children: React.ReactNode }) {
                     {active && (
                       <span
                         aria-hidden
-                        className="pointer-events-none absolute -bottom-[15px] left-0 right-0 h-[2px] bg-[color:var(--color-primary)]"
+                        className="pointer-events-none absolute bottom-0 left-0 right-0 h-[2px] bg-[color:var(--color-primary)]"
                       />
                     )}
                   </Link>
