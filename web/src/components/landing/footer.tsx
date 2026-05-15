@@ -45,7 +45,9 @@ function FooterColumn({
 }) {
   return (
     <div>
-      <h3 className="mb-4 text-xs font-semibold uppercase tracking-widest text-[color:var(--color-text-muted)]">
+      {/* Dashboard-parity small caps: 11px / 600 / 0.18em tracking,
+          on --color-text-secondary so it passes AA at this small size. */}
+      <h3 className="mb-4 font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
         {heading}
       </h3>
       <ul className="space-y-3 text-sm">
@@ -69,15 +71,21 @@ export function Footer() {
     <footer className="border-t border-[color:var(--color-border-light)] bg-[color:var(--color-surface)]">
       <div className="mx-auto max-w-6xl px-6 py-16 md:px-8 md:py-20">
         <div className="grid gap-x-8 gap-y-12 md:grid-cols-[1.5fr_repeat(5,1fr)]">
-          {/* Brand */}
+          {/* Brand — wordmark + italic-serif tagline mirrors the
+              dashboard brand block. */}
           <div className="md:pr-8">
             <div className="flex items-center gap-2.5">
               <LogoMark size={32} />
-              <span className="text-lg font-bold tracking-tight text-[color:var(--color-text)]">
-                Veradic AI
+              <span className="flex flex-col leading-none">
+                <span className="text-lg font-bold tracking-[-0.01em] text-[color:var(--color-text)]">
+                  Veradic AI
+                </span>
+                <span className="mt-1 font-serif italic text-[13px] text-[color:var(--color-text-muted)]">
+                  classroom AI, teacher-controlled
+                </span>
               </span>
             </div>
-            <p className="mt-4 max-w-xs text-sm leading-relaxed text-[color:var(--color-text-secondary)]">
+            <p className="mt-5 max-w-xs text-sm leading-relaxed text-[color:var(--color-text-secondary)]">
               Classroom AI that catches the work, drafts the grading,
               and gives every student more practice than you have time
               to write.

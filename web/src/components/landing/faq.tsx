@@ -41,7 +41,7 @@ export function FAQ({
               <button
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
                 aria-expanded={openIndex === i}
-                className="flex w-full items-center justify-between gap-4 rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] px-6 py-5 text-left transition-[border-color] duration-200 hover:border-[color:var(--color-primary)]"
+                className="flex w-full items-center justify-between gap-4 rounded-[--radius-md] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] px-6 py-5 text-left transition-[border-color] duration-200 hover:border-[color:var(--color-primary)]"
               >
                 <span className="text-base font-semibold text-[color:var(--color-text)] md:text-lg">
                   {faq.question}

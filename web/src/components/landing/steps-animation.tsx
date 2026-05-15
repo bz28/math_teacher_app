@@ -214,10 +214,10 @@ export function StepsAnimation({
       data-subject={subject}
       aria-hidden="true"
     >
-      {/* Gradient halo */}
-      <div className="pointer-events-none absolute -inset-10 -z-10 bg-gradient-to-br from-[color:var(--color-primary)]/20 via-[color:var(--color-primary-light)]/10 to-transparent blur-3xl" />
-
-      <div className="overflow-hidden rounded-3xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] shadow-xl">
+      {/* Mock browser frame — hairline-on-paper, no halo. The green
+          glow behind the frame was redundant with the in-frame UI
+          and added another "startup landing page" decoration. */}
+      <div className="overflow-hidden rounded-[--radius-lg] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] shadow-sm">
         {/* Browser chrome */}
         <div className="flex items-center gap-2 border-b border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] px-5 py-3">
           <div className="flex gap-1.5">

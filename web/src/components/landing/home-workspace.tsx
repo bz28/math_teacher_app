@@ -82,18 +82,16 @@ function FrameCard({
 }) {
   return (
     <div className={emphasized ? "md:scale-[1.04]" : ""}>
-      {/* Shadow uses the brand-green tint at low opacity. Black-on-
-          near-black blends invisibly against the dark inverted bg
-          and undermines the floating-card visual. The emphasized
-          frame gets a deeper shadow for added presence. Scale stays
-          modest (1.04) — combined with the grid track already at
-          1.15fr, larger scales were overhanging the flanking
-          frames at the md breakpoint. */}
+      {/* Frame floats over the dark inverted bg via a soft warm-ink
+          shadow + hairline-light border on the cream surface. The
+          emphasized frame gets a slightly deeper shadow; the green
+          tint that used to glow under each frame was the chief
+          "AI startup" tell on this section. Scale stays modest (1.04). */}
       <div
         className={`overflow-hidden rounded-[--radius-lg] border border-[color:var(--color-invert-border)] bg-[color:var(--color-surface)] ${
           emphasized
-            ? "shadow-[0_36px_80px_-24px_rgba(47,143,102,0.5)]"
-            : "shadow-[0_24px_60px_-24px_rgba(47,143,102,0.4)]"
+            ? "shadow-[0_24px_60px_-20px_rgba(0,0,0,0.35)]"
+            : "shadow-[0_16px_40px_-20px_rgba(0,0,0,0.28)]"
         }`}
       >
         {children}

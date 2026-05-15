@@ -95,7 +95,7 @@ export default function DemoPage() {
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="mx-auto mt-12 max-w-lg rounded-2xl border border-green-200 bg-green-50 p-10 text-center dark:border-green-500/20 dark:bg-green-500/5"
+                className="mx-auto mt-12 max-w-lg rounded-[--radius-md] border border-green-200 bg-green-50 p-10 text-center dark:border-green-500/20 dark:bg-green-500/5"
               >
                 <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 dark:bg-green-500/10">
                   <svg
@@ -176,7 +176,7 @@ export default function DemoPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl bg-[color:var(--color-primary-bg)] px-5 py-4">
+                  <div className="rounded-[--radius-md] bg-[color:var(--color-primary-bg)] px-5 py-4">
                     <p className="text-xs leading-relaxed text-[color:var(--color-text-secondary)]">
                       No commitment required. No credit card. We just want to
                       show you what&rsquo;s possible.
@@ -190,7 +190,7 @@ export default function DemoPage() {
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
                   onSubmit={handleSubmit}
-                  className="space-y-5 rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] p-8"
+                  className="space-y-5 rounded-[--radius-md] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] p-8"
                 >
                   <div>
                     <label className="text-[13px] font-semibold tracking-wide text-[color:var(--color-text-secondary)]">
