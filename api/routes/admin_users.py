@@ -56,6 +56,15 @@ async def users(
     # frontend.
     has_classroom: bool = Query(default=False),
     active_classroom: bool = Query(default=False),
+    # Student-attention filters powering the Independent Students chips.
+    # at_limit_today: free users who hit any daily cap today — the
+    #   right-now Pro-conversion list.
+    # free_heavy: free users with 3+ sessions in the last 7d — about
+    #   to hit the wall; upgrade outreach candidates.
+    # pro_inactive: Pro users with no session in 14d — silent churn.
+    at_limit_today: bool = Query(default=False),
+    free_heavy: bool = Query(default=False),
+    pro_inactive: bool = Query(default=False),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -249,6 +258,82 @@ async def users(
             .where(
                 Assignment.teacher_id == User.id,
                 Submission.submitted_at >= time_range(24 * 30),
+            )
+            .exists()
+        )
+
+    # Student-attention refinements. All three only meaningfully match
+    # students, but the conditions are subscription-tier-scoped so
+    # applying them to teachers/admins just filters them out — safe to
+    # send blindly. Same EXISTS / scalar-subquery pattern as the
+    # teacher chips so they affect search_filters but not the band.
+    if at_limit_today:
+        # Today's per-user counts mirror the existing daily_sessions/
+        # daily_chats/daily_scans subqueries; we reuse those via a
+        # union of equality conditions on the user's tier and the
+        # per-cap thresholds.
+        search_filters.append(
+            User.subscription_tier != "pro",
+        )
+        search_filters.append(
+            (
+                select(LLMCall.id)
+                .where(
+                    LLMCall.user_id == User.id,
+                    LLMCall.created_at >= today,
+                    LLMCall.function.in_(["decompose", "decompose_diagnosis"]),
+                )
+                .group_by(LLMCall.user_id)
+                .having(func.count() >= FREE_DAILY_SESSION_LIMIT)
+                .exists()
+            )
+            | (
+                select(LLMCall.id)
+                .where(
+                    LLMCall.user_id == User.id,
+                    LLMCall.created_at >= today,
+                    LLMCall.function.in_(["step_chat", "judge"]),
+                )
+                .group_by(LLMCall.user_id)
+                .having(func.count() >= FREE_DAILY_CHAT_LIMIT)
+                .exists()
+            )
+            | (
+                select(LLMCall.id)
+                .where(
+                    LLMCall.user_id == User.id,
+                    LLMCall.created_at >= today,
+                    LLMCall.function == "image_extract",
+                )
+                .group_by(LLMCall.user_id)
+                .having(func.count() >= FREE_DAILY_IMAGE_SCAN_LIMIT)
+                .exists()
+            )
+        )
+    if free_heavy:
+        # Free user with 3+ sessions in the last 7 days. "Sessions"
+        # here is rows in `sessions`, same source as the existing
+        # session_count column.
+        search_filters.append(User.subscription_tier != "pro")
+        search_filters.append(
+            select(Session.id)
+            .where(
+                Session.user_id == User.id,
+                Session.created_at >= time_range(168),
+            )
+            .group_by(Session.user_id)
+            .having(func.count() >= 3)
+            .exists()
+        )
+    if pro_inactive:
+        # Pro user with no session in the last 14 days. Negation via
+        # `~exists()` — silent churn risk.
+        search_filters.append(User.subscription_tier == "pro")
+        search_filters.append(
+            ~select(Session.id)
+            .where(
+                Session.user_id == User.id,
+                Session.created_at >= time_range(24 * 14),
             )
             .exists()
         )
