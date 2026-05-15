@@ -33,8 +33,9 @@ export function SchoolStudentLayout({ children }: { children: React.ReactNode })
 
       <div className="flex flex-1 flex-col md:min-w-0">
         {/* Mobile header — hamburger opens the drawer, keeps sign-out
-            reachable as a last-resort action. */}
-        <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border-light bg-surface/90 px-4 backdrop-blur-md md:hidden">
+            reachable as a last-resort action. Warm-paper bg matches
+            the teacher mobile header. */}
+        <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border-light bg-[color:var(--color-surface-alt-2)]/90 px-4 backdrop-blur-md md:hidden">
           <div className="flex items-center gap-3">
             <button
               type="button"
