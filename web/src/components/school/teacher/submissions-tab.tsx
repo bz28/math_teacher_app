@@ -64,7 +64,7 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
   }, [rows, sectionId, search]);
 
   if (error) {
-    return <p className="mt-6 text-sm text-red-600">{error}</p>;
+    return <p className="mt-6 text-sm text-[color:var(--color-error)]">{error}</p>;
   }
 
   if (rows === null) {
@@ -94,7 +94,7 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search homework"
-            className="w-full rounded-[--radius-md] border border-border-light bg-bg-base py-2 pl-9 pr-3 text-sm text-text-primary focus:border-primary focus:outline-none"
+            className="w-full rounded-[--radius-md] border border-border-light bg-surface py-2 pl-9 pr-3 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
         </div>
         <select
@@ -204,7 +204,7 @@ function InboxRow({
           {overdueDays > 0 && hasOutstanding && (
             <>
               <span aria-hidden>·</span>
-              <span className="font-semibold text-red-600 dark:text-red-400">
+              <span className="font-semibold text-[color:var(--color-error)]">
                 {overdueDays === 1 ? "1 day overdue" : `${overdueDays} days overdue`}
               </span>
             </>
@@ -237,7 +237,7 @@ function InboxRow({
         )}
       </div>
       {isAwaiting ? (
-        <span className="shrink-0 rounded-[--radius-md] border border-border-light bg-bg-subtle px-4 py-2 text-xs font-semibold text-text-muted">
+        <span className="shrink-0 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)] px-4 py-2 text-xs font-semibold text-text-muted">
           Awaiting submissions
         </span>
       ) : (

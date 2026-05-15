@@ -431,7 +431,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
           onClick={() => setShowNewUnit({ parentId: null })}
           disabled={busy}
           title="Create an empty unit folder"
-          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-[--radius-md] border border-border-light bg-surface px-3.5 py-2 text-sm font-semibold text-text-secondary shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-border-strong hover:bg-bg-subtle hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-[--radius-md] border border-border-light bg-surface px-3.5 py-2 text-sm font-semibold text-text-secondary shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-border-strong hover:bg-[color:var(--color-surface-alt-2)] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
         >
           <PlusIcon className="h-4 w-4" />
           New Unit
@@ -443,7 +443,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
         />
       </div>
 
-      {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-xs text-[color:var(--color-error)]">{error}</p>}
 
       <div aria-busy={busy || loading} aria-live="polite" className="sr-only">
         {busy ? "Working…" : liveMessage}
@@ -620,7 +620,7 @@ function FirstTimeDropzone({
   return (
     <div className="mt-4">
       <UploadDropzone busy={busy} onDropTree={onDropTree}>
-        <div className="flex flex-col items-center justify-center gap-4 rounded-[--radius-lg] border-2 border-dashed border-border-light bg-surface px-6 py-16 text-center shadow-sm">
+        <div className="flex flex-col items-center justify-center gap-4 rounded-[--radius-lg] border-2 border-border-light bg-surface px-6 py-16 text-center shadow-sm">
           <span
             className="flex h-20 w-20 items-center justify-center rounded-full bg-primary-bg text-primary shadow-sm ring-1 ring-primary/20"
             aria-hidden
@@ -768,7 +768,7 @@ function SplitUploadButton({
               setMenuOpen(false);
               fileInputRef.current?.click();
             }}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-text-secondary transition-colors hover:bg-bg-subtle"
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-text-secondary transition-colors hover:bg-[color:var(--color-surface-alt-2)]"
           >
             <UploadIcon className="h-3.5 w-3.5" />
             Files
@@ -780,7 +780,7 @@ function SplitUploadButton({
               setMenuOpen(false);
               folderInputRef.current?.click();
             }}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-text-secondary transition-colors hover:bg-bg-subtle"
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-text-secondary transition-colors hover:bg-[color:var(--color-surface-alt-2)]"
           >
             <FolderIcon className="h-3.5 w-3.5" />
             Folder
@@ -812,14 +812,14 @@ function Toolbar({
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search files in this folder"
           aria-label="Search files in folder"
-          className="h-9 w-full rounded-full border border-border-light bg-bg-subtle pl-9 pr-9 text-sm text-text-primary placeholder:text-text-muted transition-all duration-200 ease-out focus:border-primary focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="h-9 w-full rounded-full border border-border-light bg-[color:var(--color-surface-alt-2)] pl-9 pr-9 text-sm text-text-primary placeholder:text-text-muted transition-all duration-200 ease-out focus:border-primary focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         {search && (
           <button
             type="button"
             onClick={() => onSearchChange("")}
             aria-label="Clear search"
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-muted transition-colors hover:bg-bg-subtle hover:text-text-primary"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary"
           >
             <XIcon className="h-3.5 w-3.5" />
           </button>
@@ -830,7 +830,7 @@ function Toolbar({
         <select
           value={sort}
           onChange={(e) => onSortChange(e.target.value as SortMode)}
-          className="h-9 rounded-full border border-border-light bg-bg-subtle px-3 text-sm font-medium text-text-primary transition-all duration-200 ease-out focus:border-primary focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="h-9 rounded-full border border-border-light bg-[color:var(--color-surface-alt-2)] px-3 text-sm font-medium text-text-primary transition-all duration-200 ease-out focus:border-primary focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20"
         >
           <option value="name">Name (A–Z)</option>
           <option value="size">Size (largest)</option>
@@ -892,7 +892,7 @@ function BulkActionBar({
         type="button"
         onClick={onMove}
         disabled={busy}
-        className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold text-text-secondary transition-colors duration-150 ease-out hover:bg-bg-subtle hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
+        className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold text-text-secondary transition-colors duration-150 ease-out hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
       >
         <FolderOpenIcon className="h-4 w-4" /> Move
       </button>
@@ -900,7 +900,7 @@ function BulkActionBar({
         type="button"
         onClick={onDelete}
         disabled={busy}
-        className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full bg-red-600 px-3.5 py-2 text-sm font-bold text-white shadow-sm transition-all duration-150 ease-out hover:bg-red-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-50"
+        className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full bg-[color:var(--color-error)] px-3.5 py-2 text-sm font-bold text-white shadow-sm transition-all duration-150 ease-out hover:bg-[color:var(--color-error)]/85 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--color-error)] focus-visible:ring-offset-2 disabled:opacity-50"
       >
         <XIcon className="h-3.5 w-3.5" /> Delete
       </button>
@@ -908,7 +908,7 @@ function BulkActionBar({
         type="button"
         onClick={onClear}
         aria-label="Clear selection"
-        className="ml-1 rounded-full p-1.5 text-text-muted transition-colors hover:bg-bg-subtle hover:text-text-primary"
+        className="ml-1 rounded-full p-1.5 text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary"
       >
         <XIcon className="h-4 w-4" />
       </button>
@@ -932,7 +932,7 @@ function LoadingSkeleton() {
           {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
-              className="flex items-start gap-3 rounded-[--radius-md] border border-border-light bg-bg-subtle p-3"
+              className="flex items-start gap-3 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)] p-3"
             >
               <Skeleton className="h-10 w-10 rounded-[--radius-sm]" />
               <div className="min-w-0 flex-1 space-y-1.5">

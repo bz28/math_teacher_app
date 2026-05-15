@@ -34,17 +34,17 @@ export function SectionsTab({ courseId, onChanged }: { courseId: string; onChang
   return (
     <div>
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-text-primary">Class Sections</h2>
+        <h2 className="font-serif text-[24px] leading-tight tracking-[-0.01em] text-text-primary">Class sections</h2>
         <button
           type="button"
-          className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark"
+          className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-semibold tracking-[0.01em] text-white transition-colors hover:bg-primary-dark"
           onClick={() => setShowNew(true)}
         >
-          + New Section
+          New section
         </button>
       </div>
 
-      {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-xs text-[color:var(--color-error)]">{error}</p>}
 
       {!loading && sections.length === 0 ? (
         <EmptyState text="No sections yet. Add a class period to get started." />
@@ -250,7 +250,7 @@ function SectionCard({
                 aria-label="Section name"
                 aria-invalid={renameError ? true : undefined}
                 aria-describedby={renameError ? `rename-error-${section.id}` : undefined}
-                className="rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1 text-sm font-bold text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
+                className="rounded-[--radius-md] border border-border-light bg-surface px-2 py-1 text-sm font-bold text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
               />
               <button
                 type="submit"
@@ -263,7 +263,7 @@ function SectionCard({
                 type="button"
                 onClick={cancelRename}
                 disabled={renaming}
-                className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+                className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)] disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -275,7 +275,7 @@ function SectionCard({
                 type="button"
                 onClick={startRename}
                 title="Click to rename"
-                className="-mx-1 rounded px-1 hover:bg-bg-subtle"
+                className="-mx-1 rounded px-1 hover:bg-[color:var(--color-surface-alt-2)]"
               >
                 {section.name}
               </button>
@@ -285,7 +285,7 @@ function SectionCard({
             <p
               id={`rename-error-${section.id}`}
               role="alert"
-              className="mt-1 text-xs text-red-600"
+              className="mt-1 text-xs text-[color:var(--color-error)]"
             >
               {renameError}
             </p>
@@ -301,7 +301,7 @@ function SectionCard({
               title="Click to copy"
               className={`rounded-[--radius-pill] px-2 py-0.5 font-mono text-xs font-bold transition-colors ${
                 copied
-                  ? "bg-green-100 text-green-700 dark:bg-green-500/20"
+                  ? "bg-[color:var(--color-success-light)] text-[color:var(--color-success)]"
                   : "bg-primary-bg text-primary hover:bg-primary/20"
               }`}
             >
@@ -310,7 +310,7 @@ function SectionCard({
           )}
           <button
             onClick={onToggle}
-            className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
+            className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)]"
           >
             {expanded ? "Close" : "Manage"}
           </button>
@@ -320,7 +320,7 @@ function SectionCard({
       {expanded && (
         <div className="border-t border-border-light p-4">
           {loadingDetail && <p className="text-xs text-text-muted">Loading roster…</p>}
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="text-xs text-[color:var(--color-error)]">{error}</p>}
           {detail && (
             <>
               <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -336,26 +336,26 @@ function SectionCard({
                     </button>
                     <button
                       onClick={() => setConfirmingRegen(false)}
-                      className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
+                      className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)]"
                     >
                       Cancel
                     </button>
                   </>
                 ) : confirmingDelete ? (
                   <>
-                    <span className="text-xs font-semibold text-red-700">
+                    <span className="text-xs font-semibold text-[color:var(--color-error)]">
                       Delete &ldquo;{section.name}&rdquo;? Students will be unenrolled.
                     </span>
                     <button
                       onClick={deleteSection}
                       disabled={busy}
-                      className="rounded-[--radius-sm] bg-red-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                      className="rounded-[--radius-sm] bg-[color:var(--color-error)] px-2.5 py-1 text-xs font-bold text-white hover:bg-[color:var(--color-error)]/85 disabled:opacity-50"
                     >
                       Yes, delete
                     </button>
                     <button
                       onClick={() => setConfirmingDelete(false)}
-                      className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle"
+                      className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)]"
                     >
                       Cancel
                     </button>
@@ -365,14 +365,14 @@ function SectionCard({
                     <button
                       onClick={() => setConfirmingRegen(true)}
                       disabled={busy}
-                      className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+                      className="rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)] disabled:opacity-50"
                     >
                       Regenerate join code
                     </button>
                     <button
                       onClick={() => setConfirmingDelete(true)}
                       disabled={busy}
-                      className="rounded-[--radius-sm] border border-red-300 bg-white px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                      className="rounded-[--radius-sm] border border-[color:var(--color-error-border)] bg-white px-2.5 py-1 text-xs font-bold text-[color:var(--color-error)] hover:bg-[color:var(--color-error-light)] disabled:opacity-50"
                     >
                       Delete section
                     </button>
@@ -391,7 +391,7 @@ function SectionCard({
                   {detail.students.map((s) => (
                     <div
                       key={s.id}
-                      className="flex items-center justify-between rounded-[--radius-sm] bg-bg-subtle px-3 py-2 text-sm"
+                      className="flex items-center justify-between rounded-[--radius-sm] bg-[color:var(--color-surface-alt-2)] px-3 py-2 text-sm"
                     >
                       <div>
                         <div className="font-semibold text-text-primary">{s.name}</div>
@@ -399,7 +399,7 @@ function SectionCard({
                       </div>
                       <button
                         onClick={() => removeStudent(s.id)}
-                        className="text-xs font-bold text-red-600 hover:underline"
+                        className="text-xs font-bold text-[color:var(--color-error)] hover:underline"
                       >
                         Remove
                       </button>
@@ -416,7 +416,7 @@ function SectionCard({
                       {detail.pending_invites.map((i) => (
                         <div
                           key={i.id}
-                          className="flex items-center justify-between rounded-[--radius-sm] border border-dashed border-border-light px-3 py-2 text-sm"
+                          className="flex items-center justify-between rounded-[--radius-sm] border border-border-light px-3 py-2 text-sm"
                         >
                           <div>
                             <div className="font-semibold text-text-primary">{i.email}</div>
@@ -427,11 +427,11 @@ function SectionCard({
                           <div className="flex items-center gap-3">
                             {confirmingRevokeId === i.id ? (
                               <>
-                                <span className="text-xs font-semibold text-red-700">Revoke?</span>
+                                <span className="text-xs font-semibold text-[color:var(--color-error)]">Revoke?</span>
                                 <button
                                   onClick={() => revokeInvite(i.id)}
                                   disabled={busy}
-                                  className="text-xs font-bold text-red-600 hover:underline disabled:opacity-50"
+                                  className="text-xs font-bold text-[color:var(--color-error)] hover:underline disabled:opacity-50"
                                 >
                                   Yes, revoke
                                 </button>
@@ -455,7 +455,7 @@ function SectionCard({
                                 <button
                                   onClick={() => setConfirmingRevokeId(i.id)}
                                   disabled={busy}
-                                  className="text-xs font-bold text-red-600 hover:underline disabled:opacity-50"
+                                  className="text-xs font-bold text-[color:var(--color-error)] hover:underline disabled:opacity-50"
                                 >
                                   Revoke
                                 </button>
@@ -479,7 +479,7 @@ function SectionCard({
                     onChanged();
                   }}
                 />
-                {flash && <p className="mt-2 text-xs text-green-700">{flash}</p>}
+                {flash && <p className="mt-2 text-xs text-[color:var(--color-success)]">{flash}</p>}
               </div>
             </>
           )}
@@ -610,7 +610,7 @@ function BulkInviteForm({
         }}
         rows={3}
         placeholder={`Paste emails — comma or newline separated. Cmd/Ctrl+Enter to send.`}
-        className="mt-1 w-full resize-y rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+        className="mt-1 w-full resize-y rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
       />
       <div className="mt-2 flex items-center justify-between gap-3">
         <p className="text-[11px] text-text-muted">
@@ -619,7 +619,7 @@ function BulkInviteForm({
           ) : (
             <>
               <span
-                className={`font-semibold ${overLimit ? "text-red-600 dark:text-red-400" : "text-text-secondary"}`}
+                className={`font-semibold ${overLimit ? "text-[color:var(--color-error)]" : "text-text-secondary"}`}
               >
                 {parsed.valid.length}
               </span>{" "}
@@ -627,7 +627,7 @@ function BulkInviteForm({
               {overLimit && (
                 <>
                   {" · "}
-                  <span className="font-semibold text-red-600 dark:text-red-400">
+                  <span className="font-semibold text-[color:var(--color-error)]">
                     over the {BULK_INVITE_LIMIT}-batch limit
                   </span>
                 </>
@@ -635,7 +635,7 @@ function BulkInviteForm({
               {parsed.invalid.length > 0 && (
                 <>
                   {" · "}
-                  <span className="font-semibold text-red-600 dark:text-red-400">
+                  <span className="font-semibold text-[color:var(--color-error)]">
                     {parsed.invalid.length}
                   </span>{" "}
                   needs fixing
@@ -669,7 +669,7 @@ function BulkInviteForm({
           parse errors AND post-submit failures without a focus jump.
           Empty when there's nothing to say so silence stays silence. */}
       <div role="status" aria-live="polite" aria-atomic="true">
-        {parseError && <p className="mt-1.5 text-xs text-red-600">{parseError}</p>}
+        {parseError && <p className="mt-1.5 text-xs text-[color:var(--color-error)]">{parseError}</p>}
         {outcomes && outcomes.some((o) => !o.ok) && (
           <p className="mt-1.5 text-[11px] text-text-muted">
             {outcomes.filter((o) => !o.ok).length} couldn&rsquo;t be invited — kept in
@@ -682,7 +682,7 @@ function BulkInviteForm({
           {outcomes
             .filter((o) => !o.ok)
             .map((o) => (
-              <li key={o.email} className="text-red-600 dark:text-red-400">
+              <li key={o.email} className="text-[color:var(--color-error)]">
                 <span className="font-semibold">{o.email}</span> — {o.status}
               </li>
             ))}
@@ -762,8 +762,8 @@ function NewSectionModal({
           submit();
         }}
       >
-        <h2 className="text-lg font-bold text-text-primary">New Section</h2>
-        <p className="mt-1 text-xs text-text-muted">e.g. &ldquo;Period 1&rdquo; or &ldquo;Block A&rdquo;</p>
+        <h2 className="font-serif text-[22px] leading-tight tracking-[-0.01em] text-text-primary">New section</h2>
+        <p className="mt-1 font-serif italic text-[14px] text-text-muted">e.g. &ldquo;Period 1&rdquo; or &ldquo;Block A&rdquo;</p>
         <input
           type="text"
           value={name}
@@ -771,15 +771,15 @@ function NewSectionModal({
           autoFocus
           maxLength={100}
           placeholder="Section name"
-          className="mt-4 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+          className="mt-4 w-full rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
         />
-        {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+        {error && <p className="mt-2 text-xs text-[color:var(--color-error)]">{error}</p>}
         <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="rounded-[--radius-md] border border-border-light px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
+            className="rounded-[--radius-md] border border-border-light px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)] disabled:opacity-50"
           >
             Cancel
           </button>

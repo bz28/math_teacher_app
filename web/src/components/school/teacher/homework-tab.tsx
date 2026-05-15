@@ -146,9 +146,9 @@ export function HomeworkTab({ courseId }: { courseId: string }) {
       {/* Header row: title + summary + New */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-baseline gap-3">
-          <h2 className="text-lg font-bold text-text-primary">Homework</h2>
+          <h2 className="font-serif text-[24px] leading-tight tracking-[-0.01em] text-text-primary">Homework</h2>
           {homeworks.length > 0 && (
-            <p className="text-xs text-text-muted">
+            <p className="font-mono text-[12px] text-text-muted">
               {publishedCount} published · {draftCount}{" "}
               {draftCount === 1 ? "draft" : "drafts"}
             </p>
@@ -156,14 +156,14 @@ export function HomeworkTab({ courseId }: { courseId: string }) {
         </div>
         <button
           type="button"
-          className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-sm font-bold text-white hover:bg-primary-dark"
+          className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-semibold tracking-[0.01em] text-white transition-colors hover:bg-primary-dark"
           onClick={() => setShowNew(true)}
         >
-          + New Homework
+          New homework
         </button>
       </div>
 
-      {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-3 text-xs text-[color:var(--color-error)]">{error}</p>}
 
       {/* Search bar */}
       <div className="mt-4">
@@ -245,7 +245,7 @@ export function HomeworkTab({ courseId }: { courseId: string }) {
         ) : homeworks.length === 0 ? (
           <EmptyState text="No homework yet. Click + New Homework to create one from your approved questions." />
         ) : totalBucketed === 0 ? (
-          <div className="mt-4 rounded-[--radius-lg] border border-dashed border-border-light bg-bg-subtle p-8 text-center text-sm text-text-muted">
+          <div className="mt-4 rounded-[--radius-lg] border border-border-light bg-[color:var(--color-surface-alt-2)] p-8 text-center text-sm text-text-muted">
             No homeworks match your filters.{" "}
             <button
               type="button"
