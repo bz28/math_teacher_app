@@ -8,6 +8,7 @@ import { useAuthStore } from "@/stores/auth";
 import { clearTokens, auth as authApi } from "@/lib/api";
 import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
+import { LogoMark } from "@/components/shared/logo-mark";
 
 export default function LoginPage() {
   return (
@@ -82,41 +83,43 @@ function LoginPageContent() {
   }
 
   return (
-    <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-12">
-      {/* Background gradient mesh */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute left-1/4 top-1/4 h-[400px] w-[400px] rounded-full bg-gradient-to-br from-primary/6 to-transparent blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 h-[300px] w-[300px] rounded-full bg-gradient-to-br from-primary-light/5 to-transparent blur-3xl" />
-      </div>
-
-      {/* Logo */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.05 }}
-      >
-        <Link href="/" className="mb-8 flex items-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-[--radius-md] bg-gradient-to-br from-primary to-primary-light">
-            <span className="text-base font-extrabold text-white">V</span>
-          </div>
-          <span className="text-xl font-bold tracking-tight text-text-primary">
+    <div
+      className="relative flex flex-1 flex-col items-center justify-center px-6 py-12"
+      style={{
+        // Editorial signin backdrop matching the dashboard .login-page
+        // pattern: warm-paper radial atmosphere, no orbs, no blur halos.
+        backgroundImage:
+          "radial-gradient(circle at 18% 22%, var(--color-surface-alt-2) 0%, transparent 38%)," +
+          "radial-gradient(circle at 82% 78%, var(--color-primary-bg) 0%, transparent 40%)",
+      }}
+    >
+      {/* Brand — wordmark + serif-italic sub, matching the dashboard
+          and homepage brand block. No gradient logo tile. */}
+      <Link href="/" className="mb-10 flex items-center gap-2.5">
+        <LogoMark size={36} />
+        <span className="flex flex-col leading-none">
+          <span className="text-lg font-bold tracking-[-0.01em] text-text-primary">
             Veradic AI
           </span>
-        </Link>
-      </motion.div>
+          <span className="mt-1 font-serif italic text-[13px] text-text-muted">
+            classroom AI, teacher-controlled
+          </span>
+        </span>
+      </Link>
 
-      {/* Card */}
+      {/* Card — hairline on warm surface, no shadow chrome.
+          Quieter entrance: opacity + 4px rise, no spring. */}
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 25 }}
-        className="relative w-full max-w-sm rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-md"
+        transition={{ duration: 0.18, ease: "easeOut" }}
+        className="relative w-full max-w-sm rounded-[--radius-md] border border-border bg-surface p-8"
       >
-        <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
-          Welcome back
+        <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
+          Welcome back.
         </h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          Sign in to continue learning
+        <p className="mt-2 font-serif italic text-[15px] text-text-secondary">
+          Sign in to continue.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -178,14 +181,15 @@ function LoginPageContent() {
         </div>
       </motion.div>
 
-      {/* Forgot password overlay */}
+      {/* Forgot password overlay — warm-ink scrim, hairline card. */}
       {showForgot && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6" onClick={() => setShowForgot(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[color:var(--color-overlay)] px-6" onClick={() => setShowForgot(false)}>
           <motion.div
             onClick={(e) => e.stopPropagation()}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-sm rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-lg"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.14, ease: "easeOut" }}
+            className="w-full max-w-sm rounded-[--radius-md] border border-border bg-surface p-8 shadow-md"
           >
             {forgotSent ? (
               <div className="text-center">
@@ -207,8 +211,10 @@ function LoginPageContent() {
               </div>
             ) : (
               <>
-                <h3 className="text-lg font-bold text-text-primary">Reset your password</h3>
-                <p className="mt-1 text-sm text-text-secondary">
+                <h3 className="font-serif text-[22px] leading-tight tracking-[-0.01em] text-text-primary">
+                  Reset your password
+                </h3>
+                <p className="mt-2 text-sm text-text-secondary">
                   Enter your email and we&apos;ll send you a reset link.
                 </p>
                 <form onSubmit={handleForgotPassword} className="mt-4 space-y-4">
@@ -225,7 +231,7 @@ function LoginPageContent() {
                     <button
                       type="button"
                       onClick={() => setShowForgot(false)}
-                      className="flex-1 rounded-[--radius-md] border border-border px-4 py-2.5 text-sm font-semibold text-text-secondary transition-colors hover:border-primary/30"
+                      className="flex-1 rounded-[--radius-sm] border border-border px-4 py-2.5 text-sm font-semibold text-text-secondary transition-colors hover:border-text-primary hover:text-text-primary"
                     >
                       Cancel
                     </button>

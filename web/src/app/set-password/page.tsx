@@ -66,20 +66,21 @@ function SetPasswordContent() {
     return (
       <div className="flex flex-1 items-center justify-center px-6 py-12">
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="w-full max-w-sm rounded-[--radius-xl] border border-green-200 bg-green-50 p-8 text-center dark:border-green-500/20 dark:bg-green-500/5"
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          className="w-full max-w-sm rounded-[--radius-md] border border-[color:var(--color-success-border)] bg-[color:var(--color-success-light)] p-8 text-center"
         >
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 dark:bg-green-500/10">
-            <svg className="h-7 w-7 text-green-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[color:var(--color-success)]/10 text-[color:var(--color-success)]">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold text-text-primary">Password Set!</h2>
+          <h2 className="font-serif text-[24px] leading-tight text-text-primary">Password set.</h2>
           <p className="mt-2 text-sm text-text-secondary">You can now log in with your new password.</p>
           <Link
             href="/login"
-            className="mt-6 inline-flex h-10 items-center justify-center rounded-[--radius-md] bg-gradient-to-r from-primary to-primary-light px-6 text-sm font-bold text-white"
+            className="mt-6 inline-flex h-10 items-center justify-center rounded-[--radius-sm] bg-primary px-6 text-sm font-semibold tracking-[0.01em] text-white hover:bg-primary-dark"
           >
             Go to Login
           </Link>
@@ -89,16 +90,24 @@ function SetPasswordContent() {
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center px-6 py-12">
+    <div
+      className="relative flex flex-1 items-center justify-center px-6 py-12"
+      style={{
+        backgroundImage:
+          "radial-gradient(circle at 18% 22%, var(--color-surface-alt-2) 0%, transparent 38%)," +
+          "radial-gradient(circle at 82% 78%, var(--color-primary-bg) 0%, transparent 40%)",
+      }}
+    >
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-sm rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-md"
+        transition={{ duration: 0.18, ease: "easeOut" }}
+        className="w-full max-w-sm rounded-[--radius-md] border border-border bg-surface p-8"
       >
-        <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
-          Set Your Password
+        <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
+          Set your password.
         </h1>
-        <p className="mt-1 text-sm text-text-secondary">
+        <p className="mt-2 font-serif italic text-[15px] text-text-secondary">
           Choose a password for your account.
         </p>
 

@@ -86,11 +86,19 @@ function SectionInviteContent() {
   }, [token, authLoading, user]);
 
   return (
-    <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-12">
+    <div
+      className="relative flex flex-1 flex-col items-center justify-center px-6 py-12"
+      style={{
+        backgroundImage:
+          "radial-gradient(circle at 18% 22%, var(--color-surface-alt-2) 0%, transparent 38%)," +
+          "radial-gradient(circle at 82% 78%, var(--color-primary-bg) 0%, transparent 40%)",
+      }}
+    >
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-md"
+        transition={{ duration: 0.18, ease: "easeOut" }}
+        className="w-full max-w-md rounded-[--radius-md] border border-border bg-surface p-8"
       >
         {view.kind === "loading" && (
           <div className="text-center">
@@ -204,7 +212,7 @@ function SectionInviteContent() {
 function InviteHeader({ invite }: { invite: SectionInviteData }) {
   return (
     <>
-      <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
+      <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
         {invite.course_name}
       </h1>
       <p className="mt-1 text-sm text-text-secondary">

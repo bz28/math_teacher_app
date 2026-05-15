@@ -8,6 +8,7 @@ import { useAuthStore } from "@/stores/auth";
 import { auth, clearTokens, hasStoredTokens, type InviteData, type SectionInviteData } from "@/lib/api";
 import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
+import { LogoMark } from "@/components/shared/logo-mark";
 
 const GRADE_OPTIONS = [
   { label: "K-2", value: 2 },
@@ -240,39 +241,37 @@ function RegisterPageContent() {
   const lockEmail = isInviteFlow || isSectionInviteFlow;
 
   return (
-    <div className="relative flex flex-1 flex-col items-center justify-center px-6 py-12">
-      {/* Background gradient mesh */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute left-1/4 top-1/4 h-[400px] w-[400px] rounded-full bg-gradient-to-br from-primary/6 to-transparent blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 h-[300px] w-[300px] rounded-full bg-gradient-to-br from-primary-light/5 to-transparent blur-3xl" />
-      </div>
-
-      {/* Logo */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.05 }}
-      >
-        <Link href="/" className="mb-8 flex items-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-[--radius-md] bg-gradient-to-br from-primary to-primary-light">
-            <span className="text-base font-extrabold text-white">V</span>
-          </div>
-          <span className="text-xl font-bold tracking-tight text-text-primary">
+    <div
+      className="relative flex flex-1 flex-col items-center justify-center px-6 py-12"
+      style={{
+        backgroundImage:
+          "radial-gradient(circle at 18% 22%, var(--color-surface-alt-2) 0%, transparent 38%)," +
+          "radial-gradient(circle at 82% 78%, var(--color-primary-bg) 0%, transparent 40%)",
+      }}
+    >
+      {/* Brand — wordmark + serif sub. No gradient tile. */}
+      <Link href="/" className="mb-10 flex items-center gap-2.5">
+        <LogoMark size={36} />
+        <span className="flex flex-col leading-none">
+          <span className="text-lg font-bold tracking-[-0.01em] text-text-primary">
             Veradic AI
           </span>
-        </Link>
-      </motion.div>
+          <span className="mt-1 font-serif italic text-[13px] text-text-muted">
+            classroom AI, teacher-controlled
+          </span>
+        </span>
+      </Link>
 
-      {/* Card */}
+      {/* Card — hairline on warm surface, quiet entrance. */}
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, type: "spring", stiffness: 300, damping: 25 }}
-        className="relative w-full max-w-md rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-md"
+        transition={{ duration: 0.18, ease: "easeOut" }}
+        className="relative w-full max-w-md rounded-[--radius-md] border border-border bg-surface p-8"
       >
         {isInviteFlow ? (
           <>
-            <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
+            <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
               Welcome, Teacher
             </h1>
             <div className="mt-2 flex items-center gap-2 rounded-[--radius-sm] bg-primary-bg px-3 py-2">
@@ -286,7 +285,7 @@ function RegisterPageContent() {
           </>
         ) : isSectionInviteFlow ? (
           <>
-            <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
+            <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
               Join {sectionInvite.course_name}
             </h1>
             <p className="mt-1 text-sm text-text-secondary">
@@ -296,7 +295,7 @@ function RegisterPageContent() {
           </>
         ) : (
           <>
-            <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
+            <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
               Create your account
             </h1>
             <p className="mt-1 text-sm text-text-secondary">
