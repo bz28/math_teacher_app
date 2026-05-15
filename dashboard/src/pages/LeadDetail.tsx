@@ -788,31 +788,31 @@ function MeetingModal({
     try {
       const now = new Date();
       const isoSched = new Date(scheduledAt).toISOString();
-      // Touchpoints log events that have already happened, so their
-      // timestamp can never sit in the future. If the user opened
-      // the modal as "Schedule meeting" (which defaults scheduledAt
-      // to tomorrow), then flipped the type to a touchpoint without
-      // touching the date field, isoSched still reads as tomorrow —
-      // clamp both scheduled_at and held_at to "now" so we don't
-      // write a future-dated touchpoint. The user can still pick an
-      // explicit past time and we preserve it.
+      // Touchpoints created from the "Schedule meeting" modal inherit
+      // its tomorrow-default. If the operator flipped the type dropdown
+      // to a touchpoint without touching the date field, isoSched still
+      // reads as tomorrow — clamp to now so we don't write a future-
+      // dated touchpoint at creation time. Edit mode trusts the user's
+      // explicit time choice (and dropping the clamp there avoids the
+      // "I changed the time but the timeline still shows the old one"
+      // bug, since held_at now tracks scheduled_at on every save).
       const effectiveScheduled =
-        isTouchpoint(type) && new Date(isoSched) > now
+        mode === "create" && isTouchpoint(type) && new Date(isoSched) > now
           ? now.toISOString()
           : isoSched;
-      // Touchpoints are always after-the-fact by definition, so
-      // they ALWAYS write held_at even when the user opened the
-      // modal as a meeting and then switched the type dropdown
-      // (which hides the checkbox but leaves alreadyHappened
-      // stuck at its initial value). Deriving from the live type
-      // closes the silent "held_at: null on a logged touchpoint"
-      // bug surfaced by the PR #536 reviewer.
+      // Touchpoints are always after-the-fact by definition, so they
+      // ALWAYS write held_at even when the user opened the modal as
+      // a meeting and then switched the type dropdown (which hides
+      // the checkbox but leaves alreadyHappened stuck at its initial
+      // value). held_at tracks scheduled_at every save — the form has
+      // no separate held_at field, so preserving an orphaned earlier
+      // value just meant the timeline ignored the user's time edit.
       const effectiveHeld = isTouchpoint(type) || alreadyHappened;
       await onSubmit({
         type,
         scheduled_at: effectiveScheduled,
         agenda: agenda.trim() || null,
-        held_at: effectiveHeld ? (meeting?.held_at ?? effectiveScheduled) : null,
+        held_at: effectiveHeld ? effectiveScheduled : null,
         outcome: effectiveHeld && outcome.trim() ? outcome.trim() : null,
       });
     } catch (e) {
@@ -858,15 +858,16 @@ function MeetingModal({
             style={inputStyle}
           />
         </FormField>
-        <FormField label={touchpoint ? "What you said (optional)" : "Agenda (optional)"}>
-          <textarea
-            value={agenda}
-            onChange={(e) => setAgenda(e.target.value)}
-            rows={2}
-            placeholder={touchpoint ? "Short summary of what you sent or discussed" : undefined}
-            style={{ ...inputStyle, resize: "vertical" }}
-          />
-        </FormField>
+        {!touchpoint && (
+          <FormField label="Agenda (optional)">
+            <textarea
+              value={agenda}
+              onChange={(e) => setAgenda(e.target.value)}
+              rows={2}
+              style={{ ...inputStyle, resize: "vertical" }}
+            />
+          </FormField>
+        )}
         {!touchpoint && (
           <Checkbox
             checked={alreadyHappened}
