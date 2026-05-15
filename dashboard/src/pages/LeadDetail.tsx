@@ -11,6 +11,7 @@ import {
 } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
 import { btnGhost, btnPrimary, btnSmall, inputStyle, overlay } from "../lib/styles";
+import { Checkbox } from "../components/Checkbox";
 import ConvertLeadModal from "../components/ConvertLeadModal";
 
 const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
@@ -762,15 +763,11 @@ function MeetingModal({
               style={{ ...inputStyle, resize: "vertical" }}
             />
           </FormField>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-            <input
-              type="checkbox"
-              checked={alreadyHappened}
-              onChange={(e) => setAlreadyHappened(e.target.checked)}
-              style={{ width: 16, height: 16, accentColor: "var(--accent)" }}
-            />
-            <span style={{ fontSize: 13, fontWeight: 500 }}>This meeting already happened</span>
-          </label>
+          <Checkbox
+            checked={alreadyHappened}
+            onChange={setAlreadyHappened}
+            label="This meeting already happened"
+          />
           {alreadyHappened && (
             <FormField label="Outcome">
               <textarea

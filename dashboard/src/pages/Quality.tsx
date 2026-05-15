@@ -6,6 +6,7 @@ import {
 import { api, type QualityData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
 import StatCard from "../components/StatCard";
+import { Checkbox } from "../components/Checkbox";
 import { Pagination } from "../components/Pagination";
 
 const PAGE_SIZE = 25;
@@ -75,14 +76,11 @@ export default function Quality() {
           <option value="168">Last 7 days</option>
           <option value="720">Last 30 days</option>
         </select>
-        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <input
-            type="checkbox"
-            checked={onlyFailed}
-            onChange={(e) => handleFailedToggle(e.target.checked)}
-          />
-          Failed only
-        </label>
+        <Checkbox
+          checked={onlyFailed}
+          onChange={handleFailedToggle}
+          label="Failed only"
+        />
       </div>
 
       <div className="stat-grid">
