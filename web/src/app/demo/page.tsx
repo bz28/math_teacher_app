@@ -14,6 +14,7 @@ export default function DemoPage() {
     school_name: "",
     contact_name: "",
     contact_email: "",
+    approx_students: "",
     message: "",
   });
   const [submitting, setSubmitting] = useState(false);
@@ -23,11 +24,22 @@ export default function DemoPage() {
     e.preventDefault();
     setSubmitting(true);
     try {
+      // Parse approx_students leniently — empty stays undefined,
+      // non-numeric drops to undefined, decimals get rounded to the
+      // nearest integer (backend column is INT). Backend column
+      // accepts NULL so omitting it is fine.
+      const trimmed = form.approx_students.trim();
+      const parsed = trimmed ? Number(trimmed) : NaN;
+      const students =
+        Number.isFinite(parsed) && parsed >= 0
+          ? Math.round(parsed)
+          : undefined;
       await contact.submitLead({
         school_name: form.school_name.trim(),
         contact_name: form.contact_name.trim(),
         contact_email: form.contact_email.trim(),
         role: "teacher",
+        approx_students: students,
         message: form.message.trim() || undefined,
       });
       setSubmitted(true);
@@ -230,6 +242,23 @@ export default function DemoPage() {
                   </div>
                   <div>
                     <label className="text-[13px] font-semibold tracking-wide text-[color:var(--color-text-secondary)]">
+                      Approximate # of students
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      inputMode="numeric"
+                      value={form.approx_students}
+                      onChange={(e) =>
+                        setForm({ ...form, approx_students: e.target.value })
+                      }
+                      placeholder="e.g. 600"
+                      className="mt-1.5 w-full rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition-colors placeholder:text-[color:var(--color-text-muted)] focus:border-[color:var(--color-primary)]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-semibold tracking-wide text-[color:var(--color-text-secondary)]">
                       Anything else we should know?
                     </label>
                     <textarea
@@ -237,7 +266,7 @@ export default function DemoPage() {
                       onChange={(e) =>
                         setForm({ ...form, message: e.target.value })
                       }
-                      placeholder="e.g. how many students, what subjects, timeline…"
+                      placeholder="e.g. subjects, timeline, current solution…"
                       rows={3}
                       className="mt-1.5 w-full resize-vertical rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition-colors placeholder:text-[color:var(--color-text-muted)] focus:border-[color:var(--color-primary)]"
                     />
