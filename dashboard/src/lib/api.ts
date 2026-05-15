@@ -1,61 +1,138 @@
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000/v1";
 
-let _token: string | null = sessionStorage.getItem("admin_token");
+// ── Token storage ──────────────────────────────────────────────────
+//
+// Switched from sessionStorage (per-tab, dies on tab close) to
+// localStorage so the refresh token can outlive a tab. Without
+// persistence, the backend's 7-day refresh-token TTL is wasted
+// — every browser restart forced a fresh login. The teacher portal
+// (web/src/lib/api.ts) uses the same storage choice for the same
+// reason; admin tooling has the same tradeoff.
+
+const ACCESS_TOKEN_KEY = "admin_access_token";
+const REFRESH_TOKEN_KEY = "admin_refresh_token";
+
+// One-shot migration from the old sessionStorage key. Drop after a
+// few release cycles when no operator still has a stale tab open.
+const LEGACY_TOKEN_KEY = "admin_token";
+const legacyToken = sessionStorage.getItem(LEGACY_TOKEN_KEY);
+if (legacyToken && !localStorage.getItem(ACCESS_TOKEN_KEY)) {
+  localStorage.setItem(ACCESS_TOKEN_KEY, legacyToken);
+  sessionStorage.removeItem(LEGACY_TOKEN_KEY);
+}
+
+function getAccessToken(): string | null {
+  return localStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+function getRefreshToken(): string | null {
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
 
 export function setToken(token: string | null) {
-  _token = token;
-  if (token) sessionStorage.setItem("admin_token", token);
-  else sessionStorage.removeItem("admin_token");
+  if (token) localStorage.setItem(ACCESS_TOKEN_KEY, token);
+  else clearTokens();
+}
+
+function saveTokens(tokens: { access_token: string; refresh_token: string }) {
+  localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
+  localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
+}
+
+function clearTokens() {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
 }
 
 export function getToken() {
-  return _token;
+  return getAccessToken();
 }
 
 export function getUserRole(): string | null {
-  if (!_token) return null;
+  const token = getAccessToken();
+  if (!token) return null;
   try {
-    const payload = JSON.parse(atob(_token.split(".")[1]));
+    const payload = JSON.parse(atob(token.split(".")[1]));
     return payload.role ?? null;
   } catch {
     return null;
   }
 }
 
-async function request<T>(path: string, params?: Record<string, string>): Promise<T> {
-  const url = new URL(`${API_BASE}${path}`);
-  if (params) {
-    for (const [k, v] of Object.entries(params)) {
-      if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, v);
+// ── Refresh-token rotation ─────────────────────────────────────────
+//
+// Before this, the dashboard had no refresh logic at all — any 401
+// (which happens every ~15 min when the access token expires) kicked
+// the operator to login. Now we mirror the teacher portal's pattern:
+// on 401, attempt a refresh, retry on success, only clear tokens and
+// redirect when the refresh itself is auth-rejected.
+//
+// RefreshResult is a discriminated union (not a boolean + global
+// flag) so concurrent 401s sharing one in-flight refresh each read
+// their own answer from the promise. See web/src/lib/api.ts for the
+// fuller writeup on why the flag approach is racy.
+
+type RefreshResult = "success" | "auth_rejected" | "transient_error";
+
+let refreshPromise: Promise<RefreshResult> | null = null;
+
+async function refreshAccessToken(): Promise<RefreshResult> {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    const rt = getRefreshToken();
+    if (!rt) return "auth_rejected" as const;
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: rt }),
+      });
+      if (res.status === 401) return "auth_rejected" as const;
+      if (!res.ok) return "transient_error" as const;
+      const data = await res.json();
+      saveTokens(data);
+      return "success" as const;
+    } catch {
+      return "transient_error" as const;
+    } finally {
+      refreshPromise = null;
     }
-  }
-
-  const res = await fetch(url.toString(), {
-    headers: _token ? { Authorization: `Bearer ${_token}` } : {},
-  });
-
-  if (res.status === 401 || res.status === 403) {
-    setToken(null);
-    window.location.href = "/login";
-    throw new Error("Unauthorized");
-  }
-
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
+  })();
+  return refreshPromise;
 }
 
-async function mutate<T>(path: string, method: string, body?: object): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers: {
-      ...(_token ? { Authorization: `Bearer ${_token}` } : {}),
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+// ── Core fetch with auto-refresh ───────────────────────────────────
 
-  if (res.status === 401 || res.status === 403) {
-    setToken(null);
+async function withAuth<T>(
+  doFetch: (token: string | null) => Promise<Response>,
+  parseBody: (res: Response) => Promise<T>,
+): Promise<T> {
+  let res = await doFetch(getAccessToken());
+
+  // Only refresh on 401. A 403 is a permission problem (the user is
+  // authenticated, just not allowed) — refresh wouldn't help, so we
+  // let it fall through to the generic error path. The teacher
+  // portal (web/src/lib/api.ts) does the same and we don't want
+  // dashboard 403s to silently log out a viewer-role admin who just
+  // tried a write endpoint or an audit page they can't see.
+  if (res.status === 401) {
+    const result = await refreshAccessToken();
+    if (result === "success") {
+      res = await doFetch(getAccessToken());
+    } else if (result === "auth_rejected") {
+      clearTokens();
+      window.location.href = "/login";
+      throw new Error("Unauthorized");
+    }
+    // transient_error → fall through and let the caller see the 401
+  }
+
+  // Post-refresh 401 still terminates: refresh succeeded but the
+  // retry was rejected (token revoked between attempts, role
+  // downgraded, etc.). Send them to login. 403 deliberately not
+  // here — see the comment above.
+  if (res.status === 401) {
+    clearTokens();
     window.location.href = "/login";
     throw new Error("Unauthorized");
   }
@@ -64,7 +141,38 @@ async function mutate<T>(path: string, method: string, body?: object): Promise<T
     const data = await res.json().catch(() => ({}));
     throw new Error(data.detail || `API error ${res.status}`);
   }
-  return res.json();
+  return parseBody(res);
+}
+
+async function request<T>(path: string, params?: Record<string, string>): Promise<T> {
+  return withAuth(
+    (token) => {
+      const url = new URL(`${API_BASE}${path}`);
+      if (params) {
+        for (const [k, v] of Object.entries(params)) {
+          if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, v);
+        }
+      }
+      return fetch(url.toString(), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+    },
+    (res) => res.json() as Promise<T>,
+  );
+}
+
+async function mutate<T>(path: string, method: string, body?: object): Promise<T> {
+  return withAuth(
+    (token) => fetch(`${API_BASE}${path}`, {
+      method,
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+    (res) => res.json() as Promise<T>,
+  );
 }
 
 export const api = {
@@ -121,7 +229,7 @@ export const api = {
     });
     if (!res.ok) throw new Error("Login failed");
     const data = await res.json();
-    setToken(data.access_token);
+    saveTokens(data);
     return data;
   },
   forgotPassword: async (email: string) => {
