@@ -3,20 +3,20 @@ import { LogoMark } from "@/components/shared/logo-mark";
 
 type LinkItem = { label: string; href: string };
 
-// Plan-based grouping: Schools (institutional, teacher-led) vs.
-// Personal (individual student, no teacher). The columns now carry
-// real meaning instead of audience-mixing the way "Product" did.
-//
-// Schools column also holds the "Book a demo" CTA — it's the
-// school-plan conversion link, so it belongs with the rest of the
-// school-plan surfaces, not in its own floating column.
-const schoolsLinks: LinkItem[] = [
-  { label: "For Districts", href: "/for-districts" },
+// Product-mode grouping. "Classroom" = teacher-led, in-school product
+// (the homepage default pitch + /for-districts + book-a-demo). "Self-
+// study" = the solo-student product (web /students page is the SEO/
+// fallback surface; mobile-app stores are where most solo discovery
+// happens). Audience-named columns ("For Teachers"/"For Students")
+// were rejected because school students are also "students" — naming
+// the *mode* avoids that overlap.
+const classroomLinks: LinkItem[] = [
+  { label: "For districts", href: "/for-districts" },
   { label: "Book a demo", href: "/demo" },
 ];
 
-const personalLinks: LinkItem[] = [
-  { label: "For Students", href: "/students" },
+const selfStudyLinks: LinkItem[] = [
+  { label: "For students", href: "/students" },
 ];
 
 const subjectsLinks: LinkItem[] = [
@@ -92,12 +92,11 @@ export function Footer() {
             </p>
           </div>
 
-          {/* Plan-based grouping: Schools first (the institutional
-              path with district + book-a-demo CTA), Personal next
-              (the consumer/student-on-their-own path), Subjects as
-              supporting content, then utility columns. */}
-          <FooterColumn heading="Schools" links={schoolsLinks} />
-          <FooterColumn heading="Personal" links={personalLinks} />
+          {/* Product-mode grouping: Classroom (teacher-led, in-school)
+              first since it's the primary conversion path; Self-study
+              (solo student) next; Subjects supporting; then utility. */}
+          <FooterColumn heading="Classroom" links={classroomLinks} />
+          <FooterColumn heading="Self-study" links={selfStudyLinks} />
           <FooterColumn heading="Subjects" links={subjectsLinks} />
           <FooterColumn heading="Account" links={accountLinks} />
           <FooterColumn heading="Legal" links={legalLinks} />
