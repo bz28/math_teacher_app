@@ -343,7 +343,19 @@ export type LeadStatus =
   | "demo_held"
   | "converted"
   | "declined";
-export type MeetingType = "demo" | "follow_up" | "onboarding" | "other";
+export type MeetingType =
+  // Scheduled meetings
+  | "demo"
+  | "follow_up"
+  | "onboarding"
+  | "other"
+  // Contact touchpoints — logged after-the-fact, usually with
+  // alreadyHappened=true as the natural default.
+  | "email"
+  | "call"
+  | "dm"
+  | "text"
+  | "linkedin";
 
 export interface ContactLeadData {
   id: string;

@@ -43,10 +43,17 @@ const SOURCE_LABEL: Record<LeadSource, string> = {
 };
 
 const MEETING_TYPE_OPTIONS: { value: MeetingType; label: string }[] = [
+  // Scheduled meetings — default to "schedule it for later"
   { value: "demo", label: "Demo" },
   { value: "follow_up", label: "Follow-up" },
   { value: "onboarding", label: "Onboarding" },
-  { value: "other", label: "Other" },
+  { value: "other", label: "Other meeting" },
+  // Touchpoints — default to "log what just happened"
+  { value: "email", label: "Email" },
+  { value: "call", label: "Phone call" },
+  { value: "dm", label: "DM" },
+  { value: "text", label: "Text" },
+  { value: "linkedin", label: "LinkedIn" },
 ];
 
 const MEETING_TYPE_LABEL: Record<MeetingType, string> = {
@@ -54,7 +61,31 @@ const MEETING_TYPE_LABEL: Record<MeetingType, string> = {
   follow_up: "Follow-up",
   onboarding: "Onboarding",
   other: "Meeting",
+  email: "Email",
+  call: "Phone call",
+  dm: "DM",
+  text: "Text",
+  linkedin: "LinkedIn",
 };
+
+const MEETING_TYPE_ICON: Record<MeetingType, string> = {
+  demo: "🗓",
+  follow_up: "🗓",
+  onboarding: "🗓",
+  other: "🗓",
+  email: "✉️",
+  call: "📞",
+  dm: "💬",
+  text: "💬",
+  linkedin: "💼",
+};
+
+/** Touchpoints are after-the-fact contact logs. They default to
+ *  "already happened" in the form and are visually distinct from
+ *  scheduled meetings. The Meeting model carries them because the
+ *  timeline + edit/delete UX is identical. */
+const TOUCHPOINT_TYPES: MeetingType[] = ["email", "call", "dm", "text", "linkedin"];
+const isTouchpoint = (t: MeetingType): boolean => TOUCHPOINT_TYPES.includes(t);
 
 type MeetingState = "upcoming" | "past_unmarked" | "held" | "cancelled";
 
@@ -66,7 +97,7 @@ export default function LeadDetail() {
   const [notFound, setNotFound] = useState(false);
 
   // Modals
-  const [showSchedule, setShowSchedule] = useState(false);
+  const [showSchedule, setShowSchedule] = useState<{ initialType: MeetingType } | null>(null);
   const [editingMeeting, setEditingMeeting] = useState<LeadMeeting | null>(null);
   const [showAddNote, setShowAddNote] = useState(false);
   const [editingNote, setEditingNote] = useState<LeadNote | null>(null);
@@ -169,7 +200,8 @@ export default function LeadDetail() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <h3 style={{ marginBottom: 0 }}>Activity</h3>
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => setShowSchedule(true)} style={btnPrimary}>+ Schedule meeting</button>
+            <button onClick={() => setShowSchedule({ initialType: "demo" })} style={btnPrimary}>+ Schedule meeting</button>
+            <button onClick={() => setShowSchedule({ initialType: "email" })} style={btnGhost}>+ Log contact</button>
             <button onClick={() => setShowAddNote(true)} style={btnGhost}>+ Add note</button>
           </div>
         </div>
@@ -214,10 +246,11 @@ export default function LeadDetail() {
       {showSchedule && (
         <MeetingModal
           mode="create"
-          onClose={() => setShowSchedule(false)}
+          initialType={showSchedule.initialType}
+          onClose={() => setShowSchedule(null)}
           onSubmit={async (payload) => {
             await api.createLeadMeeting(lead.id, payload);
-            setShowSchedule(false);
+            setShowSchedule(null);
             reload();
           }}
         />
@@ -585,7 +618,7 @@ function MeetingCard({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 4 }}>
-            <span style={{ fontSize: 16 }}>🗓️</span>
+            <span style={{ fontSize: 16 }}>{MEETING_TYPE_ICON[meeting.type]}</span>
             <span style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)" }}>
               {MEETING_TYPE_LABEL[meeting.type]}
             </span>
@@ -710,11 +743,16 @@ function SystemEntry({ text, at }: { text: string; at: string }) {
 function MeetingModal({
   mode,
   meeting,
+  initialType,
   onClose,
   onSubmit,
 }: {
   mode: "create" | "edit";
   meeting?: LeadMeeting;
+  /** Seed the type select. "+ Schedule meeting" passes "demo"
+   *  and the form defaults to a future scheduled_at; "+ Log contact"
+   *  passes "email" and the form defaults to "already happened". */
+  initialType?: MeetingType;
   onClose: () => void;
   onSubmit: (payload: {
     type: MeetingType;
@@ -724,13 +762,20 @@ function MeetingModal({
     outcome: string | null;
   }) => Promise<void>;
 }) {
-  const [type, setType] = useState<MeetingType>(meeting?.type ?? "demo");
+  const [type, setType] = useState<MeetingType>(
+    meeting?.type ?? initialType ?? "demo",
+  );
+  const startsAsTouchpoint = isTouchpoint(type);
   const [scheduledAt, setScheduledAt] = useState(
-    meeting ? toLocalInput(meeting.scheduled_at) : toLocalInput(defaultScheduledAt()),
+    meeting
+      ? toLocalInput(meeting.scheduled_at)
+      // For touchpoints, default the timestamp to "right now" since
+      // the operator is logging what just happened.
+      : toLocalInput(startsAsTouchpoint ? new Date().toISOString() : defaultScheduledAt()),
   );
   const [agenda, setAgenda] = useState(meeting?.agenda ?? "");
   const [alreadyHappened, setAlreadyHappened] = useState(
-    mode === "create" ? false : meeting?.held_at != null,
+    mode === "create" ? startsAsTouchpoint : meeting?.held_at != null,
   );
   const [outcome, setOutcome] = useState(meeting?.outcome ?? "");
   const [submitting, setSubmitting] = useState(false);
@@ -756,11 +801,18 @@ function MeetingModal({
     }
   };
 
+  const touchpoint = isTouchpoint(type);
+  const createTitle = touchpoint ? "Log contact" : "Schedule meeting";
+  const editTitle = touchpoint ? "Edit contact" : "Edit meeting";
+  const createSubtitle = touchpoint
+    ? "Record an outreach touchpoint — email, call, DM, or other."
+    : "Book a demo, follow-up, or onboarding call.";
+
   return (
     <EditorialModal
-      eyebrow="Meeting"
-      title={mode === "create" ? "Schedule meeting" : "Edit meeting"}
-      subtitle={mode === "create" ? "Book a demo, follow-up, or onboarding call." : undefined}
+      eyebrow={touchpoint ? "Contact" : "Meeting"}
+      title={mode === "create" ? createTitle : editTitle}
+      subtitle={mode === "create" ? createSubtitle : undefined}
       onClose={() => !submitting && onClose()}
     >
       <form onSubmit={handleSubmit} style={{ padding: "22px 36px 28px", display: "flex", flexDirection: "column", gap: 14 }}>
@@ -776,7 +828,7 @@ function MeetingModal({
             ))}
           </select>
         </FormField>
-        <FormField label="Date & time">
+        <FormField label={touchpoint ? "When" : "Date & time"}>
           <input
             type="datetime-local"
             required
@@ -785,19 +837,22 @@ function MeetingModal({
             style={inputStyle}
           />
         </FormField>
-        <FormField label="Agenda (optional)">
+        <FormField label={touchpoint ? "What you said (optional)" : "Agenda (optional)"}>
           <textarea
             value={agenda}
             onChange={(e) => setAgenda(e.target.value)}
             rows={2}
+            placeholder={touchpoint ? "Short summary of what you sent or discussed" : undefined}
             style={{ ...inputStyle, resize: "vertical" }}
           />
         </FormField>
-        <Checkbox
-          checked={alreadyHappened}
-          onChange={setAlreadyHappened}
-          label="This meeting already happened"
-        />
+        {!touchpoint && (
+          <Checkbox
+            checked={alreadyHappened}
+            onChange={setAlreadyHappened}
+            label="This meeting already happened"
+          />
+        )}
         {alreadyHappened && (
           <FormField label="Outcome">
             <textarea

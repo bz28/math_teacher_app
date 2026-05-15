@@ -29,7 +29,15 @@ router = APIRouter()
 
 VALID_STATUSES = ("new", "contacted", "engaged", "demo_held", "converted", "declined")
 VALID_SOURCES = ("inbound_form", "warm_intro", "outbound", "event")
-MEETING_TYPES = ("demo", "follow_up", "onboarding", "other")
+MEETING_TYPES = (
+    # Scheduled-meeting types
+    "demo", "follow_up", "onboarding", "other",
+    # Lightweight contact touchpoints — usually logged after the
+    # fact rather than scheduled ahead. The same model carries them
+    # because the timeline + edit/delete UX is identical; the
+    # frontend toggles modal copy off the type.
+    "email", "call", "dm", "text", "linkedin",
+)
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
