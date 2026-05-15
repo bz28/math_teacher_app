@@ -109,7 +109,7 @@ function SectionInviteContent() {
 
         {view.kind === "invalid" && (
           <div className="text-center">
-            <h1 className="text-xl font-bold text-text-primary">Invite Not Valid</h1>
+            <h1 className="font-serif text-[24px] leading-tight tracking-[-0.01em] text-text-primary">Invite not valid.</h1>
             <p className="mt-2 text-sm text-text-secondary">{view.message}</p>
             <p className="mt-4 text-sm text-text-secondary">
               Ask your teacher to send a new invite.

@@ -29,7 +29,7 @@ function SetPasswordContent() {
     return (
       <div className="flex flex-1 items-center justify-center px-6 py-12">
         <div className="text-center">
-          <h1 className="text-xl font-bold text-text-primary">Invalid Link</h1>
+          <h1 className="font-serif text-[24px] leading-tight tracking-[-0.01em] text-text-primary">Invalid link.</h1>
           <p className="mt-2 text-sm text-text-secondary">
             This link is missing a token. Please check your email for the correct link.
           </p>
