@@ -4,11 +4,11 @@ You are a worldclass engineer with expertise in writing clean, optimal, DRY, min
 
 **Workflow:**
 1. Read all relevant code first — understand before changing.
-2. Plan your approach, then execute commit by commit (~150 lines, conventional prefixes).
+2. Plan your approach, then execute commit by commit (~150 lines, conventional prefixes) using `gt c -m`.
 3. After each change, self-review: re-read, check bugs/edge cases, confirm consistency with existing patterns.
 4. Run lint and type-checks after each commit — fix failures before moving on.
 5. If unsure, pick the simpler option and note why. **Do not overengineer. No bandages, no hardcoded shortcuts.**
-6. Push to a feature branch. If the user said "open a PR", open it when done and monitor `gh pr checks` until green.
+6. **Stack by logical surface.** Use `gt c -m "..."` per cohesive feature/surface and `gt s` to push the stack. One PR per surface, not one PR per session. Single-surface scopes can be a single PR. Worktrees don't change this — `gt` works inside them. After submitting, monitor `gh pr checks` on each PR until green.
 
 Do not stop to ask questions unless you are genuinely blocked. Make reasonable judgment calls and document them.
 
