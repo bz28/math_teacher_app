@@ -8,7 +8,7 @@ import {
   type MeetingType,
 } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
-import { btnGhost, btnPrimary, inputStyle, overlay } from "../lib/styles";
+import { btnGhost, overlay } from "../lib/styles";
 import ConvertLeadModal from "../components/ConvertLeadModal";
 import StatCard from "../components/StatCard";
 
@@ -119,7 +119,10 @@ export default function Leads() {
             <h1>Leads</h1>
             <p>{summaryLine(leads.length, counts)}</p>
           </div>
-          <button onClick={() => setShowAdd(true)} style={btnPrimary}>+ Add lead</button>
+          <button onClick={() => setShowAdd(true)} style={addLeadTrigger}>
+            <span aria-hidden style={{ fontFamily: "var(--font-display)", fontSize: 18, lineHeight: 1, marginRight: 6 }}>+</span>
+            Add lead
+          </button>
         </div>
       </div>
 
@@ -462,41 +465,60 @@ function AddLeadModal({
 
   return (
     <div style={overlay} onClick={() => !submitting && onClose()}>
-      <div className="table-card" style={modalCard} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <div>
-            <h3 style={{ marginBottom: 2 }}>Add lead</h3>
-            <div style={{ fontSize: 13, color: "var(--muted)" }}>
-              Log a warm intro, outbound prospect, or event contact.
-            </div>
-          </div>
-          <button onClick={onClose} style={btnGhost}>Cancel</button>
+      <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+        <div style={modalAccentBar} />
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          style={modalCloseBtn}
+        >
+          ×
+        </button>
+
+        <div style={{ padding: "34px 40px 0" }}>
+          <span className="eyebrow" style={{ marginBottom: 8 }}>Intake</span>
+          <h2 style={{ marginBottom: 6, fontSize: 32, letterSpacing: "-0.3px" }}>
+            Add lead
+          </h2>
+          <p style={{
+            fontFamily: "var(--font-display)", fontStyle: "italic",
+            fontSize: 16, color: "var(--muted)", lineHeight: 1.4,
+            maxWidth: "44ch",
+          }}>
+            Log a warm intro, outbound prospect, or event contact. They won't be emailed.
+          </p>
         </div>
 
         {error && (
-          <div style={{ marginBottom: 12, padding: "8px 12px", background: "var(--danger-soft)", borderRadius: 3, border: "1px solid rgba(138, 35, 23, 0.3)", fontSize: 13, color: "var(--danger)" }}>
+          <div style={{
+            margin: "18px 40px 0", padding: "10px 14px",
+            background: "var(--danger-soft)", borderLeft: "2px solid var(--danger)",
+            fontSize: 13, color: "var(--danger)",
+          }}>
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <form onSubmit={handleSubmit} style={{ padding: "26px 40px 0" }}>
+          <SectionHeader number="I." title="Contact" />
           <FormField label="School name">
             <input
               type="text"
               required
               value={form.school_name}
               onChange={(e) => setForm({ ...form, school_name: e.target.value })}
-              style={inputStyle}
+              style={fieldInput}
             />
           </FormField>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div style={fieldGridTwo}>
             <FormField label="Contact name">
               <input
                 type="text"
                 required
                 value={form.contact_name}
                 onChange={(e) => setForm({ ...form, contact_name: e.target.value })}
-                style={inputStyle}
+                style={fieldInput}
               />
             </FormField>
             <FormField label="Contact email">
@@ -505,31 +527,42 @@ function AddLeadModal({
                 required
                 value={form.contact_email}
                 onChange={(e) => setForm({ ...form, contact_email: e.target.value })}
-                style={inputStyle}
+                style={fieldInput}
               />
             </FormField>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <FormField label="Source">
-              <select
-                value={form.source}
-                onChange={(e) => setForm({ ...form, source: e.target.value as LeadSource })}
-                style={inputStyle}
-              >
-                {SOURCE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </FormField>
-            <FormField label="Role">
-              <input
-                type="text"
-                value={form.role}
-                onChange={(e) => setForm({ ...form, role: e.target.value })}
-                style={inputStyle}
-              />
-            </FormField>
-          </div>
+          <FormField label="Role">
+            <input
+              type="text"
+              value={form.role}
+              onChange={(e) => setForm({ ...form, role: e.target.value })}
+              style={fieldInput}
+            />
+          </FormField>
+
+          <SectionHeader number="II." title="Context" />
+          <FormField label="Source">
+            <div role="radiogroup" aria-label="Source" style={sourceChipsRow}>
+              {SOURCE_OPTIONS.map((o) => {
+                const active = form.source === o.value;
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setForm({ ...form, source: o.value })}
+                    style={{
+                      ...sourceChip,
+                      ...(active ? sourceChipActive : {}),
+                    }}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
+          </FormField>
           {needsReferrer && (
             <FormField label="Referred by">
               <input
@@ -537,32 +570,41 @@ function AddLeadModal({
                 value={form.referred_by}
                 onChange={(e) => setForm({ ...form, referred_by: e.target.value })}
                 placeholder="Who made the introduction"
-                style={inputStyle}
+                style={fieldInput}
               />
             </FormField>
           )}
-          <FormField label="Approx students (optional)">
+          <FormField label="Approx students" hint="optional">
             <input
               type="number"
               min={0}
               value={form.approx_students}
               onChange={(e) => setForm({ ...form, approx_students: e.target.value })}
-              style={inputStyle}
+              style={fieldInput}
             />
           </FormField>
-          <FormField label="Initial note (optional)">
+          <FormField label="Initial note" hint="optional">
             <textarea
               value={form.initial_note}
               onChange={(e) => setForm({ ...form, initial_note: e.target.value })}
               placeholder="How did this come up? Anything to remember."
               rows={3}
-              style={{ ...inputStyle, resize: "vertical" }}
+              style={{ ...fieldInput, resize: "vertical", lineHeight: 1.5 }}
             />
           </FormField>
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+
+          <div style={modalFooter}>
             <button type="button" onClick={onClose} style={btnGhost}>Cancel</button>
-            <button type="submit" disabled={submitting} style={{ ...btnPrimary, opacity: submitting ? 0.6 : 1 }}>
-              {submitting ? "Creating…" : "Create lead"}
+            <button
+              type="submit"
+              disabled={submitting}
+              style={{ ...btnFile, opacity: submitting ? 0.6 : 1 }}
+            >
+              {submitting ? "Filing…" : (
+                <>
+                  File lead <span aria-hidden style={{ marginLeft: 8, fontFamily: "var(--font-display)" }}>→</span>
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -571,11 +613,56 @@ function AddLeadModal({
   );
 }
 
-function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+function SectionHeader({ number, title }: { number: string; title: string }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <label style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "var(--muted)", letterSpacing: 0.5 }}>
-        {label}
+    <div style={{
+      display: "flex", alignItems: "baseline", gap: 10,
+      marginTop: 6, marginBottom: 16,
+      paddingBottom: 8, borderBottom: "1px solid var(--rule)",
+    }}>
+      <span style={{
+        fontFamily: "var(--font-display)", fontStyle: "italic",
+        fontSize: 18, color: "var(--accent)", letterSpacing: "-0.2px",
+      }}>
+        {number}
+      </span>
+      <span style={{
+        fontFamily: "var(--font-sans)", fontSize: 11, fontWeight: 600,
+        textTransform: "uppercase", letterSpacing: "1.8px",
+        color: "var(--ink-soft)",
+      }}>
+        {title}
+      </span>
+    </div>
+  );
+}
+
+function FormField({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 18 }}>
+      <label style={{
+        display: "flex", justifyContent: "space-between", alignItems: "baseline",
+        fontSize: 10, fontWeight: 600, textTransform: "uppercase",
+        color: "var(--muted)", letterSpacing: 1.6,
+      }}>
+        <span>{label}</span>
+        {hint && (
+          <span style={{
+            fontFamily: "var(--font-display)", fontStyle: "italic",
+            fontSize: 12, fontWeight: 400, textTransform: "none",
+            letterSpacing: 0, color: "var(--muted-2)",
+          }}>
+            {hint}
+          </span>
+        )}
       </label>
       {children}
     </div>
@@ -583,11 +670,127 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
 }
 
 const modalCard: React.CSSProperties = {
-  maxWidth: 560,
-  width: "90%",
-  maxHeight: "85vh",
+  position: "relative",
+  maxWidth: 620,
+  width: "92%",
+  maxHeight: "88vh",
   overflow: "auto",
   background: "var(--surface)",
+  borderRadius: 2,
+  boxShadow: "0 24px 64px rgba(20, 19, 15, 0.22), 0 2px 8px rgba(20, 19, 15, 0.08)",
+};
+
+const modalAccentBar: React.CSSProperties = {
+  height: 3,
+  background: "var(--accent)",
+  width: "100%",
+};
+
+const modalCloseBtn: React.CSSProperties = {
+  position: "absolute",
+  top: 14,
+  right: 16,
+  width: 30,
+  height: 30,
+  border: "none",
+  background: "transparent",
+  color: "var(--muted)",
+  fontSize: 24,
+  lineHeight: 1,
+  cursor: "pointer",
+  fontFamily: "var(--font-display)",
+  borderRadius: 2,
+};
+
+const fieldInput: React.CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: 2,
   border: "1px solid var(--rule-strong)",
-  boxShadow: "0 16px 48px rgba(20, 19, 15, 0.18)",
+  background: "var(--paper)",
+  color: "var(--ink)",
+  fontFamily: "var(--font-sans)",
+  fontSize: 14,
+  width: "100%",
+  outline: "none",
+};
+
+const fieldGridTwo: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 14,
+};
+
+const sourceChipsRow: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+};
+
+const sourceChip: React.CSSProperties = {
+  flex: "1 1 auto",
+  minWidth: 110,
+  padding: "9px 12px",
+  border: "1px solid var(--rule-strong)",
+  background: "var(--paper)",
+  color: "var(--ink-soft)",
+  fontFamily: "var(--font-sans)",
+  fontSize: 12.5,
+  fontWeight: 500,
+  letterSpacing: 0.2,
+  cursor: "pointer",
+  borderRadius: 2,
+  transition: "all 0.12s",
+  textAlign: "center",
+};
+
+const sourceChipActive: React.CSSProperties = {
+  background: "var(--ink)",
+  color: "var(--paper)",
+  borderColor: "var(--ink)",
+  fontWeight: 600,
+};
+
+const modalFooter: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  alignItems: "center",
+  gap: 10,
+  marginTop: 24,
+  marginLeft: -40,
+  marginRight: -40,
+  marginBottom: -0,
+  padding: "18px 40px 26px",
+  borderTop: "1px solid var(--rule)",
+  background: "var(--paper-2)",
+};
+
+const addLeadTrigger: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "9px 18px 10px",
+  background: "var(--ink)",
+  color: "var(--paper)",
+  border: "none",
+  borderRadius: 2,
+  fontFamily: "var(--font-sans)",
+  fontSize: 12.5,
+  fontWeight: 600,
+  letterSpacing: 0.5,
+  cursor: "pointer",
+  textTransform: "uppercase",
+};
+
+const btnFile: React.CSSProperties = {
+  padding: "10px 22px",
+  background: "var(--ink)",
+  color: "var(--paper)",
+  border: "none",
+  borderRadius: 2,
+  fontFamily: "var(--font-sans)",
+  fontSize: 13,
+  fontWeight: 600,
+  letterSpacing: 0.4,
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
 };
