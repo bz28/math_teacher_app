@@ -12,6 +12,7 @@ import {
 import { formatRelativeDate } from "../lib/format";
 import { btnGhost, btnPrimary, btnSmall, inputStyle, overlay } from "../lib/styles";
 import { Checkbox } from "../components/Checkbox";
+import { EditorialModal } from "../components/EditorialModal";
 import ConvertLeadModal from "../components/ConvertLeadModal";
 
 const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
@@ -727,67 +728,66 @@ function MeetingModal({
   };
 
   return (
-    <div style={overlay} onClick={() => !submitting && onClose()}>
-      <div className="table-card" style={modalCard} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h3 style={{ marginBottom: 0 }}>{mode === "create" ? "Schedule meeting" : "Edit meeting"}</h3>
-          <button onClick={onClose} style={btnGhost}>Cancel</button>
-        </div>
+    <EditorialModal
+      eyebrow="Meeting"
+      title={mode === "create" ? "Schedule meeting" : "Edit meeting"}
+      subtitle={mode === "create" ? "Book a demo, follow-up, or onboarding call." : undefined}
+      onClose={() => !submitting && onClose()}
+    >
+      <form onSubmit={handleSubmit} style={{ padding: "22px 36px 28px", display: "flex", flexDirection: "column", gap: 14 }}>
         {error && (
-          <div style={{ marginBottom: 12, padding: "8px 12px", background: "var(--danger-soft)", borderRadius: 3, fontSize: 13, color: "var(--danger)" }}>
+          <div style={{ padding: "8px 12px", background: "var(--danger-soft)", borderRadius: 3, fontSize: 13, color: "var(--danger)" }}>
             {error}
           </div>
         )}
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <FormField label="Type">
-            <select value={type} onChange={(e) => setType(e.target.value as MeetingType)} style={inputStyle}>
-              {MEETING_TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </FormField>
-          <FormField label="Date & time">
-            <input
-              type="datetime-local"
-              required
-              value={scheduledAt}
-              onChange={(e) => setScheduledAt(e.target.value)}
-              style={inputStyle}
-            />
-          </FormField>
-          <FormField label="Agenda (optional)">
+        <FormField label="Type">
+          <select value={type} onChange={(e) => setType(e.target.value as MeetingType)} style={inputStyle}>
+            {MEETING_TYPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </FormField>
+        <FormField label="Date & time">
+          <input
+            type="datetime-local"
+            required
+            value={scheduledAt}
+            onChange={(e) => setScheduledAt(e.target.value)}
+            style={inputStyle}
+          />
+        </FormField>
+        <FormField label="Agenda (optional)">
+          <textarea
+            value={agenda}
+            onChange={(e) => setAgenda(e.target.value)}
+            rows={2}
+            style={{ ...inputStyle, resize: "vertical" }}
+          />
+        </FormField>
+        <Checkbox
+          checked={alreadyHappened}
+          onChange={setAlreadyHappened}
+          label="This meeting already happened"
+        />
+        {alreadyHappened && (
+          <FormField label="Outcome">
             <textarea
-              value={agenda}
-              onChange={(e) => setAgenda(e.target.value)}
-              rows={2}
+              value={outcome}
+              onChange={(e) => setOutcome(e.target.value)}
+              placeholder="What happened, next steps"
+              rows={3}
               style={{ ...inputStyle, resize: "vertical" }}
             />
           </FormField>
-          <Checkbox
-            checked={alreadyHappened}
-            onChange={setAlreadyHappened}
-            label="This meeting already happened"
-          />
-          {alreadyHappened && (
-            <FormField label="Outcome">
-              <textarea
-                value={outcome}
-                onChange={(e) => setOutcome(e.target.value)}
-                placeholder="What happened, next steps"
-                rows={3}
-                style={{ ...inputStyle, resize: "vertical" }}
-              />
-            </FormField>
-          )}
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
-            <button type="button" onClick={onClose} style={btnGhost}>Cancel</button>
-            <button type="submit" disabled={submitting} style={{ ...btnPrimary, opacity: submitting ? 0.6 : 1 }}>
-              {submitting ? "Saving…" : mode === "create" ? "Schedule" : "Save"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+          <button type="button" onClick={onClose} style={btnGhost}>Cancel</button>
+          <button type="submit" disabled={submitting} style={{ ...btnPrimary, opacity: submitting ? 0.6 : 1 }}>
+            {submitting ? "Saving…" : mode === "create" ? "Schedule" : "Save"}
+          </button>
+        </div>
+      </form>
+    </EditorialModal>
   );
 }
 
@@ -836,39 +836,37 @@ function NoteModal({
   };
 
   return (
-    <div style={overlay} onClick={() => !submitting && onClose()}>
-      <div className="table-card" style={modalCard} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h3 style={{ marginBottom: 0 }}>{initial ? "Edit note" : "Add note"}</h3>
-          <button onClick={onClose} style={btnGhost}>Cancel</button>
-        </div>
+    <EditorialModal
+      eyebrow="Note"
+      title={initial ? "Edit note" : "Add note"}
+      onClose={() => !submitting && onClose()}
+    >
+      <form onSubmit={handleSubmit} style={{ padding: "20px 36px 28px" }}>
         {error && (
           <div style={{ marginBottom: 12, padding: "8px 12px", background: "var(--danger-soft)", borderRadius: 3, fontSize: 13, color: "var(--danger)" }}>
             {error}
           </div>
         )}
-        <form onSubmit={handleSubmit}>
-          <textarea
-            autoFocus
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Call notes, deal context, follow-up…"
-            rows={6}
-            style={{ ...inputStyle, fontSize: 13.5, resize: "vertical" }}
-          />
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-            <button type="button" onClick={onClose} style={btnGhost}>Cancel</button>
-            <button
-              type="submit"
-              disabled={submitting || !body.trim()}
-              style={{ ...btnPrimary, opacity: submitting || !body.trim() ? 0.6 : 1 }}
-            >
-              {submitting ? "Saving…" : "Save"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <textarea
+          autoFocus
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Call notes, deal context, follow-up…"
+          rows={6}
+          style={{ ...inputStyle, fontSize: 13.5, resize: "vertical" }}
+        />
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+          <button type="button" onClick={onClose} style={btnGhost}>Cancel</button>
+          <button
+            type="submit"
+            disabled={submitting || !body.trim()}
+            style={{ ...btnPrimary, opacity: submitting || !body.trim() ? 0.6 : 1 }}
+          >
+            {submitting ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </form>
+    </EditorialModal>
   );
 }
 

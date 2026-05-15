@@ -8,8 +8,9 @@ import {
   type MeetingType,
 } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
-import { btnGhost, overlay } from "../lib/styles";
+import { btnGhost } from "../lib/styles";
 import ConvertLeadModal from "../components/ConvertLeadModal";
+import { EditorialModal } from "../components/EditorialModal";
 import StatCard from "../components/StatCard";
 
 const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
@@ -470,43 +471,25 @@ function AddLeadModal({
   };
 
   return (
-    <div style={overlay} onClick={() => !submitting && onClose()}>
-      <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-        <div style={modalAccentBar} />
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          style={modalCloseBtn}
-        >
-          ×
-        </button>
-
-        <div style={{ padding: "34px 40px 0" }}>
-          <span className="eyebrow" style={{ marginBottom: 8 }}>Intake</span>
-          <h2 style={{ marginBottom: 6, fontSize: 32, letterSpacing: "-0.3px" }}>
-            Add lead
-          </h2>
-          <p style={{
-            fontFamily: "var(--font-display)", fontStyle: "italic",
-            fontSize: 16, color: "var(--muted)", lineHeight: 1.4,
-            maxWidth: "44ch",
-          }}>
-            Log a warm intro, outbound prospect, or event contact. They won't be emailed.
-          </p>
+    <EditorialModal
+      eyebrow="Intake"
+      title="Add lead"
+      titleSize={32}
+      subtitle="Log a warm intro, outbound prospect, or event contact. They won't be emailed."
+      maxWidth={620}
+      onClose={() => !submitting && onClose()}
+    >
+      {error && (
+        <div style={{
+          margin: "18px 36px 0", padding: "10px 14px",
+          background: "var(--danger-soft)", borderLeft: "2px solid var(--danger)",
+          fontSize: 13, color: "var(--danger)",
+        }}>
+          {error}
         </div>
+      )}
 
-        {error && (
-          <div style={{
-            margin: "18px 40px 0", padding: "10px 14px",
-            background: "var(--danger-soft)", borderLeft: "2px solid var(--danger)",
-            fontSize: 13, color: "var(--danger)",
-          }}>
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} style={{ padding: "26px 40px 0" }}>
+      <form onSubmit={handleSubmit} style={{ padding: "26px 36px 0" }}>
           <SectionHeader number="I." title="Contact" />
           <FormField label="School name">
             <input
@@ -613,9 +596,8 @@ function AddLeadModal({
               )}
             </button>
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </EditorialModal>
   );
 }
 
@@ -674,39 +656,6 @@ function FormField({
     </div>
   );
 }
-
-const modalCard: React.CSSProperties = {
-  position: "relative",
-  maxWidth: 620,
-  width: "92%",
-  maxHeight: "88vh",
-  overflow: "auto",
-  background: "var(--surface)",
-  borderRadius: 2,
-  boxShadow: "0 16px 48px rgba(20, 19, 15, 0.18)",
-};
-
-const modalAccentBar: React.CSSProperties = {
-  height: 3,
-  background: "var(--accent)",
-  width: "100%",
-};
-
-const modalCloseBtn: React.CSSProperties = {
-  position: "absolute",
-  top: 14,
-  right: 16,
-  width: 30,
-  height: 30,
-  border: "none",
-  background: "transparent",
-  color: "var(--muted)",
-  fontSize: 24,
-  lineHeight: 1,
-  cursor: "pointer",
-  fontFamily: "var(--font-display)",
-  borderRadius: 2,
-};
 
 const fieldInput: React.CSSProperties = {
   padding: "10px 14px",
