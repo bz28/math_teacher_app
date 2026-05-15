@@ -164,8 +164,8 @@ export default function Users() {
 
       {inviteSuccess && (
         <div style={{
-          marginBottom: 16, padding: "10px 14px", background: "#f0fdf4",
-          borderRadius: 6, border: "1px solid #bbf7d0", fontSize: 13, color: "#16a34a",
+          marginBottom: 16, padding: "10px 14px", background: "var(--ok-soft)",
+          borderRadius: 4, border: "1px solid rgba(74, 107, 58, 0.3)", fontSize: 13, color: "var(--ok)",
         }}>
           Invite sent to <strong>{inviteSuccess}</strong>
         </div>
@@ -177,13 +177,13 @@ export default function Users() {
             <h3 style={{ marginBottom: 0 }}>Invite New Admin</h3>
             <button onClick={() => { setShowInvite(false); setInviteError(null); }} className="btn-secondary">Cancel</button>
           </div>
-          <p style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>
+          <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>
             They'll receive an email with a link to set their password.
           </p>
           {inviteError && (
             <div style={{
-              marginBottom: 12, padding: "8px 12px", background: "#fef2f2",
-              borderRadius: 6, border: "1px solid #fecaca", fontSize: 13, color: "#dc2626",
+              marginBottom: 12, padding: "8px 12px", background: "var(--danger-soft)",
+              borderRadius: 4, border: "1px solid rgba(138, 35, 23, 0.3)", fontSize: 13, color: "var(--danger)",
             }}>
               {inviteError}
             </div>
@@ -245,7 +245,7 @@ export default function Users() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <h3 style={{ marginBottom: 0 }}>
             {search ? `Results for "${search}"` : "All Users"}
-            <span style={{ fontWeight: 400, color: "#94a3b8", marginLeft: 8 }}>
+            <span style={{ fontWeight: 400, color: "var(--muted-2)", marginLeft: 8 }}>
               ({data.filtered_count})
             </span>
           </h3>
@@ -285,7 +285,7 @@ export default function Users() {
                   <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis" }}>
                     {u.name || "-"}
                   </div>
-                  <div style={{ fontSize: 11, color: "#94a3b8", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <div style={{ fontSize: 11, color: "var(--muted-2)", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {u.email}
                   </div>
                   <div style={{ display: "flex", gap: 4, marginTop: 2, flexWrap: "wrap" }}>
@@ -295,7 +295,7 @@ export default function Users() {
                       {u.role}
                     </span>
                     {u.grade_level > 0 && (
-                      <span className="badge" style={{ background: "#f0f9ff", color: "#0369a1" }}>
+                      <span className="badge" style={{ background: "var(--info-soft)", color: "var(--info)" }}>
                         {gradeLabel(u.grade_level)}
                       </span>
                     )}
@@ -305,8 +305,8 @@ export default function Users() {
                   <span
                     className="badge"
                     style={{
-                      background: u.subscription_tier === "pro" ? "#dbeafe" : "#f1f5f9",
-                      color: u.subscription_tier === "pro" ? "#2563eb" : "#64748b",
+                      background: u.subscription_tier === "pro" ? "var(--info-soft)" : "var(--paper-2)",
+                      color: u.subscription_tier === "pro" ? "var(--info)" : "var(--muted)",
                     }}
                   >
                     {u.subscription_tier === "pro" ? "Pro" : "Free"}
@@ -328,10 +328,10 @@ export default function Users() {
                 </td>
                 <td>
                   <div style={{ fontSize: 12 }} title={new Date(u.registered).toLocaleString()}>
-                    <span style={{ color: "#94a3b8" }}>Joined </span>{formatRelativeDate(u.registered)}
+                    <span style={{ color: "var(--muted-2)" }}>Joined </span>{formatRelativeDate(u.registered)}
                   </div>
                   <div style={{ fontSize: 12 }} title={u.last_active ? new Date(u.last_active).toLocaleString() : undefined}>
-                    <span style={{ color: "#94a3b8" }}>Active </span>{u.last_active ? formatRelativeDate(u.last_active) : "-"}
+                    <span style={{ color: "var(--muted-2)" }}>Active </span>{u.last_active ? formatRelativeDate(u.last_active) : "-"}
                   </div>
                 </td>
                 <td>
@@ -410,9 +410,9 @@ function UsagePill({ label, used, limit, title }: { label: string; used: number;
         padding: "2px 5px",
         borderRadius: 4,
         fontWeight: 600,
-        background: atLimit ? "#fef2f2" : isUnlimited ? "#f0fdf4" : "#f8fafc",
-        color: atLimit ? "#ef4444" : isUnlimited ? "#16a34a" : "#475569",
-        border: `1px solid ${atLimit ? "#fecaca" : isUnlimited ? "#bbf7d0" : "#e2e8f0"}`,
+        background: atLimit ? "var(--danger-soft)" : isUnlimited ? "var(--ok-soft)" : "var(--paper-2)",
+        color: atLimit ? "var(--danger)" : isUnlimited ? "var(--ok)" : "var(--muted)",
+        border: `1px solid ${atLimit ? "rgba(138, 35, 23, 0.3)" : isUnlimited ? "rgba(74, 107, 58, 0.3)" : "var(--rule)"}`,
         whiteSpace: "nowrap" as const,
       }}
       title={`${title}: ${used}${isUnlimited ? " (unlimited)" : ` / ${limit}`}`}

@@ -683,7 +683,7 @@ const modalCard: React.CSSProperties = {
   overflow: "auto",
   background: "var(--surface)",
   borderRadius: 2,
-  boxShadow: "0 24px 64px rgba(20, 19, 15, 0.22), 0 2px 8px rgba(20, 19, 15, 0.08)",
+  boxShadow: "0 16px 48px rgba(20, 19, 15, 0.18)",
 };
 
 const modalAccentBar: React.CSSProperties = {
@@ -712,7 +712,7 @@ const fieldInput: React.CSSProperties = {
   padding: "10px 14px",
   borderRadius: 2,
   border: "1px solid var(--rule-strong)",
-  background: "var(--paper)",
+  background: "var(--surface)",
   color: "var(--ink)",
   fontFamily: "var(--font-sans)",
   fontSize: 14,

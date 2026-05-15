@@ -254,7 +254,7 @@ export default function LLMCalls() {
             </thead>
             <tbody>
               {data.recent_failures.map((f) => (
-                <tr key={f.id} style={{ background: "#fef2f2" }}>
+                <tr key={f.id} style={{ background: "var(--danger-soft)" }}>
                   <td>{f.function}</td>
                   <td>{f.model}</td>
                   <td>{f.user_name || "-"}</td>
@@ -322,14 +322,13 @@ export default function LLMCalls() {
             {tab === "all" ? "Recent Calls" : "Recent Failures"}
             {fnFilter && <span className="filter-badge">{fnFilter} <button onClick={() => handleFnFilter(fnFilter)}>x</button></span>}
           </h3>
-          <div style={{ display: "flex", gap: 4, background: "#f1f5f9", borderRadius: 6, padding: 2 }}>
+          <div style={{ display: "flex", gap: 2, background: "var(--paper-2)", border: "1px solid var(--rule)", borderRadius: 4, padding: 2 }}>
             <button
               onClick={() => setTab("all")}
               style={{
-                padding: "6px 14px", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                background: tab === "all" ? "#fff" : "transparent",
-                color: tab === "all" ? "#1e293b" : "#94a3b8",
-                boxShadow: tab === "all" ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+                padding: "6px 14px", border: "none", borderRadius: 2, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                background: tab === "all" ? "var(--surface)" : "transparent",
+                color: tab === "all" ? "var(--ink)" : "var(--muted)",
               }}
             >
               All ({totalCalls})
@@ -337,10 +336,9 @@ export default function LLMCalls() {
             <button
               onClick={() => setTab("failures")}
               style={{
-                padding: "6px 14px", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                background: tab === "failures" ? "#fff" : "transparent",
-                color: tab === "failures" ? "#ef4444" : "#94a3b8",
-                boxShadow: tab === "failures" ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+                padding: "6px 14px", border: "none", borderRadius: 2, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                background: tab === "failures" ? "var(--surface)" : "transparent",
+                color: tab === "failures" ? "var(--danger)" : "var(--muted)",
               }}
             >
               Failures ({data.failure_count})
@@ -379,7 +377,7 @@ export default function LLMCalls() {
                 <tr
                   className="clickable"
                   onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
-                  style={!c.success ? { background: "#fef2f2" } : undefined}
+                  style={!c.success ? { background: "var(--danger-soft)" } : undefined}
                 >
                   <td>{expandedId === c.id ? "\u25BC" : "\u25B6"}</td>
                   <td>{c.function}</td>
@@ -431,7 +429,7 @@ export default function LLMCalls() {
               </Fragment>
             ))}
             {callsToShow.length === 0 && (
-              <tr><td colSpan={9} style={{ textAlign: "center", color: "#94a3b8", padding: 24 }}>
+              <tr><td colSpan={9} style={{ textAlign: "center", color: "var(--muted-2)", padding: 24 }}>
                 {tab === "failures" ? "No failures in this period" : "No calls found"}
               </td></tr>
             )}
