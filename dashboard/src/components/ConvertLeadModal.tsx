@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { api, type ContactLeadData } from "../lib/api";
-import { btnGhost, btnPrimary, inputStyle, overlay } from "../lib/styles";
+import { btnGhost, btnPrimary, inputStyle } from "../lib/styles";
 import { Checkbox } from "./Checkbox";
+import { EditorialModal } from "./EditorialModal";
 
 /**
  * Convert a lead to a school. Creates the school, links the lead,
@@ -66,50 +67,52 @@ export default function ConvertLeadModal({
     }
   };
 
-  return (
-    <div style={overlay} onClick={() => !submitting && (result ? onConverted() : onClose())}>
-      <div className="table-card" style={modalCard} onClick={(e) => e.stopPropagation()}>
-        {result ? (
-          <div style={{ textAlign: "center", padding: 16 }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>&#9989;</div>
-            <h3 style={{ marginBottom: 4 }}>School created</h3>
-            <p style={{ color: "var(--muted)", fontSize: 14, marginBottom: 16 }}>
-              <strong>{form.name}</strong> has been added to your schools.
-            </p>
-            {result.invite_url && (
-              <div style={{ marginBottom: 16, padding: "12px 16px", background: "var(--ok-soft)", borderRadius: 3, border: "1px solid rgba(74, 107, 58, 0.3)", textAlign: "left" }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ok)", marginBottom: 6 }}>
-                  Invite sent to {form.contact_email}
-                </div>
-                <code style={{ fontSize: 11, color: "var(--ink-soft)", display: "block", wordBreak: "break-all" }}>
-                  {result.invite_url}
-                </code>
+  if (result) {
+    return (
+      <EditorialModal
+        eyebrow="Converted"
+        title="School created"
+        subtitle={`${form.name} has been added to your schools.`}
+        onClose={onConverted}
+      >
+        <div style={{ padding: "20px 36px 28px" }}>
+          {result.invite_url && (
+            <div style={{ marginBottom: 16, padding: "12px 16px", background: "var(--ok-soft)", borderRadius: 3, border: "1px solid rgba(74, 107, 58, 0.3)" }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ok)", marginBottom: 6 }}>
+                Invite sent to {form.contact_email}
               </div>
-            )}
-            {result.invite_error && (
-              <div style={{ marginBottom: 16, padding: "12px 16px", background: "var(--warn-soft)", borderRadius: 3, border: "1px solid rgba(180, 110, 30, 0.3)", textAlign: "left", fontSize: 12.5 }}>
-                <strong>Invite failed.</strong> The school was created and linked, but the teacher invite couldn't be sent: {result.invite_error}. You can retry from the school page.
-              </div>
-            )}
+              <code style={{ fontSize: 11, color: "var(--ink-soft)", display: "block", wordBreak: "break-all" }}>
+                {result.invite_url}
+              </code>
+            </div>
+          )}
+          {result.invite_error && (
+            <div style={{ marginBottom: 16, padding: "12px 16px", background: "var(--warn-soft)", borderRadius: 3, border: "1px solid rgba(180, 110, 30, 0.3)", fontSize: 12.5 }}>
+              <strong>Invite failed.</strong> The school was created and linked, but the teacher invite couldn't be sent: {result.invite_error}. You can retry from the school page.
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <button onClick={onConverted} style={btnPrimary}>Done</button>
           </div>
-        ) : (
-          <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div>
-                <h3 style={{ marginBottom: 2 }}>Convert lead to school</h3>
-                <div style={{ fontSize: 13, color: "var(--muted)" }}>
-                  Create a school and optionally invite the contact as the first teacher.
-                </div>
-              </div>
-              <button onClick={onClose} style={btnGhost}>Cancel</button>
-            </div>
-            {error && (
-              <div style={{ marginBottom: 12, padding: "8px 12px", background: "var(--danger-soft)", borderRadius: 3, border: "1px solid rgba(138, 35, 23, 0.3)", fontSize: 13, color: "var(--danger)" }}>
-                {error}
-              </div>
-            )}
-            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        </div>
+      </EditorialModal>
+    );
+  }
+
+  return (
+    <EditorialModal
+      eyebrow="Convert"
+      title="Convert lead to school"
+      subtitle="Create a school and optionally invite the contact as the first teacher."
+      onClose={() => !submitting && onClose()}
+    >
+      <div style={{ padding: "20px 36px 28px" }}>
+        {error && (
+          <div style={{ marginBottom: 12, padding: "8px 12px", background: "var(--danger-soft)", borderRadius: 3, border: "1px solid rgba(138, 35, 23, 0.3)", fontSize: 13, color: "var(--danger)" }}>
+            {error}
+          </div>
+        )}
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <Field label="School name">
                 <input type="text" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={inputStyle} />
               </Field>
@@ -135,17 +138,15 @@ export default function ConvertLeadModal({
                 onChange={setSendInvite}
                 label={`Send teacher invite to ${form.contact_email || "contact email"}`}
               />
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
-                <button type="button" onClick={onClose} style={btnGhost}>Cancel</button>
-                <button type="submit" disabled={submitting} style={{ ...btnPrimary, opacity: submitting ? 0.6 : 1 }}>
-                  {submitting ? "Creating…" : "Create school & convert"}
-                </button>
-              </div>
-            </form>
-          </>
-        )}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+            <button type="button" onClick={onClose} style={btnGhost}>Cancel</button>
+            <button type="submit" disabled={submitting} style={{ ...btnPrimary, opacity: submitting ? 0.6 : 1 }}>
+              {submitting ? "Creating…" : "Create school & convert"}
+            </button>
+          </div>
+        </form>
       </div>
-    </div>
+    </EditorialModal>
   );
 }
 
@@ -159,13 +160,3 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
-
-const modalCard: React.CSSProperties = {
-  maxWidth: 560,
-  width: "90%",
-  maxHeight: "85vh",
-  overflow: "auto",
-  background: "var(--surface)",
-  border: "1px solid var(--rule-strong)",
-  boxShadow: "0 16px 48px rgba(20, 19, 15, 0.18)",
-};
