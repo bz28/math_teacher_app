@@ -89,11 +89,11 @@ export function HomeworkCard({
           />
         )}
         {isDraft ? (
-          <span className="shrink-0 rounded-full border border-text-muted/40 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[color:var(--color-text-secondary)]">
+          <span className="shrink-0 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-border-light)] px-2 py-[2px] text-[10px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-text-secondary)]">
             draft
           </span>
         ) : (
-          <span className="shrink-0 rounded-full bg-green-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white dark:bg-green-500">
+          <span className="shrink-0 rounded-full border border-[color:var(--color-success-border)] bg-[color:var(--color-success-light)] px-2 py-[2px] text-[10px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-success)]">
             published
           </span>
         )}

@@ -31,6 +31,14 @@
   --color-warning-dark: #8C5610;
   --color-warning-bg: #F5E8C7;
 
+  /* Info — slate blue. Intentionally cool against the warm-paper
+     palette so "informational" reads as distinct from active
+     success/warning/error states. Used by status pills like
+     'Preview', 'Needs practice'. Matches dashboard --info family. */
+  --color-info: #3D5A78;
+  --color-info-light: #DDE6EF;
+  --color-info-border: #B5C2D1;
+
   /* Ink & paper text — warm muted browns. --color-text-secondary
      is WCAG AA at 14px on --color-bg; --color-text-muted is AA-Large
      only, intended for ≥18px labels and small caps. */
@@ -126,6 +134,10 @@
   --color-warning-dark: #C28530;
   --color-warning-bg: #2A2010;
 
+  --color-info: #74B9FF;
+  --color-info-light: #0D1F2B;
+  --color-info-border: #244A6B;
+
   --color-text: #F1EFE9;
   --color-text-secondary: #BAB2A4;
   --color-text-muted: #8A8377;
@@ -207,6 +219,10 @@
   --color-warning: var(--color-warning);
   --color-warning-dark: var(--color-warning-dark);
   --color-warning-bg: var(--color-warning-bg);
+
+  --color-info: var(--color-info);
+  --color-info-light: var(--color-info-light);
+  --color-info-border: var(--color-info-border);
 
   --color-text-primary: var(--color-text);
   --color-text-secondary: var(--color-text-secondary);
