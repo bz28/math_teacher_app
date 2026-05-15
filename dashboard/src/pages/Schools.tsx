@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type SchoolListItem } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
-import { btnGhost, btnPrimary, inputStyle, overlay } from "../lib/styles";
+import { btnGhost, btnPrimary, inputStyle } from "../lib/styles";
 import StatCard from "../components/StatCard";
 import { useConfirm } from "../lib/confirm";
 
@@ -19,10 +19,6 @@ export default function Schools() {
   const [createForm, setCreateForm] = useState({ name: "", contact_name: "", contact_email: "", city: "", state: "", notes: "" });
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-
-  // Delete modal
-  const [deleteTarget, setDeleteTarget] = useState<SchoolListItem | null>(null);
-  const [deleting, setDeleting] = useState(false);
 
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
@@ -101,18 +97,23 @@ export default function Schools() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
+  const handleDelete = async (school: SchoolListItem) => {
+    if (!(await confirm({
+      title: `Delete ${school.name}?`,
+      message: (
+        <>
+          <strong>{school.teacher_count}</strong> teacher{school.teacher_count !== 1 ? "s" : ""} will be unlinked,
+          all pending invites will be cancelled, and this can&apos;t be undone.
+          {" "}If this school was converted from a lead, remember to update the lead status in the Leads tab.
+        </>
+      ),
+      confirmLabel: "Delete school",
+    }))) return;
     try {
-      await api.deleteSchool(deleteTarget.id);
-      setDeleteTarget(null);
+      await api.deleteSchool(school.id);
       reload();
-      alert("School deleted. If this was converted from a lead, don't forget to update the lead status in the Leads tab.");
     } catch (e) {
       alert((e as Error).message);
-    } finally {
-      setDeleting(false);
     }
   };
 
@@ -320,7 +321,7 @@ export default function Schools() {
                       <button onClick={() => { setOpenMenu(null); handleToggleActive(s); }}>
                         {s.is_active ? "Deactivate" : "Activate"}
                       </button>
-                      <button className="danger" onClick={() => { setOpenMenu(null); setDeleteTarget(s); }}>
+                      <button className="danger" onClick={() => { setOpenMenu(null); handleDelete(s); }}>
                         Delete school
                       </button>
                     </div>
@@ -342,32 +343,6 @@ export default function Schools() {
         </table>
       </div>
 
-      {/* ── Delete confirmation modal ──────────────────────────── */}
-      {deleteTarget && (
-        <div style={overlay} onClick={() => !deleting && setDeleteTarget(null)}>
-          <div className="table-card" style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginBottom: 8, color: "var(--danger)" }}>Delete school</h2>
-            <p style={{ color: "var(--ink-soft)", marginBottom: 16 }}>
-              Permanently delete <strong>{deleteTarget.name}</strong>?
-            </p>
-            <ul style={{ color: "var(--muted)", fontSize: 13, marginBottom: 20, paddingLeft: 20 }}>
-              <li>{deleteTarget.teacher_count} teacher{deleteTarget.teacher_count !== 1 ? "s" : ""} will be unlinked from this school</li>
-              <li>All pending invites will be cancelled</li>
-              <li>This cannot be undone</li>
-            </ul>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button onClick={() => setDeleteTarget(null)} disabled={deleting} style={btnGhost}>Cancel</button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                style={{ ...btnPrimary, background: "var(--danger)", opacity: deleting ? 0.6 : 1 }}
-              >
-                {deleting ? "Deleting…" : "Delete school"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -411,12 +386,3 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-const modalCard: React.CSSProperties = {
-  maxWidth: 480,
-  width: "90%",
-  maxHeight: "80vh",
-  overflow: "auto",
-  background: "var(--surface)",
-  border: "1px solid var(--rule-strong)",
-  boxShadow: "0 16px 48px rgba(20, 19, 15, 0.18)",
-};

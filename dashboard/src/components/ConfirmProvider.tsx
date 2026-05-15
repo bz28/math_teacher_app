@@ -19,8 +19,18 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     (ConfirmOptions & { resolve: (value: boolean) => void }) | null
   >(null);
 
+  // Resolve the previous prompt to false before showing a new one,
+  // so a programmatic double-fire (or a fast double-click that races
+  // ahead of the modal mount) doesn't leak the earlier promise. The
+  // single-slot UX keeps "newest prompt wins" — the older caller
+  // gets a clean false instead of hanging forever.
   const confirm = useCallback<ConfirmFn>((options) => {
-    return new Promise((resolve) => setState({ ...options, resolve }));
+    return new Promise((resolve) => {
+      setState((prev) => {
+        prev?.resolve(false);
+        return { ...options, resolve };
+      });
+    });
   }, []);
 
   const handleCancel = () => {

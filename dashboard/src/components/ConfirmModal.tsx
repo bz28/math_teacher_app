@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { btnGhost, btnPrimary, overlay } from "../lib/styles";
 
 /**
@@ -13,7 +13,8 @@ import { btnGhost, btnPrimary, overlay } from "../lib/styles";
  *
  * Smaller chrome than the form modals — no eyebrow, no accent bar,
  * just a tight title + message + button row. Auto-focuses the
- * confirm button so a teacher can hit Enter.
+ * confirm button so a teacher can hit Enter; Escape cancels for
+ * parity with the native dialog.
  */
 export function ConfirmModal({
   title,
@@ -23,7 +24,6 @@ export function ConfirmModal({
   variant = "danger",
   onConfirm,
   onCancel,
-  busy,
 }: {
   title: string;
   message: ReactNode;
@@ -32,15 +32,26 @@ export function ConfirmModal({
   variant?: "danger" | "primary";
   onConfirm: () => void;
   onCancel: () => void;
-  busy?: boolean;
 }) {
   const confirmStyle =
     variant === "danger"
       ? { ...btnPrimary, background: "var(--danger)" }
       : btnPrimary;
 
+  // Escape-to-cancel for native-confirm() parity. Bound to the
+  // window so the user doesn't have to be focused on a specific
+  // element — common case is they Tab away from the confirm button
+  // and still expect Escape to dismiss.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
   return (
-    <div style={overlay} onClick={() => !busy && onCancel()}>
+    <div style={overlay} onClick={onCancel}>
       <div
         className="table-card"
         style={{
@@ -58,16 +69,11 @@ export function ConfirmModal({
           {message}
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button onClick={onCancel} disabled={busy} style={btnGhost}>
+          <button onClick={onCancel} style={btnGhost}>
             {cancelLabel}
           </button>
-          <button
-            autoFocus
-            onClick={onConfirm}
-            disabled={busy}
-            style={{ ...confirmStyle, opacity: busy ? 0.6 : 1 }}
-          >
-            {busy ? "Working…" : confirmLabel}
+          <button autoFocus onClick={onConfirm} style={confirmStyle}>
+            {confirmLabel}
           </button>
         </div>
       </div>
