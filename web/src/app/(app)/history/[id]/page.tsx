@@ -194,7 +194,6 @@ export default function SessionReviewPage({
       <div className="flex gap-3">
         {session.status === "active" && (
           <Button
-            gradient
             onClick={() => {
               router.push(`/learn/session?subject=${subject}&resume=${id}`);
             }}

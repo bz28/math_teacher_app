@@ -45,7 +45,6 @@ export function MockTestPreview({ mockTest, isTimed, onBegin, onCancel }: MockTe
         </div>
         <div className="flex flex-col gap-3 w-full">
           <Button
-            gradient
             onClick={onBegin}
             disabled={!allSolved}
             className="w-full py-3 text-base"
@@ -103,7 +102,6 @@ export function MockTestPreview({ mockTest, isTimed, onBegin, onCancel }: MockTe
 
       <div className="flex flex-col gap-3">
         <Button
-          gradient
           onClick={onBegin}
           className="w-full py-3 text-base"
         >

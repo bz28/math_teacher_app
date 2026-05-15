@@ -88,7 +88,6 @@ export function LearnCompleted({
             <>
               <DifficultyPicker value={difficulty} onChange={setDifficulty} />
               <Button
-                gradient
                 loading={loading}
                 onClick={async () => {
                   setLoading(true);

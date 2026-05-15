@@ -470,7 +470,6 @@ function RegisterPageContent() {
           <Button
             type="submit"
             loading={loading}
-            gradient
             className="w-full"
             disabled={
               !!emailError ||

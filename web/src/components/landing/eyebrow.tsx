@@ -7,8 +7,13 @@ type EyebrowProps = {
 };
 
 /**
- * Small all-caps pill used as a section eyebrow above headlines.
- * Reused across every marketing page for consistent visual rhythm.
+ * Small-caps eyebrow above headlines. Dashboard-parity: 11px / 600 /
+ * 0.18em tracking / uppercase, in --color-text-secondary so it passes
+ * WCAG AA contrast at the small size. No pill chrome — the editorial
+ * voice is in the letterforms, not in a tinted background.
+ *
+ * `invert` variant for dark sections — switches to muted-cream against
+ * the warm-ink background.
  */
 export function Eyebrow({
   children,
@@ -16,12 +21,10 @@ export function Eyebrow({
   variant = "default",
 }: EyebrowProps) {
   const base =
-    "inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]";
+    "inline-block font-sans text-[11px] font-semibold uppercase tracking-[0.18em]";
   const variants = {
-    default:
-      "bg-[color:var(--color-primary-bg)] text-[color:var(--color-primary-dark)]",
-    invert:
-      "bg-white/10 text-[color:var(--color-invert-text)] ring-1 ring-white/15",
+    default: "text-[color:var(--color-text-secondary)]",
+    invert: "text-[color:var(--color-invert-text-muted)]",
   };
 
   return (

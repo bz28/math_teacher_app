@@ -60,7 +60,6 @@ export function LearnSummary({ learnQueue, onToggleFlag, onPracticeFlagged, onRe
           <>
             <DifficultyPicker value={difficulty} onChange={setDifficulty} />
             <Button
-              gradient
               loading={loading}
               onClick={async () => {
                 setLoading(true);

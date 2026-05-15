@@ -107,7 +107,6 @@ export function PracticeSummary({
         {flagged > 0 && (
           <>
             <Button
-              gradient
               loading={loading}
               onClick={async () => {
                 setLoading(true);

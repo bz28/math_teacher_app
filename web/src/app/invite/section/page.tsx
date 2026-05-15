@@ -119,7 +119,6 @@ function SectionInviteContent() {
               Create an account with <strong>{view.invite.email}</strong> to join.
             </p>
             <Button
-              gradient
               className="mt-6 w-full"
               onClick={() => router.push(`/register?section_invite=${encodeURIComponent(token)}`)}
             >
@@ -144,7 +143,6 @@ function SectionInviteContent() {
               Sign in as <strong>{view.invite.email}</strong> to accept this invite.
             </p>
             <Button
-              gradient
               className="mt-6 w-full"
               onClick={() =>
                 router.push(`/login?redirect=${encodeURIComponent(`/invite/section?token=${token}`)}`)
@@ -164,7 +162,6 @@ function SectionInviteContent() {
               invited email to continue.
             </p>
             <Button
-              gradient
               className="mt-6 w-full"
               onClick={() => {
                 logout();
@@ -192,7 +189,6 @@ function SectionInviteContent() {
               You&rsquo;re in! Head to your dashboard to get started.
             </p>
             <Button
-              gradient
               className="mt-6 w-full"
               onClick={() => router.replace("/school/student")}
             >

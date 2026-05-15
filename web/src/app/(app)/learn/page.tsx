@@ -460,7 +460,7 @@ function LearnPageContent() {
             This will use {problemQueue.length} of your {remainingSessions} remaining problems today.
           </p>
           <div className="flex gap-2">
-            <Button gradient onClick={handleStart} loading={isLoading || starting} className="flex-1">
+            <Button onClick={handleStart} loading={isLoading || starting} className="flex-1">
               Continue
             </Button>
             <Button variant="secondary" onClick={() => setQuotaConfirm(false)} className="flex-1">
@@ -473,7 +473,6 @@ function LearnPageContent() {
       {/* Start button — matches mobile labels */}
       {!quotaConfirm && canStart && (
         <Button
-          gradient
           onClick={handleStart}
           loading={isLoading || starting}
           className="w-full py-3 text-base"

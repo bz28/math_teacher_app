@@ -140,7 +140,6 @@ export function MockTestSummary({ mockTest, onToggleFlag, onStartLearnQueue, onR
             Flagged Questions ({flaggedQuestions.length})
           </h2>
           <Button
-            gradient
             loading={loading}
             onClick={async () => {
               setLoading(true);

@@ -403,7 +403,6 @@ export function ImageUpload({
                       Cancel
                     </Button>
                     <Button
-                      gradient
                       onClick={handleConfirm}
                       disabled={selectedCount === 0 || overLimit}
                     >
