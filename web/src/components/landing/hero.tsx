@@ -33,20 +33,25 @@ export function Hero() {
       <div className="relative mx-auto w-full max-w-5xl px-6 py-12 text-center md:px-8 md:py-16">
         <Eyebrow>For teachers</Eyebrow>
         {/* Two-phrase editorial headline. First phrase solid ink in
-            Inter (sans, bold, tight). Second phrase in Instrument
-            Serif italic — the dashboard's signature emphasis move,
-            same rhythm as its serif-italic subtitles. No gradient
-            text: the contrast comes from typeface, not color.
-            clamp tops out at 4.75rem so each phrase fits a single
-            line at md+; text-wrap-balance handles smaller widths. */}
+            Inter (sans, bold). Second phrase in Fraunces italic 600 —
+            a heavier display serif than the dashboard's Instrument
+            Serif. Bumped vs the initial pass: weight 600 italic
+            (Instrument Serif only has 400), size 1.2× the first
+            line, color is the brand --color-primary (8.9:1 contrast,
+            brighter than primary-dark). The brief-period gradient
+            text the old homepage used had more chromatic punch than
+            italic-serif-regular could match; this recovers the punch
+            via weight + size + brighter accent, while keeping the
+            editorial direction (typeface contrast, not color
+            gradient). */}
         <h1
-          className="mt-7 tracking-[-0.025em] text-[color:var(--color-text)] [font-size:clamp(2.75rem,5.8vw,4.75rem)] [line-height:1.1] [text-wrap:balance]"
+          className="mt-7 tracking-[-0.025em] text-[color:var(--color-text)] [font-size:clamp(2.75rem,5.8vw,4.75rem)] [line-height:1.05] [text-wrap:balance]"
         >
-          <span className="block font-bold pb-1">
+          <span className="block font-bold pb-2">
             Your students already have AI.
           </span>
           <span
-            className="block font-serif italic font-normal pb-1 text-[color:var(--color-primary-dark)] [font-size:1.05em]"
+            className="block font-display-serif italic font-semibold pb-2 text-[color:var(--color-primary)] [font-size:1.2em]"
           >
             Give them one that&rsquo;s on your side.
           </span>
