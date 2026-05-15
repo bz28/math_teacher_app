@@ -14,6 +14,7 @@ const AUDIENCE_NAV: NavItem[] = [
   { to: "/schools", label: "Schools" },
   { to: "/students/independent", label: "Independent students" },
   { to: "/teachers/independent", label: "Independent teachers" },
+  { to: "/admins", label: "Admins" },
 ];
 
 const DIAGNOSTIC_NAV: NavItem[] = [
