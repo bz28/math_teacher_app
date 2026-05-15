@@ -4,10 +4,12 @@ import { api, type SchoolListItem } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
 import { btnGhost, btnPrimary, inputStyle, overlay } from "../lib/styles";
 import StatCard from "../components/StatCard";
+import { useConfirm } from "../lib/confirm";
 
 const AT_RISK_DAYS = 14;
 
 export default function Schools() {
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const [schools, setSchools] = useState<SchoolListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,7 +85,14 @@ export default function Schools() {
 
   const handleToggleActive = async (school: SchoolListItem) => {
     const action = school.is_active ? "Deactivate" : "Activate";
-    if (!confirm(`${action} "${school.name}"? ${school.is_active ? "All teachers and students will lose access." : ""}`)) return;
+    if (!(await confirm({
+      title: `${action} ${school.name}?`,
+      message: school.is_active
+        ? "All teachers and students will lose access until the school is reactivated."
+        : "Teachers and students will regain access on their next sign-in.",
+      confirmLabel: action,
+      variant: school.is_active ? "danger" : "primary",
+    }))) return;
     try {
       await api.updateSchool(school.id, { is_active: !school.is_active });
       reload();

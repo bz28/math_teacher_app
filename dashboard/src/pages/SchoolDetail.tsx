@@ -10,6 +10,7 @@ import {
 } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
 import { btnGhost, btnPrimary, btnSmall, inputStyle } from "../lib/styles";
+import { useConfirm } from "../lib/confirm";
 
 // Dedicated per-school deep page. Lives at /schools/:schoolId. Two
 // API fetches in parallel:
@@ -30,6 +31,7 @@ interface EditForm {
 }
 
 export default function SchoolDetail() {
+  const confirm = useConfirm();
   const { schoolId } = useParams<{ schoolId: string }>();
   const navigate = useNavigate();
 
@@ -120,7 +122,14 @@ export default function SchoolDetail() {
   const handleToggleActive = async () => {
     if (!detail) return;
     const next = !detail.is_active;
-    if (!confirm(`${next ? "Activate" : "Deactivate"} "${detail.name}"? ${detail.is_active ? "All teachers and students will lose access." : ""}`)) return;
+    if (!(await confirm({
+      title: `${next ? "Activate" : "Deactivate"} ${detail.name}?`,
+      message: detail.is_active
+        ? "All teachers and students will lose access until the school is reactivated."
+        : "Teachers and students will regain access on their next sign-in.",
+      confirmLabel: next ? "Activate" : "Deactivate",
+      variant: detail.is_active ? "danger" : "primary",
+    }))) return;
     try {
       await api.updateSchool(detail.id, { is_active: next });
       reload();
@@ -131,7 +140,11 @@ export default function SchoolDetail() {
 
   const handleDelete = async () => {
     if (!detail) return;
-    if (!confirm(`Permanently delete ${detail.name}? ${detail.teachers.length} teacher(s) will be unlinked. This cannot be undone.`)) return;
+    if (!(await confirm({
+      title: `Permanently delete ${detail.name}?`,
+      message: <><strong>{detail.teachers.length}</strong> teacher{detail.teachers.length === 1 ? "" : "s"} will be unlinked. This cannot be undone.</>,
+      confirmLabel: "Delete",
+    }))) return;
     try {
       await api.deleteSchool(detail.id);
       navigate("/schools");
@@ -157,7 +170,12 @@ export default function SchoolDetail() {
   };
 
   const handleCancelInvite = async (inviteId: string) => {
-    if (!detail || !confirm("Cancel this invite?")) return;
+    if (!detail) return;
+    if (!(await confirm({
+      title: "Cancel this invite?",
+      message: "The invite link will stop working. You can issue a new one anytime.",
+      confirmLabel: "Cancel invite",
+    }))) return;
     try {
       await api.cancelInvite(detail.id, inviteId);
       reload();
