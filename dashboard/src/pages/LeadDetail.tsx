@@ -14,6 +14,7 @@ import { btnGhost, btnPrimary, btnSmall, inputStyle } from "../lib/styles";
 import { Checkbox } from "../components/Checkbox";
 import { EditorialModal } from "../components/EditorialModal";
 import { useConfirm } from "../lib/confirm";
+import { EditableText } from "../components/EditableText";
 import ConvertLeadModal from "../components/ConvertLeadModal";
 
 const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
@@ -145,6 +146,10 @@ export default function LeadDetail() {
         lead={lead}
         onStatusChange={handleStatusChange}
         onApproxStudentsChange={handleApproxStudentsChange}
+        onFieldSave={async (patch) => {
+          await api.updateLead(lead.id, patch);
+          reload();
+        }}
         onConvert={() => setShowConvert(true)}
         onDelete={handleDelete}
       />
@@ -278,12 +283,14 @@ function Header({
   lead,
   onStatusChange,
   onApproxStudentsChange,
+  onFieldSave,
   onConvert,
   onDelete,
 }: {
   lead: LeadDetailData;
   onStatusChange: (s: LeadStatus) => void;
   onApproxStudentsChange: (n: number | null) => void;
+  onFieldSave: (patch: { school_name?: string; contact_name?: string; contact_email?: string }) => Promise<void>;
   onConvert: () => void;
   onDelete: () => void;
 }) {
@@ -302,12 +309,27 @@ function Header({
       <span className="eyebrow">{SOURCE_LABEL[lead.source]} lead</span>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
         <div style={{ flex: 1 }}>
-          <h1 style={{ marginBottom: 6 }}>{lead.school_name}</h1>
+          <h1 style={{ marginBottom: 6 }}>
+            <EditableText
+              value={lead.school_name}
+              onSave={(school_name) => onFieldSave({ school_name })}
+              inputStyle={{ fontSize: "inherit", fontWeight: "inherit", letterSpacing: "inherit" }}
+            />
+          </h1>
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
-            <span style={{ fontSize: 14 }}>{lead.contact_name}</span>
+            <span style={{ fontSize: 14 }}>
+              <EditableText
+                value={lead.contact_name}
+                onSave={(contact_name) => onFieldSave({ contact_name })}
+              />
+            </span>
             <span style={{ color: "var(--muted-2)" }}>·</span>
             <span style={{ fontSize: 13, color: "var(--muted)" }}>
-              {lead.contact_email}
+              <EditableText
+                value={lead.contact_email}
+                inputType="email"
+                onSave={(contact_email) => onFieldSave({ contact_email })}
+              />
               <button onClick={handleCopy} style={{ ...btnSmall, marginLeft: 6, color: copied ? "var(--ok)" : "var(--accent)" }}>
                 {copied ? "Copied" : "Copy"}
               </button>

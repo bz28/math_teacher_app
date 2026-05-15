@@ -410,6 +410,9 @@ export interface UpdateLeadBody {
   referred_by?: string | null;
   school_id?: string;
   approx_students?: number | null;
+  school_name?: string;
+  contact_name?: string;
+  contact_email?: string;
 }
 
 export interface CreateMeetingBody {
