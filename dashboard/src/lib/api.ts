@@ -111,7 +111,10 @@ async function withAuth<T>(
 
   // Only refresh on 401. A 403 is a permission problem (the user is
   // authenticated, just not allowed) — refresh wouldn't help, so we
-  // pass it through as an error rather than risking a redirect loop.
+  // let it fall through to the generic error path. The teacher
+  // portal (web/src/lib/api.ts) does the same and we don't want
+  // dashboard 403s to silently log out a viewer-role admin who just
+  // tried a write endpoint or an audit page they can't see.
   if (res.status === 401) {
     const result = await refreshAccessToken();
     if (result === "success") {
@@ -124,7 +127,11 @@ async function withAuth<T>(
     // transient_error → fall through and let the caller see the 401
   }
 
-  if (res.status === 401 || res.status === 403) {
+  // Post-refresh 401 still terminates: refresh succeeded but the
+  // retry was rejected (token revoked between attempts, role
+  // downgraded, etc.). Send them to login. 403 deliberately not
+  // here — see the comment above.
+  if (res.status === 401) {
     clearTokens();
     window.location.href = "/login";
     throw new Error("Unauthorized");
