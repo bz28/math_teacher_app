@@ -164,8 +164,8 @@ export default function Users() {
 
       {inviteSuccess && (
         <div style={{
-          marginBottom: 16, padding: "10px 14px", background: "#f0fdf4",
-          borderRadius: 6, border: "1px solid #bbf7d0", fontSize: 13, color: "#16a34a",
+          marginBottom: 16, padding: "10px 14px", background: "var(--ok-soft)",
+          borderRadius: 4, border: "1px solid var(--rule)", fontSize: 13, color: "var(--ok)",
         }}>
           Invite sent to <strong>{inviteSuccess}</strong>
         </div>

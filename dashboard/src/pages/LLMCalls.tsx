@@ -322,14 +322,13 @@ export default function LLMCalls() {
             {tab === "all" ? "Recent Calls" : "Recent Failures"}
             {fnFilter && <span className="filter-badge">{fnFilter} <button onClick={() => handleFnFilter(fnFilter)}>x</button></span>}
           </h3>
-          <div style={{ display: "flex", gap: 4, background: "#f1f5f9", borderRadius: 6, padding: 2 }}>
+          <div style={{ display: "flex", gap: 2, background: "var(--paper-2)", border: "1px solid var(--rule)", borderRadius: 4, padding: 2 }}>
             <button
               onClick={() => setTab("all")}
               style={{
-                padding: "6px 14px", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                background: tab === "all" ? "#fff" : "transparent",
-                color: tab === "all" ? "#1e293b" : "#94a3b8",
-                boxShadow: tab === "all" ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+                padding: "6px 14px", border: "none", borderRadius: 2, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                background: tab === "all" ? "var(--surface)" : "transparent",
+                color: tab === "all" ? "var(--ink)" : "var(--muted)",
               }}
             >
               All ({totalCalls})
@@ -337,10 +336,9 @@ export default function LLMCalls() {
             <button
               onClick={() => setTab("failures")}
               style={{
-                padding: "6px 14px", border: "none", borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                background: tab === "failures" ? "#fff" : "transparent",
-                color: tab === "failures" ? "#ef4444" : "#94a3b8",
-                boxShadow: tab === "failures" ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+                padding: "6px 14px", border: "none", borderRadius: 2, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                background: tab === "failures" ? "var(--surface)" : "transparent",
+                color: tab === "failures" ? "var(--danger)" : "var(--muted)",
               }}
             >
               Failures ({data.failure_count})
