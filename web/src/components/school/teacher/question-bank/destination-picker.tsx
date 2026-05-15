@@ -95,7 +95,7 @@ export function DestinationPicker({
       } ${creating ? "w-80" : "w-72"}`}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="text-xs font-bold uppercase tracking-wider text-text-muted">
+      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
         Add to homework
       </div>
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
@@ -136,7 +136,7 @@ export function DestinationPicker({
             className="w-full rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:opacity-50"
           />
           <div>
-            <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
               Unit · required
             </div>
             <UnitMultiSelect

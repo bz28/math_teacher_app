@@ -242,7 +242,7 @@ function PricingPageContent() {
           describe student-side limits like "5 problem sessions/day"). */}
       {view === "student" && (
       <div className="mt-12">
-        <h2 className="text-center text-sm font-bold uppercase tracking-wide text-text-muted">
+        <h2 className="text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           Free vs Pro
         </h2>
         <div className="mt-4 overflow-hidden rounded-[--radius-xl] border border-border-light">

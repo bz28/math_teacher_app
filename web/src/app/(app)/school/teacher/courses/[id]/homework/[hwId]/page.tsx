@@ -860,7 +860,7 @@ export default function HomeworkDetailPage({
           {/* Problems — the hero of the page */}
           <section className="mt-6 rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-sm">
             <div className="flex items-center justify-between border-b border-border-light pb-3">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-text-muted">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
                 Problems · {problems.length}
               </h2>
               <div className="flex items-center gap-2">
@@ -1129,7 +1129,7 @@ function CollapsibleSection({
         className="flex w-full items-center justify-between gap-3 px-5 py-3 text-left"
       >
         <div className="flex items-baseline gap-3">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             {label}
           </span>
           {summary && !open && (
@@ -1349,7 +1349,7 @@ function Field({
   return (
     <div>
       <div className="mb-1.5 flex items-center gap-2">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           {label}
           {required && (
             <span className="ml-1 font-normal normal-case text-text-muted/70">· required</span>
@@ -1460,7 +1460,7 @@ function ProblemRow({
         <div className="line-clamp-2 text-[15px] leading-snug text-text-primary">
           <MathText text={problem.question} />
         </div>
-        <div className="mt-1.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+        <div className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           {problem.difficulty}
         </div>
       </div>
@@ -1534,7 +1534,7 @@ function RemoveProblemsView({
     <div>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             Remove problems
           </div>
           <p className="mt-0.5 text-xs text-text-secondary">
@@ -1636,7 +1636,7 @@ function RemovableProblemRow({
           <MathText text={problem.question} />
         </div>
         <div className="mt-1.5 flex items-center gap-2">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             {problem.difficulty}
           </span>
           {marked && (
@@ -1987,7 +1987,7 @@ function InstructionsBlock({
       return (
         <div className="mt-3">
           <div className="mb-1 flex items-baseline gap-1.5">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
               Instructions for students
             </span>
             <span className="text-[11px] font-normal normal-case tracking-normal text-text-muted">
@@ -2008,7 +2008,7 @@ function InstructionsBlock({
     return (
       <div className="mt-3 group">
         <div className="mb-1 flex items-center gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             Instructions for students
           </span>
           <InlineSavedHint state={saveState} errorMessage={saveError} />
@@ -2043,7 +2043,7 @@ function InstructionsBlock({
   return (
     <div className="mt-3">
       <div className="mb-1 flex items-center gap-2">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           Instructions for students
         </span>
         <InlineSavedHint state={saveState} errorMessage={saveError} />
