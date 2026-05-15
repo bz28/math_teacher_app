@@ -22,7 +22,7 @@ import { SidebarJoinModal } from "./sidebar-join-modal";
  */
 export function Sidebar() {
   return (
-    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border-light bg-surface md:flex">
+    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border-light bg-[color:var(--color-surface-alt-2)] md:flex">
       <SidebarContent />
     </aside>
   );
@@ -56,11 +56,11 @@ export function MobileSidebarDrawer({
   return (
     <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
       <div
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-[color:var(--color-overlay)]"
         onClick={onClose}
         aria-hidden
       />
-      <aside className="relative flex h-full w-64 max-w-[80%] flex-col border-r border-border-light bg-surface shadow-xl">
+      <aside className="relative flex h-full w-64 max-w-[80%] flex-col border-r border-border-light bg-[color:var(--color-surface-alt-2)] shadow-md">
         <SidebarContent onNavigate={onClose} />
       </aside>
     </div>
@@ -90,14 +90,15 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void } = {}) {
 
   return (
     <>
-      {/* Brand */}
+      {/* Brand — wordmark + serif-italic school sub. Matches teacher
+          sidebar and dashboard brand block. */}
       <div className="flex h-16 items-center gap-2.5 border-b border-border-light px-5">
         <LogoMark size={32} />
         <div className="min-w-0">
-          <div className="text-sm font-bold tracking-tight text-text-primary">
+          <div className="text-sm font-bold tracking-[-0.01em] text-text-primary">
             Veradic AI
           </div>
-          <div className="truncate text-[11px] font-medium text-text-muted">
+          <div className="truncate font-serif italic text-[13px] text-text-muted">
             {user?.school_name || "Student"}
           </div>
         </div>
@@ -125,14 +126,14 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void } = {}) {
       {/* Classes */}
       <div className="flex min-h-0 flex-1 flex-col px-3">
         <div className="flex items-center justify-between px-3 pb-1 pt-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             My Classes
           </span>
           <button
             type="button"
             onClick={() => setShowJoin(true)}
             title="Join a class"
-            className="-mr-1 flex h-6 w-6 items-center justify-center rounded-[--radius-sm] text-text-muted transition-colors hover:bg-primary-bg/50 hover:text-primary"
+            className="-mr-1 flex h-6 w-6 items-center justify-center rounded-[--radius-sm] text-text-muted transition-colors hover:text-text-primary"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19" />
@@ -158,12 +159,18 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void } = {}) {
                 href={href}
                 onClick={afterNav}
                 className={cn(
-                  "flex flex-col gap-0.5 rounded-[--radius-sm] px-3 py-2 text-sm transition-colors",
+                  "relative flex flex-col gap-0.5 px-3 py-2 text-sm transition-colors",
                   active
-                    ? "bg-primary-bg text-primary"
-                    : "text-text-secondary hover:bg-primary-bg/50 hover:text-primary",
+                    ? "text-text-primary"
+                    : "text-text-secondary hover:text-text-primary",
                 )}
               >
+                {active && (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute bottom-1 left-3 h-[1px] w-5 bg-[color:var(--color-primary)]"
+                  />
+                )}
                 <span className="truncate font-semibold">{c.course_name}</span>
                 <span className="truncate text-[11px] font-medium text-text-muted">
                   {c.section_name}
@@ -180,12 +187,18 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void } = {}) {
           href="/account"
           onClick={afterNav}
           className={cn(
-            "flex items-center gap-3 rounded-[--radius-sm] px-3 py-2.5 text-sm font-medium transition-colors",
+            "relative flex items-center gap-3 px-3 py-2 text-sm transition-colors",
             pathname.startsWith("/account")
-              ? "bg-primary-bg text-primary"
-              : "text-text-secondary hover:bg-primary-bg/50 hover:text-primary",
+              ? "font-semibold text-text-primary"
+              : "font-medium text-text-secondary hover:text-text-primary",
           )}
         >
+          {pathname.startsWith("/account") && (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute bottom-1 left-3 h-[1px] w-5 bg-[color:var(--color-primary)]"
+            />
+          )}
           <AccountIcon />
           Account
         </Link>
@@ -230,12 +243,18 @@ function NavLink({
       href={href}
       onClick={onClick}
       className={cn(
-        "flex items-center gap-3 rounded-[--radius-sm] px-3 py-2.5 text-sm font-medium transition-colors",
+        "relative flex items-center gap-3 px-3 py-2 text-sm transition-colors",
         active
-          ? "bg-primary-bg text-primary"
-          : "text-text-secondary hover:bg-primary-bg/50 hover:text-primary",
+          ? "font-semibold text-text-primary"
+          : "font-medium text-text-secondary hover:text-text-primary",
       )}
     >
+      {active && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute bottom-1 left-3 h-[1px] w-5 bg-[color:var(--color-primary)]"
+        />
+      )}
       {icon}
       {label}
     </Link>
