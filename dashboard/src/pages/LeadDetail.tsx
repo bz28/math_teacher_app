@@ -787,12 +787,20 @@ function MeetingModal({
     setError(null);
     try {
       const isoSched = new Date(scheduledAt).toISOString();
+      // Touchpoints are always after-the-fact by definition, so
+      // they ALWAYS write held_at even when the user opened the
+      // modal as a meeting and then switched the type dropdown
+      // (which hides the checkbox but leaves alreadyHappened
+      // stuck at its initial value). Deriving from the live type
+      // closes the silent "held_at: null on a logged touchpoint"
+      // bug surfaced by the PR #536 reviewer.
+      const effectiveHeld = isTouchpoint(type) || alreadyHappened;
       await onSubmit({
         type,
         scheduled_at: isoSched,
         agenda: agenda.trim() || null,
-        held_at: alreadyHappened ? (meeting?.held_at ?? isoSched) : null,
-        outcome: alreadyHappened && outcome.trim() ? outcome.trim() : null,
+        held_at: effectiveHeld ? (meeting?.held_at ?? isoSched) : null,
+        outcome: effectiveHeld && outcome.trim() ? outcome.trim() : null,
       });
     } catch (e) {
       setError((e as Error).message);
