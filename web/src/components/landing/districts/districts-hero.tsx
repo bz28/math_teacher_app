@@ -14,7 +14,7 @@ export function DistrictsHero() {
         <Eyebrow>For superintendents and curriculum directors</Eyebrow>
         <h1 className="mt-8 text-display-xl text-[color:var(--color-text)]">
           District-ready{" "}
-          <span className="bg-gradient-to-r from-[color:var(--color-primary)] to-[color:var(--color-primary-light)] bg-clip-text text-transparent">
+          <span className="font-serif italic font-normal text-[color:var(--color-primary-dark)]">
             from day one.
           </span>
         </h1>

@@ -63,7 +63,7 @@ export function HomeOutcomes() {
         {VIGNETTES.map((v) => (
           <article
             key={v.when}
-            className="marketing-card relative overflow-hidden rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] p-8 pt-9"
+            className="marketing-card relative overflow-hidden rounded-[--radius-md] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] p-8 pt-9"
           >
             {/* Thin colored top edge — gives each card a journal-entry
                 feel (like a tabbed file in a folder) rather than a

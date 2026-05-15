@@ -23,13 +23,16 @@ export function Section({
   id,
   as: Tag = "section",
 }: SectionProps) {
+  // Warm-paper section variants. `accent` flattened from a gradient
+  // wash to a flat ink-primary block — dashboard restraint. Long-page
+  // rhythm comes from alternating surface→alt→invert, not from chroma.
   const bg: Record<SectionVariant, string> = {
     default: "bg-[color:var(--color-surface)] text-[color:var(--color-text)]",
     alt: "bg-[color:var(--color-surface-alt)] text-[color:var(--color-text)]",
     alt2: "bg-[color:var(--color-surface-alt-2)] text-[color:var(--color-text)]",
     invert: "bg-[color:var(--color-invert)] text-[color:var(--color-invert-text)]",
     accent:
-      "bg-gradient-to-br from-[color:var(--color-primary)] to-[color:var(--color-primary-light)] text-white",
+      "bg-[color:var(--color-primary)] text-white",
   };
 
   return (

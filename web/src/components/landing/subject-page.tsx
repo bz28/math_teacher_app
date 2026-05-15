@@ -58,10 +58,13 @@ export function SubjectPage({
         }}
       />
 
-      {/* ── Hero ── */}
+      {/* ── Hero ──
+          Removed the two gradient orbs — they were the "AI startup
+          landing page" tell. Subject pages now lean on the same
+          editorial hero structure as the homepage: paper surface,
+          eyebrow, big headline, italic-serif phrase carries the
+          emphasis. */}
       <section className="relative flex min-h-[calc(100dvh_-_4rem)] items-center overflow-hidden bg-[color:var(--color-surface)] md:min-h-[calc(100dvh_-_5rem)]">
-        <div className="pointer-events-none absolute right-0 top-0 hidden h-[700px] w-[700px] rounded-full bg-gradient-to-br from-[color:var(--color-primary)]/12 to-transparent blur-3xl md:block" />
-        <div className="pointer-events-none absolute -left-40 bottom-0 h-[460px] w-[460px] rounded-full bg-gradient-to-br from-[color:var(--color-primary-light)]/14 to-transparent blur-3xl" />
 
         <div className="relative mx-auto w-full max-w-4xl px-6 py-12 text-center md:px-8 md:py-16">
           <motion.div
@@ -83,7 +86,7 @@ export function SubjectPage({
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.05 }}
-            className="mx-auto mt-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-[color:var(--color-primary-bg)] text-[color:var(--color-primary)]"
+            className="mx-auto mt-8 flex h-16 w-16 items-center justify-center rounded-[--radius-md] bg-[color:var(--color-primary-bg)] text-[color:var(--color-primary)]"
             aria-hidden="true"
           >
             {icon}
@@ -183,7 +186,7 @@ export function SubjectPage({
             {whyReasons.map((reason) => (
               <li
                 key={reason}
-                className="flex items-start gap-4 rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] p-6"
+                className="flex items-start gap-4 rounded-[--radius-md] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] p-6"
               >
                 <svg
                   className="mt-1 h-6 w-6 flex-shrink-0 text-[color:var(--color-primary)]"

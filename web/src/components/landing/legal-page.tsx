@@ -34,7 +34,7 @@ export function LegalPage({ title, lastUpdated, sections }: LegalPageProps) {
           <div className="md:hidden">
             <button
               onClick={() => setTocOpen(!tocOpen)}
-              className="flex w-full items-center justify-between rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] px-5 py-4 text-sm font-semibold text-[color:var(--color-text)]"
+              className="flex w-full items-center justify-between rounded-[--radius-md] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] px-5 py-4 text-sm font-semibold text-[color:var(--color-text)]"
             >
               Table of Contents
               <svg
@@ -50,7 +50,7 @@ export function LegalPage({ title, lastUpdated, sections }: LegalPageProps) {
               </svg>
             </button>
             {tocOpen && (
-              <nav className="mt-2 rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] p-5">
+              <nav className="mt-2 rounded-[--radius-md] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] p-5">
                 <ul className="space-y-3">
                   {sections.map((s, i) => (
                     <li key={s.id}>

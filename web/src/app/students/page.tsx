@@ -95,17 +95,16 @@ export default function StudentsPage() {
     <>
       <Navbar />
       <main>
-        {/* Hero */}
+        {/* Hero — editorial restraint matching homepage hero: paper
+            surface, no gradient orbs, italic-serif emphasis phrase
+            instead of gradient text. */}
         <section className="relative flex min-h-[calc(100dvh_-_4rem)] items-center overflow-hidden bg-[color:var(--color-surface)] md:min-h-[calc(100dvh_-_5rem)]">
-          <div className="pointer-events-none absolute right-0 top-0 hidden h-[600px] w-[600px] rounded-full bg-gradient-to-br from-[color:var(--color-primary)]/10 to-transparent blur-3xl md:block" />
-          <div className="pointer-events-none absolute -left-32 top-40 h-[420px] w-[420px] rounded-full bg-gradient-to-br from-[color:var(--color-primary-light)]/10 to-transparent blur-3xl" />
-
           <div className="relative mx-auto w-full max-w-4xl px-6 py-12 text-center md:px-8 md:py-16">
             <Eyebrow>For students</Eyebrow>
             <h1 className="mt-6 text-display-xl text-[color:var(--color-text)]">
               Get unstuck.
               <br />
-              <span className="bg-gradient-to-r from-[color:var(--color-primary)] to-[color:var(--color-primary-light)] bg-clip-text text-transparent">
+              <span className="font-serif italic font-normal text-[color:var(--color-primary-dark)]">
                 Step by step.
               </span>
             </h1>
@@ -169,7 +168,7 @@ export default function StudentsPage() {
             {features.map((f, i) => (
               <div
                 key={f.title}
-                className="marketing-card rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] p-8"
+                className="marketing-card rounded-[--radius-md] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] p-8"
               >
                 <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-[color:var(--color-primary-bg)] text-[color:var(--color-primary)]">
                   <div className="h-6 w-6">{f.icon}</div>
@@ -206,7 +205,7 @@ export default function StudentsPage() {
               <Link
                 key={s.slug}
                 href={`/subjects/${s.slug}`}
-                className="marketing-card group rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] p-8"
+                className="marketing-card group rounded-[--radius-md] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] p-8"
               >
                 <span
                   className="inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest"
@@ -227,7 +226,7 @@ export default function StudentsPage() {
 
         {/* School mode call-out */}
         <Section variant="alt">
-          <div className="mx-auto max-w-2xl rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] p-10 text-center">
+          <div className="mx-auto max-w-2xl rounded-[--radius-md] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] p-10 text-center">
             <Eyebrow>Using Veradic in class?</Eyebrow>
             <p className="mt-5 text-xl font-semibold text-[color:var(--color-text)]">
               Your teacher will give you a join code.
@@ -259,7 +258,7 @@ export default function StudentsPage() {
               {faqs.map((faq) => (
                 <details
                   key={faq.q}
-                  className="group rounded-2xl border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] p-6 open:bg-[color:var(--color-surface)]"
+                  className="group rounded-[--radius-md] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] p-6 open:bg-[color:var(--color-surface)]"
                 >
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-semibold text-[color:var(--color-text)]">
                     {faq.q}
