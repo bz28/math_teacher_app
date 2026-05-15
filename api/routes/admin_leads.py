@@ -58,7 +58,7 @@ class UpdateLeadRequest(BaseModel):
     source: str | None = None
     referred_by: str | None = None
     school_id: str | None = None
-    approx_students: int | None = Field(default=None, ge=0)
+    approx_students: int | None = Field(default=None, ge=0, le=1_000_000)
 
 
 class CreateMeetingRequest(BaseModel):
@@ -350,7 +350,10 @@ async def update_lead(
     if "referred_by" in fields:
         lead.referred_by = fields["referred_by"]
     if "school_id" in fields and fields["school_id"]:
-        lead.school_id = _uuid.UUID(fields["school_id"])
+        try:
+            lead.school_id = _uuid.UUID(fields["school_id"])
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="Invalid school_id") from e
     if "approx_students" in fields:
         lead.approx_students = fields["approx_students"]
 

@@ -149,9 +149,20 @@ async def test_list_leads_next_action_picks_earliest_unresolved(
 async def test_list_leads_last_touch_prefers_recent_note_over_creation(
     client: AsyncClient, seeded: dict[str, Any],
 ) -> None:
+    """A note explicitly stamped after lead.created_at should win.
+
+    Both timestamps come from server clocks if left to defaults, so we
+    pin the note an hour ahead to avoid the same-microsecond tie that
+    leaves max() at the mercy of insertion order.
+    """
     lead_id = uuid.UUID(seeded["inbound_id"])
     async with get_session_factory()() as s:
-        s.add(LeadNote(lead_id=lead_id, body="recent note", created_by_name="Admin"))
+        s.add(LeadNote(
+            lead_id=lead_id,
+            body="recent note",
+            created_by_name="Admin",
+            created_at=datetime.now(UTC) + timedelta(hours=1),
+        ))
         await s.commit()
 
     res = await client.get("/v1/admin/leads", headers=auth_headers(seeded["admin_token"]))
