@@ -338,6 +338,11 @@ export interface UsersData {
       scans: number;
       scans_limit: number | null;
     };
+    classroom: {
+      sections: number;
+      students: number;
+      submissions_30d: number;
+    };
   }[];
 }
 

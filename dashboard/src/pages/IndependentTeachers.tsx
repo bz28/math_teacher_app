@@ -5,8 +5,9 @@ export default function IndependentTeachers() {
     <UserScopePanel
       eyebrow="Audience"
       title="Independent teachers"
-      subtitle="Teachers piloting outside a school deal — useful for outreach and finding power-users to convert."
+      subtitle="Teachers piloting outside a school deal — find the ones with real classrooms and convert."
       role="teacher"
+      showClassroom
       emptyMessage="No independent teachers for this window."
     />
   );
