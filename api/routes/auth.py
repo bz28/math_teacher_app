@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import html
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -236,6 +237,54 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
 
     access_token = create_access_token(str(user.id), user.role)
     refresh_token = await create_refresh_token(db, user.id)
+
+    # Fire-and-forget signup notification to the admin team. Early-
+    # user visibility: see new activations in inbox without watching
+    # the dashboard. Wrapped so an email outage never blocks signup.
+    #
+    # Every user-controlled field is run through html.escape because
+    # the /auth/register endpoint is public — an attacker can submit
+    # name='<a href="evil">Click here</a>' and the unescaped HTML
+    # would render verbatim in admin inboxes. The subject line is
+    # escaped too so header-shaping characters don't leak through.
+    if settings.admin_alert_emails:
+        signup_path = (
+            "Teacher invite" if body.invite_token else
+            "Section invite" if body.section_invite_token else
+            "Join code" if body.join_code else
+            "Self-signup"
+        )
+        safe_name = html.escape(body.name)
+        safe_email = html.escape(body.email)
+        school_line = (
+            f"<li><strong>School:</strong> {html.escape(body.signup_school_name)}</li>"
+            if role == "teacher" and body.signup_school_name else ""
+        )
+        grade_line = (
+            f"<li><strong>Grade:</strong> {body.grade_level}</li>"
+            if body.grade_level else ""
+        )
+        dashboard_path = (
+            "teachers/independent" if role == "teacher"
+            else "students/independent"
+        )
+        asyncio.create_task(send_email(
+            to=settings.admin_alert_emails,
+            subject=f"New signup: {safe_name} ({role})",
+            html=(
+                f"<h2>New {role} signup</h2>"
+                f"<ul>"
+                f"<li><strong>Name:</strong> {safe_name}</li>"
+                f"<li><strong>Email:</strong> {safe_email}</li>"
+                f"<li><strong>Role:</strong> {role}</li>"
+                f"{school_line}"
+                f"{grade_line}"
+                f"<li><strong>Signup path:</strong> {signup_path}</li>"
+                f"</ul>"
+                f'<p><a href="https://admin.veradicai.com/{dashboard_path}">View in dashboard</a></p>'
+            ),
+        ))
+
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
