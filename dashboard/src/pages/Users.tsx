@@ -4,6 +4,7 @@ import { api, type UsersData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
 import StatCard from "../components/StatCard";
 import { Pagination, SearchInput } from "../components/Pagination";
+import { InviteAdminForm } from "../components/InviteAdminForm";
 import { useConfirm } from "../lib/confirm";
 
 type SortKey = "total_cost" | "session_count" | "last_active" | "name";
@@ -71,14 +72,6 @@ export default function Users() {
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
   }, [openMenu]);
-
-  // Invite admin form
-  const [showInvite, setShowInvite] = useState(false);
-  const [inviteName, setInviteName] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviting, setInviting] = useState(false);
-  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
-  const [inviteError, setInviteError] = useState<string | null>(null);
 
   if (!data) return <p>Loading...</p>;
 
@@ -151,97 +144,15 @@ export default function Users() {
     }
   };
 
-  const handleInviteAdmin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setInviting(true);
-    setInviteSuccess(null);
-    setInviteError(null);
-    try {
-      await api.inviteAdmin(inviteEmail.trim(), inviteName.trim());
-      setInviteSuccess(inviteEmail.trim());
-      setInviteName("");
-      setInviteEmail("");
-      setShowInvite(false);
-      reload();
-    } catch (err) {
-      setInviteError((err as Error).message);
-    } finally {
-      setInviting(false);
-    }
-  };
-
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
-        <div className="page-header" style={{ marginBottom: 0 }}>
-          <span className="eyebrow">All users</span>
-          <h1>Users</h1>
-          <p>Cross-cutting view across every account in the system.</p>
-        </div>
-        {!showInvite && (
-          <button onClick={() => { setShowInvite(true); setInviteSuccess(null); }} className="btn-primary">
-            + Invite admin
-          </button>
-        )}
+      <div className="page-header">
+        <span className="eyebrow">All users</span>
+        <h1>Users</h1>
+        <p>Cross-cutting view across every account in the system.</p>
       </div>
 
-      {inviteSuccess && (
-        <div style={{
-          marginBottom: 16, padding: "10px 14px", background: "var(--ok-soft)",
-          borderRadius: 4, border: "1px solid rgba(74, 107, 58, 0.3)", fontSize: 13, color: "var(--ok)",
-        }}>
-          Invite sent to <strong>{inviteSuccess}</strong>
-        </div>
-      )}
-
-      {showInvite && (
-        <div className="table-card" style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-            <h3 style={{ marginBottom: 0 }}>Invite New Admin</h3>
-            <button onClick={() => { setShowInvite(false); setInviteError(null); }} className="btn-secondary">Cancel</button>
-          </div>
-          <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>
-            They'll receive an email with a link to set their password.
-          </p>
-          {inviteError && (
-            <div style={{
-              marginBottom: 12, padding: "8px 12px", background: "var(--danger-soft)",
-              borderRadius: 4, border: "1px solid rgba(138, 35, 23, 0.3)", fontSize: 13, color: "var(--danger)",
-            }}>
-              {inviteError}
-            </div>
-          )}
-          <form onSubmit={handleInviteAdmin} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <label className="field-label">Name</label>
-              <input
-                type="text"
-                value={inviteName}
-                onChange={(e) => setInviteName(e.target.value)}
-                placeholder="Jane Smith"
-                required
-                className="input"
-              />
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <label className="field-label">Email</label>
-              <input
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="jane@veradicai.com"
-                required
-                className="input"
-              />
-            </div>
-            <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
-              <button type="submit" disabled={inviting} className="btn-primary">
-                {inviting ? "Sending..." : "Send Invite"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      <InviteAdminForm onInvited={reload} />
 
       <div className="filters" style={{ display: "flex", gap: 12, alignItems: "center" }}>
         <SearchInput value={search} onChange={handleSearchChange} placeholder="Search by name or email..." />

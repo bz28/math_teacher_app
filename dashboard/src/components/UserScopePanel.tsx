@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type UsersData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
@@ -43,6 +43,18 @@ export interface UserScopePanelProps {
    */
   showStudentChips?: boolean;
   emptyMessage: string;
+  /**
+   * Optional slot rendered between the page header and the filter
+   * bar. Used by the Admins page to mount its invite-admin form.
+   */
+  headerSlot?: ReactNode;
+  /**
+   * Bump this number to force a reload of the user list without
+   * unmounting the panel. Lets the parent invalidate data after a
+   * mutation (e.g. inviting an admin) while preserving the
+   * operator's search, sort, time-window, and pagination state.
+   */
+  reloadSignal?: number;
 }
 
 export default function UserScopePanel({
@@ -54,6 +66,8 @@ export default function UserScopePanel({
   showClassroom = false,
   showStudentChips = false,
   emptyMessage,
+  headerSlot,
+  reloadSignal = 0,
 }: UserScopePanelProps) {
   const navigate = useNavigate();
   const confirm = useConfirm();
@@ -128,7 +142,7 @@ export default function UserScopePanel({
   }, [openMenu]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { reload(); }, [hours, sortBy, search, offset, role, hasClassroom, activeClassroom, atLimitToday, freeHeavy, proInactive]);
+  useEffect(() => { reload(); }, [hours, sortBy, search, offset, role, hasClassroom, activeClassroom, atLimitToday, freeHeavy, proInactive, reloadSignal]);
 
   const handleSearchChange = (v: string) => { setSearch(v); setOffset(0); };
   const handleSortChange = (v: SortKey) => { setSortBy(v); setOffset(0); };
@@ -203,6 +217,8 @@ export default function UserScopePanel({
         <h1>{title}</h1>
         <p>{subtitle}</p>
       </div>
+
+      {headerSlot}
 
       <div className="filters">
         <SearchInput
