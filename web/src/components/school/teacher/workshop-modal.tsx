@@ -19,10 +19,10 @@ import { InlineTitleEdit } from "./_pieces/inline-title-edit";
 import { SimilarJobStrip } from "./_pieces/similar-job-strip";
 
 const STATUS_BADGE: Record<string, string> = {
-  pending: "bg-[color:var(--color-warning-bg)] text-[color:var(--color-warning-dark)] ",
-  approved: "bg-green-50 text-green-700 dark:bg-green-500/10",
-  rejected: "bg-gray-100 text-gray-500 dark:bg-gray-500/10",
-  archived: "bg-gray-100 text-gray-500 dark:bg-gray-500/10",
+  pending: "bg-[color:var(--color-warning-bg)] text-[color:var(--color-warning-dark)]",
+  approved: "bg-[color:var(--color-success-light)] text-[color:var(--color-success)]",
+  rejected: "bg-[color:var(--color-border-light)] text-[color:var(--color-text-secondary)]",
+  archived: "bg-[color:var(--color-border-light)] text-[color:var(--color-text-secondary)]",
 };
 
 /**
@@ -568,7 +568,7 @@ export function WorkshopModal({
               </span>
             )}
             <span
-              className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-bold uppercase ${
+              className={`rounded-[--radius-pill] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] ${
                 STATUS_BADGE[liveItem.status] ?? ""
               }`}
             >
@@ -764,7 +764,7 @@ export function WorkshopModal({
                 {solutionOpen ? "Hide" : "Show"} solution
                 {previewSteps && ` (${previewSteps.length} steps)`}
                 {stepsChanged && (
-                  <span className="ml-2 rounded-[--radius-pill] bg-blue-100 px-2 py-0.5 text-[9px] font-bold text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
+                  <span className="ml-2 rounded-[--radius-pill] bg-[color:var(--color-info-light)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-info)]">
                     Preview
                   </span>
                 )}

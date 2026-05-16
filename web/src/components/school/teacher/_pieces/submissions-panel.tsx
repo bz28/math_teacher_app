@@ -29,22 +29,22 @@ const DISPOSITION_CONFIG: Record<
   pass: {
     label: "Pass",
     icon: "✓",
-    cls: "bg-green-100 text-green-700 dark:bg-green-500/20",
+    cls: "bg-[color:var(--color-success-light)] text-[color:var(--color-success)]",
   },
   needs_practice: {
     label: "Needs practice",
     icon: "↻",
-    cls: "bg-blue-100 text-blue-700 dark:bg-blue-500/20",
+    cls: "bg-[color:var(--color-info-light)] text-[color:var(--color-info)]",
   },
   tutor_pivot: {
     label: "Tutored",
     icon: "?",
-    cls: "bg-[color:var(--color-warning-bg)] text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning-bg)]0/20",
+    cls: "bg-[color:var(--color-warning-bg)] text-[color:var(--color-warning-dark)]",
   },
   flag_for_review: {
     label: "Review",
     icon: "⚑",
-    cls: "bg-red-100 text-red-700 dark:bg-red-500/20",
+    cls: "bg-[color:var(--color-error-light)] text-[color:var(--color-error)]",
   },
 };
 
@@ -59,8 +59,8 @@ function DispositionPill({
   return (
     <span
       className={cn(
-        "rounded-full px-2 py-0.5 text-xs font-bold",
-        subtle ? "bg-gray-100 text-gray-500 dark:bg-gray-500/20" : cfg.cls,
+        "rounded-full px-2 py-[3px] text-[10.5px] font-semibold",
+        subtle ? "bg-[color:var(--color-border-light)] text-[color:var(--color-text-secondary)]" : cfg.cls,
       )}
     >
       {cfg.icon} {cfg.label}
@@ -75,7 +75,7 @@ function OverviewBadge({ overview }: { overview: IntegrityOverview | null }) {
   // an empty completed state.
   if (overview.overall_status === "complete" && !overview.disposition) {
     return (
-      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-bold text-gray-600 dark:bg-gray-500/20">
+      <span className="rounded-full bg-[color:var(--color-border-light)] px-2 py-[3px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-text-secondary)]">
         Needs review
       </span>
     );
@@ -83,7 +83,7 @@ function OverviewBadge({ overview }: { overview: IntegrityOverview | null }) {
   if (overview.overall_status !== "complete" || !overview.disposition) {
     const progress = `${overview.complete_count}/${overview.problem_count}`;
     return (
-      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-bold text-gray-500 dark:bg-gray-500/20">
+      <span className="rounded-full bg-[color:var(--color-border-light)] px-2 py-[3px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-text-secondary)]">
         {overview.complete_count === 0 ? "Pending" : `In progress ${progress}`}
       </span>
     );
@@ -462,7 +462,7 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
         {data &&
           !data.disposition &&
           data.overall_status === "complete" && (
-            <span className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 text-xs font-bold text-gray-600 dark:bg-gray-500/20">
+            <span className="ml-auto rounded-full bg-[color:var(--color-border-light)] px-2 py-[3px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-text-secondary)]">
               Needs review
             </span>
           )}
@@ -612,12 +612,12 @@ function ProblemCard({
         </span>
         <div className="flex items-center gap-2">
           {isDismissed && (
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-bold text-gray-500 dark:bg-gray-500/20">
+            <span className="rounded-full bg-[color:var(--color-border-light)] px-2 py-[3px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-text-secondary)]">
               Dismissed
             </span>
           )}
           {p.status === "skipped_unreadable" && (
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-bold text-gray-600 dark:bg-gray-500/20">
+            <span className="rounded-full bg-[color:var(--color-border-light)] px-2 py-[3px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-text-secondary)]">
               Unreadable
             </span>
           )}
@@ -875,7 +875,7 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
                         {r.student_name || r.student_email}
                       </div>
                       {r.is_preview && (
-                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700 dark:bg-blue-500/20">
+                        <span className="rounded-full bg-[color:var(--color-info-light)] px-2 py-[3px] text-[10px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-info)]">
                           Preview
                         </span>
                       )}
