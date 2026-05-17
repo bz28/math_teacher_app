@@ -188,6 +188,18 @@ def _mock_integrity_ai() -> Any:
             "api.core.integrity_pipeline.run_agent_turn",
             side_effect=_mock_run_agent_turn,
         ),
+        # Silent per-wrong-problem diagnosis — patched at the import
+        # site in integrity_pipeline so tests with multiple wrong
+        # primaries don't fan out to real Claude. Tests that care
+        # about specific diagnosis behavior can re-patch locally.
+        patch(
+            "api.core.integrity_pipeline.diagnose_wrong_problem",
+            new_callable=AsyncMock,
+            return_value={
+                "note": "(mock diagnosis)",
+                "kind": "conceptual_gap",
+            },
+        ),
         patch(
             "api.core.grading_ai.run_ai_grading_for_submission",
             new_callable=AsyncMock,

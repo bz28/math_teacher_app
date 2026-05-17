@@ -39,7 +39,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.constants import MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
 from api.core.image_utils import validate_and_decode_upload
-from api.core.integrity_pipeline import start_integrity_check
+from api.core.integrity_pipeline import (
+    spawn_diagnosis_seeding,
+    start_integrity_check,
+)
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
@@ -75,9 +78,20 @@ async def drain_integrity_background_tasks() -> None:
     import would tempt ad-hoc usage. A named helper makes the intent
     explicit. This is the only external contract — tests call this,
     nothing else should.
+
+    Loops until both task sets stay empty across a pass because the
+    integrity pipeline's main task spawns diagnosis-seeding sub-tasks
+    on its own session (fire-and-forget so they don't block the
+    student's kickoff). A single-pass drain can miss diagnosis tasks
+    spawned right at the parent's last microtask. Cap at 10 iterations
+    so a runaway spawner can't hang tests forever.
     """
-    tasks = list(_BACKGROUND_TASKS)
-    if tasks:
+    from api.core.integrity_pipeline import _BACKGROUND_DIAGNOSIS_TASKS
+
+    for _ in range(10):
+        tasks = list(_BACKGROUND_TASKS) + list(_BACKGROUND_DIAGNOSIS_TASKS)
+        if not tasks:
+            return
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
@@ -177,10 +191,16 @@ async def _run_integrity_and_grading_background(
 
             if run_integrity:
                 try:
-                    await start_integrity_check(
+                    pending_diagnoses = await start_integrity_check(
                         submission_id, db, extraction=extraction,
                     )
                     await db.commit()
+                    # Spawn the diagnosis fan-out ONLY after the parent
+                    # commit lands — the bg task uses a fresh session
+                    # and can't see uncommitted parent rows; spawning
+                    # pre-commit FK-violates every diagnosis insert.
+                    if pending_diagnoses is not None:
+                        spawn_diagnosis_seeding(pending_diagnoses)
                 except Exception:
                     logger.exception(
                         "integrity pipeline failed for submission %s; "
