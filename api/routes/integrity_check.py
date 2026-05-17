@@ -769,9 +769,16 @@ async def teacher_dismiss_problem(
 
     problem.teacher_dismissed = True
     problem.teacher_dismissal_reason = body.reason or None
-    # Flip to dismissed unless the problem was already terminal in a
-    # different terminal state (unreadable) — preserve that signal.
-    if problem.status != PROBLEM_STATUS_SKIPPED_UNREADABLE:
+    # Flip to dismissed unless the problem was already in a different
+    # terminal state we want to preserve: unreadable (signal teacher
+    # may still care about) or diagnosis_only (silent-diagnosis row,
+    # not a chat verdict — dropping it from its own status would leak
+    # it into the chat-verdict list on the teacher panel and re-expose
+    # it on student-facing endpoints whose filter keys on status).
+    if problem.status not in (
+        PROBLEM_STATUS_SKIPPED_UNREADABLE,
+        PROBLEM_STATUS_DIAGNOSIS_ONLY,
+    ):
         problem.status = PROBLEM_STATUS_DISMISSED
 
     # Session-level disposition is a holistic judgment from the agent —

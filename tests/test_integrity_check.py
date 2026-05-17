@@ -933,17 +933,82 @@ async def test_teacher_get_detail_surfaces_diagnosis_rows(
     )
     assert r.status_code == 200
     rows = r.json()["problems"]
-    # chat-probed row first (sample_position=0), then diagnosis rows.
-    chat = [p for p in rows if p["status"] != "diagnosis_only"]
-    diag = [p for p in rows if p["status"] == "diagnosis_only"]
-    assert len(chat) == 1
-    assert chat[0]["sample_position"] == 0
-    assert chat[0]["diagnosis_note"] is None
-    assert chat[0]["diagnosis_kind"] is None
-    assert len(diag) == 2
-    for d in diag:
-        assert d["diagnosis_kind"] is not None
+    # Pin response order — chat-probed row (sample_position=0) lands
+    # first, diagnosis_only rows follow in hw_position order. The
+    # teacher UI relies on this ordering to render the chat verdict
+    # above the "Where else this student went wrong" section.
+    assert rows[0]["status"] != "diagnosis_only"
+    assert rows[0]["sample_position"] == 0
+    assert rows[0]["diagnosis_note"] is None
+    assert rows[0]["diagnosis_kind"] is None
+    diag_positions = [r["sample_position"] for r in rows[1:]]
+    assert diag_positions == sorted(diag_positions)
+    assert all(r["status"] == "diagnosis_only" for r in rows[1:])
+    # Pin the note value too — the mocked diagnose_wrong_problem
+    # returns a specific string (see conftest); a regression that
+    # forgot to thread diagnosis_note through the schema would
+    # silently render `None` here.
+    for d in rows[1:]:
+        assert d["diagnosis_kind"] == "conceptual_gap"
+        assert d["diagnosis_note"] == "(mock diagnosis)"
         assert d["sample_position"] > 0
+    assert len(rows) == 3  # 1 chat + 2 diagnosis
+
+
+async def test_student_turn_endpoint_hides_diagnosis_only_rows(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """POST /turn goes through the same _build_state_response as GET
+    /integrity/submissions/{id} — both must hide diagnosis_only rows.
+    Guard against a regression where someone adds an alternate
+    response path on the POST side that forgets the filter."""
+    async with get_session_factory()() as s:
+        original = (await s.execute(
+            select(QuestionBankItem).where(QuestionBankItem.id == world["primary_id"])
+        )).scalar_one()
+        clone = QuestionBankItem(
+            course_id=original.course_id,
+            unit_id=original.unit_id,
+            originating_assignment_id=original.originating_assignment_id,
+            title="Turn-hide diag",
+            question="Turn-hide problem",
+            solution_steps=[],
+            final_answer="x",
+            distractors=["a", "b", "c"],
+            status="approved",
+            source="generated",
+        )
+        s.add(clone)
+        await s.flush()
+        new_problems = [str(world["primary_id"]), str(clone.id)]
+        await s.execute(
+            text("UPDATE assignments SET content=:c WHERE id=:id"),
+            {
+                "c": '{"problems": [' + ", ".join(
+                    f'{{"bank_item_id": "{p}", "position": {i + 1}}}'
+                    for i, p in enumerate(new_problems)
+                ) + ']}',
+                "id": world["assignment_id"],
+            },
+        )
+        await s.commit()
+
+    set_agent_script([
+        [make_text("Opener.")],
+        [make_text("Reply.")],
+    ])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "hello"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert len(body["problems"]) == 1
+    assert body["problems"][0]["status"] != "diagnosis_only"
 
 
 async def test_student_state_hides_diagnosis_only_rows(
