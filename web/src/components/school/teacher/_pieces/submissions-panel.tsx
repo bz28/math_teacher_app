@@ -6,6 +6,7 @@ import {
   teacher,
   type IntegrityActivityReason,
   type IntegrityActivitySummary,
+  type IntegrityDiagnosisKind,
   type IntegrityDisposition,
   type IntegrityOverview,
   type IntegrityRubric,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/api";
 import { ExtractionView } from "@/components/school/shared/extraction-view";
 import { FileTextIcon } from "@/components/ui/icons";
+import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
 import { cn } from "@/lib/utils";
 
 // ── Disposition badge ──
@@ -518,22 +520,30 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
 
           <ActivityDigest summary={data.activity_summary} />
 
-          {data.problems.map((p) => (
-            <ProblemCard
-              key={p.problem_id}
-              problem={p}
-              dismissConfirm={dismissConfirm}
-              dismissReason={dismissReason}
-              dismissingId={dismissingId}
-              onStartDismiss={(id) => {
-                setDismissConfirm(id);
-                setDismissReason("");
-              }}
-              onCancelDismiss={() => setDismissConfirm(null)}
-              onDismiss={dismiss}
-              onDismissReasonChange={setDismissReason}
-            />
-          ))}
+          {data.problems
+            .filter((p) => p.status !== "diagnosis_only")
+            .map((p) => (
+              <ProblemCard
+                key={p.problem_id}
+                problem={p}
+                dismissConfirm={dismissConfirm}
+                dismissReason={dismissReason}
+                dismissingId={dismissingId}
+                onStartDismiss={(id) => {
+                  setDismissConfirm(id);
+                  setDismissReason("");
+                }}
+                onCancelDismiss={() => setDismissConfirm(null)}
+                onDismiss={dismiss}
+                onDismissReasonChange={setDismissReason}
+              />
+            ))}
+
+          <DiagnosisSection
+            diagnoses={data.problems.filter(
+              (p) => p.status === "diagnosis_only" && !p.teacher_dismissed,
+            )}
+          />
 
           {data.transcript.length > 0 && (
             <div>
@@ -573,6 +583,108 @@ function OverallHeaderBadge({
     >
       {cfg.icon} {cfg.label}
     </span>
+  );
+}
+
+// ── Per-wrong-problem diagnosis section ──
+// One card per wrong problem the live chat did NOT probe. The card
+// renders the silent AI-generated misconception note alongside a
+// collapsible view of the student's written work. Chat-probed rows
+// already get the richer rubric + ai_reasoning treatment up in
+// ProblemCard, so they're skipped here.
+
+const DIAGNOSIS_KIND_LABEL: Record<IntegrityDiagnosisKind, string> = {
+  procedural_slip: "Procedural slip",
+  conceptual_gap: "Conceptual gap",
+  blank: "No work shown",
+  unreadable: "Unreadable",
+  error: "Not diagnosed",
+};
+
+const DIAGNOSIS_KIND_TONE: Record<
+  IntegrityDiagnosisKind,
+  "info" | "amber" | "muted"
+> = {
+  procedural_slip: "info",
+  conceptual_gap: "amber",
+  blank: "muted",
+  unreadable: "muted",
+  error: "muted",
+};
+
+const DIAGNOSIS_FALLBACK_COPY: Record<
+  Exclude<IntegrityDiagnosisKind, "procedural_slip" | "conceptual_gap">,
+  string
+> = {
+  blank: "Student didn't write any work for this problem.",
+  unreadable: "Couldn't read the student's work for this problem.",
+  error: "Couldn't auto-diagnose — open the student's work to review.",
+};
+
+function DiagnosisSection({
+  diagnoses,
+}: {
+  diagnoses: TeacherIntegrityProblemRow[];
+}) {
+  if (diagnoses.length === 0) return null;
+  // Server already sorts by sample_position (which mirrors hw_position
+  // for these rows), so the cards land in homework order.
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-bold uppercase tracking-[0.06em] text-text-secondary">
+          Where else this student went wrong
+        </h3>
+        <span className="text-[11px] text-text-muted">
+          {diagnoses.length}{" "}
+          {diagnoses.length === 1 ? "problem" : "problems"}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {diagnoses.map((d) => (
+          <DiagnosisCard key={d.problem_id} problem={d} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DiagnosisCard({ problem: p }: { problem: TeacherIntegrityProblemRow }) {
+  const [sawOpen, setSawOpen] = useState(false);
+  const kind: IntegrityDiagnosisKind = p.diagnosis_kind ?? "error";
+  const isLlmKind = kind === "procedural_slip" || kind === "conceptual_gap";
+  const body = isLlmKind
+    ? p.diagnosis_note
+    : DIAGNOSIS_FALLBACK_COPY[kind];
+
+  return (
+    <div className="space-y-2 rounded-[--radius-sm] border border-border-light bg-surface p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-bold text-text-secondary">
+          Problem {p.hw_position}
+        </span>
+        <StatusPill
+          tone={DIAGNOSIS_KIND_TONE[kind]}
+          label={DIAGNOSIS_KIND_LABEL[kind]}
+        />
+      </div>
+      {body && (
+        <p className="text-xs italic text-text-muted">{body}</p>
+      )}
+      {p.student_work_extraction && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setSawOpen((v) => !v)}
+            className="flex items-center gap-1 text-xs font-medium text-text-muted hover:text-primary"
+          >
+            <span className="text-[10px]">{sawOpen ? "▼" : "▶"}</span>
+            Student&apos;s work
+          </button>
+          {sawOpen && <ExtractionView extraction={p.student_work_extraction} />}
+        </div>
+      )}
+    </div>
   );
 }
 

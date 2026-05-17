@@ -1891,7 +1891,19 @@ export type IntegrityProblemStatus =
   | "pending"
   | "verdict_submitted"
   | "dismissed"
-  | "skipped_unreadable";
+  | "skipped_unreadable"
+  | "diagnosis_only";
+
+/** Categorical bucket for the silent per-wrong-problem misconception
+ *  diagnosis. procedural_slip / conceptual_gap come from the LLM;
+ *  blank / unreadable / error are pipeline-side sentinels. Null on
+ *  chat-probed rows (the chat verdict's ai_reasoning is richer). */
+export type IntegrityDiagnosisKind =
+  | "procedural_slip"
+  | "conceptual_gap"
+  | "blank"
+  | "unreadable"
+  | "error";
 
 export interface IntegrityProblemSummary {
   problem_id: string;
@@ -2038,6 +2050,14 @@ export interface TeacherIntegrityProblemRow {
   teacher_dismissed: boolean;
   teacher_dismissal_reason: string | null;
   student_work_extraction: IntegrityExtraction | null;
+  /** Silent misconception hypothesis written from the student's
+   *  extracted work alone. Populated only on `diagnosis_only` rows
+   *  (every wrong problem the chat didn't probe). Null on chat-probed
+   *  rows AND on `blank` / `unreadable` / `error` kinds where the UI
+   *  renders fallback copy from `diagnosis_kind` instead. */
+  diagnosis_note: string | null;
+  /** Categorical bucket for the diagnosis. See IntegrityDiagnosisKind. */
+  diagnosis_kind: IntegrityDiagnosisKind | null;
 }
 
 export type IntegrityActivityReason =
