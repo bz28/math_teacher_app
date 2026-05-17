@@ -751,16 +751,17 @@ def _select_wrong_bank_ids_for_diagnosis(
     return [bid for _, bid in eligible[:MAX_DIAGNOSES]]
 
 
-def _classify_diagnosis_kind(raw: Any) -> str:
-    """Normalize the LLM's returned kind onto our enum, defaulting to
-    conceptual_gap when the model emits an unrecognized value (defensive
-    — schema constrains it, but we don't trust the model with the DB).
+def _classify_diagnosis_kind(raw: Any) -> str | None:
+    """Normalize the LLM's returned kind onto our enum. Returns None
+    for any unrecognized value — the caller treats that as an error
+    so a garbled model response doesn't masquerade as a real
+    diagnosis (conceptual_gap) in the teacher UI.
     """
     if raw == DIAGNOSIS_KIND_PROCEDURAL_SLIP:
         return DIAGNOSIS_KIND_PROCEDURAL_SLIP
     if raw == DIAGNOSIS_KIND_CONCEPTUAL_GAP:
         return DIAGNOSIS_KIND_CONCEPTUAL_GAP
-    return DIAGNOSIS_KIND_CONCEPTUAL_GAP
+    return None
 
 
 async def _seed_wrong_problem_diagnoses(
@@ -891,6 +892,13 @@ async def _seed_wrong_problem_diagnoses(
             continue
         note = (result.get("note") or "").strip()
         kind = _classify_diagnosis_kind(result.get("kind"))
+        if kind is None:
+            # Model emitted a kind we don't understand — treat as
+            # failure rather than letting it surface as a real
+            # diagnosis in the teacher UI under a fallback bucket.
+            row.diagnosis_kind = DIAGNOSIS_KIND_ERROR
+            row.diagnosis_note = None
+            continue
         # Defensive truncate: schema enforces maxLength=400 but if a
         # future model variant goes long we clamp before the column
         # would (Text is unbounded but the UI assumes short).
@@ -903,19 +911,35 @@ async def _seed_wrong_problem_diagnoses(
     await db.flush()
 
 
-def _spawn_diagnosis_seeding(
-    *,
-    check_id: uuid.UUID,
-    extraction: dict[str, Any],
-    items_by_id: dict[uuid.UUID, QuestionBankItem],
-    hw_position_by_id: dict[uuid.UUID, int],
-    is_correct_by_bank_id: dict[uuid.UUID, bool],
-    chat_probed_bank_id: uuid.UUID,
-    user_id: str,
-    submission_id: uuid.UUID,
-) -> None:
+class PendingDiagnoses(NamedTuple):
+    """Args for spawning the silent-diagnosis fan-out as a background
+    task. Built inside `start_integrity_check` (which has all the
+    upstream context — extraction, the items+positions maps, the
+    correctness map from check_answer_correctness) but RETURNED rather
+    than spawned inline, so the caller can spawn the task only AFTER
+    committing the parent's IntegrityCheckSubmission row. Spawning
+    before commit races: the bg task's own session can't see the
+    uncommitted parent row, so the FK on integrity_check_problems
+    fires immediately and every diagnosis silently fails."""
+    check_id: uuid.UUID
+    extraction: dict[str, Any]
+    items_by_id: dict[uuid.UUID, QuestionBankItem]
+    hw_position_by_id: dict[uuid.UUID, int]
+    is_correct_by_bank_id: dict[uuid.UUID, bool]
+    chat_probed_bank_id: uuid.UUID
+    user_id: str
+    submission_id: uuid.UUID
+
+
+def spawn_diagnosis_seeding(pending: PendingDiagnoses) -> None:
     """Fire-and-forget: run the silent diagnosis fan-out on its own
     session so it doesn't block the integrity kickoff commit.
+
+    MUST be called AFTER the caller has committed the parent
+    IntegrityCheckSubmission row — the bg task's own session can't
+    see uncommitted parent data and the FK from
+    integrity_check_problems → integrity_check_submissions fires
+    immediately, silently failing every diagnosis insert.
 
     Errors are swallowed + logged — a failed diagnosis pass should
     never break the integrity check itself. Holds a strong reference
@@ -926,21 +950,21 @@ def _spawn_diagnosis_seeding(
         try:
             async with get_session_factory()() as own_db:
                 await _seed_wrong_problem_diagnoses(
-                    check_id=check_id,
-                    extraction=extraction,
-                    items_by_id=items_by_id,
-                    hw_position_by_id=hw_position_by_id,
-                    is_correct_by_bank_id=is_correct_by_bank_id,
-                    chat_probed_bank_id=chat_probed_bank_id,
+                    check_id=pending.check_id,
+                    extraction=pending.extraction,
+                    items_by_id=pending.items_by_id,
+                    hw_position_by_id=pending.hw_position_by_id,
+                    is_correct_by_bank_id=pending.is_correct_by_bank_id,
+                    chat_probed_bank_id=pending.chat_probed_bank_id,
                     db=own_db,
-                    user_id=user_id,
-                    submission_id=submission_id,
+                    user_id=pending.user_id,
+                    submission_id=pending.submission_id,
                 )
                 await own_db.commit()
         except Exception:
             logger.exception(
                 "background diagnosis seeding failed for check %s",
-                check_id,
+                pending.check_id,
             )
 
     task = asyncio.create_task(_runner())
@@ -955,8 +979,15 @@ async def start_integrity_check(
     db: AsyncSession,
     *,
     extraction: dict[str, Any] | None = None,
-) -> None:
+) -> PendingDiagnoses | None:
     """Run the integrity check for a fresh submission.
+
+    Returns the args needed to spawn the silent-diagnosis fan-out as
+    a post-commit background task, or None if there's nothing to
+    diagnose. Caller MUST commit before invoking spawn_diagnosis_seeding
+    on the return value (the bg task uses a fresh session and can't
+    see uncommitted parent rows; the FK from integrity_check_problems
+    → integrity_check_submissions fires immediately otherwise).
 
     If `extraction` is provided (from a shared Vision call), uses it
     directly instead of calling extract_student_work again. This lets
@@ -975,7 +1006,7 @@ async def start_integrity_check(
         logger.warning(
             "start_integrity_check: submission %s not found", submission_id,
         )
-        return
+        return None
 
     assignment = (await db.execute(
         select(Assignment).where(Assignment.id == submission.assignment_id)
@@ -985,12 +1016,12 @@ async def start_integrity_check(
             "start_integrity_check: assignment %s not found",
             submission.assignment_id,
         )
-        return
+        return None
 
     if not assignment.integrity_check_enabled:
-        return
+        return None
     if assignment.type != "homework":
-        return
+        return None
 
     # Idempotency: one IntegrityCheckSubmission row per submission.
     existing = (await db.execute(
@@ -999,11 +1030,11 @@ async def start_integrity_check(
         ).limit(1)
     )).scalar_one_or_none()
     if existing is not None:
-        return
+        return None
 
     primary_id_strs = problem_ids_in_content(assignment.content)
     if not primary_id_strs:
-        return
+        return None
 
     # Parse every primary bank id into a candidate pool, then let the
     # selection algorithm pick the best subset. Invalid UUIDs log and
@@ -1018,7 +1049,7 @@ async def start_integrity_check(
                 s, assignment.id,
             )
     if not candidate_uuids:
-        return
+        return None
 
     # Hydrate candidates in one query so the selector can score by
     # difficulty + solution_step count and check_answer_correctness
@@ -1093,7 +1124,7 @@ async def start_integrity_check(
             status=PROBLEM_STATUS_SKIPPED_UNREADABLE,
             student_work_extraction=problem_slice,
         ))
-        return
+        return None
 
     is_correct_by_bank_id = await check_answer_correctness(
         extraction, items_by_id, hw_position_by_id,
@@ -1106,7 +1137,7 @@ async def start_integrity_check(
         # Every primary id was deleted between publish and submit.
         # Don't create a stuck row — let the teacher handle the
         # submission without an integrity trace.
-        return
+        return None
 
     check = IntegrityCheckSubmission(
         submission_id=submission_id,
@@ -1132,24 +1163,26 @@ async def start_integrity_check(
     db.add(chosen_row)
     await db.flush()
 
-    # Silent per-wrong-problem diagnosis. Dispatched as a fire-and-
-    # forget background task with its own session so the student's
-    # kickoff opener isn't gated on N Haiku calls — each
-    # diagnose_wrong_problem has a 90s timeout, and even healthy
-    # parallel calls add seconds of wait. The student sees the opener
-    # the moment this function returns and the caller commits; the
-    # teacher's per-problem diagnosis cards appear on their next panel
-    # refresh once the background task lands.
-    _spawn_diagnosis_seeding(
-        check_id=check.id,
-        extraction=extraction,
-        items_by_id=items_by_id,
-        hw_position_by_id=hw_position_by_id,
-        is_correct_by_bank_id=is_correct_by_bank_id,
-        chat_probed_bank_id=selection.bank_item_id,
-        user_id=user_id,
-        submission_id=submission_id,
-    )
+    # Silent per-wrong-problem diagnosis. We BUILD the args here
+    # (only this scope has the items map, the correctness map from
+    # check_answer_correctness, and the extraction slice) but RETURN
+    # them rather than spawning inline. Caller spawns the bg task
+    # after committing the parent row — see PendingDiagnoses doc for
+    # why pre-commit spawning would FK-violate every diagnosis insert.
+    pending_diagnoses: PendingDiagnoses | None = None
+    if _select_wrong_bank_ids_for_diagnosis(
+        is_correct_by_bank_id, items_by_id, hw_position_by_id, selection.bank_item_id,
+    ):
+        pending_diagnoses = PendingDiagnoses(
+            check_id=check.id,
+            extraction=extraction,
+            items_by_id=items_by_id,
+            hw_position_by_id=hw_position_by_id,
+            is_correct_by_bank_id=is_correct_by_bank_id,
+            chat_probed_bank_id=selection.bank_item_id,
+            user_id=user_id,
+            submission_id=submission_id,
+        )
 
     # Derive the agent's posture from the tier + how much real work
     # the student wrote on the chosen problem. Posture conditions the
@@ -1213,6 +1246,8 @@ async def start_integrity_check(
         content=opening_text,
     ))
     check.status = STATUS_AWAITING_STUDENT
+
+    return pending_diagnoses
 
 
 # ── Student turn processing ─────────────────────────────────────────

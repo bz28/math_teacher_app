@@ -1080,12 +1080,13 @@ class TestClassifyDiagnosisKind:
         assert _classify_diagnosis_kind("procedural_slip") == DIAGNOSIS_KIND_PROCEDURAL_SLIP
         assert _classify_diagnosis_kind("conceptual_gap") == DIAGNOSIS_KIND_CONCEPTUAL_GAP
 
-    def test_defaults_unknown_to_conceptual_gap(self) -> None:
-        # Defensive — schema constrains this server-side, but a malformed
-        # model response shouldn't crash the persist step.
-        assert _classify_diagnosis_kind("unknown_kind") == DIAGNOSIS_KIND_CONCEPTUAL_GAP
-        assert _classify_diagnosis_kind(None) == DIAGNOSIS_KIND_CONCEPTUAL_GAP
-        assert _classify_diagnosis_kind(42) == DIAGNOSIS_KIND_CONCEPTUAL_GAP
+    def test_returns_none_for_unrecognized_input(self) -> None:
+        # Unknown values surface as None so the persist step can fall
+        # back to DIAGNOSIS_KIND_ERROR rather than letting garbage
+        # masquerade as a real diagnosis bucket in the teacher UI.
+        assert _classify_diagnosis_kind("unknown_kind") is None
+        assert _classify_diagnosis_kind(None) is None
+        assert _classify_diagnosis_kind(42) is None
 
 
 class TestBuildDiagnoseWrongUserMessage:

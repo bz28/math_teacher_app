@@ -39,7 +39,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.constants import MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
 from api.core.image_utils import validate_and_decode_upload
-from api.core.integrity_pipeline import start_integrity_check
+from api.core.integrity_pipeline import (
+    spawn_diagnosis_seeding,
+    start_integrity_check,
+)
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
@@ -76,20 +79,20 @@ async def drain_integrity_background_tasks() -> None:
     explicit. This is the only external contract — tests call this,
     nothing else should.
 
-    Drains in two passes because the integrity pipeline's main task
-    can spawn its own diagnosis-seeding sub-tasks (own session, fire-
-    and-forget so they don't block the student's kickoff). Pass 1
-    awaits the integrity tasks (which spawn diagnosis tasks during
-    their run); pass 2 awaits the diagnosis tasks themselves.
+    Loops until both task sets stay empty across a pass because the
+    integrity pipeline's main task spawns diagnosis-seeding sub-tasks
+    on its own session (fire-and-forget so they don't block the
+    student's kickoff). A single-pass drain can miss diagnosis tasks
+    spawned right at the parent's last microtask. Cap at 10 iterations
+    so a runaway spawner can't hang tests forever.
     """
     from api.core.integrity_pipeline import _BACKGROUND_DIAGNOSIS_TASKS
 
-    tasks = list(_BACKGROUND_TASKS)
-    if tasks:
+    for _ in range(10):
+        tasks = list(_BACKGROUND_TASKS) + list(_BACKGROUND_DIAGNOSIS_TASKS)
+        if not tasks:
+            return
         await asyncio.gather(*tasks, return_exceptions=True)
-    diag_tasks = list(_BACKGROUND_DIAGNOSIS_TASKS)
-    if diag_tasks:
-        await asyncio.gather(*diag_tasks, return_exceptions=True)
 
 
 async def _run_extraction_background(submission_id: uuid.UUID) -> None:
@@ -188,10 +191,16 @@ async def _run_integrity_and_grading_background(
 
             if run_integrity:
                 try:
-                    await start_integrity_check(
+                    pending_diagnoses = await start_integrity_check(
                         submission_id, db, extraction=extraction,
                     )
                     await db.commit()
+                    # Spawn the diagnosis fan-out ONLY after the parent
+                    # commit lands — the bg task uses a fresh session
+                    # and can't see uncommitted parent rows; spawning
+                    # pre-commit FK-violates every diagnosis insert.
+                    if pending_diagnoses is not None:
+                        spawn_diagnosis_seeding(pending_diagnoses)
                 except Exception:
                     logger.exception(
                         "integrity pipeline failed for submission %s; "
