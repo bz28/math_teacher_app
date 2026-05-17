@@ -20,6 +20,7 @@ import pytest
 from api.core.integrity_ai import (
     POSTURE_PROMPT_FRAGMENTS,
     build_agent_system_prompt,
+    build_diagnose_wrong_user_message,
     build_problems_briefing,
 )
 from api.core.integrity_pipeline import (
@@ -30,10 +31,19 @@ from api.core.integrity_pipeline import (
     ACTIVITY_REASON_FULL_PASTE,
     ACTIVITY_REASON_LARGE_PASTE,
     ACTIVITY_REASON_LONG_TAB_OUT,
+    DIAGNOSIS_KIND_BLANK,
+    DIAGNOSIS_KIND_CONCEPTUAL_GAP,
+    DIAGNOSIS_KIND_ERROR,
+    DIAGNOSIS_KIND_PROCEDURAL_SLIP,
+    MAX_DIAGNOSES,
+    PROBLEM_STATUS_DIAGNOSIS_ONLY,
     SELECTION_REASON_STRUGGLING_EASIEST,
     SELECTION_REASON_VERIFIED_HARDEST_CORRECT,
     _build_agent_messages,
+    _classify_diagnosis_kind,
     _normalize_answer_for_trivial_match,
+    _seed_wrong_problem_diagnoses,
+    _select_wrong_bank_ids_for_diagnosis,
     _validate_rubric,
     build_fallback_opener,
     build_kickoff_message,
@@ -42,7 +52,10 @@ from api.core.integrity_pipeline import (
     derive_agent_posture,
     select_probe_problem,
 )
-from api.models.integrity_check import IntegrityConversationTurn
+from api.models.integrity_check import (
+    IntegrityCheckProblem,
+    IntegrityConversationTurn,
+)
 
 
 @dataclass
@@ -976,3 +989,310 @@ class TestComputeActivitySummary:
         nt = summary["notable_turns"][0]
         assert ACTIVITY_REASON_DOMINANT_TAB_OUT in nt["reasons"]
         assert ACTIVITY_REASON_LONG_TAB_OUT not in nt["reasons"]
+
+
+# ── Silent per-wrong-problem diagnosis ──────────────────────────────
+
+
+class _FakeBankItem:
+    """Stand-in for QuestionBankItem with the fields the diagnosis path
+    reads (question / final_answer / solution_steps)."""
+    def __init__(
+        self,
+        *,
+        question: str = "Solve",
+        final_answer: str | None = "1",
+        solution_steps: list[Any] | None = None,
+    ) -> None:
+        self.id = uuid.uuid4()
+        self.question = question
+        self.final_answer = final_answer
+        self.solution_steps = solution_steps
+
+
+class _FakeSession:
+    """Minimal AsyncSession stand-in for unit tests: captures added rows
+    and treats flush() as a no-op so the fan-out logic is testable
+    without spinning up a real DB."""
+    def __init__(self) -> None:
+        self.added: list[Any] = []
+
+    def add(self, obj: Any) -> None:
+        self.added.append(obj)
+
+    async def flush(self) -> None:
+        return None
+
+
+class TestSelectWrongBankIdsForDiagnosis:
+    def test_skips_correct_and_chat_probed(self) -> None:
+        chat_id = uuid.uuid4()
+        item_wrong = _FakeBankItem()
+        item_right = _FakeBankItem()
+        items = {chat_id: _FakeBankItem(), item_wrong.id: item_wrong, item_right.id: item_right}
+        hw_pos = {chat_id: 1, item_wrong.id: 2, item_right.id: 3}
+        correctness = {chat_id: False, item_wrong.id: False, item_right.id: True}
+        out = _select_wrong_bank_ids_for_diagnosis(correctness, items, hw_pos, chat_id)
+        assert out == [item_wrong.id]
+
+    def test_skips_proof_style_with_no_final_answer(self) -> None:
+        chat_id = uuid.uuid4()
+        proof = _FakeBankItem(final_answer=None)
+        wrong = _FakeBankItem()
+        items = {chat_id: _FakeBankItem(), proof.id: proof, wrong.id: wrong}
+        hw_pos = {chat_id: 1, proof.id: 2, wrong.id: 3}
+        correctness = {chat_id: False, proof.id: False, wrong.id: False}
+        out = _select_wrong_bank_ids_for_diagnosis(correctness, items, hw_pos, chat_id)
+        assert out == [wrong.id]
+
+    def test_skips_deleted_bank_items(self) -> None:
+        chat_id = uuid.uuid4()
+        wrong = _FakeBankItem()
+        ghost_id = uuid.uuid4()  # bid in correctness but not in items
+        items = {chat_id: _FakeBankItem(), wrong.id: wrong}
+        hw_pos = {chat_id: 1, wrong.id: 2, ghost_id: 3}
+        correctness = {chat_id: False, wrong.id: False, ghost_id: False}
+        out = _select_wrong_bank_ids_for_diagnosis(correctness, items, hw_pos, chat_id)
+        assert out == [wrong.id]
+
+    def test_orders_by_hw_position_and_caps(self) -> None:
+        chat_id = uuid.uuid4()
+        # 12 wrong problems with hw_positions 2..13 (chat is 1). After
+        # the cap of MAX_DIAGNOSES=10 the highest 2 hw_positions drop.
+        items: dict[uuid.UUID, _FakeBankItem] = {chat_id: _FakeBankItem()}
+        hw_pos: dict[uuid.UUID, int] = {chat_id: 1}
+        correctness: dict[uuid.UUID, bool] = {chat_id: False}
+        wrong_ids_by_pos: dict[int, uuid.UUID] = {}
+        for pos in range(2, 14):
+            item = _FakeBankItem()
+            items[item.id] = item
+            hw_pos[item.id] = pos
+            correctness[item.id] = False
+            wrong_ids_by_pos[pos] = item.id
+
+        out = _select_wrong_bank_ids_for_diagnosis(correctness, items, hw_pos, chat_id)
+        assert len(out) == MAX_DIAGNOSES
+        assert out == [wrong_ids_by_pos[pos] for pos in range(2, 2 + MAX_DIAGNOSES)]
+
+
+class TestClassifyDiagnosisKind:
+    def test_passes_through_known_values(self) -> None:
+        assert _classify_diagnosis_kind("procedural_slip") == DIAGNOSIS_KIND_PROCEDURAL_SLIP
+        assert _classify_diagnosis_kind("conceptual_gap") == DIAGNOSIS_KIND_CONCEPTUAL_GAP
+
+    def test_defaults_unknown_to_conceptual_gap(self) -> None:
+        # Defensive — schema constrains this server-side, but a malformed
+        # model response shouldn't crash the persist step.
+        assert _classify_diagnosis_kind("unknown_kind") == DIAGNOSIS_KIND_CONCEPTUAL_GAP
+        assert _classify_diagnosis_kind(None) == DIAGNOSIS_KIND_CONCEPTUAL_GAP
+        assert _classify_diagnosis_kind(42) == DIAGNOSIS_KIND_CONCEPTUAL_GAP
+
+
+class TestBuildDiagnoseWrongUserMessage:
+    def test_includes_problem_correct_steps_and_student_work(self) -> None:
+        msg = build_diagnose_wrong_user_message(
+            problem_statement="What is 2+2?",
+            correct_answer="4",
+            canonical_steps=[{"description": "Add them"}],
+            student_steps=[
+                {"step_num": 1, "plain_english": "added", "latex": "2+2"},
+            ],
+            student_final_answer="5",
+        )
+        assert "What is 2+2?" in msg
+        assert "Correct final answer:\n4" in msg
+        assert "Add them" in msg
+        assert "Step 1: added [2+2]" in msg
+        assert "Student's final answer: 5" in msg
+
+    def test_omits_canonical_section_when_none(self) -> None:
+        msg = build_diagnose_wrong_user_message(
+            problem_statement="Q",
+            correct_answer="A",
+            canonical_steps=None,
+            student_steps=[{"step_num": 1, "plain_english": "x"}],
+            student_final_answer="y",
+        )
+        assert "Canonical solution steps" not in msg
+
+    def test_marks_no_legible_steps_when_empty(self) -> None:
+        msg = build_diagnose_wrong_user_message(
+            problem_statement="Q",
+            correct_answer="A",
+            canonical_steps=None,
+            student_steps=[],
+            student_final_answer="",
+        )
+        assert "(no legible steps)" in msg
+        assert "(none extracted)" in msg
+
+
+class TestSeedWrongProblemDiagnoses:
+    """End-to-end-ish tests against the gather + persist path. Uses
+    _FakeSession to avoid real DB; AsyncMock replaces the LLM call."""
+
+    @staticmethod
+    def _setup(
+        *,
+        wrong_count: int = 2,
+        blank_idx: set[int] | None = None,
+    ) -> tuple[
+        uuid.UUID,
+        dict[str, Any],
+        dict[uuid.UUID, _FakeBankItem],
+        dict[uuid.UUID, int],
+        dict[uuid.UUID, bool],
+        uuid.UUID,
+    ]:
+        """Build a check world with `wrong_count` wrong-and-eligible
+        items at hw_positions 2..(wrong_count+1) plus a chat-probed
+        item at hw_position 1. `blank_idx` lists hw_positions among
+        the wrong set whose extraction has no steps + no final answer.
+        """
+        blank_idx = blank_idx or set()
+        chat_id = uuid.uuid4()
+        items: dict[uuid.UUID, _FakeBankItem] = {
+            chat_id: _FakeBankItem(question="chat", final_answer="0"),
+        }
+        hw_pos: dict[uuid.UUID, int] = {chat_id: 1}
+        correctness: dict[uuid.UUID, bool] = {chat_id: True}
+        steps: list[dict[str, Any]] = []
+        final_answers: list[dict[str, Any]] = []
+        for pos in range(2, 2 + wrong_count):
+            item = _FakeBankItem(question=f"q{pos}", final_answer=str(pos))
+            items[item.id] = item
+            hw_pos[item.id] = pos
+            correctness[item.id] = False
+            if pos in blank_idx:
+                continue
+            steps.append({"step_num": pos, "problem_position": pos, "plain_english": f"work{pos}"})
+            final_answers.append({"problem_position": pos, "answer_latex": str(pos + 100)})
+        extraction = {"steps": steps, "final_answers": final_answers}
+        return uuid.uuid4(), extraction, items, hw_pos, correctness, chat_id
+
+    @pytest.mark.asyncio
+    async def test_creates_one_row_per_wrong_non_chat_problem(self) -> None:
+        check_id, extraction, items, hw_pos, correctness, chat_id = self._setup(
+            wrong_count=2,
+        )
+        session = _FakeSession()
+        with patch(
+            "api.core.integrity_pipeline.diagnose_wrong_problem",
+            new=AsyncMock(return_value={
+                "note": "Looks like sign flip.", "kind": "procedural_slip",
+            }),
+        ) as mock_llm:
+            await _seed_wrong_problem_diagnoses(
+                check_id=check_id,
+                extraction=extraction,
+                items_by_id=items,  # type: ignore[arg-type]
+                hw_position_by_id=hw_pos,
+                is_correct_by_bank_id=correctness,
+                chat_probed_bank_id=chat_id,
+                db=session,  # type: ignore[arg-type]
+                user_id="u",
+                submission_id=uuid.uuid4(),
+            )
+
+        rows = [r for r in session.added if isinstance(r, IntegrityCheckProblem)]
+        assert len(rows) == 2
+        assert all(r.status == PROBLEM_STATUS_DIAGNOSIS_ONLY for r in rows)
+        assert all(r.diagnosis_kind == DIAGNOSIS_KIND_PROCEDURAL_SLIP for r in rows)
+        assert all(r.diagnosis_note == "Looks like sign flip." for r in rows)
+        # sample_position mirrors hw_position so chat row (0) sorts first.
+        assert {r.sample_position for r in rows} == {2, 3}
+        assert mock_llm.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_blank_work_skips_llm(self) -> None:
+        check_id, extraction, items, hw_pos, correctness, chat_id = self._setup(
+            wrong_count=2, blank_idx={3},
+        )
+        session = _FakeSession()
+        with patch(
+            "api.core.integrity_pipeline.diagnose_wrong_problem",
+            new=AsyncMock(return_value={"note": "x", "kind": "conceptual_gap"}),
+        ) as mock_llm:
+            await _seed_wrong_problem_diagnoses(
+                check_id=check_id,
+                extraction=extraction,
+                items_by_id=items,  # type: ignore[arg-type]
+                hw_position_by_id=hw_pos,
+                is_correct_by_bank_id=correctness,
+                chat_probed_bank_id=chat_id,
+                db=session,  # type: ignore[arg-type]
+                user_id=None,
+                submission_id=uuid.uuid4(),
+            )
+
+        rows = [r for r in session.added if isinstance(r, IntegrityCheckProblem)]
+        assert len(rows) == 2
+        by_pos = {r.sample_position: r for r in rows}
+        assert by_pos[3].diagnosis_kind == DIAGNOSIS_KIND_BLANK
+        assert by_pos[3].diagnosis_note is None
+        assert by_pos[2].diagnosis_kind == DIAGNOSIS_KIND_CONCEPTUAL_GAP
+        assert mock_llm.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_one_call_failure_isolates_to_one_row(self) -> None:
+        check_id, extraction, items, hw_pos, correctness, chat_id = self._setup(
+            wrong_count=3,
+        )
+
+        call_count = {"n": 0}
+
+        async def flaky(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            call_count["n"] += 1
+            if call_count["n"] == 2:
+                raise RuntimeError("model misbehaved")
+            return {"note": "fine", "kind": "conceptual_gap"}
+
+        session = _FakeSession()
+        with patch(
+            "api.core.integrity_pipeline.diagnose_wrong_problem",
+            new=flaky,
+        ):
+            await _seed_wrong_problem_diagnoses(
+                check_id=check_id,
+                extraction=extraction,
+                items_by_id=items,  # type: ignore[arg-type]
+                hw_position_by_id=hw_pos,
+                is_correct_by_bank_id=correctness,
+                chat_probed_bank_id=chat_id,
+                db=session,  # type: ignore[arg-type]
+                user_id=None,
+                submission_id=uuid.uuid4(),
+            )
+
+        rows = [r for r in session.added if isinstance(r, IntegrityCheckProblem)]
+        kinds = [r.diagnosis_kind for r in rows]
+        assert kinds.count(DIAGNOSIS_KIND_ERROR) == 1
+        assert kinds.count(DIAGNOSIS_KIND_CONCEPTUAL_GAP) == 2
+        err_row = next(r for r in rows if r.diagnosis_kind == DIAGNOSIS_KIND_ERROR)
+        assert err_row.diagnosis_note is None
+
+    @pytest.mark.asyncio
+    async def test_empty_targets_does_nothing(self) -> None:
+        # All-correct submission: no wrong problems → no rows, no calls.
+        chat_id = uuid.uuid4()
+        items = {chat_id: _FakeBankItem(final_answer="1")}
+        hw_pos = {chat_id: 1}
+        correctness = {chat_id: True}
+        session = _FakeSession()
+        with patch(
+            "api.core.integrity_pipeline.diagnose_wrong_problem",
+            new=AsyncMock(),
+        ) as mock_llm:
+            await _seed_wrong_problem_diagnoses(
+                check_id=uuid.uuid4(),
+                extraction={"steps": [], "final_answers": []},
+                items_by_id=items,  # type: ignore[arg-type]
+                hw_position_by_id=hw_pos,
+                is_correct_by_bank_id=correctness,
+                chat_probed_bank_id=chat_id,
+                db=session,  # type: ignore[arg-type]
+                user_id=None,
+                submission_id=uuid.uuid4(),
+            )
+        assert session.added == []
+        mock_llm.assert_not_called()

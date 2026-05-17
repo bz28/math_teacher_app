@@ -21,6 +21,7 @@ The feature runs as three phases:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -33,6 +34,7 @@ from api.core.integrity_ai import (
     UNREADABLE_THRESHOLD,
     build_agent_system_prompt,
     build_problems_briefing,
+    diagnose_wrong_problem,
     extract_student_work,
     run_agent_turn,
 )
@@ -682,6 +684,174 @@ def _slice_extraction_for_problem(
     }
 
 
+# ── Silent per-wrong-problem diagnosis fan-out ──────────────────────
+
+def _select_wrong_bank_ids_for_diagnosis(
+    is_correct_by_bank_id: dict[uuid.UUID, bool],
+    items_by_id: dict[uuid.UUID, QuestionBankItem],
+    hw_position_by_id: dict[uuid.UUID, int],
+    chat_probed_bank_id: uuid.UUID,
+) -> list[uuid.UUID]:
+    """Pick the wrong bank ids that should get a silent diagnosis row.
+
+    Filters out:
+    - the chat-probed bank id (the chat verdict's ai_reasoning is richer)
+    - any bank id with no final_answer on the bank item (proof-style —
+      `is_correct_by_bank_id` defaults False there, but there's nothing
+      to diagnose against, so we skip rather than ground a hypothesis
+      on no answer key)
+    - any bank id missing from items_by_id (deleted between publish + submit)
+
+    Returns at most MAX_DIAGNOSES ids, ordered by hw_position ascending
+    so the cap behavior is deterministic and matches the order the
+    teacher sees on the page.
+    """
+    eligible: list[tuple[int, uuid.UUID]] = []
+    for bid, is_correct in is_correct_by_bank_id.items():
+        if is_correct:
+            continue
+        if bid == chat_probed_bank_id:
+            continue
+        item = items_by_id.get(bid)
+        if item is None:
+            continue
+        if not (item.final_answer or "").strip():
+            continue
+        hw_pos = hw_position_by_id.get(bid)
+        if hw_pos is None:
+            continue
+        eligible.append((hw_pos, bid))
+    eligible.sort(key=lambda t: t[0])
+    return [bid for _, bid in eligible[:MAX_DIAGNOSES]]
+
+
+def _classify_diagnosis_kind(raw: Any) -> str:
+    """Normalize the LLM's returned kind onto our enum, defaulting to
+    conceptual_gap when the model emits an unrecognized value (defensive
+    — schema constrains it, but we don't trust the model with the DB).
+    """
+    if raw == DIAGNOSIS_KIND_PROCEDURAL_SLIP:
+        return DIAGNOSIS_KIND_PROCEDURAL_SLIP
+    if raw == DIAGNOSIS_KIND_CONCEPTUAL_GAP:
+        return DIAGNOSIS_KIND_CONCEPTUAL_GAP
+    return DIAGNOSIS_KIND_CONCEPTUAL_GAP
+
+
+async def _seed_wrong_problem_diagnoses(
+    *,
+    check_id: uuid.UUID,
+    extraction: dict[str, Any],
+    items_by_id: dict[uuid.UUID, QuestionBankItem],
+    hw_position_by_id: dict[uuid.UUID, int],
+    is_correct_by_bank_id: dict[uuid.UUID, bool],
+    chat_probed_bank_id: uuid.UUID,
+    db: AsyncSession,
+    user_id: str | None,
+    submission_id: uuid.UUID,
+) -> None:
+    """Insert + populate diagnosis_only rows for every wrong problem that
+    isn't chat-probed.
+
+    Blank work skips the LLM call. Other rows fan out via asyncio.gather
+    with return_exceptions=True so one failure doesn't tank the rest;
+    failed rows end up with kind=error and a null note (teacher sees
+    fallback copy in the UI).
+    """
+    targets = _select_wrong_bank_ids_for_diagnosis(
+        is_correct_by_bank_id, items_by_id, hw_position_by_id, chat_probed_bank_id,
+    )
+    if not targets:
+        return
+
+    # Insert one row per target up front so we have stable references
+    # to update once the LLM calls return. sample_position = hw_position
+    # so the chat row (sample_position=0) sorts first naturally and the
+    # diagnosis rows order by HW layout for the teacher.
+    rows_to_call: list[tuple[IntegrityCheckProblem, QuestionBankItem, dict[str, Any]]] = []
+    for bid in targets:
+        item = items_by_id[bid]
+        hw_pos = hw_position_by_id[bid]
+        problem_slice = _slice_extraction_for_problem(extraction, hw_pos)
+        steps = problem_slice.get("steps") or []
+        finals = problem_slice.get("final_answers") or []
+        row = IntegrityCheckProblem(
+            integrity_check_submission_id=check_id,
+            bank_item_id=bid,
+            sample_position=hw_pos,
+            status=PROBLEM_STATUS_DIAGNOSIS_ONLY,
+            student_work_extraction=problem_slice,
+        )
+        if not steps and not finals:
+            # No legible work to diagnose. Static "blank" kind, no LLM call.
+            row.diagnosis_kind = DIAGNOSIS_KIND_BLANK
+            row.diagnosis_note = None
+        db.add(row)
+        if steps or finals:
+            rows_to_call.append((row, item, problem_slice))
+    await db.flush()
+
+    if not rows_to_call:
+        return
+
+    student_final_by_row: list[str] = []
+    for _row, _item, slice_ in rows_to_call:
+        finals = slice_.get("final_answers") or []
+        # When Vision extracted multiple final-answer candidates for one
+        # problem (rare; schema doesn't forbid it), use the first non-empty
+        # one — same fallthrough check_answer_correctness uses upstream.
+        chosen = ""
+        for fa in finals:
+            text = (
+                (fa.get("answer_latex") or "").strip()
+                or (fa.get("answer_plain") or "").strip()
+            )
+            if text:
+                chosen = text
+                break
+        student_final_by_row.append(chosen)
+
+    coroutines = [
+        diagnose_wrong_problem(
+            problem_statement=item.question or "",
+            correct_answer=item.final_answer or "",
+            canonical_steps=item.solution_steps,
+            student_steps=slice_.get("steps") or [],
+            student_final_answer=student_final_by_row[idx],
+            user_id=user_id,
+            submission_id=str(submission_id),
+            call_metadata={
+                "phase": "diagnosis",
+                "check_id": str(check_id),
+                "bank_item_id": str(row.bank_item_id),
+                "hw_position": row.sample_position,
+            },
+        )
+        for idx, (row, item, slice_) in enumerate(rows_to_call)
+    ]
+    results = await asyncio.gather(*coroutines, return_exceptions=True)
+
+    for (row, _item, _slice), result in zip(rows_to_call, results, strict=True):
+        if isinstance(result, BaseException):
+            logger.exception(
+                "integrity diagnosis call failed for check %s bank %s",
+                check_id, row.bank_item_id, exc_info=result,
+            )
+            row.diagnosis_kind = DIAGNOSIS_KIND_ERROR
+            row.diagnosis_note = None
+            continue
+        note = (result.get("note") or "").strip() if isinstance(result, dict) else ""
+        kind = _classify_diagnosis_kind(
+            result.get("kind") if isinstance(result, dict) else None,
+        )
+        # Defensive truncate: schema enforces maxLength=400 but if a
+        # future model variant goes long we clamp before the column
+        # would (Text is unbounded but the UI assumes short).
+        row.diagnosis_note = note[:400] if note else None
+        row.diagnosis_kind = kind if note else DIAGNOSIS_KIND_ERROR
+
+    await db.flush()
+
+
 # ── Pipeline start (called from submit_homework's background task) ──
 
 async def start_integrity_check(
@@ -865,6 +1035,23 @@ async def start_integrity_check(
     )
     db.add(chosen_row)
     await db.flush()
+
+    # Silent per-wrong-problem diagnosis. Runs alongside the chat
+    # kickoff: one Haiku call per wrong problem (excluding the chat-
+    # probed one). Each call's note + kind is persisted on its own
+    # IntegrityCheckProblem row (status=diagnosis_only). Fan-out is
+    # capped at MAX_DIAGNOSES; per-call failures isolate to one row.
+    await _seed_wrong_problem_diagnoses(
+        check_id=check.id,
+        extraction=extraction,
+        items_by_id=items_by_id,
+        hw_position_by_id=hw_position_by_id,
+        is_correct_by_bank_id=is_correct_by_bank_id,
+        chat_probed_bank_id=selection.bank_item_id,
+        db=db,
+        user_id=user_id,
+        submission_id=submission_id,
+    )
 
     # Derive the agent's posture from the tier + how much real work
     # the student wrote on the chosen problem. Posture conditions the
@@ -1714,10 +1901,19 @@ async def _load_problems_for_prompt(
     check_id: uuid.UUID, db: AsyncSession,
 ) -> list[dict[str, Any]]:
     """Build the per-problem dicts used by build_problems_briefing,
-    with up-to-date verdict status."""
+    with up-to-date verdict status.
+
+    Excludes `diagnosis_only` rows: those exist for the teacher-facing
+    silent diagnosis pass and aren't part of the chat agent's loop —
+    including them in the briefing would trick the agent into thinking
+    it should probe those problems too.
+    """
     problems = (await db.execute(
         select(IntegrityCheckProblem)
-        .where(IntegrityCheckProblem.integrity_check_submission_id == check_id)
+        .where(
+            IntegrityCheckProblem.integrity_check_submission_id == check_id,
+            IntegrityCheckProblem.status != PROBLEM_STATUS_DIAGNOSIS_ONLY,
+        )
         .order_by(IntegrityCheckProblem.sample_position.asc())
     )).scalars().all()
 

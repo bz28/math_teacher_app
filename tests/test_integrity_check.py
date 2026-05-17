@@ -135,9 +135,16 @@ async def test_submit_with_integrity_disabled_creates_no_rows(
 async def test_submit_caps_sample_at_max_sample(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    from api.core.integrity_pipeline import MAX_SAMPLE
+    from api.core.integrity_pipeline import (
+        MAX_SAMPLE,
+        PROBLEM_STATUS_DIAGNOSIS_ONLY,
+    )
 
     # Seed extra primary problems so the HW has more than MAX_SAMPLE.
+    # Asserts chat-probe stays capped at MAX_SAMPLE even though
+    # diagnosis-only rows now also land on the same submission for
+    # every other wrong problem (see test_submit_seeds_diagnosis_rows
+    # for the diagnosis fan-out behavior).
     extra_ids: list[str] = []
     async with get_session_factory()() as s:
         original = (await s.execute(
@@ -180,12 +187,85 @@ async def test_submit_caps_sample_at_max_sample(
             select(IntegrityCheckSubmission)
             .where(IntegrityCheckSubmission.submission_id == r.json()["submission_id"])
         )).scalar_one()
-        problems = (await s.execute(
+        chat_probed = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(
+                IntegrityCheckProblem.integrity_check_submission_id == check.id,
+                IntegrityCheckProblem.status != PROBLEM_STATUS_DIAGNOSIS_ONLY,
+            )
+        )).scalars().all()
+        assert len(chat_probed) == MAX_SAMPLE
+        assert sorted(p.sample_position for p in chat_probed) == list(range(MAX_SAMPLE))
+
+
+async def test_submit_seeds_diagnosis_rows_for_other_wrong_problems(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Multi-primary HW where the student got every problem wrong:
+    one chat-probed row (sample_position=0, status=pending) plus
+    diagnosis_only rows for every other wrong primary. Mock extraction
+    has no final answers so all problems read as wrong and the
+    diagnosis fan-out fires for the non-chat-probed ones."""
+    from api.core.integrity_pipeline import PROBLEM_STATUS_DIAGNOSIS_ONLY
+
+    extra_ids: list[str] = []
+    async with get_session_factory()() as s:
+        original = (await s.execute(
+            select(QuestionBankItem).where(QuestionBankItem.id == world["primary_id"])
+        )).scalar_one()
+        for i in range(2):
+            clone = QuestionBankItem(
+                course_id=original.course_id,
+                unit_id=original.unit_id,
+                originating_assignment_id=original.originating_assignment_id,
+                title=f"Diag {i}",
+                question=f"Diagnose problem {i}",
+                solution_steps=[],
+                final_answer="x",
+                distractors=["a", "b", "c"],
+                status="approved",
+                source="generated",
+            )
+            s.add(clone)
+            await s.flush()
+            extra_ids.append(str(clone.id))
+        new_problems = [str(world["primary_id"])] + extra_ids
+        await s.execute(
+            text("UPDATE assignments SET content=:c WHERE id=:id"),
+            {
+                "c": '{"problems": [' + ", ".join(
+                    f'{{"bank_item_id": "{p}", "position": {i + 1}}}'
+                    for i, p in enumerate(new_problems)
+                ) + ']}',
+                "id": world["assignment_id"],
+            },
+        )
+        await s.commit()
+
+    r = await _submit(client, world)
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == r.json()["submission_id"])
+        )).scalar_one()
+        all_rows = (await s.execute(
             select(IntegrityCheckProblem)
             .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
         )).scalars().all()
-        assert len(problems) == MAX_SAMPLE
-        assert sorted(p.sample_position for p in problems) == list(range(MAX_SAMPLE))
+
+        diagnosis_rows = [r for r in all_rows if r.status == PROBLEM_STATUS_DIAGNOSIS_ONLY]
+        chat_rows = [r for r in all_rows if r.status != PROBLEM_STATUS_DIAGNOSIS_ONLY]
+
+        assert len(chat_rows) == 1
+        assert chat_rows[0].sample_position == 0
+        # 3 primaries, 1 chat-probed → 2 diagnosis-only rows.
+        assert len(diagnosis_rows) == 2
+        for row in diagnosis_rows:
+            assert row.diagnosis_kind is not None
+            # sample_position mirrors hw_position (positive) so chat row sorts first.
+            assert row.sample_position > 0
 
 
 async def test_submit_with_zero_primaries_no_error(
