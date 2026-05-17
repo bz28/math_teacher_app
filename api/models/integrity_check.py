@@ -151,6 +151,9 @@ class IntegrityCheckProblem(Base):
     sample_position: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # status: pending / verdict_submitted / dismissed / skipped_unreadable
+    # / diagnosis_only. `diagnosis_only` rows carry a silent per-wrong-
+    # problem misconception note for the teacher but are NOT part of the
+    # chat agent's loop (no rubric, no chat verdict expected).
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     student_work_extraction: Mapped[dict[str, Any] | None] = mapped_column(
         JSON, nullable=True,
@@ -159,9 +162,23 @@ class IntegrityCheckProblem(Base):
     # Filled in by submit_problem_verdict. Six dimensions scored
     # low / mid / high (paraphrase + causal always; transfer,
     # prediction, authority_resistance, self_correction may be
-    # not_probed / not_observed).
+    # not_probed / not_observed). Always null on diagnosis_only rows.
     rubric: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     ai_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Silent diagnosis (no chat) — populated for diagnosis_only rows
+    # (every problem the student got wrong that we did NOT chat-probe).
+    # `diagnosis_note` is the 2-3 sentence misconception hypothesis the
+    # AI emits from the student's written work alone. `diagnosis_kind`
+    # is the categorical bucket:
+    #   procedural_slip / conceptual_gap — AI-emitted
+    #   blank — student wrote nothing for this problem (no LLM call)
+    #   unreadable — extraction had nothing legible (no LLM call)
+    #   error — LLM call failed (teacher sees fallback copy)
+    # Both null on chat-probed rows; the chat verdict's ai_reasoning
+    # covers that problem in much richer detail.
+    diagnosis_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    diagnosis_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     # Why this problem was selected as a probe target. One of
     # verified_hardest_correct / struggling_easiest. Mirrors
