@@ -46,6 +46,8 @@ export function ExtractionView({
 }) {
   const isFull = variant === "full";
   const renderProse = showProse ?? !isFull;
+  const hasSteps = extraction.steps.length > 0;
+  const hasFinals = extraction.final_answers.length > 0;
   return (
     <div
       className={cn(
@@ -53,16 +55,17 @@ export function ExtractionView({
         isFull ? "p-4" : "mt-2 p-2",
       )}
     >
-      {extraction.steps.length === 0 ? (
+      {!hasSteps && !hasFinals && (
         <p
           className={cn(
             "italic text-text-muted",
             isFull ? "mt-2 text-sm" : "mt-1 text-xs",
           )}
         >
-          No legible steps were extracted.
+          No legible work was extracted.
         </p>
-      ) : (
+      )}
+      {hasSteps && (
         <ol
           className={cn(
             "list-decimal space-y-1 pl-5 text-text-secondary",
@@ -109,6 +112,42 @@ export function ExtractionView({
             </li>
           ))}
         </ol>
+      )}
+      {hasFinals && (
+        // Final-answer block renders independently of steps so a row
+        // where the student wrote ONLY a final answer (no scratchwork)
+        // doesn't surface the misleading "no legible work" copy. Order
+        // by problem_position so multi-problem slices read top-to-
+        // bottom like the page they came from.
+        <dl
+          className={cn(
+            "grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-text-secondary",
+            hasSteps ? (isFull ? "mt-3" : "mt-2") : (isFull ? "mt-2" : "mt-1"),
+            isFull ? "text-sm" : "text-xs",
+          )}
+        >
+          {[...extraction.final_answers]
+            .sort((a, b) => a.problem_position - b.problem_position)
+            .map((fa) => (
+              <div
+                key={fa.problem_position}
+                className="contents"
+              >
+                <dt className="font-medium text-text-muted">
+                  Problem {fa.problem_position} answer
+                </dt>
+                <dd className="text-text-primary">
+                  {fa.answer_latex ? (
+                    <MathText text={`$${fa.answer_latex}$`} />
+                  ) : (
+                    fa.answer_plain || (
+                      <span className="italic text-text-muted">(blank)</span>
+                    )
+                  )}
+                </dd>
+              </div>
+            ))}
+        </dl>
       )}
     </div>
   );
