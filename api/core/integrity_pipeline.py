@@ -89,12 +89,38 @@ PROBLEM_STATUS_PENDING = "pending"
 PROBLEM_STATUS_VERDICT_SUBMITTED = "verdict_submitted"
 PROBLEM_STATUS_DISMISSED = "dismissed"
 PROBLEM_STATUS_SKIPPED_UNREADABLE = "skipped_unreadable"
+# Per-wrong-problem silent diagnosis row. Lives alongside the chat-probed
+# row(s) on the same submission; carries diagnosis_note + diagnosis_kind
+# but never gets a rubric and is excluded from the chat agent's briefing.
+PROBLEM_STATUS_DIAGNOSIS_ONLY = "diagnosis_only"
 
 PROBLEM_TERMINAL_STATUSES = frozenset({
     PROBLEM_STATUS_VERDICT_SUBMITTED,
     PROBLEM_STATUS_DISMISSED,
     PROBLEM_STATUS_SKIPPED_UNREADABLE,
+    PROBLEM_STATUS_DIAGNOSIS_ONLY,
 })
+
+# Diagnosis kind values. procedural_slip / conceptual_gap are emitted
+# by the LLM; blank / unreadable / error are pipeline-side.
+DIAGNOSIS_KIND_PROCEDURAL_SLIP = "procedural_slip"
+DIAGNOSIS_KIND_CONCEPTUAL_GAP = "conceptual_gap"
+DIAGNOSIS_KIND_BLANK = "blank"
+DIAGNOSIS_KIND_UNREADABLE = "unreadable"
+DIAGNOSIS_KIND_ERROR = "error"
+
+DIAGNOSIS_KIND_VALUES = frozenset({
+    DIAGNOSIS_KIND_PROCEDURAL_SLIP,
+    DIAGNOSIS_KIND_CONCEPTUAL_GAP,
+    DIAGNOSIS_KIND_BLANK,
+    DIAGNOSIS_KIND_UNREADABLE,
+    DIAGNOSIS_KIND_ERROR,
+})
+
+# Cap on silent diagnoses per submission. Bounds cost (Haiku ≈ $0.003
+# per call × 10 ≈ $0.03 worst case) for HW with many wrong answers.
+# Selection order: by hw_position ascending (deterministic, predictable).
+MAX_DIAGNOSES = 10
 
 # Disposition values surfaced to the teacher. Emitted by the agent
 # via finish_check; None when status=skipped_unreadable or when the
