@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.integrity_pipeline import (
     MAX_STUDENT_TURNS,
+    PROBLEM_STATUS_DIAGNOSIS_ONLY,
     PROBLEM_STATUS_DISMISSED,
     PROBLEM_STATUS_SKIPPED_UNREADABLE,
     STATUS_COMPLETE,
@@ -410,14 +411,21 @@ async def _build_state_response(
             problems=[],
             transcript=[],
         )
-    questions = await _load_problem_questions(db, problems)
+    # Diagnosis-only rows are teacher-facing — the student isn't being
+    # probed on them, so they have nothing to see (no chat reference,
+    # no question to read). Filter them out of every student-facing
+    # surface; the teacher detail endpoint loads its own list.
+    chat_probed = [
+        p for p in problems if p.status != PROBLEM_STATUS_DIAGNOSIS_ONLY
+    ]
+    questions = await _load_problem_questions(db, chat_probed)
     hw_positions = await _load_hw_positions(db, submission_id)
     return IntegrityStateResponse(
         submission_id=str(submission_id),
         overall_status=check.status,
         disposition=check.disposition,
-        extraction=_first_extraction(problems),
-        problems=_problem_summaries(problems, questions, hw_positions),
+        extraction=_first_extraction(chat_probed),
+        problems=_problem_summaries(chat_probed, questions, hw_positions),
         transcript=_student_facing_transcript(turns),
     )
 
@@ -558,6 +566,12 @@ class TeacherIntegrityProblemRow(BaseModel):
     teacher_dismissed: bool
     teacher_dismissal_reason: str | None
     student_work_extraction: dict[str, Any] | None
+    # Silent per-wrong-problem misconception note + kind. Populated on
+    # diagnosis_only rows (every wrong problem the chat didn't probe);
+    # null on chat-probed rows. See
+    # api.core.integrity_pipeline._seed_wrong_problem_diagnoses.
+    diagnosis_note: str | None
+    diagnosis_kind: str | None
 
 
 class IntegrityActivityTotals(BaseModel):
@@ -684,6 +698,8 @@ async def teacher_get_integrity_detail(
             teacher_dismissed=p.teacher_dismissed,
             teacher_dismissal_reason=p.teacher_dismissal_reason,
             student_work_extraction=p.student_work_extraction,
+            diagnosis_note=p.diagnosis_note,
+            diagnosis_kind=p.diagnosis_kind,
         ))
 
     turns = await _load_transcript(db, check.id)
@@ -753,9 +769,16 @@ async def teacher_dismiss_problem(
 
     problem.teacher_dismissed = True
     problem.teacher_dismissal_reason = body.reason or None
-    # Flip to dismissed unless the problem was already terminal in a
-    # different terminal state (unreadable) — preserve that signal.
-    if problem.status != PROBLEM_STATUS_SKIPPED_UNREADABLE:
+    # Flip to dismissed unless the problem was already in a different
+    # terminal state we want to preserve: unreadable (signal teacher
+    # may still care about) or diagnosis_only (silent-diagnosis row,
+    # not a chat verdict — dropping it from its own status would leak
+    # it into the chat-verdict list on the teacher panel and re-expose
+    # it on student-facing endpoints whose filter keys on status).
+    if problem.status not in (
+        PROBLEM_STATUS_SKIPPED_UNREADABLE,
+        PROBLEM_STATUS_DIAGNOSIS_ONLY,
+    ):
         problem.status = PROBLEM_STATUS_DISMISSED
 
     # Session-level disposition is a holistic judgment from the agent —
