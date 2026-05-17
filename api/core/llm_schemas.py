@@ -851,3 +851,46 @@ INTEGRITY_ANSWER_EQUIVALENCE_SCHEMA: ToolSchema = {
         "additionalProperties": False,
     },
 }
+
+
+# Silent per-wrong-problem misconception diagnosis. Runs after
+# check_answer_correctness identifies the wrong problems; one call per
+# wrong problem (excluding the chat-probed one). Output is teacher-
+# facing only — never surfaced to the student.
+INTEGRITY_DIAGNOSE_WRONG_SCHEMA: ToolSchema = {
+    "name": "return_misconception_diagnosis",
+    "description": (
+        "Hypothesize the student's likely misunderstanding from their "
+        "written work on a single problem they got wrong. Used by the "
+        "integrity checker's silent per-problem diagnosis pass — see "
+        "api.core.integrity_ai.diagnose_wrong_problem."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "note": {
+                "type": "string",
+                "maxLength": 400,
+                "description": (
+                    "2-3 sentence teacher-facing hypothesis of what the "
+                    "student likely misunderstood. Be concrete — name "
+                    "the specific rule, sign, or step. Frame as "
+                    "\"appears to...\" or \"looks like the student...\"; "
+                    "never use \"wrong\" or \"incorrect\" or accuse."
+                ),
+            },
+            "kind": {
+                "type": "string",
+                "enum": ["procedural_slip", "conceptual_gap"],
+                "description": (
+                    "procedural_slip = concept understood, execution "
+                    "slipped (arithmetic error, sign flip, dropped term). "
+                    "conceptual_gap = the student misunderstands the "
+                    "underlying rule or method, not just the execution."
+                ),
+            },
+        },
+        "required": ["note", "kind"],
+        "additionalProperties": False,
+    },
+}

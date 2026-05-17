@@ -23,12 +23,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.image_utils import to_content_block
 from api.core.llm_client import (
+    MODEL_HAIKU,
     MODEL_REASON,
     LLMMode,
     call_claude_conversation,
+    call_claude_json,
     call_claude_vision,
 )
 from api.core.llm_schemas import (
+    INTEGRITY_DIAGNOSE_WRONG_SCHEMA,
     INTEGRITY_EXTRACT_SCHEMA,
     INTEGRITY_FINISH_CHECK_SCHEMA,
     INTEGRITY_GENERATE_VARIANT_SCHEMA,
@@ -543,6 +546,150 @@ async def run_agent_turn(
         user_id=user_id,
         model=MODEL_REASON,
         max_tokens=AGENT_MAX_TOKENS_PER_TURN,
+        submission_id=submission_id,
+        call_metadata=call_metadata,
+    )
+
+
+# ── Silent per-wrong-problem diagnosis ──────────────────────────────
+
+DIAGNOSE_WRONG_SYSTEM_PROMPT = """\
+You are a math teacher diagnosing a student's likely misunderstanding from \
+the written work they submitted on a homework problem they got wrong. The \
+student is not in the room — this note is teacher-facing only.
+
+Your job is to hypothesize, in 2-3 concrete sentences, the most likely \
+underlying misunderstanding. Name the specific rule, sign, or step that \
+went sideways. Don't restate what they did step-by-step — the teacher can \
+see the work themselves; tell them WHY it went wrong.
+
+Tone:
+- Frame as "the student appears to..." or "looks like the student...".
+- Never use the words "wrong", "incorrect", or any accusatory phrasing — \
+this note may sit alongside the student's work in a teacher review UI and \
+should read as analysis, not judgment.
+- If the work looks like a careless execution error rather than a \
+conceptual gap, say so plainly.
+
+Classify the diagnosis into one of:
+- procedural_slip: concept appears understood, execution slipped \
+(arithmetic mistake, sign flip, dropped term, transcription error).
+- conceptual_gap: the student appears to misunderstand the underlying \
+rule, definition, or method itself — not just the execution.
+
+If the written work is too sparse to tell, lean conceptual_gap and note \
+the ambiguity in the note text."""
+
+
+def build_diagnose_wrong_user_message(
+    *,
+    problem_statement: str,
+    correct_answer: str,
+    canonical_steps: list[Any] | None,
+    student_steps: list[dict[str, Any]],
+    student_final_answer: str,
+) -> str:
+    """Render the user message for one silent diagnosis call.
+
+    `canonical_steps` is the bank item's `solution_steps` JSON (list of
+    arbitrary dicts) or None when the item didn't ship with one — the
+    prompt adapts by omitting that section instead of rendering empty
+    bullets that would confuse the model. `student_steps` is the
+    pre-sliced extraction.steps for this problem.
+    """
+    lines: list[str] = [
+        "Problem:",
+        problem_statement.strip() or "(problem text unavailable)",
+        "",
+        "Correct final answer:",
+        correct_answer.strip() or "(none recorded)",
+    ]
+
+    if canonical_steps:
+        lines.append("")
+        lines.append("Canonical solution steps (reference):")
+        for idx, raw in enumerate(canonical_steps, start=1):
+            if isinstance(raw, dict):
+                # Bank items vary on which fields populate; prefer the
+                # human-readable description when present, fall back to
+                # whatever string field exists.
+                text = (
+                    raw.get("description")
+                    or raw.get("text")
+                    or raw.get("plain_english")
+                    or raw.get("latex")
+                    or ""
+                )
+            else:
+                text = str(raw)
+            text = text.strip()
+            if text:
+                lines.append(f"  {idx}. {text}")
+
+    lines.append("")
+    lines.append("Student's written work for this problem:")
+    if student_steps:
+        for s in student_steps:
+            step_num = s.get("step_num", "?")
+            plain = (s.get("plain_english") or "").strip()
+            latex = (s.get("latex") or "").strip()
+            if plain and latex:
+                lines.append(f"  Step {step_num}: {plain} [{latex}]")
+            elif plain or latex:
+                lines.append(f"  Step {step_num}: {plain or latex}")
+            else:
+                lines.append(f"  Step {step_num}: (unreadable)")
+    else:
+        lines.append("  (no legible steps)")
+
+    final = student_final_answer.strip()
+    lines.append("")
+    lines.append(
+        f"Student's final answer: {final or '(none extracted)'}",
+    )
+    lines.append("")
+    lines.append(
+        "Diagnose the misunderstanding and classify the kind. Return via "
+        "the tool call."
+    )
+    return "\n".join(lines)
+
+
+async def diagnose_wrong_problem(
+    *,
+    problem_statement: str,
+    correct_answer: str,
+    canonical_steps: list[Any] | None,
+    student_steps: list[dict[str, Any]],
+    student_final_answer: str,
+    user_id: str | None = None,
+    submission_id: str | None = None,
+    call_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """One Haiku call producing a misconception note + kind for a single
+    problem the student got wrong. Cost ≈ $0.003 per call. Caller fans
+    these out with asyncio.gather over wrong problems; per-call failures
+    are caught at the pipeline layer (return_exceptions=True) and that
+    row is marked kind='error'.
+
+    Returns the parsed tool-call output: `{"note": str, "kind": str}`
+    where kind is one of "procedural_slip" or "conceptual_gap" (the
+    pipeline owns "blank"/"unreadable"/"error" sentinels).
+    """
+    user_message = build_diagnose_wrong_user_message(
+        problem_statement=problem_statement,
+        correct_answer=correct_answer,
+        canonical_steps=canonical_steps,
+        student_steps=student_steps,
+        student_final_answer=student_final_answer,
+    )
+    return await call_claude_json(
+        system_prompt=DIAGNOSE_WRONG_SYSTEM_PROMPT,
+        user_message=user_message,
+        mode=LLMMode.INTEGRITY_DIAGNOSE_WRONG,
+        tool_schema=INTEGRITY_DIAGNOSE_WRONG_SCHEMA,
+        user_id=user_id,
+        model=MODEL_HAIKU,
         submission_id=submission_id,
         call_metadata=call_metadata,
     )
