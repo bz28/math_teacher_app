@@ -40,6 +40,7 @@ from api.core.integrity_ai import (
 )
 from api.core.llm_client import MODEL_HAIKU, LLMMode, call_claude_json
 from api.core.llm_schemas import INTEGRITY_ANSWER_EQUIVALENCE_SCHEMA
+from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission
 from api.models.integrity_check import (
     IntegrityCheckProblem,
@@ -123,6 +124,31 @@ DIAGNOSIS_KIND_VALUES = frozenset({
 # per call × 10 ≈ $0.03 worst case) for HW with many wrong answers.
 # Selection order: by hw_position ascending (deterministic, predictable).
 MAX_DIAGNOSES = 10
+
+# Concurrency cap for the silent-diagnosis fan-out across the process.
+# With MAX_DIAGNOSES=10 and a classroom of ~30 students submitting near-
+# simultaneously, an uncapped gather lets 300 Haiku calls fly in
+# parallel and pressure per-org rate limits. Cap is process-wide so the
+# total in-flight count is bounded regardless of how many checks are
+# running concurrently; per-check cost is still bounded by MAX_DIAGNOSES.
+_DIAGNOSIS_CONCURRENCY = 5
+_diagnosis_semaphore: asyncio.Semaphore | None = None
+
+
+def _get_diagnosis_semaphore() -> asyncio.Semaphore:
+    """Lazy-init so the semaphore binds to whatever event loop is running
+    when the first diagnosis call happens (matters for tests that spin
+    up fresh loops)."""
+    global _diagnosis_semaphore
+    if _diagnosis_semaphore is None:
+        _diagnosis_semaphore = asyncio.Semaphore(_DIAGNOSIS_CONCURRENCY)
+    return _diagnosis_semaphore
+
+
+# Background-task strong refs so the fire-and-forget diagnosis seeding
+# doesn't get GC'd before it completes. add_done_callback removes the
+# task on completion to keep the set bounded.
+_BACKGROUND_DIAGNOSIS_TASKS: set[asyncio.Task[None]] = set()
 
 # Disposition values surfaced to the teacher. Emitted by the agent
 # via finish_check; None when status=skipped_unreadable or when the
@@ -810,21 +836,39 @@ async def _seed_wrong_problem_diagnoses(
                 break
         student_final_by_row.append(chosen)
 
+    semaphore = _get_diagnosis_semaphore()
+
+    async def _bounded_diagnose(
+        item: QuestionBankItem,
+        slice_: dict[str, Any],
+        student_final: str,
+        bank_item_id: uuid.UUID,
+        hw_pos: int,
+    ) -> dict[str, Any]:
+        async with semaphore:
+            return await diagnose_wrong_problem(
+                problem_statement=item.question or "",
+                correct_answer=item.final_answer or "",
+                canonical_steps=item.solution_steps,
+                student_steps=slice_.get("steps") or [],
+                student_final_answer=student_final,
+                user_id=user_id,
+                submission_id=str(submission_id),
+                call_metadata={
+                    "phase": "diagnosis",
+                    "check_id": str(check_id),
+                    "bank_item_id": str(bank_item_id),
+                    "hw_position": hw_pos,
+                },
+            )
+
     coroutines = [
-        diagnose_wrong_problem(
-            problem_statement=item.question or "",
-            correct_answer=item.final_answer or "",
-            canonical_steps=item.solution_steps,
-            student_steps=slice_.get("steps") or [],
-            student_final_answer=student_final_by_row[idx],
-            user_id=user_id,
-            submission_id=str(submission_id),
-            call_metadata={
-                "phase": "diagnosis",
-                "check_id": str(check_id),
-                "bank_item_id": str(row.bank_item_id),
-                "hw_position": row.sample_position,
-            },
+        _bounded_diagnose(
+            item=item,
+            slice_=slice_,
+            student_final=student_final_by_row[idx],
+            bank_item_id=row.bank_item_id,
+            hw_pos=row.sample_position,
         )
         for idx, (row, item, slice_) in enumerate(rows_to_call)
     ]
@@ -839,17 +883,69 @@ async def _seed_wrong_problem_diagnoses(
             row.diagnosis_kind = DIAGNOSIS_KIND_ERROR
             row.diagnosis_note = None
             continue
-        note = (result.get("note") or "").strip() if isinstance(result, dict) else ""
-        kind = _classify_diagnosis_kind(
-            result.get("kind") if isinstance(result, dict) else None,
-        )
+        if not isinstance(result, dict):
+            # Defensive: gather returned a non-dict, non-exception value.
+            # Shouldn't happen, but treat as failure rather than crash.
+            row.diagnosis_kind = DIAGNOSIS_KIND_ERROR
+            row.diagnosis_note = None
+            continue
+        note = (result.get("note") or "").strip()
+        kind = _classify_diagnosis_kind(result.get("kind"))
         # Defensive truncate: schema enforces maxLength=400 but if a
         # future model variant goes long we clamp before the column
         # would (Text is unbounded but the UI assumes short).
+        # Trust the kind even if note came back empty — a valid
+        # classification with no commentary is still a teacher signal,
+        # distinct from a call failure.
         row.diagnosis_note = note[:400] if note else None
-        row.diagnosis_kind = kind if note else DIAGNOSIS_KIND_ERROR
+        row.diagnosis_kind = kind
 
     await db.flush()
+
+
+def _spawn_diagnosis_seeding(
+    *,
+    check_id: uuid.UUID,
+    extraction: dict[str, Any],
+    items_by_id: dict[uuid.UUID, QuestionBankItem],
+    hw_position_by_id: dict[uuid.UUID, int],
+    is_correct_by_bank_id: dict[uuid.UUID, bool],
+    chat_probed_bank_id: uuid.UUID,
+    user_id: str,
+    submission_id: uuid.UUID,
+) -> None:
+    """Fire-and-forget: run the silent diagnosis fan-out on its own
+    session so it doesn't block the integrity kickoff commit.
+
+    Errors are swallowed + logged — a failed diagnosis pass should
+    never break the integrity check itself. Holds a strong reference
+    to the task in _BACKGROUND_DIAGNOSIS_TASKS so Python's GC doesn't
+    eat the coroutine mid-flight.
+    """
+    async def _runner() -> None:
+        try:
+            async with get_session_factory()() as own_db:
+                await _seed_wrong_problem_diagnoses(
+                    check_id=check_id,
+                    extraction=extraction,
+                    items_by_id=items_by_id,
+                    hw_position_by_id=hw_position_by_id,
+                    is_correct_by_bank_id=is_correct_by_bank_id,
+                    chat_probed_bank_id=chat_probed_bank_id,
+                    db=own_db,
+                    user_id=user_id,
+                    submission_id=submission_id,
+                )
+                await own_db.commit()
+        except Exception:
+            logger.exception(
+                "background diagnosis seeding failed for check %s",
+                check_id,
+            )
+
+    task = asyncio.create_task(_runner())
+    _BACKGROUND_DIAGNOSIS_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_DIAGNOSIS_TASKS.discard)
 
 
 # ── Pipeline start (called from submit_homework's background task) ──
@@ -1036,19 +1132,21 @@ async def start_integrity_check(
     db.add(chosen_row)
     await db.flush()
 
-    # Silent per-wrong-problem diagnosis. Runs alongside the chat
-    # kickoff: one Haiku call per wrong problem (excluding the chat-
-    # probed one). Each call's note + kind is persisted on its own
-    # IntegrityCheckProblem row (status=diagnosis_only). Fan-out is
-    # capped at MAX_DIAGNOSES; per-call failures isolate to one row.
-    await _seed_wrong_problem_diagnoses(
+    # Silent per-wrong-problem diagnosis. Dispatched as a fire-and-
+    # forget background task with its own session so the student's
+    # kickoff opener isn't gated on N Haiku calls — each
+    # diagnose_wrong_problem has a 90s timeout, and even healthy
+    # parallel calls add seconds of wait. The student sees the opener
+    # the moment this function returns and the caller commits; the
+    # teacher's per-problem diagnosis cards appear on their next panel
+    # refresh once the background task lands.
+    _spawn_diagnosis_seeding(
         check_id=check.id,
         extraction=extraction,
         items_by_id=items_by_id,
         hw_position_by_id=hw_position_by_id,
         is_correct_by_bank_id=is_correct_by_bank_id,
         chat_probed_bank_id=selection.bank_item_id,
-        db=db,
         user_id=user_id,
         submission_id=submission_id,
     )

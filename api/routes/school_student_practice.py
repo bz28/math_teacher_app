@@ -75,10 +75,21 @@ async def drain_integrity_background_tasks() -> None:
     import would tempt ad-hoc usage. A named helper makes the intent
     explicit. This is the only external contract — tests call this,
     nothing else should.
+
+    Drains in two passes because the integrity pipeline's main task
+    can spawn its own diagnosis-seeding sub-tasks (own session, fire-
+    and-forget so they don't block the student's kickoff). Pass 1
+    awaits the integrity tasks (which spawn diagnosis tasks during
+    their run); pass 2 awaits the diagnosis tasks themselves.
     """
+    from api.core.integrity_pipeline import _BACKGROUND_DIAGNOSIS_TASKS
+
     tasks = list(_BACKGROUND_TASKS)
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
+    diag_tasks = list(_BACKGROUND_DIAGNOSIS_TASKS)
+    if diag_tasks:
+        await asyncio.gather(*diag_tasks, return_exceptions=True)
 
 
 async def _run_extraction_background(submission_id: uuid.UUID) -> None:
