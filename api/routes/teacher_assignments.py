@@ -13,6 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.integrity_pipeline import (
+    PROBLEM_STATUS_DIAGNOSIS_ONLY,
+)
+from api.core.integrity_pipeline import (
     STATUS_COMPLETE as INTEGRITY_COMPLETE,
 )
 from api.core.integrity_pipeline import (
@@ -1219,6 +1222,10 @@ async def list_submissions(
     # many sampled problems have received a verdict. One grouped
     # query gives us that. A problem has a verdict when its rubric is
     # populated (or it's been dismissed/skipped — any terminal status).
+    # diagnosis_only rows are excluded: they're silent per-wrong-problem
+    # diagnoses (never get a rubric, never represent a chat verdict),
+    # so counting them would inflate the denominator and show e.g.
+    # "1 of 8 verdicts" on a fully-complete check.
     problem_count_by_check: dict[uuid.UUID, tuple[int, int]] = {}
     if check_rows:
         done_expr = func.sum(
@@ -1234,6 +1241,7 @@ async def list_submissions(
                 IntegrityCheckProblem.integrity_check_submission_id.in_(
                     [c.id for c in check_rows],
                 ),
+                IntegrityCheckProblem.status != PROBLEM_STATUS_DIAGNOSIS_ONLY,
             )
             .group_by(IntegrityCheckProblem.integrity_check_submission_id)
         )).all()
