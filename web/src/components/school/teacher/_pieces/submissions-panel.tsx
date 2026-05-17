@@ -674,6 +674,7 @@ function DiagnosisCard({ problem: p }: { problem: TeacherIntegrityProblemRow }) 
       {p.student_work_extraction && (
         <div>
           <button
+            type="button"
             onClick={() => setSawOpen((v) => !v)}
             className="flex items-center gap-1 text-xs font-medium text-text-muted hover:text-primary"
           >
