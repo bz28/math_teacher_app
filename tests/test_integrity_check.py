@@ -882,6 +882,123 @@ async def test_teacher_get_detail_includes_extraction_and_transcript(
     assert body["transcript"][0]["role"] == "agent"
 
 
+async def test_teacher_get_detail_surfaces_diagnosis_rows(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Multi-primary HW where the student got every primary wrong:
+    teacher detail should include the chat-probed row (sample_position=0,
+    no diagnosis fields) AND diagnosis-only rows (status=diagnosis_only,
+    with diagnosis_kind populated from the mocked LLM)."""
+    extra_ids: list[str] = []
+    async with get_session_factory()() as s:
+        original = (await s.execute(
+            select(QuestionBankItem).where(QuestionBankItem.id == world["primary_id"])
+        )).scalar_one()
+        for i in range(2):
+            clone = QuestionBankItem(
+                course_id=original.course_id,
+                unit_id=original.unit_id,
+                originating_assignment_id=original.originating_assignment_id,
+                title=f"Diag detail {i}",
+                question=f"Diagnose detail problem {i}",
+                solution_steps=[],
+                final_answer="x",
+                distractors=["a", "b", "c"],
+                status="approved",
+                source="generated",
+            )
+            s.add(clone)
+            await s.flush()
+            extra_ids.append(str(clone.id))
+        new_problems = [str(world["primary_id"])] + extra_ids
+        await s.execute(
+            text("UPDATE assignments SET content=:c WHERE id=:id"),
+            {
+                "c": '{"problems": [' + ", ".join(
+                    f'{{"bank_item_id": "{p}", "position": {i + 1}}}'
+                    for i, p in enumerate(new_problems)
+                ) + ']}',
+                "id": world["assignment_id"],
+            },
+        )
+        await s.commit()
+
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    r = await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200
+    rows = r.json()["problems"]
+    # chat-probed row first (sample_position=0), then diagnosis rows.
+    chat = [p for p in rows if p["status"] != "diagnosis_only"]
+    diag = [p for p in rows if p["status"] == "diagnosis_only"]
+    assert len(chat) == 1
+    assert chat[0]["sample_position"] == 0
+    assert chat[0]["diagnosis_note"] is None
+    assert chat[0]["diagnosis_kind"] is None
+    assert len(diag) == 2
+    for d in diag:
+        assert d["diagnosis_kind"] is not None
+        assert d["sample_position"] > 0
+
+
+async def test_student_state_hides_diagnosis_only_rows(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Multi-primary HW: the student-facing state endpoint should
+    NEVER include diagnosis_only rows (those exist for the teacher's
+    review, the student is only being probed on the chat-picked one)."""
+    async with get_session_factory()() as s:
+        original = (await s.execute(
+            select(QuestionBankItem).where(QuestionBankItem.id == world["primary_id"])
+        )).scalar_one()
+        clone = QuestionBankItem(
+            course_id=original.course_id,
+            unit_id=original.unit_id,
+            originating_assignment_id=original.originating_assignment_id,
+            title="Diag hide",
+            question="Hidden problem",
+            solution_steps=[],
+            final_answer="x",
+            distractors=["a", "b", "c"],
+            status="approved",
+            source="generated",
+        )
+        s.add(clone)
+        await s.flush()
+        new_problems = [str(world["primary_id"]), str(clone.id)]
+        await s.execute(
+            text("UPDATE assignments SET content=:c WHERE id=:id"),
+            {
+                "c": '{"problems": [' + ", ".join(
+                    f'{{"bank_item_id": "{p}", "position": {i + 1}}}'
+                    for i, p in enumerate(new_problems)
+                ) + ']}',
+                "id": world["assignment_id"],
+            },
+        )
+        await s.commit()
+
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    r = await client.get(
+        f"/v1/school/student/integrity/submissions/{submission_id}",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200
+    body = r.json()
+    # Student should see exactly one row (the chat probe). The
+    # diagnosis-only sibling never reaches them.
+    assert len(body["problems"]) == 1
+    assert body["problems"][0]["status"] != "diagnosis_only"
+
+
 async def test_teacher_get_integrity_403_for_other_teacher(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
