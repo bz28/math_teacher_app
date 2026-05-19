@@ -477,7 +477,14 @@ export interface SchoolDetail {
   is_active: boolean;
   notes: string | null;
   created_at: string;
-  teachers: { id: string; name: string; email: string; joined_at: string }[];
+  teachers: {
+    id: string;
+    name: string;
+    email: string;
+    joined_at: string;
+    call_count_30d: number;
+    total_cost_30d: number;
+  }[];
   pending_invites: { id: string; email: string; expires_at: string; created_at: string }[];
 }
 
@@ -562,6 +569,8 @@ export interface TeacherStudentsData {
     subscription_tier: string;
     subscription_status: string;
     school_id: string | null;
+    call_count_30d: number;
+    total_cost_30d: number;
   };
   sections: TeacherRosterSection[];
   total_students: number;

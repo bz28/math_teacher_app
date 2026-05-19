@@ -55,8 +55,16 @@ export default function TeacherDetail() {
             ← Independent teachers
           </Link>
         </span>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <h1>{t.name || t.email}</h1>
+          <Link
+            to={`/llm-calls?user=${t.id}&hours=720`}
+            className="link-btn"
+            style={{ fontSize: 13 }}
+            title="Every LLM call this teacher has made in the last 30 days"
+          >
+            View this teacher's LLM calls →
+          </Link>
         </div>
         <p>
           <span style={{ fontFamily: "var(--font-mono)" }}>{t.email}</span>
@@ -70,6 +78,20 @@ export default function TeacherDetail() {
             }
           >
             {isPro ? "Pro" : "Free"}
+          </span>
+          {"  ·  "}
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: 13,
+              color: t.total_cost_30d > 0 ? "var(--ink)" : "var(--muted-2)",
+            }}
+            title="LLM activity in the last 30 days"
+          >
+            ${t.total_cost_30d.toFixed(4)}
+          </span>
+          <span style={{ color: "var(--muted)" }}>
+            {" "}({t.call_count_30d.toLocaleString()} call{t.call_count_30d === 1 ? "" : "s"} · 30d)
           </span>
         </p>
       </div>
