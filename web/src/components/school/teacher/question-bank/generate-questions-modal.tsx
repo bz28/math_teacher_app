@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import {
   teacher,
   EntitlementError,
+  DEFAULT_GENERATION_PARAMS,
   type BankJob,
+  type GenerationParams,
   type TeacherDocument,
   type TeacherUnit,
 } from "@/lib/api";
@@ -13,6 +15,10 @@ import { useDocumentUploads } from "@/hooks/use-document-uploads";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { SelectableChip } from "../_pieces/selectable-chip";
 import { SourceMaterialPicker } from "../_pieces/source-material-picker";
+import {
+  GenerationParamsCustomize,
+  persistGenerationParams,
+} from "../_pieces/generation-params-customize";
 import { QUANTITY_CHIPS } from "./constants";
 
 /**
@@ -49,6 +55,11 @@ export function GenerateQuestionsModal({
   const [countDraft, setCountDraft] = useState("10");
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   const [constraint, setConstraint] = useState("");
+  // Customize-section selections. The GenerationParamsCustomize
+  // component hydrates from localStorage on mount; on submit we
+  // funnel through persistGenerationParams to write back + decide
+  // whether to send `null` (clean audit log when nothing customized).
+  const [params, setParams] = useState<GenerationParams>(DEFAULT_GENERATION_PARAMS);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { showUpgrade, UpgradeModal } = useUpgradePrompt();
@@ -142,6 +153,9 @@ export function GenerateQuestionsModal({
         unit_id: savedTo,
         document_ids: Array.from(selectedDocs),
         constraint: constraint.trim() || null,
+        // Writes to localStorage as a side-effect and returns null
+        // when no customizations are active (clean audit log).
+        params: persistGenerationParams(params),
       });
       onStarted(job);
     } catch (e) {
@@ -284,6 +298,12 @@ export function GenerateQuestionsModal({
               className="mt-2 w-full resize-none rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
             />
           </div>
+
+          <GenerationParamsCustomize
+            params={params}
+            onChange={setParams}
+            disabled={submitting}
+          />
 
           {hasChosenSavedTo && (
             <SourceMaterialPicker

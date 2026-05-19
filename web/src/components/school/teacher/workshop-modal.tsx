@@ -324,6 +324,23 @@ export function WorkshopModal({
       replaceLiveItem(updated);
     });
 
+  // Update one of the 3 MCQ distractors by index. Pads to length 3
+  // with empty strings if the item came back from generation with
+  // fewer (shouldn't happen for format=mcq items, but defensive
+  // against legacy rows the teacher converts to MCQ manually).
+  const saveDistractor = (idx: number, next: string) =>
+    run(async () => {
+      if (!liveItem || blockIfPending()) return;
+      const current = [...(liveItem.distractors ?? [])];
+      while (current.length < 3) current.push("");
+      if (current[idx] === next) return;
+      current[idx] = next;
+      const updated = await teacher.updateBankItem(liveItem.id, {
+        distractors: current.slice(0, 3),
+      });
+      replaceLiveItem(updated);
+    });
+
   // Chat is decoupled from the parent's useAsyncAction `run()`.
   // Using run() sets setBusy(true) on the parent, triggering a
   // WorkshopModal re-render that races with ChatPanel's local
@@ -876,6 +893,44 @@ export function WorkshopModal({
                     />
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* MCQ wrong-answer choices. Visible only for items the
+                generation pipeline marked format='mcq' (had 3
+                successful distractors). The correct answer is edited
+                via the Final answer block above; this section is for
+                the three wrong choices. Composing the final 4-choice
+                view (with shuffle + correct marker) lives in the
+                bank-list / student renderer; this is the edit form. */}
+            {liveItem.format === "mcq" && (
+              <div className="mt-4 rounded-[--radius-lg] border border-border-light p-4">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                  Wrong choices
+                </div>
+                <p className="mt-1 text-[11px] text-text-muted">
+                  Three plausible wrong answers students will see alongside the
+                  correct one. Edit any of them inline.
+                </p>
+                <ul className="mt-3 space-y-2">
+                  {[0, 1, 2].map((i) => (
+                    <li
+                      key={i}
+                      className="flex items-start gap-2 rounded-[--radius-md] bg-bg-subtle px-3 py-2"
+                    >
+                      <span className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                        Wrong {i + 1}
+                      </span>
+                      <div className="flex-1 text-sm text-text-primary">
+                        <ClickToEditText
+                          value={(liveItem.distractors ?? [])[i] ?? ""}
+                          onSave={(v) => saveDistractor(i, v)}
+                          busy={busy}
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
 

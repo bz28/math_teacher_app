@@ -28,7 +28,12 @@ from api.core.practice import generate_distractors
 from api.core.subjects import get_config
 from api.database import get_session_factory
 from api.models.course import Course
-from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
+from api.models.question_bank import (
+    FORMAT_FRQ,
+    FORMAT_MCQ,
+    QuestionBankGenerationJob,
+    QuestionBankItem,
+)
 from api.models.unit import Unit
 
 logger = logging.getLogger(__name__)
@@ -246,6 +251,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             user_id=str(job.created_by_id),
             images=images or None,
             extra_instructions=constraint_text,
+            params=job.params,
         )
         if not question_dicts:
             raise RuntimeError(
@@ -303,7 +309,21 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
     else:
         item_source = "generated"
 
+    # Whether to mark each persisted item as MCQ. Only honors the
+    # teacher's request when the item also has 3 successful distractors
+    # — without them there's nothing to render as MCQ choices. The
+    # frontend detects the requested-vs-persisted mismatch
+    # (job.params.format='mcq' but item.format='frq') and surfaces a
+    # retry banner; no DB-side error path needed.
+    requested_mcq = bool(job.params and job.params.get("format") == FORMAT_MCQ)
+
     for idx, (q, s) in enumerate(zip(question_dicts, solutions), start=1):
+        item_distractors = distractor_lists[idx - 1] or None
+        item_format = (
+            FORMAT_MCQ
+            if requested_mcq and item_distractors and len(item_distractors) == 3
+            else FORMAT_FRQ
+        )
         item = QuestionBankItem(
             course_id=job.course_id,
             unit_id=job.unit_id,
@@ -315,8 +335,9 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             question=q["text"],
             solution_steps=s.get("steps") or None,
             final_answer=s.get("final_answer") or "",
-            distractors=distractor_lists[idx - 1] or None,
+            distractors=item_distractors,
             difficulty=q.get("difficulty") or "medium",
+            format=item_format,
             status="pending",
             source_doc_ids=source_doc_id_strs,
             generation_prompt=job.constraint,

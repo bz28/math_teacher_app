@@ -59,6 +59,78 @@ def _build_question_generation_prompt(subject: str) -> str:
     )
 
 
+# Translation tables for the Customize section's structured params.
+# Each non-default value becomes a single bullet in the user message;
+# defaults (mixed/auto/either/frq) emit nothing so the unchanged
+# 1-click flow produces a prompt byte-identical to before.
+_PROBLEM_TYPE_INSTRUCTIONS = {
+    "word": "Generate only word problems with real-world contexts.",
+    "computation": "Generate only pure computational problems.",
+    "multi_step": "Each problem must involve multiple steps or chained techniques.",
+    "proof": "Each problem must be a proof requiring justified reasoning at each step.",
+}
+_ANSWER_FORM_INSTRUCTIONS = {
+    "radical": "Express all final answers in radical form (no decimal approximations).",
+    "rational_exponent": "Express all final answers in rational-exponent form.",
+    "exact": "All final answers must be exact — no decimal approximations.",
+    "decimal_2": "Express final answers as decimals to 2 significant figures.",
+    "decimal_3": "Express final answers as decimals to 3 significant figures.",
+}
+_DIFFICULTY_INSTRUCTIONS = {
+    "easy": "Generate all problems at the EASY level per the difficulty calibration above.",
+    "medium": "Generate all problems at the MEDIUM level per the difficulty calibration above.",
+    "hard": "Generate all problems at the HARD level per the difficulty calibration above.",
+    "ramp": (
+        "Order problems by difficulty: roughly first third easy, middle "
+        "third medium, last third hard. For fewer than 3 problems, "
+        "distribute as evenly as possible."
+    ),
+}
+_CALCULATOR_INSTRUCTIONS = {
+    "no_calc": (
+        "No-calculator problems: keep all numerics clean (standard angles "
+        "like π/4, integer evaluations, simple fractions). Do not require "
+        "multi-digit decimal arithmetic."
+    ),
+    "calc_allowed": (
+        "Calculator-allowed: irregular numerics, transcendental "
+        "evaluations, and multi-digit decimal arithmetic are fine."
+    ),
+}
+_FORMAT_INSTRUCTIONS = {
+    "mcq": (
+        "These problems will be served as multiple choice. Each problem "
+        "should have one clear correct answer that's distinct from common "
+        "student misconceptions. Distractors (3 plausible wrong answers) "
+        "will be generated separately — do NOT include answer choices in "
+        "the problem text itself."
+    ),
+}
+
+
+def _translate_params_to_instructions(params: dict[str, Any] | None) -> list[str]:
+    """Map the Customize-section param dict to prompt-instruction lines.
+
+    Defaults (mixed/auto/either/frq) emit nothing. The order of the
+    returned list mirrors the order the dropdowns appear in the
+    modal — gives the model a predictable structure to read.
+    """
+    if not params:
+        return []
+    instructions: list[str] = []
+    if (line := _PROBLEM_TYPE_INSTRUCTIONS.get(params.get("problem_type", ""))):
+        instructions.append(line)
+    if (line := _ANSWER_FORM_INSTRUCTIONS.get(params.get("answer_form", ""))):
+        instructions.append(line)
+    if (line := _DIFFICULTY_INSTRUCTIONS.get(params.get("difficulty", ""))):
+        instructions.append(line)
+    if (line := _CALCULATOR_INSTRUCTIONS.get(params.get("calculator", ""))):
+        instructions.append(line)
+    if (line := _FORMAT_INSTRUCTIONS.get(params.get("format", ""))):
+        instructions.append(line)
+    return instructions
+
+
 async def generate_questions(
     unit_name: str,
     count: int,
@@ -68,6 +140,7 @@ async def generate_questions(
     user_id: str | None = None,
     images: list[dict[str, str]] | None = None,
     extra_instructions: str | None = None,
+    params: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
     """Generate problems for a given topic.
 
@@ -79,6 +152,12 @@ async def generate_questions(
         extra_instructions: Optional natural-language brief from the teacher
                 ("only word problems", "no calculator", "skip trig"). This
                 is the priority-1 source of truth — Claude leads from it.
+        params: Optional dict of structured customizations from the
+                Customize section of the generate modal (problem_type /
+                answer_form / difficulty / calculator / format). Each
+                non-default value is translated to a constraint bullet
+                appended to the user message. See
+                _translate_params_to_instructions.
 
     Returns list of {"title", "text", "difficulty"}. The model's
     auto-labeled difficulty (per the schema enum) flows downstream
@@ -90,12 +169,17 @@ async def generate_questions(
 
     system_prompt = _build_question_generation_prompt(subject)
     # Order the user message to match the prompt's priority hierarchy:
-    # teacher's brief first (intent), unit name and count next (scope).
+    # teacher's brief first (intent), structured constraints next, then
+    # unit name + course + count.
     user_message_parts: list[str] = []
     if extra_instructions and extra_instructions.strip():
         user_message_parts.append(
             f"Teacher's instructions:\n{extra_instructions.strip()}"
         )
+    param_lines = _translate_params_to_instructions(params)
+    if param_lines:
+        bullets = "\n".join(f"- {line}" for line in param_lines)
+        user_message_parts.append(f"Constraints:\n{bullets}")
     user_message_parts.append(f"Topic: {unit_name}")
     if course_name:
         user_message_parts.append(f"Course: {course_name}")

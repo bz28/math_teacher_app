@@ -1192,6 +1192,9 @@ export const teacher = {
     unit_id: string;
     document_ids?: string[];
     constraint?: string | null;
+    /** Customize-section selections. Omit (or null) for the default
+     *  1-click flow. */
+    params?: GenerationParams | null;
   }) {
     return apiFetch<BankJob>(`/teacher/courses/${courseId}/question-bank/generate`, {
       method: "POST",
@@ -1222,6 +1225,9 @@ export const teacher = {
     question?: string;
     solution_steps?: { title: string; description: string }[];
     final_answer?: string;
+    /** MCQ wrong-answer choices. Must be exactly 3 strings when set
+     *  so the composed [correct, ...wrong] yields 4 choices. */
+    distractors?: string[];
     difficulty?: string;
     /** Move the item to a different unit. Required to be a real id
      *  when set (Uncategorized bucket removed). */
@@ -1448,7 +1454,16 @@ export interface BankItem {
   question: string;
   solution_steps: { title: string; description: string }[] | null;
   final_answer: string | null;
+  /** 3 wrong-answer choices generated alongside the solution. Empty
+   *  for FRQ items where distractor generation failed. The MCQ
+   *  renderer composes the 4 visible choices from
+   *  [final_answer, ...distractors] (deterministic shuffle keyed on
+   *  the item id). */
+  distractors: string[];
   difficulty: string;
+  /** "frq" (default — free response) or "mcq" (multiple choice). MCQ
+   *  items render the 4 choices alongside the problem text. */
+  format: string;
   status: string;
   locked: boolean;
   source: string;
@@ -1469,6 +1484,27 @@ export interface BankItem {
   created_at: string;
   updated_at: string;
 }
+
+/** Customize-section selections sent on the generate-bank request.
+ *  Every default value emits NO prompt instruction, so omitting the
+ *  whole object reproduces the 1-click flow exactly. Mirror of the
+ *  GenerationParams Pydantic model in
+ *  api/routes/teacher_question_bank.py. */
+export interface GenerationParams {
+  problem_type: "mixed" | "word" | "computation" | "multi_step" | "proof";
+  answer_form: "auto" | "radical" | "rational_exponent" | "exact" | "decimal_2" | "decimal_3";
+  difficulty: "mixed" | "easy" | "medium" | "hard" | "ramp";
+  calculator: "either" | "no_calc" | "calc_allowed";
+  format: "frq" | "mcq";
+}
+
+export const DEFAULT_GENERATION_PARAMS: GenerationParams = {
+  problem_type: "mixed",
+  answer_form: "auto",
+  difficulty: "mixed",
+  calculator: "either",
+  format: "frq",
+};
 
 export interface BankCounts {
   pending: number;
@@ -1563,6 +1599,12 @@ export interface StudentHomeworkProblem {
   // and the student must not be able to read the answer client-side.
   difficulty: string;
   approved_variation_count: number;
+  /** "frq" (default) or "mcq". Renderer shows mcq_choices below the
+   *  problem text for MCQ items. */
+  format: string;
+  /** Pre-shuffled choices (correct + 3 wrong) for MCQ items.
+   *  Server-side ordering hides which one is correct. Empty for FRQ. */
+  mcq_choices: string[];
 }
 
 /** Per-problem published-grade row on the student-facing HW detail.

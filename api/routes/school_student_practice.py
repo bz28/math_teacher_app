@@ -25,6 +25,7 @@ approved variation content.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import uuid
 from collections.abc import Coroutine
@@ -48,7 +49,7 @@ from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course
-from api.models.question_bank import BankConsumption, QuestionBankItem
+from api.models.question_bank import FORMAT_MCQ, BankConsumption, QuestionBankItem
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
@@ -355,6 +356,18 @@ class StudentHomeworkProblem(BaseModel):
     # ship answer + steps because that's the whole point of practice.
     difficulty: str
     approved_variation_count: int
+    # "frq" (free response, default) or "mcq" (multiple choice). When
+    # mcq, the renderer shows mcq_choices below the question text so
+    # the student knows which letter to write on their handwritten
+    # work. Submission is unchanged — still photo upload.
+    format: str = "frq"
+    # MCQ choices in the order the student will see them.
+    # Deterministically shuffled server-side from the correct answer +
+    # distractors using a hash of bank_item_id, so the order is stable
+    # for a given problem (matches what the teacher previews on the
+    # bank review page) but not revealing which is correct. Empty for
+    # frq problems.
+    mcq_choices: list[str] = []
 
 
 class StudentProblemFeedback(BaseModel):
@@ -494,6 +507,34 @@ class StudentGradesResponse(BaseModel):
 
 
 # ── Helpers ──
+
+
+def _mcq_choices_for_student(item: QuestionBankItem) -> list[str]:
+    """Compose the 4 MCQ choices (correct + 3 wrong) in a
+    deterministically-shuffled order so the student sees a stable
+    layout that doesn't reveal which is correct.
+
+    The shuffle key is a hash of the item's UUID — same for every
+    student, same across the teacher's review preview and the
+    student's homework view. We intentionally do NOT randomize per
+    student: a teacher reviewing the bank should see the same
+    arrangement the kids do.
+
+    Returns [] for items not flagged as MCQ or missing distractors —
+    the renderer falls back to FRQ behavior.
+    """
+    if item.format != FORMAT_MCQ:
+        return []
+    distractors = list(item.distractors or [])
+    if len(distractors) != 3 or not item.final_answer:
+        return []
+    choices = [item.final_answer, *distractors]
+    # Stable shuffle: derive a permutation from a SHA1 of the id, then
+    # sort by it. Sort-by-derived-key beats Fisher-Yates here because
+    # it's a single line and the input list is fixed at 4.
+    digest = hashlib.sha1(str(item.id).encode("utf-8")).digest()
+    return [c for _, c in sorted(zip(digest[:4], choices))]
+
 
 def _serialize(item: QuestionBankItem) -> VariationPayload:
     return VariationPayload(
@@ -1090,6 +1131,8 @@ async def homework_detail(
             question=item.question,
             difficulty=item.difficulty,
             approved_variation_count=counts.get(str(pid), 0),
+            format=item.format,
+            mcq_choices=_mcq_choices_for_student(item),
         ))
 
     # Existing submission for this student? Drives the HW page's
