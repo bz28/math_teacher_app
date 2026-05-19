@@ -120,6 +120,17 @@ export default function Leads() {
     return leads;
   }, [leads, filter]);
 
+  // Derive the Active count from isActive — same source of truth as
+  // the table. The previous chip hardcoded new+contacted+engaged,
+  // which silently dropped demo_held leads (their row was visible
+  // but the chip count didn't reflect them, so the badge drifted
+  // from the rendered list). Future non-terminal statuses now flow
+  // through automatically.
+  const filteredActiveCount = useMemo(
+    () => leads.filter(isActive).length,
+    [leads],
+  );
+
   if (loading) return <p className="loading">Loading…</p>;
 
   return (
@@ -165,7 +176,7 @@ export default function Leads() {
                 }}
               >
                 {f === "active"
-                  ? `Active (${counts.new + counts.contacted + counts.engaged})`
+                  ? `Active (${filteredActiveCount})`
                   : f === "stale"
                     ? `Stale (${counts.stale})`
                     : `All (${leads.length})`}
