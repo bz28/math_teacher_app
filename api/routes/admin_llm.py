@@ -64,9 +64,11 @@ async def llm_calls(
         # place. Indexed on submission_id, instant.
         base_filters.append(LLMCall.submission_id == submission_id)
     if school_id == INTERNAL_SCHOOL_SENTINEL:
-        # The "Internal" pseudo-school — calls from users with
-        # school_id IS NULL (founder, test accounts, non-school
-        # learners). Drives the school-scope picker's Internal entry.
+        # The "Internal" pseudo-school — LLMCall rows with school_id
+        # IS NULL. Post-bp1000059 that's admin/system calls plus
+        # legacy pre-backfill rows (LLMCall.school_id snapshots the
+        # user's school at write time and isn't rewritten when an
+        # indie teacher is later linked to their individual school).
         base_filters.append(LLMCall.school_id.is_(None))
     elif school_id:
         # Scope to a specific school. Indexed; instant.

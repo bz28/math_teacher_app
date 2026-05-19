@@ -26,6 +26,7 @@ from api.middleware.auth import CurrentUser, require_admin
 from api.models.assignment import Assignment, Submission
 from api.models.course import CourseTeacher
 from api.models.llm_call import LLMCall
+from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.session import Session
@@ -81,7 +82,17 @@ async def users(
     if role:
         scope_filters.append(User.role == role)
     if no_school:
-        scope_filters.append(User.school_id.is_(None))
+        # Post-bp1000059 every teacher/student has a school_id; indie
+        # accounts now point at a kind='individual' synthetic school
+        # instead of being NULL. EXISTS keeps this an indexed lookup.
+        scope_filters.append(
+            select(School.id)
+            .where(
+                School.id == User.school_id,
+                School.kind == SCHOOL_KIND_INDIVIDUAL,
+            )
+            .exists()
+        )
 
     # Subquery of user IDs in scope — referenced by the spend and
     # active-user aggregates so they only count users we're showing.

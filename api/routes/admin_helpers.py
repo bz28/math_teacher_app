@@ -3,10 +3,12 @@
 from datetime import UTC, datetime, timedelta
 
 # The literal `school_id` value the dashboard sends to scope a query
-# to "users with school_id IS NULL" — i.e. the founder, test
-# accounts, and any non-school learners. Keeping this in one place
-# means the wire contract is defined once for every admin endpoint
-# and the dashboard's INTERNAL_SCHOOL_ID stays in sync trivially.
+# to LLMCall rows with `school_id IS NULL`. Post-bp1000059 every
+# teacher/student is linked to a school (real or synthetic
+# 'individual'), so the bucket is now admin/system calls plus the
+# legacy pre-backfill snapshots from indie teachers. Defined here so
+# the wire contract stays in one place and the dashboard's
+# INTERNAL_SCHOOL_ID matches trivially.
 INTERNAL_SCHOOL_SENTINEL = "internal"
 
 
