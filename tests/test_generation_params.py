@@ -34,7 +34,6 @@ from api.models.school import SCHOOL_KIND_INSTITUTIONAL, School
 from api.models.unit import Unit
 from api.models.user import User
 
-
 # ── translator ──
 
 
