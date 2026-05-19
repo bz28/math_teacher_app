@@ -5,11 +5,22 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSON, UUID
+from sqlalchemy.dialects.postgresql import JSON, JSONB, UUID
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.database import Base
+
+# Allowed values for `QuestionBankItem.format`.
+#   frq = free-response. Default and behaviour pre-refactor — student
+#         photographs handwritten work, no choices are surfaced anywhere.
+#   mcq = multiple choice. The four choices (final_answer + the 3
+#         distractors) are rendered alongside the problem in the
+#         teacher's bank review and in the student's assignment view.
+#         Submission is still handwritten-work photo — the format flag
+#         only affects how the problem is *posed*.
+FORMAT_FRQ = "frq"
+FORMAT_MCQ = "mcq"
 
 
 class QuestionBankItem(Base):
@@ -54,6 +65,14 @@ class QuestionBankItem(Base):
     # calls per kid.
     distractors: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     difficulty: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
+    # How the problem is rendered. See FORMAT_* constants. Defaults to
+    # frq so existing items + every legacy code path stay unchanged.
+    # MCQ items reuse final_answer + distractors; nothing about the
+    # problem text is bake-in.
+    format: Mapped[str] = mapped_column(
+        String(10), nullable=False,
+        default=FORMAT_FRQ, server_default=FORMAT_FRQ,
+    )
     # status: pending / approved / rejected / archived
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
 
@@ -148,6 +167,14 @@ class QuestionBankGenerationJob(Base):
     # Transient base64 images for upload-mode jobs. Not stored as Documents
     # because they're one-time extraction inputs, not course materials.
     uploaded_images: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    # Generation-time customizations from the Customize section of the
+    # generate-problems modal: problem_type / answer_form / difficulty /
+    # calculator / format. Shape matches the GenerationParams Pydantic
+    # model in api/schemas/question_bank.py. NULL = teacher used the
+    # default 1-click flow (everything mixed/auto/either/frq). The
+    # legacy `difficulty` column above stays hardcoded to "mixed"; the
+    # real value lives here.
+    params: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     produced_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 

@@ -7,7 +7,7 @@ The frontend polls the job row for status.
 """
 
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
@@ -45,6 +45,29 @@ _VALID_DIFFICULTIES = {"easy", "medium", "hard"}
 # ── request shapes ──
 
 
+class GenerationParams(BaseModel):
+    """Teacher customizations from the Customize section of the
+    generate-problems modal. Every field is optional with a default
+    that produces NO prompt instruction — so omitting the whole
+    object reproduces today's 1-click default flow exactly.
+
+    Stored on QuestionBankGenerationJob.params (JSONB) and translated
+    to prompt-instruction bullets in api/core/assignment_generation.
+    """
+
+    problem_type: Literal[
+        "mixed", "word", "computation", "multi_step", "proof"
+    ] = "mixed"
+    answer_form: Literal[
+        "auto", "radical", "rational_exponent", "exact", "decimal_2", "decimal_3"
+    ] = "auto"
+    difficulty: Literal[
+        "mixed", "easy", "medium", "hard", "ramp"
+    ] = "mixed"
+    calculator: Literal["either", "no_calc", "calc_allowed"] = "either"
+    format: Literal["frq", "mcq"] = "frq"
+
+
 class GenerateRequest(BaseModel):
     count: int
     # The homework the teacher kicked this off from. Required — there's
@@ -56,9 +79,9 @@ class GenerateRequest(BaseModel):
     unit_id: uuid.UUID
     document_ids: list[uuid.UUID] = []
     constraint: str | None = None  # natural-language extra instructions
-    # difficulty intentionally absent: questions are modeled after the source
-    # documents, and the teacher can specify difficulty in `constraint` if they
-    # want it (e.g. "all hard" or "mostly easy").
+    # Customize-section selections. None = the teacher used the default
+    # 1-click flow.
+    params: GenerationParams | None = None
 
     @field_validator("count")
     @classmethod
@@ -171,7 +194,9 @@ def _serialize_item(
         "question": item.question,
         "solution_steps": item.solution_steps,
         "final_answer": item.final_answer,
+        "distractors": item.distractors or [],
         "difficulty": item.difficulty,
+        "format": item.format,
         "status": item.status,
         "locked": bool(item.locked),
         "source": item.source,
@@ -197,6 +222,7 @@ def _serialize_job(job: QuestionBankGenerationJob) -> dict[str, Any]:
         "requested_count": job.requested_count,
         "difficulty": job.difficulty,
         "constraint": job.constraint,
+        "params": job.params,
         "produced_count": job.produced_count,
         "error_message": job.error_message,
         "parent_question_id": str(job.parent_question_id) if job.parent_question_id else None,
@@ -326,11 +352,13 @@ async def generate_bank_questions(
         created_by_id=current_user.user_id,
         status="queued",
         requested_count=body.count,
-        # difficulty column is legacy — hardcoded so generate_questions still
-        # gets a non-empty value but the teacher never picks it
+        # difficulty column is legacy — hardcoded so anything still
+        # reading it gets a non-empty value. The teacher's real
+        # difficulty selection lives in params.difficulty below.
         difficulty="mixed",
         constraint=body.constraint,
         source_doc_ids=[str(d) for d in body.document_ids] if body.document_ids else None,
+        params=body.params.model_dump() if body.params else None,
     )
     db.add(job)
     await db.commit()
