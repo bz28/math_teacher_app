@@ -122,7 +122,15 @@ async def test_me_with_invalid_token(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_teacher_self_signup_no_invite(client: AsyncClient) -> None:
-    """A teacher can self-register without any invite token."""
+    """A teacher can self-register without an invite — and gets stamped
+    with a synthetic 'individual' school so downstream school-aware
+    code doesn't have to special-case nulls."""
+    from sqlalchemy import select
+
+    from api.database import get_session_factory
+    from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
+    from api.models.user import User
+
     payload = {
         "email": "solo_teacher@test.com",
         "password": "StrongPass1",
@@ -138,7 +146,17 @@ async def test_teacher_self_signup_no_invite(client: AsyncClient) -> None:
     assert me.status_code == 200
     me_data = me.json()
     assert me_data["role"] == "teacher"
-    assert me_data["school_id"] is None
+    assert me_data["school_id"] is not None
+
+    async with get_session_factory()() as session:
+        user = (await session.execute(
+            select(User).where(User.email == "solo_teacher@test.com")
+        )).scalar_one()
+        school = (await session.execute(
+            select(School).where(School.id == user.school_id)
+        )).scalar_one()
+        assert school.kind == SCHOOL_KIND_INDIVIDUAL
+        assert school.name == "Solo Teacher's classroom"
 
 
 @pytest.mark.asyncio
@@ -240,6 +258,90 @@ async def test_join_code_with_teacher_role_forces_student(client: AsyncClient) -
             select(User).where(User.email == payload["email"])
         )).scalar_one()
         assert user.role == "student", "join_code must force student role"
+
+
+@pytest.mark.asyncio
+async def test_indie_teacher_join_code_stamps_student_with_individual_school(
+    client: AsyncClient,
+) -> None:
+    """The bug this PR fixes end-to-end: an indie teacher signs up,
+    creates a course + section + join code; a student joining via that
+    code must get the same school_id as the teacher (the synthetic
+    'individual' school). Without this, the student lands on the
+    consumer homepage instead of /school/student.
+    """
+    import uuid
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select
+
+    from api.database import get_session_factory
+    from api.models.course import Course, CourseTeacher
+    from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
+    from api.models.section import Section
+    from api.models.user import User
+
+    tag = uuid.uuid4().hex[:6].lower()
+
+    teacher_payload = {
+        "email": f"indie_{tag}@t.com",
+        "password": "StrongPass1",
+        "name": "Indie Teacher",
+        "grade_level": 12,
+        "role": "teacher",
+    }
+    resp = await client.post(REGISTER_URL, json=teacher_payload)
+    assert resp.status_code == 201, resp.text
+
+    teacher_school_id = None
+    async with get_session_factory()() as s:
+        teacher = (await s.execute(
+            select(User).where(User.email == teacher_payload["email"])
+        )).scalar_one()
+        teacher_school_id = teacher.school_id
+        assert teacher_school_id is not None
+
+        course = Course(
+            name=f"Indie Course {tag}",
+            subject="math",
+            school_id=teacher_school_id,
+        )
+        s.add(course)
+        await s.flush()
+        s.add(CourseTeacher(
+            course_id=course.id, teacher_id=teacher.id, role="owner",
+        ))
+        section = Section(
+            course_id=course.id,
+            name="Period 1",
+            join_code=f"IND{tag.upper()}",
+            join_code_expires_at=datetime.now(UTC) + timedelta(days=7),
+        )
+        s.add(section)
+        await s.commit()
+
+    student_payload = {
+        "email": f"indie_student_{tag}@t.com",
+        "password": "StrongPass1",
+        "name": "Student",
+        "grade_level": 8,
+        "role": "student",
+        "join_code": f"IND{tag.upper()}",
+    }
+    resp = await client.post(REGISTER_URL, json=student_payload)
+    assert resp.status_code == 201, resp.text
+
+    async with get_session_factory()() as s:
+        student = (await s.execute(
+            select(User).where(User.email == student_payload["email"])
+        )).scalar_one()
+        # Same school as the indie teacher — the fix.
+        assert student.school_id == teacher_school_id
+
+        school = (await s.execute(
+            select(School).where(School.id == student.school_id)
+        )).scalar_one()
+        assert school.kind == SCHOOL_KIND_INDIVIDUAL
 
 
 @pytest.mark.asyncio

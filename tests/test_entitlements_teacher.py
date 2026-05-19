@@ -49,12 +49,15 @@ async def _make_teacher(
         return teacher
 
 
-async def _make_school(*, is_active: bool = True) -> School:
+async def _make_school(
+    *, is_active: bool = True, kind: str = "institutional",
+) -> School:
     async with get_session_factory()() as session:
         school = School(
             name="Test School",
+            kind=kind,
             contact_name="Contact",
-            contact_email="c@s.com",
+            contact_email=f"c_{uuid.uuid4().hex[:6]}@s.com",
             is_active=is_active,
         )
         session.add(school)
@@ -170,6 +173,29 @@ async def test_pro_teacher_bypasses_cap() -> None:
             select(User).where(User.id == teacher_id)
         )).scalar_one()
         await check_entitlement(session, user, Entitlement.GENERATE_PROBLEM)
+
+
+@pytest.mark.asyncio
+async def test_individual_school_teacher_still_capped() -> None:
+    """An indie teacher whose school_id points at a kind='individual'
+    school must still hit the cap — the synthetic personal school is
+    the post-refactor indie signal, not a paying institution.
+    Regression guard for the school.kind switch in
+    `is_school_active_teacher`.
+    """
+    indie_school = await _make_school(is_active=True, kind="individual")
+    teacher = await _make_teacher(
+        email=f"indie_{uuid.uuid4().hex[:6]}@t.com",
+        school_id=indie_school.id,
+    )
+    await _log_generate_problem(teacher.id, TEACHER_DAILY_GENERATION_LIMIT)
+
+    async with get_session_factory()() as session:
+        user = (await session.execute(
+            select(User).where(User.id == teacher.id)
+        )).scalar_one()
+        with pytest.raises(EntitlementError):
+            await check_entitlement(session, user, Entitlement.GENERATE_PROBLEM)
 
 
 @pytest.mark.asyncio
