@@ -38,7 +38,18 @@ When they pull against each other, the higher one wins.
 - Generate exactly the requested number of problems
 - Each problem is self-contained
 - LaTeX with $ delimiters; single backslashes for commands
-- Problem text only — no answers, no hints"""
+- Problem text only — no answers, no hints
+
+# Difficulty calibration
+
+Label each problem easy / medium / hard relative to THIS course's
+student level — NOT absolute math/science difficulty:
+- easy: direct application of one technique with clean numbers.
+  Would appear in the first few practice problems of this unit.
+- medium: chains two techniques OR requires choosing the right
+  approach from several options. Mid-textbook practice.
+- hard: synthesis, unusual setup, or a non-obvious step. Tough but
+  solvable with practice for THIS course."""
 
 
 def _build_question_generation_prompt(subject: str) -> str:
