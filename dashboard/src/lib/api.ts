@@ -186,6 +186,8 @@ export const api = {
     mutate<{ status: string }>(`/admin/users/${userId}/subscription`, "PATCH", { tier, status }),
   resetDailyLimit: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}/reset-daily-limit`, "POST"),
   inviteAdmin: (email: string, name: string) => mutate<{ status: string }>("/admin/users/invite", "POST", { email, name }),
+  teacherStudents: (teacherId: string, params?: Record<string, string>) =>
+    request<TeacherStudentsData>(`/admin/users/${teacherId}/students`, params),
   // Leads
   leads: () => request<{ leads: ContactLeadData[] }>("/admin/leads"),
   lead: (id: string) => request<LeadDetail>(`/admin/leads/${id}`),
@@ -521,6 +523,37 @@ export interface UpdateSchoolBody {
   contact_email?: string;
   is_active?: boolean;
   notes?: string;
+}
+
+export interface TeacherRosterStudent {
+  id: string;
+  email: string;
+  name: string;
+  grade_level: number;
+  registered: string;
+  last_active: string | null;
+  subscription_tier: string;
+  subscription_status: string;
+}
+
+export interface TeacherRosterSection {
+  id: string;
+  name: string;
+  course_id: string;
+}
+
+export interface TeacherStudentsData {
+  teacher: {
+    id: string;
+    name: string;
+    email: string;
+    subscription_tier: string;
+    subscription_status: string;
+    school_id: string | null;
+  };
+  sections: TeacherRosterSection[];
+  total_students: number;
+  students: TeacherRosterStudent[];
 }
 
 export interface UsersData {

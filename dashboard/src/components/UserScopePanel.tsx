@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, type UsersData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
 import StatCard from "./StatCard";
@@ -331,7 +331,19 @@ export default function UserScopePanel({
                         textOverflow: "ellipsis",
                       }}
                     >
-                      {u.name || "—"}
+                      {/* Only teachers have a roster page worth
+                          drilling into; students fall through to plain
+                          text. */}
+                      {role === "teacher" ? (
+                        <Link
+                          to={`/teachers/${u.id}`}
+                          style={{ color: "var(--ink)", textDecoration: "none" }}
+                        >
+                          {u.name || "—"}
+                        </Link>
+                      ) : (
+                        u.name || "—"
+                      )}
                     </div>
                     <div
                       style={{
@@ -407,7 +419,7 @@ export default function UserScopePanel({
                   )}
                   {showClassroom && (
                     <td>
-                      <ClassroomCell classroom={u.classroom} />
+                      <ClassroomCell classroom={u.classroom} teacherId={u.id} />
                     </td>
                   )}
                   <td className="num">{u.session_count}</td>
@@ -551,21 +563,32 @@ function UsagePill({
 
 function ClassroomCell({
   classroom,
+  teacherId,
 }: {
   classroom: { sections: number; students: number; submissions_30d: number };
+  teacherId: string;
 }) {
   const empty = classroom.sections === 0 && classroom.students === 0;
   if (empty) {
     return <span style={{ color: "var(--muted-2)", fontSize: 12 }}>—</span>;
   }
+  // Student count is a link into the per-teacher roster; sections +
+  // 30d submissions stay as plain text since the roster page is the
+  // student drill-in.
   return (
     <div style={{ fontFamily: "var(--font-mono)", fontSize: 12.5, color: "var(--ink-soft)", lineHeight: 1.6 }}>
       <div>
         <span style={{ color: "var(--ink)" }}>{classroom.sections}</span>{" "}
         <span style={{ color: "var(--muted)" }}>section{classroom.sections === 1 ? "" : "s"}</span>
         {" · "}
-        <span style={{ color: "var(--ink)" }}>{classroom.students.toLocaleString()}</span>{" "}
-        <span style={{ color: "var(--muted)" }}>student{classroom.students === 1 ? "" : "s"}</span>
+        <Link
+          to={`/teachers/${teacherId}`}
+          style={{ color: "var(--accent)", textDecoration: "none" }}
+          title="View student roster"
+        >
+          <span style={{ color: "var(--accent)" }}>{classroom.students.toLocaleString()}</span>{" "}
+          <span>student{classroom.students === 1 ? "" : "s"}</span>
+        </Link>
       </div>
       <div style={{ color: "var(--muted)" }}>
         <span style={{ color: classroom.submissions_30d > 0 ? "var(--ink-soft)" : "var(--muted-2)" }}>

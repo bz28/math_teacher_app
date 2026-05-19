@@ -13,6 +13,7 @@ import Schools from "./pages/Schools";
 import SchoolDetail from "./pages/SchoolDetail";
 import IndependentStudents from "./pages/IndependentStudents";
 import IndependentTeachers from "./pages/IndependentTeachers";
+import TeacherDetail from "./pages/TeacherDetail";
 import Admins from "./pages/Admins";
 import SubmissionTrace from "./pages/SubmissionTrace";
 
@@ -48,6 +49,7 @@ export default function App() {
             path="/teachers/independent"
             element={<IndependentTeachers />}
           />
+          <Route path="/teachers/:teacherId" element={<TeacherDetail />} />
           <Route path="/admins" element={<Admins />} />
 
           {/* Diagnostics. */}
