@@ -534,8 +534,13 @@ async def _create_or_refresh_invite(
 
 def _stamp_school_id(user: User, course: Course) -> None:
     """If the user isn't already linked to a school, link them to the course's
-    school. Same semantics as join_section: never overwrite an existing school."""
-    if user.school_id is None and course.school_id is not None:
+    school. Same semantics as join_section: never overwrite an existing school.
+
+    Post-bp1000059 every course has a school (institutional or
+    individual), so the only branch worth keeping is the "don't
+    clobber an existing link" guard.
+    """
+    if user.school_id is None:
         user.school_id = course.school_id
 
 

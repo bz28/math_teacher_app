@@ -42,7 +42,7 @@ from api.middleware.rate_limit import limiter
 from api.models.app_stat import AppStat
 from api.models.course import Course, CourseTeacher
 from api.models.llm_call import LLMCall
-from api.models.school import School
+from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.section_invite import SectionInvite
@@ -162,15 +162,11 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
                 detail="Email does not match invite",
             )
         role = "student"
-        if section_course and section_course.school_id is not None:
+        # Section invite always targets a real course; the course
+        # always has a school (institutional or individual) after the
+        # bp1000059 backfill + CHECK, so we can stamp unconditionally.
+        if section_course is not None:
             school_id = section_course.school_id
-
-    # Teacher self-signup is now allowed (no invite required). A solo
-    # teacher lands here with role=teacher and no invite/section/join
-    # token — we let them through. They get school_id=NULL, which
-    # makes the entitlement layer treat them as an independent free
-    # teacher (daily generation cap applies). The teacher-via-invite
-    # branch above still sets school_id when an invite is present.
 
     # Join code (student): validate up-front so we don't create a user if
     # the code is bad. Mutually exclusive with invite flows (either invite
@@ -193,13 +189,36 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         join_course = (await db.execute(
             select(Course).where(Course.id == join_section_obj.course_id)
         )).scalar_one_or_none()
-        if join_course and join_course.school_id is not None:
+        # Course always has a school after the bp1000059 backfill; even
+        # an indie teacher's course inherits their synthetic individual
+        # school. Stamping the student here is what fixes the
+        # consumer-homepage bug for indie-teacher classes.
+        if join_course is not None:
             school_id = join_course.school_id
         # Join codes are a student-only enrollment path. Force the role
         # to student so a malicious caller can't combine role=teacher
         # with a leaked join code to escalate into a teacher attached
         # to that school. Mirrors the section_invite override above.
         role = "student"
+
+    # Teacher self-signup with no invite/section/join token: provision a
+    # synthetic personal school so every teacher (and any student who
+    # later joins their section) has a stamped school_id. Entitlements
+    # still cap them via the `kind='individual'` signal — same business
+    # behavior as the previous `school_id IS NULL` check, just keyed off
+    # a real row instead of a missing one.
+    if role == "teacher" and school_id is None:
+        display_name = body.name.strip() or body.email.split("@")[0]
+        personal_school = School(
+            name=f"{display_name}'s classroom",
+            kind=SCHOOL_KIND_INDIVIDUAL,
+            contact_name=display_name,
+            contact_email=body.email,
+            is_active=True,
+        )
+        db.add(personal_school)
+        await db.flush()
+        school_id = personal_school.id
 
     user = User(
         email=body.email,
@@ -335,7 +354,12 @@ async def claim_section_invite(
             course_id=course.id,
             student_id=user.id,
         ))
-    if user.school_id is None and course is not None and course.school_id is not None:
+    # The course always has a school post-bp1000059 (CHECK + backfill),
+    # so we can stamp unconditionally when the student lacks one. We
+    # still avoid overwriting an existing school link — once a student
+    # is in an institutional school we don't downgrade them to whatever
+    # the next claimed invite happens to point at.
+    if user.school_id is None:
         user.school_id = course.school_id
     invite.status = "accepted"
     await db.commit()

@@ -19,7 +19,7 @@ from api.middleware.auth import CurrentUser, require_admin
 from api.models.assignment import Submission
 from api.models.course import Course
 from api.models.llm_call import LLMCall
-from api.models.school import School
+from api.models.school import SCHOOL_KIND_INSTITUTIONAL, School
 from api.models.section import Section
 from api.models.teacher_invite import TeacherInvite
 from api.models.user import User
@@ -125,6 +125,10 @@ async def list_schools(
         .subquery()
     )
 
+    # Filter out kind='individual' schools — those are synthetic
+    # personal containers auto-created for indie teachers (one per
+    # teacher). They aren't real partner schools and would otherwise
+    # explode this list with every solo signup.
     rows = (await db.execute(
         select(
             School,
@@ -137,6 +141,7 @@ async def list_schools(
         .outerjoin(cost_30d_q, cost_30d_q.c.school_id == School.id)
         .outerjoin(cost_prev_30d_q, cost_prev_30d_q.c.school_id == School.id)
         .outerjoin(last_activity_q, last_activity_q.c.school_id == School.id)
+        .where(School.kind == SCHOOL_KIND_INSTITUTIONAL)
         .order_by(School.created_at.desc())
     )).all()
 

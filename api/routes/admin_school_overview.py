@@ -16,8 +16,13 @@ add them back when we have a use case.
 
 The `school_id` path segment can be a real school UUID or the literal
 `internal` sentinel — the latter scopes to LLMCall rows where
-`school_id IS NULL` (the founder, test accounts, and any non-school
-learners). Activity counts come back zeroed for that scope since no
+`school_id IS NULL`. Post-bp1000059 every teacher/student is linked
+to a school (institutional or synthetic individual), so the
+`internal` bucket is now just admin/system calls plus the legacy
+pre-backfill rows from indie teachers (LLMCall.school_id is a
+snapshot, not refreshed by the migration). To inspect an indie
+teacher's activity, navigate to their individual school's overview
+by id. Activity counts come back zeroed for `internal` since no
 submissions exist outside a school context; cost + failed-call tiles
 still work.
 """

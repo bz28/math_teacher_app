@@ -61,13 +61,18 @@ def is_pro(user: object) -> bool:
 
 
 async def is_school_active_teacher(db: AsyncSession, user: object) -> bool:
-    """Check if a teacher belongs to an active school.
+    """Check if a teacher belongs to an active *institutional* school.
 
     Teachers carry `school_id` directly on the user row (unlike students,
     who link via SectionEnrollment), so this is a single-table lookup.
     Used to bypass free-tier quotas for teachers whose school is paying.
+
+    Indie teachers post-bp1000059 have `school_id` pointing at a
+    synthetic kind='individual' school. They MUST NOT bypass the cap —
+    so the active-school check filters by kind too. Same business
+    behavior as the previous `school_id IS NULL` signal.
     """
-    from api.models.school import School
+    from api.models.school import SCHOOL_KIND_INSTITUTIONAL, School
 
     role = getattr(user, "role", "")
     school_id = getattr(user, "school_id", None)
@@ -75,20 +80,29 @@ async def is_school_active_teacher(db: AsyncSession, user: object) -> bool:
         return False
 
     result = await db.execute(
-        select(School.is_active).where(School.id == school_id)
+        select(School.is_active, School.kind).where(School.id == school_id)
     )
     row = result.first()
-    return bool(row and row.is_active)
+    return bool(
+        row
+        and row.is_active
+        and row.kind == SCHOOL_KIND_INSTITUTIONAL,
+    )
 
 
 async def is_school_enrolled(db: AsyncSession, user_id: uuid.UUID) -> bool:
-    """Check if a student is enrolled in any section of an active school.
+    """Check if a student is enrolled in any section of an active
+    *institutional* school.
 
     Short-circuits: if the user has no enrollments at all (most users),
     we skip the expensive 5-table join entirely.
+
+    Indie-teacher students sit in kind='individual' schools after
+    bp1000059 — they don't get the institutional pro-tier bypass, so
+    the join filters by School.kind too.
     """
     from api.models.course import Course
-    from api.models.school import School
+    from api.models.school import SCHOOL_KIND_INSTITUTIONAL, School
     from api.models.section import Section
     from api.models.section_enrollment import SectionEnrollment
 
@@ -101,8 +115,9 @@ async def is_school_enrolled(db: AsyncSession, user_id: uuid.UUID) -> bool:
     if has_any is None:
         return False
 
-    # Slow path: verify at least one enrollment is in an active school.
-    # Course has school_id directly now, so we can skip the user/teacher hop.
+    # Slow path: verify at least one enrollment is in an active
+    # institutional school. Course has school_id directly so we can
+    # skip the user/teacher hop.
     result = await db.execute(
         select(SectionEnrollment.id)
         .join(Section, Section.id == SectionEnrollment.section_id)
@@ -111,6 +126,7 @@ async def is_school_enrolled(db: AsyncSession, user_id: uuid.UUID) -> bool:
         .where(
             SectionEnrollment.student_id == user_id,
             School.is_active.is_(True),
+            School.kind == SCHOOL_KIND_INSTITUTIONAL,
         )
         .limit(1)
     )
