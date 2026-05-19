@@ -211,6 +211,11 @@ GENERATE_QUESTIONS_SCHEMA: ToolSchema = {
                         "difficulty": {
                             "type": "string",
                             "enum": ["easy", "medium", "hard"],
+                            "description": (
+                                "Label per the difficulty calibration in the "
+                                "system prompt — easy/medium/hard relative to "
+                                "this course's student level."
+                            ),
                         },
                     },
                     "required": ["title", "text", "difficulty"],
