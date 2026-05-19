@@ -746,6 +746,22 @@ async def teacher_students(
     )
     rows = (await db.execute(students_q)).all()
 
+    # 30d LLM stats for this teacher — drives the cost/calls indicator
+    # in the header and tells admins at a glance whether the teacher
+    # is generating real usage. Coalesced so zero-activity teachers
+    # show as 0 rather than NULL.
+    since_30d = datetime.now(UTC) - timedelta(days=30)
+    llm_stats = (await db.execute(
+        select(
+            func.count().label("call_count"),
+            func.coalesce(func.sum(LLMCall.cost_usd), 0).label("total_cost"),
+        )
+        .where(
+            LLMCall.user_id == teacher.id,
+            LLMCall.created_at >= since_30d,
+        )
+    )).one()
+
     return {
         "teacher": {
             "id": str(teacher.id),
@@ -754,6 +770,8 @@ async def teacher_students(
             "subscription_tier": teacher.subscription_tier,
             "subscription_status": teacher.subscription_status,
             "school_id": str(teacher.school_id) if teacher.school_id else None,
+            "call_count_30d": int(llm_stats.call_count),
+            "total_cost_30d": round(float(llm_stats.total_cost), 6),
         },
         "sections": section_summary,
         "total_students": total,

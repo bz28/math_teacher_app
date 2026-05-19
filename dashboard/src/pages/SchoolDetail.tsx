@@ -408,7 +408,27 @@ export default function SchoolDetail() {
       </Section>
 
       {/* ── 04 — TEACHERS ───────────────────────────────────────── */}
-      <Section number="04" label={`Teachers (${detail.teachers.length})`}>
+      {/* Per-row layout: name+email | joined | 30d cost+calls | → */}
+      {/* drill-in. Mirrors the student row pattern on TeacherDetail */}
+      {/* so admins have a single mental model for "drill into a */}
+      {/* user's LLM calls". Cost is the primary signal for the */}
+      {/* heavy-spender scan; call count is the secondary check. */}
+      <Section
+        number="04"
+        label={`Teachers (${detail.teachers.length})`}
+        action={
+          detail.teachers.length > 0 ? (
+            <Link
+              to={`/llm-calls?school=${detail.id}&hours=720`}
+              className="link-btn"
+              style={{ fontSize: 12 }}
+              title="LLM calls for everyone at this school (teachers + students)"
+            >
+              View all school calls (30d) →
+            </Link>
+          ) : undefined
+        }
+      >
         {detail.teachers.length > 0 ? (
           <div className="list" style={{ marginBottom: 24 }}>
             {detail.teachers.map((t) => (
@@ -416,29 +436,62 @@ export default function SchoolDetail() {
                 key={t.id}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1.4fr 1.6fr auto",
+                  gridTemplateColumns: "1.6fr 1fr 1fr auto",
                   gap: 18,
                   alignItems: "center",
                   padding: "14px 0",
                   borderBottom: "1px solid var(--rule)",
                 }}
               >
-                <Link
-                  to={`/teachers/${t.id}`}
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: 17,
-                    color: "var(--ink)",
-                    textDecoration: "none",
-                  }}
-                  title="View this teacher's roster"
-                >
-                  {t.name || "—"}
-                </Link>
-                <div style={{ fontSize: 12.5, color: "var(--muted)" }}>{t.email}</div>
-                <div style={{ fontSize: 12, color: "var(--muted-2)" }}>
-                  joined {formatRelativeDate(t.joined_at)}
+                <div style={{ overflow: "hidden" }}>
+                  <Link
+                    to={`/teachers/${t.id}`}
+                    style={{
+                      display: "block",
+                      fontFamily: "var(--font-display)",
+                      fontSize: 17,
+                      color: "var(--ink)",
+                      textDecoration: "none",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title="View this teacher's roster"
+                  >
+                    {t.name || "—"}
+                  </Link>
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {t.email}
+                  </div>
                 </div>
+                <div style={{ fontSize: 12, color: "var(--muted-2)" }}>
+                  <span style={{ color: "var(--muted-2)" }}>Joined </span>
+                  {formatRelativeDate(t.joined_at)}
+                </div>
+                <div title="LLM activity over the last 30 days">
+                  <div
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 15,
+                      color: t.total_cost_30d > 0 ? "var(--ink)" : "var(--muted-2)",
+                      letterSpacing: -0.2,
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    ${t.total_cost_30d.toFixed(4)}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                    {t.call_count_30d.toLocaleString()} call{t.call_count_30d === 1 ? "" : "s"} · 30d
+                  </div>
+                </div>
+                <Link
+                  to={`/llm-calls?user=${t.id}&hours=720`}
+                  className="action-toggle"
+                  title="View this teacher's LLM calls"
+                  style={{ textDecoration: "none", textAlign: "center" }}
+                >
+                  →
+                </Link>
               </div>
             ))}
           </div>

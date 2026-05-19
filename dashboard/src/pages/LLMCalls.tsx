@@ -21,7 +21,11 @@ export default function LLMCalls() {
   const tracePathFor = (submissionId: string) =>
     `/submissions/${submissionId}/trace`;
   const [data, setData] = useState<LLMCallsData | null>(null);
-  const [hours, setHours] = useState("24");
+  // `hours` is URL-driven so deep links from SchoolDetail / TeacherDetail
+  // ("View calls (30d)" → ?hours=720) and from Overview ("View failures"
+  // → ?hours=168) land on the time window they advertised. Initial state
+  // reads searchParams; subsequent edits sync back via handleHoursChange.
+  const [hours, setHours] = useState(searchParams.get("hours") ?? "24");
   const [fnFilter, setFnFilter] = useState("");
   const [userFilter, setUserFilter] = useState(searchParams.get("user") ?? "");
   const submissionFilter = searchParams.get("submission") ?? "";
@@ -77,8 +81,16 @@ export default function LLMCalls() {
   }, [userFilter, submissionFilter, schoolFilter, fnFilter, hours]);
 
   // Local-state handlers — offset reset is handled by the effect
-  // above, so we don't duplicate it here.
-  const handleHoursChange = (v: string) => setHours(v);
+  // above, so we don't duplicate it here. handleHoursChange also
+  // mirrors the new value back into the URL so the user can copy
+  // a link that lands on the same window they're currently viewing.
+  const handleHoursChange = (v: string) => {
+    setHours(v);
+    const next = new URLSearchParams(searchParams);
+    if (v === "24") next.delete("hours");
+    else next.set("hours", v);
+    setSearchParams(next);
+  };
   const handleUserFilter = (v: string) => setUserFilter(v);
   const handleFnFilter = (v: string) => setFnFilter(fnFilter === v ? "" : v);
   const clearSubmissionFilter = () => {
