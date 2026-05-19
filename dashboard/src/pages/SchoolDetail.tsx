@@ -7,6 +7,7 @@ import {
   api,
   type SchoolDetail as SchoolDetailData,
   type SchoolOverviewData,
+  type SchoolStudentsData,
 } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
 import { btnGhost, btnPrimary, btnSmall, inputStyle } from "../lib/styles";
@@ -37,6 +38,7 @@ export default function SchoolDetail() {
 
   const [detail, setDetail] = useState<SchoolDetailData | null>(null);
   const [overview, setOverview] = useState<SchoolOverviewData | null>(null);
+  const [students, setStudents] = useState<SchoolStudentsData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Edit (inline)
@@ -53,12 +55,14 @@ export default function SchoolDetail() {
   const reload = async () => {
     if (!schoolId) return;
     try {
-      const [d, o] = await Promise.all([
+      const [d, o, st] = await Promise.all([
         api.school(schoolId),
         api.schoolOverview(schoolId),
+        api.schoolStudents(schoolId),
       ]);
       setDetail(d);
       setOverview(o);
+      setStudents(st);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -72,6 +76,7 @@ export default function SchoolDetail() {
     // showing the wrong values briefly until reload landed.
     setDetail(null);
     setOverview(null);
+    setStudents(null);
     setError(null);
     setEditing(false);
     setEditForm(null);
@@ -418,9 +423,18 @@ export default function SchoolDetail() {
                   borderBottom: "1px solid var(--rule)",
                 }}
               >
-                <div style={{ fontFamily: "var(--font-display)", fontSize: 17, color: "var(--ink)" }}>
+                <Link
+                  to={`/teachers/${t.id}`}
+                  style={{
+                    fontFamily: "var(--font-display)",
+                    fontSize: 17,
+                    color: "var(--ink)",
+                    textDecoration: "none",
+                  }}
+                  title="View this teacher's roster"
+                >
                   {t.name || "—"}
-                </div>
+                </Link>
                 <div style={{ fontSize: 12.5, color: "var(--muted)" }}>{t.email}</div>
                 <div style={{ fontSize: 12, color: "var(--muted-2)" }}>
                   joined {formatRelativeDate(t.joined_at)}
@@ -500,8 +514,114 @@ export default function SchoolDetail() {
           )}
         </div>
       </Section>
+
+      {/* ── 05 — STUDENTS ─────────────────────────────────────────── */}
+      <Section
+        number="05"
+        label={`Students (${students ? students.total_students : "…"})`}
+      >
+        {!students ? (
+          <p className="loading">Loading roster…</p>
+        ) : students.total_students === 0 ? (
+          <p style={{ color: "var(--muted)", fontStyle: "italic" }}>
+            No students enrolled yet. Once teachers create sections and
+            students join, they'll appear here.
+          </p>
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <colgroup>
+                <col style={{ width: "34%" }} />
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "18%" }} />
+                <col style={{ width: "20%" }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Plan</th>
+                  <th>Grade</th>
+                  <th>Joined</th>
+                  <th>Last active</th>
+                </tr>
+              </thead>
+              <tbody>
+                {students.students.map((s) => (
+                  <tr key={s.id}>
+                    <td style={{ overflow: "hidden" }}>
+                      <div
+                        style={{
+                          fontFamily: "var(--font-display)",
+                          fontSize: 17,
+                          color: "var(--ink)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {s.name || "—"}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11.5,
+                          color: "var(--muted)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {s.email}
+                      </div>
+                    </td>
+                    <td>
+                      <span
+                        className="badge"
+                        style={
+                          s.subscription_tier === "pro"
+                            ? { background: "var(--info-soft)", color: "var(--info)" }
+                            : { background: "transparent", color: "var(--muted)" }
+                        }
+                      >
+                        {s.subscription_tier === "pro" ? "Pro" : "Free"}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: 12, color: "var(--ink-soft)" }}>
+                      {s.grade_level > 0 ? gradeLabel(s.grade_level) : "—"}
+                    </td>
+                    <td>
+                      <div style={{ fontSize: 12 }} title={new Date(s.registered).toLocaleString()}>
+                        {formatRelativeDate(s.registered)}
+                      </div>
+                    </td>
+                    <td>
+                      <div
+                        style={{ fontSize: 12 }}
+                        title={s.last_active ? new Date(s.last_active).toLocaleString() : undefined}
+                      >
+                        {s.last_active ? formatRelativeDate(s.last_active) : "—"}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {students.students.length < students.total_students && (
+              <p style={{ marginTop: 12, color: "var(--muted)", fontSize: 12 }}>
+                Showing first {students.students.length} of {students.total_students}.
+              </p>
+            )}
+          </div>
+        )}
+      </Section>
     </div>
   );
+}
+
+function gradeLabel(grade: number): string {
+  if (grade <= 2) return "K–2";
+  if (grade <= 5) return "3–5";
+  if (grade <= 8) return "6–8";
+  if (grade <= 12) return "9–12";
+  return "College";
 }
 
 /* ── Subcomponents ─────────────────────────────────────────────── */

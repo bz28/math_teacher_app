@@ -215,6 +215,8 @@ export const api = {
   schools: () => request<{ schools: SchoolListItem[] }>("/admin/schools"),
   school: (id: string) => request<SchoolDetail>(`/admin/schools/${id}`),
   schoolOverview: (id: string) => request<SchoolOverviewData>(`/admin/schools/${id}/overview`),
+  schoolStudents: (id: string, params?: Record<string, string>) =>
+    request<SchoolStudentsData>(`/admin/schools/${id}/students`, params),
   createSchool: (body: CreateSchoolBody) => mutate<{ id: string; status: string }>("/admin/schools", "POST", body),
   updateSchool: (id: string, body: UpdateSchoolBody) => mutate<{ status: string }>(`/admin/schools/${id}`, "PATCH", body),
   inviteTeacher: (schoolId: string, email: string) =>
@@ -540,6 +542,16 @@ export interface TeacherRosterSection {
   id: string;
   name: string;
   course_id: string;
+}
+
+export interface SchoolStudentsData {
+  school: {
+    id: string;
+    name: string;
+    kind: string;
+  };
+  total_students: number;
+  students: TeacherRosterStudent[];
 }
 
 export interface TeacherStudentsData {
