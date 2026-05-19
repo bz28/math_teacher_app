@@ -19,16 +19,18 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="student")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    # School affiliation. The column stays nullable so admin rows can
-    # be created without a school, but production enforces
-    # `role IN ('teacher','student') ⇒ school_id IS NOT NULL` via a
-    # CHECK constraint added in migration bp1000059. For institutional
-    # users this is the partner school; for indie self-signups it's a
-    # synthetic kind='individual' school auto-created in /auth/register
-    # so every teacher and student has a stamped school_id and
-    # downstream code can stop branching on NULL. SET NULL on school
-    # delete keeps users alive — caller must re-link to satisfy the
-    # CHECK before the next write.
+    # School affiliation. Production enforces `role = 'teacher' ⇒
+    # school_id IS NOT NULL` via a CHECK constraint added in
+    # bp1000059 — every teacher has a school (institutional partner,
+    # or a synthetic kind='individual' school auto-created at
+    # self-signup). The teacher-only invariant breaks the propagation
+    # chain that caused the indie-classroom bug: every course inherits
+    # a real school_id, so every student joining the section inherits
+    # one too. Students and admins stay nullable on purpose — solo
+    # consumer-app students never join a class and admins are
+    # platform-level. SET NULL on school delete keeps users alive —
+    # caller must re-link any teacher to satisfy the CHECK before the
+    # next write.
     school_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("schools.id", ondelete="SET NULL"),
         nullable=True, index=True,
