@@ -214,9 +214,31 @@ async def get_school(
     if not school:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="School not found")
 
-    # Teachers at this school
+    # Teachers at this school, joined to a 30d LLM stats subquery so a
+    # 20-teacher school still resolves in one round trip (no per-row
+    # follow-up query). Outer-joined so a teacher with zero calls
+    # surfaces with 0/0 rather than dropping out of the list.
+    since_30d = datetime.now(UTC) - timedelta(days=30)
+    llm_stats_sq = (
+        select(
+            LLMCall.user_id.label("user_id"),
+            func.count().label("call_count"),
+            func.coalesce(func.sum(LLMCall.cost_usd), 0).label("total_cost"),
+        )
+        .where(LLMCall.created_at >= since_30d, LLMCall.user_id.isnot(None))
+        .group_by(LLMCall.user_id)
+        .subquery()
+    )
     teachers = (await db.execute(
-        select(User.id, User.name, User.email, User.created_at)
+        select(
+            User.id,
+            User.name,
+            User.email,
+            User.created_at,
+            func.coalesce(llm_stats_sq.c.call_count, 0).label("call_count_30d"),
+            func.coalesce(llm_stats_sq.c.total_cost, 0).label("total_cost_30d"),
+        )
+        .outerjoin(llm_stats_sq, llm_stats_sq.c.user_id == User.id)
         .where(User.school_id == school.id, User.role == "teacher")
         .order_by(User.name)
     )).all()
@@ -239,7 +261,14 @@ async def get_school(
         "notes": school.notes,
         "created_at": school.created_at.isoformat(),
         "teachers": [
-            {"id": str(t.id), "name": t.name, "email": t.email, "joined_at": t.created_at.isoformat()}
+            {
+                "id": str(t.id),
+                "name": t.name,
+                "email": t.email,
+                "joined_at": t.created_at.isoformat(),
+                "call_count_30d": int(t.call_count_30d),
+                "total_cost_30d": round(float(t.total_cost_30d), 6),
+            }
             for t in teachers
         ],
         "pending_invites": [
