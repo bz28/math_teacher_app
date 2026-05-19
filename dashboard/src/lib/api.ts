@@ -186,6 +186,8 @@ export const api = {
     mutate<{ status: string }>(`/admin/users/${userId}/subscription`, "PATCH", { tier, status }),
   resetDailyLimit: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}/reset-daily-limit`, "POST"),
   inviteAdmin: (email: string, name: string) => mutate<{ status: string }>("/admin/users/invite", "POST", { email, name }),
+  teacherStudents: (teacherId: string, params?: Record<string, string>) =>
+    request<TeacherStudentsData>(`/admin/users/${teacherId}/students`, params),
   // Leads
   leads: () => request<{ leads: ContactLeadData[] }>("/admin/leads"),
   lead: (id: string) => request<LeadDetail>(`/admin/leads/${id}`),
@@ -213,6 +215,8 @@ export const api = {
   schools: () => request<{ schools: SchoolListItem[] }>("/admin/schools"),
   school: (id: string) => request<SchoolDetail>(`/admin/schools/${id}`),
   schoolOverview: (id: string) => request<SchoolOverviewData>(`/admin/schools/${id}/overview`),
+  schoolStudents: (id: string, params?: Record<string, string>) =>
+    request<SchoolStudentsData>(`/admin/schools/${id}/students`, params),
   createSchool: (body: CreateSchoolBody) => mutate<{ id: string; status: string }>("/admin/schools", "POST", body),
   updateSchool: (id: string, body: UpdateSchoolBody) => mutate<{ status: string }>(`/admin/schools/${id}`, "PATCH", body),
   inviteTeacher: (schoolId: string, email: string) =>
@@ -521,6 +525,47 @@ export interface UpdateSchoolBody {
   contact_email?: string;
   is_active?: boolean;
   notes?: string;
+}
+
+export interface TeacherRosterStudent {
+  id: string;
+  email: string;
+  name: string;
+  grade_level: number;
+  registered: string;
+  last_active: string | null;
+  subscription_tier: string;
+  subscription_status: string;
+}
+
+export interface TeacherRosterSection {
+  id: string;
+  name: string;
+  course_id: string;
+}
+
+export interface SchoolStudentsData {
+  school: {
+    id: string;
+    name: string;
+    kind: string;
+  };
+  total_students: number;
+  students: TeacherRosterStudent[];
+}
+
+export interface TeacherStudentsData {
+  teacher: {
+    id: string;
+    name: string;
+    email: string;
+    subscription_tier: string;
+    subscription_status: string;
+    school_id: string | null;
+  };
+  sections: TeacherRosterSection[];
+  total_students: number;
+  students: TeacherRosterStudent[];
 }
 
 export interface UsersData {

@@ -7,7 +7,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +21,8 @@ from api.models.course import Course
 from api.models.llm_call import LLMCall
 from api.models.school import SCHOOL_KIND_INSTITUTIONAL, School
 from api.models.section import Section
+from api.models.section_enrollment import SectionEnrollment
+from api.models.session import Session
 from api.models.teacher_invite import TeacherInvite
 from api.models.user import User
 
@@ -248,6 +250,91 @@ async def get_school(
                 "created_at": i.created_at.isoformat(),
             }
             for i in invites
+        ],
+    }
+
+
+@router.get("/schools/{school_id}/students")
+async def school_students(
+    school_id: str,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Roster of every student enrolled in any of the school's courses.
+
+    One pass over courses → sections → section_enrollments → users
+    so a school with many teachers doesn't N+1 across the per-teacher
+    endpoint. Same row shape as `/admin/users/{teacher_id}/students`
+    minus per-section context (a student may sit across several
+    teachers within the same school; surfacing each enrollment would
+    bloat the table for no obvious operator value).
+    """
+    school = (await db.execute(
+        select(School).where(School.id == school_id)
+    )).scalar_one_or_none()
+    if school is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="School not found",
+        )
+
+    students_base = (
+        select(
+            User.id,
+            User.email,
+            User.name,
+            User.grade_level,
+            User.created_at,
+            User.subscription_tier,
+            User.subscription_status,
+        )
+        .join(SectionEnrollment, SectionEnrollment.student_id == User.id)
+        .join(Course, Course.id == SectionEnrollment.course_id)
+        .where(Course.school_id == school.id)
+        .distinct()
+    )
+    total = (await db.execute(
+        select(func.count()).select_from(students_base.subquery())
+    )).scalar() or 0
+
+    last_active_sq = (
+        select(
+            Session.user_id,
+            func.max(Session.created_at).label("last_active"),
+        )
+        .group_by(Session.user_id)
+        .subquery()
+    )
+
+    rows = (await db.execute(
+        students_base
+        .add_columns(last_active_sq.c.last_active)
+        .outerjoin(last_active_sq, last_active_sq.c.user_id == User.id)
+        .order_by(User.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )).all()
+
+    return {
+        "school": {
+            "id": str(school.id),
+            "name": school.name,
+            "kind": school.kind,
+        },
+        "total_students": total,
+        "students": [
+            {
+                "id": str(r.id),
+                "email": r.email,
+                "name": r.name,
+                "grade_level": r.grade_level,
+                "registered": r.created_at.isoformat(),
+                "last_active": r.last_active.isoformat() if r.last_active else None,
+                "subscription_tier": r.subscription_tier,
+                "subscription_status": r.subscription_status,
+            }
+            for r in rows
         ],
     }
 
