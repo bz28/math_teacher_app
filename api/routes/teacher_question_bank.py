@@ -117,6 +117,11 @@ class UpdateBankItemRequest(BaseModel):
     question: str | None = None
     solution_steps: list[Any] | None = None
     final_answer: str | None = None
+    # MCQ wrong-answer choices. None = leave unchanged; must be a
+    # 3-element list when set so the renderer always has exactly 4
+    # choices (correct + 3 wrong). Used by the workshop modal's
+    # MCQ edit fields.
+    distractors: list[str] | None = None
     difficulty: str | None = None
     # None = leave unchanged; must be a real unit when set. The old
     # `clear_unit` sentinel is gone — there's no unsorted bucket to
@@ -473,6 +478,7 @@ async def update_bank_item(
         body.question is not None
         or body.solution_steps is not None
         or body.final_answer is not None
+        or body.distractors is not None
     )
     if content_changing:
         _ensure_unlocked(item)
@@ -492,6 +498,18 @@ async def update_bank_item(
         item.solution_steps = body.solution_steps
     if body.final_answer is not None:
         item.final_answer = body.final_answer
+    if body.distractors is not None:
+        # MCQ rendering relies on exactly 3 distractors so the
+        # composed [correct, ...wrong] gives 4 choices. Reject
+        # anything else loudly — silently truncating would surprise
+        # the teacher later when the modal renders fewer choices than
+        # they typed.
+        if len(body.distractors) != 3:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="distractors must contain exactly 3 wrong-answer choices",
+            )
+        item.distractors = [str(d) for d in body.distractors]
     if body.difficulty is not None:
         if body.difficulty not in ("easy", "medium", "hard"):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid difficulty")

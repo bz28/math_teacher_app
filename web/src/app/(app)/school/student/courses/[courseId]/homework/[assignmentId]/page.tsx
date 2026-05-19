@@ -357,6 +357,28 @@ export default function HomeworkPage() {
                       <MathText text={p.question} />
                     </div>
 
+                    {/* MCQ choices laid out beneath the problem so the
+                        student knows which letter to circle on their
+                        handwritten work. Submission is still the
+                        photo-upload flow — these are display-only. */}
+                    {p.format === "mcq" && p.mcq_choices.length === 4 && (
+                      <ol className="mt-3 space-y-1 pl-1 text-sm text-text-primary">
+                        {p.mcq_choices.map((choice, i) => (
+                          <li
+                            key={`${p.bank_item_id}-${i}`}
+                            className="flex items-start gap-2"
+                          >
+                            <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border text-[10px] font-bold text-text-muted">
+                              {String.fromCharCode(65 + i)}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <MathText text={choice} />
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+
                     {gradeEntry !== null && (
                       <PublishedGradePanel entry={gradeEntry} />
                     )}
