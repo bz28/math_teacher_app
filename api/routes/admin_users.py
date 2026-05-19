@@ -655,6 +655,124 @@ async def delete_user(
     return {"status": "ok"}
 
 
+@router.get("/users/{teacher_id}/students")
+async def teacher_students(
+    teacher_id: str,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Roster of every student enrolled in any of `teacher_id`'s sections.
+
+    Drives the per-teacher drill-in on the dashboard (both indie and
+    institutional). Same row shape as `/admin/users` so the frontend
+    reuses the existing row component — but slimmed to the columns
+    the roster actually needs (no spend / classroom / daily-usage
+    aggregates, since those don't make sense per-student in this
+    view).
+
+    Returns 404 if the user doesn't exist or isn't a teacher — the
+    page only makes sense for teachers, and a typo'd UUID shouldn't
+    silently return an empty list.
+    """
+    teacher = (await db.execute(
+        select(User).where(User.id == teacher_id)
+    )).scalar_one_or_none()
+    if teacher is None or teacher.role != "teacher":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Teacher not found",
+        )
+
+    # All sections the teacher owns or co-owns. CourseTeacher is the
+    # source of truth; SectionEnrollment hops through that.
+    sections_q = (
+        select(Section.id, Section.name, Section.course_id)
+        .join(CourseTeacher, CourseTeacher.course_id == Section.course_id)
+        .where(CourseTeacher.teacher_id == teacher_id)
+        .order_by(Section.name.asc())
+    )
+    section_rows = (await db.execute(sections_q)).all()
+    section_summary = [
+        {
+            "id": str(s.id),
+            "name": s.name,
+            "course_id": str(s.course_id),
+        }
+        for s in section_rows
+    ]
+
+    # Distinct students across all those sections. distinct() because a
+    # student could (in theory) be enrolled in two sections of the
+    # same teacher's courses; we want one row per kid.
+    students_base = (
+        select(
+            User.id,
+            User.email,
+            User.name,
+            User.grade_level,
+            User.created_at,
+            User.subscription_tier,
+            User.subscription_status,
+        )
+        .join(SectionEnrollment, SectionEnrollment.student_id == User.id)
+        .join(Section, Section.id == SectionEnrollment.section_id)
+        .join(CourseTeacher, CourseTeacher.course_id == Section.course_id)
+        .where(CourseTeacher.teacher_id == teacher_id)
+        .distinct()
+    )
+    total = (await db.execute(
+        select(func.count()).select_from(students_base.subquery())
+    )).scalar() or 0
+
+    # Last-active per student in scope. Same source as the main users
+    # list so the displayed timestamp matches what's shown elsewhere.
+    last_active_sq = (
+        select(
+            Session.user_id,
+            func.max(Session.created_at).label("last_active"),
+        )
+        .group_by(Session.user_id)
+        .subquery()
+    )
+
+    students_q = (
+        students_base
+        .add_columns(last_active_sq.c.last_active)
+        .outerjoin(last_active_sq, last_active_sq.c.user_id == User.id)
+        .order_by(User.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = (await db.execute(students_q)).all()
+
+    return {
+        "teacher": {
+            "id": str(teacher.id),
+            "name": teacher.name,
+            "email": teacher.email,
+            "subscription_tier": teacher.subscription_tier,
+            "subscription_status": teacher.subscription_status,
+            "school_id": str(teacher.school_id) if teacher.school_id else None,
+        },
+        "sections": section_summary,
+        "total_students": total,
+        "students": [
+            {
+                "id": str(r.id),
+                "email": r.email,
+                "name": r.name,
+                "grade_level": r.grade_level,
+                "registered": r.created_at.isoformat(),
+                "last_active": r.last_active.isoformat() if r.last_active else None,
+                "subscription_tier": r.subscription_tier,
+                "subscription_status": r.subscription_status,
+            }
+            for r in rows
+        ],
+    }
+
+
 @router.post("/users/{user_id}/reset-daily-limit")
 async def reset_daily_limit(
     user_id: str,
