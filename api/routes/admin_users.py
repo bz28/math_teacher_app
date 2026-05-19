@@ -82,17 +82,30 @@ async def users(
     if role:
         scope_filters.append(User.role == role)
     if no_school:
-        # Post-bp1000059 every teacher/student has a school_id; indie
-        # accounts now point at a kind='individual' synthetic school
-        # instead of being NULL. EXISTS keeps this an indexed lookup.
-        scope_filters.append(
-            select(School.id)
-            .where(
-                School.id == User.school_id,
-                School.kind == SCHOOL_KIND_INDIVIDUAL,
+        # "Independent" means different things for the two roles
+        # post-bp1000059:
+        #  - Teachers always have a school_id (CHECK constraint).
+        #    Indie ones point at a kind='individual' synthetic
+        #    school — that's the new signal.
+        #  - Students may be solo (consumer-app users who never
+        #    joined a class) and keep school_id IS NULL. Students of
+        #    indie teachers have school_id set and belong under that
+        #    teacher's roster, NOT in the global "Independent
+        #    Students" list.
+        # When the page doesn't constrain role we default to the
+        # student semantics (matches the pre-refactor meaning of
+        # "no school").
+        if role == "teacher":
+            scope_filters.append(
+                select(School.id)
+                .where(
+                    School.id == User.school_id,
+                    School.kind == SCHOOL_KIND_INDIVIDUAL,
+                )
+                .exists()
             )
-            .exists()
-        )
+        else:
+            scope_filters.append(User.school_id.is_(None))
 
     # Subquery of user IDs in scope — referenced by the spend and
     # active-user aggregates so they only count users we're showing.

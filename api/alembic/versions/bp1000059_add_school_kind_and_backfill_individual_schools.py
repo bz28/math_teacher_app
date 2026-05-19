@@ -17,9 +17,13 @@ Changes:
      courses + enrolled students that were inheriting the NULL.
   3. Mirror the new school_id onto preview shadow students (the
      "Try as Student" rows that link via preview_owner_id).
-  4. Add a CHECK on `users`: role IN ('teacher','student') ⇒
-     school_id IS NOT NULL — so the bug class can't reappear at the
-     column level.
+  4. Add a CHECK on `users`: role = 'teacher' ⇒ school_id IS NOT NULL
+     — so the propagation chain that caused the bug (teacher with no
+     school → course with no school → student with no school) can't
+     reappear at the column level. Students stay nullable on purpose:
+     the consumer mobile app lets a kid sign up to scan a problem
+     without ever joining a class, and those users legitimately have
+     no school_id.
 """
 from collections.abc import Sequence
 
@@ -138,17 +142,19 @@ def upgrade() -> None:
         )
     )
 
-    # 4. Lock the invariant in. Admins stay nullable.
+    # 4. Lock the invariant in: every teacher has a school. Students
+    # and admins stay nullable — solo consumer-app students never
+    # joined a class and admins are platform-level.
     op.create_check_constraint(
-        "ck_users_school_required_for_teacher_student",
+        "ck_users_school_required_for_teacher",
         "users",
-        "role NOT IN ('teacher', 'student') OR school_id IS NOT NULL",
+        "role != 'teacher' OR school_id IS NOT NULL",
     )
 
 
 def downgrade() -> None:
     op.drop_constraint(
-        "ck_users_school_required_for_teacher_student",
+        "ck_users_school_required_for_teacher",
         "users", type_="check",
     )
     # The synthetic individual schools and the NOT-NULL school_id
