@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { teacher, EntitlementError, type TeacherDocument, type TeacherUnit } from "@/lib/api";
+import {
+  teacher,
+  EntitlementError,
+  DEFAULT_GENERATION_PARAMS,
+  type GenerationParams,
+  type TeacherDocument,
+  type TeacherUnit,
+} from "@/lib/api";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { topUnits } from "@/lib/units";
 import { fileToBase64, formatFileSize } from "@/lib/utils";
@@ -11,6 +18,10 @@ import { useDocumentUploads } from "@/hooks/use-document-uploads";
 import { FileTextIcon, ImageIcon, UploadIcon, XIcon } from "@/components/ui/icons";
 import { SelectableChip } from "./selectable-chip";
 import { SourceMaterialPicker } from "./source-material-picker";
+import {
+  GenerationParamsCustomize,
+  persistGenerationParams,
+} from "./generation-params-customize";
 
 /**
  * Single-screen creation modal for a draft homework.
@@ -93,6 +104,10 @@ export function NewHomeworkModal({
   // a non-preset.
   const [countDraft, setCountDraft] = useState("");
   const [topicHint, setTopicHint] = useState("");
+  // Customize-section selections for generation. Same shape + storage
+  // as the in-HW Generate-more modal; selection persists across both
+  // entry points so AP teachers don't reselect.
+  const [params, setParams] = useState<GenerationParams>(DEFAULT_GENERATION_PARAMS);
 
   // Upload-mode state. Files stay staged across mode switches so a
   // teacher who clicks Generate by accident doesn't lose their photos.
@@ -214,6 +229,9 @@ export function NewHomeworkModal({
           unit_id: unitId!,
           document_ids: Array.from(selectedDocs),
           constraint: topicHint.trim() || null,
+          // Writes to localStorage as a side-effect; returns null
+          // when no customizations are active.
+          params: persistGenerationParams(params),
         });
         sessionStorage.setItem(`hw-gen-${id}`, JSON.stringify([job.id]));
       } catch (e) {
@@ -526,6 +544,12 @@ export function NewHomeworkModal({
                   className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
                 />
               </div>
+
+              <GenerationParamsCustomize
+                params={params}
+                onChange={setParams}
+                disabled={busy}
+              />
 
               {unitId && (
                 <SourceMaterialPicker
