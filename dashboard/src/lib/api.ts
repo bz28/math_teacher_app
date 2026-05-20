@@ -1,5 +1,69 @@
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000/v1";
 
+// ── Network error + API health pub/sub ─────────────────────────────
+//
+// Mirrors web/src/lib/api.ts. NetworkError marks the case where the
+// request never received a server response (DNS failure, TCP refused,
+// CORS preflight blocked by a dead container) — distinct from a
+// non-2xx HTTP response, which still proves the backend is reachable.
+//
+// `apiHealth` is a tiny pub/sub the ServiceStatusBanner subscribes to.
+// We flip `down` on any NetworkError; any successful response clears
+// it. No debouncing — outages are infrequent and a quick flicker is
+// preferable to staring at a frozen UI for 30 seconds.
+
+export class NetworkError extends Error {
+  cause: "fetch_failed" | "timeout";
+  constructor(cause: "fetch_failed" | "timeout", message?: string) {
+    super(
+      message ??
+        (cause === "timeout"
+          ? "The request took too long. Please try again."
+          : "Can't reach our servers right now. Please try again in a moment."),
+    );
+    this.name = "NetworkError";
+    this.cause = cause;
+  }
+}
+
+type ApiHealthListener = (down: boolean) => void;
+const apiHealthListeners = new Set<ApiHealthListener>();
+let apiHealthDown = false;
+
+function setApiHealth(down: boolean) {
+  if (apiHealthDown === down) return;
+  apiHealthDown = down;
+  apiHealthListeners.forEach((fn) => fn(down));
+}
+
+export const apiHealth = {
+  isDown(): boolean {
+    return apiHealthDown;
+  },
+  subscribe(fn: ApiHealthListener): () => void {
+    apiHealthListeners.add(fn);
+    return () => apiHealthListeners.delete(fn);
+  },
+};
+
+// Wraps `fetch` so network failures become a typed NetworkError and
+// the global health flag is kept in sync. Every call site that hits
+// the API in this file routes through here (withAuth's inner fetch,
+// login, forgotPassword). Refresh is intentionally not wrapped: its
+// own swallowed failure already returns "transient_error" and we
+// don't want a refresh blip alone to flash the banner.
+async function trackedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  try {
+    const res = await fetch(input, init);
+    if (apiHealthDown) setApiHealth(false);
+    return res;
+  } catch (e) {
+    const isTimeout = (e as { name?: string }).name === "AbortError";
+    setApiHealth(true);
+    throw new NetworkError(isTimeout ? "timeout" : "fetch_failed");
+  }
+}
+
 // ── Token storage ──────────────────────────────────────────────────
 //
 // Switched from sessionStorage (per-tab, dies on tab close) to
@@ -153,7 +217,7 @@ async function request<T>(path: string, params?: Record<string, string>): Promis
           if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, v);
         }
       }
-      return fetch(url.toString(), {
+      return trackedFetch(url.toString(), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
     },
@@ -163,7 +227,7 @@ async function request<T>(path: string, params?: Record<string, string>): Promis
 
 async function mutate<T>(path: string, method: string, body?: object): Promise<T> {
   return withAuth(
-    (token) => fetch(`${API_BASE}${path}`, {
+    (token) => trackedFetch(`${API_BASE}${path}`, {
       method,
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -226,7 +290,7 @@ export const api = {
   cancelInvite: (schoolId: string, inviteId: string) =>
     mutate<{ status: string }>(`/admin/schools/${schoolId}/invites/${inviteId}`, "DELETE"),
   login: async (email: string, password: string) => {
-    const res = await fetch(`${API_BASE}/auth/login`, {
+    const res = await trackedFetch(`${API_BASE}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -237,7 +301,7 @@ export const api = {
     return data;
   },
   forgotPassword: async (email: string) => {
-    const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+    const res = await trackedFetch(`${API_BASE}/auth/forgot-password`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
