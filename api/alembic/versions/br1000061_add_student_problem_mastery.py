@@ -45,6 +45,13 @@ def upgrade() -> None:
             "state", sa.String(20), nullable=False,
             server_default="not_started",
         ),
+        # CHECK at the DB level so any direct SQL or buggy code path
+        # can't land an unknown state. Pydantic's Literal validation
+        # on the read side would otherwise 500 on a bad value.
+        sa.CheckConstraint(
+            "state IN ('not_started','walked_through','missed','attempted','mastered')",
+            name="ck_student_problem_mastery_state_valid",
+        ),
         sa.Column(
             "attempts", sa.Integer, nullable=False, server_default="0",
         ),
@@ -87,6 +94,10 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("role", sa.String(16), nullable=False),
+        sa.CheckConstraint(
+            "role IN ('user','assistant')",
+            name="ck_student_problem_chat_role_valid",
+        ),
         sa.Column("content", sa.String(8192), nullable=False),
         sa.Column("step_index", sa.Integer, nullable=True),
         sa.Column(

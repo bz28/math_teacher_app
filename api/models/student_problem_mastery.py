@@ -13,7 +13,16 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -53,12 +62,22 @@ class StudentProblemMastery(Base):
             "student_id",
             "state",
         ),
-        # History-tab "needs review" surfaces rows where the student
-        # has interacted recently; index covers the ORDER BY.
+        # Reserved for PR 3's History-tab "needs review" surface,
+        # which orders by `last_attempt_at DESC` for the recently-
+        # missed list. Cheap to land alongside the table — adding
+        # an index later would require a backfill scan.
         Index(
             "ix_student_problem_mastery_student_last_attempt",
             "student_id",
             "last_attempt_at",
+        ),
+        # CHECK at the DB level so any direct SQL or buggy code path
+        # can't land an unknown state. Pydantic's Literal validation
+        # would otherwise 500 on read.
+        CheckConstraint(
+            "state IN ('not_started','walked_through','missed',"
+            "'attempted','mastered')",
+            name="ck_student_problem_mastery_state_valid",
         ),
     )
 
@@ -129,6 +148,10 @@ class StudentProblemChat(Base):
             "student_id",
             "bank_item_id",
             "created_at",
+        ),
+        CheckConstraint(
+            "role IN ('user','assistant')",
+            name="ck_student_problem_chat_role_valid",
         ),
     )
 

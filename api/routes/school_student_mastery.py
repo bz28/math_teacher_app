@@ -47,6 +47,7 @@ from api.models.student_problem_mastery import (
     StudentProblemMastery,
 )
 from api.models.user import User
+from api.routes.school_student_practice import _load_assignment_for_student
 from api.services.mastery import Event, MasterySnapshot, apply_event
 
 router = APIRouter(prefix="/school/student", tags=["school-student-mastery"])
@@ -182,44 +183,6 @@ class ChatAskResponse(BaseModel):
 # ── Auth + load helpers ──
 
 
-async def _load_practice_for_student(
-    db: AsyncSession,
-    assignment_id: uuid.UUID,
-    student_id: uuid.UUID,
-) -> Assignment:
-    """Load a published practice assignment the student has section
-    visibility into. 404 on miss / wrong type / unpublished, 403 on
-    not-enrolled. Same shape as the existing
-    school_student_practice._load_assignment_for_student, scoped to
-    practice."""
-    assignment = (await db.execute(
-        select(Assignment).where(Assignment.id == assignment_id)
-    )).scalar_one_or_none()
-    if assignment is None:
-        raise HTTPException(status_code=404, detail="Practice set not found")
-    if assignment.status != "published":
-        raise HTTPException(status_code=403, detail="Practice set is not published")
-    if assignment.type != "practice":
-        # 404 (not 400) to keep cross-type ids opaque.
-        raise HTTPException(status_code=404, detail="Not a practice set")
-
-    enrolled = (await db.execute(
-        select(SectionEnrollment.id)
-        .join(
-            AssignmentSection,
-            AssignmentSection.section_id == SectionEnrollment.section_id,
-        )
-        .where(
-            AssignmentSection.assignment_id == assignment_id,
-            SectionEnrollment.student_id == student_id,
-        )
-        .limit(1)
-    )).scalar_one_or_none()
-    if enrolled is None:
-        raise HTTPException(status_code=403, detail="Not enrolled in this practice")
-    return assignment
-
-
 async def _load_practice_problem_for_student(
     db: AsyncSession,
     bank_item_id: uuid.UUID,
@@ -231,8 +194,14 @@ async def _load_practice_problem_for_student(
     the bank_item_id is the only path param so we resolve its parent
     practice here and reuse the practice-level enrollment check.
 
-    404 on every authz failure to avoid leaking the difference
-    between "doesn't exist" and "exists but not yours."
+    404 on every authz failure (vs the 403 the assignment-level
+    `_load_assignment_for_student` returns for not-enrolled). The
+    asymmetry is intentional: assignment_ids are class-scoped and
+    visible to enrolled students through the UI, so 403 gives clear
+    feedback. bank_item_ids leak through this endpoint alone and are
+    not enumerable from anywhere else; 404 keeps cross-class items
+    opaque so a student can't probe to confirm which bank items
+    exist across the school's catalog.
     """
     item = (await db.execute(
         select(QuestionBankItem).where(QuestionBankItem.id == bank_item_id)
@@ -419,7 +388,9 @@ async def practice_overview(
     """Return the practice set plus per-problem mastery state for the
     overview page. One round trip — joins the assignment's approved
     items with the student's mastery rows."""
-    assignment = await _load_practice_for_student(db, assignment_id, user.id)
+    assignment = await _load_assignment_for_student(
+        db, assignment_id, user.id, expected_type="practice",
+    )
     course = (await db.execute(
         select(Course).where(Course.id == assignment.course_id)
     )).scalar_one()
@@ -487,7 +458,9 @@ async def practice_next_problem(
     state is anything but `mastered`. Returns `complete` when every
     problem is mastered so the client can route to the celebratory
     state instead of into an empty session."""
-    assignment = await _load_practice_for_student(db, assignment_id, user.id)
+    assignment = await _load_assignment_for_student(
+        db, assignment_id, user.id, expected_type="practice",
+    )
 
     items = (await db.execute(
         select(QuestionBankItem)
