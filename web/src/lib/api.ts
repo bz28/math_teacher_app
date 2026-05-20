@@ -180,6 +180,61 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Thrown when the network request never reached a server response —
+ * `fetch` itself rejected (DNS failure, TCP refused, CORS preflight
+ * blocked, container down) or the request was aborted via timeout.
+ * Distinct from `ApiError`, which represents an HTTP response the
+ * server actually returned. UI surfaces use this distinction to show
+ * a "service unavailable" banner vs. an inline error message.
+ *
+ * Default messages are user-facing — anywhere this `.message` ends
+ * up rendered (toast, inline error) reads as plain English rather
+ * than the literal browser error.
+ */
+export class NetworkError extends Error {
+  constructor(
+    public cause: "fetch_failed" | "timeout",
+    message?: string,
+  ) {
+    super(
+      message ??
+        (cause === "timeout"
+          ? "The request took too long. Please try again."
+          : "Can't reach our servers right now. Please try again in a moment."),
+    );
+    this.name = "NetworkError";
+  }
+}
+
+// ── API health pub/sub ──
+//
+// Tracks whether requests are currently failing with NetworkError so
+// any subscribed component can render a "service unavailable" UI.
+// One consecutive failure flips the state — outages are rare enough
+// that we don't bother debouncing, and a flicker is preferable to
+// users staring at a frozen form for 30 seconds. Any successful
+// request flips it back.
+type ApiHealthListener = (down: boolean) => void;
+const apiHealthListeners = new Set<ApiHealthListener>();
+let apiHealthDown = false;
+
+function setApiHealth(down: boolean) {
+  if (apiHealthDown === down) return;
+  apiHealthDown = down;
+  apiHealthListeners.forEach((fn) => fn(down));
+}
+
+export const apiHealth = {
+  isDown(): boolean {
+    return apiHealthDown;
+  },
+  subscribe(fn: ApiHealthListener): () => void {
+    apiHealthListeners.add(fn);
+    return () => apiHealthListeners.delete(fn);
+  },
+};
+
 export class EntitlementError extends ApiError {
   public entitlement: string;
   public isLimit: boolean;
@@ -318,12 +373,29 @@ async function apiFetch<T>(
     ...(fetchOpts.headers as Record<string, string> | undefined),
   };
 
+  let res: Response;
   try {
-    const res = await fetch(`${BASE_URL}${path}`, {
+    res = await fetch(`${BASE_URL}${path}`, {
       ...fetchOpts,
       headers,
       signal: controller.signal,
     });
+  } catch (e) {
+    // `fetch` only rejects when the request never received a response
+    // (DNS failure, TCP refused, CORS preflight blocked by a dead
+    // backend, abort from our own timeout). We flip the global health
+    // state so the ServiceStatusBanner can render, then re-throw a
+    // typed error so individual callers can still react if they want.
+    clearTimeout(timer);
+    const isTimeout = (e as { name?: string }).name === "AbortError";
+    setApiHealth(true);
+    throw new NetworkError(isTimeout ? "timeout" : "fetch_failed");
+  }
+
+  try {
+    // Any response from the server — even a 5xx — means the backend
+    // is reachable. Clear the down flag so the banner hides.
+    if (apiHealthDown) setApiHealth(false);
 
     if (res.status === 401) {
       // Don't attempt token refresh for auth endpoints — their 401s
