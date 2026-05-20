@@ -115,6 +115,17 @@ async def test_overview_returns_problems_with_not_started_default(
     for prob in body["problems"]:
         assert prob["mastery_state"] == "not_started"
         assert prob["attempts"] == 0
+        # Answer-leak regression: overview must never ship the correct
+        # answer, distractors, or solution_step bodies pre-attempt. If
+        # any of these come back, the dot map becomes a spoiler.
+        assert "final_answer" not in prob
+        assert "distractors" not in prob
+        assert "solution_steps" not in prob
+        # MCQ rendering data IS allowed because knowing the four
+        # choices (with the correct one mixed in) doesn't reveal which
+        # is correct.
+        assert len(prob["mcq_choices"]) == 4
+        assert prob["step_count"] == 1
 
 
 async def test_overview_404_for_outsider(
@@ -281,6 +292,25 @@ async def test_walkthrough_opened_blocks_mastery(
         json={"selected_choice": p["answers"][0]},
     )
     assert r.json()["mastery_state_after"] == "attempted"
+
+
+async def test_walkthrough_returns_solution_steps_and_answer(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """The walkthrough response is the only place solution steps and
+    the final answer are exposed to the client — opening the
+    walkthrough is the moment the student "earns" them."""
+    p = await _seed_practice(world)
+    pid = p["problem_ids"][0]
+    r = await client.post(
+        f"/v1/school/student/problems/{pid}/walkthrough-opened",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["mastery_state_after"] == "walked_through"
+    assert len(body["solution_steps"]) == 1
+    assert body["final_answer"] == p["answers"][0]
 
 
 async def test_walkthrough_idempotent(

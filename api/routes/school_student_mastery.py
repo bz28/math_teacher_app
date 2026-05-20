@@ -23,6 +23,7 @@ tutor is the moment we *want* students to lean on the tool.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -37,7 +38,7 @@ from api.database import get_db
 from api.middleware.auth import get_current_user_full
 from api.models.assignment import Assignment, AssignmentSection
 from api.models.course import Course
-from api.models.question_bank import QuestionBankItem
+from api.models.question_bank import FORMAT_MCQ, QuestionBankItem
 from api.models.section_enrollment import SectionEnrollment
 from api.models.student_problem_mastery import (
     STATE_NOT_STARTED,
@@ -69,18 +70,33 @@ MasteryState = Literal[
 
 
 class PracticeProblemOverview(BaseModel):
-    """One problem on the set Overview. Carries the mastery state for
-    the dot-map plus enough payload for the client to deep-link into
-    the session at a specific problem."""
+    """One problem on the set Overview / session entry. Carries the
+    mastery state for the dot-map plus enough payload to render the
+    MCQ session page without exposing the correct answer.
+
+    Deliberately omits `final_answer`, `distractors`, and
+    `solution_steps`: if any of them shipped pre-attempt, a student
+    could read the answer off the dot map and the mastery game is
+    moot. `mcq_choices` is the shuffled view-of-4 (correct + 3
+    distractors) — knowing the set of choices doesn't reveal which
+    is correct. `solution_steps` are exposed only after the student
+    opts into the walkthrough (returned by
+    /problems/{id}/walkthrough-opened) — once opened, the mastery
+    line is closed anyway, so it's safe."""
 
     bank_item_id: str
     position: int
     question: str
-    final_answer: str | None
-    distractors: list[str] | None
-    solution_steps: list[dict[str, Any]] | None
     difficulty: str
     format: str
+    # MCQ choices in stable shuffled order. Empty for free-response
+    # items. Same shuffle the existing HW-flow uses so a teacher
+    # previewing the bank sees the same arrangement as students.
+    mcq_choices: list[str]
+    # Total number of solution steps. Lets the dot-map / session UI
+    # show a step counter ("Step 1 of 4") without shipping the step
+    # bodies pre-walkthrough.
+    step_count: int
     mastery_state: MasteryState
     attempts: int
     last_attempt_at: datetime | None
@@ -128,7 +144,15 @@ class AnswerResponse(BaseModel):
 
 
 class WalkthroughOpenedResponse(BaseModel):
+    """Returned by POST /problems/{id}/walkthrough-opened. The
+    solution steps ship in this response (not in overview / next-
+    problem) because opening the walkthrough is the moment the
+    student commits to "show me the answer" — pre-opening, the
+    steps would be a spoiler that breaks the mastery game."""
+
     mastery_state_after: MasteryState
+    solution_steps: list[dict[str, Any]]
+    final_answer: str
 
 
 class ChatMessageOut(BaseModel):
@@ -322,6 +346,24 @@ def _normalize_answer(s: str) -> str:
     return " ".join(s.strip().split())
 
 
+def _mcq_choices_for_student(item: QuestionBankItem) -> list[str]:
+    """Return the four MCQ choices in stable shuffled order, or [] for
+    non-MCQ items. Same algorithm as the HW-loop variant — deterministic
+    hash-of-id shuffle so the order is identical for every student and
+    matches what the teacher previewed on the bank review page.
+
+    Duplicated from school_student_practice rather than imported to
+    avoid coupling the two routers; the function is pure and tiny."""
+    if item.format != FORMAT_MCQ:
+        return []
+    distractors = list(item.distractors or [])
+    if len(distractors) != 3 or not item.final_answer:
+        return []
+    choices = [item.final_answer, *distractors]
+    digest = hashlib.sha1(str(item.id).encode("utf-8")).digest()
+    return [c for _, c in sorted(zip(digest[:4], choices, strict=False))]
+
+
 def _serialize_problem(
     item: QuestionBankItem,
     position: int,
@@ -334,11 +376,10 @@ def _serialize_problem(
         bank_item_id=str(item.id),
         position=position,
         question=item.question,
-        final_answer=item.final_answer,
-        distractors=list(item.distractors or []),
-        solution_steps=item.solution_steps,
         difficulty=item.difficulty,
         format=item.format,
+        mcq_choices=_mcq_choices_for_student(item),
+        step_count=len(item.solution_steps or []),
         mastery_state=state,
         attempts=row.attempts if row is not None else 0,
         last_attempt_at=row.last_attempt_at if row is not None else None,
@@ -510,8 +551,13 @@ async def open_walkthrough(
     """Stamp `walkthrough_opened_at` (idempotent) and transition state
     if appropriate. The student is committing to "show me the steps"
     — even if they end up answering correctly later, the mastery line
-    is closed."""
-    await _load_practice_problem_for_student(db, bank_item_id, user.id)
+    is closed. The solution steps and final answer ship in the response
+    so the client can render them immediately without a second round
+    trip, and so the overview / next-problem endpoints can stay free
+    of any answer-leaking fields."""
+    item, _assignment = await _load_practice_problem_for_student(
+        db, bank_item_id, user.id,
+    )
 
     existing = (await db.execute(
         select(StudentProblemMastery).where(
@@ -525,6 +571,8 @@ async def open_walkthrough(
 
     return WalkthroughOpenedResponse(
         mastery_state_after=row.state,
+        solution_steps=list(item.solution_steps or []),
+        final_answer=item.final_answer,
     )
 
 
