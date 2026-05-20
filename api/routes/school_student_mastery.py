@@ -25,12 +25,13 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.tutor import completed_chat, step_chat
@@ -46,7 +47,7 @@ from api.models.student_problem_mastery import (
     StudentProblemMastery,
 )
 from api.models.user import User
-from api.services.mastery import MasterySnapshot, apply_event
+from api.services.mastery import Event, MasterySnapshot, apply_event
 
 router = APIRouter(prefix="/school/student", tags=["school-student-mastery"])
 
@@ -283,54 +284,74 @@ def _snapshot_from_row(row: StudentProblemMastery | None) -> MasterySnapshot:
     )
 
 
-async def _upsert_mastery(
+async def _apply_event_to_mastery(
     db: AsyncSession,
     student_id: uuid.UUID,
     bank_item_id: uuid.UUID,
-    new: MasterySnapshot,
+    event: Event,
+    now: datetime,
 ) -> StudentProblemMastery:
-    """Persist `new` for (student, bank_item) — INSERT or UPDATE as
-    needed. Returns the live row.
+    """Atomically read-modify-write the (student, bank_item) mastery
+    row: SELECT FOR UPDATE the existing row (or INSERT a fresh one),
+    apply the state-machine event to its snapshot, persist the
+    result, commit.
 
-    Uses a row-level SELECT-then-add path rather than a Postgres
-    ON CONFLICT upsert because (a) we already loaded the row before
-    applying the state machine, so a second lookup is free and (b) the
-    column set is small enough that the typed update is clearer than
-    a JSONB diff. Concurrent answers from the same student on the
-    same problem are vanishingly rare in practice — at worst the
-    state machine is run twice and the second commit wins, which is
-    correct in this domain (idempotent on terminal states)."""
-    row = (await db.execute(
-        select(StudentProblemMastery).where(
-            StudentProblemMastery.student_id == student_id,
-            StudentProblemMastery.bank_item_id == bank_item_id,
-        )
-    )).scalar_one_or_none()
+    The row lock serializes concurrent answer + walkthrough requests
+    from the same student on the same problem so they can't read the
+    same snapshot, compute conflicting next-states, and clobber each
+    other on commit. In the no-row branch we race other inserts on
+    the (student_id, bank_item_id) PK; an IntegrityError means
+    someone else got there first, so we roll back and retry — the
+    second pass takes the lock-then-mutate path."""
+    for attempt in (0, 1):
+        row = (await db.execute(
+            select(StudentProblemMastery)
+            .where(
+                StudentProblemMastery.student_id == student_id,
+                StudentProblemMastery.bank_item_id == bank_item_id,
+            )
+            .with_for_update()
+        )).scalar_one_or_none()
 
-    if row is None:
-        row = StudentProblemMastery(
-            student_id=student_id,
-            bank_item_id=bank_item_id,
-            state=new.state,
-            attempts=new.attempts,
-            walkthrough_opened_at=new.walkthrough_opened_at,
-            first_attempt_at=new.first_attempt_at,
-            first_attempt_was_correct=new.first_attempt_was_correct,
-            last_attempt_at=new.last_attempt_at,
-            last_correct_at=new.last_correct_at,
-        )
-        db.add(row)
-    else:
-        row.state = new.state
-        row.attempts = new.attempts
-        row.walkthrough_opened_at = new.walkthrough_opened_at
-        row.first_attempt_at = new.first_attempt_at
-        row.first_attempt_was_correct = new.first_attempt_was_correct
-        row.last_attempt_at = new.last_attempt_at
-        row.last_correct_at = new.last_correct_at
+        snap = _snapshot_from_row(row)
+        after = apply_event(snap, event, now)
 
-    await db.commit()
-    return row
+        if row is None:
+            new_row = StudentProblemMastery(
+                student_id=student_id,
+                bank_item_id=bank_item_id,
+                state=after.state,
+                attempts=after.attempts,
+                walkthrough_opened_at=after.walkthrough_opened_at,
+                first_attempt_at=after.first_attempt_at,
+                first_attempt_was_correct=after.first_attempt_was_correct,
+                last_attempt_at=after.last_attempt_at,
+                last_correct_at=after.last_correct_at,
+            )
+            db.add(new_row)
+            try:
+                await db.commit()
+                return new_row
+            except IntegrityError:
+                await db.rollback()
+                if attempt == 1:
+                    # Shouldn't happen — a row that existed at the
+                    # second SELECT couldn't be insert-conflicted on.
+                    raise
+                continue
+
+        row.state = after.state
+        row.attempts = after.attempts
+        row.walkthrough_opened_at = after.walkthrough_opened_at
+        row.first_attempt_at = after.first_attempt_at
+        row.first_attempt_was_correct = after.first_attempt_was_correct
+        row.last_attempt_at = after.last_attempt_at
+        row.last_correct_at = after.last_correct_at
+        await db.commit()
+        return row
+
+    # Unreachable: the loop either returns or re-raises.
+    raise RuntimeError("apply_event_to_mastery exhausted retries")
 
 
 def _normalize_answer(s: str) -> str:
@@ -519,21 +540,11 @@ async def submit_answer(
         _normalize_answer(body.selected_choice)
         == _normalize_answer(item.final_answer)
     )
-
-    existing = (await db.execute(
-        select(StudentProblemMastery).where(
-            StudentProblemMastery.student_id == user.id,
-            StudentProblemMastery.bank_item_id == bank_item_id,
-        )
-    )).scalar_one_or_none()
-    snap = _snapshot_from_row(existing)
-    after = apply_event(
-        snap,
+    row = await _apply_event_to_mastery(
+        db, user.id, bank_item_id,
         "answer_correct" if correct else "answer_wrong",
         datetime.now(UTC),
     )
-    row = await _upsert_mastery(db, user.id, bank_item_id, after)
-
     return AnswerResponse(
         is_correct=correct,
         correct_answer=item.final_answer,
@@ -558,17 +569,9 @@ async def open_walkthrough(
     item, _assignment = await _load_practice_problem_for_student(
         db, bank_item_id, user.id,
     )
-
-    existing = (await db.execute(
-        select(StudentProblemMastery).where(
-            StudentProblemMastery.student_id == user.id,
-            StudentProblemMastery.bank_item_id == bank_item_id,
-        )
-    )).scalar_one_or_none()
-    snap = _snapshot_from_row(existing)
-    after = apply_event(snap, "walkthrough_opened", datetime.now(UTC))
-    row = await _upsert_mastery(db, user.id, bank_item_id, after)
-
+    row = await _apply_event_to_mastery(
+        db, user.id, bank_item_id, "walkthrough_opened", datetime.now(UTC),
+    )
     return WalkthroughOpenedResponse(
         mastery_state_after=row.state,
         solution_steps=list(item.solution_steps or []),
@@ -582,10 +585,16 @@ async def get_chat_thread(
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> ChatHistoryResponse:
-    """Return every persisted chat turn for this (student, bank_item)
-    pair, oldest first. The chat is global to the problem — student
-    returning a week later sees their earlier conversation, which is
-    the point: past confusion + the tutor's reply is study material."""
+    """Return the last `_MAX_CHAT_HISTORY_RETURNED` chat turns for
+    this (student, bank_item) pair, oldest first. The chat is global
+    to the problem — student returning a week later sees their
+    earlier conversation, which is the point: past confusion + the
+    tutor's reply is study material.
+
+    We fetch the *newest* N (DESC + LIMIT) then reverse in Python.
+    The older ASC + LIMIT path silently dropped the most recent
+    messages once a thread exceeded N — backwards for a chat
+    history."""
     await _load_practice_problem_for_student(db, bank_item_id, user.id)
 
     rows = (await db.execute(
@@ -594,9 +603,10 @@ async def get_chat_thread(
             StudentProblemChat.student_id == user.id,
             StudentProblemChat.bank_item_id == bank_item_id,
         )
-        .order_by(StudentProblemChat.created_at.asc())
+        .order_by(StudentProblemChat.created_at.desc())
         .limit(_MAX_CHAT_HISTORY_RETURNED)
     )).scalars().all()
+    rows = list(reversed(rows))
 
     return ChatHistoryResponse(
         messages=[
@@ -715,9 +725,11 @@ async def post_chat_message(
             role="assistant",
             content=result.feedback,
             step_index=body.step_index,
-            # +1 microsecond keeps ordering deterministic in tests
-            # where the two rows would otherwise share a timestamp.
-            created_at=now,
+            # +1µs so the assistant row sorts strictly after the user
+            # row on ORDER BY created_at. Without the delta the two
+            # rows share a timestamp and Postgres tie-breaks
+            # arbitrarily — fine in practice, undefined in spec.
+            created_at=now + timedelta(microseconds=1),
         ),
     ])
     await db.commit()

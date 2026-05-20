@@ -505,6 +505,45 @@ async def test_endpoints_require_auth(
     assert r.status_code in (401, 403)
 
 
+async def test_sequential_walkthrough_then_correct_consistent_with_lock(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """End-to-end version of the state-machine truth-table check:
+    walkthrough then correct lands `attempted`, with both atomic
+    fields (walkthrough_opened_at, last_correct_at) set on the same
+    row. Pins the read-modify-write path under the row lock end-to-
+    end. (Truly concurrent two-tab races are exercised by the unit
+    tests in test_mastery_state_machine.py; ASGITransport serializes
+    awaited HTTP calls so a gather() test here wouldn't actually race
+    transactions.)"""
+    p = await _seed_practice(world)
+    pid = p["problem_ids"][0]
+    correct = p["answers"][0]
+
+    await client.post(
+        f"/v1/school/student/problems/{pid}/walkthrough-opened",
+        headers=_auth(world["student_token"]),
+    )
+    await client.post(
+        f"/v1/school/student/problems/{pid}/answer",
+        headers=_auth(world["student_token"]),
+        json={"selected_choice": correct},
+    )
+    async with get_session_factory()() as s:
+        rows = (await s.execute(
+            select(StudentProblemMastery).where(
+                StudentProblemMastery.student_id == world["student_id"],
+                StudentProblemMastery.bank_item_id == pid,
+            )
+        )).scalars().all()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.state == "attempted"
+    assert row.walkthrough_opened_at is not None
+    assert row.last_correct_at is not None
+    assert row.attempts == 1
+
+
 async def test_answer_random_bank_item_404(
     client: AsyncClient, world: dict[str, Any],
 ) -> None:
