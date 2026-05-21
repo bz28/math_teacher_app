@@ -1663,6 +1663,90 @@ export interface StudentLinkedPracticeResponse {
   practice_assignment_id: string | null;
 }
 
+// ── Mastery Loop ──
+// School-student practice rendered as a journey: persistent mastery
+// state per (student, problem), set Overview with dot map, in-session
+// linear loop with paced walkthrough + persisted tutor chat.
+
+export type MasteryState =
+  | "not_started"
+  | "walked_through"
+  | "missed"
+  | "attempted"
+  | "mastered";
+
+/** One problem on the Set Overview / in the session loop. Deliberately
+ *  does NOT carry `final_answer`, `distractors`, or `solution_steps` —
+ *  shipping any of those pre-attempt would let students read answers
+ *  off the dot map. The shuffled `mcq_choices` are safe (knowing the
+ *  four options doesn't reveal which is correct); `step_count` is the
+ *  number of teacher-authored steps so the UI can show "Step N of M"
+ *  without holding the bodies. */
+export interface PracticeProblemOverview {
+  bank_item_id: string;
+  position: number;
+  question: string;
+  difficulty: string;
+  format: string;
+  mcq_choices: string[];
+  step_count: number;
+  mastery_state: MasteryState;
+  attempts: number;
+  last_attempt_at: string | null;
+}
+
+export interface PracticeSetOverview {
+  assignment_id: string;
+  title: string;
+  course_id: string;
+  course_name: string;
+  source_homework_id: string | null;
+  source_homework_title: string | null;
+  problems: PracticeProblemOverview[];
+  /** `mastered_count + in_progress_count + not_started_count` ===
+   *  `problems.length`. Precomputed server-side so headline (`9 of
+   *  15 mastered`) and the dots can't drift out of sync. */
+  mastered_count: number;
+  in_progress_count: number;
+  not_started_count: number;
+}
+
+export type NextProblemResponse =
+  | { status: "served"; problem: PracticeProblemOverview }
+  | { status: "complete" };
+
+export interface AnswerResponse {
+  is_correct: boolean;
+  correct_answer: string;
+  mastery_state_after: MasteryState;
+  attempts_after: number;
+}
+
+/** Walkthrough-opened is where solution_steps + final_answer enter
+ *  client view — opening the walkthrough is the moment the student
+ *  commits to "show me the answer," so the mastery line is closed
+ *  and exposing the steps is safe. */
+export interface WalkthroughOpenedResponse {
+  mastery_state_after: MasteryState;
+  solution_steps: { title?: string; description: string }[];
+  final_answer: string;
+}
+
+export interface ProblemChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  step_index: number | null;
+  created_at: string;
+}
+
+export interface ProblemChatHistory {
+  messages: ProblemChatMessage[];
+}
+
+export interface ProblemChatAskResponse {
+  reply: string;
+}
+
 export interface StudentHomeworkProblem {
   bank_item_id: string;
   position: number;
@@ -1839,6 +1923,63 @@ export const schoolStudent = {
   practiceDetail(assignmentId: string) {
     return apiFetch<StudentPracticeDetail>(
       `/school/student/practice/${assignmentId}`,
+    );
+  },
+  // ── Mastery Loop ──
+  /** Set Overview: title, dot-map data, per-problem mastery state,
+   *  aggregates. Safe to call on entry — does not leak answers. */
+  practiceSetOverview(assignmentId: string) {
+    return apiFetch<PracticeSetOverview>(
+      `/school/student/practice/${assignmentId}/overview`,
+    );
+  },
+  /** Smart-resume target: first non-mastered problem in order, or
+   *  `{ status: "complete" }` when every problem is mastered (the
+   *  client renders the celebratory state instead of routing into
+   *  an empty session). */
+  practiceNextProblem(assignmentId: string) {
+    return apiFetch<NextProblemResponse>(
+      `/school/student/practice/${assignmentId}/next-problem`,
+    );
+  },
+  /** Submit an MCQ pick. Server compares against the stored
+   *  final_answer and returns the new mastery state in one round
+   *  trip so the UI can render correct/wrong + the badge update
+   *  without a separate refetch. */
+  submitProblemAnswer(bankItemId: string, selectedChoice: string) {
+    return apiFetch<AnswerResponse>(
+      `/school/student/problems/${bankItemId}/answer`,
+      { method: "POST", body: JSON.stringify({ selected_choice: selectedChoice }) },
+    );
+  },
+  /** Open the walkthrough on a problem. Idempotent. Returns the
+   *  solution steps + final answer — this is the only endpoint that
+   *  exposes them, so the overview/next-problem responses can stay
+   *  free of any answer-leaking fields. */
+  openProblemWalkthrough(bankItemId: string) {
+    return apiFetch<WalkthroughOpenedResponse>(
+      `/school/student/problems/${bankItemId}/walkthrough-opened`,
+      { method: "POST" },
+    );
+  },
+  /** Full per-(student, problem) tutor chat thread. Persisted across
+   *  sessions — a student returning days later sees their prior
+   *  questions and the tutor's earlier explanations. */
+  problemChatHistory(bankItemId: string) {
+    return apiFetch<ProblemChatHistory>(
+      `/school/student/problems/${bankItemId}/chat`,
+    );
+  },
+  /** Ask the tutor a question about this problem. step_index !=
+   *  null  → walkthrough step ask; null → whole-problem ask.
+   *  Server persists both turns atomically. */
+  askProblemTutor(
+    bankItemId: string,
+    body: { question: string; step_index?: number | null },
+  ) {
+    return apiFetch<ProblemChatAskResponse>(
+      `/school/student/problems/${bankItemId}/chat`,
+      { method: "POST", body: JSON.stringify(body) },
     );
   },
   /** Practice set linked to this HW (source_homework_id match),
