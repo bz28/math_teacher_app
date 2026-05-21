@@ -18,7 +18,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy import select, text
 
-from api.core.assignment_generation import _translate_params_to_instructions
+from api.core.assignment_generation import (
+    _build_question_generation_prompt,
+    _translate_params_to_instructions,
+)
 from api.core.auth import hash_password
 from api.core.question_bank_generation import _run_generation
 from api.database import get_session_factory
@@ -35,6 +38,20 @@ from api.models.unit import Unit
 from api.models.user import User
 
 # ── translator ──
+
+
+def test_prompt_template_format_is_safe() -> None:
+    """The generation prompt is a `.format()`-style template. Every
+    literal curly brace in the body must be escaped as `{{`/`}}`,
+    otherwise Python interprets it as a format placeholder and
+    raises KeyError at call time. Caught by a real Pythagorean
+    job failing in prod with `KeyError: '"A"'` when the prompt's
+    figure-spec example `{"A": 30, "B": 150}` was unescaped.
+    """
+    # Just calling the builder must succeed for every subject.
+    for subject in ("math", "physics", "chemistry"):
+        out = _build_question_generation_prompt(subject)
+        assert "figure_spec" in out  # sanity check: geometry section present
 
 
 def test_defaults_emit_no_instructions() -> None:
