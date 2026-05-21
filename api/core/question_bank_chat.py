@@ -70,6 +70,23 @@ Rules for proposals:
   commands (e.g. \\frac, \\sqrt, \\begin{{pmatrix}}). Do not double-escape.
 - Each solution step has a short title (2-5 words) and a full description.
 
+Geometry figures (you CAN produce these):
+- The question can carry a `figure_spec` (triangle or circle) — a structured
+  JSON description that gets rendered to an SVG. Same for each solution
+  step's `figure_spec`. The renderer draws exact diagrams from the spec;
+  you describe the relationships symbolically, code computes the pixels.
+- For triangles: emit `shape="triangle"`, list `vertices`, give enough
+  constraints to determine the shape (3 sides; or 2 sides + 1 angle;
+  or 1 side + 2 angles). Use `right_angle_at` for 90° angles.
+- For circles: emit `shape="circle"`, give a positive `radius`, add
+  named points on the circumference with their angle in degrees (CCW
+  from positive x-axis), and any chords as two-character identifiers.
+- Use figures only when they actually clarify the problem (geometry
+  problems, NOT algebra). When the teacher asks for a diagram on a
+  step that visibly evolves the construction (drop an altitude, draw
+  a chord, mark an inscribed angle), attach a `figure_spec` to that
+  step. Leave figure_spec=null on steps that don't change the picture.
+
 CRITICAL — solution_steps is a FULL REPLACEMENT, not a patch:
 - If you set solution_steps, you MUST return the complete list of all steps
   in the correct order. Unchanged steps must be included verbatim.
