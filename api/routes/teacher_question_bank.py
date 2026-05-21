@@ -17,7 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.image_utils import validate_and_decode_upload
 from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
-from api.core.question_bank_generation import regenerate_one, schedule_generation_job, snapshot_history
+from api.core.question_bank_generation import (
+    _render_step_figures,
+    _resolve_figure,
+    regenerate_one,
+    schedule_generation_job,
+    snapshot_history,
+)
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
 from api.middleware.rate_limit import limiter
@@ -777,15 +783,35 @@ async def accept_chat_proposal(
         # entry would crash the frontend render at workshop-modal.tsx.
         raw_steps = proposal["solution_steps"]
         if isinstance(raw_steps, list):
-            item.solution_steps = [
-                {"title": s["title"], "description": s["description"]}
-                for s in raw_steps
-                if isinstance(s, dict)
-                and isinstance(s.get("title"), str)
-                and isinstance(s.get("description"), str)
-            ]
+            cleaned_steps: list[dict[str, Any]] = []
+            for s in raw_steps:
+                if not isinstance(s, dict):
+                    continue
+                if not isinstance(s.get("title"), str) or not isinstance(s.get("description"), str):
+                    continue
+                step: dict[str, Any] = {
+                    "title": s["title"], "description": s["description"],
+                }
+                # Carry over a per-step figure if the proposal included one.
+                # _render_step_figures (called below if needed) validates +
+                # renders the spec; we hold the raw value here so the
+                # render helper sees it.
+                if isinstance(s.get("figure_spec"), dict):
+                    step["figure_spec"] = s["figure_spec"]
+                cleaned_steps.append(step)
+            item.solution_steps = _render_step_figures(cleaned_steps)
     if proposal.get("final_answer") is not None:
         item.final_answer = str(proposal["final_answer"])
+    # Top-level question-figure on the proposal — mirrors what
+    # regenerate_one does: any change resolves through _resolve_figure
+    # so a bad spec drops the figure without dropping the question.
+    # When the proposal omits figure_spec, we leave the existing one
+    # alone (the chat-prompt rules say the AI sets fields to null when
+    # unchanged).
+    if proposal.get("figure_spec") is not None:
+        new_figure_spec, new_figure_svg = _resolve_figure(proposal["figure_spec"])
+        item.figure_spec = new_figure_spec
+        item.figure_svg = new_figure_svg
 
     # Build a NEW list with NEW dict copies for any modified message.
     # In-place dict mutation (e.g. `m["accepted"] = True`) would be a

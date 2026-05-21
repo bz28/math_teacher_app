@@ -452,6 +452,10 @@ BANK_CHAT_REPLY_SCHEMA: ToolSchema = {
                             "properties": {
                                 "title": {"type": "string"},
                                 "description": {"type": "string"},
+                                # Each step can carry its own geometry
+                                # figure — see _FIGURE_SCHEMA for the
+                                # full shape (triangle or circle).
+                                "figure_spec": _FIGURE_SCHEMA,
                             },
                             "required": ["title", "description"],
                             "additionalProperties": False,
@@ -462,6 +466,11 @@ BANK_CHAT_REPLY_SCHEMA: ToolSchema = {
                         "type": ["string", "null"],
                         "description": "New final answer, or null to leave unchanged.",
                     },
+                    # Top-level figure on the question itself. Same
+                    # DSL as everywhere else; omit when the question
+                    # doesn't need a diagram (or to leave the existing
+                    # one unchanged).
+                    "figure_spec": _FIGURE_SCHEMA,
                 },
                 "additionalProperties": False,
             },
