@@ -16,8 +16,10 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from api.core.geometry.dsl import FigureSpec, FigureSpecError, TriangleFigure
-from api.core.geometry.solver import Point, solve_triangle
+from pydantic import TypeAdapter
+
+from api.core.geometry.dsl import CircleFigure, FigureSpec, FigureSpecError, TriangleFigure
+from api.core.geometry.solver import Point, solve_circle, solve_triangle
 
 # Visual constants — single source of truth so tweaks land in one
 # place. Sizes are in SVG user units; the viewBox is computed to fit
@@ -32,23 +34,42 @@ _RIGHT_ANGLE_SIZE = 0.25
 _LABEL_OFFSET = 0.22
 
 
+# FigureSpec is a discriminated union; use TypeAdapter so Pydantic
+# dispatches to the right shape variant from `spec.shape`.
+_FIGURE_SPEC_ADAPTER: TypeAdapter[FigureSpec] = TypeAdapter(FigureSpec)
+
+
 def render_figure(spec_dict: dict[str, Any]) -> str:
     """Validate a spec dict, solve it, and return an SVG string.
 
     Raises FigureSpecError on any structural, semantic, or geometric
     problem. The caller (question_bank_generation in PR 2) catches
     and decides whether to fall back to no-figure or retry.
+
+    Specs without an explicit `shape` field default to "triangle".
+    This preserves backwards compatibility with specs persisted
+    before the circle branch landed (those rows have no `shape`
+    discriminator since the schema's default was triangle).
     """
+    if "shape" not in spec_dict:
+        spec_dict = {**spec_dict, "shape": "triangle"}
     try:
-        spec = FigureSpec.model_validate(spec_dict)
+        spec = _FIGURE_SPEC_ADAPTER.validate_python(spec_dict)
     except Exception as e:
         # Pydantic raises ValidationError, but we collapse to our
         # error type so callers don't need to import pydantic just
         # to handle bad specs.
         raise FigureSpecError(f"invalid figure spec: {e}") from e
 
-    coords = solve_triangle(spec)
-    return _render_triangle(spec, coords)
+    if isinstance(spec, TriangleFigure):
+        coords = solve_triangle(spec)
+        return _render_triangle(spec, coords)
+    if isinstance(spec, CircleFigure):
+        coords = solve_circle(spec)
+        return _render_circle(spec, coords)
+    # Unreachable — discriminated union exhausts the shape variants,
+    # but mypy doesn't know that without an explicit assert_never.
+    raise FigureSpecError(f"unknown figure shape: {type(spec).__name__}")
 
 
 def _render_triangle(
@@ -110,6 +131,149 @@ def _render_triangle(
     for vertex, text in spec.angle_labels.items():
         x, y = coords[vertex]
         parts.append(_angle_label_text(spec, vertex, x, -y, coords, text))
+
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def _render_circle(
+    spec: CircleFigure, coords: dict[str, Point],
+) -> str:
+    """Compose the SVG for a solved circle. Order:
+    viewBox → circle outline → chords (under labels) → radius line if
+    labeled → center dot if requested → point dots + labels → label
+    text on top.
+    """
+    # Bounding box: extend radius units around center, plus padding.
+    bound = spec.radius
+    min_x, max_x = -bound - _PADDING, bound + _PADDING
+    min_y, max_y = -bound - _PADDING, bound + _PADDING
+    width = max_x - min_x
+    height = max_y - min_y
+
+    parts: list[str] = []
+    parts.append(
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'viewBox="{min_x:.4f} {-max_y:.4f} {width:.4f} {height:.4f}" '
+        f'role="img" aria-label="Geometry figure">',
+    )
+    parts.append('<g transform="scale(1,-1)">')
+
+    # 1. Circle outline.
+    parts.append(
+        f'<circle cx="0" cy="0" r="{spec.radius:.4f}" '
+        f'fill="none" stroke="{_STROKE}" stroke-width="{_STROKE_WIDTH}"/>',
+    )
+
+    # 2. Chords.
+    for chord in spec.chords:
+        a, b = chord[0], chord[1]
+        if a not in coords or b not in coords:
+            continue  # defensive — validator already enforces
+        x1, y1 = coords[a]
+        x2, y2 = coords[b]
+        parts.append(
+            f'<line x1="{x1:.4f}" y1="{y1:.4f}" x2="{x2:.4f}" y2="{y2:.4f}" '
+            f'stroke="{_STROKE}" stroke-width="{_STROKE_WIDTH}"/>',
+        )
+
+    # 3. Optional radius line (from center to first named point) — drawn
+    # whenever radius_label is set so the label has something to anchor on.
+    radius_target: str | None = None
+    if spec.radius_label and spec.points:
+        radius_target = next(iter(spec.points))
+        rx, ry = coords[radius_target]
+        parts.append(
+            f'<line x1="0" y1="0" x2="{rx:.4f}" y2="{ry:.4f}" '
+            f'stroke="{_STROKE}" stroke-width="{_STROKE_WIDTH}"/>',
+        )
+
+    # 4. Center dot when requested.
+    if spec.show_center:
+        # Tiny filled circle. Size scaled with _RIGHT_ANGLE_SIZE so it
+        # reads as proportional across triangles + circles.
+        dot_r = _RIGHT_ANGLE_SIZE * 0.15
+        parts.append(
+            f'<circle cx="0" cy="0" r="{dot_r:.4f}" fill="{_STROKE}"/>',
+        )
+
+    # 5. Point dots — small filled dots so the named circumference
+    # points read as discrete markers rather than implicit corners.
+    dot_r = _RIGHT_ANGLE_SIZE * 0.15
+    for name in spec.points:
+        x, y = coords[name]
+        parts.append(
+            f'<circle cx="{x:.4f}" cy="{y:.4f}" r="{dot_r:.4f}" fill="{_STROKE}"/>',
+        )
+
+    parts.append("</g>")  # close the flipped group — text uses upright coords
+
+    # 6. Center label.
+    if spec.show_center:
+        parts.append(
+            f'<text x="0" y="0" '
+            f'font-family="{_FONT_FAMILY}" font-size="{_VERTEX_FONT_SIZE}" '
+            'text-anchor="middle" dominant-baseline="middle" '
+            f'fill="{_STROKE}" dx="0.15" dy="0.25">{_escape(spec.center_label)}</text>',
+        )
+
+    # 7. Point labels — offset radially outward so they don't sit on
+    # top of the circle outline.
+    for name in spec.points:
+        x, y = coords[name]
+        display = spec.point_labels.get(name, name)
+        # Outward-radial offset of _LABEL_OFFSET units.
+        norm = math.hypot(x, y) or 1.0  # 1.0 guard for degenerate radius=0 (impossible: validator)
+        ox = (x / norm) * _LABEL_OFFSET
+        oy = (y / norm) * _LABEL_OFFSET
+        parts.append(
+            f'<text x="{x + ox:.4f}" y="{-(y + oy):.4f}" '
+            f'font-family="{_FONT_FAMILY}" font-size="{_VERTEX_FONT_SIZE}" '
+            'text-anchor="middle" dominant-baseline="middle" '
+            f'fill="{_STROKE}">{_escape(display)}</text>',
+        )
+
+    # 8. Chord labels — midpoint of chord, offset perpendicular OUTWARD
+    # (away from center).
+    for chord in spec.chords:
+        label = spec.chord_labels.get(chord) or spec.chord_labels.get(chord[::-1])
+        if not label:
+            continue
+        a, b = chord[0], chord[1]
+        x1, y1 = coords[a]
+        x2, y2 = coords[b]
+        mid_x = (x1 + x2) / 2
+        mid_y = (y1 + y2) / 2
+        # Outward = away from center (the origin).
+        norm = math.hypot(mid_x, mid_y) or 1.0
+        ox = (mid_x / norm) * _LABEL_OFFSET
+        oy = (mid_y / norm) * _LABEL_OFFSET
+        parts.append(
+            f'<text x="{mid_x + ox:.4f}" y="{-(mid_y + oy):.4f}" '
+            f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
+            'text-anchor="middle" dominant-baseline="middle" '
+            f'fill="{_STROKE}">{_escape(label)}</text>',
+        )
+
+    # 9. Radius label — midpoint of the radius line, perpendicular
+    # offset for readability.
+    if spec.radius_label and radius_target:
+        rx, ry = coords[radius_target]
+        mid_x = rx / 2
+        mid_y = ry / 2
+        # Perpendicular to the radius vector (rotate 90°). Either side
+        # works; the side that's "above" relative to the chord layout
+        # is fine for a single radius.
+        norm = math.hypot(rx, ry) or 1.0
+        # Perpendicular unit vector: rotate (rx,ry)/norm by 90° = (-ry, rx)/norm
+        ox = (-ry / norm) * _LABEL_OFFSET * 0.6
+        oy = (rx / norm) * _LABEL_OFFSET * 0.6
+        parts.append(
+            f'<text x="{mid_x + ox:.4f}" y="{-(mid_y + oy):.4f}" '
+            f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
+            'text-anchor="middle" dominant-baseline="middle" '
+            f'fill="{_STROKE}">{_escape(spec.radius_label)}</text>',
+        )
 
     parts.append("</svg>")
     return "".join(parts)

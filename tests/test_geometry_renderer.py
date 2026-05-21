@@ -13,8 +13,8 @@ import math
 import pytest
 
 from api.core.geometry import FigureSpecError, render_figure
-from api.core.geometry.dsl import TriangleFigure
-from api.core.geometry.solver import solve_triangle
+from api.core.geometry.dsl import CircleFigure, TriangleFigure
+from api.core.geometry.solver import solve_circle, solve_triangle
 
 # ── Solver: SSS ──────────────────────────────────────────────────────
 
@@ -254,6 +254,112 @@ def test_render_omits_right_angle_when_not_specified() -> None:
 def test_render_raises_on_bad_spec() -> None:
     with pytest.raises(FigureSpecError):
         render_figure({"vertices": ["A", "B"], "side_lengths": {"AB": 1.0}})
+
+
+# ── Circles: solver ─────────────────────────────────────────────────
+
+
+def test_circle_solver_places_center_and_points() -> None:
+    spec = CircleFigure(
+        radius=5.0,
+        points={"A": 0.0, "B": 90.0},
+    )
+    coords = solve_circle(spec)
+    assert coords["__center__"] == (0.0, 0.0)
+    # Point at 0° = (5, 0), point at 90° = (0, 5).
+    assert math.isclose(coords["A"][0], 5.0, abs_tol=1e-9)
+    assert math.isclose(coords["A"][1], 0.0, abs_tol=1e-9)
+    assert math.isclose(coords["B"][0], 0.0, abs_tol=1e-9)
+    assert math.isclose(coords["B"][1], 5.0, abs_tol=1e-9)
+
+
+def test_circle_solver_negative_radius_rejected() -> None:
+    """Validator catches it at DSL level; defense-in-depth at solver."""
+    with pytest.raises(ValueError, match="must be positive"):
+        CircleFigure(radius=-1.0)
+
+
+def test_circle_contradictory_chord_keys_rejected() -> None:
+    with pytest.raises(ValueError, match="same chord"):
+        CircleFigure(
+            radius=1.0,
+            points={"A": 0.0, "B": 90.0},
+            chords=["AB", "BA"],
+        )
+
+
+def test_circle_chord_references_unknown_point_rejected() -> None:
+    with pytest.raises(ValueError, match="named points"):
+        CircleFigure(
+            radius=1.0,
+            points={"A": 0.0, "B": 90.0},
+            chords=["AC"],
+        )
+
+
+# ── Circles: end-to-end render ──────────────────────────────────────
+
+
+def test_render_circle_minimal_just_the_outline() -> None:
+    """A circle with no points + no chords still renders — just the
+    outline. Useful for problems referencing "a circle with radius r"
+    where the figure is purely illustrative."""
+    svg = render_figure({"shape": "circle", "radius": 1.0})
+    assert "<circle" in svg
+    assert svg.startswith("<svg")
+    # No chord lines, no point dots, no center dot.
+    assert "<line" not in svg
+
+
+def test_render_circle_with_chord_and_labels() -> None:
+    svg = render_figure(
+        {
+            "shape": "circle",
+            "radius": 5.0,
+            "points": {"A": 0.0, "B": 180.0},
+            "chords": ["AB"],
+            "chord_labels": {"AB": "diameter"},
+            "show_center": True,
+            "center_label": "O",
+        },
+    )
+    assert "<circle" in svg  # outline
+    assert "<line" in svg  # chord
+    assert ">A<" in svg and ">B<" in svg  # point labels
+    assert ">O<" in svg  # center label
+    assert ">diameter<" in svg
+
+
+def test_render_circle_with_labeled_radius() -> None:
+    svg = render_figure(
+        {
+            "shape": "circle",
+            "radius": 3.0,
+            "points": {"P": 60.0},
+            "radius_label": "r",
+        },
+    )
+    assert "<line" in svg  # the radius line
+    assert ">r<" in svg
+
+
+# ── Discriminated union dispatch ────────────────────────────────────
+
+
+def test_render_dispatches_on_shape() -> None:
+    """Same render_figure() entry handles both shapes via the
+    discriminator. No type checking in the caller required."""
+    triangle = render_figure(
+        {
+            "shape": "triangle",
+            "vertices": ["A", "B", "C"],
+            "side_lengths": {"AB": 3.0, "BC": 4.0, "CA": 5.0},
+        },
+    )
+    circle = render_figure({"shape": "circle", "radius": 2.0})
+    assert "<polygon" in triangle  # triangle outline
+    assert "<polygon" not in circle  # circles use <circle>
+    assert "<circle" in circle
 
 
 def test_render_escapes_text_content() -> None:
