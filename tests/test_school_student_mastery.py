@@ -128,16 +128,23 @@ async def test_overview_returns_problems_with_not_started_default(
         assert prob["step_count"] == 1
 
 
-async def test_overview_404_for_outsider(
+async def test_overview_403_for_outsider(
     client: AsyncClient, world: dict[str, Any],
 ) -> None:
+    """The assignment-level loader returns 403 (not 404) when an
+    outsider student hits a practice set they're not enrolled in.
+    The shared `_load_assignment_for_student` helper uses 403 here
+    to give a clear "not your set" signal — fine because assignment
+    ids are class-scoped, not enumerable across the org.
+
+    Contrast with `_load_practice_problem_for_student`, which uses
+    404 everywhere because bank_item ids would otherwise leak
+    cross-class via the /problems/{id}/... routes."""
     p = await _seed_practice(world)
     r = await client.get(
         f"/v1/school/student/practice/{p['practice_id']}/overview",
         headers=_auth(world["outsider_token"]),
     )
-    # _load_practice_for_student returns 403 on not-enrolled rather
-    # than 404 — the practice exists, the student is just locked out.
     assert r.status_code == 403
 
 

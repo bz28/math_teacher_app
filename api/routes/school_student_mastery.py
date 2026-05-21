@@ -37,10 +37,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
-from api.models.assignment import Assignment, AssignmentSection
+from api.models.assignment import Assignment
 from api.models.course import Course
 from api.models.question_bank import FORMAT_MCQ, QuestionBankItem
-from api.models.section_enrollment import SectionEnrollment
 from api.models.student_problem_mastery import (
     STATE_NOT_STARTED,
     StudentProblemChat,
@@ -209,31 +208,23 @@ async def _load_practice_problem_for_student(
     if item is None or item.status != "approved":
         raise HTTPException(status_code=404, detail="Problem not available")
 
-    assignment = (await db.execute(
-        select(Assignment).where(
-            Assignment.id == item.originating_assignment_id,
+    # Defer to the shared assignment-level loader for the existence
+    # + published + type + enrollment checks. The helper raises
+    # 403/404 depending on which check failed; we collapse all of
+    # them to 404 here to preserve the bank_item-id opacity
+    # guarantee (cross-class probing must look the same as
+    # "doesn't exist"). Letting 5xx-class exceptions propagate.
+    try:
+        assignment = await _load_assignment_for_student(
+            db, item.originating_assignment_id, student_id,
+            expected_type="practice",
         )
-    )).scalar_one_or_none()
-    if assignment is None or assignment.type != "practice":
-        raise HTTPException(status_code=404, detail="Problem not available")
-    if assignment.status != "published":
-        raise HTTPException(status_code=404, detail="Problem not available")
-
-    enrolled = (await db.execute(
-        select(SectionEnrollment.id)
-        .join(
-            AssignmentSection,
-            AssignmentSection.section_id == SectionEnrollment.section_id,
-        )
-        .where(
-            AssignmentSection.assignment_id == assignment.id,
-            SectionEnrollment.student_id == student_id,
-        )
-        .limit(1)
-    )).scalar_one_or_none()
-    if enrolled is None:
-        raise HTTPException(status_code=404, detail="Problem not available")
-
+    except HTTPException as e:
+        if e.status_code in (403, 404):
+            raise HTTPException(
+                status_code=404, detail="Problem not available",
+            ) from None
+        raise
     return item, assignment
 
 
