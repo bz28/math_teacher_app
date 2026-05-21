@@ -254,6 +254,10 @@ class VariationPayload(BaseModel):
     distractors: list[str]
     solution_steps: list[Any] | None
     difficulty: str
+    # Rendered SVG when the bank item has a geometry figure. Null for
+    # everything else. Frontend renders inline above the question via
+    # DOMPurify + dangerouslySetInnerHTML.
+    figure_svg: str | None = None
 
 
 class NextVariationServed(BaseModel):
@@ -544,6 +548,7 @@ def _serialize(item: QuestionBankItem) -> VariationPayload:
         distractors=list(item.distractors or []),
         solution_steps=item.solution_steps,
         difficulty=item.difficulty,
+        figure_svg=item.figure_svg,
     )
 
 

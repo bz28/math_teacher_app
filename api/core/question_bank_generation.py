@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
 from api.core.document_vision import MAX_VISION_IMAGES, build_vision_content, fetch_document_images
+from api.core.geometry import FigureSpecError, render_figure
 from api.core.image_utils import to_content_block
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import GENERATE_QUESTIONS_SCHEMA, REGENERATE_QA_SCHEMA
@@ -45,6 +46,32 @@ _inflight_jobs: set[asyncio.Task[None]] = set()
 # Commit every N persisted questions during bulk generation so the
 # frontend polling banner ticks visibly without N+1 transactions.
 _PROGRESS_BATCH = 5
+
+
+def _resolve_figure(
+    raw_spec: Any,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Validate + render a figure spec emitted by the LLM.
+
+    Returns (spec, svg) — both None if the model didn't emit one, or
+    if validation/rendering raises FigureSpecError. We swallow the
+    error here on purpose: a bad figure shouldn't tank the whole
+    batch. The question lands without a diagram, the teacher
+    reviews it in the workshop, and they can regenerate or accept
+    text-only. The error is logged so we notice if specific
+    figure types fail systematically.
+    """
+    if not isinstance(raw_spec, dict):
+        return None, None
+    try:
+        svg = render_figure(raw_spec)
+    except FigureSpecError as e:
+        logger.warning(
+            "figure_spec rejected by renderer (keeping question, dropping figure): %s",
+            e,
+        )
+        return None, None
+    return raw_spec, svg
 
 
 def schedule_generation_job(job_id: uuid.UUID) -> None:
@@ -324,6 +351,13 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             if requested_mcq and item_distractors and len(item_distractors) == 3
             else FORMAT_FRQ
         )
+        # Render the figure if the model produced a spec. Failures
+        # degrade gracefully — we drop the spec and keep the question
+        # rather than failing the whole batch over one bad figure.
+        # The teacher still sees the question in the workshop and
+        # can regenerate or accept-as-text-only.
+        figure_spec, figure_svg = _resolve_figure(q.get("figure_spec"))
+
         item = QuestionBankItem(
             course_id=job.course_id,
             unit_id=job.unit_id,
@@ -344,6 +378,8 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             created_by_id=job.created_by_id,
             parent_question_id=job.parent_question_id,
             source=item_source,
+            figure_spec=figure_spec,
+            figure_svg=figure_svg,
         )
         db.add(item)
         if idx % _PROGRESS_BATCH == 0:
