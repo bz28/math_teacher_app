@@ -244,10 +244,24 @@ def _render_circle(
         x2, y2 = coords[b]
         mid_x = (x1 + x2) / 2
         mid_y = (y1 + y2) / 2
-        # Outward = away from center (the origin).
-        norm = math.hypot(mid_x, mid_y) or 1.0
-        ox = (mid_x / norm) * _LABEL_OFFSET
-        oy = (mid_y / norm) * _LABEL_OFFSET
+        # Outward = away from center (the origin). When the midpoint
+        # IS the center (e.g. a diameter — points 180° apart), there's
+        # no defined "outward" direction, so fall back to the chord's
+        # own perpendicular. Without this fallback, diameter labels
+        # land exactly at the origin and overlap the center dot.
+        norm = math.hypot(mid_x, mid_y)
+        if norm < 1e-9:
+            edge_x = x2 - x1
+            edge_y = y2 - y1
+            edge_norm = math.hypot(edge_x, edge_y) or 1.0
+            # Perpendicular: rotate 90° (any side reads fine when the
+            # midpoint is the center — there's no inside/outside to
+            # disambiguate).
+            ox = (-edge_y / edge_norm) * _LABEL_OFFSET
+            oy = (edge_x / edge_norm) * _LABEL_OFFSET
+        else:
+            ox = (mid_x / norm) * _LABEL_OFFSET
+            oy = (mid_y / norm) * _LABEL_OFFSET
         parts.append(
             f'<text x="{mid_x + ox:.4f}" y="{-(mid_y + oy):.4f}" '
             f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
