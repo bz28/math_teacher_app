@@ -388,6 +388,13 @@ function HeatmapPanel({ days }: { days: HistoryHeatmapDay[] }) {
               .map((c) => (
                 <div
                   key={c.date}
+                  // Treat each cell as an info-only image with a
+                  // descriptive aria-label so screen readers can
+                  // hear the date and attempt count. Title stays
+                  // for sighted mouse-hover users; aria-label
+                  // covers keyboard/screen-reader access.
+                  role="img"
+                  aria-label={`${c.date}, ${c.count} ${c.count === 1 ? "attempt" : "attempts"}`}
                   title={`${c.date} · ${c.count} ${c.count === 1 ? "attempt" : "attempts"}`}
                   className={cn("aspect-square rounded-[2px]", BIN_COLOR[bin(c.count)])}
                 />

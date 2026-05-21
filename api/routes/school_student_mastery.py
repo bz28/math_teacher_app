@@ -800,8 +800,6 @@ async def course_history_summary(
     enrollment for. Mastery rows for items the student can no
     longer access (teacher unpublished, item removed, etc.) are
     excluded from every aggregate so stale data doesn't show up."""
-    from datetime import timedelta
-
     from api.models.course import Course as CourseModel
 
     # Verify the student is enrolled in at least one section of
@@ -877,10 +875,14 @@ async def course_history_summary(
     # again on day B contributes to both days even though we only
     # store the last timestamp. (Still lossy for 3+ days of activity
     # on the same problem; acceptable for v1.)
+    # Heatmap counts DISTINCT (problem, day) interactions — a row
+    # whose first_attempt_at, last_attempt_at, and walkthrough_opened_at
+    # all land on the same day must contribute exactly 1 to that
+    # day's bucket, not 3. We dedup per problem before counting.
     now = datetime.now(UTC)
     window_start = (now - timedelta(weeks=_HISTORY_HEATMAP_WEEKS)).date()
-    bucket_counts: dict[date, int] = {}
     activity_dates: set[date] = set()
+    interactions: set[tuple[uuid.UUID, date]] = set()
     for r in mastery_rows:
         for ts in (r.first_attempt_at, r.last_attempt_at, r.walkthrough_opened_at):
             if ts is None:
@@ -888,7 +890,10 @@ async def course_history_summary(
             d = ts.astimezone(UTC).date()
             activity_dates.add(d)
             if d >= window_start:
-                bucket_counts[d] = bucket_counts.get(d, 0) + 1
+                interactions.add((r.bank_item_id, d))
+    bucket_counts: dict[date, int] = {}
+    for _, d in interactions:
+        bucket_counts[d] = bucket_counts.get(d, 0) + 1
     heatmap = [
         HistoryHeatmapDay(date=d.isoformat(), count=n)
         for d, n in sorted(bucket_counts.items())
@@ -981,7 +986,13 @@ async def course_history_summary(
         )).all()
         set_problem_counts = {aid: int(n) for aid, n in rows}
 
-        # Mastered counts per set: join mastery → bank_item.
+        # Mastered counts per set: join mastery → bank_item, filtered
+        # by the SAME `status == 'approved'` predicate used for the
+        # problem-count query so the two stay consistent. Without
+        # this, a mastery row whose bank item has since been demoted
+        # to pending/rejected would still count as mastered while no
+        # longer being counted as a problem — producing the
+        # impossible `mastered_count > problem_count` for a set.
         rows = (await db.execute(
             select(
                 QuestionBankItem.originating_assignment_id,
@@ -994,6 +1005,7 @@ async def course_history_summary(
             .where(
                 StudentProblemMastery.student_id == user.id,
                 StudentProblemMastery.state == "mastered",
+                QuestionBankItem.status == "approved",
                 QuestionBankItem.originating_assignment_id.in_(set_ids),
             )
             .group_by(QuestionBankItem.originating_assignment_id)

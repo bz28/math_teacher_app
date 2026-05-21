@@ -692,6 +692,43 @@ async def test_history_summary_aggregates_after_attempts(
     assert set_row["problem_count"] == 3
 
 
+async def test_history_summary_heatmap_dedups_same_day_per_problem(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """A problem with walkthrough_opened_at + first_attempt_at +
+    last_attempt_at all on the same day must contribute exactly 1 to
+    that day's heatmap bucket, not 3. Regression test for the
+    distinct-interactions invariant in the endpoint docstring."""
+    p = await _seed_practice(world)
+    course_id = await _get_course_id_from_world(world)
+
+    # Walkthrough then wrong answer then correct answer on the same
+    # problem — all three timestamps will land today.
+    await client.post(
+        f"/v1/school/student/problems/{p['problem_ids'][0]}/walkthrough-opened",
+        headers=_auth(world["student_token"]),
+    )
+    await client.post(
+        f"/v1/school/student/problems/{p['problem_ids'][0]}/answer",
+        headers=_auth(world["student_token"]),
+        json={"selected_choice": "wrong"},
+    )
+    await client.post(
+        f"/v1/school/student/problems/{p['problem_ids'][0]}/answer",
+        headers=_auth(world["student_token"]),
+        json={"selected_choice": p["answers"][0]},
+    )
+    r = await client.get(
+        f"/v1/school/student/courses/{course_id}/history/summary",
+        headers=_auth(world["student_token"]),
+    )
+    body = r.json()
+    assert r.status_code == 200, r.text
+    # Exactly one row (one problem) on one day → exactly 1 in the bucket.
+    assert len(body["heatmap"]) == 1
+    assert body["heatmap"][0]["count"] == 1
+
+
 async def test_history_summary_403_for_outsider(
     client: AsyncClient, world: dict[str, Any],
 ) -> None:
