@@ -48,6 +48,39 @@ _inflight_jobs: set[asyncio.Task[None]] = set()
 _PROGRESS_BATCH = 5
 
 
+def _render_step_figures(
+    steps: list[Any],
+) -> list[dict[str, Any]]:
+    """Render any per-step figure_spec into figure_svg in-place.
+
+    Mirrors `_resolve_figure` but works on a list of steps from a
+    regenerate / generation payload. Used for the regenerate path
+    (which bypasses step_decomposition._parse_decomposition); the
+    main generation path already renders step figures in
+    _parse_decomposition. Centralizing the spec→svg conversion at
+    persistence time means downstream readers never need to know
+    about the geometry module.
+    """
+    out: list[dict[str, Any]] = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        rendered: dict[str, Any] = dict(step)
+        raw = step.get("figure_spec")
+        if isinstance(raw, dict):
+            try:
+                rendered["figure_svg"] = render_figure(raw)
+                rendered["figure_spec"] = raw
+            except FigureSpecError as e:
+                logger.warning(
+                    "step figure_spec rejected on regenerate (keeping step): %s", e,
+                )
+                rendered.pop("figure_spec", None)
+                rendered.pop("figure_svg", None)
+        out.append(rendered)
+    return out
+
+
 def _resolve_figure(
     raw_spec: Any,
 ) -> tuple[dict[str, Any] | None, str | None]:
@@ -510,7 +543,9 @@ async def regenerate_one(
     if new_title:
         item.title = str(new_title)[:120]
     item.question = str(new_question)
-    item.solution_steps = new_steps if isinstance(new_steps, list) else None
+    item.solution_steps = (
+        _render_step_figures(new_steps) if isinstance(new_steps, list) else None
+    )
     item.final_answer = str(new_answer) if new_answer else ""
     # Re-resolve the figure from the regenerated payload. If the new
     # question no longer needs a figure (LLM omitted the spec), we

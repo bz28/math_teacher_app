@@ -262,6 +262,9 @@ function LearnPanel({
               Step {idx + 1}
               {step.title ? ` · ${step.title}` : ""}
             </div>
+            {step.figure_svg && (
+              <FigureDisplay svg={step.figure_svg} className="max-h-40" />
+            )}
             <div className="mt-1 text-sm text-text-primary">
               <MathText text={step.description} />
             </div>
