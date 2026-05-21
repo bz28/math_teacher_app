@@ -3,6 +3,7 @@
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
 import { formatDue } from "@/lib/utils";
 import {
@@ -35,6 +36,8 @@ interface AssignmentProblem {
   bank_item_id: string;
   position: number;
   question: string;
+  /** Pre-rendered geometry SVG; null when the problem has no figure. */
+  figure_svg: string | null;
   solution_steps: { title: string; description: string }[] | null;
   final_answer: string | null;
   difficulty: string;
