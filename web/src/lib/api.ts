@@ -1509,6 +1509,11 @@ export interface BankChatProposal {
     figure_svg?: string | null;
   }[] | null;
   final_answer: string | null;
+  /** Top-level question figure when the proposal changes the diagram.
+   *  Pre-rendered server-side so the preview can show it before
+   *  Accept. Null when the proposal doesn't touch the figure. */
+  figure_spec?: Record<string, unknown> | null;
+  figure_svg?: string | null;
 }
 
 export interface BankChatMessage {

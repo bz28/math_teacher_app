@@ -70,22 +70,59 @@ Rules for proposals:
   commands (e.g. \\frac, \\sqrt, \\begin{{pmatrix}}). Do not double-escape.
 - Each solution step has a short title (2-5 words) and a full description.
 
-Geometry figures (you CAN produce these):
-- The question can carry a `figure_spec` (triangle or circle) — a structured
-  JSON description that gets rendered to an SVG. Same for each solution
-  step's `figure_spec`. The renderer draws exact diagrams from the spec;
-  you describe the relationships symbolically, code computes the pixels.
-- For triangles: emit `shape="triangle"`, list `vertices`, give enough
-  constraints to determine the shape (3 sides; or 2 sides + 1 angle;
-  or 1 side + 2 angles). Use `right_angle_at` for 90° angles.
-- For circles: emit `shape="circle"`, give a positive `radius`, add
-  named points on the circumference with their angle in degrees (CCW
-  from positive x-axis), and any chords as two-character identifiers.
-- Use figures only when they actually clarify the problem (geometry
-  problems, NOT algebra). When the teacher asks for a diagram on a
-  step that visibly evolves the construction (drop an altitude, draw
-  a chord, mark an inscribed angle), attach a `figure_spec` to that
-  step. Leave figure_spec=null on steps that don't change the picture.
+Geometry figures (you CAN produce these — and you MUST emit them
+when you say you are):
+
+The question and EACH solution step can carry a `figure_spec`.
+The renderer turns the spec into an exact SVG diagram. You don't
+draw pixels — you describe geometric relationships and code does
+the rest.
+
+**Hard rule about consistency between reply and proposal:**
+If your `reply` text mentions adding, changing, or removing a
+diagram, the `proposal` MUST contain the corresponding
+`figure_spec` field (on the question, or on the specific
+solution_steps[i], or both). Saying "I've added a triangle to
+step 2" without putting figure_spec on step 2 is broken behavior
+— the teacher sees no diagram and concludes the system is buggy.
+
+**Triangle figure_spec example** (when the teacher asks for a
+diagram on a Pythagorean problem):
+{{
+  "type": "geometry",
+  "shape": "triangle",
+  "vertices": ["A", "B", "C"],
+  "side_lengths": {{"AB": 3, "BC": 4}},
+  "right_angle_at": ["B"],
+  "side_labels": {{"AB": "a", "BC": "b", "CA": "c"}}
+}}
+
+**Circle figure_spec example** (for an inscribed-angle problem):
+{{
+  "type": "geometry",
+  "shape": "circle",
+  "radius": 5,
+  "points": {{"A": 30, "B": 150, "C": 270}},
+  "chords": ["AB", "AC"],
+  "show_center": true
+}}
+
+Rules:
+- Triangles need enough constraints to determine the shape
+  (3 sides; or 2 sides + 1 angle; or 1 side + 2 angles). Use
+  `right_angle_at` (not `angles`) for 90° angles.
+- Circles need a positive `radius`. Each named point has an
+  angle in degrees CCW from positive x-axis. Chords reference
+  two named points.
+- Use figures only when they actually clarify (geometry, NOT
+  algebra). On a step that visibly evolves the construction
+  (drop an altitude, draw a chord), attach a figure_spec to that
+  step. Leave figure_spec OFF (omit the key, or null) for steps
+  that don't change the picture.
+- When the teacher says "add a diagram to step N" and step N's
+  current title doesn't make sense as a figure-bearing step,
+  pick the most appropriate step to attach to and SAY which one
+  in your reply.
 
 CRITICAL — solution_steps is a FULL REPLACEMENT, not a patch:
 - If you set solution_steps, you MUST return the complete list of all steps
@@ -251,32 +288,58 @@ async def chat_with_bank_item(
         logger.exception("Bank chat call failed")
         raise RuntimeError(f"AI chat failed: {e}") from e
 
+    # Local import — keeps the chat module loadable without the
+    # geometry render path, but lets us pre-render the proposal's
+    # figures here so the preview UI can show them before the teacher
+    # clicks Accept. Without pre-rendering, the preview reads
+    # figure_svg=None (since the proposal carries raw figure_spec)
+    # and the diagram only appears post-accept — confusing UX.
+    from api.core.question_bank_generation import _render_step_figures, _resolve_figure
+
     reply = str(result.get("reply") or "").strip()
     proposal_raw = result.get("proposal")
     proposal: dict[str, Any] | None = None
     if isinstance(proposal_raw, dict):
         steps_raw = proposal_raw.get("solution_steps")
-        # Filter to well-formed steps only: {title: str, description: str}.
-        # Claude almost always honors the schema, but if a malformed step
-        # slips through it would be stored in chat_messages and applied
-        # to item.solution_steps on accept, crashing the frontend render.
+        # Filter to well-formed steps. Required: title (str) +
+        # description (str). Optional pass-through: figure_spec when
+        # the AI emitted one (dict — rendered by accept_chat_proposal
+        # via _render_step_figures). Earlier versions of this filter
+        # dropped figure_spec; the chat looked like it was producing
+        # diagrams in the reply text but never actually populated the
+        # field, so step diagrams silently never appeared.
         cleaned_steps: list[dict[str, Any]] | None = None
         if isinstance(steps_raw, list):
-            cleaned_steps = [
-                {"title": s["title"], "description": s["description"]}
-                for s in steps_raw
-                if isinstance(s, dict)
-                and isinstance(s.get("title"), str)
-                and isinstance(s.get("description"), str)
-            ]
-            if not cleaned_steps:
-                cleaned_steps = None
+            tmp: list[dict[str, Any]] = []
+            for s in steps_raw:
+                if not isinstance(s, dict):
+                    continue
+                if not isinstance(s.get("title"), str) or not isinstance(s.get("description"), str):
+                    continue
+                step: dict[str, Any] = {
+                    "title": s["title"], "description": s["description"],
+                }
+                if isinstance(s.get("figure_spec"), dict):
+                    step["figure_spec"] = s["figure_spec"]
+                tmp.append(step)
+            # Pre-render any per-step figures so the preview can
+            # display them; accept_chat_proposal re-runs the same
+            # path to write the final state.
+            cleaned_steps = _render_step_figures(tmp) if tmp else None
+
+        # Top-level question figure: pass through + pre-render so the
+        # preview UI shows the diagram alongside the question text.
+        top_spec_raw = proposal_raw.get("figure_spec")
+        top_figure_spec, top_figure_svg = _resolve_figure(top_spec_raw)
+
         proposal = {
             "question": proposal_raw.get("question") if proposal_raw.get("question") else None,
             "solution_steps": cleaned_steps,
             "final_answer": proposal_raw.get("final_answer")
             if proposal_raw.get("final_answer")
             else None,
+            "figure_spec": top_figure_spec,
+            "figure_svg": top_figure_svg,
         }
         # Drop the proposal entirely if every field is null
         if all(v is None for v in proposal.values()):
