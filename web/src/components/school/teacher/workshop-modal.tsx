@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
 import {
   teacher,
@@ -756,6 +757,10 @@ export function WorkshopModal({
                   <MathText text={liveItem.question} />
                 </BeforeBlock>
               )}
+              {/* Geometry figure (when present). Renders above the
+                  question text since most textbook geometry sets the
+                  diagram first and references it in prose. */}
+              <FigureDisplay svg={liveItem.figure_svg} />
               <div className="mt-3 text-base leading-relaxed text-text-primary">
                 {questionChanged || isProposalPending ? (
                   <MathText text={previewQuestion} />

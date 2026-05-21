@@ -8,6 +8,7 @@ import {
   type StudentPracticeDetail,
   type StudentPracticeProblem,
 } from "@/lib/api";
+import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
 import { MCQCard } from "@/components/shared/mcq-card";
 
@@ -108,11 +109,15 @@ function ProblemCard({ problem }: { problem: StudentPracticeProblem }) {
         <div className="min-w-0 flex-1">
           {/* MCQCard re-renders the question when Answer is expanded,
               so suppress it here in that mode to avoid rendering the
-              same question twice. */}
+              same question twice. Figure follows the same suppression
+              rule — it's part of the question, not the answer view. */}
           {mode !== "answer" && (
-            <div className="text-base text-text-primary">
-              <MathText text={problem.question} />
-            </div>
+            <>
+              <FigureDisplay svg={problem.figure_svg} />
+              <div className="text-base text-text-primary">
+                <MathText text={problem.question} />
+              </div>
+            </>
           )}
 
           {mode === "idle" && (

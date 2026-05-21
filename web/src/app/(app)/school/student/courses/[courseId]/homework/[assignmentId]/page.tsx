@@ -10,6 +10,7 @@ import {
   type StudentSubmission,
   type SubmissionFile,
 } from "@/lib/api";
+import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
 import { SubmittedView } from "@/components/school/student/submitted-view";
@@ -353,6 +354,10 @@ export default function HomeworkPage() {
                     {p.position}
                   </span>
                   <div className="min-w-0 flex-1">
+                    {/* Geometry figure when present — rendered above
+                        the question text since most setups read
+                        "figure first, then prose referencing it." */}
+                    <FigureDisplay svg={p.figure_svg} />
                     <div className="text-base text-text-primary">
                       <MathText text={p.question} />
                     </div>
