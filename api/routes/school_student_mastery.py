@@ -39,7 +39,7 @@ from api.database import get_db
 from api.middleware.auth import get_current_user_full
 from api.models.assignment import Assignment
 from api.models.course import Course
-from api.models.question_bank import FORMAT_MCQ, QuestionBankItem
+from api.models.question_bank import QuestionBankItem
 from api.models.student_problem_mastery import (
     STATE_NOT_STARTED,
     StudentProblemChat,
@@ -328,15 +328,19 @@ def _normalize_answer(s: str) -> str:
 
 
 def _mcq_choices_for_student(item: QuestionBankItem) -> list[str]:
-    """Return the four MCQ choices in stable shuffled order, or [] for
-    non-MCQ items. Same algorithm as the HW-loop variant — deterministic
-    hash-of-id shuffle so the order is identical for every student and
-    matches what the teacher previewed on the bank review page.
+    """Return the four MCQ choices in stable shuffled order, or [] if
+    the item lacks the data to render MCQ (missing distractors or
+    final_answer). Deterministic hash-of-id shuffle so the order is
+    stable across every render and matches what the teacher saw on
+    the bank review page.
 
-    Duplicated from school_student_practice rather than imported to
-    avoid coupling the two routers; the function is pure and tiny."""
-    if item.format != FORMAT_MCQ:
-        return []
+    Deliberately ignores `item.format` (unlike the HW-context variant
+    in school_student_practice). The mastery loop's Answer mode is
+    structurally MCQ — server compares the picked choice string
+    against final_answer. The `format` field reflects how the teacher
+    wanted the *homework* posed (write work vs see choices); in
+    practice mode the student is always self-checking, so we use
+    MCQ whenever the distractors + final_answer are populated."""
     distractors = list(item.distractors or [])
     if len(distractors) != 3 or not item.final_answer:
         return []

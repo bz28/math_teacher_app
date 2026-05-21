@@ -97,6 +97,73 @@ async def _seed_practice(world: dict[str, Any]) -> dict[str, Any]:
 # ── overview ──
 
 
+async def test_overview_renders_mcq_choices_even_for_frq_format_items(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """The mastery loop's Answer mode is MCQ-structurally; we render
+    choices for any item that has final_answer + 3 distractors
+    regardless of the teacher's chosen `format`. Cloned practice
+    sets routinely carry items with `format='frq'` (inherited from
+    the source HW), so refusing to render MCQ for them would create
+    a dead-end action on most practice problems."""
+    # Reseed with format=frq instead of mcq.
+    async with get_session_factory()() as s:
+        source_hw = (await s.execute(
+            select(Assignment).where(Assignment.id == world["assignment_id"])
+        )).scalar_one()
+        practice = Assignment(
+            course_id=source_hw.course_id,
+            unit_ids=list(source_hw.unit_ids or []),
+            teacher_id=world["teacher_id"],
+            title="frq practice",
+            type="practice",
+            status="published",
+            source_homework_id=source_hw.id,
+            content=None,
+        )
+        s.add(practice)
+        await s.flush()
+        item = QuestionBankItem(
+            course_id=source_hw.course_id,
+            unit_id=world["unit_id"],
+            originating_assignment_id=practice.id,
+            title="frq item",
+            question="Simplify $5\\sqrt{8}$",
+            solution_steps=[{"title": "Factor", "description": "..."}],
+            final_answer="$10\\sqrt{2}$",
+            distractors=["$5\\sqrt{8}$", "$20\\sqrt{2}$", "$10\\sqrt{8}$"],
+            status="approved",
+            source="practice",
+            format="frq",  # <-- the case the previous behavior couldn't serve
+        )
+        s.add(item)
+        section_id = (await s.execute(
+            text(
+                "SELECT section_id FROM assignment_sections "
+                "WHERE assignment_id=:aid LIMIT 1"
+            ),
+            {"aid": world["assignment_id"]},
+        )).scalar_one()
+        s.add(AssignmentSection(
+            assignment_id=practice.id,
+            section_id=section_id,
+            published_at=datetime.now(UTC),
+        ))
+        await s.commit()
+        practice_id = practice.id
+
+    r = await client.get(
+        f"/v1/school/student/practice/{practice_id}/overview",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert len(body["problems"]) == 1
+    # Even though format=frq, mcq_choices is populated because the
+    # data supports rendering choices.
+    assert len(body["problems"][0]["mcq_choices"]) == 4
+
+
 async def test_overview_returns_problems_with_not_started_default(
     client: AsyncClient, world: dict[str, Any],
 ) -> None:
