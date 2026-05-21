@@ -205,6 +205,14 @@ def _parse_decomposition(
                     logger.warning(
                         "step figure_spec rejected (keeping step, dropping figure): %s", e,
                     )
+                except Exception:
+                    # Defense-in-depth: any renderer bug drops the
+                    # step figure but keeps the step. Full traceback
+                    # in logs so the actual bug is visible.
+                    logger.exception(
+                        "unexpected error rendering step figure_spec (keeping step); spec=%r",
+                        raw_figure,
+                    )
             steps.append(step)
         else:
             # Backward compat: plain string from older prompt format
