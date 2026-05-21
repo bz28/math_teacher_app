@@ -78,28 +78,46 @@ function SessionPageInner() {
     if (!assignmentId) return;
     schoolStudent
       .practiceSetOverview(assignmentId)
-      .then((o) => {
+      .then(async (o) => {
         setOverview(o);
-        // If no ?start, resolve the smart-resume target server-side
-        // so we always land on the right problem for first-time
-        // entry (dot-map taps already pass ?start).
-        if (!currentId && o.problems.length > 0) {
-          schoolStudent.practiceNextProblem(assignmentId).then((next) => {
-            if (next.status === "complete") {
-              setShowSummary(true);
-            } else {
-              setCurrentId(next.problem.bank_item_id);
-            }
-          }).catch(() => {
+        // Trust ?start only if the id is actually in this set —
+        // otherwise a copy-pasted stale link would strand the
+        // student on "Loading…" forever. On miss, fall through to
+        // the smart-resume branch.
+        const startIsValid =
+          startParam !== null
+          && o.problems.some((p) => p.bank_item_id === startParam);
+        if (startIsValid) {
+          setCurrentId(startParam);
+          return;
+        }
+        // No ?start (or stale): resolve the smart-resume target
+        // server-side, with a fallback to the first problem so the
+        // student is never stuck without a target.
+        try {
+          const next = await schoolStudent.practiceNextProblem(
+            assignmentId,
+          );
+          if (next.status === "complete") {
+            setShowSummary(true);
+            if (o.problems.length > 0) fireConfetti(true);
+          } else {
+            setCurrentId(next.problem.bank_item_id);
+          }
+        } catch {
+          if (o.problems.length > 0) {
             setCurrentId(o.problems[0].bank_item_id);
-          });
+          } else {
+            setShowSummary(true);
+          }
         }
       })
       .catch(() => setError("Couldn't load this practice set. Try again."));
-    // The smart-resume branch fires only on first load; subsequent
-    // currentId changes are driven by user advance / dot-strip taps.
+    // currentId is intentionally excluded from deps — this effect
+    // runs once per assignmentId/startParam to seed initial state;
+    // subsequent currentId changes are driven by user interaction.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignmentId]);
+  }, [assignmentId, startParam]);
 
   // Reset per-problem UI on every problem change.
   useEffect(() => {

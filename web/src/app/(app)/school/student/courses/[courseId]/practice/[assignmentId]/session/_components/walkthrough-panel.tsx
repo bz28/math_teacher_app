@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   schoolStudent,
@@ -60,6 +60,17 @@ export function WalkthroughPanel({
   const [activeStepIndex, setActiveStepIndex] = useState<number | null>(null);
   const [asking, setAsking] = useState(false);
 
+  // Hold the latest onReady in a ref so the open-walkthrough effect
+  // depends ONLY on bankItemId. Listing the prop in deps would re-
+  // fire the effect every time the parent re-renders (the parent
+  // passes an inline arrow), causing the panel to re-POST
+  // /walkthrough-opened, re-GET /chat, and clobber any in-flight
+  // optimistic chat message with the freshly-fetched server view.
+  const onReadyRef = useRef(onReady);
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  });
+
   useEffect(() => {
     let cancelled = false;
     schoolStudent
@@ -67,7 +78,7 @@ export function WalkthroughPanel({
       .then((resp) => {
         if (cancelled) return;
         setData(resp);
-        onReady?.(resp);
+        onReadyRef.current?.(resp);
       })
       .catch(() => {
         if (!cancelled) setError("Couldn't open the walkthrough. Try again.");
@@ -85,7 +96,7 @@ export function WalkthroughPanel({
     return () => {
       cancelled = true;
     };
-  }, [bankItemId, onReady]);
+  }, [bankItemId]);
 
   if (error) {
     return (
