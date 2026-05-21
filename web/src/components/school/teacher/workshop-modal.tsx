@@ -536,6 +536,11 @@ export function WorkshopModal({
   const previewQuestion = pendingProposal?.question ?? liveItem.question;
   const previewSteps = pendingProposal?.solution_steps ?? liveItem.solution_steps;
   const previewAnswer = pendingProposal?.final_answer ?? liveItem.final_answer;
+  // Question-level figure: prefer the proposal's diagram while a
+  // proposal is pending so the teacher sees what they're about to
+  // accept. Falls back to the existing item diagram otherwise.
+  const previewFigureSvg =
+    pendingProposal?.figure_svg ?? liveItem.figure_svg;
   const questionChanged = pendingProposal?.question != null;
   const stepsChanged = pendingProposal?.solution_steps != null;
   const answerChanged = pendingProposal?.final_answer != null;
@@ -759,8 +764,10 @@ export function WorkshopModal({
               )}
               {/* Geometry figure (when present). Renders above the
                   question text since most textbook geometry sets the
-                  diagram first and references it in prose. */}
-              <FigureDisplay svg={liveItem.figure_svg} />
+                  diagram first and references it in prose. While a
+                  proposal is pending, prefer the proposal's figure
+                  so the teacher previews what they'll accept. */}
+              <FigureDisplay svg={previewFigureSvg} />
               <div className="mt-3 text-base leading-relaxed text-text-primary">
                 {questionChanged || isProposalPending ? (
                   <MathText text={previewQuestion} />
