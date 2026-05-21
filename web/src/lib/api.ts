@@ -1747,6 +1747,44 @@ export interface ProblemChatAskResponse {
   reply: string;
 }
 
+// ── Mastery Loop history ──
+// Per-class study record: heatmap, mastery aggregates, streak,
+// "needs review" queue, per-set breakdown. Backs the third tab
+// inside the class page.
+
+export interface HistoryHeatmapDay {
+  /** ISO YYYY-MM-DD in UTC. */
+  date: string;
+  count: number;
+}
+
+export interface HistoryReviewItem {
+  bank_item_id: string;
+  practice_assignment_id: string;
+  practice_title: string;
+  question: string;
+  mastery_state: MasteryState;
+  last_attempt_at: string;
+}
+
+export interface HistorySetBreakdown {
+  assignment_id: string;
+  title: string;
+  problem_count: number;
+  mastered_count: number;
+}
+
+export interface CourseHistorySummary {
+  course_id: string;
+  course_name: string;
+  mastered_count: number;
+  total_problems: number;
+  streak_days: number;
+  heatmap: HistoryHeatmapDay[];
+  needs_review: HistoryReviewItem[];
+  sets: HistorySetBreakdown[];
+}
+
 export interface StudentHomeworkProblem {
   bank_item_id: string;
   position: number;
@@ -1980,6 +2018,14 @@ export const schoolStudent = {
     return apiFetch<ProblemChatAskResponse>(
       `/school/student/problems/${bankItemId}/chat`,
       { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+  /** Per-class history summary — heatmap, mastery aggregates,
+   *  streak, needs-review, per-set breakdown. One round trip for
+   *  the entire History tab. */
+  courseHistorySummary(courseId: string) {
+    return apiFetch<CourseHistorySummary>(
+      `/school/student/courses/${courseId}/history/summary`,
     );
   },
   /** Practice set linked to this HW (source_homework_id match),
