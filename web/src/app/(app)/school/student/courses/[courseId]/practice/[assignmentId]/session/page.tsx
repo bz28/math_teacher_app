@@ -157,6 +157,12 @@ function SessionPageInner() {
     // Wrap around if we hit the end with stragglers still un-mastered;
     // if everything's mastered, show the summary.
     if (problems.length === 0) return;
+    // Always drop back to idle so the user gets a fresh action picker
+    // — covers the edge case where the only non-mastered problem is
+    // the current one (advance lands on itself, currentId doesn't
+    // change, the mode-reset effect that watches currentId never
+    // fires, and the student would otherwise be stuck mid-mode).
+    setMode("idle");
     const start = currentIndex >= 0 ? currentIndex + 1 : 0;
     for (let i = 0; i < problems.length; i++) {
       const idx = (start + i) % problems.length;
@@ -307,41 +313,43 @@ function IdleActions({
 }) {
   const canAnswer = problem.mcq_choices.length === 4;
   const canWalkthrough = problem.step_count > 0;
+  // Disabled-button explanations are rendered inline below the
+  // action row so they're visible to everyone — sighted users see
+  // the same text screen-reader users hear. The previous
+  // `<span title=…>` wrapper hid the explanation behind a mouse-
+  // only tooltip; disabled buttons aren't keyboard-focusable so
+  // AT users had no way to discover *why* an action was greyed out.
+  const disabledReasons: string[] = [];
+  if (!canAnswer) disabledReasons.push("Multiple-choice options aren't ready yet.");
+  if (!canWalkthrough) disabledReasons.push("No teacher-authored steps for this problem yet.");
   return (
     <Card variant="flat" className="mt-5">
       <div className="flex flex-wrap items-center gap-3">
-        <span
-          title={canAnswer ? undefined : "MCQ choices not ready yet"}
+        <Button
+          variant="primary"
+          size="md"
+          onClick={onAnswer}
+          disabled={!canAnswer}
         >
-          <Button
-            variant="primary"
-            size="md"
-            onClick={onAnswer}
-            disabled={!canAnswer}
-          >
-            Answer
-          </Button>
-        </span>
-        <span
-          title={
-            canWalkthrough
-              ? "See the teacher-authored steps — closes the mastery line."
-              : "No steps yet"
-          }
+          Answer
+        </Button>
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={onWalkthrough}
+          disabled={!canWalkthrough}
         >
-          <Button
-            variant="secondary"
-            size="md"
-            onClick={onWalkthrough}
-            disabled={!canWalkthrough}
-          >
-            Walk me through
-          </Button>
-        </span>
+          Walk me through
+        </Button>
         <Button variant="ghost" size="md" onClick={onSkip} className="ml-auto">
           Skip
         </Button>
       </div>
+      {disabledReasons.length > 0 && (
+        <p className="mt-3 text-xs text-text-muted" role="status">
+          {disabledReasons.join(" ")}
+        </p>
+      )}
       {problem.attempts > 0 && (
         <p className="mt-3 text-xs text-text-muted">
           You&rsquo;ve attempted this {problem.attempts}{" "}
