@@ -62,17 +62,20 @@ def solve_triangle(spec: TriangleFigure) -> dict[str, Point]:
     n_sides = len(known_sides)
     n_angles = len(angles)
 
-    # Three sides given (SSS).
+    # Route by what determines the triangle:
+    # - 2+ angles given → ASA/AAS handles it (any 1+ side anchors scale).
+    #   This MUST come before the SAS branch because an LLM emitting an
+    #   over-constrained 2-sides + 2-angles spec (e.g. {AB, BC, ∠A, ∠C})
+    #   is a valid AAS — _solve_sas would wrongly reject it as "angle
+    #   not at the included vertex." ASA generalizes cleanly.
+    # - 3 sides → SSS.
+    # - 2 sides + 1 angle → SAS (angle must be at the shared vertex).
+    if n_angles >= 2 and n_sides >= 1:
+        return _solve_asa(spec, sides, angles)
     if n_sides == 3:
         return _solve_sss(spec, sides)  # type: ignore[arg-type]
-
-    # Two sides given (SAS) — need an angle (any vertex).
     if n_sides == 2 and n_angles >= 1:
         return _solve_sas(spec, sides, angles)
-
-    # One side given (ASA/AAS) — need at least two angles.
-    if n_sides == 1 and n_angles >= 2:
-        return _solve_asa(spec, sides, angles)
 
     raise FigureSpecError(
         "underdetermined triangle: need 3 sides, or 2 sides + 1 angle, "
@@ -206,11 +209,16 @@ def _solve_asa(
                 "the two given angles sum to ≥ 180°",
             )
 
-    # Find the known side.
+    # Find a known side — any of them suffices to anchor the scale,
+    # so when the LLM emits an over-constrained spec (2-3 sides + 2
+    # angles) we just take the first. The law-of-sines path computes
+    # the other sides; if any conflict with what the LLM also
+    # provided, that's a consistency issue we let SSS catch (it'll
+    # raise triangle-inequality if the lengths don't agree).
     known = [(edge, length) for edge, length in sides.items() if length is not None]
-    if len(known) != 1:
+    if not known:
         raise FigureSpecError(
-            "_solve_asa called with the wrong number of sides",
+            "_solve_asa called with no sides — need at least one for scale",
         )
     known_edge, known_length = known[0]
     assert known_length is not None

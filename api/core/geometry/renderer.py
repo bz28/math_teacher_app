@@ -17,7 +17,7 @@ import math
 from typing import Any
 
 from api.core.geometry.dsl import FigureSpec, FigureSpecError, TriangleFigure
-from api.core.geometry.solver import Point, _canonical_edge, solve_triangle
+from api.core.geometry.solver import Point, solve_triangle
 
 # Visual constants — single source of truth so tweaks land in one
 # place. Sizes are in SVG user units; the viewBox is computed to fit
@@ -267,5 +267,4 @@ def _escape(text: str) -> str:
     )
 
 
-# Re-export for callers that want to skip render and just solve.
-__all__ = ["render_figure", "_canonical_edge"]
+__all__ = ["render_figure"]

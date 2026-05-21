@@ -135,6 +135,23 @@ def test_asa_angles_summing_too_high_rejected() -> None:
         solve_triangle(spec)
 
 
+def test_aas_with_two_sides_and_two_angles() -> None:
+    """LLM commonly emits over-constrained AAS: 2 sides + 2 angles.
+    Router prefers ASA when 2+ angles are present so this resolves
+    correctly instead of being rejected as 'angle not at the
+    included vertex' by SAS.
+    """
+    spec = TriangleFigure(
+        vertices=["A", "B", "C"],
+        side_lengths={"AB": 1.0, "BC": 1.0},
+        # Non-included angles (60° at A, 60° at C) → equilateral.
+        angles={"A": 60.0, "C": 60.0},
+    )
+    coords = solve_triangle(spec)
+    ca = math.hypot(coords["C"][0] - coords["A"][0], coords["C"][1] - coords["A"][1])
+    assert math.isclose(ca, 1.0, abs_tol=1e-9)
+
+
 # ── Solver: underdetermined ──────────────────────────────────────────
 
 
@@ -164,6 +181,18 @@ def test_unknown_vertex_in_constraint_rejected() -> None:
         TriangleFigure(
             vertices=["A", "B", "C"],
             right_angle_at=["Z"],
+        )
+
+
+def test_contradictory_edge_keys_rejected() -> None:
+    """`{AB: 3, BA: 5}` references the same edge twice with different
+    values. Silently picking one is a hidden-bug factory; surface it
+    at validation time.
+    """
+    with pytest.raises(ValueError, match="same edge"):
+        TriangleFigure(
+            vertices=["A", "B", "C"],
+            side_lengths={"AB": 3.0, "BA": 5.0},
         )
 
 

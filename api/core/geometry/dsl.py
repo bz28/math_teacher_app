@@ -87,11 +87,31 @@ class TriangleFigure(BaseModel):
             if vertex not in names:
                 raise ValueError(f"vertex_labels references unknown vertex: {vertex}")
 
-        for edge_key in [*self.side_lengths, *self.side_labels]:
-            if len(edge_key) != 2 or not all(c in names for c in edge_key):
-                raise ValueError(
-                    f"edge key {edge_key!r} must be two vertex names from {sorted(names)}",
-                )
+        # Canonicalize edge keys so 'AB' and 'BA' resolve to the same
+        # edge. We reject contradictory duplicates (LLM emits both
+        # 'AB' and 'BA' with different values) rather than silently
+        # picking one — that's a hidden inconsistency we'd rather
+        # surface at validation time.
+        def _canon(edge: str) -> str:
+            return edge if edge[0] < edge[1] else edge[1] + edge[0]
+
+        for field_name, mapping in (
+            ("side_lengths", self.side_lengths),
+            ("side_labels", self.side_labels),
+        ):
+            seen: dict[str, str] = {}
+            for edge_key in mapping:
+                if len(edge_key) != 2 or not all(c in names for c in edge_key):
+                    raise ValueError(
+                        f"edge key {edge_key!r} must be two vertex names from {sorted(names)}",
+                    )
+                canon = _canon(edge_key)
+                if canon in seen and seen[canon] != edge_key:
+                    raise ValueError(
+                        f"{field_name} has both {seen[canon]!r} and {edge_key!r} — "
+                        "these reference the same edge; emit one form only",
+                    )
+                seen[canon] = edge_key
 
         # Negative or zero lengths are nonsense, and constraint angles
         # must be in (0, 180) — a triangle vertex angle equals 0° or
