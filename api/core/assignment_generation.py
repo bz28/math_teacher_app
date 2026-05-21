@@ -82,7 +82,7 @@ Pick the variant by setting `shape`:
   matter; the renderer auto-scales.
 - Add named points on the circumference via `points`: each entry
   maps a single-character name to an angle in degrees, measured
-  CCW from the positive x-axis. e.g. `{"A": 30, "B": 150}`.
+  CCW from the positive x-axis. e.g. `{{"A": 30, "B": 150}}`.
 - `chords` lists two-character chord identifiers — straight
   segments between named points.
 - `show_center: true` draws a dot + label at the center; pair
