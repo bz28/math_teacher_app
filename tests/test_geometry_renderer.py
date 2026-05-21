@@ -330,6 +330,34 @@ def test_render_circle_with_chord_and_labels() -> None:
     assert ">diameter<" in svg
 
 
+def test_render_circle_diameter_label_not_at_origin() -> None:
+    """Diameter chord (endpoints 180° apart) has its midpoint AT the
+    origin, so the 'outward = away from center' offset is undefined.
+    Previously this produced a label drawn at (0, 0), overlapping the
+    center dot. Falls back to the chord's perpendicular instead.
+    """
+    import re
+
+    svg = render_figure(
+        {
+            "shape": "circle",
+            "radius": 5.0,
+            "points": {"A": 0.0, "B": 180.0},
+            "chords": ["AB"],
+            "chord_labels": {"AB": "d"},
+            "show_center": True,
+        },
+    )
+    # Find the diameter label's <text> element. It should NOT be at
+    # x="0" + y="0" (which would overlap the center dot).
+    match = re.search(r'<text x="([-\d.]+)" y="([-\d.]+)"[^>]*>d</text>', svg)
+    assert match is not None, "diameter label 'd' missing from SVG"
+    x, y = float(match.group(1)), float(match.group(2))
+    assert abs(x) > 0.1 or abs(y) > 0.1, (
+        f"diameter label landed too close to origin: ({x}, {y})"
+    )
+
+
 def test_render_circle_with_labeled_radius() -> None:
     svg = render_figure(
         {
