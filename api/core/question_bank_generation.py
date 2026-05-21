@@ -402,6 +402,9 @@ def snapshot_history(item: QuestionBankItem) -> None:
     item.previous_solution_steps = item.solution_steps
     item.previous_final_answer = item.final_answer
     item.previous_status = item.status
+    # Figure-side undo so revert restores prose AND diagram together.
+    item.previous_figure_spec = item.figure_spec
+    item.previous_figure_svg = item.figure_svg
 
 
 _REGENERATE_SYSTEM_TEMPLATE = """\
@@ -509,6 +512,14 @@ async def regenerate_one(
     item.question = str(new_question)
     item.solution_steps = new_steps if isinstance(new_steps, list) else None
     item.final_answer = str(new_answer) if new_answer else ""
+    # Re-resolve the figure from the regenerated payload. If the new
+    # question no longer needs a figure (LLM omitted the spec), we
+    # clear the stale one — otherwise the diagram on disk would
+    # contradict the rewritten prose. If rendering fails we drop both
+    # (graceful degradation: teacher reviews + manually retries).
+    new_figure_spec, new_figure_svg = _resolve_figure(result.get("figure_spec"))
+    item.figure_spec = new_figure_spec
+    item.figure_svg = new_figure_svg
     # Regenerate distractors to match the new question/answer. The old
     # distractors were keyed off the old wrong-answer patterns and would
     # be misleading on the new problem. Failure here is non-fatal —
