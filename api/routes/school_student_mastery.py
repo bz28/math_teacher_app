@@ -37,9 +37,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db
 from api.middleware.auth import get_current_user_full
-from api.models.assignment import Assignment
+from api.models.assignment import Assignment, AssignmentSection
 from api.models.course import Course
 from api.models.question_bank import QuestionBankItem
+from api.models.section_enrollment import SectionEnrollment
 from api.models.student_problem_mastery import (
     STATE_NOT_STARTED,
     StudentProblemChat,

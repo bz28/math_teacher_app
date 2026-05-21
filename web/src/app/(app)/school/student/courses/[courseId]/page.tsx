@@ -336,10 +336,17 @@ function HeatmapPanel({ days }: { days: HistoryHeatmapDay[] }) {
   // Build a window of HEATMAP_DAYS, oldest first, with counts mapped
   // in. The grid renders column-by-column (Sunday on top), so we
   // shape the array of cells with date metadata for tooltips.
+  //
+  // `today` is included in the memo deps as an ISO string so a tab
+  // kept open across UTC midnight rolls the window forward on the
+  // next render — without it, the memo would hold a stale "today"
+  // from the original mount and the heatmap would silently drop
+  // the new day's bucket. We re-read it inside the memo so the
+  // string and the iteration use the same value.
+  const todayUtc = new Date().toISOString().slice(0, 10);
   const cells = useMemo(() => {
     const result: { date: string; count: number }[] = [];
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+    const today = new Date(`${todayUtc}T00:00:00Z`);
     for (let i = HEATMAP_DAYS - 1; i >= 0; i--) {
       const d = new Date(today);
       d.setUTCDate(today.getUTCDate() - i);
@@ -347,7 +354,7 @@ function HeatmapPanel({ days }: { days: HistoryHeatmapDay[] }) {
       result.push({ date: iso, count: byDate.get(iso) ?? 0 });
     }
     return result;
-  }, [byDate]);
+  }, [byDate, todayUtc]);
 
   // Bin intensities so a single big day doesn't drown out everything
   // else. Four bins is the consumer convention.
