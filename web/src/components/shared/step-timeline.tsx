@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Card, Button, TypingIndicator } from "@/components/ui";
 import { CheckIcon } from "@/components/ui/icons";
+import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +16,10 @@ export interface TimelineStep {
   title?: string;
   description: string;
   final_answer?: string | null;
+  /** Pre-rendered geometry SVG when the step carries a figure. The
+   *  renderer (api/core/geometry) produces this at generation time so
+   *  the client just embeds. */
+  figure_svg?: string | null;
 }
 
 interface Props {
@@ -173,6 +178,11 @@ function CompletedStep({
             Step {index + 1}
             {step.title ? ` — ${step.title}` : ""}
           </p>
+          {/* Figure shown only when the step's row is expanded —
+              keeps the collapsed timeline compact. */}
+          {expanded && step.figure_svg && (
+            <FigureDisplay svg={step.figure_svg} className="max-h-40" />
+          )}
           <div
             className={cn(
               "text-sm text-text-secondary",
@@ -247,6 +257,9 @@ function ActiveStep({
         Step {index + 1}
         {step.title ? ` — ${step.title}` : ""}
       </p>
+      {step.figure_svg && (
+        <FigureDisplay svg={step.figure_svg} className="max-h-44" />
+      )}
       <div className="mt-1 text-base leading-relaxed text-text-primary">
         <MathText text={step.description} />
       </div>

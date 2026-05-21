@@ -1502,7 +1502,12 @@ export interface AiGradeEntry {
 
 export interface BankChatProposal {
   question: string | null;
-  solution_steps: { title: string; description: string }[] | null;
+  solution_steps: {
+    title: string;
+    description: string;
+    figure_spec?: Record<string, unknown> | null;
+    figure_svg?: string | null;
+  }[] | null;
   final_answer: string | null;
 }
 
@@ -1524,7 +1529,16 @@ export interface BankItem {
   unit_id: string;
   title: string;
   question: string;
-  solution_steps: { title: string; description: string }[] | null;
+  /** Solution steps may carry a per-step geometry figure (rendered
+   *  SVG) when the construction evolves between steps (e.g. dropping
+   *  an altitude). figure_spec is the canonical source-of-truth for a
+   *  future visual editor; figure_svg is what gets rendered. */
+  solution_steps: {
+    title: string;
+    description: string;
+    figure_spec?: Record<string, unknown> | null;
+    figure_svg?: string | null;
+  }[] | null;
   final_answer: string | null;
   /** 3 wrong-answer choices generated alongside the solution. Empty
    *  for FRQ items where distractor generation failed. The MCQ
@@ -1655,7 +1669,12 @@ export interface StudentPracticeProblem {
   question: string;
   /** Pre-rendered geometry SVG; null when the problem has no figure. */
   figure_svg: string | null;
-  solution_steps: { title?: string; description: string }[] | null;
+  solution_steps: {
+    title?: string;
+    description: string;
+    figure_spec?: Record<string, unknown> | null;
+    figure_svg?: string | null;
+  }[] | null;
   final_answer: string | null;
   distractors: string[] | null;
   difficulty: string;

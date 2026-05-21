@@ -14,7 +14,7 @@ generation integration tests once PR 2 lands and we wire a
 fixture-friendly mock there.
 """
 
-from api.core.question_bank_generation import _resolve_figure
+from api.core.question_bank_generation import _render_step_figures, _resolve_figure
 
 
 def test_resolve_figure_passes_valid_spec_through() -> None:
@@ -69,3 +69,63 @@ def test_resolve_figure_underdetermined_drops_gracefully() -> None:
         "side_lengths": {"AB": 3.0},
     }
     assert _resolve_figure(spec) == (None, None)
+
+
+# ── _render_step_figures ────────────────────────────────────────────
+
+
+def test_render_step_figures_passes_text_steps_through() -> None:
+    """Steps without a figure_spec are returned unchanged."""
+    steps = [
+        {"title": "Setup", "description": "Identify the right triangle."},
+        {"title": "Apply Pythagoras", "description": "$a^2 + b^2 = c^2$"},
+    ]
+    out = _render_step_figures(steps)
+    assert len(out) == 2
+    assert "figure_svg" not in out[0] and "figure_svg" not in out[1]
+    assert out[0]["description"] == "Identify the right triangle."
+
+
+def test_render_step_figures_renders_valid_spec() -> None:
+    """A step with a valid figure_spec gets figure_svg populated."""
+    steps = [
+        {
+            "title": "Draw the triangle",
+            "description": "We start with a 3-4-5 right triangle.",
+            "figure_spec": {
+                "type": "geometry",
+                "shape": "triangle",
+                "vertices": ["A", "B", "C"],
+                "side_lengths": {"AB": 3.0, "BC": 4.0, "CA": 5.0},
+                "right_angle_at": ["B"],
+            },
+        },
+    ]
+    out = _render_step_figures(steps)
+    assert out[0]["figure_svg"].startswith("<svg")
+    assert out[0]["figure_spec"]["shape"] == "triangle"
+
+
+def test_render_step_figures_drops_bad_spec_keeps_step() -> None:
+    """A step with a triangle-inequality-violating spec keeps the
+    step but loses the figure. This is the load-bearing graceful-
+    degradation behavior — one bad step figure should never drop
+    the whole solution.
+    """
+    steps = [
+        {
+            "title": "Broken",
+            "description": "Description still valid.",
+            "figure_spec": {
+                "type": "geometry",
+                "shape": "triangle",
+                "vertices": ["A", "B", "C"],
+                "side_lengths": {"AB": 1.0, "BC": 1.0, "CA": 5.0},
+            },
+        },
+    ]
+    out = _render_step_figures(steps)
+    assert len(out) == 1
+    assert "figure_svg" not in out[0]
+    assert "figure_spec" not in out[0]
+    assert out[0]["description"] == "Description still valid."

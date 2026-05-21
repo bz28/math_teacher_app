@@ -10,6 +10,93 @@ from typing import Any
 ToolSchema = dict[str, Any]
 
 # ---------------------------------------------------------------------------
+# Geometry figure (shared across question generation, regeneration, and
+# step-decomposition schemas). Mirrors api/core/geometry/dsl.py's
+# TriangleFigure. v1 covers triangles only; the `shape` discriminator
+# is fixed at "triangle" so the LLM can't emit unrecognized shapes the
+# renderer doesn't know about yet. Future PRs add circles, polygons,
+# etc. by extending this with a oneOf branch per shape.
+# ---------------------------------------------------------------------------
+
+_TRIANGLE_FIGURE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "description": (
+        "Geometric figure for this problem (or this step). OMIT this "
+        "field unless the problem / step genuinely needs a diagram "
+        "(triangles with given sides/angles, Pythagorean / right-"
+        "triangle trig, congruence-or-similarity setups). Don't emit "
+        "a figure spec just to decorate algebra or word problems "
+        "where the prose carries full meaning."
+    ),
+    "properties": {
+        "type": {"type": "string", "enum": ["geometry"]},
+        "shape": {"type": "string", "enum": ["triangle"]},
+        "vertices": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Three distinct single-character names, e.g. ['A', 'B', 'C'].",
+        },
+        "side_lengths": {
+            "type": "object",
+            "description": (
+                "Lengths keyed by two-vertex edge identifiers ('AB', "
+                "'BC', etc.). Pick ONE ordering per edge — don't emit "
+                "both 'AB' and 'BA'."
+            ),
+            "additionalProperties": {"type": "number"},
+        },
+        "angles": {
+            "type": "object",
+            "description": (
+                "Non-right angle measures in degrees, keyed by vertex "
+                "name. For 90° angles use right_angle_at instead — it "
+                "also draws the marker."
+            ),
+            "additionalProperties": {"type": "number"},
+        },
+        "right_angle_at": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Vertex names where the triangle has a right angle. "
+                "At most one entry — triangles can't have multiple "
+                "right angles."
+            ),
+        },
+        "side_labels": {
+            "type": "object",
+            "description": (
+                "Text shown next to each edge (the number or variable "
+                "students see on the diagram, e.g. '3' or 'c'). Keyed "
+                "like side_lengths. Omit a label to leave the side "
+                "unlabeled in the rendered figure."
+            ),
+            "additionalProperties": {"type": "string"},
+        },
+        "angle_labels": {
+            "type": "object",
+            "description": (
+                "Text shown at each vertex's angle (e.g. '60°' or "
+                "'θ'). Keyed by vertex name."
+            ),
+            "additionalProperties": {"type": "string"},
+        },
+        "vertex_labels": {
+            "type": "object",
+            "description": (
+                "Override the displayed vertex name (default is the "
+                "vertex's key from `vertices`). Keyed by vertex name."
+            ),
+            "additionalProperties": {"type": "string"},
+        },
+    },
+    "required": ["type", "shape", "vertices"],
+}
+
+
+# ---------------------------------------------------------------------------
 # Practice
 # ---------------------------------------------------------------------------
 
@@ -125,6 +212,12 @@ DECOMPOSITION_SCHEMA: ToolSchema = {
                     "properties": {
                         "title": {"type": "string", "description": "Short 2-5 word heading."},
                         "description": {"type": "string", "description": "Full explanation of the step."},
+                        # Per-step figure for geometry problems where
+                        # the construction evolves (e.g. "drop an
+                        # altitude from B to AC" is best shown, not
+                        # described). OMIT for non-geometry steps —
+                        # don't decorate algebra walkthroughs.
+                        "figure_spec": _TRIANGLE_FIGURE_SCHEMA,
                     },
                     "required": ["title", "description"],
                     "additionalProperties": False,
@@ -185,89 +278,6 @@ UNIT_SUGGESTIONS_SCHEMA: ToolSchema = {
 # ---------------------------------------------------------------------------
 # Assignment generation
 # ---------------------------------------------------------------------------
-
-# Geometry figure schema fragment — mirrors api/core/geometry/dsl.py's
-# TriangleFigure. v1 covers triangles only; the `shape` discriminator
-# is fixed at "triangle" so the LLM can't emit unrecognized shapes
-# the renderer doesn't know about yet. Future PRs add circles,
-# polygons, etc. by extending this with a oneOf branch per shape.
-_TRIANGLE_FIGURE_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "description": (
-        "Geometric figure for this problem. OMIT this field unless "
-        "the problem genuinely needs a diagram (triangles with given "
-        "sides/angles, Pythagorean / right-triangle trig, "
-        "congruence-or-similarity setups). Don't emit a figure spec "
-        "just to decorate algebra or word problems where the prose "
-        "carries full meaning."
-    ),
-    "properties": {
-        "type": {"type": "string", "enum": ["geometry"]},
-        "shape": {"type": "string", "enum": ["triangle"]},
-        "vertices": {
-            "type": "array",
-            "items": {"type": "string"},
-            "minItems": 3,
-            "maxItems": 3,
-            "description": "Three distinct single-character names, e.g. ['A', 'B', 'C'].",
-        },
-        "side_lengths": {
-            "type": "object",
-            "description": (
-                "Lengths keyed by two-vertex edge identifiers ('AB', "
-                "'BC', etc.). Pick ONE ordering per edge — don't emit "
-                "both 'AB' and 'BA'."
-            ),
-            "additionalProperties": {"type": "number"},
-        },
-        "angles": {
-            "type": "object",
-            "description": (
-                "Non-right angle measures in degrees, keyed by vertex "
-                "name. For 90° angles use right_angle_at instead — it "
-                "also draws the marker."
-            ),
-            "additionalProperties": {"type": "number"},
-        },
-        "right_angle_at": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": (
-                "Vertex names where the triangle has a right angle. "
-                "At most one entry — triangles can't have multiple "
-                "right angles."
-            ),
-        },
-        "side_labels": {
-            "type": "object",
-            "description": (
-                "Text shown next to each edge (the number or variable "
-                "students see on the diagram, e.g. '3' or 'c'). Keyed "
-                "like side_lengths. Omit a label to leave the side "
-                "unlabeled in the rendered figure."
-            ),
-            "additionalProperties": {"type": "string"},
-        },
-        "angle_labels": {
-            "type": "object",
-            "description": (
-                "Text shown at each vertex's angle (e.g. '60°' or "
-                "'θ'). Keyed by vertex name."
-            ),
-            "additionalProperties": {"type": "string"},
-        },
-        "vertex_labels": {
-            "type": "object",
-            "description": (
-                "Override the displayed vertex name (default is the "
-                "vertex's key from `vertices`). Keyed by vertex name."
-            ),
-            "additionalProperties": {"type": "string"},
-        },
-    },
-    "required": ["type", "shape", "vertices"],
-}
-
 
 GENERATE_QUESTIONS_SCHEMA: ToolSchema = {
     "name": "return_questions",
@@ -401,6 +411,9 @@ REGENERATE_QA_SCHEMA: ToolSchema = {
                     "properties": {
                         "title": {"type": "string", "description": "Short 2-5 word heading."},
                         "description": {"type": "string", "description": "Full explanation of the step."},
+                        # Per-step figure (only for geometry steps
+                        # where the construction is what matters).
+                        "figure_spec": _TRIANGLE_FIGURE_SCHEMA,
                     },
                     "required": ["title", "description"],
                     "additionalProperties": False,

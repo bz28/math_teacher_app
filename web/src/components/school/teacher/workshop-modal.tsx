@@ -839,6 +839,12 @@ export function WorkshopModal({
                                 )}
                               </div>
                               <div className="mt-2 h-px bg-border-light" />
+                              {/* Per-step geometry figure when present
+                                  (e.g. "drop an altitude from B to AC"
+                                  shown as the updated triangle). */}
+                              {s.figure_svg && (
+                                <FigureDisplay svg={s.figure_svg} className="max-h-44" />
+                              )}
                               <div className="mt-2 text-xs leading-relaxed text-text-secondary">
                                 {isProposalPending ? (
                                   <MathText text={s.description ?? ""} />
