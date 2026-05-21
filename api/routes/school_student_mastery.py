@@ -25,12 +25,12 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -703,3 +703,320 @@ async def post_chat_message(
     await db.commit()
 
     return ChatAskResponse(reply=result.feedback)
+
+
+# ── History tab ──
+#
+# Per-class study record: heatmap of activity, mastery aggregates,
+# current streak, "needs review" queue, per-set breakdown. All in
+# one round trip — the History tab loads as a unit.
+#
+# Scoped to a single course (third tab inside courses/[id]?tab=history)
+# because the primary student use case is studying for an upcoming
+# test in one class. Cross-class roll-up can live on the dashboard
+# later if it proves useful.
+
+# Cap on the rolling heatmap window. 20 weeks ≈ 5 months — long
+# enough to feel like a record, short enough that the response stays
+# small. Aligns with the consumer "github contributions" feel.
+_HISTORY_HEATMAP_WEEKS = 20
+_NEEDS_REVIEW_LIMIT = 20
+
+
+class HistoryHeatmapDay(BaseModel):
+    """One bar in the activity heatmap. `count` is the number of
+    distinct (student, bank_item) interactions whose most-recent
+    timestamp falls on this UTC date.
+
+    Caveat: because mastery rows store only `last_attempt_at` (not a
+    full per-attempt log), the heatmap is approximate for problems
+    re-attempted across multiple days. v1 ships this as-is; a real
+    event log can land later if the surface proves valuable enough
+    to warrant it."""
+
+    date: str  # YYYY-MM-DD, UTC
+    count: int
+
+
+class HistoryReviewItem(BaseModel):
+    bank_item_id: str
+    practice_assignment_id: str
+    practice_title: str
+    question: str
+    mastery_state: MasteryState
+    last_attempt_at: datetime
+
+
+class HistorySetBreakdown(BaseModel):
+    assignment_id: str
+    title: str
+    problem_count: int
+    mastered_count: int
+
+
+class CourseHistorySummary(BaseModel):
+    course_id: str
+    course_name: str
+    mastered_count: int
+    total_problems: int
+    streak_days: int
+    heatmap: list[HistoryHeatmapDay]
+    needs_review: list[HistoryReviewItem]
+    sets: list[HistorySetBreakdown]
+
+
+def _streak_days(dates: set[date], today: date) -> int:
+    """Count consecutive UTC days back from `today` that appear in
+    `dates`. The cursor starts at today; if today is missing, allow
+    a one-day grace (yesterday) so a student in a far-west timezone
+    who studied mid-day local but before UTC midnight isn't
+    penalized. Walk back until the first missing day, then stop.
+
+    All bucketing is UTC for v1; the common case (US/EU schools) is
+    close enough. A tz-aware computation can land later if it
+    proves needed."""
+    if not dates:
+        return 0
+    cursor = today
+    if cursor not in dates:
+        cursor = cursor - timedelta(days=1)
+    streak = 0
+    while cursor in dates:
+        streak += 1
+        cursor = cursor - timedelta(days=1)
+    return streak
+
+
+@router.get("/courses/{course_id}/history/summary")
+async def course_history_summary(
+    course_id: uuid.UUID,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> CourseHistorySummary:
+    """All-in-one read for the History tab inside a course page.
+
+    Scoped to bank items that originate from a published practice
+    assignment in this course that the student has section
+    enrollment for. Mastery rows for items the student can no
+    longer access (teacher unpublished, item removed, etc.) are
+    excluded from every aggregate so stale data doesn't show up."""
+    from datetime import timedelta
+
+    from api.models.course import Course as CourseModel
+
+    # Verify the student is enrolled in at least one section of
+    # this course. We don't reuse the per-assignment loader because
+    # there's no specific assignment to load — this is course-level.
+    enrolled = (await db.execute(
+        select(SectionEnrollment.id)
+        .join(
+            AssignmentSection,
+            AssignmentSection.section_id == SectionEnrollment.section_id,
+        )
+        .join(Assignment, Assignment.id == AssignmentSection.assignment_id)
+        .where(
+            Assignment.course_id == course_id,
+            SectionEnrollment.student_id == user.id,
+        )
+        .limit(1)
+    )).scalar_one_or_none()
+    if enrolled is None:
+        raise HTTPException(status_code=403, detail="Not enrolled in this class")
+
+    course = (await db.execute(
+        select(CourseModel).where(CourseModel.id == course_id)
+    )).scalar_one_or_none()
+    if course is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+
+    # All bank items the student has access to via published
+    # practice sets in this course. Subquery so we can reuse it for
+    # the mastery aggregate + needs-review join.
+    eligible_subq = (
+        select(QuestionBankItem.id)
+        .join(
+            Assignment,
+            Assignment.id == QuestionBankItem.originating_assignment_id,
+        )
+        .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
+        .join(
+            SectionEnrollment,
+            and_(
+                SectionEnrollment.section_id == AssignmentSection.section_id,
+                SectionEnrollment.student_id == user.id,
+            ),
+        )
+        .where(
+            Assignment.course_id == course_id,
+            Assignment.type == "practice",
+            Assignment.status == "published",
+            QuestionBankItem.status == "approved",
+        )
+        .distinct()
+        .subquery()
+    )
+
+    total_problems = int((await db.execute(
+        select(func.count()).select_from(eligible_subq)
+    )).scalar_one())
+
+    # Mastery rows for the student, filtered to eligible items only.
+    mastery_rows = (await db.execute(
+        select(StudentProblemMastery)
+        .where(
+            StudentProblemMastery.student_id == user.id,
+            StudentProblemMastery.bank_item_id.in_(select(eligible_subq)),
+        )
+    )).scalars().all()
+
+    mastered_count = sum(1 for r in mastery_rows if r.state == "mastered")
+
+    # Heatmap + streak: bucket distinct UTC dates from each row's
+    # last_attempt_at (the most recent interaction). first_attempt_at
+    # is also folded in so a student who attempted on day A and then
+    # again on day B contributes to both days even though we only
+    # store the last timestamp. (Still lossy for 3+ days of activity
+    # on the same problem; acceptable for v1.)
+    now = datetime.now(UTC)
+    window_start = (now - timedelta(weeks=_HISTORY_HEATMAP_WEEKS)).date()
+    bucket_counts: dict[date, int] = {}
+    activity_dates: set[date] = set()
+    for r in mastery_rows:
+        for ts in (r.first_attempt_at, r.last_attempt_at, r.walkthrough_opened_at):
+            if ts is None:
+                continue
+            d = ts.astimezone(UTC).date()
+            activity_dates.add(d)
+            if d >= window_start:
+                bucket_counts[d] = bucket_counts.get(d, 0) + 1
+    heatmap = [
+        HistoryHeatmapDay(date=d.isoformat(), count=n)
+        for d, n in sorted(bucket_counts.items())
+    ]
+    streak = _streak_days(activity_dates, now.date())
+
+    # Needs-review: missed / walked_through / attempted, ordered by
+    # last_attempt_at desc, capped. Joins with bank item + assignment
+    # for the question text and practice title.
+    # "Worth a second look" surfaces walked_through, missed, and
+    # attempted rows. Order by the most recent interaction —
+    # COALESCE so a row with only walkthrough_opened_at (no answer
+    # yet) still surfaces; otherwise a walked-through-but-not-
+    # answered problem would never appear in review.
+    review_ordering = func.coalesce(
+        StudentProblemMastery.last_attempt_at,
+        StudentProblemMastery.walkthrough_opened_at,
+    )
+    review_rows = (await db.execute(
+        select(StudentProblemMastery, QuestionBankItem, Assignment)
+        .join(QuestionBankItem, QuestionBankItem.id == StudentProblemMastery.bank_item_id)
+        .join(Assignment, Assignment.id == QuestionBankItem.originating_assignment_id)
+        .where(
+            StudentProblemMastery.student_id == user.id,
+            StudentProblemMastery.state.in_(
+                ["missed", "walked_through", "attempted"],
+            ),
+            StudentProblemMastery.bank_item_id.in_(select(eligible_subq)),
+        )
+        .order_by(review_ordering.desc())
+        .limit(_NEEDS_REVIEW_LIMIT)
+    )).all()
+    needs_review: list[HistoryReviewItem] = []
+    for m, it, a in review_rows:
+        # Use last_attempt_at when present, fall back to walkthrough
+        # timestamp for walked-through-only rows.
+        when = m.last_attempt_at or m.walkthrough_opened_at
+        if when is None:
+            continue
+        needs_review.append(HistoryReviewItem(
+            bank_item_id=str(it.id),
+            practice_assignment_id=str(a.id),
+            practice_title=a.title,
+            question=it.question,
+            mastery_state=m.state,
+            last_attempt_at=when,
+        ))
+
+    # Per-set breakdown: every published practice set in this course
+    # visible to the student, with mastery count over its problems.
+    # Two queries (one for set metadata, one for per-set counts) and
+    # then we stitch in Python — simpler than a window function.
+    # Postgres requires DISTINCT'd select columns to include any
+    # ORDER BY targets — fetch `created_at` too and discard it after
+    # ordering. Cheaper than the subquery alternative.
+    sets_rows_raw = (await db.execute(
+        select(Assignment.id, Assignment.title, Assignment.created_at)
+        .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
+        .join(
+            SectionEnrollment,
+            and_(
+                SectionEnrollment.section_id == AssignmentSection.section_id,
+                SectionEnrollment.student_id == user.id,
+            ),
+        )
+        .where(
+            Assignment.course_id == course_id,
+            Assignment.type == "practice",
+            Assignment.status == "published",
+        )
+        .distinct()
+        .order_by(Assignment.created_at.desc())
+    )).all()
+    sets_rows = [(aid, title) for aid, title, _ in sets_rows_raw]
+
+    set_ids = [aid for aid, _ in sets_rows]
+    set_problem_counts: dict[uuid.UUID, int] = {}
+    set_mastered_counts: dict[uuid.UUID, int] = {}
+    if set_ids:
+        rows = (await db.execute(
+            select(
+                QuestionBankItem.originating_assignment_id,
+                func.count(QuestionBankItem.id),
+            )
+            .where(
+                QuestionBankItem.originating_assignment_id.in_(set_ids),
+                QuestionBankItem.status == "approved",
+            )
+            .group_by(QuestionBankItem.originating_assignment_id)
+        )).all()
+        set_problem_counts = {aid: int(n) for aid, n in rows}
+
+        # Mastered counts per set: join mastery → bank_item.
+        rows = (await db.execute(
+            select(
+                QuestionBankItem.originating_assignment_id,
+                func.count(StudentProblemMastery.bank_item_id),
+            )
+            .join(
+                StudentProblemMastery,
+                StudentProblemMastery.bank_item_id == QuestionBankItem.id,
+            )
+            .where(
+                StudentProblemMastery.student_id == user.id,
+                StudentProblemMastery.state == "mastered",
+                QuestionBankItem.originating_assignment_id.in_(set_ids),
+            )
+            .group_by(QuestionBankItem.originating_assignment_id)
+        )).all()
+        set_mastered_counts = {aid: int(n) for aid, n in rows}
+
+    sets = [
+        HistorySetBreakdown(
+            assignment_id=str(aid),
+            title=title,
+            problem_count=set_problem_counts.get(aid, 0),
+            mastered_count=set_mastered_counts.get(aid, 0),
+        )
+        for aid, title in sets_rows
+    ]
+
+    return CourseHistorySummary(
+        course_id=str(course.id),
+        course_name=course.name,
+        mastered_count=mastered_count,
+        total_problems=total_problems,
+        streak_days=streak,
+        heatmap=heatmap,
+        needs_review=needs_review,
+        sets=sets,
+    )

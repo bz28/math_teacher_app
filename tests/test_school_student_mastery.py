@@ -618,6 +618,102 @@ async def test_sequential_walkthrough_then_correct_consistent_with_lock(
     assert row.attempts == 1
 
 
+# ── history summary ──
+
+
+async def test_history_summary_baseline_zeros_with_no_mastery_yet(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """Brand-new student in a class with a practice set but no
+    interactions yet: total_problems reflects the set's count;
+    everything else is zero."""
+    p = await _seed_practice(world)
+    course_id = (await _get_course_id_from_world(world))
+    r = await client.get(
+        f"/v1/school/student/courses/{course_id}/history/summary",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["course_id"] == str(course_id)
+    assert body["total_problems"] == 3
+    assert body["mastered_count"] == 0
+    assert body["streak_days"] == 0
+    assert body["heatmap"] == []
+    assert body["needs_review"] == []
+    # Per-set breakdown still ships even pre-interaction.
+    assert len(body["sets"]) == 1
+    assert body["sets"][0]["assignment_id"] == str(p["practice_id"])
+    assert body["sets"][0]["problem_count"] == 3
+    assert body["sets"][0]["mastered_count"] == 0
+
+
+async def test_history_summary_aggregates_after_attempts(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    p = await _seed_practice(world)
+    course_id = await _get_course_id_from_world(world)
+    # One mastered, one walked-through, one missed.
+    await client.post(
+        f"/v1/school/student/problems/{p['problem_ids'][0]}/answer",
+        headers=_auth(world["student_token"]),
+        json={"selected_choice": p["answers"][0]},
+    )
+    await client.post(
+        f"/v1/school/student/problems/{p['problem_ids'][1]}/walkthrough-opened",
+        headers=_auth(world["student_token"]),
+    )
+    await client.post(
+        f"/v1/school/student/problems/{p['problem_ids'][2]}/answer",
+        headers=_auth(world["student_token"]),
+        json={"selected_choice": "wrong"},
+    )
+    r = await client.get(
+        f"/v1/school/student/courses/{course_id}/history/summary",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["mastered_count"] == 1
+    assert body["streak_days"] >= 1  # today counted at least once
+    # Needs-review surfaces walked-through + missed problems (the
+    # ones the student should "look at again").
+    needs_review_ids = {item["bank_item_id"] for item in body["needs_review"]}
+    assert str(p["problem_ids"][1]) in needs_review_ids
+    assert str(p["problem_ids"][2]) in needs_review_ids
+    # And does NOT include the mastered one — it's not in need of
+    # review.
+    assert str(p["problem_ids"][0]) not in needs_review_ids
+    # Heatmap has at least one bucket (today).
+    assert len(body["heatmap"]) >= 1
+    # Per-set breakdown reflects the mastered count.
+    set_row = next(s for s in body["sets"] if s["assignment_id"] == str(p["practice_id"]))
+    assert set_row["mastered_count"] == 1
+    assert set_row["problem_count"] == 3
+
+
+async def test_history_summary_403_for_outsider(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    course_id = await _get_course_id_from_world(world)
+    r = await client.get(
+        f"/v1/school/student/courses/{course_id}/history/summary",
+        headers=_auth(world["outsider_token"]),
+    )
+    assert r.status_code == 403
+
+
+async def _get_course_id_from_world(world: dict[str, Any]) -> uuid.UUID:
+    """world fixture doesn't ship the course_id directly — fetch it
+    from the assignment so the history endpoint test can hit a real
+    course."""
+    async with get_session_factory()() as s:
+        assignment = (await s.execute(
+            select(Assignment).where(Assignment.id == world["assignment_id"])
+        )).scalar_one()
+        return assignment.course_id
+
+
 async def test_answer_random_bank_item_404(
     client: AsyncClient, world: dict[str, Any],
 ) -> None:
