@@ -414,6 +414,7 @@ REGENERATE_QA_SCHEMA: ToolSchema = {
                     "Use single backslashes for LaTeX commands."
                 ),
             },
+            "figure_spec": _TRIANGLE_FIGURE_SCHEMA,
         },
         "required": ["title", "question", "solution_steps", "final_answer"],
         "additionalProperties": False,

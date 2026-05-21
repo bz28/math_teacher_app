@@ -38,8 +38,24 @@ def upgrade() -> None:
         "question_bank_items",
         sa.Column("figure_svg", sa.Text(), nullable=True),
     )
+    # Undo-snapshot columns for the figure, parallel to previous_question
+    # / previous_solution_steps / previous_final_answer. snapshot_history
+    # writes the live values into these on regenerate so the
+    # /revert endpoint can roll back atomically — without these,
+    # undoing a regeneration would restore the old prose alongside the
+    # new (or null) figure, which silently desyncs the two.
+    op.add_column(
+        "question_bank_items",
+        sa.Column("previous_figure_spec", JSONB(), nullable=True),
+    )
+    op.add_column(
+        "question_bank_items",
+        sa.Column("previous_figure_svg", sa.Text(), nullable=True),
+    )
 
 
 def downgrade() -> None:
+    op.drop_column("question_bank_items", "previous_figure_svg")
+    op.drop_column("question_bank_items", "previous_figure_spec")
     op.drop_column("question_bank_items", "figure_svg")
     op.drop_column("question_bank_items", "figure_spec")

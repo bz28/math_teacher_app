@@ -88,6 +88,13 @@ class QuestionBankItem(Base):
     # NULL when the question has no figure.
     figure_svg: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # One-level undo for the figure, parallel to the previous_* family
+    # below. Snapshotted in snapshot_history() so revert atomically
+    # restores prose AND figure — otherwise an undo could leave the
+    # old question text alongside the new (or cleared) diagram.
+    previous_figure_spec: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    previous_figure_svg: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # True while at least one published assignment references this item.
     # While locked, content edits / status changes / delete are refused.
     locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

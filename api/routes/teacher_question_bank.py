@@ -543,10 +543,15 @@ async def revert_bank_item(
     item.final_answer = item.previous_final_answer or ""
     if item.previous_status:
         item.status = item.previous_status
+    # Restore the figure alongside the prose so the two stay in sync.
+    item.figure_spec = item.previous_figure_spec
+    item.figure_svg = item.previous_figure_svg
     item.previous_question = None
     item.previous_solution_steps = None
     item.previous_final_answer = None
     item.previous_status = None
+    item.previous_figure_spec = None
+    item.previous_figure_svg = None
     await db.commit()
     return _serialize_item(item, await used_in_for_item(db, item))
 
