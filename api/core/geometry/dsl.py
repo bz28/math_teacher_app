@@ -122,6 +122,21 @@ class TriangleFigure(BaseModel):
             if vertex not in names:
                 raise ValueError(f"vertex_labels references unknown vertex: {vertex}")
 
+        # show_tangent_points is only meaningful for the INSCRIBED
+        # circle (the renderer marks where the incircle touches each
+        # side). Setting it on circumscribed_circle is a silent no-op
+        # at render time — surface the misuse explicitly so callers
+        # know to put the flag on the right annotation.
+        if (
+            self.circumscribed_circle is not None
+            and self.circumscribed_circle.show_tangent_points
+        ):
+            raise ValueError(
+                "show_tangent_points is only valid on inscribed_circle "
+                "(tangent points are the incircle's contact points with "
+                "the triangle's sides); set it there instead.",
+            )
+
         # Canonicalize edge keys so 'AB' and 'BA' resolve to the same
         # edge. We reject contradictory duplicates (LLM emits both
         # 'AB' and 'BA' with different values) rather than silently
@@ -318,6 +333,18 @@ class PolygonFigure(BaseModel):
                 )
             if len(set(self.vertex_names)) != len(self.vertex_names):
                 raise ValueError("vertex_names must be distinct")
+            # Single-char enforcement: side_labels uses two-character
+            # edge keys ("AB"); supporting multi-char names ("P1")
+            # would require restructuring side_labels into a list of
+            # (vertex_a, vertex_b, label) tuples. v1 stays string-keyed
+            # for LLM simplicity, so vertex_names must be one char each.
+            for name in self.vertex_names:
+                if len(name) != 1:
+                    raise ValueError(
+                        f"vertex_names entries must be single characters (got {name!r}); "
+                        "multi-char names break the two-character edge-key format "
+                        "used by side_labels",
+                    )
 
         # Default vertex names: A, B, C, ... — must align with edge
         # keys and angle_labels referencing them.
@@ -326,11 +353,40 @@ class PolygonFigure(BaseModel):
         for v in self.angle_labels:
             if v not in name_set:
                 raise ValueError(f"angle_labels references unknown vertex: {v}")
+
+        # side_labels: single-char vertex keys, canonicalize order
+        # (AB ≡ BA), require adjacency (the edge must connect two
+        # CONSECUTIVE vertices in drawing order — labeling a diagonal
+        # would render in the wrong place because the renderer
+        # midpoint-positions labels assuming a side, not a diagonal).
+        adjacent_pairs: set[str] = set()
+        for i, v in enumerate(names):
+            nxt = names[(i + 1) % count]
+            adjacent_pairs.add(v + nxt if v < nxt else nxt + v)
+
+        def _canon(edge: str) -> str:
+            return edge if edge[0] < edge[1] else edge[1] + edge[0]
+
+        seen_edges: dict[str, str] = {}
         for edge in self.side_labels:
             if len(edge) != 2 or not all(c in name_set for c in edge):
                 raise ValueError(
                     f"side_labels edge key {edge!r} must reference two vertex names",
                 )
+            canon = _canon(edge)
+            if canon not in adjacent_pairs:
+                raise ValueError(
+                    f"side_labels edge {edge!r} is not a polygon side — "
+                    "it connects two non-adjacent vertices (a diagonal). "
+                    "Side labels can only annotate the polygon's edges.",
+                )
+            if canon in seen_edges and seen_edges[canon] != edge:
+                raise ValueError(
+                    f"side_labels has both {seen_edges[canon]!r} and {edge!r} — "
+                    "these reference the same edge; emit one form only",
+                )
+            seen_edges[canon] = edge
+
         return self
 
 

@@ -802,16 +802,27 @@ async def accept_chat_proposal(
             item.solution_steps = _render_step_figures(cleaned_steps)
     if proposal.get("final_answer") is not None:
         item.final_answer = str(proposal["final_answer"])
-    # Top-level question-figure on the proposal — mirrors what
-    # regenerate_one does: any change resolves through _resolve_figure
-    # so a bad spec drops the figure without dropping the question.
-    # When the proposal omits figure_spec, we leave the existing one
-    # alone (the chat-prompt rules say the AI sets fields to null when
-    # unchanged).
+    # Top-level question-figure on the proposal. Three cases:
+    #   1. Proposal includes a NEW figure_spec → render + persist.
+    #   2. Proposal rewrites the question but omits figure_spec →
+    #      clear the stale figure. Preview-side UI (workshop-modal's
+    #      previewFigureSvg) already hides the figure in this case
+    #      so the teacher sees "no diagram" before accepting; persist
+    #      logic must match what they previewed, otherwise we'd save
+    #      old-figure-paired-with-new-prose. Caught by the full-stack
+    #      audit as a state desync between preview and accept.
+    #   3. Proposal touches neither question nor figure_spec → leave
+    #      the existing figure alone.
     if proposal.get("figure_spec") is not None:
         new_figure_spec, new_figure_svg = _resolve_figure(proposal["figure_spec"])
         item.figure_spec = new_figure_spec
         item.figure_svg = new_figure_svg
+    elif proposal.get("question") is not None:
+        # Question rewritten without a fresh figure → the old figure
+        # almost certainly no longer describes the new question.
+        # Match what the preview showed (no figure).
+        item.figure_spec = None
+        item.figure_svg = None
 
     # Build a NEW list with NEW dict copies for any modified message.
     # In-place dict mutation (e.g. `m["accepted"] = True`) would be a

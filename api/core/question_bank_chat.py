@@ -141,6 +141,10 @@ Rules:
 - Circles need a positive `radius`. Each named point has an
   angle in degrees CCW from positive x-axis. Chords reference
   two named points.
+- Polygons (4+ sides — squares, pentagons, hexagons, irregular
+  quads): use `shape='polygon'` with `n_sides` (regular) OR
+  `vertex_positions` (irregular). Do NOT use polygon mode for
+  triangles; `shape='triangle'` has the constraint solver.
 - Use figures only when they actually clarify (geometry, NOT
   algebra). On a step that visibly evolves the construction
   (drop an altitude, draw a chord), attach a figure_spec to that

@@ -32,15 +32,20 @@ export function FigureDisplay({ svg, className }: FigureDisplayProps) {
     <div
       role="img"
       aria-label="Geometry figure"
-      // Width-driven layout: cap container width, let height follow
-      // the SVG's intrinsic aspect ratio. We force the inner <svg>
-      // to `width:100%; height:auto; display:block` — without these
-      // the browser falls back to the SVG's default 300x150 sizing
-      // and figures with large coordinate-space side lengths render
-      // way too big, overlapping the question text.
+      // Width AND height-capped layout. The container caps width
+      // (max-w-sm ≈ 384px) AND height (max-h-72 ≈ 288px) — without
+      // BOTH caps, a tall-viewBox figure (height > width, e.g. an
+      // isoceles triangle with one long altitude) renders at
+      // max-width × aspect-ratio with no vertical ceiling, eating the
+      // entire question card and overlapping the prose. The
+      // [&_svg]:max-h-full + max-w-full forces the inner SVG to
+      // respect both axes simultaneously; preserveAspectRatio="meet"
+      // (set server-side) handles the proportional scaling.
       className={
-        "geometry-figure mx-auto my-3 w-full max-w-sm " +
-        "[&_svg]:block [&_svg]:h-auto [&_svg]:w-full " +
+        "geometry-figure mx-auto my-3 flex max-h-72 w-full max-w-sm " +
+        "items-center justify-center " +
+        "[&_svg]:block [&_svg]:max-h-full [&_svg]:max-w-full " +
+        "[&_svg]:h-auto [&_svg]:w-auto " +
         (className ?? "")
       }
       // The SVG is pre-sanitized via DOMPurify above. Required for
