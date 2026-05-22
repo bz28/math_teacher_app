@@ -13,11 +13,12 @@ import math
 import pytest
 
 from api.core.geometry import FigureSpecError, render_figure
-from api.core.geometry.dsl import CircleFigure, TriangleFigure
+from api.core.geometry.dsl import CircleFigure, PolygonFigure, TriangleFigure
 from api.core.geometry.solver import (
     circumcircle_of_triangle,
     incircle_of_triangle,
     solve_circle,
+    solve_polygon,
     solve_triangle,
 )
 
@@ -475,6 +476,99 @@ def test_inscribed_circle_omitted_means_no_circle_drawn() -> None:
         },
     )
     assert "<circle" not in svg
+
+
+# ── Polygons ────────────────────────────────────────────────────────
+
+
+def test_regular_polygon_square_vertices_form_a_square() -> None:
+    """Regular polygon with n_sides=4 + side_length=1 → unit square.
+    All 4 sides equal length, all 4 interior angles equal (90°).
+    """
+    spec = PolygonFigure(n_sides=4, side_length=1.0)
+    names, coords = solve_polygon(spec)
+    assert len(names) == 4
+    # Each consecutive pair should be exactly side_length apart.
+    for i in range(4):
+        v1 = names[i]
+        v2 = names[(i + 1) % 4]
+        d = math.hypot(coords[v1][0] - coords[v2][0], coords[v1][1] - coords[v2][1])
+        assert math.isclose(d, 1.0, abs_tol=1e-9), f"side {v1}{v2} = {d} not 1.0"
+
+
+def test_regular_polygon_hexagon_has_six_vertices() -> None:
+    spec = PolygonFigure(n_sides=6, side_length=2.0)
+    names, coords = solve_polygon(spec)
+    assert len(names) == 6
+    assert names == ["A", "B", "C", "D", "E", "F"]
+
+
+def test_polygon_n_sides_3_rejected() -> None:
+    """n_sides=3 forces the LLM to use shape='triangle' (which has
+    the actual constraint solver). The polygon path is for shapes
+    we render from a vertex list, not a constraint set."""
+    with pytest.raises(ValueError, match="n_sides must be"):
+        PolygonFigure(n_sides=3)
+
+
+def test_polygon_both_modes_rejected() -> None:
+    """Can't be both regular (n_sides) and irregular (vertex_positions)."""
+    with pytest.raises(ValueError, match="EITHER"):
+        PolygonFigure(n_sides=4, vertex_positions=[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+
+
+def test_polygon_neither_mode_rejected() -> None:
+    with pytest.raises(ValueError, match="EITHER"):
+        PolygonFigure()
+
+
+def test_irregular_polygon_uses_explicit_positions() -> None:
+    """Irregular polygon with explicit vertex positions — kite shape."""
+    spec = PolygonFigure(
+        vertex_positions=[(0.0, 0.0), (1.0, 2.0), (0.0, 3.0), (-1.0, 2.0)],
+    )
+    names, coords = solve_polygon(spec)
+    assert names == ["A", "B", "C", "D"]
+    assert coords["A"] == (0.0, 0.0)
+    assert coords["C"] == (0.0, 3.0)
+
+
+def test_polygon_custom_vertex_names() -> None:
+    spec = PolygonFigure(
+        n_sides=4, side_length=1.0, vertex_names=["P", "Q", "R", "S"],
+    )
+    names, _ = solve_polygon(spec)
+    assert names == ["P", "Q", "R", "S"]
+
+
+def test_polygon_vertex_names_wrong_length_rejected() -> None:
+    with pytest.raises(ValueError, match="vertex_names length"):
+        PolygonFigure(n_sides=4, vertex_names=["A", "B", "C"])
+
+
+def test_render_polygon_square_outputs_svg() -> None:
+    svg = render_figure(
+        {
+            "shape": "polygon",
+            "n_sides": 4,
+            "side_labels": {"AB": "s", "BC": "s"},
+        },
+    )
+    assert "<polygon" in svg
+    assert ">A<" in svg and ">B<" in svg
+    assert ">s<" in svg
+
+
+def test_render_polygon_irregular_pentagon() -> None:
+    svg = render_figure(
+        {
+            "shape": "polygon",
+            "n_sides": 5,
+            "angle_labels": {"A": "108°"},
+        },
+    )
+    assert "<polygon" in svg
+    assert ">108°<" in svg
 
 
 # ── Discriminated union dispatch ────────────────────────────────────

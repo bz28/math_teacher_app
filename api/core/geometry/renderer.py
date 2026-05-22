@@ -22,6 +22,7 @@ from api.core.geometry.dsl import (
     CircleFigure,
     FigureSpec,
     FigureSpecError,
+    PolygonFigure,
     TriangleCircleAnnotation,
     TriangleFigure,
 )
@@ -30,6 +31,7 @@ from api.core.geometry.solver import (
     circumcircle_of_triangle,
     incircle_of_triangle,
     solve_circle,
+    solve_polygon,
     solve_triangle,
 )
 
@@ -79,6 +81,9 @@ def render_figure(spec_dict: dict[str, Any]) -> str:
     if isinstance(spec, CircleFigure):
         coords = solve_circle(spec)
         return _render_circle(spec, coords)
+    if isinstance(spec, PolygonFigure):
+        names, poly_coords = solve_polygon(spec)
+        return _render_polygon(spec, names, poly_coords)
     # Unreachable — discriminated union exhausts the shape variants,
     # but mypy doesn't know that without an explicit assert_never.
     raise FigureSpecError(f"unknown figure shape: {type(spec).__name__}")
@@ -271,6 +276,103 @@ def _circle_annotation_labels(
             f'fill="{_STROKE}">{_escape(annotation.radius_label)}</text>',
         )
     return out
+
+
+def _render_polygon(
+    spec: PolygonFigure, names: list[str], coords: dict[str, Point],
+) -> str:
+    """Compose the SVG for a polygon. Layout sequence:
+    viewBox → polygon outline → vertex dots + labels → side labels →
+    angle labels.
+    """
+    xs = [coords[v][0] for v in names]
+    ys = [coords[v][1] for v in names]
+    min_x, max_x = min(xs) - _PADDING, max(xs) + _PADDING
+    min_y, max_y = min(ys) - _PADDING, max(ys) + _PADDING
+    width = max_x - min_x
+    height = max_y - min_y
+
+    parts: list[str] = []
+    parts.append(
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'viewBox="{min_x:.4f} {-max_y:.4f} {width:.4f} {height:.4f}" '
+        f'preserveAspectRatio="xMidYMid meet" '
+        f'role="img" aria-label="Geometry figure">',
+    )
+    parts.append('<g transform="scale(1,-1)">')
+
+    # 1. Polygon outline as one polygon element — clean miters at
+    # vertices.
+    points_attr = " ".join(f"{coords[v][0]:.4f},{coords[v][1]:.4f}" for v in names)
+    parts.append(
+        f'<polygon points="{points_attr}" fill="none" '
+        f'stroke="{_STROKE}" stroke-width="{_STROKE_WIDTH}" '
+        'stroke-linejoin="round"/>',
+    )
+
+    parts.append("</g>")  # close flip — text uses upright SVG coords
+
+    # 2. Vertex labels — same outward-from-centroid heuristic the
+    # triangle path uses, scaled for n vertices.
+    cx_avg = sum(coords[v][0] for v in names) / len(names)
+    cy_avg = sum(coords[v][1] for v in names) / len(names)
+    for v in names:
+        x, y = coords[v]
+        # Vector from centroid to vertex, normalized.
+        dx, dy = x - cx_avg, y - cy_avg
+        norm = math.hypot(dx, dy) or 1.0
+        ox = (dx / norm) * _LABEL_OFFSET
+        oy = (dy / norm) * _LABEL_OFFSET
+        parts.append(
+            f'<text x="{x + ox:.4f}" y="{-(y + oy):.4f}" '
+            f'font-family="{_FONT_FAMILY}" font-size="{_VERTEX_FONT_SIZE}" '
+            'text-anchor="middle" dominant-baseline="middle" '
+            f'fill="{_STROKE}">{_escape(v)}</text>',
+        )
+
+    # 3. Side labels — perpendicular to the edge, on the outside
+    # (away from the centroid).
+    for edge_key, text in spec.side_labels.items():
+        v1, v2 = edge_key[0], edge_key[1]
+        if v1 not in coords or v2 not in coords:
+            continue  # defensive — validator already enforces
+        x1, y1 = coords[v1]
+        x2, y2 = coords[v2]
+        mid_x = (x1 + x2) / 2
+        mid_y = (y1 + y2) / 2
+        # Perpendicular to edge, outward (= away from centroid).
+        edge_x = x2 - x1
+        edge_y = y2 - y1
+        norm = math.hypot(edge_x, edge_y) or 1.0
+        # Two perpendiculars; pick the one pointing AWAY from centroid.
+        nx, ny = -edge_y / norm, edge_x / norm
+        if (mid_x - cx_avg) * nx + (mid_y - cy_avg) * ny < 0:
+            nx, ny = -nx, -ny
+        label_x = mid_x + nx * _LABEL_OFFSET
+        label_y = mid_y + ny * _LABEL_OFFSET
+        parts.append(
+            f'<text x="{label_x:.4f}" y="{-label_y:.4f}" '
+            f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
+            'text-anchor="middle" dominant-baseline="middle" '
+            f'fill="{_STROKE}">{_escape(text)}</text>',
+        )
+
+    # 4. Angle labels — sit slightly inside the vertex, toward centroid.
+    for v, text in spec.angle_labels.items():
+        x, y = coords[v]
+        dx, dy = cx_avg - x, cy_avg - y
+        norm = math.hypot(dx, dy) or 1.0
+        ox = (dx / norm) * _LABEL_OFFSET * 1.2
+        oy = (dy / norm) * _LABEL_OFFSET * 1.2
+        parts.append(
+            f'<text x="{x + ox:.4f}" y="{-(y + oy):.4f}" '
+            f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
+            'text-anchor="middle" dominant-baseline="middle" '
+            f'fill="{_STROKE}">{_escape(text)}</text>',
+        )
+
+    parts.append("</svg>")
+    return "".join(parts)
 
 
 def _render_circle(

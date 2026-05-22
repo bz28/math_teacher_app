@@ -223,13 +223,89 @@ _CIRCLE_FIGURE_SCHEMA: dict[str, Any] = {
 }
 
 
+_POLYGON_FIGURE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "description": (
+        "Polygon (square, pentagon, hexagon, n-gon — anything with "
+        "4+ sides). For triangles use shape='triangle' (the triangle "
+        "schema has the full constraint solver). Two modes: regular "
+        "(set n_sides + side_length) or irregular (set "
+        "vertex_positions as an explicit list of [x, y] pairs)."
+    ),
+    "properties": {
+        "type": {"type": "string", "enum": ["geometry"]},
+        "shape": {"type": "string", "enum": ["polygon"]},
+        "n_sides": {
+            "type": "integer",
+            "description": (
+                "REGULAR mode: number of sides (4-20). Vertices "
+                "auto-place evenly on a circumscribed circle. Mutually "
+                "exclusive with vertex_positions."
+            ),
+        },
+        "side_length": {
+            "type": "number",
+            "description": (
+                "REGULAR mode only: side length. Defaults to 1; the "
+                "renderer auto-scales the figure to the container, so "
+                "proportions are what matter, not absolute values."
+            ),
+        },
+        "vertex_positions": {
+            "type": "array",
+            "items": {
+                "type": "array",
+                "items": {"type": "number"},
+                "minItems": 2,
+                "maxItems": 2,
+            },
+            "description": (
+                "IRREGULAR mode: explicit list of [x, y] vertex "
+                "positions in drawing order (vertices are connected "
+                "in sequence, last back to first). Mutually exclusive "
+                "with n_sides."
+            ),
+        },
+        "vertex_names": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Override default vertex names (A, B, C, D, ...). "
+                "Must have the same length as n_sides or "
+                "vertex_positions."
+            ),
+        },
+        "side_labels": {
+            "type": "object",
+            "description": (
+                "Text shown on each edge. Keyed by two-character "
+                "vertex pair (e.g. 'AB')."
+            ),
+            "additionalProperties": {"type": "string"},
+        },
+        "angle_labels": {
+            "type": "object",
+            "description": "Text shown at each vertex's angle. Keyed by vertex name.",
+            "additionalProperties": {"type": "string"},
+        },
+    },
+    "required": ["type", "shape"],
+}
+
+
 # Discriminated union over supported shapes — LLM picks the variant
 # that matches the problem.
 _TRIANGLE_FIGURE_SCHEMA["properties"]["shape"]["description"] = (
-    "Always 'triangle' for this branch. Use shape='circle' for circles."
+    "Always 'triangle' for this branch. Use shape='circle' for circles "
+    "or shape='polygon' for 4+-sided shapes."
 )
 _CIRCLE_FIGURE_SCHEMA["properties"]["shape"]["description"] = (
-    "Always 'circle' for this branch. Use shape='triangle' for triangles."
+    "Always 'circle' for this branch. Use shape='triangle' or "
+    "shape='polygon' for line-segment shapes."
+)
+_POLYGON_FIGURE_SCHEMA["properties"]["shape"]["description"] = (
+    "Always 'polygon' for this branch. Use shape='triangle' for "
+    "3-vertex shapes (has the full constraint solver)."
 )
 
 _FIGURE_SCHEMA: dict[str, Any] = {
@@ -238,10 +314,14 @@ _FIGURE_SCHEMA: dict[str, Any] = {
         "field unless the problem / step genuinely needs a diagram. "
         "Don't emit a figure spec just to decorate algebra or word "
         "problems where the prose carries full meaning. Pick the "
-        "variant whose `shape` matches the problem: 'triangle' or "
-        "'circle'."
+        "variant whose `shape` matches the problem: 'triangle', "
+        "'circle', or 'polygon'."
     ),
-    "anyOf": [_TRIANGLE_FIGURE_SCHEMA, _CIRCLE_FIGURE_SCHEMA],
+    "anyOf": [
+        _TRIANGLE_FIGURE_SCHEMA,
+        _CIRCLE_FIGURE_SCHEMA,
+        _POLYGON_FIGURE_SCHEMA,
+    ],
 }
 
 
