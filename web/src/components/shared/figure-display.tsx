@@ -48,15 +48,25 @@ export function FigureDisplay({ svg, className, ariaLabel }: FigureDisplayProps)
       // respect both axes simultaneously; preserveAspectRatio="meet"
       // (set server-side) handles the proportional scaling.
       className={
-        // `text-text` sets `color: var(--color-text)`. The server SVG
-        // uses stroke="currentColor" / fill="currentColor", so every
-        // line, label, and dot inherits this color and adapts to
-        // light vs dark theme. Without this, a hardcoded near-black
-        // stroke was invisible against the dark-mode bg #14130F.
-        "geometry-figure mx-auto my-3 flex max-h-72 w-full max-w-sm " +
+        // The figure renders in a **fixed-height box** (h-72 = 288px)
+        // and the inner SVG fills the height; width follows the
+        // SVG's viewBox aspect via `preserveAspectRatio="xMidYMid meet"`
+        // (set server-side). Width is capped at max-w-md (~448px) so
+        // a very-wide figure doesn't overflow the question card.
+        //
+        // Critical: explicit h-72 (not max-h-72) makes the container
+        // a fixed-height target. With max-h alone, the SVG was free
+        // to render at its intrinsic 300x150 default scaled up to
+        // container width, blowing through the max-h. With explicit
+        // h-72 + svg height:100% + width:auto, the SVG is forced to
+        // match the box exactly.
+        //
+        // `text-text-primary` sets color: var(--color-text); the
+        // server SVG uses stroke="currentColor" so every line + label
+        // adapts to light/dark theme.
+        "geometry-figure mx-auto my-3 flex h-72 w-full max-w-md " +
         "items-center justify-center text-text-primary " +
-        "[&_svg]:block [&_svg]:max-h-full [&_svg]:max-w-full " +
-        "[&_svg]:h-auto [&_svg]:w-auto " +
+        "[&_svg]:block [&_svg]:h-full [&_svg]:w-auto [&_svg]:max-w-full " +
         (className ?? "")
       }
       // The SVG is pre-sanitized via DOMPurify above. Required for
