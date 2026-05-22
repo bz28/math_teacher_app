@@ -834,7 +834,7 @@ async def accept_chat_proposal(
     # used in core/question_bank_chat.py's superseded_history.
     item.chat_messages = [
         {**m, "accepted": True} if i == body.message_index
-        else {**m, "superseded": True} if (
+        else _shed_resolved_figure_svg({**m, "superseded": True}) if (
             m.get("role") == "ai"
             and m.get("proposal")
             and not m.get("accepted")
@@ -866,11 +866,44 @@ async def discard_chat_proposal(
     # New dict for the discarded message — see accept_chat_proposal
     # above for why in-place mutation doesn't persist.
     item.chat_messages = [
-        {**m, "discarded": True} if i == body.message_index else m
+        _shed_resolved_figure_svg({**m, "discarded": True})
+        if i == body.message_index else m
         for i, m in enumerate(existing)
     ]
     await db.commit()
     return _serialize_item(item, await used_in_for_item(db, item))
+
+
+def _shed_resolved_figure_svg(msg: dict[str, Any]) -> dict[str, Any]:
+    """Strip pre-rendered figure_svg from a resolved (accepted is
+    handled separately via accept_chat_proposal mutating the item
+    directly, so accept doesn't pass through here; this is for
+    discarded + superseded paths) chat-message proposal.
+
+    Background: at proposal time the chat orchestrator pre-renders
+    the figure_svg so the preview UI can show it before Accept.
+    Once a proposal is resolved (discarded or superseded), nothing
+    will ever need to render that SVG again — and a single rendered
+    SVG can run several KB. Over a long chat with several geometry
+    revisions, accumulated stale SVGs bloat the chat_messages JSON
+    column. Stripping leaves the canonical figure_spec in place
+    (compact, useful for audit/replay) but drops the rendered cache.
+    """
+    proposal = msg.get("proposal")
+    if not isinstance(proposal, dict):
+        return msg
+    cleaned_proposal: dict[str, Any] = {
+        k: v for k, v in proposal.items() if k != "figure_svg"
+    }
+    # Per-step figure_svg also goes — same rationale, same size impact.
+    steps = cleaned_proposal.get("solution_steps")
+    if isinstance(steps, list):
+        cleaned_proposal["solution_steps"] = [
+            {k: v for k, v in s.items() if k != "figure_svg"}
+            if isinstance(s, dict) else s
+            for s in steps
+        ]
+    return {**msg, "proposal": cleaned_proposal}
 
 
 @router.post("/question-bank/{item_id}/chat/clear")

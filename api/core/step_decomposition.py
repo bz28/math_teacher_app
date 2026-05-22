@@ -21,7 +21,14 @@ _cache: dict[str, tuple[float, "Decomposition"]] = {}
 
 
 def _cache_get(problem: str) -> "Decomposition | None":
-    """Get a cached decomposition if it exists and hasn't expired."""
+    """Get a cached decomposition if it exists and hasn't expired.
+
+    Re-renders any step figures at read time so that a renderer-code
+    update (deploy, hotfix) takes effect immediately instead of being
+    masked by 30-minute-old cached SVGs. The cached Decomposition
+    holds only the structured spec (figure_spec dict); figure_svg is
+    rendered fresh here.
+    """
     entry = _cache.get(problem)
     if entry is None:
         return None
@@ -29,16 +36,71 @@ def _cache_get(problem: str) -> "Decomposition | None":
     if time.monotonic() - ts > DECOMPOSITION_CACHE_TTL_SECONDS:
         del _cache[problem]
         return None
-    return decomp
+
+    # Re-render step figures using the current renderer.
+    from api.core.geometry import FigureSpecError, render_figure
+
+    refreshed_steps: list[dict[str, Any]] = []
+    for s in decomp.steps:
+        if not isinstance(s, dict):
+            refreshed_steps.append(s)
+            continue
+        rendered = dict(s)
+        spec = s.get("figure_spec")
+        if isinstance(spec, dict):
+            try:
+                rendered["figure_svg"] = render_figure(spec)
+            except FigureSpecError:
+                # Renderer changes may have made a previously-valid
+                # spec invalid — drop the figure rather than crash.
+                rendered.pop("figure_svg", None)
+            except Exception:
+                logger.exception("re-render of cached step figure failed; spec=%r", spec)
+                rendered.pop("figure_svg", None)
+        else:
+            # No spec → ensure there's no leftover stale figure_svg.
+            rendered.pop("figure_svg", None)
+        refreshed_steps.append(rendered)
+
+    return Decomposition(
+        problem=decomp.problem,
+        steps=refreshed_steps,
+        final_answer=decomp.final_answer,
+        problem_type=decomp.problem_type,
+        answer_type=decomp.answer_type,
+    )
 
 
 def _cache_set(problem: str, decomp: "Decomposition") -> None:
-    """Cache a decomposition result."""
+    """Cache a decomposition result.
+
+    Strips rendered figure_svg before storing so the cache holds
+    only the canonical figure_spec. Re-rendering happens on read so
+    renderer-code updates take effect immediately. Without this, a
+    deploy that fixes a renderer bug would leave stale SVGs in the
+    in-process cache for up to DECOMPOSITION_CACHE_TTL_SECONDS.
+    """
     # Evict oldest entry if cache is full (dict is insertion-ordered in Python 3.7+)
     if len(_cache) >= DECOMPOSITION_CACHE_MAX_SIZE:
         oldest_key = next(iter(_cache))
         del _cache[oldest_key]
-    _cache[problem] = (time.monotonic(), decomp)
+
+    stripped_steps: list[dict[str, Any]] = []
+    for s in decomp.steps:
+        if not isinstance(s, dict):
+            stripped_steps.append(s)
+            continue
+        stripped = {k: v for k, v in s.items() if k != "figure_svg"}
+        stripped_steps.append(stripped)
+
+    cacheable = Decomposition(
+        problem=decomp.problem,
+        steps=stripped_steps,
+        final_answer=decomp.final_answer,
+        problem_type=decomp.problem_type,
+        answer_type=decomp.answer_type,
+    )
+    _cache[problem] = (time.monotonic(), cacheable)
 
 _SYSTEM_PROMPT_TEMPLATE = (
     "You are a {professor_role}.\n\n"

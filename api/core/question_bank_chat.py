@@ -173,6 +173,26 @@ Reply text:
 """
 
 
+def _strip_figure_svg_on_supersede(msg: dict[str, Any]) -> dict[str, Any]:
+    """Drop the pre-rendered figure_svg from a superseded proposal —
+    same shape as the route-layer helper in teacher_question_bank.
+    Keeps the canonical figure_spec; only the rendered cache is shed."""
+    proposal = msg.get("proposal")
+    if not isinstance(proposal, dict):
+        return msg
+    cleaned_proposal: dict[str, Any] = {
+        k: v for k, v in proposal.items() if k != "figure_svg"
+    }
+    steps = cleaned_proposal.get("solution_steps")
+    if isinstance(steps, list):
+        cleaned_proposal["solution_steps"] = [
+            {k: v for k, v in s.items() if k != "figure_svg"}
+            if isinstance(s, dict) else s
+            for s in steps
+        ]
+    return {**msg, "proposal": cleaned_proposal}
+
+
 def _strip_internal_fields(messages: list[dict[str, Any]]) -> list[dict[str, str]]:
     """Convert chat_messages into the {role, content} pairs Claude expects.
 
@@ -388,8 +408,15 @@ async def chat_with_bank_item(
     # unresolved proposals. Without this, discarding the most recent
     # proposal would let a stale older one bubble back as "pending"
     # and the teacher would think the same suggestion came back.
+    #
+    # When marking superseded, also strip the pre-rendered figure_svg
+    # from the proposal (canonical figure_spec stays for audit). The
+    # SVG was needed only for the preview UI while the proposal was
+    # pending — once superseded it's dead weight in the JSON column.
+    # Over a long chat with multiple geometry revisions this strip
+    # prevents accumulated multi-KB SVGs from bloating chat_messages.
     superseded_history = [
-        {**m, "superseded": True}
+        _strip_figure_svg_on_supersede({**m, "superseded": True})
         if (
             m.get("role") == "ai"
             and m.get("proposal")
