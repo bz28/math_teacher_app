@@ -305,9 +305,17 @@ def solve_polygon(spec: PolygonFigure) -> tuple[list[str], dict[str, Point]]:
         n = spec.n_sides
         # Circumradius from side length (chord-length formula).
         r = spec.side_length / (2 * math.sin(math.pi / n))
-        # Start at the top (-π/2 in standard math convention because
-        # the renderer flips y, putting top of cartesian → top of SVG).
-        start_angle = math.pi / 2
+        # Orientation: we want the bottom edge horizontal so the
+        # polygon reads upright (a square looks like a square, not a
+        # diamond; a hexagon sits on a flat side, not a point). With
+        # `start_angle = π/2 + π/n`, vertex 0 is at the top-left
+        # corner above the bottom edge — verified: for n=4 vertices
+        # land at (±√2/2, ±√2/2), giving the conventional axis-aligned
+        # square; for n=6 the bottom edge runs from (-1/2, -√3/2) to
+        # (1/2, -√3/2). The previous start_angle of π/2 alone put a
+        # vertex at top + bottom + left + right, producing a square
+        # rotated 45° (a diamond).
+        start_angle = math.pi / 2 + math.pi / n
         positions: list[Point] = []
         for i in range(n):
             theta = start_angle + 2 * math.pi * i / n

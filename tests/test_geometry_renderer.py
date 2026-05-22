@@ -496,6 +496,37 @@ def test_regular_polygon_square_vertices_form_a_square() -> None:
         assert math.isclose(d, 1.0, abs_tol=1e-9), f"side {v1}{v2} = {d} not 1.0"
 
 
+def test_regular_polygon_square_is_upright_not_diamond() -> None:
+    """A regular n=4 polygon must render as a CONVENTIONAL square
+    (sides axis-aligned, like graph paper) not as a diamond (rotated
+    45° with vertex at top + bottom + left + right). The orientation
+    test the existing side-equality check can't catch — true for any
+    rotation of a regular polygon.
+
+    For a unit square, the bottom edge must be horizontal: both
+    vertices on the bottom must share the same y coordinate.
+    """
+    spec = PolygonFigure(n_sides=4, side_length=1.0)
+    _names, coords = solve_polygon(spec)
+    ys = sorted(c[1] for c in coords.values())
+    # Bottom-two y values should match (= the bottom edge is flat).
+    assert math.isclose(ys[0], ys[1], abs_tol=1e-9), (
+        f"square is rotated as a diamond — bottom vertices at different y: {ys}"
+    )
+    # And top-two y values should match.
+    assert math.isclose(ys[2], ys[3], abs_tol=1e-9)
+
+
+def test_regular_polygon_hexagon_has_flat_bottom() -> None:
+    """Hexagons should sit on a flat side, not balanced on a point —
+    the textbook orientation."""
+    spec = PolygonFigure(n_sides=6, side_length=1.0)
+    _names, coords = solve_polygon(spec)
+    ys = sorted(c[1] for c in coords.values())
+    # Two bottom vertices share y (the flat bottom edge).
+    assert math.isclose(ys[0], ys[1], abs_tol=1e-9)
+
+
 def test_regular_polygon_hexagon_has_six_vertices() -> None:
     spec = PolygonFigure(n_sides=6, side_length=2.0)
     names, coords = solve_polygon(spec)

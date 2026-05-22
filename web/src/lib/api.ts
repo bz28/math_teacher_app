@@ -1805,7 +1805,15 @@ export interface VariationPayload {
   figure_svg: string | null;
   final_answer: string | null;
   distractors: string[];
-  solution_steps: { title?: string; description?: string }[] | null;
+  solution_steps: {
+    title?: string;
+    description?: string;
+    /** Per-step geometry figure (already rendered server-side).
+     *  Lets practice/learn loops display step figures consistently
+     *  with the workshop + homework views. */
+    figure_spec?: Record<string, unknown> | null;
+    figure_svg?: string | null;
+  }[] | null;
   difficulty: string;
 }
 
