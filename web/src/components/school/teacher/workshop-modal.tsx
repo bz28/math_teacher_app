@@ -536,14 +536,24 @@ export function WorkshopModal({
   const previewQuestion = pendingProposal?.question ?? liveItem.question;
   const previewSteps = pendingProposal?.solution_steps ?? liveItem.solution_steps;
   const previewAnswer = pendingProposal?.final_answer ?? liveItem.final_answer;
-  // Question-level figure: prefer the proposal's diagram while a
-  // proposal is pending so the teacher sees what they're about to
-  // accept. Falls back to the existing item diagram otherwise.
-  const previewFigureSvg =
-    pendingProposal?.figure_svg ?? liveItem.figure_svg;
   const questionChanged = pendingProposal?.question != null;
   const stepsChanged = pendingProposal?.solution_steps != null;
   const answerChanged = pendingProposal?.final_answer != null;
+  // Figure handling during a pending proposal:
+  //   - If the proposal includes a NEW figure_spec → show that.
+  //   - If the proposal rewrites the question but DOESN'T touch the
+  //     figure, the old figure is almost certainly stale (the new
+  //     prose may describe a completely different setup) — hide it
+  //     in the preview rather than mislead the teacher into thinking
+  //     the old diagram still belongs.
+  //   - Otherwise (no proposal, or proposal doesn't touch question
+  //     OR figure) → fall back to the existing item diagram.
+  const proposalHasFigure = pendingProposal?.figure_svg != null;
+  const previewFigureSvg = proposalHasFigure
+    ? pendingProposal!.figure_svg
+    : questionChanged
+      ? null
+      : liveItem.figure_svg;
   // When solution_steps is proposed, highlight only the individual steps
   // that actually differ from the current version. Index-by-index
   // compare on title+description: if a step is new (no prev at that
@@ -759,15 +769,21 @@ export function WorkshopModal({
               </div>
               {questionChanged && (
                 <BeforeBlock>
+                  {/* Old figure travels with the old question text so
+                      the BEFORE block reads as a cohesive snapshot,
+                      not as a stale figure floating over new prose. */}
+                  {liveItem.figure_svg && (
+                    <FigureDisplay svg={liveItem.figure_svg} className="max-h-44" />
+                  )}
                   <MathText text={liveItem.question} />
                 </BeforeBlock>
               )}
-              {/* Geometry figure (when present). Renders above the
-                  question text since most textbook geometry sets the
-                  diagram first and references it in prose. While a
-                  proposal is pending, prefer the proposal's figure
-                  so the teacher previews what they'll accept. */}
-              <FigureDisplay svg={previewFigureSvg} />
+              {/* New figure (or the unchanged live figure when no
+                  proposal is pending). When the proposal rewrites the
+                  question without a new figure_spec, previewFigureSvg
+                  resolves to null — we'd rather show no figure than
+                  show a stale one that contradicts the new prose. */}
+              {previewFigureSvg && <FigureDisplay svg={previewFigureSvg} />}
               <div className="mt-3 text-base leading-relaxed text-text-primary">
                 {questionChanged || isProposalPending ? (
                   <MathText text={previewQuestion} />
