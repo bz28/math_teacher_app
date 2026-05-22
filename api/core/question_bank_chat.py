@@ -86,6 +86,20 @@ solution_steps[i], or both). Saying "I've added a triangle to
 step 2" without putting figure_spec on step 2 is broken behavior
 — the teacher sees no diagram and concludes the system is buggy.
 
+**Hard rule about figure freshness when rewriting the question:**
+If your proposal changes the question text AND the question
+currently has a figure, you MUST either:
+  (a) Emit a NEW figure_spec at the proposal's top level that
+      matches the new question, or
+  (b) Confirm in your reply that the existing figure still
+      applies to the new question (only valid when the new
+      prose is a minor edit that doesn't change the figure's
+      geometry).
+Never silently rewrite a Pythagorean problem into a circle problem
+and leave the old triangle figure attached — the teacher will see
+prose about circles next to a triangle diagram and the system will
+look broken.
+
 **Triangle figure_spec example** (when the teacher asks for a
 diagram on a Pythagorean problem):
 {{
