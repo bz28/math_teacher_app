@@ -34,6 +34,30 @@ class FigureSpecError(ValueError):
 EdgeKey = str
 
 
+class TriangleCircleAnnotation(BaseModel):
+    """An overlay circle attached to a TriangleFigure — either the
+    incircle (inscribed in the triangle, tangent to each side) or the
+    circumcircle (passes through every vertex). The renderer computes
+    the center + radius from the triangle's own geometry — the LLM
+    just opts in by setting the field, and optionally requests
+    display affordances (center dot, labeled radius).
+
+    Using compound primitives lets the AMC-classic "circle inscribed
+    in a right triangle" render as ONE figure (triangle + overlay)
+    rather than two separate shapes that the LLM would have to keep
+    geometrically consistent by hand.
+    """
+
+    show_center: bool = False
+    center_label: str = "O"
+    # When set, draws a labeled radius from the center to the first
+    # tangent point (incircle) or first vertex (circumcircle).
+    radius_label: str | None = None
+    # Incircle only: when true, mark the three tangent points where
+    # the circle touches the sides. Ignored on circumcircles.
+    show_tangent_points: bool = False
+
+
 class TriangleFigure(BaseModel):
     """A triangle with optional constraints + display labels.
 
@@ -68,6 +92,13 @@ class TriangleFigure(BaseModel):
     # Vertex labels default to the vertex name (e.g. "A") — override
     # only when the problem uses a different label scheme.
     vertex_labels: dict[str, str] = Field(default_factory=dict)
+
+    # Compound annotations — overlay circles whose geometry is
+    # derived from the triangle's own constraints. Both nullable; the
+    # renderer computes incenter/circumcenter coordinates and radii
+    # at draw time so they're guaranteed consistent with the triangle.
+    inscribed_circle: TriangleCircleAnnotation | None = None
+    circumscribed_circle: TriangleCircleAnnotation | None = None
 
     @model_validator(mode="after")
     def _validate_references(self) -> TriangleFigure:

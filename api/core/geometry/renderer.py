@@ -18,8 +18,20 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
-from api.core.geometry.dsl import CircleFigure, FigureSpec, FigureSpecError, TriangleFigure
-from api.core.geometry.solver import Point, solve_circle, solve_triangle
+from api.core.geometry.dsl import (
+    CircleFigure,
+    FigureSpec,
+    FigureSpecError,
+    TriangleCircleAnnotation,
+    TriangleFigure,
+)
+from api.core.geometry.solver import (
+    Point,
+    circumcircle_of_triangle,
+    incircle_of_triangle,
+    solve_circle,
+    solve_triangle,
+)
 
 # Visual constants — single source of truth so tweaks land in one
 # place. Sizes are in SVG user units; the viewBox is computed to fit
@@ -77,11 +89,27 @@ def _render_triangle(
 ) -> str:
     """Compose the SVG for a solved triangle. Layout sequence:
     viewBox first (so user-unit constants stay readable), then sides,
-    then markings (right angle, labels) in z-order — text on top.
+    overlay circles (incircle/circumcircle), then markings (right
+    angle, labels) in z-order — text on top.
     """
     a, b, c = spec.vertices
     xs = [coords[v][0] for v in spec.vertices]
     ys = [coords[v][1] for v in spec.vertices]
+
+    # Pre-compute overlay circles up front so the viewBox bounds them.
+    # The incircle is always inside the triangle so doesn't change
+    # bounds, but the circumcircle is bigger and would otherwise
+    # clip out of the viewBox.
+    incircle: tuple[Point, float, list[Point]] | None = None
+    circumcircle: tuple[Point, float] | None = None
+    if spec.inscribed_circle is not None:
+        incircle = incircle_of_triangle(spec.vertices, coords)
+    if spec.circumscribed_circle is not None:
+        circumcircle = circumcircle_of_triangle(spec.vertices, coords)
+        cc, cr = circumcircle
+        xs.extend([cc[0] - cr, cc[0] + cr])
+        ys.extend([cc[1] - cr, cc[1] + cr])
+
     min_x, max_x = min(xs) - _PADDING, max(xs) + _PADDING
     min_y, max_y = min(ys) - _PADDING, max(ys) + _PADDING
     width = max_x - min_x
@@ -97,6 +125,7 @@ def _render_triangle(
     parts.append(
         f'<svg xmlns="http://www.w3.org/2000/svg" '
         f'viewBox="{min_x:.4f} {-max_y:.4f} {width:.4f} {height:.4f}" '
+        f'preserveAspectRatio="xMidYMid meet" '
         f'role="img" aria-label="Geometry figure">',
     )
     parts.append('<g transform="scale(1,-1)">')
@@ -110,7 +139,27 @@ def _render_triangle(
         'stroke-linejoin="round"/>',
     )
 
-    # 2. Right-angle markers (little squares at the vertex). These go
+    # 2. Overlay circles (incircle / circumcircle). Drawn UNDER the
+    # right-angle marker and labels so text remains readable on top.
+    if incircle is not None and spec.inscribed_circle is not None:
+        parts.extend(_overlay_circle_geometry(incircle[0], incircle[1]))
+        if spec.inscribed_circle.show_tangent_points:
+            for tp in incircle[2]:
+                parts.append(_dot_at(tp))
+        if spec.inscribed_circle.radius_label and incircle[2]:
+            # Draw a labeled radius from incenter to first tangent point.
+            parts.append(_radius_line(incircle[0], incircle[2][0]))
+        if spec.inscribed_circle.show_center:
+            parts.append(_dot_at(incircle[0]))
+    if circumcircle is not None and spec.circumscribed_circle is not None:
+        parts.extend(_overlay_circle_geometry(circumcircle[0], circumcircle[1]))
+        if spec.circumscribed_circle.radius_label:
+            # Labeled radius from circumcenter to first vertex.
+            parts.append(_radius_line(circumcircle[0], coords[spec.vertices[0]]))
+        if spec.circumscribed_circle.show_center:
+            parts.append(_dot_at(circumcircle[0]))
+
+    # 3. Right-angle markers (little squares at the vertex). These go
     # under the labels so a tight diagram still reads cleanly.
     for vertex in spec.right_angle_at:
         parts.append(_right_angle_marker(vertex, coords, spec.vertices))
@@ -132,8 +181,96 @@ def _render_triangle(
         x, y = coords[vertex]
         parts.append(_angle_label_text(spec, vertex, x, -y, coords, text))
 
+    # 4. Compound annotation labels — center labels + radius labels for
+    # the inscribed/circumscribed circles when those affordances are
+    # requested. Positioned in upright SVG coords (negate y from cartesian).
+    if incircle is not None and spec.inscribed_circle is not None:
+        parts.extend(
+            _circle_annotation_labels(
+                spec.inscribed_circle, incircle[0], incircle[2][0] if incircle[2] else None,
+            ),
+        )
+    if circumcircle is not None and spec.circumscribed_circle is not None:
+        parts.extend(
+            _circle_annotation_labels(
+                spec.circumscribed_circle,
+                circumcircle[0],
+                coords[spec.vertices[0]],
+            ),
+        )
+
     parts.append("</svg>")
     return "".join(parts)
+
+
+def _overlay_circle_geometry(center: Point, radius: float) -> list[str]:
+    """Geometry-mode SVG fragments for an overlay circle (drawn inside
+    the flipped <g>). Just the outline; dots / radius lines / labels
+    are added separately so the caller can opt in to each."""
+    cx, cy = center
+    return [
+        f'<circle cx="{cx:.4f}" cy="{cy:.4f}" r="{radius:.4f}" '
+        f'fill="none" stroke="{_STROKE}" stroke-width="{_STROKE_WIDTH}"/>',
+    ]
+
+
+def _dot_at(p: Point) -> str:
+    """Tiny filled marker — used for incircle center, tangent points,
+    circumcenter. Sized off the right-angle constant so all markers
+    feel proportional across the figure."""
+    dot_r = _RIGHT_ANGLE_SIZE * 0.15
+    return (
+        f'<circle cx="{p[0]:.4f}" cy="{p[1]:.4f}" r="{dot_r:.4f}" fill="{_STROKE}"/>'
+    )
+
+
+def _radius_line(from_pt: Point, to_pt: Point) -> str:
+    """Labeled radius — the line itself. The text label is rendered
+    later in upright SVG coords by _circle_annotation_labels."""
+    return (
+        f'<line x1="{from_pt[0]:.4f}" y1="{from_pt[1]:.4f}" '
+        f'x2="{to_pt[0]:.4f}" y2="{to_pt[1]:.4f}" '
+        f'stroke="{_STROKE}" stroke-width="{_STROKE_WIDTH}"/>'
+    )
+
+
+def _circle_annotation_labels(
+    annotation: TriangleCircleAnnotation,
+    center: Point,
+    radius_endpoint: Point | None,
+) -> list[str]:
+    """Upright-SVG text for an overlay circle's center / radius labels.
+    Called AFTER the </g> flip is closed, so y values are negated from
+    cartesian. radius_endpoint may be None when the circle has no
+    natural radius target (defensive only — current callers always
+    pass one when radius_label is set)."""
+    out: list[str] = []
+    if annotation.show_center:
+        cx, cy = center
+        out.append(
+            f'<text x="{cx:.4f}" y="{-cy:.4f}" '
+            f'font-family="{_FONT_FAMILY}" font-size="{_VERTEX_FONT_SIZE}" '
+            'text-anchor="middle" dominant-baseline="middle" '
+            f'dx="0.18" dy="0.25" fill="{_STROKE}">{_escape(annotation.center_label)}</text>',
+        )
+    if annotation.radius_label and radius_endpoint is not None:
+        # Midpoint of the radius line, with a small perpendicular
+        # offset so the label doesn't sit on top of the line.
+        mid_x = (center[0] + radius_endpoint[0]) / 2
+        mid_y = (center[1] + radius_endpoint[1]) / 2
+        dx = radius_endpoint[0] - center[0]
+        dy = radius_endpoint[1] - center[1]
+        norm = math.hypot(dx, dy) or 1.0
+        # Perpendicular = rotate (dx,dy)/norm by 90° = (-dy, dx)/norm.
+        ox = (-dy / norm) * _LABEL_OFFSET * 0.6
+        oy = (dx / norm) * _LABEL_OFFSET * 0.6
+        out.append(
+            f'<text x="{mid_x + ox:.4f}" y="{-(mid_y + oy):.4f}" '
+            f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
+            'text-anchor="middle" dominant-baseline="middle" '
+            f'fill="{_STROKE}">{_escape(annotation.radius_label)}</text>',
+        )
+    return out
 
 
 def _render_circle(
@@ -155,6 +292,7 @@ def _render_circle(
     parts.append(
         f'<svg xmlns="http://www.w3.org/2000/svg" '
         f'viewBox="{min_x:.4f} {-max_y:.4f} {width:.4f} {height:.4f}" '
+        f'preserveAspectRatio="xMidYMid meet" '
         f'role="img" aria-label="Geometry figure">',
     )
     parts.append('<g transform="scale(1,-1)">')
