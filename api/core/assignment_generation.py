@@ -90,6 +90,16 @@ Pick the variant by setting `shape`:
 - `radius_label` draws a labeled radius to the FIRST named point.
 - Don't emit the same chord twice ('AB' or 'BA' — pick one).
 
+**Polygons** (`shape: "polygon"`, for 4+ sides — squares,
+pentagons, hexagons, n-gons; for triangles use `shape: "triangle"`
+since it has the full constraint solver):
+- REGULAR polygons: set `n_sides` (4-20). The renderer auto-scales,
+  so you don't need to specify side_length unless you want to.
+- IRREGULAR polygons (kites, trapezoids, arbitrary quads): set
+  `vertex_positions` as a list of [x, y] pairs in drawing order.
+  Connect vertices in sequence (last back to first).
+- Don't use polygon mode for triangles — use shape='triangle'.
+
 **Compound: triangle WITH inscribed or circumscribed circle**:
 For problems like "a circle inscribed in a right triangle" or "a
 triangle inscribed in a circle," DON'T emit a separate circle

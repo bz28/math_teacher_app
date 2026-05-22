@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import math
 
-from api.core.geometry.dsl import CircleFigure, FigureSpecError, TriangleFigure
+from api.core.geometry.dsl import CircleFigure, FigureSpecError, PolygonFigure, TriangleFigure
 
 Point = tuple[float, float]
 
@@ -285,6 +285,41 @@ def circumcircle_of_triangle(
     center = (ux, uy)
     radius = math.hypot(ax - ux, ay - uy)
     return center, radius
+
+
+def solve_polygon(spec: PolygonFigure) -> tuple[list[str], dict[str, Point]]:
+    """Compute polygon vertex positions + the canonical name list.
+
+    Regular mode: vertices sit evenly on a circle whose circumradius
+    is derived from the side length via r = s / (2·sin(π/n)). First
+    vertex placed at angle -π/2 (top of the polygon) so the figure
+    reads upright (a square looks like a square, not diamond-rotated).
+
+    Irregular mode: use vertex_positions verbatim. The caller (the
+    LLM) is responsible for picking positions that form a sensible
+    polygon — we don't check convexity or self-intersection because
+    "concave" and "self-intersecting" are both legitimate teaching
+    figures.
+    """
+    if spec.n_sides is not None:
+        n = spec.n_sides
+        # Circumradius from side length (chord-length formula).
+        r = spec.side_length / (2 * math.sin(math.pi / n))
+        # Start at the top (-π/2 in standard math convention because
+        # the renderer flips y, putting top of cartesian → top of SVG).
+        start_angle = math.pi / 2
+        positions: list[Point] = []
+        for i in range(n):
+            theta = start_angle + 2 * math.pi * i / n
+            positions.append((r * math.cos(theta), r * math.sin(theta)))
+    else:
+        assert spec.vertex_positions is not None  # validator guarantees
+        positions = [(x, y) for x, y in spec.vertex_positions]
+        n = len(positions)
+
+    names = spec.vertex_names or [chr(ord("A") + i) for i in range(n)]
+    coords = dict(zip(names, positions))
+    return list(names), coords
 
 
 def solve_circle(spec: CircleFigure) -> dict[str, Point]:
