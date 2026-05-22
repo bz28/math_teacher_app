@@ -181,7 +181,13 @@ function CompletedStep({
           {/* Figure shown only when the step's row is expanded —
               keeps the collapsed timeline compact. */}
           {expanded && step.figure_svg && (
-            <FigureDisplay svg={step.figure_svg} className="max-h-40" />
+            <FigureDisplay
+              svg={step.figure_svg}
+              className="max-h-40"
+              ariaLabel={
+                step.title ? `Figure for step ${index + 1}: ${step.title}` : `Figure for step ${index + 1}`
+              }
+            />
           )}
           <div
             className={cn(
@@ -258,7 +264,13 @@ function ActiveStep({
         {step.title ? ` — ${step.title}` : ""}
       </p>
       {step.figure_svg && (
-        <FigureDisplay svg={step.figure_svg} className="max-h-44" />
+        <FigureDisplay
+          svg={step.figure_svg}
+          className="max-h-44"
+          ariaLabel={
+            step.title ? `Figure for step ${index + 1}: ${step.title}` : `Figure for step ${index + 1}`
+          }
+        />
       )}
       <div className="mt-1 text-base leading-relaxed text-text-primary">
         <MathText text={step.description} />

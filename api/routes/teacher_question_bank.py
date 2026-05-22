@@ -632,7 +632,9 @@ async def reject_bank_item(
 
 
 @router.post("/question-bank/{item_id}/regenerate")
+@limiter.limit("6/minute")
 async def regenerate_bank_item(
+    request: Request,
     body: RegenerateRequest,
     item: QuestionBankItem = Depends(get_bank_item),
     current_user: CurrentUser = Depends(require_teacher),
@@ -718,7 +720,9 @@ async def delete_bank_item(
 
 
 @router.post("/question-bank/{item_id}/chat")
+@limiter.limit("10/minute")
 async def post_chat_message(
+    request: Request,
     body: ChatMessageRequest,
     item: QuestionBankItem = Depends(get_bank_item),
     current_user: CurrentUser = Depends(require_teacher),

@@ -38,7 +38,13 @@ from api.core.geometry.solver import (
 # Visual constants — single source of truth so tweaks land in one
 # place. Sizes are in SVG user units; the viewBox is computed to fit
 # the figure with PADDING units of margin on each side.
-_STROKE = "#14130f"
+# `currentColor` lets the SVG inherit the surrounding CSS `color`
+# property, so figures pick up the theme's text color (light text in
+# dark mode, dark text in light mode). Without this, a hardcoded
+# near-black stroke is invisible against the dark-mode bg #14130F.
+# The frontend container (FigureDisplay) sets `color: var(--color-text)`
+# so every line, label, and dot adapts to the active theme.
+_STROKE = "currentColor"
 _STROKE_WIDTH = 0.04
 _FONT_FAMILY = "system-ui, sans-serif"
 _LABEL_FONT_SIZE = 0.22

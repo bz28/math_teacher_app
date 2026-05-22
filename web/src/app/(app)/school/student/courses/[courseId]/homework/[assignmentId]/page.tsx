@@ -357,7 +357,10 @@ export default function HomeworkPage() {
                     {/* Geometry figure when present — rendered above
                         the question text since most setups read
                         "figure first, then prose referencing it." */}
-                    <FigureDisplay svg={p.figure_svg} />
+                    <FigureDisplay
+                      svg={p.figure_svg}
+                      ariaLabel={`Figure for problem ${p.position}`}
+                    />
                     <div className="text-base text-text-primary">
                       <MathText text={p.question} />
                     </div>

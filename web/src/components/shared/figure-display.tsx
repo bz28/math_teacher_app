@@ -21,9 +21,15 @@ interface FigureDisplayProps {
    *  question block; the student-practice surface overrides to a
    *  taller cap. */
   className?: string;
+  /** Screen-reader label for the figure. Defaults to a generic
+   *  "Geometry figure" but callers SHOULD pass problem-specific
+   *  context (e.g. the question text or step description) so a
+   *  screen-reader user navigating 5 distinct figures on a page
+   *  doesn't hear "Geometry figure" 5 times. */
+  ariaLabel?: string;
 }
 
-export function FigureDisplay({ svg, className }: FigureDisplayProps) {
+export function FigureDisplay({ svg, className, ariaLabel }: FigureDisplayProps) {
   const cleaned = useMemo(() => (svg ? sanitizeSvg(svg) : null), [svg]);
 
   if (!cleaned) return null;
@@ -31,7 +37,7 @@ export function FigureDisplay({ svg, className }: FigureDisplayProps) {
   return (
     <div
       role="img"
-      aria-label="Geometry figure"
+      aria-label={ariaLabel ?? "Geometry figure"}
       // Width AND height-capped layout. The container caps width
       // (max-w-sm ≈ 384px) AND height (max-h-72 ≈ 288px) — without
       // BOTH caps, a tall-viewBox figure (height > width, e.g. an
@@ -42,8 +48,13 @@ export function FigureDisplay({ svg, className }: FigureDisplayProps) {
       // respect both axes simultaneously; preserveAspectRatio="meet"
       // (set server-side) handles the proportional scaling.
       className={
+        // `text-text` sets `color: var(--color-text)`. The server SVG
+        // uses stroke="currentColor" / fill="currentColor", so every
+        // line, label, and dot inherits this color and adapts to
+        // light vs dark theme. Without this, a hardcoded near-black
+        // stroke was invisible against the dark-mode bg #14130F.
         "geometry-figure mx-auto my-3 flex max-h-72 w-full max-w-sm " +
-        "items-center justify-center " +
+        "items-center justify-center text-text-primary " +
         "[&_svg]:block [&_svg]:max-h-full [&_svg]:max-w-full " +
         "[&_svg]:h-auto [&_svg]:w-auto " +
         (className ?? "")
