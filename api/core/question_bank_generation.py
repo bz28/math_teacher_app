@@ -186,6 +186,14 @@ Rules:
 - Rate each problem's difficulty based on the content
 - Extract at most 40 problems. If the worksheet has more, extract the
   first 40 and stop.
+- DO NOT emit a `figure_spec` on any extracted problem. The
+  extraction job's contract is "copy the textbook verbatim" — and
+  the geometry DSL only covers triangles / circles / polygons, so
+  any attempt to translate a textbook figure into a spec would
+  either fail or produce a structurally-different diagram. Leave
+  figure_spec null and rely on the bracket-described figure text in
+  the problem itself. The teacher will see the original photo
+  alongside the extracted problem on review.
 """
 
 
@@ -318,6 +326,26 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
                 "or framing so each variation is its own problem.\n\n"
                 f"Reference question:\n{parent.question}"
             )
+            # If the parent has a structured figure, hand its spec to
+            # the model so the variations stay figure-coherent (same
+            # shape family, different numbers). Without this, a
+            # triangle-with-figure parent commonly spawned children
+            # that either dropped the figure entirely or invented a
+            # structurally different one — the variation tree was
+            # figure-incoherent by construction.
+            if parent.figure_spec:
+                import json as _json
+                seed_block += (
+                    "\n\nThe reference question has a structured "
+                    "geometry figure. Each variation should carry "
+                    "the SAME shape family (triangle, circle, "
+                    "polygon, compound) — vary only the numeric "
+                    "values, labels, and orientation. Don't drop "
+                    "the figure entirely and don't switch to a "
+                    "different shape.\n\n"
+                    f"Reference figure_spec (for shape reference):\n"
+                    f"{_json.dumps(parent.figure_spec, indent=2)}"
+                )
             constraint_text = (
                 f"{seed_block}\n\nAdditional constraint: {job.constraint}"
                 if job.constraint else seed_block

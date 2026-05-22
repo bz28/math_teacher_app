@@ -15,6 +15,7 @@ fixture-friendly mock there.
 """
 
 from api.core.question_bank_generation import _render_step_figures, _resolve_figure
+from api.core.step_decomposition import Decomposition, _cache, _cache_get, _cache_set
 
 
 def test_resolve_figure_passes_valid_spec_through() -> None:
@@ -129,3 +130,84 @@ def test_render_step_figures_drops_bad_spec_keeps_step() -> None:
     assert "figure_svg" not in out[0]
     assert "figure_spec" not in out[0]
     assert out[0]["description"] == "Description still valid."
+
+
+# ── Decomposition cache: figure_svg is re-rendered on read ──────────
+
+
+def test_decomposition_cache_strips_figure_svg_on_set() -> None:
+    """Cache must store only the canonical figure_spec, not the
+    rendered SVG, so renderer-code updates take effect immediately
+    instead of being shadowed by 30-minute-old cached SVGs."""
+    _cache.clear()
+    valid_spec = {
+        "type": "geometry",
+        "shape": "triangle",
+        "vertices": ["A", "B", "C"],
+        "side_lengths": {"AB": 3.0, "BC": 4.0, "CA": 5.0},
+    }
+    decomp = Decomposition(
+        problem="cache-test",
+        steps=[
+            {
+                "title": "Step 1",
+                "description": "Set up the right triangle.",
+                "figure_spec": valid_spec,
+                "figure_svg": "<svg>STALE</svg>",  # would be cached if not stripped
+            },
+        ],
+        final_answer="5",
+        problem_type="math",
+    )
+    _cache_set("cache-test", decomp)
+    cached_raw = _cache["cache-test"][1]
+    assert "figure_svg" not in cached_raw.steps[0], (
+        "cache should strip figure_svg before storage so a renderer "
+        "update takes effect on next read"
+    )
+
+
+def test_decomposition_cache_get_re_renders_figure_svg() -> None:
+    """Reading from cache produces a fresh figure_svg from the
+    canonical spec, NOT a stale one that lingered from a previous
+    renderer version."""
+    _cache.clear()
+    valid_spec = {
+        "type": "geometry",
+        "shape": "triangle",
+        "vertices": ["A", "B", "C"],
+        "side_lengths": {"AB": 3.0, "BC": 4.0, "CA": 5.0},
+    }
+    decomp = Decomposition(
+        problem="reread-test",
+        steps=[
+            {
+                "title": "Step 1",
+                "description": "Right triangle setup.",
+                "figure_spec": valid_spec,
+            },
+        ],
+        final_answer="5",
+        problem_type="math",
+    )
+    _cache_set("reread-test", decomp)
+    fetched = _cache_get("reread-test")
+    assert fetched is not None
+    assert fetched.steps[0]["figure_svg"].startswith("<svg")
+    assert "<polygon" in fetched.steps[0]["figure_svg"]
+
+
+def test_decomposition_cache_handles_step_without_figure() -> None:
+    """A step with no figure_spec stays figure-less on cache read —
+    we don't invent a figure where none was requested."""
+    _cache.clear()
+    decomp = Decomposition(
+        problem="no-figure-test",
+        steps=[{"title": "Pure algebra", "description": "x = 5"}],
+        final_answer="5",
+        problem_type="math",
+    )
+    _cache_set("no-figure-test", decomp)
+    fetched = _cache_get("no-figure-test")
+    assert fetched is not None
+    assert "figure_svg" not in fetched.steps[0]
