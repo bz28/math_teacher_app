@@ -111,7 +111,10 @@ function ProblemCard({ problem }: { problem: StudentPracticeProblem }) {
               without its diagram. Only the question TEXT is suppressed in
               answer mode, because MCQCard re-renders that text and we don't
               want it twice (MCQCard does NOT render the figure). */}
-          <FigureDisplay svg={problem.figure_svg} />
+          <FigureDisplay
+            svg={problem.figure_svg}
+            ariaLabel={`Figure for problem ${problem.position}`}
+          />
           {mode !== "answer" && (
             <div className="text-base text-text-primary">
               <MathText text={problem.question} />
