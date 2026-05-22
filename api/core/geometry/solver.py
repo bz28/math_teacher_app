@@ -188,6 +188,105 @@ def _solve_sas(
     return {a: placements[a], b: placements[b], c: placements[c]}
 
 
+def incircle_of_triangle(
+    vertices: list[str], coords: dict[str, Point],
+) -> tuple[Point, float, list[Point]]:
+    """Compute the incircle of the triangle defined by `vertices`.
+
+    Returns (center, radius, tangent_points). The tangent points are
+    the feet of the perpendiculars from the incenter to each side, in
+    the same order as the triangle's sides: AB, BC, CA.
+
+    Math:
+    - The incenter is the weighted average of the vertices, where
+      each vertex is weighted by the length of the side OPPOSITE it.
+      I = (a·A + b·B + c·C) / (a + b + c), where a = |BC|, b = |CA|,
+      c = |AB|.
+    - The inradius is Area / s, where s is the semi-perimeter.
+    - Tangent points: for each side, project the incenter onto the
+      line through that side's endpoints — that's the foot of the
+      perpendicular, which is exactly where the incircle touches.
+    """
+    a_name, b_name, c_name = vertices
+    pa = coords[a_name]
+    pb = coords[b_name]
+    pc = coords[c_name]
+
+    # Side lengths (named by the vertex they're opposite to).
+    side_a = math.hypot(pb[0] - pc[0], pb[1] - pc[1])  # opposite A → |BC|
+    side_b = math.hypot(pc[0] - pa[0], pc[1] - pa[1])  # opposite B → |CA|
+    side_c = math.hypot(pa[0] - pb[0], pa[1] - pb[1])  # opposite C → |AB|
+    perim = side_a + side_b + side_c
+    if perim <= 0:
+        raise FigureSpecError("degenerate triangle (zero perimeter) — incircle undefined")
+
+    cx = (side_a * pa[0] + side_b * pb[0] + side_c * pc[0]) / perim
+    cy = (side_a * pa[1] + side_b * pb[1] + side_c * pc[1]) / perim
+    center = (cx, cy)
+
+    # Inradius = Area / s. Area via the cross product of two edge
+    # vectors (more numerically stable than Heron's formula at the
+    # near-degenerate edge of the valid-triangle space).
+    ex1, ey1 = pb[0] - pa[0], pb[1] - pa[1]
+    ex2, ey2 = pc[0] - pa[0], pc[1] - pa[1]
+    area = abs(ex1 * ey2 - ex2 * ey1) / 2
+    if area <= 0:
+        raise FigureSpecError("degenerate triangle (zero area) — incircle undefined")
+    radius = area / (perim / 2)
+
+    # Tangent points: project incenter onto each side. For a side
+    # from P to Q, foot = P + ((I - P) · (Q - P) / |Q - P|²) · (Q - P).
+    def _foot(p: Point, q: Point) -> Point:
+        dx, dy = q[0] - p[0], q[1] - p[1]
+        denom = dx * dx + dy * dy
+        if denom == 0:
+            raise FigureSpecError("degenerate side — tangent point undefined")
+        t = ((cx - p[0]) * dx + (cy - p[1]) * dy) / denom
+        return (p[0] + t * dx, p[1] + t * dy)
+
+    tangent_points = [_foot(pa, pb), _foot(pb, pc), _foot(pc, pa)]
+    return center, radius, tangent_points
+
+
+def circumcircle_of_triangle(
+    vertices: list[str], coords: dict[str, Point],
+) -> tuple[Point, float]:
+    """Compute the circumcircle (center, radius).
+
+    Math:
+    - Circumcenter is the intersection of the perpendicular bisectors
+      of the sides. Closed-form formula via the determinant of a 3×3
+      matrix of vertex coordinates; numerically equivalent and faster
+      than solving the bisector system algebraically.
+    - Circumradius = (a·b·c) / (4·Area).
+    """
+    a_name, b_name, c_name = vertices
+    ax, ay = coords[a_name]
+    bx, by = coords[b_name]
+    cx_, cy_ = coords[c_name]
+
+    # D = 2 · (ax·(by - cy) + bx·(cy - ay) + cx·(ay - by))
+    d = 2 * (ax * (by - cy_) + bx * (cy_ - ay) + cx_ * (ay - by))
+    if abs(d) < 1e-12:
+        raise FigureSpecError(
+            "degenerate triangle (collinear vertices) — circumcircle undefined",
+        )
+
+    ux = (
+        (ax * ax + ay * ay) * (by - cy_)
+        + (bx * bx + by * by) * (cy_ - ay)
+        + (cx_ * cx_ + cy_ * cy_) * (ay - by)
+    ) / d
+    uy = (
+        (ax * ax + ay * ay) * (cx_ - bx)
+        + (bx * bx + by * by) * (ax - cx_)
+        + (cx_ * cx_ + cy_ * cy_) * (bx - ax)
+    ) / d
+    center = (ux, uy)
+    radius = math.hypot(ax - ux, ay - uy)
+    return center, radius
+
+
 def solve_circle(spec: CircleFigure) -> dict[str, Point]:
     """Compute (x, y) for the center and each named point on the circle.
 

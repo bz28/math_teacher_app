@@ -88,7 +88,26 @@ Pick the variant by setting `shape`:
 - `show_center: true` draws a dot + label at the center; pair
   with `center_label` (defaults to "O").
 - `radius_label` draws a labeled radius to the FIRST named point.
-- Don't emit the same chord twice ('AB' or 'BA' — pick one)."""
+- Don't emit the same chord twice ('AB' or 'BA' — pick one).
+
+**Compound: triangle WITH inscribed or circumscribed circle**:
+For problems like "a circle inscribed in a right triangle" or "a
+triangle inscribed in a circle," DON'T emit a separate circle
+figure. Use `shape: "triangle"` and set the optional
+`inscribed_circle` or `circumscribed_circle` field — the renderer
+computes the circle's geometry from the triangle automatically, so
+the two stay perfectly consistent.
+
+- For an AMC-style "find the inradius" problem: set
+  `inscribed_circle: {{"show_center": true, "radius_label": "r"}}`.
+  Add `"show_tangent_points": true` if the problem references where
+  the circle touches each side.
+- For "find the circumradius" or "triangle inscribed in circle":
+  set `circumscribed_circle: {{"show_center": true,
+  "radius_label": "R"}}`.
+- The triangle's `side_lengths` / `angles` still need to fully
+  determine the triangle — the circle inherits its geometry from
+  whatever shape you specify."""
 
 
 def _build_question_generation_prompt(subject: str) -> str:

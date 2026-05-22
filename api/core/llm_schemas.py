@@ -87,6 +87,68 @@ _TRIANGLE_FIGURE_SCHEMA: dict[str, Any] = {
             ),
             "additionalProperties": {"type": "string"},
         },
+        # Compound annotations — overlay circles whose geometry is
+        # derived from the triangle's own constraints. Use these
+        # instead of emitting a separate CircleFigure when the
+        # problem says "circle inscribed in a triangle" or "triangle
+        # inscribed in a circle" — the renderer computes the center
+        # + radius from the triangle so the two stay consistent.
+        "inscribed_circle": {
+            "type": "object",
+            "description": (
+                "Draws the INCIRCLE (the circle inscribed inside the "
+                "triangle, tangent to all three sides). Use this for "
+                "AMC-style 'find the inradius' problems. Renderer "
+                "computes center + radius from the triangle's "
+                "geometry — you just opt in by setting this field."
+            ),
+            "properties": {
+                "show_center": {
+                    "type": "boolean",
+                    "description": "Mark the incenter with a labeled dot.",
+                },
+                "center_label": {
+                    "type": "string",
+                    "description": "Label for the incenter (default 'O').",
+                },
+                "radius_label": {
+                    "type": "string",
+                    "description": (
+                        "When set, draws a labeled radius from the "
+                        "incenter to one of the tangent points."
+                    ),
+                },
+                "show_tangent_points": {
+                    "type": "boolean",
+                    "description": "Mark the three points where the incircle touches each side.",
+                },
+            },
+        },
+        "circumscribed_circle": {
+            "type": "object",
+            "description": (
+                "Draws the CIRCUMCIRCLE (the circle passing through "
+                "all three vertices). Use this for 'triangle "
+                "inscribed in a circle' setups."
+            ),
+            "properties": {
+                "show_center": {
+                    "type": "boolean",
+                    "description": "Mark the circumcenter with a labeled dot.",
+                },
+                "center_label": {
+                    "type": "string",
+                    "description": "Label for the circumcenter (default 'O').",
+                },
+                "radius_label": {
+                    "type": "string",
+                    "description": (
+                        "When set, draws a labeled radius from the "
+                        "circumcenter to the first vertex."
+                    ),
+                },
+            },
+        },
     },
     "required": ["type", "shape", "vertices"],
 }

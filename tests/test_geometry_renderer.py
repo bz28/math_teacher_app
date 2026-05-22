@@ -14,7 +14,12 @@ import pytest
 
 from api.core.geometry import FigureSpecError, render_figure
 from api.core.geometry.dsl import CircleFigure, TriangleFigure
-from api.core.geometry.solver import solve_circle, solve_triangle
+from api.core.geometry.solver import (
+    circumcircle_of_triangle,
+    incircle_of_triangle,
+    solve_circle,
+    solve_triangle,
+)
 
 # ── Solver: SSS ──────────────────────────────────────────────────────
 
@@ -369,6 +374,107 @@ def test_render_circle_with_labeled_radius() -> None:
     )
     assert "<line" in svg  # the radius line
     assert ">r<" in svg
+
+
+# ── Compound: triangle + inscribed/circumscribed circle ────────────
+
+
+def test_incircle_of_9_12_15_right_triangle() -> None:
+    """Classic AMC: a 9-12-15 right triangle has inradius exactly 3.
+    Verified via the closed-form r = (a + b - c) / 2 for a right
+    triangle = (9 + 12 - 15) / 2 = 3.
+    """
+    spec = TriangleFigure(
+        vertices=["A", "B", "C"],
+        side_lengths={"AB": 9.0, "BC": 12.0, "CA": 15.0},
+        right_angle_at=["B"],
+    )
+    coords = solve_triangle(spec)
+    _center, radius, tangent_points = incircle_of_triangle(spec.vertices, coords)
+    assert math.isclose(radius, 3.0, abs_tol=1e-9)
+    # Tangent points should be ON the sides — verify by checking
+    # that each one's distance to the incenter equals the radius.
+    cx, cy = _center
+    for tp in tangent_points:
+        d = math.hypot(tp[0] - cx, tp[1] - cy)
+        assert math.isclose(d, radius, abs_tol=1e-9)
+
+
+def test_circumcircle_of_3_4_5_right_triangle() -> None:
+    """A right triangle's circumradius equals half its hypotenuse.
+    3-4-5 → circumradius 2.5. Also: circumcenter is at the midpoint
+    of the hypotenuse.
+    """
+    spec = TriangleFigure(
+        vertices=["A", "B", "C"],
+        side_lengths={"AB": 3.0, "BC": 4.0, "CA": 5.0},
+    )
+    coords = solve_triangle(spec)
+    center, radius = circumcircle_of_triangle(spec.vertices, coords)
+    assert math.isclose(radius, 2.5, abs_tol=1e-9)
+    # Distance from circumcenter to EACH vertex must equal the radius.
+    for v in spec.vertices:
+        d = math.hypot(coords[v][0] - center[0], coords[v][1] - center[1])
+        assert math.isclose(d, radius, abs_tol=1e-9)
+
+
+def test_collinear_triangle_circumcircle_rejected() -> None:
+    """Algebraic guard: circumcircle of a degenerate (collinear)
+    triangle is undefined — should raise FigureSpecError rather
+    than divide by zero.
+    """
+    coords = {"A": (0.0, 0.0), "B": (1.0, 0.0), "C": (2.0, 0.0)}
+    with pytest.raises(FigureSpecError, match="circumcircle"):
+        circumcircle_of_triangle(["A", "B", "C"], coords)
+
+
+def test_render_triangle_with_inscribed_circle() -> None:
+    """End-to-end: a triangle with inscribed_circle in the spec
+    renders BOTH the polygon outline AND a <circle> for the incircle.
+    """
+    svg = render_figure(
+        {
+            "shape": "triangle",
+            "vertices": ["A", "B", "C"],
+            "side_lengths": {"AB": 9.0, "BC": 12.0, "CA": 15.0},
+            "right_angle_at": ["B"],
+            "inscribed_circle": {
+                "show_center": True,
+                "radius_label": "r",
+                "show_tangent_points": True,
+            },
+        },
+    )
+    assert "<polygon" in svg  # triangle outline
+    assert "<circle" in svg  # the incircle
+    assert ">r<" in svg  # radius label rendered
+
+
+def test_render_triangle_with_circumscribed_circle() -> None:
+    svg = render_figure(
+        {
+            "shape": "triangle",
+            "vertices": ["A", "B", "C"],
+            "side_lengths": {"AB": 3.0, "BC": 4.0, "CA": 5.0},
+            "circumscribed_circle": {"show_center": True, "radius_label": "R"},
+        },
+    )
+    assert "<polygon" in svg
+    assert "<circle" in svg
+    assert ">R<" in svg
+
+
+def test_inscribed_circle_omitted_means_no_circle_drawn() -> None:
+    """Triangles without inscribed_circle/circumscribed_circle render
+    exactly as before — no <circle> element appears."""
+    svg = render_figure(
+        {
+            "shape": "triangle",
+            "vertices": ["A", "B", "C"],
+            "side_lengths": {"AB": 3.0, "BC": 4.0, "CA": 5.0},
+        },
+    )
+    assert "<circle" not in svg
 
 
 # ── Discriminated union dispatch ────────────────────────────────────
