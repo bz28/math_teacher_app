@@ -306,7 +306,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   submitBtnText: {
     ...typography.label,
-    color: colors.white,
+    color: colors.textOnPrimary,
   },
   pillsContainer: {
     paddingVertical: spacing.sm,
@@ -412,7 +412,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     fontSize: 13,
   },
   choiceLetterTextSelected: {
-    color: colors.white,
+    color: colors.textOnPrimary,
   },
   choiceText: {
     ...typography.body,

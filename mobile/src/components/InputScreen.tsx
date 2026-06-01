@@ -19,14 +19,12 @@ import { ImagePreview } from "./ImagePreview";
 import { MathKeyboard } from "./MathKeyboard";
 import { MathText } from "./MathText";
 import { MockTestConfig } from "./MockTestConfig";
-import { PaywallScreen } from "./PaywallScreen";
-import { UpgradePrompt } from "./UpgradePrompt";
 import { RectangleSelector } from "./RectangleSelector";
 import { type Mode } from "./ModeSelectScreen";
 import { useImageExtraction } from "../hooks/useImageExtraction";
-import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
+import { usePaywallStore } from "../stores/paywall";
 import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
 
 const MAX_PROBLEMS = 10;
@@ -56,8 +54,9 @@ export function InputScreen({
   const [mockTimeLimitMinutes, setMockTimeLimitMinutes] = useState(30);
   const [mockUntimed, setMockUntimed] = useState(true);
   const [mockMultipleChoice, setMockMultipleChoice] = useState(true);
+  const [mockQuestionCount, setMockQuestionCount] = useState(5);
   const [quotaConfirm, setQuotaConfirm] = useState(false);
-  const { show: showUpgrade, promptProps, paywallVisible, paywallTrigger, closePaywall } = useUpgradePrompt();
+  const showPaywall = usePaywallStore((s) => s.show);
 
   const isPro = useEntitlementStore((s) => s.isPro);
   const sessionsRemaining = useEntitlementStore((s) => s.sessionsRemaining);
@@ -99,7 +98,7 @@ export function InputScreen({
   } = useImageExtraction(
     problemQueue.length, maxQueueSize, setError, subject,
     isPro ? undefined : scansRemaining,
-    isPro ? undefined : () => showUpgrade("image_scan", "Scan Limit Reached", `You've used all ${dailyScansLimit} image scans for today. Upgrade to Pro for unlimited scans.`),
+    isPro ? undefined : () => showPaywall("image_scan"),
   );
 
   const {
@@ -148,16 +147,17 @@ export function InputScreen({
     const text = input.trim();
     if (!text) return;
     if (!isPro && problemQueue.length >= maxQueueSize) {
-      const remaining = sessionsRemaining();
-      const msg = problemQueue.length > 0
-        ? `Your queue is full — you have ${remaining} problem${remaining !== 1 ? "s" : ""} remaining today. Remove one to add another, or upgrade to Pro.`
-        : `You've used all ${dailySessionsLimit} problems for today. Upgrade to Pro for unlimited access.`;
-      showUpgrade("create_session", "Queue Full", msg);
+      showPaywall("create_session");
       return;
     }
     if (problemQueue.length >= MAX_PROBLEMS) return;
     setProblemQueue([...problemQueue, text]);
     setInput("");
+    // Imperatively clear the native TextInput as well. Controlled
+    // TextInputs on iOS can occasionally drop the value="" reset
+    // when queue/input state both update in the same tick — the
+    // problem lands in the queue but the typed text still shows.
+    inputRef.current?.clear();
     setError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     inputRef.current?.focus();
@@ -187,9 +187,19 @@ export function InputScreen({
     if (allProblems.length === 0) return;
     setError(null);
 
-    // Enforce session limit for free users
+    // Enforce session limit for free users.
+    // Mock test counts as one session credit regardless of problem
+    // count (server doesn't decompose anything for mock tests), so
+    // the per-problem cap only applies to the learn-queue path.
     if (!isPro && sessionsRemaining() <= 0) {
-      showUpgrade("create_session", "Daily Limit Reached", `You've used all ${dailySessionsLimit} problems for today. Upgrade to Pro for unlimited access.`);
+      showPaywall("create_session");
+      return;
+    }
+    if (!isPro && mode !== "mock_test" && allProblems.length > sessionsRemaining()) {
+      // Adding queue + currently-typed input was bypassing the per-add
+      // cap (handleAddToQueue gates the queue length, but a typed-but-
+      // unadded line would push the total past the limit).
+      showPaywall("create_session");
       return;
     }
 
@@ -203,7 +213,7 @@ export function InputScreen({
     // Mock test mode — start exam directly
     if (mode === "mock_test") {
       onSessionStart();
-      const generateCount = mockExamType === "generate_similar" ? allProblems.length : 0;
+      const generateCount = mockExamType === "generate_similar" ? mockQuestionCount : 0;
       const timeLimitMinutes = mockUntimed ? null : mockTimeLimitMinutes;
       await startMockTest(allProblems, generateCount, timeLimitMinutes, mockMultipleChoice);
       const postPhase = useSessionStore.getState().phase;
@@ -468,6 +478,8 @@ export function InputScreen({
             onTimeLimitChange={setMockTimeLimitMinutes}
             multipleChoice={mockMultipleChoice}
             onMultipleChoiceChange={setMockMultipleChoice}
+            questionCount={mockQuestionCount}
+            onQuestionCountChange={setMockQuestionCount}
           />
         )}
 
@@ -555,14 +567,6 @@ export function InputScreen({
         onManualSelect={imageUri && imageDimensions ? startManualSelect : undefined}
       />
 
-      <UpgradePrompt {...promptProps} />
-      <PaywallScreen
-        visible={paywallVisible}
-        onClose={closePaywall}
-        onPurchaseComplete={() => { closePaywall(); fetchEntitlements(); }}
-        trigger={paywallTrigger}
-      />
-
     </>
   );
 }
@@ -584,7 +588,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   headerTitle: {
-    ...typography.hero,
+    ...typography.displaySerifItalic,
+    fontSize: 32,
+    lineHeight: 38,
     color: colors.text,
     marginBottom: spacing.md,
   },
@@ -649,7 +655,7 @@ const styles = StyleSheet.create({
   },
   inputField: {
     width: "100%",
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
     padding: spacing.lg,
@@ -674,10 +680,10 @@ const styles = StyleSheet.create({
   extractingCard: {
     width: "100%",
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderColor: colors.border,
     marginBottom: spacing.lg,
     paddingVertical: spacing.xxxl,
     paddingHorizontal: spacing.xxl,
@@ -696,10 +702,10 @@ const styles = StyleSheet.create({
   // Queue
   queueContainer: {
     width: "100%",
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderColor: colors.border,
     marginTop: spacing.md,
     paddingVertical: spacing.sm,
   },

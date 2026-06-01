@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
+import { CompletionReward, type CompletionRewardRef } from "./CompletionReward";
 import { DiagnosisTeaser } from "./DiagnosisTeaser";
 import { GradientButton } from "./GradientButton";
 import { MathText } from "./MathText";
@@ -20,7 +20,7 @@ export function MockTestSummary({ onBack, onHome }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { mockTest, startLearnQueue, toggleMockTestFlag, reset } = useSessionStore();
-  const confettiRef = useRef<ConfettiOverlayRef>(null);
+  const confettiRef = useRef<CompletionRewardRef>(null);
 
   if (!mockTest || !mockTest.results) return null;
 
@@ -62,7 +62,6 @@ export function MockTestSummary({ onBack, onHome }: Props) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {score >= 70 && <ConfettiOverlay ref={confettiRef} />}
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Score card */}
         <View style={[styles.scoreCard, shadows.md]}>
@@ -213,6 +212,9 @@ export function MockTestSummary({ onBack, onHome }: Props) {
           <Text style={styles.newExamText}>Return Home</Text>
         </AnimatedPressable>
       </ScrollView>
+      {/* Reward rendered LAST so it stacks above the score card on iOS;
+          elevation: 9999 in CompletionReward takes care of Android. */}
+      {score >= 70 && <CompletionReward ref={confettiRef} />}
     </SafeAreaView>
   );
 }

@@ -294,7 +294,7 @@ export function SubmissionPanel({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={f.previewUrl}
-                    alt=""
+                    alt={`Preview of ${f.filename}`}
                     className="h-12 w-12 flex-shrink-0 rounded object-cover"
                   />
                 ) : f.mediaType === "application/pdf" ? (

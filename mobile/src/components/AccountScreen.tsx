@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated as RNAnimated,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
@@ -18,13 +19,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as SecureStore from "expo-secure-store";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { BackButton } from "./BackButton";
-import { PaywallScreen } from "./PaywallScreen";
+import { usePaywallStore } from "../stores/paywall";
+import { useTrialEligibility } from "../hooks/useTrialEligibility";
 import { ThemeToggle } from "./ThemeToggle";
 import { clearAuth, deleteAccount, getUserName } from "../services/api";
 import { useEntitlementStore } from "../stores/entitlements";
 import { LEGAL_URLS } from "../constants/legal";
 import { ONBOARDING_FLAGS_KEY, ONBOARDING_KEY } from "../constants/storageKeys";
-import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
+import { useColors, useGradients, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 interface AccountScreenProps {
   onBack: () => void;
@@ -36,6 +38,7 @@ type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 
 function UsageBar({ label, used, limit, icon }: { label: string; used: number; limit: number; icon: IoniconsName }) {
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const pct = limit > 0 ? used / limit : 0;
   const barColor = pct >= 1 ? colors.error : pct >= 0.8 ? colors.warningDark : colors.primary;
@@ -57,6 +60,7 @@ function UsageBar({ label, used, limit, icon }: { label: string; used: number; l
 
 export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScreenProps) {
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const name = getUserName();
   const isPro = useEntitlementStore((s) => s.isPro);
@@ -68,8 +72,8 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
   const dailyScansLimit = useEntitlementStore((s) => s.dailyScansLimit);
   const dailyChatsUsed = useEntitlementStore((s) => s.dailyChatsUsed);
   const dailyChatsLimit = useEntitlementStore((s) => s.dailyChatsLimit);
-  const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
-  const [paywallVisible, setPaywallVisible] = useState(false);
+  const showPaywall = usePaywallStore((s) => s.show);
+  const trialEligible = useTrialEligibility();
 
   // Delete account state
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
@@ -166,7 +170,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
           </LinearGradient>
           <Text style={styles.profileName}>{name ?? "User"}</Text>
           <View style={[styles.planBadge, isPro ? styles.planBadgePro : styles.planBadgeFree]}>
-            {isPro && <Ionicons name="star" size={12} color={colors.white} />}
+            {isPro && <Ionicons name="star" size={12} color={colors.textOnPrimary} />}
             <Text style={[styles.planBadgeText, isPro ? styles.planBadgeTextPro : styles.planBadgeTextFree]}>
               {isPro ? "PRO" : "FREE"}
             </Text>
@@ -175,7 +179,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
 
         {/* Subscription card */}
         {isPro && (
-          <View style={[styles.card, shadows.sm]}>
+          <View style={styles.card}>
             <Text style={styles.cardTitle}>Subscription</Text>
             <View style={styles.row}>
               <Text style={styles.label}>Status</Text>
@@ -195,7 +199,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
 
         {/* Usage card — free users */}
         {!isPro && dailySessionsLimit < Infinity && (
-          <View style={[styles.card, shadows.sm]}>
+          <View style={styles.card}>
             <Text style={styles.cardTitle}>Daily Usage</Text>
             <UsageBar label="Problems" used={dailySessionsUsed} limit={dailySessionsLimit as number} icon="book-outline" />
             <UsageBar label="Scans" used={dailyScansUsed} limit={dailyScansLimit as number} icon="camera-outline" />
@@ -207,17 +211,22 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
             can inspect prices, terms, and Restore Purchases without leaving
             the app. Apple Guideline 3.1.1 expects subscription metadata to be
             visible from in-app, not just iOS Settings. */}
-        <AnimatedPressable onPress={() => setPaywallVisible(true)} scaleDown={0.97}>
+        <AnimatedPressable onPress={() => showPaywall("account_upgrade_card")} scaleDown={0.97}>
           <LinearGradient
             colors={gradients.primary}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.upgradeButton}
           >
-            <Ionicons name="star" size={18} color={colors.white} />
-            <Text style={styles.upgradeButtonText}>{isPro ? "View Plans" : "Upgrade to Pro"}</Text>
+            <Ionicons name={isPro ? "star" : trialEligible ? "sparkles" : "star"} size={18} color={colors.textOnPrimary} />
+            <Text style={styles.upgradeButtonText}>
+              {isPro ? "View Plans" : trialEligible ? "Start Free Trial" : "Upgrade to Pro"}
+            </Text>
           </LinearGradient>
         </AnimatedPressable>
+        {!isPro && trialEligible && (
+          <Text style={styles.upgradeButtonSubText}>3 days free, then annual — cancel anytime</Text>
+        )}
 
         {/* Theme toggle — single icon button matching the web ThemeToggle */}
         <View style={styles.themeRow}>
@@ -297,12 +306,6 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
         )}
       </ScrollView>
 
-      <PaywallScreen
-        visible={paywallVisible}
-        onClose={() => setPaywallVisible(false)}
-        onPurchaseComplete={() => { setPaywallVisible(false); fetchEntitlements(); }}
-      />
-
       {/* About Veradic AI Modal */}
       <Modal
         visible={aboutAiVisible}
@@ -339,7 +342,14 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
         animationType="slide"
         onRequestClose={() => !deleteLoading && setDeleteModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        {/* Bottom-sheet modal + autoFocus on the password field means
+            the keyboard rises and covers the whole modal on iOS.
+            KeyboardAvoidingView with behavior="padding" pads the
+            container's bottom so the sheet floats above the keyboard. */}
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           <View style={[styles.modalContent, shadows.lg]}>
             <View style={styles.modalAccent} />
             <Text style={styles.modalTitle}>Verify Your Identity</Text>
@@ -372,7 +382,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
               disabled={deleteLoading}
             >
               {deleteLoading ? (
-                <ActivityIndicator color={colors.white} size="small" />
+                <ActivityIndicator color={colors.textOnPrimary} size="small" />
               ) : (
                 <Text style={styles.modalCtaBtnText}>Delete My Account</Text>
               )}
@@ -387,7 +397,7 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
               <Text style={styles.modalCancelText}>Cancel</Text>
             </AnimatedPressable>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -420,10 +430,12 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   avatarText: {
     fontSize: 28,
     fontWeight: "800",
-    color: colors.white,
+    color: colors.textOnPrimary,
   },
   profileName: {
-    ...typography.heading,
+    ...typography.displaySerifItalic,
+    fontSize: 28,
+    lineHeight: 32,
     color: colors.text,
     marginBottom: spacing.sm,
   },
@@ -447,7 +459,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     letterSpacing: 1,
   },
   planBadgeTextPro: {
-    color: colors.white,
+    color: colors.textOnPrimary,
   },
   planBadgeTextFree: {
     color: colors.textSecondary,
@@ -455,16 +467,16 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
 
   // Cards
   card: {
-    backgroundColor: colors.white,
-    borderRadius: radii.xl,
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderColor: colors.border,
     padding: spacing.xl,
     marginBottom: spacing.lg,
   },
   cardTitle: {
-    ...typography.bodyBold,
-    color: colors.text,
+    ...typography.eyebrow,
+    color: colors.textSecondary,
     marginBottom: spacing.lg,
   },
   row: {
@@ -551,7 +563,13 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   upgradeButtonText: {
     ...typography.button,
-    color: colors.white,
+    color: colors.textOnPrimary,
+  },
+  upgradeButtonSubText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textAlign: "center",
+    marginTop: spacing.xs,
   },
   themeRow: {
     flexDirection: "row",
@@ -729,7 +747,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   modalCtaBtnText: {
     ...typography.button,
-    color: colors.white,
+    color: colors.textOnPrimary,
   },
   modalCancelBtn: {
     paddingVertical: spacing.md,

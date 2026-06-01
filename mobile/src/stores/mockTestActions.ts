@@ -23,29 +23,56 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
       if (generateCount > 0) {
         set({ ...initialState, subject, phase: "loading" });
         try {
-          const seedText = problems.map((p, i) => `Problem ${i + 1}: ${p}`).join("\n");
-          const { problems: generated } = await generatePracticeProblems(seedText, generateCount, subject);
+          // Pass the sources as a list and let the backend round-robin so a
+          // 3-source / 10-question request produces ~3-4 similar problems for
+          // each source instead of 10 variations of one concatenated blob.
+          const { problems: generated } = await generatePracticeProblems(problems, generateCount, subject);
           if (generated.length === 0) throw new Error("Failed to generate exam questions");
+
+          // /practice/generate (count > 0) returns question text only —
+          // answer + distractors come back empty. Solve each question in
+          // parallel and AWAIT all of them before flipping to
+          // mock_test_active, so the student never sees "Loading choices"
+          // on any question (which used to happen if they nav'd ahead
+          // before the backfill resolved).
+          const solveResults = await Promise.allSettled(
+            generated.map((q) =>
+              generatePracticeProblems(q.question, 0, subject).then((res) => res.problems[0]),
+            ),
+          );
+          const fullQuestions = generated.map((q, i) => {
+            const r = solveResults[i];
+            if (r.status === "fulfilled" && r.value) {
+              // Keep the freshly-generated question text — solve_problem
+              // sometimes lightly reformats it; the student should see
+              // exactly what they were shown during generation.
+              return { ...r.value, question: q.question };
+            }
+            // Per-question failure: render with empty distractors. The MC
+            // grid degrades to "Loading choices" for that single item
+            // rather than dragging the whole test back to loading.
+            return q;
+          });
 
           set({
             mockTest: {
               sessionId: null,
-              questions: generated,
+              questions: fullQuestions,
               answers: {},
-              flags: new Array(generated.length).fill(false),
+              flags: new Array(fullQuestions.length).fill(false),
               currentIndex: 0,
               timeLimitSeconds: timeLimitMinutes != null ? timeLimitMinutes * 60 : null,
               startedAt: Date.now(),
               submittedAt: null,
               results: null,
-              workImages: new Array(generated.length).fill(null),
-              workSubmissions: new Array(generated.length).fill(null),
+              workImages: new Array(fullQuestions.length).fill(null),
+              workSubmissions: new Array(fullQuestions.length).fill(null),
               multipleChoice,
             },
             phase: "mock_test_active",
           });
 
-          const allQuestions = generated.map((q) => q.question);
+          const allQuestions = fullQuestions.map((q) => q.question);
           createMockTestSession(allQuestions.join("\n"), allQuestions)
             .then(({ id }) => {
               const current = get().mockTest;
@@ -82,25 +109,29 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
         phase: "loading",
       });
 
-      // Fire all API calls in parallel, update each question as it resolves
-      const promises = problems.map((p, i) =>
-        generatePracticeProblems(p, 0, subject).then((res) => {
-          if (res.problems[0]) {
-            const { mockTest: mt } = get();
-            if (!mt) return;
-            const updated = [...mt.questions];
-            updated[i] = res.problems[0];
-            set({ mockTest: { ...mt, questions: updated } });
-          }
-        }),
+      // Solve every question in parallel and AWAIT all of them before
+      // flipping to mock_test_active. Previously we only awaited the
+      // first solve, which meant nav'ing ahead before the rest finished
+      // showed "Loading choices" on later questions.
+      const solveResults = await Promise.allSettled(
+        problems.map((p) =>
+          generatePracticeProblems(p, 0, subject).then((res) => res.problems[0]),
+        ),
       );
-
-      // Wait for the first question before showing the exam
-      try { await promises[0]; } catch { /* first question failed, continue */ }
-      set({ phase: "mock_test_active" });
-
-      // Remaining questions continue resolving in background
-      Promise.allSettled(promises.slice(1)).catch(() => {});
+      const mt = get().mockTest;
+      if (mt) {
+        const updated = mt.questions.map((q, i) => {
+          const r = solveResults[i];
+          if (r.status === "fulfilled" && r.value) {
+            // Preserve the literal source problem text as the question.
+            return { ...r.value, question: q.question };
+          }
+          return q;
+        });
+        set({ mockTest: { ...mt, questions: updated }, phase: "mock_test_active" });
+      } else {
+        set({ phase: "mock_test_active" });
+      }
 
       // Fire-and-forget: track session for analytics
       const allQuestions = questions.map((q) => q.question);

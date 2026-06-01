@@ -7,13 +7,14 @@ import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
 import { useEntitlementStore } from "@/stores/entitlements";
 import { getManagementUrl } from "@/services/revenuecat";
-import { billing } from "@/lib/api";
+import { auth as authApi, billing, ApiError } from "@/lib/api";
 import { Badge, Button, Modal, PasswordInput } from "@/components/ui";
 
 export default function AccountPage() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const deleteAccount = useAuthStore((s) => s.deleteAccount);
+  const loadUser = useAuthStore((s) => s.loadUser);
   const router = useRouter();
 
   const isPro = useEntitlementStore((s) => s.isPro);
@@ -51,6 +52,79 @@ export default function AccountPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
+
+  // MFA state. Surface only to teachers/admins — students aren't a
+  // high-value target for credential theft and don't need the extra
+  // friction. Districts can enforce it via their own policy for staff.
+  const showMfaSection = user?.role === "teacher" || user?.role === "admin";
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [mfaError, setMfaError] = useState<string | null>(null);
+  const [showMfaDisableModal, setShowMfaDisableModal] = useState(false);
+  const [mfaDisablePassword, setMfaDisablePassword] = useState("");
+
+  // Data export — triggers a JSON download of the user's personal data.
+  // Available to all roles; primarily satisfies PA Personnel Files Act
+  // self-service access for teachers but it's the user's data either way.
+  const [exportLoading, setExportLoading] = useState(false);
+
+  async function handleDownloadData() {
+    setExportLoading(true);
+    try {
+      const data = await authApi.myData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `veradic-data-${new Date().toISOString().split("T")[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // Use the existing toast if there's a global one wired here.
+      // Falling back to a quiet console log so a transient failure
+      // doesn't crash the page — user can retry.
+      console.error("Failed to download data export");
+    } finally {
+      setExportLoading(false);
+    }
+  }
+
+  async function handleEnableMfa() {
+    setMfaLoading(true);
+    setMfaError(null);
+    try {
+      await authApi.mfaEnable();
+      await loadUser();
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Couldn't enable MFA. Please try again.";
+      setMfaError(msg);
+    } finally {
+      setMfaLoading(false);
+    }
+  }
+
+  async function handleConfirmDisableMfa() {
+    if (!mfaDisablePassword.trim()) {
+      setMfaError("Please enter your password to disable MFA.");
+      return;
+    }
+    setMfaLoading(true);
+    setMfaError(null);
+    try {
+      await authApi.mfaDisable(mfaDisablePassword);
+      await loadUser();
+      setShowMfaDisableModal(false);
+      setMfaDisablePassword("");
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Couldn't disable MFA. Please try again.";
+      setMfaError(msg);
+    } finally {
+      setMfaLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (!loaded) fetchEntitlements();
@@ -215,6 +289,57 @@ export default function AccountPage() {
         </motion.div>
       )}
 
+      {/* Two-factor authentication — teachers and admins only. Email-
+          based; uses the same address on file. Required by some
+          district procurement processes; opt-in everywhere else. */}
+      {showMfaSection && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12 }}
+          className="mt-8 rounded-[--radius-xl] border border-border-light bg-surface p-5"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-bold text-text-primary">Two-factor authentication</h2>
+              <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+                {user.mfa_enabled
+                  ? `Enabled. We'll email a 6-digit code to ${user.email} each time you sign in.`
+                  : "Add a second sign-in step using a code emailed to your address. Recommended for school accounts."}
+              </p>
+            </div>
+            {user.mfa_enabled ? (
+              <Badge variant="success">On</Badge>
+            ) : (
+              <Badge variant="muted">Off</Badge>
+            )}
+          </div>
+          {mfaError && !showMfaDisableModal && (
+            <p role="alert" className="mt-3 text-sm text-error">{mfaError}</p>
+          )}
+          {user.mfa_enabled ? (
+            <button
+              onClick={() => {
+                setMfaError(null);
+                setMfaDisablePassword("");
+                setShowMfaDisableModal(true);
+              }}
+              className="mt-4 w-full rounded-[--radius-pill] border border-border-light py-2.5 text-sm font-bold text-text-primary transition-colors hover:bg-primary-bg"
+            >
+              Disable two-factor
+            </button>
+          ) : (
+            <button
+              onClick={handleEnableMfa}
+              disabled={mfaLoading}
+              className="mt-4 w-full rounded-[--radius-pill] border border-border-light py-2.5 text-sm font-bold text-text-primary transition-colors hover:bg-primary-bg disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {mfaLoading ? "Enabling..." : "Enable two-factor"}
+            </button>
+          )}
+        </motion.div>
+      )}
+
       {/* Sign out */}
       <motion.div
         initial={{ opacity: 0 }}
@@ -231,13 +356,64 @@ export default function AccountPage() {
         </button>
       </motion.div>
 
-      {/* Danger zone */}
+      {/* MFA disable modal — re-verify password to prevent a hijacked
+          live session from weakening the account. */}
+      <Modal open={showMfaDisableModal} onClose={() => { setShowMfaDisableModal(false); setMfaError(null); }}>
+        <div>
+          <h2 className="text-lg font-bold text-text-primary">Disable two-factor?</h2>
+          <p className="mt-3 text-sm leading-relaxed text-text-secondary">
+            Enter your password to confirm. Your account will no longer require an email code to sign in.
+          </p>
+          <div className="mt-4">
+            <PasswordInput
+              label="Password"
+              placeholder="Your password"
+              value={mfaDisablePassword}
+              onChange={(e) => setMfaDisablePassword(e.target.value)}
+              autoComplete="current-password"
+              autoFocus
+            />
+          </div>
+          {mfaError && (
+            <p role="alert" className="mt-3 text-sm text-error">{mfaError}</p>
+          )}
+          <div className="mt-6 flex gap-3">
+            <button
+              type="button"
+              onClick={() => { setShowMfaDisableModal(false); setMfaError(null); }}
+              disabled={mfaLoading}
+              className="flex-1 rounded-[--radius-sm] border border-border px-4 py-2.5 text-sm font-semibold text-text-secondary transition-colors hover:border-text-primary hover:text-text-primary disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <Button
+              onClick={handleConfirmDisableMfa}
+              loading={mfaLoading}
+              variant="danger"
+              className="flex-1"
+            >
+              Disable
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Data and account zone — bottom-of-page actions kept quiet
+          and text-only so they don't compete with the primary cards
+          above. */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2 }}
-        className="mt-4 flex justify-center pb-8"
+        className="mt-4 flex flex-col items-center gap-3 pb-8"
       >
+        <button
+          onClick={handleDownloadData}
+          disabled={exportLoading}
+          className="text-xs text-text-muted transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {exportLoading ? "Preparing your data..." : "Download my data"}
+        </button>
         <button
           onClick={() => setShowConfirm(true)}
           className="text-xs text-text-muted transition-colors hover:text-error"

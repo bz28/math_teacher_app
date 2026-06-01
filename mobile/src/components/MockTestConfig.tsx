@@ -13,9 +13,16 @@ interface MockTestConfigProps {
   onTimeLimitChange: (minutes: number) => void;
   multipleChoice: boolean;
   onMultipleChoiceChange: (mc: boolean) => void;
+  /** How many questions to generate in `generate_similar` mode. Only
+   *  shown/used when examType === "generate_similar". */
+  questionCount: number;
+  onQuestionCountChange: (count: number) => void;
   /** Subject theme color used for active pill background and stepper accents */
   themeColor?: string;
 }
+
+const MIN_QUESTIONS = 1;
+const MAX_QUESTIONS = 20;
 
 function PillToggle<T extends string>({
   options,
@@ -60,6 +67,8 @@ export function MockTestConfig({
   onTimeLimitChange,
   multipleChoice,
   onMultipleChoiceChange,
+  questionCount,
+  onQuestionCountChange,
   themeColor,
 }: MockTestConfigProps) {
   const colors = useColors();
@@ -80,6 +89,37 @@ export function MockTestConfig({
           themeColor={resolvedThemeColor}
         />
       </View>
+
+      {/* How many to generate — only relevant in "Generate" mode. The backend
+          round-robins across the user's source problems so a 3-source / 10-
+          question request produces ~3-4 similar problems for each source. */}
+      {examType === "generate_similar" && (
+        <>
+          <View style={styles.divider} />
+          <View style={styles.row}>
+            <Text style={styles.label}>How many</Text>
+            <View style={styles.stepper}>
+              <AnimatedPressable
+                style={[styles.stepperBtn, questionCount <= MIN_QUESTIONS && styles.stepperBtnDisabled]}
+                onPress={() => onQuestionCountChange(Math.max(MIN_QUESTIONS, questionCount - 1))}
+                scaleDown={0.9}
+                disabled={questionCount <= MIN_QUESTIONS}
+              >
+                <Ionicons name="remove" size={14} color={questionCount <= MIN_QUESTIONS ? colors.textMuted : resolvedThemeColor} />
+              </AnimatedPressable>
+              <Text style={[styles.stepperValue, { color: resolvedThemeColor }]}>{questionCount}</Text>
+              <AnimatedPressable
+                style={[styles.stepperBtn, questionCount >= MAX_QUESTIONS && styles.stepperBtnDisabled]}
+                onPress={() => onQuestionCountChange(Math.min(MAX_QUESTIONS, questionCount + 1))}
+                scaleDown={0.9}
+                disabled={questionCount >= MAX_QUESTIONS}
+              >
+                <Ionicons name="add" size={14} color={questionCount >= MAX_QUESTIONS ? colors.textMuted : resolvedThemeColor} />
+              </AnimatedPressable>
+            </View>
+          </View>
+        </>
+      )}
 
       <View style={styles.divider} />
 
@@ -190,7 +230,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     color: colors.textSecondary,
   },
   pillTextActive: {
-    color: colors.white,
+    color: colors.textOnPrimary,
   },
   stepper: {
     flexDirection: "row",

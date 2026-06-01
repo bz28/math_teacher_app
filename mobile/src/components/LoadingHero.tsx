@@ -3,7 +3,7 @@ import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { getSubjectMeta } from "./SubjectPills";
-import { useColors, spacing, radii, typography, gradients, type ColorPalette } from "../theme";
+import { useColors, useGradients, spacing, radii, typography, gradients, type ColorPalette } from "../theme";
 
 interface Props {
   subject: string;
@@ -30,6 +30,7 @@ const PHRASES_TEST = [
  */
 export function LoadingHero({ subject, mode }: Props) {
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const meta = getSubjectMeta(subject);
   const phrases = mode === "test" ? PHRASES_TEST : PHRASES_LEARN;
@@ -74,7 +75,7 @@ export function LoadingHero({ subject, mode }: Props) {
         style={StyleSheet.absoluteFill}
       />
       <Animated.View style={[styles.iconWrap, { transform: [{ scale }], opacity }]}>
-        <Ionicons name={icon} size={64} color={colors.white} />
+        <Ionicons name={icon} size={64} color={colors.textOnPrimary} />
       </Animated.View>
       <Text style={styles.title}>
         {mode === "test" ? "Setting up your exam" : "Building your session"}
@@ -102,7 +103,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   title: {
     ...typography.title,
-    color: colors.white,
+    color: colors.textOnPrimary,
     marginBottom: spacing.sm,
     textAlign: "center",
   },
