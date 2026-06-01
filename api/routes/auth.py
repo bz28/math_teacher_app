@@ -3,10 +3,12 @@ import hashlib
 import html
 import logging
 import secrets
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,13 +38,24 @@ from api.core.entitlements import (
     is_school_enrolled,
     usage_cutoff,
 )
+from api.core.mfa import (
+    MAX_MFA_ATTEMPTS,
+    code_expiry,
+    create_pending_token,
+    decode_pending_token,
+    generate_code,
+    hash_code,
+    is_code_expired,
+    send_mfa_code_email,
+    verify_code,
+)
 from api.database import get_db
-from api.middleware.auth import get_current_user_full
+from api.middleware.auth import COOKIE_ACCESS, COOKIE_REFRESH, get_current_user_full
 from api.middleware.rate_limit import limiter
 from api.models.app_stat import AppStat
 from api.models.course import Course, CourseTeacher
 from api.models.llm_call import LLMCall
-from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
+from api.models.school import School
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.section_invite import SectionInvite
@@ -56,6 +69,9 @@ from api.schemas.auth import (
     EntitlementLimits,
     EntitlementsResponse,
     LoginRequest,
+    LoginVerifyMfaRequest,
+    MfaChallengeResponse,
+    MfaDisableRequest,
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
@@ -65,6 +81,51 @@ from api.schemas.auth import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    """Issue HttpOnly + Secure + SameSite=Lax cookies for both tokens.
+
+    HttpOnly means JavaScript can't read them — an XSS on the marketing
+    site can't steal a teacher session the way it can with localStorage.
+    SameSite=Lax blocks most cross-site form-submission CSRF without
+    needing an explicit token. Secure is conditional on env so dev
+    over plain HTTP still works.
+
+    Set on /auth/login (no-MFA path), /auth/login/verify-mfa,
+    /auth/register, and /auth/refresh — every endpoint that hands out
+    a fresh token pair.
+    """
+    secure = settings.app_env != "development"
+    response.set_cookie(
+        key=COOKIE_ACCESS,
+        value=access_token,
+        max_age=settings.jwt_access_token_expire_minutes * 60,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/",
+    )
+    response.set_cookie(
+        key=COOKIE_REFRESH,
+        value=refresh_token,
+        max_age=settings.jwt_refresh_token_expire_days * 24 * 60 * 60,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/",
+    )
+
+
+def _clear_auth_cookies(response: Response) -> None:
+    """Set expired cookies on the same path so the browser drops them.
+
+    Called on logout and account deletion. Pairing path="/" with the
+    same name we set them with is required — different path means
+    different cookie identity.
+    """
+    response.delete_cookie(COOKIE_ACCESS, path="/")
+    response.delete_cookie(COOKIE_REFRESH, path="/")
 
 
 @router.post("/check-email")
@@ -115,7 +176,21 @@ async def validate_section_invite(token: str, db: AsyncSession = Depends(get_db)
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("3/minute")
-async def register(request: Request, body: RegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+async def register(
+    request: Request,
+    body: RegisterRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    # COPPA gate before any DB work. Runs first so an under-13 attempting
+    # personal self-signup gets a deterministic 400 without leaking whether
+    # their email is registered. Invited / join-code paths bypass the gate
+    # because the school-consent exception under 15 U.S.C. § 6502 applies.
+    try:
+        body.enforce_coppa_self_signup_gate()
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
     existing = await db.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
@@ -162,11 +237,15 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
                 detail="Email does not match invite",
             )
         role = "student"
-        # Section invite always targets a real course; the course
-        # always has a school (institutional or individual) after the
-        # bp1000059 backfill + CHECK, so we can stamp unconditionally.
-        if section_course is not None:
+        if section_course and section_course.school_id is not None:
             school_id = section_course.school_id
+
+    # Teacher self-signup is now allowed (no invite required). A solo
+    # teacher lands here with role=teacher and no invite/section/join
+    # token — we let them through. They get school_id=NULL, which
+    # makes the entitlement layer treat them as an independent free
+    # teacher (daily generation cap applies). The teacher-via-invite
+    # branch above still sets school_id when an invite is present.
 
     # Join code (student): validate up-front so we don't create a user if
     # the code is bad. Mutually exclusive with invite flows (either invite
@@ -189,36 +268,13 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
         join_course = (await db.execute(
             select(Course).where(Course.id == join_section_obj.course_id)
         )).scalar_one_or_none()
-        # Course always has a school after the bp1000059 backfill; even
-        # an indie teacher's course inherits their synthetic individual
-        # school. Stamping the student here is what fixes the
-        # consumer-homepage bug for indie-teacher classes.
-        if join_course is not None:
+        if join_course and join_course.school_id is not None:
             school_id = join_course.school_id
         # Join codes are a student-only enrollment path. Force the role
         # to student so a malicious caller can't combine role=teacher
         # with a leaked join code to escalate into a teacher attached
         # to that school. Mirrors the section_invite override above.
         role = "student"
-
-    # Teacher self-signup with no invite/section/join token: provision a
-    # synthetic personal school so every teacher (and any student who
-    # later joins their section) has a stamped school_id. Entitlements
-    # still cap them via the `kind='individual'` signal — same business
-    # behavior as the previous `school_id IS NULL` check, just keyed off
-    # a real row instead of a missing one.
-    if role == "teacher" and school_id is None:
-        display_name = body.name.strip() or body.email.split("@")[0]
-        personal_school = School(
-            name=f"{display_name}'s classroom",
-            kind=SCHOOL_KIND_INDIVIDUAL,
-            contact_name=display_name,
-            contact_email=body.email,
-            is_active=True,
-        )
-        db.add(personal_school)
-        await db.flush()
-        school_id = personal_school.id
 
     user = User(
         email=body.email,
@@ -304,6 +360,7 @@ async def register(request: Request, body: RegisterRequest, db: AsyncSession = D
             ),
         ))
 
+    _set_auth_cookies(response, access_token, refresh_token)
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
@@ -354,12 +411,7 @@ async def claim_section_invite(
             course_id=course.id,
             student_id=user.id,
         ))
-    # The course always has a school post-bp1000059 (CHECK + backfill),
-    # so we can stamp unconditionally when the student lacks one. We
-    # still avoid overwriting an existing school link — once a student
-    # is in an institutional school we don't downgrade them to whatever
-    # the next claimed invite happens to point at.
-    if user.school_id is None:
+    if user.school_id is None and course is not None and course.school_id is not None:
         user.school_id = course.school_id
     invite.status = "accepted"
     await db.commit()
@@ -410,9 +462,22 @@ async def _load_section_invite(
     return invite, section, course, school
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login")
 @limiter.limit("5/minute")
-async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+async def login(
+    request: Request,
+    body: LoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse | MfaChallengeResponse:
+    """Verify password, optionally issue an MFA challenge.
+
+    Returns TokenResponse for accounts without MFA enabled. Returns
+    MfaChallengeResponse (and emails a 6-digit code) when the account
+    has opted in to MFA — the client must then POST to
+    /auth/login/verify-mfa with the pending_token + code to receive
+    real tokens. See api/core/mfa.py for the full flow.
+    """
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
 
@@ -433,18 +498,181 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     await reset_failed_logins(db, user)
+
+    # MFA branch — issue a code challenge instead of tokens.
+    if user.mfa_enabled:
+        code = generate_code()
+        user.mfa_code_hash = hash_code(code)
+        user.mfa_code_expires_at = code_expiry()
+        user.mfa_code_attempts = 0
+        await db.commit()
+        # Email is awaited so an outage surfaces in logs; send_email
+        # swallows exceptions so a delivery failure won't 500 the
+        # request — the user can simply log in again to trigger a
+        # fresh code.
+        await send_mfa_code_email(to=user.email, name=user.name, code=code)
+        pending_token = create_pending_token(str(user.id))
+        return MfaChallengeResponse(mfa_pending_token=pending_token)
+
     access_token = create_access_token(str(user.id), user.role)
     refresh_token = await create_refresh_token(db, user.id)
+    _set_auth_cookies(response, access_token, refresh_token)
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
+@router.post("/login/verify-mfa", response_model=TokenResponse)
+@limiter.limit("10/minute")
+async def login_verify_mfa(
+    request: Request,
+    body: LoginVerifyMfaRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    """Complete an MFA login by submitting the emailed 6-digit code.
+
+    Pending token validation prevents random code attempts against a
+    known email without going through /auth/login first (which itself
+    requires a valid password). Wrong-code attempts are counted; the
+    challenge is invalidated server-side after MAX_MFA_ATTEMPTS so the
+    online brute-force surface against a 6-digit secret is bounded.
+    """
+    try:
+        user_id_str = decode_pending_token(body.mfa_pending_token)
+    except jwt.PyJWTError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired challenge. Please log in again.",
+        ) from e
+
+    try:
+        user_id = uuid.UUID(user_id_str)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid challenge",
+        ) from e
+
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid challenge",
+        )
+
+    if not user.mfa_enabled:
+        # User disabled MFA between login and verify. Refuse this
+        # challenge and require a fresh login (which will skip MFA).
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="MFA is not enabled. Please log in again.",
+        )
+
+    if user.mfa_code_hash is None or is_code_expired(user.mfa_code_expires_at):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Code expired. Please log in again.",
+        )
+
+    if user.mfa_code_attempts >= MAX_MFA_ATTEMPTS:
+        # Burn the challenge entirely. Attacker has to start over from
+        # /auth/login (rate-limited at 5/minute per IP).
+        user.mfa_code_hash = None
+        user.mfa_code_expires_at = None
+        user.mfa_code_attempts = 0
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Too many attempts. Please log in again.",
+        )
+
+    if not verify_code(body.code, user.mfa_code_hash):
+        user.mfa_code_attempts += 1
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect code",
+        )
+
+    # Success — clear challenge and issue tokens normally.
+    user.mfa_code_hash = None
+    user.mfa_code_expires_at = None
+    user.mfa_code_attempts = 0
+    await db.commit()
+
+    access_token = create_access_token(str(user.id), user.role)
+    refresh_token = await create_refresh_token(db, user.id)
+    _set_auth_cookies(response, access_token, refresh_token)
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+
+
+@router.post("/mfa/enable", status_code=status.HTTP_204_NO_CONTENT)
+async def mfa_enable(
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Opt the current account in to email-based MFA.
+
+    No setup required — the user's email already serves as the second
+    factor channel. Future logins will issue a code instead of tokens
+    until /mfa/disable is called.
+    """
+    user.mfa_enabled = True
+    user.mfa_code_hash = None
+    user.mfa_code_expires_at = None
+    user.mfa_code_attempts = 0
+    await db.commit()
+
+
+@router.post("/mfa/disable", status_code=status.HTTP_204_NO_CONTENT)
+async def mfa_disable(
+    body: MfaDisableRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Disable MFA after re-verifying the user's password.
+
+    Password re-entry blocks a session-hijack attacker (who has an
+    access token but not the password) from weakening the account.
+    """
+    if not verify_password(body.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect password",
+        )
+    user.mfa_enabled = False
+    user.mfa_code_hash = None
+    user.mfa_code_expires_at = None
+    user.mfa_code_attempts = 0
+    await db.commit()
+
+
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
-    result = await rotate_refresh_token(db, body.refresh_token)
+async def refresh(
+    request: Request,
+    response: Response,
+    body: RefreshRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    # Cookie-first refresh path: browsers send the refresh cookie
+    # automatically, so the body can be empty. Mobile / API clients
+    # continue to pass {refresh_token: ...} explicitly.
+    refresh_token_value = (body.refresh_token if body else None) or request.cookies.get(COOKIE_REFRESH)
+    if not refresh_token_value:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token")
+    result = await rotate_refresh_token(db, refresh_token_value)
     if result is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
     access_token, new_refresh, _ = result
+    _set_auth_cookies(response, access_token, new_refresh)
     return TokenResponse(access_token=access_token, refresh_token=new_refresh)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(response: Response) -> None:
+    """Clear auth cookies. Stateless — nothing on the server to revoke
+    here since refresh tokens are independently expired on use; this
+    just makes the browser drop the cookies it has."""
+    _clear_auth_cookies(response)
 
 
 @router.get("/me", response_model=UserResponse)
@@ -482,7 +710,127 @@ async def me(
         is_pro=is_pro(user) or is_pro_via_school,
         has_stripe_customer=bool(user.stripe_customer_id),
         is_preview=user.is_preview,
+        mfa_enabled=user.mfa_enabled,
     )
+
+
+@router.get("/my-data")
+@limiter.limit("3/minute")
+async def my_data(
+    request: Request,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Self-service data export — the personal data Veradic holds on the
+    requesting user. Satisfies the PA Personnel Files Act (43 P.S.
+    §§ 1321-1324) for teacher accounts and is reasonable practice for
+    any user requesting their data.
+
+    Returns account fields, an activity-counts summary, and a
+    role-specific section (courses for teachers, enrollments for
+    students). For full historical content (every session step, every
+    LLM call) the response includes a contact pointer so we can
+    deliver a tailored export — keeping this endpoint bounded.
+    """
+    school_name = None
+    if user.school_id:
+        school = (
+            await db.execute(select(School.name).where(School.id == user.school_id))
+        ).scalar_one_or_none()
+        school_name = school
+
+    account: dict[str, Any] = {
+        "id": str(user.id),
+        "email": user.email,
+        "name": user.name,
+        "role": user.role,
+        "grade_level": user.grade_level,
+        "school_id": str(user.school_id) if user.school_id else None,
+        "school_name": school_name,
+        "signup_school_name": user.signup_school_name,
+        "subscription_tier": user.subscription_tier,
+        "subscription_status": user.subscription_status,
+        "subscription_provider": user.subscription_provider,
+        "subscription_expires_at": (
+            user.subscription_expires_at.isoformat()
+            if user.subscription_expires_at else None
+        ),
+        "is_active": user.is_active,
+        "mfa_enabled": user.mfa_enabled,
+        "is_preview": user.is_preview,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+    }
+
+    sessions_count = (
+        await db.execute(
+            select(func.count()).select_from(Session).where(Session.user_id == user.id)
+        )
+    ).scalar() or 0
+    submissions_count = (
+        await db.execute(
+            select(func.count()).select_from(WorkSubmission).where(WorkSubmission.user_id == user.id)
+        )
+    ).scalar() or 0
+    llm_calls_count = (
+        await db.execute(
+            select(func.count()).select_from(LLMCall).where(LLMCall.user_id == user.id)
+        )
+    ).scalar() or 0
+
+    activity_summary: dict[str, Any] = {
+        "sessions": sessions_count,
+        "submissions": submissions_count,
+        "llm_calls": llm_calls_count,
+    }
+
+    role_specific: dict[str, Any] = {}
+    if user.role == "teacher":
+        # Teacher-authored courses. Course-level only (no student PII).
+        courses_q = await db.execute(
+            select(Course)
+            .join(CourseTeacher, CourseTeacher.course_id == Course.id)
+            .where(CourseTeacher.teacher_id == user.id)
+        )
+        role_specific["courses"] = [
+            {
+                "id": str(c.id),
+                "name": c.name,
+                "subject": c.subject,
+                "grade_level": c.grade_level,
+                "school_id": str(c.school_id) if c.school_id else None,
+            }
+            for c in courses_q.scalars().all()
+        ]
+
+    if user.role == "student":
+        # Student's own enrollments. Course/section IDs only — names
+        # are looked up by the frontend if needed.
+        enrollments_q = await db.execute(
+            select(SectionEnrollment).where(SectionEnrollment.student_id == user.id)
+        )
+        role_specific["enrollments"] = [
+            {
+                "section_id": str(e.section_id),
+                "course_id": str(e.course_id),
+                "enrolled_at": e.enrolled_at.isoformat() if e.enrolled_at else None,
+            }
+            for e in enrollments_q.scalars().all()
+        ]
+
+    return {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "note": (
+            "This export contains the personal data Veradic holds about you, "
+            "summarized for portability. For detailed records (individual "
+            "session content, full LLM call history, or specific records not "
+            "shown here) contact support@veradicai.com and we will deliver a "
+            "tailored export within a reasonable timeframe."
+        ),
+        "account": account,
+        "activity_summary": activity_summary,
+        "role_specific": role_specific,
+    }
 
 
 @router.delete("/account", status_code=status.HTTP_204_NO_CONTENT)

@@ -35,15 +35,28 @@ function sameOriginRedirect(raw: string | null): string | null {
 function LoginPageContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
   const [showForgot, setShowForgot] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
-  const { login, loading, error, clearError } = useAuthStore();
+  const { login, verifyMfa, cancelMfa, pendingMfa, loading, error, clearError } = useAuthStore();
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect");
   const toast = useToast();
+
+  function redirectAfterLogin() {
+    const user = useAuthStore.getState().user;
+    const dest =
+      sameOriginRedirect(redirect) ??
+      (user?.role === "teacher"
+        ? "/school/teacher"
+        : user?.role === "student" && user.school_id
+          ? "/school/student"
+          : "/home");
+    router.replace(dest);
+  }
 
   async function handleForgotPassword(e: FormEvent) {
     e.preventDefault();
@@ -66,20 +79,41 @@ function LoginPageContent() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     try {
-      await login(email, password);
-      const user = useAuthStore.getState().user;
-      const dest =
-        sameOriginRedirect(redirect) ??
-        (user?.role === "teacher"
-          ? "/school/teacher"
-          : user?.role === "student" && user.school_id
-            ? "/school/student"
-            : "/home");
-      router.replace(dest);
+      const result = await login(email, password);
+      if (result.mfa_required) {
+        // pendingMfa is now set in the store; the form below switches
+        // to the code-entry view. Don't redirect — login is incomplete
+        // until verifyMfa succeeds.
+        setMfaCode("");
+        return;
+      }
+      redirectAfterLogin();
     } catch {
       const msg = useAuthStore.getState().error;
       if (msg) toast.error(msg);
     }
+  }
+
+  async function handleVerifyMfa(e: FormEvent) {
+    e.preventDefault();
+    try {
+      await verifyMfa(mfaCode);
+      redirectAfterLogin();
+    } catch {
+      const msg = useAuthStore.getState().error;
+      if (msg) toast.error(msg);
+      // If pendingMfa got cleared by the store (fatal verify error
+      // like expired or too-many-attempts), the next render will fall
+      // back to the password form automatically. Reset local code
+      // state either way so a stale value doesn't carry over.
+      setMfaCode("");
+    }
+  }
+
+  function handleCancelMfa() {
+    cancelMfa();
+    setMfaCode("");
+    setPassword("");
   }
 
   return (
@@ -115,70 +149,122 @@ function LoginPageContent() {
         transition={{ duration: 0.18, ease: "easeOut" }}
         className="relative w-full max-w-sm rounded-[--radius-md] border border-border bg-surface p-8"
       >
-        <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
-          Welcome back.
-        </h1>
-        <p className="mt-2 font-serif italic text-[15px] text-text-secondary">
-          Sign in to continue.
-        </p>
+        {pendingMfa ? (
+          <>
+            <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
+              Check your email.
+            </h1>
+            <p className="mt-2 text-sm text-text-secondary">
+              We sent a 6-digit code to{" "}
+              <strong className="text-text-primary">{pendingMfa.email}</strong>.
+              Enter it below to finish signing in. The code expires in 10 minutes.
+            </p>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <Input
-            label="Email"
-            type="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              if (error) clearError();
-            }}
-            required
-            autoComplete="email"
-          />
+            <form onSubmit={handleVerifyMfa} className="mt-6 space-y-4">
+              <Input
+                label="Sign-in code"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                placeholder="123456"
+                value={mfaCode}
+                onChange={(e) => {
+                  // Strip non-digits so paste of "123 456" still works.
+                  setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                  if (error) clearError();
+                }}
+                required
+                autoComplete="one-time-code"
+                autoFocus
+              />
 
-          <div>
-            <PasswordInput
-              label="Password"
-              placeholder="Your password"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (error) clearError();
-              }}
-              required
-              autoComplete="current-password"
-            />
-            <div className="mt-1.5 text-right">
+              <Button
+                type="submit"
+                loading={loading}
+                disabled={mfaCode.length !== 6}
+                className="w-full"
+              >
+                Verify and sign in
+              </Button>
+
               <button
                 type="button"
-                className="text-xs font-medium text-text-muted transition-colors hover:text-primary"
-                onClick={() => setShowForgot(true)}
+                onClick={handleCancelMfa}
+                className="block w-full text-center text-xs font-medium text-text-muted transition-colors hover:text-primary"
               >
-                Forgot password?
+                ← Use a different account
               </button>
+            </form>
+          </>
+        ) : (
+          <>
+            <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
+              Welcome back.
+            </h1>
+            <p className="mt-2 font-serif italic text-[15px] text-text-secondary">
+              Sign in to continue.
+            </p>
+
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              <Input
+                label="Email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (error) clearError();
+                }}
+                required
+                autoComplete="email"
+              />
+
+              <div>
+                <PasswordInput
+                  label="Password"
+                  placeholder="Your password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) clearError();
+                  }}
+                  required
+                  autoComplete="current-password"
+                />
+                <div className="mt-1.5 text-right">
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-text-muted transition-colors hover:text-primary"
+                    onClick={() => setShowForgot(true)}
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                loading={loading}
+                className="w-full"
+              >
+                Sign In
+              </Button>
+            </form>
+
+            <div className="mt-6 border-t border-border-light pt-4 text-center">
+              <p className="text-sm text-text-secondary">
+                Don&apos;t have an account?{" "}
+                <Link
+                  href="/register"
+                  className="font-semibold text-primary hover:text-primary-dark"
+                >
+                  Get Started
+                </Link>
+              </p>
             </div>
-          </div>
-
-          <Button
-            type="submit"
-            loading={loading}
-            className="w-full"
-          >
-            Sign In
-          </Button>
-        </form>
-
-        <div className="mt-6 border-t border-border-light pt-4 text-center">
-          <p className="text-sm text-text-secondary">
-            Don&apos;t have an account?{" "}
-            <Link
-              href="/register"
-              className="font-semibold text-primary hover:text-primary-dark"
-            >
-              Get Started
-            </Link>
-          </p>
-        </div>
+          </>
+        )}
       </motion.div>
 
       {/* Forgot password overlay — warm-ink scrim, hairline card. */}

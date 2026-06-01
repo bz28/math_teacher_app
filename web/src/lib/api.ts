@@ -16,6 +16,23 @@ export interface TokenPair {
   token_type: string;
 }
 
+/** Returned from /auth/login when the account has MFA enabled. The
+ *  client must collect a 6-digit code from the user and POST to
+ *  /auth/login/verify-mfa with this pending_token to receive real
+ *  tokens. See api/core/mfa.py for the server-side contract. */
+export interface MfaChallenge {
+  mfa_required: true;
+  mfa_pending_token: string;
+}
+
+/** Discriminated union of the two /auth/login response shapes. Callers
+ *  must check `mfa_required` before treating the value as a TokenPair. */
+export type LoginResult = TokenPair | MfaChallenge;
+
+export function isMfaChallenge(r: LoginResult): r is MfaChallenge {
+  return (r as MfaChallenge).mfa_required === true;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -31,6 +48,7 @@ export interface User {
   is_pro: boolean;
   has_stripe_customer: boolean;
   is_preview: boolean;
+  mfa_enabled: boolean;
 }
 
 export interface InviteData {
@@ -332,18 +350,24 @@ async function refreshAccessToken(): Promise<RefreshResult> {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
-    const rt = getRefreshToken();
-    if (!rt) return "auth_rejected" as const;
+    // Cookie-first: the HttpOnly refresh cookie travels automatically
+    // with credentials:include, so we don't read from localStorage.
+    // If the cookie is missing or expired, the server returns 401 and
+    // we map it to auth_rejected like any other invalid-credentials
+    // result. Body is empty — backend accepts either path.
     try {
       const res = await fetch(`${BASE_URL}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: rt }),
+        body: JSON.stringify({}),
+        credentials: "include",
       });
       if (res.status === 401) return "auth_rejected" as const;
       if (!res.ok) return "transient_error" as const;
-      const data: TokenPair = await res.json();
-      saveTokens(data);
+      // Server set fresh HttpOnly cookies on the response; no need to
+      // saveTokens(). We still parse the body so any future caller
+      // that wants the token strings can find them.
+      await res.json().catch(() => ({}));
       return "success" as const;
     } catch {
       return "transient_error" as const;
@@ -366,10 +390,13 @@ async function apiFetch<T>(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
-  const token = getAccessToken();
+  // Cookie-first auth: the browser sends the HttpOnly access cookie
+  // automatically with credentials:include. We no longer attach an
+  // Authorization Bearer header here — that path remains in mobile's
+  // separate API client (mobile/src/services/api.ts) because
+  // expo-secure-store isn't cookie-based.
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(fetchOpts.headers as Record<string, string> | undefined),
   };
 
@@ -379,6 +406,7 @@ async function apiFetch<T>(
       ...fetchOpts,
       headers,
       signal: controller.signal,
+      credentials: "include",
     });
   } catch (e) {
     // `fetch` only rejects when the request never received a response
@@ -476,10 +504,44 @@ export const auth = {
   },
 
   login(email: string, password: string) {
-    return apiFetch<TokenPair>("/auth/login", {
+    return apiFetch<LoginResult>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
+  },
+
+  loginVerifyMfa(mfaPendingToken: string, code: string) {
+    return apiFetch<TokenPair>("/auth/login/verify-mfa", {
+      method: "POST",
+      body: JSON.stringify({ mfa_pending_token: mfaPendingToken, code }),
+    });
+  },
+
+  mfaEnable() {
+    return apiFetch<void>("/auth/mfa/enable", { method: "POST" });
+  },
+
+  mfaDisable(password: string) {
+    return apiFetch<void>("/auth/mfa/disable", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    });
+  },
+
+  /** Personal-data export — returns everything Veradic holds about
+   *  the requesting user (account, activity summary, role-specific
+   *  records). For teachers this satisfies the PA Personnel Files Act
+   *  data-access requirement. */
+  myData() {
+    return apiFetch<Record<string, unknown>>("/auth/my-data");
+  },
+
+  /** Server-side logout — clears HttpOnly auth cookies. The caller
+   *  should also clear local token storage via clearTokens() to
+   *  fully sign out across the dual-path (cookie + localStorage)
+   *  auth model. */
+  logout() {
+    return apiFetch<void>("/auth/logout", { method: "POST" });
   },
 
   me() {
@@ -1134,9 +1196,8 @@ export const teacher = {
   async exportGradesCSV(courseId: string, sectionId?: string): Promise<void> {
     const qs = sectionId ? `?section_id=${sectionId}` : "";
     const path = `/teacher/courses/${courseId}/grades/export.csv${qs}`;
-    const token = getAccessToken();
     const res = await fetch(`${BASE_URL}${path}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "include",
     });
     if (!res.ok) {
       throw new ApiError(res.status, await res.json().catch(() => ({})));

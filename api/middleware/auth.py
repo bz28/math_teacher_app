@@ -3,8 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +13,13 @@ from api.database import get_db
 if TYPE_CHECKING:
     from api.models.user import User
 
-security = HTTPBearer()
+# HttpOnly cookie names. Set by /auth/login, /auth/login/verify-mfa,
+# /auth/register, /auth/refresh; cleared by /auth/logout. The middleware
+# below accepts cookies OR an Authorization Bearer header — cookies are
+# preferred for browser clients (immune to XSS-driven localStorage
+# theft), the header path is kept for mobile and API consumers.
+COOKIE_ACCESS = "veradic_access"
+COOKIE_REFRESH = "veradic_refresh"
 
 
 class CurrentUser:
@@ -24,11 +29,39 @@ class CurrentUser:
         self.name = name
 
 
+def _extract_access_token(request: Request) -> str | None:
+    """Token extraction with cookie-first preference.
+
+    Cookies are preferred because they live in HttpOnly storage that
+    JS can't read, so an XSS in the marketing site can't steal a
+    teacher's session. Authorization header is the fallback for
+    mobile (expo-secure-store) and any direct API integrations.
+    """
+    cookie = request.cookies.get(COOKIE_ACCESS)
+    if cookie:
+        return cookie
+    auth = request.headers.get("authorization")
+    if auth and auth.lower().startswith("bearer "):
+        return auth[7:].strip() or None
+    return None
+
+
+def _unauthorized() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> CurrentUser:
-    payload = decode_access_token(credentials.credentials)
+    token = _extract_access_token(request)
+    if not token:
+        raise _unauthorized()
+    payload = decode_access_token(token)
     if payload is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
@@ -48,11 +81,14 @@ async def get_current_user(
 
 
 async def get_current_user_full(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """Return the full User ORM object for the current authenticated user."""
-    payload = decode_access_token(credentials.credentials)
+    token = _extract_access_token(request)
+    if not token:
+        raise _unauthorized()
+    payload = decode_access_token(token)
     if payload is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 

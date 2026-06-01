@@ -5,9 +5,25 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml .
+# First install pulls dependencies declared in pyproject — fast and cacheable.
 RUN uv pip install --system -e .
 
 COPY . .
+
+# Re-run the editable install now that the api/ source is present. The
+# previous install ran with only pyproject.toml on disk, so setuptools'
+# packages.find discovered no packages and wrote an empty MAPPING into
+# the editable finder. Without this step `import api` fails at runtime.
+RUN uv pip install --system -e .
+
+# Create and switch to non-root user. A container escape from a root
+# process inherits root on the host kernel namespace; running as an
+# unprivileged UID/GID limits the blast radius. Chown /app so the
+# runtime can still read source and write alembic state.
+RUN groupadd --system --gid 1000 app \
+ && useradd --system --uid 1000 --gid 1000 --no-create-home app \
+ && chown -R app:app /app
+USER app:app
 
 EXPOSE 8000
 

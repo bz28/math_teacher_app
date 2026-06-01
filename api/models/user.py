@@ -19,18 +19,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="student")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    # School affiliation. Production enforces `role = 'teacher' ⇒
-    # school_id IS NOT NULL` via a CHECK constraint added in
-    # bp1000059 — every teacher has a school (institutional partner,
-    # or a synthetic kind='individual' school auto-created at
-    # self-signup). The teacher-only invariant breaks the propagation
-    # chain that caused the indie-classroom bug: every course inherits
-    # a real school_id, so every student joining the section inherits
-    # one too. Students and admins stay nullable on purpose — solo
-    # consumer-app students never join a class and admins are
-    # platform-level. SET NULL on school delete keeps users alive —
-    # caller must re-link any teacher to satisfy the CHECK before the
-    # next write.
+    # School affiliation (teachers only — students connect via section enrollments)
     school_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("schools.id", ondelete="SET NULL"),
         nullable=True, index=True,
@@ -83,6 +72,20 @@ class User(Base):
     # Brute force protection
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # MFA (email-based one-time codes). See api/core/mfa.py for the flow.
+    # mfa_enabled is opt-in via /auth/mfa/enable; mfa_code_* track an
+    # in-flight challenge between /auth/login and /auth/login/verify-mfa.
+    mfa_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    mfa_code_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mfa_code_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    mfa_code_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
