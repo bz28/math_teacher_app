@@ -1,8 +1,9 @@
 """Admin endpoint: autonomous test-harness run history."""
 
+import uuid as uuid_lib
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -79,3 +80,25 @@ async def harness_runs(
             for p, runs, avg_judge, total_cost in agg
         ],
     }
+
+
+@router.get("/harness-runs/{run_id}/report")
+async def harness_run_report(
+    run_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Return one run's self-contained HTML report so the dashboard can
+    render it in-app (auth-gated; not a public file)."""
+    try:
+        rid = uuid_lib.UUID(run_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found") from e
+    row = (
+        await db.execute(select(HarnessRun).where(HarnessRun.id == rid))
+    ).scalar_one_or_none()
+    if row is None or not row.report_html:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Report not found",
+        )
+    return {"html": row.report_html}

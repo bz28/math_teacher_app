@@ -67,7 +67,10 @@ def main(argv: list[str]) -> int:
     async def _execute() -> tuple[Any, Path, bool]:
         result = await run_probe(probe, cfg)
         out_path = write_report(result, Path(args.out))
-        summary_ok = await persist_run_summary(result, str(out_path), args.summary_db)
+        report_html = out_path.read_text()
+        summary_ok = await persist_run_summary(
+            result, str(out_path), report_html, args.summary_db,
+        )
         return result, out_path, summary_ok
 
     result, out, summary_ok = asyncio.run(_execute())

@@ -39,6 +39,10 @@ class HarnessRun(Base):
     passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     report_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The self-contained HTML report (embeds screenshots) so the admin
+    # dashboard can render it in-app, regardless of which machine ran the
+    # harness. One per run, so reports don't overwrite each other.
+    report_html: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True,
