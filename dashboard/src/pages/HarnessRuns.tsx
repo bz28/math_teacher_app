@@ -12,6 +12,17 @@ function fmtCost(c: number | null): string {
 export default function HarnessRuns() {
   const [data, setData] = useState<HarnessRunsData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reportHtml, setReportHtml] = useState<string | null>(null);
+  const [loadingReport, setLoadingReport] = useState<string | null>(null);
+
+  const openReport = (id: string) => {
+    setLoadingReport(id);
+    api
+      .harnessReport(id)
+      .then((r) => setReportHtml(r.html))
+      .catch(() => setReportHtml("<p style='padding:24px'>No report stored for this run.</p>"))
+      .finally(() => setLoadingReport(null));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -70,6 +81,7 @@ export default function HarnessRuns() {
             <th style={{ padding: 8 }}>Cards</th>
             <th style={{ padding: 8 }}>Judge mean</th>
             <th style={{ padding: 8 }}>Cost</th>
+            <th style={{ padding: 8 }}>Report</th>
           </tr>
         </thead>
         <tbody>
@@ -102,17 +114,86 @@ export default function HarnessRuns() {
                 {r.judge_mean !== null ? `${r.judge_mean}/5 (${r.judge_count})` : "—"}
               </td>
               <td style={{ padding: 8 }}>{fmtCost(r.cost_usd)}</td>
+              <td style={{ padding: 8 }}>
+                <button
+                  onClick={() => openReport(r.id)}
+                  disabled={loadingReport === r.id}
+                  style={{
+                    fontSize: 12,
+                    padding: "2px 10px",
+                    borderRadius: 6,
+                    border: "1px solid #c9c2ad",
+                    background: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  {loadingReport === r.id ? "…" : "View"}
+                </button>
+              </td>
             </tr>
           ))}
           {data.runs.length === 0 && (
             <tr>
-              <td colSpan={9} style={{ padding: 16, color: "#999" }}>
+              <td colSpan={10} style={{ padding: 16, color: "#999" }}>
                 No harness runs yet.
               </td>
             </tr>
           )}
         </tbody>
       </table>
+
+      {reportHtml !== null && (
+        <div
+          onClick={() => setReportHtml(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50,
+            padding: 24,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              borderRadius: 10,
+              width: "min(1100px, 95vw)",
+              height: "90vh",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "8px 14px",
+                borderBottom: "1px solid #eee",
+              }}
+            >
+              <b style={{ fontSize: 13 }}>Harness report</b>
+              <button
+                onClick={() => setReportHtml(null)}
+                style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer" }}
+              >
+                ✕
+              </button>
+            </div>
+            <iframe
+              title="Harness report"
+              srcDoc={reportHtml}
+              sandbox="allow-same-origin"
+              style={{ flex: 1, border: "none", width: "100%" }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

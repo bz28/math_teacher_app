@@ -73,11 +73,12 @@ def _summary_fields(result: RunResult) -> dict[str, object]:
 
 
 async def persist_run_summary(
-    result: RunResult, report_path: str, summary_db_url: str,
+    result: RunResult, report_path: str, report_html: str, summary_db_url: str,
 ) -> bool:
-    """Write a one-row run summary to the MAIN app DB (which the admin
-    dashboard reads), separate from the harness test DB. Best-effort:
-    returns False on any failure rather than crashing the run."""
+    """Write a one-row run summary (including the self-contained HTML report)
+    to the MAIN app DB the admin dashboard reads, separate from the harness
+    test DB. Best-effort: returns False on any failure rather than crashing
+    the run."""
     try:
         from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -86,7 +87,11 @@ async def persist_run_summary(
         engine = create_async_engine(summary_db_url)
         try:
             async with async_sessionmaker(engine, expire_on_commit=False)() as s:
-                s.add(HarnessRun(report_path=report_path, **_summary_fields(result)))
+                s.add(HarnessRun(
+                    report_path=report_path,
+                    report_html=report_html,
+                    **_summary_fields(result),
+                ))
                 await s.commit()
         finally:
             await engine.dispose()

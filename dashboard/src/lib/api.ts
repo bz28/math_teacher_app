@@ -266,6 +266,7 @@ export const api = {
   overview: (params?: Record<string, string>) => request<OverviewData>("/admin/overview", params),
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
   harnessRuns: (params?: Record<string, string>) => request<HarnessRunsData>("/admin/harness-runs", params),
+  harnessReport: (id: string) => request<{ html: string }>(`/admin/harness-runs/${id}/report`),
   quality: (params?: Record<string, string>) => request<QualityData>("/admin/quality", params),
   users: (params?: Record<string, string>) => request<UsersData>("/admin/users", params),
   updateUserRole: (userId: string, role: string) => mutate<{ status: string }>(`/admin/users/${userId}/role`, "PATCH", { role }),
