@@ -357,7 +357,7 @@ def _cassetted(default_model: str) -> Callable[[_F], _F]:
                     "Re-run with HARNESS_LLM_MODE=record or auto to record it.",
                 )
             result = await fn(*args, **kwargs)
-            cassette.put(fn.__name__, key, result, summarize(identity))
+            await cassette.put(fn.__name__, key, result, summarize(identity))
             return result
 
         return wrapper  # type: ignore[return-value]
