@@ -19,6 +19,7 @@ const AUDIENCE_NAV: NavItem[] = [
 
 const DIAGNOSTIC_NAV: NavItem[] = [
   { to: "/llm-calls", label: "LLM calls" },
+  { to: "/harness-runs", label: "Harness runs" },
   { to: "/quality", label: "Quality" },
 ];
 

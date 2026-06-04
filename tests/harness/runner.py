@@ -51,6 +51,50 @@ class RunConfig:
     judge_sample: int = 3
 
 
+def _summary_fields(result: RunResult) -> dict[str, object]:
+    det_pass = sum(1 for it in result.items if it.passed)
+    judged = [c.judge for c in result.captures if c.judge is not None]
+    judge_mean = (
+        round(sum(j.mean for j in judged) / len(judged), 2) if judged else None
+    )
+    return {
+        "probe": result.probe_name,
+        "mode": result.mode,
+        "items_generated": len(result.items),
+        "det_pass": det_pass,
+        "det_total": len(result.items),
+        "captures": len(result.captures),
+        "judge_count": len(judged),
+        "judge_mean": judge_mean,
+        "cost_usd": result.cost_usd,
+        "passed": len(result.items) > 0 and det_pass == len(result.items),
+        "note": result.note,
+    }
+
+
+async def persist_run_summary(
+    result: RunResult, report_path: str, summary_db_url: str,
+) -> bool:
+    """Write a one-row run summary to the MAIN app DB (which the admin
+    dashboard reads), separate from the harness test DB. Best-effort:
+    returns False on any failure rather than crashing the run."""
+    try:
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        from api.models.harness_run import HarnessRun
+
+        engine = create_async_engine(summary_db_url)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as s:
+                s.add(HarnessRun(report_path=report_path, **_summary_fields(result)))
+                await s.commit()
+        finally:
+            await engine.dispose()
+        return True
+    except Exception:  # noqa: BLE001 — summary is observability, never fatal
+        return False
+
+
 async def run_probe(probe: Probe, cfg: RunConfig) -> RunResult:
     started = _utcnow()
     seed = await seed_world()

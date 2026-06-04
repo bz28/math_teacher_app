@@ -12,10 +12,14 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 _DEFAULT_API = "http://localhost:8000/v1"
 _DEFAULT_WEB = "http://localhost:3000"
 _DEFAULT_DB = "postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_harness"
+# Run summaries land in the MAIN app DB (what the admin dashboard reads),
+# separate from the harness test DB above.
+_DEFAULT_SUMMARY_DB = "postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp"
 
 
 def _parse(argv: list[str]) -> argparse.Namespace:
@@ -30,6 +34,10 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     run.add_argument("--count", type=int, default=6)
     run.add_argument("--judge-sample", type=int, default=3)
     run.add_argument("--out", default="tests/harness/_reports/report.html")
+    run.add_argument(
+        "--summary-db",
+        default=os.environ.get("HARNESS_SUMMARY_DB", _DEFAULT_SUMMARY_DB),
+    )
     return p.parse_args(argv)
 
 
@@ -48,7 +56,7 @@ def main(argv: list[str]) -> int:
     os.environ.setdefault("DATABASE_URL", args.db)
 
     from tests.harness.report import write_report
-    from tests.harness.runner import RunConfig, run_probe
+    from tests.harness.runner import RunConfig, persist_run_summary, run_probe
 
     probe = _build_probe(args.probe, args.count)
     cfg = RunConfig(
@@ -56,8 +64,13 @@ def main(argv: list[str]) -> int:
         mode=args.mode, judge_sample=args.judge_sample,
     )
 
-    result = asyncio.run(run_probe(probe, cfg))
-    out = write_report(result, Path(args.out))
+    async def _execute() -> tuple[Any, Path, bool]:
+        result = await run_probe(probe, cfg)
+        out_path = write_report(result, Path(args.out))
+        summary_ok = await persist_run_summary(result, str(out_path), args.summary_db)
+        return result, out_path, summary_ok
+
+    result, out, summary_ok = asyncio.run(_execute())
 
     det_passed = sum(1 for it in result.items if it.passed)
     print(
@@ -67,6 +80,7 @@ def main(argv: list[str]) -> int:
         f"cost={'$0 (replay)' if result.cost_usd == 0 else result.cost_usd}",
     )
     print(f"report: {out}")
+    print(f"admin summary: {'written to main DB' if summary_ok else 'SKIPPED (see --summary-db)'}")
     return 0
 
 
