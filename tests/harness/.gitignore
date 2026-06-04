@@ -1,0 +1,5 @@
+# Generated per-run reports — not source. Cassettes ARE committed (they
+# make replay-mode runs reproducible + free for CI and teammates).
+_reports/
+__pycache__/
+*.pyc

@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "fn": "call_claude_json",
+    "recorded_at": 1780573510.90384,
+    "mode": "practice_eval",
+    "model": "claude-haiku-4-5-20251001",
+    "prompt": "You are a worldclass worldclass math professor with expertise in breaking down math problems into easy to understand, co"
+  },
+  "response": {
+    "distractors": [
+      "$AB = 7$",
+      "$AB = 2.65$",
+      "$AB = 25$"
+    ]
+  }
+}

@@ -11,12 +11,16 @@ instead of raw client.messages.create(). This ensures every call gets:
 """
 
 import asyncio
+import functools
+import inspect
 import json
 import logging
+import os
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, TypeVar
 
 import anthropic
 from anthropic.types import ToolChoiceToolParam, ToolParam
@@ -281,6 +285,74 @@ def _to_tool_params(schema: ToolSchema) -> tuple[list[ToolParam], ToolChoiceTool
 # Public API
 # ---------------------------------------------------------------------------
 
+# ── Test-harness record/replay hook (off by default) ─────────────────
+#
+# The autonomous test harness (tests/harness/) needs to exercise real AI
+# generation without paying for every rerun. When HARNESS_LLM_MODE is set,
+# the three call_claude_* helpers route through a disk-backed cassette so
+# responses are recorded once and replayed for free. In production the env
+# var is unset, so _get_cassette() returns None after a single dict lookup
+# and the call proceeds untouched — zero behavioral or import coupling.
+
+_F = TypeVar("_F", bound=Callable[..., Awaitable[Any]])
+
+
+def _get_cassette() -> Any | None:
+    """Return the harness cassette when active, else None. The test
+    harness is imported lazily and ONLY when HARNESS_LLM_MODE is set, so
+    production never imports tests/."""
+    if os.environ.get("HARNESS_LLM_MODE", "off") == "off":
+        return None
+    from tests.harness.cassette import get_cassette
+
+    return get_cassette()
+
+
+def _cassetted(default_model: str) -> Callable[[_F], _F]:
+    """Decorate a call_claude_* helper with record/replay. A no-op (one
+    env check) unless the harness is active; never alters prod behavior."""
+
+    def decorator(fn: _F) -> _F:
+        sig = inspect.signature(fn)
+
+        @functools.wraps(fn)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            cassette = _get_cassette()
+            if cassette is None:
+                return await fn(*args, **kwargs)
+
+            from tests.harness.cassette import (
+                MISS,
+                CassetteMissError,
+                build_identity,
+                summarize,
+            )
+
+            bound = sig.bind(*args, **kwargs)
+            bound.apply_defaults()
+            identity = build_identity(dict(bound.arguments), default_model)
+            key = cassette.key(fn.__name__, identity)
+
+            cached = cassette.get(fn.__name__, key)
+            # record always re-records (force-refresh); replay/auto reuse.
+            if cassette.mode != "record" and cached is not MISS:
+                return cached
+            if cassette.mode == "replay":
+                raise CassetteMissError(
+                    f"no cassette for {fn.__name__} key={key} in replay mode "
+                    f"(model={identity['model']}, mode={identity.get('mode')}). "
+                    "Re-run with HARNESS_LLM_MODE=record or auto to record it.",
+                )
+            result = await fn(*args, **kwargs)
+            cassette.put(fn.__name__, key, result, summarize(identity))
+            return result
+
+        return wrapper  # type: ignore[return-value]
+
+    return decorator
+
+
+@_cassetted(default_model=MODEL_CLASSIFY)
 async def call_claude_json(
     system_prompt: str,
     user_message: str,
@@ -603,6 +675,7 @@ async def call_claude_conversation(
         raise RuntimeError(f"Claude conversation error: {e}") from e
 
 
+@_cassetted(default_model=MODEL_REASON)
 async def call_claude_vision(
     user_content: list[Any],
     mode: str,
