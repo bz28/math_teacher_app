@@ -3,7 +3,7 @@
 import { Suspense, lazy, useMemo } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
-import DOMPurify from "dompurify";
+import { sanitizeSvg } from "@/lib/sanitize-svg";
 
 const ChemDiagram = lazy(() => import("./chem-diagram").then((m) => ({ default: m.ChemDiagram })));
 const MathGraph = lazy(() => import("./math-graph").then((m) => ({ default: m.MathGraph })));
@@ -155,13 +155,6 @@ function renderKatex(latex: string, displayMode: boolean): string {
   }
 }
 
-function sanitizeSvg(svg: string): string {
-  return DOMPurify.sanitize(svg, {
-    USE_PROFILES: { svg: true, svgFilters: true },
-    ADD_TAGS: ["svg", "path", "circle", "rect", "line", "polyline", "polygon", "text", "g", "defs", "marker", "tspan"],
-    ADD_ATTR: ["viewBox", "d", "cx", "cy", "r", "x", "y", "x1", "y1", "x2", "y2", "width", "height", "fill", "stroke", "stroke-width", "font-size", "text-anchor", "transform", "points", "marker-end", "marker-start"],
-  });
-}
 
 interface MathTextProps {
   text: string;

@@ -1,7 +1,8 @@
 "use client";
 
-import DOMPurify from "dompurify";
 import { useMemo } from "react";
+
+import { sanitizeSvg } from "@/lib/sanitize-svg";
 
 // Inline SVG figure renderer for question-bank items that have a
 // `figure_svg`. The server (api/core/geometry) produces the SVG at
@@ -23,13 +24,7 @@ interface FigureDisplayProps {
 }
 
 export function FigureDisplay({ svg, className }: FigureDisplayProps) {
-  const cleaned = useMemo(() => {
-    if (!svg) return null;
-    // USE_PROFILES.svg is the right profile for inline SVG —
-    // permits geometry/text elements, blocks scripting + foreign
-    // content.
-    return DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true } });
-  }, [svg]);
+  const cleaned = useMemo(() => (svg ? sanitizeSvg(svg) : null), [svg]);
 
   if (!cleaned) return null;
 
