@@ -52,13 +52,15 @@ class CheckResult:
 
 @dataclass
 class CardCapture:
-    """A screenshot of one rendered question card + its page context. The
-    judge scores it self-contained (the card shows figure AND text), so we
-    don't need to pair it back to a specific GeneratedItem."""
+    """A screenshot of one rendered card + its page context. `item_index` +
+    `kind` let the report group a question and its solution together (and give
+    the judge a stable cassette key independent of pixel jitter)."""
 
-    label: str  # human label for the report (e.g. "pending #2")
+    label: str  # human label for the report (e.g. "Question 2")
     role: str  # "teacher" | "student"
     png: bytes | None
+    item_index: int = 0  # which generated question this belongs to
+    kind: str = "question"  # "question" | "solution"
     console_errors: list[str] = field(default_factory=list)
     overflow: bool = False
     problem_text: str = ""  # text shown on the card, for the judge prompt

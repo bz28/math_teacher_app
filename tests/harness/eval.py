@@ -81,6 +81,9 @@ async def judge_card(capture: CardCapture, rubric: JudgeRubric) -> JudgeScore | 
         tool_schema=_build_judge_schema(rubric.dimensions),
         model=MODEL_HAIKU,
         max_tokens=512,
+        # Pin the cassette key to the card's identity, not the screenshot
+        # bytes (which jitter across runs), so replay is reproducible.
+        call_metadata={"harness_cassette_key": f"judge:{capture.item_index}:{capture.kind}"},
     )
     scores: dict[str, int] = {}
     for dim in rubric.dimensions:
