@@ -330,8 +330,21 @@ def _cassetted(default_model: str) -> Callable[[_F], _F]:
 
             bound = sig.bind(*args, **kwargs)
             bound.apply_defaults()
-            identity = build_identity(dict(bound.arguments), default_model)
-            key = cassette.key(fn.__name__, identity)
+            args_dict = dict(bound.arguments)
+            # A caller can pin a STABLE cassette key via
+            # call_metadata["harness_cassette_key"] — used by the vision judge,
+            # whose input image (a live-page screenshot) isn't byte-identical
+            # across runs, so hashing it would miss on replay. Keying on the
+            # card's identity instead makes replay reproducible.
+            cm = args_dict.get("call_metadata")
+            override = (
+                cm.get("harness_cassette_key") if isinstance(cm, dict) else None
+            )
+            identity = build_identity(args_dict, default_model)
+            if override is not None:
+                key = cassette.key(fn.__name__, {"k": str(override)})
+            else:
+                key = cassette.key(fn.__name__, identity)
 
             cached = cassette.get(fn.__name__, key)
             # record always re-records (force-refresh); replay/auto reuse.

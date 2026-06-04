@@ -53,9 +53,36 @@ class GeometryProbe(Probe):
     def __init__(self, count: int = 6) -> None:
         self.count = count
 
+    # ── capability surface (for the autonomous explorer) ─────────────
+
+    def capability_spec(self) -> str:
+        return (
+            "Geometry question generation that attaches a renderable diagram. "
+            "The renderer supports exactly these figures:\n"
+            "- TRIANGLES: defined by SSS (three sides), SAS (two sides + "
+            "included angle), or ASA/AAS (two angles + one side); optional "
+            "right-angle mark; optional side labels and angle labels; optional "
+            "inscribed circle (with tangent points) or circumscribed circle.\n"
+            "- CIRCLES: a radius, named points on the circumference at given "
+            "angles, chords between points, a labeled radius/diameter, central "
+            "angles.\n"
+            "- POLYGONS: regular (n=4..12, e.g. square/pentagon/hexagon/octagon) "
+            "or irregular (explicit vertices).\n"
+            "Measurements can be any positive magnitude (sub-unit fractions up "
+            "to hundreds). Solutions are decomposed into steps that may each "
+            "carry their own small diagram.\n"
+            "Known sensitive areas worth probing: very large or very small "
+            "measurements (text/stroke scaling), near-degenerate/sliver "
+            "triangles (label overlap), long labels (clipping), "
+            "over-determined or inconsistent specs (sides that contradict "
+            "angles, false right-angle marks), and diameter/chord labels."
+        )
+
     # ── generation ───────────────────────────────────────────────────
 
-    async def generate(self, ctx: HarnessContext) -> list[GeneratedItem]:
+    async def generate(
+        self, ctx: HarnessContext, constraint: str | None = None,
+    ) -> list[GeneratedItem]:
         headers = {"Authorization": f"Bearer {ctx.teacher_token}"}
         base = f"{ctx.api_base}/teacher/courses/{ctx.course_id}/question-bank"
         async with httpx.AsyncClient(timeout=120.0) as client:
@@ -66,7 +93,7 @@ class GeometryProbe(Probe):
                     "count": self.count,
                     "assignment_id": ctx.assignment_id,
                     "unit_id": ctx.unit_id,
-                    "constraint": _GEOMETRY_CONSTRAINT,
+                    "constraint": constraint or _GEOMETRY_CONSTRAINT,
                 },
             )
             resp.raise_for_status()
@@ -238,9 +265,11 @@ class GeometryProbe(Probe):
                 overflow = await browser.svg_overflows(page, self._FIGURE)
                 captures.append(
                     CardCapture(
-                        label=f"review #{i + 1}",
+                        label=f"Question {i + 1}",
                         role="teacher",
                         png=png,
+                        item_index=i,
+                        kind="question",
                         console_errors=errors[before:],
                         overflow=overflow,
                         problem_text=await self._review_text(page),
@@ -310,9 +339,11 @@ class GeometryProbe(Probe):
         after = await page.locator(self._FIGURE).count()
         step_figs = max(0, after - before)
         return CardCapture(
-            label=f"review #{n} · solution ({step_figs} step figs)",
+            label=f"Solution ({step_figs} step figures)",
             role="teacher",
             png=png,
+            item_index=n - 1,
+            kind="solution",
             problem_text=(
                 "This is the worked SOLUTION view: numbered steps, each with "
                 "its own small diagram. Judge whether the step diagrams render "

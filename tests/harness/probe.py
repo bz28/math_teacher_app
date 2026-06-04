@@ -33,10 +33,21 @@ class Probe(ABC):
     name: str
 
     @abstractmethod
-    async def generate(self, ctx: HarnessContext) -> list[GeneratedItem]:
+    def capability_spec(self) -> str:
+        """A prose description of the feature's full surface — the shapes,
+        scales, options, and edge cases the generator can be steered toward.
+        The autonomous explorer reads this to invent diverse + adversarial
+        test scenarios, so a new probe needs only describe its surface, not
+        hand-author a scenario matrix."""
+
+    @abstractmethod
+    async def generate(
+        self, ctx: HarnessContext, constraint: str | None = None,
+    ) -> list[GeneratedItem]:
         """Drive the real generation path (HTTP against ctx.api_base) and
-        return the produced items once they're ready to view. Implementations
-        own their own polling for fire-and-forget generation."""
+        return the produced items once they're ready to view. `constraint`
+        overrides the probe's default steer (the explorer passes a per-scenario
+        constraint). Implementations own their own polling."""
 
     @abstractmethod
     def deterministic_checks(self, item: GeneratedItem) -> list[CheckResult]:
