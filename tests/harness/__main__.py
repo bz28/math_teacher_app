@@ -197,12 +197,31 @@ def _run_explore(args: argparse.Namespace) -> int:
     return 0
 
 
+_PROTECTED_DBS = {"mathapp"}  # the main app DB — never seed/generate into it
+
+
+def _safe_db(url: str) -> str:
+    """The harness SEEDS fake users and GENERATES content, so it must target a
+    dedicated DB — never the main app DB (run summaries go to --summary-db
+    separately). Refuse the main DB outright."""
+    name = url.rstrip("/").rsplit("/", 1)[-1].split("?")[0]
+    if name in _PROTECTED_DBS:
+        raise SystemExit(
+            f"refusing to run the harness against DB {name!r}: it seeds + "
+            "generates data and must use a separate DB (e.g. mathapp_harness). "
+            "Pass --db or set HARNESS_DATABASE_URL.",
+        )
+    return url
+
+
 def main(argv: list[str]) -> int:
     args = _parse(argv)
 
     # Must be set before importing api/runner: cassette mode + DB target.
+    # Force (not setdefault) so an ambient DATABASE_URL — e.g. one pointing at
+    # the main DB — can't leak in and get seeded into.
     os.environ["HARNESS_LLM_MODE"] = args.mode
-    os.environ.setdefault("DATABASE_URL", args.db)
+    os.environ["DATABASE_URL"] = _safe_db(args.db)
 
     if args.cmd == "explore":
         return _run_explore(args)
