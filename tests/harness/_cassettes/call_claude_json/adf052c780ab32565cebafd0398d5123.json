@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "fn": "call_claude_json",
+    "recorded_at": 1780573511.557358,
+    "mode": "practice_eval",
+    "model": "claude-haiku-4-5-20251001",
+    "prompt": "You are a worldclass worldclass math professor with expertise in breaking down math problems into easy to understand, co"
+  },
+  "response": {
+    "distractors": [
+      "$90$",
+      "$108\u00b0$",
+      "$4$ equilateral triangles with side length $7.5$ units"
+    ]
+  }
+}

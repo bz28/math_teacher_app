@@ -1,0 +1,101 @@
+{
+  "meta": {
+    "fn": "call_claude_json",
+    "recorded_at": 1780573492.371501,
+    "mode": "generate_questions",
+    "model": "claude-sonnet-4-6",
+    "prompt": "You are a worldclass math professor with expertise in breaking down math problems into easy to understand, coherent step"
+  },
+  "response": {
+    "questions": [
+      {
+        "title": "Right triangle \u2014 find the hypotenuse",
+        "text": "In right triangle $ABC$, the right angle is at $C$. The two legs measure $AC = 3$ and $BC = 4$. Using the Pythagorean Theorem, find the length of the hypotenuse $AB$.",
+        "difficulty": "easy",
+        "figure_spec": {
+          "type": "geometry",
+          "shape": "triangle",
+          "vertices": [
+            "A",
+            "B",
+            "C"
+          ],
+          "right_angle_at": [
+            "C"
+          ],
+          "side_lengths": {
+            "AC": 3,
+            "BC": 4,
+            "AB": 5
+          },
+          "side_labels": {
+            "AC": "3",
+            "BC": "4",
+            "AB": "c"
+          }
+        }
+      },
+      {
+        "title": "Triangle trig \u2014 find a missing side",
+        "text": "In triangle $PQR$, side $PQ = 30$, side $QR = 40$, and the angle at $Q$ is $90\u00b0$. Find the length of side $PR$. Then, using your answer, determine $\\sin(\\angle QPR)$ as a simplified fraction.",
+        "difficulty": "medium",
+        "figure_spec": {
+          "type": "geometry",
+          "shape": "triangle",
+          "vertices": [
+            "P",
+            "Q",
+            "R"
+          ],
+          "right_angle_at": [
+            "Q"
+          ],
+          "side_lengths": {
+            "PQ": 30,
+            "QR": 40,
+            "PR": 50
+          },
+          "side_labels": {
+            "PQ": "30",
+            "QR": "40",
+            "PR": "PR"
+          }
+        }
+      },
+      {
+        "title": "Circle \u2014 arc length from central angle",
+        "text": "Circle $O$ has a radius of $12$ cm. Chord $\\overline{AB}$ connects two points on the circle, and the central angle $\\angle AOB = 60\u00b0$. \n\n(a) Find the length of chord $\\overline{AB}$. \n\n(b) Find the length of the minor arc $\\widehat{AB}$. Leave your answer in terms of $\\pi$.",
+        "difficulty": "medium",
+        "figure_spec": {
+          "type": "geometry",
+          "shape": "circle",
+          "radius": 12,
+          "show_center": true,
+          "center_label": "O",
+          "radius_label": "12",
+          "points": {
+            "A": 90,
+            "B": 30
+          },
+          "chords": [
+            "AB"
+          ]
+        }
+      },
+      {
+        "title": "Regular hexagon \u2014 perimeter and interior angles",
+        "text": "A regular hexagon $ABCDEF$ has a side length of $15$ units. \n\n(a) Find the perimeter of the hexagon. \n\n(b) Using the interior angle formula $\\displaystyle\\frac{(n-2)\\cdot 180\u00b0}{n}$, find the measure of each interior angle. \n\n(c) The hexagon is divided into equilateral triangles by drawing all three main diagonals. How many equilateral triangles are formed, and what is the side length of each?",
+        "difficulty": "hard",
+        "figure_spec": {
+          "type": "geometry",
+          "shape": "polygon",
+          "n_sides": 6,
+          "side_length": 15,
+          "side_labels": {
+            "AB": "15"
+          }
+        }
+      }
+    ]
+  }
+}
