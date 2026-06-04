@@ -661,6 +661,17 @@ def test_regular_polygon_hexagon_has_six_vertices() -> None:
     assert names == ["A", "B", "C", "D", "E", "F"]
 
 
+def test_regular_polygon_odd_n_points_up_not_down() -> None:
+    """Odd-n regular polygons (pentagon, …) should point UP — a vertex at
+    the top and a flat bottom edge (the textbook 'house'), not upside-down
+    with a vertex at the bottom."""
+    spec = PolygonFigure(n_sides=5, side_length=2.0)
+    _names, coords = solve_polygon(spec)
+    ys = sorted(c[1] for c in coords.values())
+    assert ys[-1] > 0  # a single vertex at the top
+    assert math.isclose(ys[0], ys[1], abs_tol=1e-9)  # flat bottom edge
+
+
 def test_polygon_n_sides_3_rejected() -> None:
     """n_sides=3 forces the LLM to use shape='triangle' (which has
     the actual constraint solver). The polygon path is for shapes

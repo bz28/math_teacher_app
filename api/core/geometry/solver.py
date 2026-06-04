@@ -378,17 +378,16 @@ def solve_polygon(spec: PolygonFigure) -> tuple[list[str], dict[str, Point]]:
         n = spec.n_sides
         # Circumradius from side length (chord-length formula).
         r = spec.side_length / (2 * math.sin(math.pi / n))
-        # Orientation: we want the bottom edge horizontal so the
-        # polygon reads upright (a square looks like a square, not a
-        # diamond; a hexagon sits on a flat side, not a point). With
-        # `start_angle = π/2 + π/n`, vertex 0 is at the top-left
-        # corner above the bottom edge — verified: for n=4 vertices
-        # land at (±√2/2, ±√2/2), giving the conventional axis-aligned
-        # square; for n=6 the bottom edge runs from (-1/2, -√3/2) to
-        # (1/2, -√3/2). The previous start_angle of π/2 alone put a
-        # vertex at top + bottom + left + right, producing a square
-        # rotated 45° (a diamond).
-        start_angle = math.pi / 2 + math.pi / n
+        # Orientation: read upright (flat bottom edge), not rotated.
+        # - EVEN n: offset by π/n so a flat edge sits at the bottom
+        #   (square → axis-aligned, hexagon → flat side down) rather than
+        #   a vertex at top+bottom+left+right (a 45°-rotated diamond).
+        # - ODD n: a regular odd polygon can't have flat edges top AND
+        #   bottom, so the textbook orientation is a vertex pointing UP
+        #   with a flat bottom (a pentagon "house"). That's start_angle
+        #   = π/2 (a vertex at the top); π/2 + π/n would instead put a
+        #   vertex at the BOTTOM (point-down, upside-down).
+        start_angle = math.pi / 2 + (math.pi / n if n % 2 == 0 else 0.0)
         positions: list[Point] = []
         for i in range(n):
             theta = start_angle + 2 * math.pi * i / n

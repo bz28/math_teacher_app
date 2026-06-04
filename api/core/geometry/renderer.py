@@ -77,10 +77,10 @@ def render_figure(spec_dict: dict[str, Any]) -> str:
     problem. The caller (question_bank_generation in PR 2) catches
     and decides whether to fall back to no-figure or retry.
 
-    Specs without an explicit `shape` field default to "triangle".
-    This preserves backwards compatibility with specs persisted
-    before the circle branch landed (those rows have no `shape`
-    discriminator since the schema's default was triangle).
+    A spec without an explicit `shape` defaults to "triangle" — a
+    convenience for the common case and for terse hand-written specs;
+    the generation schema always emits `shape`, so this only affects
+    callers that build specs by hand.
     """
     if "shape" not in spec_dict:
         spec_dict = {**spec_dict, "shape": "triangle"}
@@ -122,14 +122,16 @@ def _scale_to_canonical(coords: dict[str, Point]) -> dict[str, Point]:
 
 def _label_padding(texts: list[str]) -> float:
     """Extra viewBox margin so the longest label can't clip past the
-    edge. A centered label anchored _LABEL_OFFSET outside the figure
-    extends ~half its width further; estimate that from the character
-    count (SVG can't measure text server-side). Falls back to the base
-    _PADDING for short labels."""
+    edge. A label anchored _LABEL_OFFSET outside the figure can extend up
+    to its full text width further (worst case: it sits on the figure's
+    extreme edge). Estimate that width from the character count (SVG can't
+    measure text server-side) with a generous per-char width, so we
+    over-reserve rather than clip. Falls back to _PADDING for short labels."""
     longest = max((len(t) for t in texts), default=0)
-    # ~0.5 user-units per character at _LABEL_FONT_SIZE, halved (the
-    # label is centered so only half overhangs), plus the offset itself.
-    overhang = longest * _LABEL_FONT_SIZE * 0.5 * 0.5 + _LABEL_OFFSET
+    # ~0.6em/char (generous for a proportional font) at the label font
+    # size, reserved in full beyond the offset so even a long label on the
+    # extreme edge can't clip.
+    overhang = _LABEL_OFFSET + longest * _LABEL_FONT_SIZE * 0.6
     return max(_PADDING, overhang)
 
 
