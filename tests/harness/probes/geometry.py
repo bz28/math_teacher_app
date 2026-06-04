@@ -53,6 +53,18 @@ class GeometryProbe(Probe):
     def __init__(self, count: int = 6) -> None:
         self.count = count
 
+    def relevant_paths(self) -> list[str]:
+        # A change under any of these should be geometry-tested.
+        return [
+            "api/core/geometry/",
+            "api/core/question_bank_generation.py",
+            "api/core/step_decomposition.py",
+            "api/core/assignment_generation.py",
+            "web/src/components/shared/figure-display.tsx",
+            "web/src/components/shared/step-timeline.tsx",
+            "tests/harness/probes/geometry.py",
+        ]
+
     # ── capability surface (for the autonomous explorer) ─────────────
 
     def capability_spec(self) -> str:
