@@ -157,6 +157,37 @@ class GeometryProbe(Probe):
                 and 'role="img"' in svg,
             ),
         )
+
+        # Per-step solution figures (the decomposition can attach a diagram to
+        # each step). Verify every one re-renders consistently + is well-formed
+        # — the question figure passing tells us nothing about these.
+        steps = item.raw.get("solution_steps") or []
+        step_figs = [
+            s for s in steps
+            if isinstance(s, dict) and s.get("figure_spec")
+        ]
+        if step_figs:
+            renders_ok = True
+            wellformed_ok = True
+            render_detail = ""
+            for idx, s in enumerate(step_figs):
+                try:
+                    render_figure(s["figure_spec"])
+                except FigureSpecError as e:
+                    renders_ok = False
+                    render_detail = f"step fig {idx}: {e}"
+                ssvg = s.get("figure_svg") or ""
+                if not (ssvg.lstrip().startswith("<svg") and "viewBox" in ssvg):
+                    wellformed_ok = False
+            checks.append(
+                CheckResult(
+                    f"{len(step_figs)} step figure(s) re-render (consistent)",
+                    renders_ok, render_detail,
+                ),
+            )
+            checks.append(
+                CheckResult("step figure svgs well-formed", wellformed_ok),
+            )
         return checks
 
     # ── teacher-review capture ───────────────────────────────────────
@@ -215,6 +246,13 @@ class GeometryProbe(Probe):
                         problem_text=await self._review_text(page),
                     ),
                 )
+                # Expand the solution and capture the steps + their per-step
+                # figures — what the teacher sees when reviewing the worked
+                # solution, which the question card alone doesn't cover.
+                sol = await self._capture_solution(page, i + 1)
+                if sol is not None:
+                    captures.append(sol)
+
                 if i < len(items) - 1 and not await self._skip(page):
                     break
 
@@ -244,6 +282,44 @@ class GeometryProbe(Probe):
             return " ".join(str(text).split())[:600]
         except Exception:  # noqa: BLE001
             return ""
+
+    async def _capture_solution(self, page: Any, n: int) -> CardCapture | None:
+        """Reveal the worked solution and screenshot the panel (now including
+        the per-step figures). Returns None if the solution couldn't be
+        opened or shot."""
+        before = await page.locator(self._FIGURE).count()
+        opened = False
+        try:
+            await page.get_by_text("SHOW SOLUTION", exact=False).first.click(timeout=3000)
+            await page.wait_for_timeout(800)
+            opened = True
+        except Exception:  # noqa: BLE001 — fall back to the keyboard toggle
+            try:
+                await page.keyboard.press("ArrowDown")
+                await page.wait_for_timeout(800)
+                opened = True
+            except Exception:  # noqa: BLE001
+                opened = False
+        if not opened:
+            return None
+        try:
+            panel = page.locator(self._FIGURE).first.locator(self._PANEL_XPATH)
+            png: bytes = await panel.first.screenshot(timeout=6000)
+        except Exception:  # noqa: BLE001
+            return None
+        after = await page.locator(self._FIGURE).count()
+        step_figs = max(0, after - before)
+        return CardCapture(
+            label=f"review #{n} · solution ({step_figs} step figs)",
+            role="teacher",
+            png=png,
+            problem_text=(
+                "This is the worked SOLUTION view: numbered steps, each with "
+                "its own small diagram. Judge whether the step diagrams render "
+                "cleanly (legible, not clipped/overlapping) and match their "
+                "step text. " + await self._review_text(page)
+            ),
+        )
 
     async def _skip(self, page: Any) -> bool:
         """Advance to the next pending item via the Skip control."""
