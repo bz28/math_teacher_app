@@ -33,6 +33,12 @@ class Probe(ABC):
     name: str
 
     @abstractmethod
+    def relevant_paths(self) -> list[str]:
+        """Path substrings whose change means this probe should run. The
+        `for-diff` command uses these to pick which probe(s) to run for a
+        given changeset, so review/autopilot test exactly what was built."""
+
+    @abstractmethod
     def capability_spec(self) -> str:
         """A prose description of the feature's full surface — the shapes,
         scales, options, and edge cases the generator can be steered toward.
