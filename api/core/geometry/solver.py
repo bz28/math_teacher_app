@@ -19,6 +19,20 @@ from api.core.geometry.dsl import CircleFigure, FigureSpecError, PolygonFigure, 
 
 Point = tuple[float, float]
 
+# Tolerances for the post-solve consistency check. Generous on purpose:
+# the goal is to catch GROSS inconsistencies that would draw a visibly
+# wrong figure (a side off by 25%, an angle off by 20°), while tolerating
+# the rounding an LLM applies to "nice" textbook numbers (calling a 3-4-5
+# triangle's angles 37°/53° instead of 36.87°/53.13°). A discrepancy
+# under these bounds is visually imperceptible anyway. The side bound is
+# 5% rather than tighter because an over-determined spec can carry a
+# DERIVED side rounded to a nice integer — e.g. two sides of 10 with base
+# angles 55°/65° forces the third side to 10.47, which the LLM may label
+# "10" (4.7% off). That's a fine figure; only gross contradictions (a
+# side off by 2x, the law-of-sines anchor disagreeing wildly) should drop.
+_SIDE_REL_TOL = 0.05  # 5%
+_ANGLE_ABS_TOL_DEG = 1.5
+
 
 def _canonical_edge(a: str, b: str) -> str:
     """Edges are unordered — 'AB' and 'BA' resolve to the same key."""
@@ -63,24 +77,83 @@ def solve_triangle(spec: TriangleFigure) -> dict[str, Point]:
     n_angles = len(angles)
 
     # Route by what determines the triangle:
-    # - 2+ angles given → ASA/AAS handles it (any 1+ side anchors scale).
-    #   This MUST come before the SAS branch because an LLM emitting an
-    #   over-constrained 2-sides + 2-angles spec (e.g. {AB, BC, ∠A, ∠C})
-    #   is a valid AAS — _solve_sas would wrongly reject it as "angle
-    #   not at the included vertex." ASA generalizes cleanly.
-    # - 3 sides → SSS.
+    # - 3 sides → SSS. Three sides fully fix the triangle, so they take
+    #   priority: a spec that ALSO carries angle(s) is over-determined,
+    #   and the side lengths (which the figure labels) are the source of
+    #   truth. The extra angles are verified, not re-solved from.
+    # - 2+ angles + 1+ side → ASA/AAS (the side anchors scale). This
+    #   must come before the SAS branch because an over-constrained
+    #   2-sides + 2-angles spec (e.g. {AB, BC, ∠A, ∠C}) is a valid AAS —
+    #   _solve_sas would wrongly reject it as "angle not at the included
+    #   vertex." ASA generalizes cleanly.
     # - 2 sides + 1 angle → SAS (angle must be at the shared vertex).
-    if n_angles >= 2 and n_sides >= 1:
-        return _solve_asa(spec, sides, angles)
     if n_sides == 3:
-        return _solve_sss(spec, sides)  # type: ignore[arg-type]
-    if n_sides == 2 and n_angles >= 1:
-        return _solve_sas(spec, sides, angles)
+        coords = _solve_sss(spec, sides)  # type: ignore[arg-type]
+    elif n_angles >= 2 and n_sides >= 1:
+        coords = _solve_asa(spec, sides, angles)
+    elif n_sides == 2 and n_angles >= 1:
+        coords = _solve_sas(spec, sides, angles)
+    else:
+        raise FigureSpecError(
+            "underdetermined triangle: need 3 sides, or 2 sides + 1 angle, "
+            f"or 1 side + 2 angles (got {n_sides} sides, {n_angles} angles)",
+        )
 
-    raise FigureSpecError(
-        "underdetermined triangle: need 3 sides, or 2 sides + 1 angle, "
-        f"or 1 side + 2 angles (got {n_sides} sides, {n_angles} angles)",
-    )
+    # Each solver family consumes only the constraints it needs and
+    # silently ignores the rest — so an over-determined or
+    # self-inconsistent spec (e.g. sides that contradict the given
+    # angles, three angles that don't sum to 180°, or a right_angle_at
+    # that the side lengths don't actually form) would otherwise be
+    # drawn WRONG with no error. Verify the solved triangle satisfies
+    # every provided side and angle; the caller catches FigureSpecError
+    # and drops just the figure, keeping the question intact.
+    _verify_constraints(spec, coords, angles)
+    return coords
+
+
+def _angle_at_vertex(
+    coords: dict[str, Point], vertex: str, others: list[str],
+) -> float:
+    """Interior angle at `vertex` (degrees), measured between the edges
+    to the two `others` vertices."""
+    px, py = coords[vertex]
+    qx, qy = coords[others[0]]
+    rx, ry = coords[others[1]]
+    v1x, v1y = qx - px, qy - py
+    v2x, v2y = rx - px, ry - py
+    n1 = math.hypot(v1x, v1y)
+    n2 = math.hypot(v2x, v2y)
+    if n1 == 0 or n2 == 0:
+        raise FigureSpecError("degenerate triangle: coincident vertices")
+    cos_a = (v1x * v2x + v1y * v2y) / (n1 * n2)
+    cos_a = max(-1.0, min(1.0, cos_a))  # clamp fp drift before acos
+    return math.degrees(math.acos(cos_a))
+
+
+def _verify_constraints(
+    spec: TriangleFigure, coords: dict[str, Point], angles: dict[str, float],
+) -> None:
+    """Reject specs whose stated constraints disagree with the solved
+    geometry. `angles` is the folded dict (right_angle_at already merged
+    in as 90°), so this also enforces that a marked right angle is real.
+    """
+    for edge, length in spec.side_lengths.items():
+        p1 = coords[edge[0]]
+        p2 = coords[edge[1]]
+        actual = math.hypot(p1[0] - p2[0], p1[1] - p2[1])
+        if not math.isclose(actual, length, rel_tol=_SIDE_REL_TOL, abs_tol=1e-9):
+            raise FigureSpecError(
+                f"inconsistent triangle: side {edge} given as {length} but "
+                f"the other constraints force {actual:.4f}",
+            )
+    for vertex, want in angles.items():
+        others = [v for v in spec.vertices if v != vertex]
+        actual = _angle_at_vertex(coords, vertex, others)
+        if not math.isclose(actual, want, abs_tol=_ANGLE_ABS_TOL_DEG):
+            raise FigureSpecError(
+                f"inconsistent triangle: angle at {vertex} given as {want}° "
+                f"but the other constraints force {actual:.2f}°",
+            )
 
 
 def _solve_sss(

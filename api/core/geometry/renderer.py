@@ -53,6 +53,17 @@ _PADDING = 0.6
 _RIGHT_ANGLE_SIZE = 0.25
 _LABEL_OFFSET = 0.22
 
+# Every visual constant above (stroke width, font sizes, marker sizes,
+# label offsets) is an ABSOLUTE user-space length. They're tuned to look
+# right when the figure spans roughly this many units. But the solver
+# places vertices at the spec's literal magnitudes — a "3-4-5 triangle"
+# spans ~5 units while a "130-140-150 field" spans ~150 and a fractional
+# figure spans <1. Without normalization the text/stroke would be
+# invisible on large figures and dwarf small ones. So every render
+# function first rescales the solved coordinates so the figure's longest
+# dimension equals _CANONICAL_SPAN, making the constants always correct.
+_CANONICAL_SPAN = 5.0
+
 
 # FigureSpec is a discriminated union; use TypeAdapter so Pydantic
 # dispatches to the right shape variant from `spec.shape`.
@@ -95,6 +106,33 @@ def render_figure(spec_dict: dict[str, Any]) -> str:
     raise FigureSpecError(f"unknown figure shape: {type(spec).__name__}")
 
 
+def _scale_to_canonical(coords: dict[str, Point]) -> dict[str, Point]:
+    """Rescale coordinates so the figure's longest dimension equals
+    _CANONICAL_SPAN, keeping the absolute visual constants correct at
+    any input magnitude. Origin-relative scaling preserves shape and
+    relative position exactly; the viewBox re-centers afterward."""
+    xs = [p[0] for p in coords.values()]
+    ys = [p[1] for p in coords.values()]
+    span = max(max(xs) - min(xs), max(ys) - min(ys))
+    if span <= 0:
+        return coords  # single point / degenerate — nothing to scale
+    factor = _CANONICAL_SPAN / span
+    return {k: (x * factor, y * factor) for k, (x, y) in coords.items()}
+
+
+def _label_padding(texts: list[str]) -> float:
+    """Extra viewBox margin so the longest label can't clip past the
+    edge. A centered label anchored _LABEL_OFFSET outside the figure
+    extends ~half its width further; estimate that from the character
+    count (SVG can't measure text server-side). Falls back to the base
+    _PADDING for short labels."""
+    longest = max((len(t) for t in texts), default=0)
+    # ~0.5 user-units per character at _LABEL_FONT_SIZE, halved (the
+    # label is centered so only half overhangs), plus the offset itself.
+    overhang = longest * _LABEL_FONT_SIZE * 0.5 * 0.5 + _LABEL_OFFSET
+    return max(_PADDING, overhang)
+
+
 def _render_triangle(
     spec: TriangleFigure, coords: dict[str, Point],
 ) -> str:
@@ -104,6 +142,7 @@ def _render_triangle(
     angle, labels) in z-order — text on top.
     """
     a, b, c = spec.vertices
+    coords = _scale_to_canonical(coords)
     xs = [coords[v][0] for v in spec.vertices]
     ys = [coords[v][1] for v in spec.vertices]
 
@@ -121,8 +160,14 @@ def _render_triangle(
         xs.extend([cc[0] - cr, cc[0] + cr])
         ys.extend([cc[1] - cr, cc[1] + cr])
 
-    min_x, max_x = min(xs) - _PADDING, max(xs) + _PADDING
-    min_y, max_y = min(ys) - _PADDING, max(ys) + _PADDING
+    pad = _label_padding([
+        *spec.side_labels.values(),
+        *spec.angle_labels.values(),
+        *spec.vertex_labels.values(),
+        *spec.vertices,
+    ])
+    min_x, max_x = min(xs) - pad, max(xs) + pad
+    min_y, max_y = min(ys) - pad, max(ys) + pad
     width = max_x - min_x
     height = max_y - min_y
 
@@ -291,10 +336,16 @@ def _render_polygon(
     viewBox → polygon outline → vertex dots + labels → side labels →
     angle labels.
     """
+    coords = _scale_to_canonical(coords)
     xs = [coords[v][0] for v in names]
     ys = [coords[v][1] for v in names]
-    min_x, max_x = min(xs) - _PADDING, max(xs) + _PADDING
-    min_y, max_y = min(ys) - _PADDING, max(ys) + _PADDING
+    pad = _label_padding([
+        *spec.side_labels.values(),
+        *spec.angle_labels.values(),
+        *names,
+    ])
+    min_x, max_x = min(xs) - pad, max(xs) + pad
+    min_y, max_y = min(ys) - pad, max(ys) + pad
     width = max_x - min_x
     height = max_y - min_y
 
@@ -389,10 +440,24 @@ def _render_circle(
     labeled → center dot if requested → point dots + labels → label
     text on top.
     """
+    # Normalize so the circle's diameter equals _CANONICAL_SPAN, keeping
+    # the absolute visual constants legible regardless of the spec's
+    # radius (r=0.5 vs r=500 both render the same on-screen size).
+    scale = _CANONICAL_SPAN / (2 * spec.radius)
+    radius = spec.radius * scale
+    coords = {k: (x * scale, y * scale) for k, (x, y) in coords.items()}
+
     # Bounding box: extend radius units around center, plus padding.
-    bound = spec.radius
-    min_x, max_x = -bound - _PADDING, bound + _PADDING
-    min_y, max_y = -bound - _PADDING, bound + _PADDING
+    pad = _label_padding([
+        *spec.point_labels.values(),
+        *spec.chord_labels.values(),
+        *spec.points,
+        spec.center_label if spec.show_center else "",
+        spec.radius_label or "",
+    ])
+    bound = radius
+    min_x, max_x = -bound - pad, bound + pad
+    min_y, max_y = -bound - pad, bound + pad
     width = max_x - min_x
     height = max_y - min_y
 
@@ -407,7 +472,7 @@ def _render_circle(
 
     # 1. Circle outline.
     parts.append(
-        f'<circle cx="0" cy="0" r="{spec.radius:.4f}" '
+        f'<circle cx="0" cy="0" r="{radius:.4f}" '
         f'fill="none" stroke="{_STROKE}" stroke-width="{_STROKE_WIDTH}"/>',
     )
 

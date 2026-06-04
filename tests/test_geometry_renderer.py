@@ -222,6 +222,133 @@ def test_inconsistent_right_angle_and_angles_rejected() -> None:
         solve_triangle(spec)
 
 
+# ── Solver: over-determined / inconsistent constraint rejection ──────
+
+
+def test_three_sides_with_conflicting_angle_rejected() -> None:
+    """3 sides fully fix the triangle (53/90/37 for 3-4-5). An angle
+    that grossly disagrees means the spec is self-inconsistent — reject
+    rather than draw a figure whose angle label contradicts its shape."""
+    spec = TriangleFigure(
+        vertices=["A", "B", "C"],
+        side_lengths={"AB": 3.0, "BC": 4.0, "CA": 5.0},
+        angles={"A": 10.0},  # real angle at A is 53.13°
+    )
+    with pytest.raises(FigureSpecError, match="inconsistent"):
+        solve_triangle(spec)
+
+
+def test_three_angles_not_summing_to_180_rejected() -> None:
+    """50/50/50 sums to 150°, not 180° — impossible. The law-of-sines
+    path would silently 'correct' it to an equilateral; verify catches
+    that the drawn angles wouldn't match the stated 50°."""
+    spec = TriangleFigure(
+        vertices=["A", "B", "C"],
+        side_lengths={"AB": 10.0},
+        angles={"A": 50.0, "B": 50.0, "C": 50.0},
+    )
+    with pytest.raises(FigureSpecError, match="inconsistent"):
+        solve_triangle(spec)
+
+
+def test_two_sides_conflicting_with_two_angles_rejected() -> None:
+    """Over-determined: a second side that the angles don't support is
+    silently overwritten by the ASA law-of-sines solve — verify catches
+    the discarded constraint."""
+    spec = TriangleFigure(
+        vertices=["A", "B", "C"],
+        side_lengths={"AB": 10.0, "BC": 999.0},
+        angles={"A": 30.0, "C": 30.0},
+    )
+    with pytest.raises(FigureSpecError, match="inconsistent"):
+        solve_triangle(spec)
+
+
+def test_false_right_angle_on_three_sides_rejected() -> None:
+    """A right-angle marker on a vertex the side lengths don't make 90°
+    would draw a misleading square. The folded 90° fails verification."""
+    spec = TriangleFigure(
+        vertices=["A", "B", "C"],
+        side_lengths={"AB": 3.0, "BC": 4.0, "CA": 5.0},
+        right_angle_at=["A"],  # the right angle is at B, not A
+    )
+    with pytest.raises(FigureSpecError, match="inconsistent"):
+        solve_triangle(spec)
+
+
+def test_overdetermined_consistent_spec_accepted() -> None:
+    """Rounded-but-correct textbook numbers (3-4-5 with angle A≈53°)
+    are within tolerance — accepted, not dropped."""
+    spec = TriangleFigure(
+        vertices=["A", "B", "C"],
+        side_lengths={"AB": 3.0, "BC": 4.0, "CA": 5.0},
+        angles={"A": 53.0},  # true value 53.13°
+    )
+    coords = solve_triangle(spec)  # must not raise
+    assert math.isclose(
+        math.hypot(coords["A"][0] - coords["B"][0], coords["A"][1] - coords["B"][1]),
+        3.0, abs_tol=1e-9,
+    )
+
+
+def test_overdetermined_rounded_derived_side_accepted() -> None:
+    """Over-determined spec where a DERIVED side is rounded to a nice
+    integer. Two sides of 10 with base angles 55°/65° force the third
+    side to ~10.47; an LLM labeling it "10" (4.7% off) is a fine figure
+    and must NOT be dropped — the consistency check tolerates rounding
+    on derived sides, only rejecting gross contradictions."""
+    spec = TriangleFigure(
+        vertices=["A", "B", "C"],
+        side_lengths={"AB": 10.0, "CA": 10.0},
+        angles={"A": 55.0, "B": 65.0},
+    )
+    solve_triangle(spec)  # must not raise
+
+
+def test_grossly_wrong_derived_side_still_rejected() -> None:
+    """The loosened tolerance still rejects a side that's off by orders
+    of magnitude (999 where the angles force ~10)."""
+    spec = TriangleFigure(
+        vertices=["A", "B", "C"],
+        side_lengths={"AB": 10.0, "BC": 999.0},
+        angles={"A": 30.0, "C": 30.0},
+    )
+    with pytest.raises(FigureSpecError, match="inconsistent"):
+        solve_triangle(spec)
+
+
+# ── Renderer: scale normalization ────────────────────────────────────
+
+
+def _viewbox(svg: str) -> tuple[float, float, float, float]:
+    import re
+    m = re.search(r'viewBox="([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+)"', svg)
+    assert m, "svg has no viewBox"
+    return tuple(float(g) for g in m.groups())  # type: ignore[return-value]
+
+
+def test_render_scale_invariant_across_magnitudes() -> None:
+    """Same-shape triangles at wildly different magnitudes must render
+    at the same on-screen size: font/stroke are absolute, so the
+    coordinates are normalized to a canonical span. A 3-4-5 and a
+    300-400-500 triangle produce an identical viewBox."""
+    small = render_figure({
+        "vertices": ["A", "B", "C"],
+        "side_lengths": {"AB": 3.0, "BC": 4.0, "CA": 5.0},
+    })
+    large = render_figure({
+        "vertices": ["A", "B", "C"],
+        "side_lengths": {"AB": 300.0, "BC": 400.0, "CA": 500.0},
+    })
+    sw = _viewbox(small)[2]
+    lw = _viewbox(large)[2]
+    assert math.isclose(sw, lw, rel_tol=1e-6)
+    # And the canonical span is the tuned ~5 units (longest dim) plus
+    # padding on both sides — i.e. the figure is neither microscopic nor
+    # gigantic relative to the absolute font size.
+    assert 4.0 < sw < 8.0
+
+
 # ── End-to-end via render_figure ─────────────────────────────────────
 
 
