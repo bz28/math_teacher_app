@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 
 from api.core.llm_client import MODEL_HAIKU, LLMMode, call_claude_vision
 from api.core.llm_schemas import ToolSchema
+from tests.harness.cassette import CassetteMissError
 from tests.harness.types import CardCapture, JudgeRubric
 
 
@@ -75,16 +76,24 @@ async def judge_card(capture: CardCapture, rubric: JudgeRubric) -> JudgeScore | 
             ),
         },
     ]
-    result = await call_claude_vision(
-        user_content,
-        LLMMode.JUDGE,
-        tool_schema=_build_judge_schema(rubric.dimensions),
-        model=MODEL_HAIKU,
-        max_tokens=512,
-        # Pin the cassette key to the card's identity, not the screenshot
-        # bytes (which jitter across runs), so replay is reproducible.
-        call_metadata={"harness_cassette_key": f"judge:{capture.item_index}:{capture.kind}"},
-    )
+    try:
+        result = await call_claude_vision(
+            user_content,
+            LLMMode.JUDGE,
+            tool_schema=_build_judge_schema(rubric.dimensions),
+            model=MODEL_HAIKU,
+            max_tokens=512,
+            # Pin the cassette key to the card's identity, not the screenshot
+            # bytes (which jitter across runs), so replay is reproducible.
+            call_metadata={
+                "harness_cassette_key": f"judge:{capture.item_index}:{capture.kind}",
+            },
+        )
+    except CassetteMissError:
+        # Judge cassettes are a local cache (gitignored). On a fresh checkout
+        # in replay mode there's nothing to replay — the judge is advisory, so
+        # skip it rather than failing the run.
+        return None
     scores: dict[str, int] = {}
     for dim in rubric.dimensions:
         value = result.get(dim)

@@ -1,27 +1,35 @@
 """Record/replay cassettes for Claude calls — the harness's cost guardrail.
 
-The harness exercises real AI generation, but paying for every rerun would
-be wasteful and non-deterministic. So we intercept the three `call_claude_*`
+The harness exercises real AI generation, but paying for every rerun would be
+wasteful and non-deterministic. So we intercept the three `call_claude_*`
 helpers at their boundary (via a hook in `api/core/llm_client.py`) and:
 
   - **replay** (default for reruns): return the saved response. $0, no
-    network, byte-identical every time. A miss is a hard error — we never
-    silently fall back to a live call in replay mode.
-  - **record**: always call live, then save the response.
-  - **auto**: replay if a cassette exists, else call live and save it
-    (first run / newly-added inputs).
+    network, byte-identical. A miss is a hard error — never a silent live call.
+  - **record**: always call live, then save the response (force-refresh).
+  - **auto**: replay if a cassette exists, else call live and save it.
   - **off** (unset env): the hook is inert; production is unaffected.
 
-The mode comes from the `HARNESS_LLM_MODE` env var. Cassettes live on disk
-under `_cassettes/<fn>/<key>.json`, keyed by a stable hash of the call's
-*identity* inputs (model, prompts, messages/image content, tool schema,
-token budget) — excluding noise like session/user ids that don't change
-the response. Only the RESPONSE is stored (not the input), so cassettes
-stay small and reviewable even when the input carries a base64 image.
+Storage: one readable JSON file per call function, `_cassettes/<fn>.json`, a
+dict keyed by a stable hash of the call's *identity* inputs. Each entry keeps a
+short human-readable `meta` (mode/model/prompt snippet) so a PR diff is
+reviewable — not a folder of opaque hash-named files. Writes take an exclusive
+`flock` (the API server AND the harness process both record), so concurrent
+records don't clobber each other. Only the RESPONSE is stored (not the input),
+so the vision judge's cassette stays small.
+
+The vision judge's file (`call_claude_vision.json`) is treated as a LOCAL CACHE
+and gitignored — the judge is advisory (never gates pass/fail), so its scores
+don't need to be a versioned, shared artifact. The generation cassettes
+(`call_claude_json.json`) ARE committed: they're the frozen fixtures the
+deterministic regression gate replays against.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import fcntl
 import hashlib
 import json
 import os
@@ -36,8 +44,7 @@ _VALID_MODES = {"off", "replay", "record", "auto"}
 _DEFAULT_DIR = Path(__file__).parent / "_cassettes"
 
 # Call arguments that identify the logging/metadata context but never the
-# response content — excluded from the cassette key so the same prompt
-# replays regardless of who/when called it.
+# response content — excluded from the cassette key.
 _IDENTITY_EXCLUDE = {
     "session_id",
     "user_id",
@@ -48,9 +55,8 @@ _IDENTITY_EXCLUDE = {
 
 
 class CassetteMissError(RuntimeError):
-    """Raised in replay mode when no cassette exists for a call — surfaces
-    a missing recording loudly instead of silently spending on a live call.
-    """
+    """Raised in replay mode when no cassette exists for a call — surfaces a
+    missing recording loudly instead of silently spending on a live call."""
 
 
 def build_identity(bound_args: dict[str, Any], default_model: str) -> dict[str, Any]:
@@ -62,66 +68,90 @@ def build_identity(bound_args: dict[str, Any], default_model: str) -> dict[str, 
     return ident
 
 
+def summarize(identity: dict[str, Any]) -> dict[str, Any]:
+    """A compact, human-readable label stored alongside each cassette so the
+    file is reviewable without decoding the hash key."""
+    sys_p = str(identity.get("system_prompt") or "")[:80]
+    usr_p = str(identity.get("user_message") or "")[:160]
+    return {
+        "mode": identity.get("mode"),
+        "model": identity.get("model"),
+        "prompt": (f"{sys_p} || {usr_p}").strip()[:200],
+    }
+
+
 class Cassette:
-    """A disk-backed record/replay store for one harness run."""
+    """A disk-backed record/replay store: one JSON file per call function."""
 
     def __init__(self, mode: str, root: Path) -> None:
         self.mode = mode
         self.root = root
+        self._cache: dict[str, dict[str, Any]] = {}  # fn -> {key: entry}
 
     def key(self, fn_name: str, identity: dict[str, Any]) -> str:
-        """Stable content hash of a call. `default=str` canonicalizes any
-        non-JSON-native values (e.g. enum labels); `sort_keys` makes dict
-        ordering irrelevant. Truncated to 32 hex chars — ample to avoid
-        collisions within a run."""
         payload = json.dumps(
             {"fn": fn_name, **identity}, sort_keys=True, default=str,
         )
         return hashlib.sha256(payload.encode()).hexdigest()[:32]
 
-    def _path(self, fn_name: str, key: str) -> Path:
-        return self.root / fn_name / f"{key}.json"
+    def _file(self, fn_name: str) -> Path:
+        return self.root / f"{fn_name}.json"
+
+    def _load(self, fn_name: str) -> dict[str, Any]:
+        if fn_name not in self._cache:
+            path = self._file(fn_name)
+            try:
+                self._cache[fn_name] = (
+                    json.loads(path.read_text()) if path.exists() else {}
+                )
+            except (json.JSONDecodeError, OSError):
+                self._cache[fn_name] = {}
+        return self._cache[fn_name]
 
     def get(self, fn_name: str, key: str) -> Any:
         """Return the recorded response, or MISS if none on disk."""
-        path = self._path(fn_name, key)
-        if not path.exists():
-            return MISS
-        return json.loads(path.read_text())["response"]
+        entry = self._load(fn_name).get(key)
+        return entry["response"] if isinstance(entry, dict) else MISS
 
-    def put(
-        self,
-        fn_name: str,
-        key: str,
-        response: Any,
-        summary: dict[str, Any],
+    async def put(
+        self, fn_name: str, key: str, response: Any, summary: dict[str, Any],
     ) -> None:
-        """Persist a live response. Stores a small human-readable `meta`
-        block (mode/model/prompt snippet) alongside the response so a
-        reviewer can tell cassettes apart without decoding the hash."""
-        path = self._path(fn_name, key)
+        """Persist a live response under an exclusive file lock (both the API
+        server and the harness process record, so writes must not clobber)."""
+        await asyncio.to_thread(self._put_locked, fn_name, key, response, summary)
+        self._cache.pop(fn_name, None)  # force a fresh read next get
+
+    def _put_locked(
+        self, fn_name: str, key: str, response: Any, summary: dict[str, Any],
+    ) -> None:
+        path = self._file(fn_name)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(
-                {
-                    "meta": {"fn": fn_name, "recorded_at": time.time(), **summary},
+        with open(path, "a+") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                f.seek(0)
+                content = f.read()
+                data: dict[str, Any] = {}
+                if content.strip():
+                    with contextlib.suppress(json.JSONDecodeError):
+                        data = json.loads(content)
+                data[key] = {
+                    "meta": {"recorded_at": time.time(), **summary},
                     "response": response,
-                },
-                indent=2,
-                default=str,
-            ),
-        )
+                }
+                f.seek(0)
+                f.truncate()
+                f.write(json.dumps(data, indent=2, sort_keys=True, default=str))
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
 
 
 _instance: Cassette | None = None
 
 
 def get_cassette() -> Cassette | None:
-    """Return the active cassette, or None when the harness is off.
-
-    Cheap and safe to call on every LLM request: a single env read in the
-    common (production) case where the var is unset returns None.
-    """
+    """Return the active cassette, or None when the harness is off. Cheap and
+    safe on every request: a single env read returns None in production."""
     mode = os.environ.get("HARNESS_LLM_MODE", "off")
     if mode not in _VALID_MODES or mode == "off":
         return None
@@ -130,13 +160,3 @@ def get_cassette() -> Cassette | None:
     if _instance is None or _instance.mode != mode or _instance.root != root:
         _instance = Cassette(mode, root)
     return _instance
-
-
-def summarize(identity: dict[str, Any]) -> dict[str, Any]:
-    """A compact, human-readable label for a stored cassette."""
-    prompt = identity.get("system_prompt") or identity.get("user_message") or ""
-    return {
-        "mode": identity.get("mode"),
-        "model": identity.get("model"),
-        "prompt": str(prompt)[:120],
-    }

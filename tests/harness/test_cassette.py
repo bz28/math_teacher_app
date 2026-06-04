@@ -65,11 +65,11 @@ def test_build_identity_drops_noise_and_resolves_model() -> None:
     assert ident["system_prompt"] == "s"
 
 
-def test_get_put_roundtrip(cassette_dir) -> None:  # type: ignore[no-untyped-def]
+async def test_get_put_roundtrip(cassette_dir) -> None:  # type: ignore[no-untyped-def]
     c = Cassette("record", root=cassette_dir)
     key = c.key("call_claude_json", {"x": 1})
     assert c.get("call_claude_json", key) is MISS
-    c.put("call_claude_json", key, {"answer": 42}, {"mode": "test"})
+    await c.put("call_claude_json", key, {"answer": 42}, {"mode": "test"})
     assert c.get("call_claude_json", key) == {"answer": 42}
 
 

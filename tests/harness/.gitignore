@@ -1,5 +1,9 @@
-# Generated per-run reports — not source. Cassettes ARE committed (they
-# make replay-mode runs reproducible + free for CI and teammates).
+# Generated per-run reports — not source.
 _reports/
 __pycache__/
 *.pyc
+
+# Judge (vision) cassettes are an advisory LOCAL CACHE — the judge never gates
+# pass/fail, so its scores aren't a versioned artifact. Generation cassettes
+# (_cassettes/call_claude_json.json) ARE committed as regression fixtures.
+_cassettes/call_claude_vision.json
