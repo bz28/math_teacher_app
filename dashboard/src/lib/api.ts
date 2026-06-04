@@ -239,9 +239,33 @@ async function mutate<T>(path: string, method: string, body?: object): Promise<T
   );
 }
 
+export interface HarnessRun {
+  id: string;
+  probe: string;
+  mode: string;
+  items_generated: number;
+  det_pass: number;
+  det_total: number;
+  captures: number;
+  judge_count: number;
+  judge_mean: number | null;
+  cost_usd: number | null;
+  passed: boolean;
+  note: string | null;
+  report_path: string | null;
+  created_at: string;
+}
+
+export interface HarnessRunsData {
+  runs: HarnessRun[];
+  total_count: number;
+  by_probe: { probe: string; runs: number; avg_judge: number | null; total_cost: number }[];
+}
+
 export const api = {
   overview: (params?: Record<string, string>) => request<OverviewData>("/admin/overview", params),
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
+  harnessRuns: (params?: Record<string, string>) => request<HarnessRunsData>("/admin/harness-runs", params),
   quality: (params?: Record<string, string>) => request<QualityData>("/admin/quality", params),
   users: (params?: Record<string, string>) => request<UsersData>("/admin/users", params),
   updateUserRole: (userId: string, role: string) => mutate<{ status: string }>(`/admin/users/${userId}/role`, "PATCH", { role }),

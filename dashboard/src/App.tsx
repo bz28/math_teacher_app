@@ -6,6 +6,7 @@ import ServiceStatusBanner from "./components/ServiceStatusBanner";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import LLMCalls from "./pages/LLMCalls";
+import HarnessRuns from "./pages/HarnessRuns";
 import Quality from "./pages/Quality";
 import Users from "./pages/Users";
 import LeadDetail from "./pages/LeadDetail";
@@ -56,6 +57,7 @@ export default function App() {
 
           {/* Diagnostics. */}
           <Route path="/llm-calls" element={<LLMCalls />} />
+          <Route path="/harness-runs" element={<HarnessRuns />} />
           <Route path="/quality" element={<Quality />} />
           <Route
             path="/submissions/:submissionId/trace"
