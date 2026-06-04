@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "fn": "call_claude_json",
+    "recorded_at": 1780578045.499068,
+    "mode": "practice_eval",
+    "model": "claude-haiku-4-5-20251001",
+    "prompt": "You are a worldclass worldclass math professor with expertise in breaking down math problems into easy to understand, co"
+  },
+  "response": {
+    "distractors": [
+      "Arc $AB$",
+      "Arc $AO$",
+      "Arc $OC$"
+    ]
+  }
+}

@@ -38,6 +38,27 @@ def _parse(argv: list[str]) -> argparse.Namespace:
         "--summary-db",
         default=os.environ.get("HARNESS_SUMMARY_DB", _DEFAULT_SUMMARY_DB),
     )
+
+    exp = sub.add_parser(
+        "explore",
+        help="autonomously generate + run test scenarios; promote failures",
+    )
+    exp.add_argument("--probe", default="geometry")
+    exp.add_argument("--mode", default="auto", choices=["replay", "record", "auto"])
+    exp.add_argument("--scenarios", type=int, default=8)
+    exp.add_argument(
+        "--from-corpus", action="store_true",
+        help="re-run the promoted regression corpus instead of generating new scenarios",
+    )
+    exp.add_argument("--api-base", default=os.environ.get("HARNESS_API_BASE", _DEFAULT_API))
+    exp.add_argument("--web-base", default=os.environ.get("HARNESS_WEB_BASE", _DEFAULT_WEB))
+    exp.add_argument("--db", default=os.environ.get("HARNESS_DATABASE_URL", _DEFAULT_DB))
+    exp.add_argument("--count", type=int, default=3)
+    exp.add_argument("--out", default="tests/harness/_reports/explore.html")
+    exp.add_argument(
+        "--summary-db",
+        default=os.environ.get("HARNESS_SUMMARY_DB", _DEFAULT_SUMMARY_DB),
+    )
     return p.parse_args(argv)
 
 
@@ -48,12 +69,59 @@ def _build_probe(name: str, count: int):  # type: ignore[no-untyped-def]
     raise SystemExit(f"unknown probe: {name!r}")
 
 
+def _run_explore(args: argparse.Namespace) -> int:
+    from datetime import UTC, datetime
+
+    from tests.harness.explorer import (
+        explore,
+        generate_scenarios,
+        load_corpus,
+        persist_explore_summary,
+        promote_failures,
+        write_explore_report,
+    )
+    from tests.harness.runner import run_cost
+
+    probe = _build_probe(args.probe, args.count)
+
+    async def _exec() -> tuple[Any, Path, float | None, bool]:
+        started = datetime.now(UTC)
+        if args.from_corpus:
+            scenarios = load_corpus(probe.name)
+        else:
+            scenarios = await generate_scenarios(probe, args.scenarios)
+        result = await explore(probe, scenarios, args.api_base, args.web_base)
+        corpus = promote_failures(result)
+        report_html = write_explore_report(result, Path(args.out))
+        cost = await run_cost(args.mode, started)
+        ok = await persist_explore_summary(
+            result, report_html, cost, args.mode, args.summary_db,
+        )
+        return result, corpus, cost, ok
+
+    result, corpus, cost, ok = asyncio.run(_exec())
+    total = len(result.results)
+    passed = result.passed
+    print(
+        f"\n[explore:{args.mode}] {probe.name}: {total} scenarios, "
+        f"{passed} passed, {total - passed} promoted to corpus, "
+        f"cost={'$0 (replay)' if cost == 0 else cost}",
+    )
+    print(f"report: {args.out}")
+    print(f"corpus: {corpus}")
+    print(f"admin summary: {'written to main DB' if ok else 'SKIPPED'}")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     args = _parse(argv)
 
     # Must be set before importing api/runner: cassette mode + DB target.
     os.environ["HARNESS_LLM_MODE"] = args.mode
     os.environ.setdefault("DATABASE_URL", args.db)
+
+    if args.cmd == "explore":
+        return _run_explore(args)
 
     from tests.harness.report import write_report
     from tests.harness.runner import RunConfig, persist_run_summary, run_probe

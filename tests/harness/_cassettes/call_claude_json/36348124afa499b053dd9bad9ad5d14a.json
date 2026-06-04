@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "fn": "call_claude_json",
+    "recorded_at": 1780578003.760122,
+    "mode": "judge",
+    "model": "claude-sonnet-4-6",
+    "prompt": "You are a meticulous QA test designer for an AI generation feature. Given the feature's capability surface, propose a se"
+  },
+  "response": {
+    "scenarios": [
+      {
+        "name": "Circle with Chord and Diameter Labels",
+        "constraint": "Generate a circle with 4 named points on the circumference, two crossing chords between them, a labeled diameter, and a labeled central angle of 72\u00b0.",
+        "expected_shapes": [
+          "circle"
+        ],
+        "adversarial": false,
+        "rationale": "Covers the broad circle capability surface: named circumference points, chords, diameter label, and central angle all exercised together \u2014 a standard breadth check for the circle renderer."
+      },
+      {
+        "name": "Near-Degenerate Sliver Triangle with Long Side Labels",
+        "constraint": "Generate an SSS triangle with sides 0.05, 0.06, and 0.109 (nearly collinear) and label each side with a 28-character string like 'opposite-side-length-value-A'.",
+        "expected_shapes": [
+          "triangle"
+        ],
+        "adversarial": true,
+        "rationale": "Probes two known failure modes simultaneously: the near-degenerate sliver geometry collapses interior angles close to 0\u00b0 and 180\u00b0 (risking label-overlap and stroke-scaling breakdown), while the excessively long side labels stress-test clipping and layout on a figure with almost no interior space."
+      },
+      {
+        "name": "Inconsistent SAS Triangle with False Right-Angle Mark",
+        "constraint": "Generate an SAS triangle with sides 3 and 4, included angle 90\u00b0, but also assert the third side is 6 (contradicting the Pythagorean result of 5) and render a right-angle mark at the included vertex.",
+        "expected_shapes": [
+          "triangle"
+        ],
+        "adversarial": true,
+        "rationale": "Directly targets the over-determined/inconsistent spec failure mode: the explicit hypotenuse (6) contradicts both the SAS-derived length (5) and the right-angle mark, forcing the renderer to reconcile or surface an error rather than silently produce a misleading diagram."
+      }
+    ]
+  }
+}

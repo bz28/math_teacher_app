@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "fn": "call_claude_json",
+    "recorded_at": 1780578011.648124,
+    "mode": "generate_questions",
+    "model": "claude-sonnet-4-6",
+    "prompt": "You are a worldclass math professor with expertise in breaking down math problems into easy to understand, coherent step"
+  },
+  "response": {
+    "questions": [
+      {
+        "title": "Circle \u2014 chords, diameter, and central angle",
+        "difficulty": "medium",
+        "text": "In the circle below, $O$ is the center. Chord $AC$ and chord $BD$ intersect inside the circle. $AB$ is a diameter of length $d$. The central angle $\\angle AOC = 72\u00b0$.\n\n(a) Name the arc intercepted by the central angle $\\angle AOC$.\n\n(b) What is the measure of arc $AC$?\n\n(c) If two chords intersect inside a circle, state the relationship between the angles formed and the intercepted arcs. Use chords $AC$ and $BD$ to illustrate your answer.",
+        "figure_spec": {
+          "type": "geometry",
+          "shape": "circle",
+          "radius": 3,
+          "show_center": true,
+          "center_label": "O",
+          "points": {
+            "A": 180,
+            "B": 90,
+            "C": 0,
+            "D": 300
+          },
+          "chords": [
+            "AC",
+            "BD",
+            "AB"
+          ],
+          "chord_labels": {
+            "AB": "d",
+            "AC": "",
+            "BD": ""
+          },
+          "radius_label": null,
+          "point_labels": {
+            "A": "A",
+            "B": "B",
+            "C": "C",
+            "D": "D"
+          }
+        }
+      }
+    ]
+  }
+}

@@ -124,7 +124,7 @@ async def run_probe(probe: Probe, cfg: RunConfig) -> RunResult:
         score = await judge_card(cap, rubric) if i < cfg.judge_sample else None
         capture_results.append(CaptureResult(cap, score))
 
-    cost = await _run_cost(cfg.mode, started)
+    cost = await run_cost(cfg.mode, started)
     return RunResult(
         probe_name=probe.name, mode=cfg.mode,
         items=item_results, captures=capture_results, cost_usd=cost,
@@ -137,7 +137,7 @@ def _utcnow() -> object:
     return datetime.now(UTC)
 
 
-async def _run_cost(mode: str, started: object) -> float | None:
+async def run_cost(mode: str, started: object) -> float | None:
     """Sum the USD cost of LLM calls logged during this run. Replay makes no
     live calls, so it's $0 by definition. On record/auto, read the persisted
     LLMCall rows (give fire-and-forget persists a moment to land first)."""
