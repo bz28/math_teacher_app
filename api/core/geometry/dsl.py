@@ -1,18 +1,22 @@
 """JSON DSL for figure specs.
 
-v1: triangles only. The shape is intentionally flat (one Pydantic
-model, not a nested polymorphic shapes/constraints/labels tree)
-because triangles have a small fixed surface and a flat model is
-easier for the LLM to fill in correctly and easier to validate.
+Discriminated union keyed on `shape`. v1 covered triangles only; this
+revision adds circles. Each shape is one flat Pydantic model — chosen
+over a nested shapes/constraints/labels tree because the LLM produces
+flat structures more reliably and because each shape's constraint
+math is shape-specific (no real reuse between triangle SSS/SAS and
+circle radius+chord).
 
-When circles + polygons land, the model grows a discriminated union
-keyed on `shape`; the triangle case stays as-is. That migration is
-additive — no breaking change to existing stored specs.
+Adding a new shape (polygon, coordinate plane, transformations, ...)
+follows the circle pattern: define a new BaseModel with
+`shape: Literal["..."]`, add it to FigureSpec's Annotated union, write
+a solver, write a renderer function. No existing stored specs are
+affected.
 """
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -128,8 +132,89 @@ class TriangleFigure(BaseModel):
         return self
 
 
-# Top-level FigureSpec — kept as a TypeAlias for now since triangles
-# are the only shape. When circles + polygons land, this becomes a
-# discriminated union: FigureSpec = Annotated[Union[Triangle, Circle,
-# ...], Field(discriminator="shape")].
-FigureSpec = TriangleFigure
+class CircleFigure(BaseModel):
+    """A circle with optional named points on the circumference, chords,
+    labeled radii, and angle labels.
+
+    The circle itself is determined by `radius` alone (we place its
+    center at the origin internally; the renderer re-centers via the
+    viewBox). Named points are positioned by their `angle_deg` —
+    measured CCW from the positive x-axis. This is deliberately a
+    *single* degree of freedom per point: the LLM doesn't have to
+    invent (x, y) coordinates, just an angle, and the solver does the
+    trig.
+
+    Chords are unordered vertex pairs (`"AB"` ≡ `"BA"`). The renderer
+    canonicalizes; the validator rejects duplicates.
+    """
+
+    type: Literal["geometry"] = "geometry"
+    shape: Literal["circle"] = "circle"
+
+    # Display label for the center (default "O" — the textbook
+    # convention). Shown when show_center is True.
+    center_label: str = "O"
+    # Radius — drives everything else. Strictly positive.
+    radius: float
+
+    # Named points on the circumference, keyed by name, valued by
+    # angle in degrees (CCW from positive x-axis).
+    points: dict[str, float] = Field(default_factory=dict)
+    # Two-character chord identifiers referring to points above. The
+    # renderer draws a straight segment between the two named points.
+    chords: list[str] = Field(default_factory=list)
+    # Whether to draw a small dot + label at the center.
+    show_center: bool = False
+    # If set, draws a labeled radius to the FIRST named point with
+    # the given label text (e.g. "r" or "5").
+    radius_label: str | None = None
+    # Per-chord display labels, keyed like chords.
+    chord_labels: dict[str, str] = Field(default_factory=dict)
+    # Display labels at named points (e.g. when the LLM wants point
+    # A drawn with a different visible name).
+    point_labels: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate(self) -> CircleFigure:
+        if self.radius <= 0:
+            raise ValueError(f"radius must be positive (got {self.radius})")
+
+        names = set(self.points)
+
+        def _canon(edge: str) -> str:
+            return edge if edge[0] < edge[1] else edge[1] + edge[0]
+
+        seen_chord: dict[str, str] = {}
+        for c in self.chords:
+            if len(c) != 2 or not all(ch in names for ch in c):
+                raise ValueError(
+                    f"chord {c!r} must reference two named points from {sorted(names)}",
+                )
+            canon = _canon(c)
+            if canon in seen_chord and seen_chord[canon] != c:
+                raise ValueError(
+                    f"chords has both {seen_chord[canon]!r} and {c!r} — "
+                    "these reference the same chord; emit one form only",
+                )
+            seen_chord[canon] = c
+
+        for chord_key in self.chord_labels:
+            if chord_key not in self.chords and chord_key[::-1] not in self.chords:
+                raise ValueError(
+                    f"chord_labels key {chord_key!r} doesn't match any entry in chords",
+                )
+        for pt in self.point_labels:
+            if pt not in names:
+                raise ValueError(f"point_labels references unknown point: {pt}")
+
+        return self
+
+
+# Discriminated union over the supported shapes. Pydantic uses the
+# `shape` field to dispatch validation; the JSON schema generated by
+# Pydantic includes a properly-typed oneOf branch per shape so the
+# LLM tool-use validator picks up shape-specific required fields.
+FigureSpec = Annotated[
+    TriangleFigure | CircleFigure,
+    Field(discriminator="shape"),
+]

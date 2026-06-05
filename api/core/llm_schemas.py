@@ -11,22 +11,18 @@ ToolSchema = dict[str, Any]
 
 # ---------------------------------------------------------------------------
 # Geometry figure (shared across question generation, regeneration, and
-# step-decomposition schemas). Mirrors api/core/geometry/dsl.py's
-# TriangleFigure. v1 covers triangles only; the `shape` discriminator
-# is fixed at "triangle" so the LLM can't emit unrecognized shapes the
-# renderer doesn't know about yet. Future PRs add circles, polygons,
-# etc. by extending this with a oneOf branch per shape.
+# step-decomposition schemas). Mirrors api/core/geometry/dsl.py.
+# Discriminator: `shape` ∈ {triangle, circle}. The LLM picks the variant
+# based on the problem. Extending to new shapes is additive — append a
+# new branch to _FIGURE_SCHEMA's anyOf without touching consumers.
 # ---------------------------------------------------------------------------
 
 _TRIANGLE_FIGURE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "description": (
-        "Geometric figure for this problem (or this step). OMIT this "
-        "field unless the problem / step genuinely needs a diagram "
-        "(triangles with given sides/angles, Pythagorean / right-"
-        "triangle trig, congruence-or-similarity setups). Don't emit "
-        "a figure spec just to decorate algebra or word problems "
-        "where the prose carries full meaning."
+        "Triangle figure. Use for problems involving triangles with "
+        "given sides/angles, Pythagorean / right-triangle trig, "
+        "congruence, or similarity."
     ),
     "properties": {
         "type": {"type": "string", "enum": ["geometry"]},
@@ -93,6 +89,97 @@ _TRIANGLE_FIGURE_SCHEMA: dict[str, Any] = {
         },
     },
     "required": ["type", "shape", "vertices"],
+}
+
+
+_CIRCLE_FIGURE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "description": (
+        "Circle figure. Use for problems involving circles, chords, "
+        "tangents, inscribed/central angles, or arcs. Each named "
+        "point sits on the circumference at the angle you specify."
+    ),
+    "properties": {
+        "type": {"type": "string", "enum": ["geometry"]},
+        "shape": {"type": "string", "enum": ["circle"]},
+        "radius": {
+            "type": "number",
+            "description": "Circle radius. Strictly positive.",
+        },
+        "center_label": {
+            "type": "string",
+            "description": "Label for the center point (default 'O').",
+        },
+        "show_center": {
+            "type": "boolean",
+            "description": (
+                "When true, draws a small dot + label at the center. "
+                "Use this when the center is referenced in the problem."
+            ),
+        },
+        "points": {
+            "type": "object",
+            "description": (
+                "Named points on the circumference, keyed by name "
+                "(single character), valued by angle in degrees "
+                "(counter-clockwise from the positive x-axis). For "
+                "example, {\"A\": 30, \"B\": 150, \"C\": 270}."
+            ),
+            "additionalProperties": {"type": "number"},
+        },
+        "chords": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Two-character chord identifiers referencing named "
+                "points (e.g. 'AB'). Renderer draws a straight "
+                "segment. Don't emit both 'AB' and 'BA' — same edge."
+            ),
+        },
+        "radius_label": {
+            "type": "string",
+            "description": (
+                "When set, draws a labeled radius from the center to "
+                "the FIRST named point (e.g. label 'r' or '5')."
+            ),
+        },
+        "chord_labels": {
+            "type": "object",
+            "description": "Text shown on each chord, keyed like chords.",
+            "additionalProperties": {"type": "string"},
+        },
+        "point_labels": {
+            "type": "object",
+            "description": (
+                "Override the displayed name of a point (default is "
+                "the key from `points`). Keyed by point name."
+            ),
+            "additionalProperties": {"type": "string"},
+        },
+    },
+    "required": ["type", "shape", "radius"],
+}
+
+
+# Discriminated union over supported shapes — LLM picks the variant
+# that matches the problem.
+_TRIANGLE_FIGURE_SCHEMA["properties"]["shape"]["description"] = (
+    "Always 'triangle' for this branch. Use shape='circle' for circles."
+)
+_CIRCLE_FIGURE_SCHEMA["properties"]["shape"]["description"] = (
+    "Always 'circle' for this branch. Use shape='triangle' for triangles."
+)
+
+_FIGURE_SCHEMA: dict[str, Any] = {
+    "description": (
+        "Geometric figure for this problem (or this step). OMIT this "
+        "field unless the problem / step genuinely needs a diagram. "
+        "Don't emit a figure spec just to decorate algebra or word "
+        "problems where the prose carries full meaning. Pick the "
+        "variant whose `shape` matches the problem: 'triangle' or "
+        "'circle'."
+    ),
+    "anyOf": [_TRIANGLE_FIGURE_SCHEMA, _CIRCLE_FIGURE_SCHEMA],
 }
 
 
@@ -217,7 +304,7 @@ DECOMPOSITION_SCHEMA: ToolSchema = {
                         # altitude from B to AC" is best shown, not
                         # described). OMIT for non-geometry steps —
                         # don't decorate algebra walkthroughs.
-                        "figure_spec": _TRIANGLE_FIGURE_SCHEMA,
+                        "figure_spec": _FIGURE_SCHEMA,
                     },
                     "required": ["title", "description"],
                     "additionalProperties": False,
@@ -310,7 +397,7 @@ GENERATE_QUESTIONS_SCHEMA: ToolSchema = {
                                 "this course's student level."
                             ),
                         },
-                        "figure_spec": _TRIANGLE_FIGURE_SCHEMA,
+                        "figure_spec": _FIGURE_SCHEMA,
                     },
                     "required": ["title", "text", "difficulty"],
                     "additionalProperties": False,
@@ -365,6 +452,10 @@ BANK_CHAT_REPLY_SCHEMA: ToolSchema = {
                             "properties": {
                                 "title": {"type": "string"},
                                 "description": {"type": "string"},
+                                # Each step can carry its own geometry
+                                # figure — see _FIGURE_SCHEMA for the
+                                # full shape (triangle or circle).
+                                "figure_spec": _FIGURE_SCHEMA,
                             },
                             "required": ["title", "description"],
                             "additionalProperties": False,
@@ -375,6 +466,11 @@ BANK_CHAT_REPLY_SCHEMA: ToolSchema = {
                         "type": ["string", "null"],
                         "description": "New final answer, or null to leave unchanged.",
                     },
+                    # Top-level figure on the question itself. Same
+                    # DSL as everywhere else; omit when the question
+                    # doesn't need a diagram (or to leave the existing
+                    # one unchanged).
+                    "figure_spec": _FIGURE_SCHEMA,
                 },
                 "additionalProperties": False,
             },
@@ -413,7 +509,7 @@ REGENERATE_QA_SCHEMA: ToolSchema = {
                         "description": {"type": "string", "description": "Full explanation of the step."},
                         # Per-step figure (only for geometry steps
                         # where the construction is what matters).
-                        "figure_spec": _TRIANGLE_FIGURE_SCHEMA,
+                        "figure_spec": _FIGURE_SCHEMA,
                     },
                     "required": ["title", "description"],
                     "additionalProperties": False,
@@ -427,7 +523,7 @@ REGENERATE_QA_SCHEMA: ToolSchema = {
                     "Use single backslashes for LaTeX commands."
                 ),
             },
-            "figure_spec": _TRIANGLE_FIGURE_SCHEMA,
+            "figure_spec": _FIGURE_SCHEMA,
         },
         "required": ["title", "question", "solution_steps", "final_answer"],
         "additionalProperties": False,

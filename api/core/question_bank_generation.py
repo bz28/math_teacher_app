@@ -77,6 +77,15 @@ def _render_step_figures(
                 )
                 rendered.pop("figure_spec", None)
                 rendered.pop("figure_svg", None)
+            except Exception:
+                # Broad catch — any renderer bug drops the step
+                # figure but keeps the step. Logged with traceback.
+                logger.exception(
+                    "unexpected error rendering step figure_spec (keeping step); spec=%r",
+                    raw,
+                )
+                rendered.pop("figure_spec", None)
+                rendered.pop("figure_svg", None)
         out.append(rendered)
     return out
 
@@ -87,12 +96,13 @@ def _resolve_figure(
     """Validate + render a figure spec emitted by the LLM.
 
     Returns (spec, svg) — both None if the model didn't emit one, or
-    if validation/rendering raises FigureSpecError. We swallow the
-    error here on purpose: a bad figure shouldn't tank the whole
-    batch. The question lands without a diagram, the teacher
-    reviews it in the workshop, and they can regenerate or accept
-    text-only. The error is logged so we notice if specific
-    figure types fail systematically.
+    if rendering raises ANY exception. We catch broadly on purpose:
+    a bad figure shouldn't tank the whole batch under any failure
+    mode. The renderer is supposed to raise only FigureSpecError,
+    but bugs in label-placement or coord-lookup can surface as
+    KeyError / IndexError / AttributeError — none of those should
+    kill a perfectly-valid question. Log with the full traceback so
+    real renderer bugs are still visible in monitoring.
     """
     if not isinstance(raw_spec, dict):
         return None, None
@@ -102,6 +112,16 @@ def _resolve_figure(
         logger.warning(
             "figure_spec rejected by renderer (keeping question, dropping figure): %s",
             e,
+        )
+        return None, None
+    except Exception:
+        # Defense-in-depth: an unexpected renderer error is a bug we
+        # want to fix, but it must NOT take down the surrounding
+        # question. exc_info=True so the traceback lands in logs.
+        logger.exception(
+            "unexpected error rendering figure_spec (keeping question, "
+            "dropping figure); spec=%r",
+            raw_spec,
         )
         return None, None
     return raw_spec, svg

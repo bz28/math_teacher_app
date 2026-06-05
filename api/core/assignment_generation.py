@@ -55,29 +55,40 @@ student level — NOT absolute math/science difficulty:
 
 Some problems genuinely need a diagram to be understood —
 right-triangle trigonometry, Pythagorean theorem, congruence /
-similarity setups, problems referencing "the triangle below."
-Emit `figure_spec` for those, NOT for algebra, word problems, or
-anything where the prose already carries the full picture. A
-figure that decorates rather than informs is noise.
+similarity setups, circles with inscribed angles or tangent lines,
+chords. Emit `figure_spec` for those, NOT for algebra, word
+problems, or anything where the prose already carries the full
+picture. A figure that decorates rather than informs is noise.
 
-v1 supports triangles only. If a problem needs a circle, polygon,
-coordinate-plane setup, or other non-triangle figure, either reword
-it so prose carries the figure, or skip the problem — don't emit a
-mis-shaped figure_spec.
+Two supported shapes today: triangle and circle. If a problem
+needs a polygon, coordinate-plane setup, or other shape, either
+reword it so prose carries the figure, or skip the problem —
+don't emit a mis-shaped figure_spec.
 
-When you do emit one:
+Pick the variant by setting `shape`:
+
+**Triangles** (`shape: "triangle"`):
 - Use single-character vertex names (A, B, C).
 - Provide enough constraints to determine the triangle (3 sides;
-  or 2 sides + 1 angle; or 1 side + 2 angles). Don't leave it
-  underspecified.
-- Don't emit the same edge twice (e.g. don't include both 'AB' and
-  'BA' — pick one).
-- For a 90° angle use `right_angle_at` (also draws the square
-  marker). Use the `angles` field only for non-right angles.
-- side_labels / angle_labels are what STUDENTS see on the figure
-  — match the variable names or numbers the problem text uses
-  (e.g. side_label 'c' when the question asks the student to
-  find c)."""
+  or 2 sides + 1 angle; or 1 side + 2 angles).
+- Don't emit the same edge twice ('AB' or 'BA' — pick one).
+- For a 90° angle use `right_angle_at` (draws the square marker).
+- side_labels / angle_labels are what STUDENTS see — match the
+  variable names the question uses (e.g. side_label 'c' when the
+  problem asks the student to find c).
+
+**Circles** (`shape: "circle"`):
+- Set `radius` to any positive number — proportions are what
+  matter; the renderer auto-scales.
+- Add named points on the circumference via `points`: each entry
+  maps a single-character name to an angle in degrees, measured
+  CCW from the positive x-axis. e.g. `{{"A": 30, "B": 150}}`.
+- `chords` lists two-character chord identifiers — straight
+  segments between named points.
+- `show_center: true` draws a dot + label at the center; pair
+  with `center_label` (defaults to "O").
+- `radius_label` draws a labeled radius to the FIRST named point.
+- Don't emit the same chord twice ('AB' or 'BA' — pick one)."""
 
 
 def _build_question_generation_prompt(subject: str) -> str:

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import math
 
-from api.core.geometry.dsl import FigureSpecError, TriangleFigure
+from api.core.geometry.dsl import CircleFigure, FigureSpecError, TriangleFigure
 
 Point = tuple[float, float]
 
@@ -186,6 +186,32 @@ def _solve_sas(
 
     placements = {included_vertex: p_included, arm1: p_arm1, arm2: p_arm2}
     return {a: placements[a], b: placements[b], c: placements[c]}
+
+
+def solve_circle(spec: CircleFigure) -> dict[str, Point]:
+    """Compute (x, y) for the center and each named point on the circle.
+
+    Center is placed at the origin. Each named point sits on the
+    circumference at the LLM-specified angle (degrees CCW from
+    positive x-axis). The single-DOF-per-point design is the
+    important contract — the LLM doesn't pick coordinates, just an
+    angle, and the geometry is exact by construction.
+
+    The center is stored under the special key "__center__" so it
+    can't collide with a user-named point. Renderer + tests both
+    treat that key as opaque.
+    """
+    if spec.radius <= 0:
+        # The validator already catches this; the second check is
+        # defense-in-depth since solve_circle is called from outside
+        # the model validator path during render_figure.
+        raise FigureSpecError(f"circle radius must be positive (got {spec.radius})")
+
+    coords: dict[str, Point] = {"__center__": (0.0, 0.0)}
+    for name, angle_deg in spec.points.items():
+        rad = math.radians(angle_deg)
+        coords[name] = (spec.radius * math.cos(rad), spec.radius * math.sin(rad))
+    return coords
 
 
 def _solve_asa(
