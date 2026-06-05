@@ -45,6 +45,14 @@ def test_rank_filter_drops_forbidden_and_oversized() -> None:
     assert titles == {"Fix nav overflow"}
 
 
+def test_forbidden_catches_inflected_auth_schema_terms() -> None:
+    # Regression for the cold-review finding: \b boundaries missed these.
+    for change in ("rework authentication", "add authorization checks",
+                   "edit two schemas", "add a migration", "use OAuth"):
+        assert _p("x", change=change).forbidden, change
+    assert not _p("Fix nav overflow", change="tighten the gap").forbidden
+
+
 def test_dedupe_and_merge() -> None:
     a, b = _p("A"), _p("B")
     dup = _p("a")  # same id as A
@@ -89,6 +97,17 @@ def test_queue_add_dedupes_and_status(tmp_path) -> None:  # type: ignore[no-unty
     assert [it.id for it in q.by_status("approved")] == [aid]
     reloaded = Queue.load(tmp_path).get(aid)  # persisted across reload
     assert reloaded is not None and reloaded.status == "approved"
+
+
+def test_ledger_skips_corrupt_rows_without_resetting(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    # Regression: one bad row must not wipe the window (re-opening the budget).
+    lg = Ledger.load(tmp_path)
+    lg.record("scan", now=_NOW)
+    (tmp_path / "ledger.json").write_text(
+        '[{"ts": "' + _NOW.isoformat() + '", "kind": "scan"}, {"garbage": true}]'
+    )
+    reloaded = Ledger.load(tmp_path)
+    assert reloaded.scans_in_5h(_NOW) == 1  # good row kept, bad row skipped
 
 
 # --- execute brief --------------------------------------------------------

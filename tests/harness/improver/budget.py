@@ -31,6 +31,15 @@ _FIVE_HOURS = timedelta(hours=5)
 _SEVEN_DAYS = timedelta(days=7)
 
 
+def _atomic_write(path: Path, text: str) -> None:
+    """Write via a temp file + atomic replace, so a crash mid-write or a
+    concurrent reader never sees a half-written (corrupt) state file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.tmp")
+    tmp.write_text(text)
+    tmp.replace(path)
+
+
 def state_dir() -> Path:
     """Where the ledger + proposal queue + decline-list live."""
     return Path(os.environ.get(
@@ -105,14 +114,19 @@ class Ledger:
         entries: list[LedgerEntry] = []
         if path.exists():
             try:
-                entries = [LedgerEntry(**e) for e in json.loads(path.read_text())]
-            except (json.JSONDecodeError, TypeError):
-                entries = []
+                raw = json.loads(path.read_text())
+            except json.JSONDecodeError:
+                raw = []
+            for e in raw:  # skip only the corrupt rows, never reset the window to 0
+                try:
+                    entries.append(LedgerEntry(**e))
+                except TypeError:
+                    continue
         return cls(path=path, entries=entries)
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps([asdict(e) for e in self.entries], indent=2))
+        _atomic_write(self.path, json.dumps([asdict(e) for e in self.entries], indent=2))
 
     def record(self, kind: str, *, cost_usd: float = 0.0, note: str = "", now: datetime | None = None) -> None:
         self.entries.append(LedgerEntry(

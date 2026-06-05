@@ -385,15 +385,22 @@ def _run_improve_scan(args: argparse.Namespace) -> int:
         return obs, proposals, cost
 
     obs, proposals, cost = asyncio.run(_exec())
-    ledger.record("scan", cost_usd=cost or 0.0, note=f"{len(proposals)} new proposals")
+    # If the cost read failed (None) on a billable run, record a conservative
+    # non-zero estimate so the 7d $ cap still trips — never silently log $0 and
+    # let the dollar guarantee degrade to the scan-count cap alone.
+    if cost is None:
+        cost_for_ledger = 0.0 if args.mode == "replay" else 0.50
+    else:
+        cost_for_ledger = cost
+    ledger.record("scan", cost_usd=cost_for_ledger, note=f"{len(proposals)} new proposals")
     added = queue.add(proposals)
     out = write_scan_report(obs, proposals, Path(args.out))
     scanned = sum(1 for o in obs if o.ok)
     hits = sum(len(o.hits) for o in obs)
+    cost_str = "$0 (replay)" if cost == 0 else (f"~${cost_for_ledger} (est)" if cost is None else f"${cost}")
     print(
         f"\n[improve:scan:{args.mode}] {scanned}/{len(obs)} surfaces loaded, "
-        f"{hits} hits, {len(added)} new proposals queued, "
-        f"cost={'$0 (replay)' if cost == 0 else f'${cost}'}",
+        f"{hits} hits, {len(added)} new proposals queued, cost={cost_str}",
     )
     for p in proposals[:12]:
         print(f"  [{p.score:.2f}] {p.est_size}/{p.severity:<6} {p.category:<11} {p.id}  {p.title}")

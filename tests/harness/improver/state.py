@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from tests.harness.improver.budget import state_dir
+from tests.harness.improver.budget import _atomic_write, state_dir
 from tests.harness.improver.proposals import Proposal, to_dict
 
 # proposed → (approved → done) | rejected
@@ -46,14 +46,18 @@ class Queue:
         items: list[QueuedProposal] = []
         if path.exists():
             try:
-                items = [QueuedProposal(**it) for it in json.loads(path.read_text())]
-            except (json.JSONDecodeError, TypeError):
-                items = []
+                raw = json.loads(path.read_text())
+            except json.JSONDecodeError:
+                raw = []
+            for it in raw:  # skip only corrupt rows, never drop the whole queue
+                try:
+                    items.append(QueuedProposal(**it))
+                except TypeError:
+                    continue
         return cls(path=path, items=items)
 
     def save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps([asdict(it) for it in self.items], indent=2))
+        _atomic_write(self.path, json.dumps([asdict(it) for it in self.items], indent=2))
 
     def seen_ids(self) -> set[str]:
         """Every id we've ever recorded — used to never re-propose a known idea."""

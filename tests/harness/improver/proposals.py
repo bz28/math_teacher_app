@@ -29,8 +29,12 @@ _SIZE_RANK = {"S": 1, "M": 2, "L": 3}
 _SEVERITY_WEIGHT = {"high": 3.0, "medium": 2.0, "low": 1.0}
 
 # A proposal touching any of these is dropped pre-approval — too risky for the
-# autonomous loop regardless of how small it looks.
-_FORBIDDEN = re.compile(r"\b(schema|migration|auth|login|password|billing|payment|stripe|token|secret)\b", re.I)
+# autonomous loop regardless of how small it looks. Substring (no \b) on stems
+# so "authentication"/"authorization"/"oauth"/"schemas"/"migrations" all match;
+# over-blocking a few innocents (e.g. "author") is the safe side for a guard.
+_FORBIDDEN = re.compile(
+    r"(schema|migrat|auth|login|password|billing|payment|stripe|token|secret|credential)", re.I,
+)
 
 
 @dataclass

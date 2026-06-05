@@ -76,9 +76,10 @@ async def _a11y(page: Page) -> list[DetectorHit]:
     except Exception:  # noqa: BLE001 — a11y is best-effort
         return []
     violations = result.get("violations", []) if isinstance(result, dict) else []
-    violations.sort(
-        key=lambda v: list(_AXE_IMPACT_SEVERITY).index(v.get("impact") or "minor")
-    )
+    # Sort most-severe first; an unexpected/missing impact ranks last instead of
+    # raising (axe data is external input even if the CDN is pinned).
+    _rank = {"critical": 0, "serious": 1, "moderate": 2, "minor": 3}
+    violations.sort(key=lambda v: _rank.get(v.get("impact"), 99))
     hits: list[DetectorHit] = []
     for v in violations[:_MAX_A11Y_HITS]:
         count = len(v.get("nodes", []))
