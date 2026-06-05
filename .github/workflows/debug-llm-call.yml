@@ -1,0 +1,68 @@
+name: Debug LLM call
+
+# Fired by the admin "Debug with agent" button (a repository_dispatch from the
+# backend). Runs Claude Code to investigate one prod LLM call and post a GitHub
+# issue with the root cause + suggested fix. Runs on the Claude plan
+# (CLAUDE_CODE_OAUTH_TOKEN), not the API. See api/routes/admin_llm.py.
+
+on:
+  repository_dispatch:
+    types: [debug-llm-call]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: debug-llm-call-${{ github.event.client_payload.call_id }}
+  cancel-in-progress: false
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    env:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      # client_payload via env — NEVER inlined into a run: shell (injection-safe).
+      FUNCTION: ${{ github.event.client_payload.function }}
+      MODEL: ${{ github.event.client_payload.model }}
+      CALL_ID: ${{ github.event.client_payload.call_id }}
+      INPUT_TEXT: ${{ github.event.client_payload.input_text }}
+      OUTPUT_TEXT: ${{ github.event.client_payload.output_text }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e ".[dev]"
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Investigate + report
+        run: |
+          PROMPT="You are debugging ONE production LLM call that may have produced a buggy
+          output (e.g. broken LaTeX). Investigate against the real code and report.
+
+          Call: function=\"$FUNCTION\" model=\"$MODEL\" id=\"$CALL_ID\"
+          --- INPUT ---
+          $INPUT_TEXT
+          --- OUTPUT ---
+          $OUTPUT_TEXT
+          --- END ---
+
+          Steps:
+          1. Use the /debug skill. Trace this output through the real pipeline:
+             api/core/llm_client.py (_normalize_arrays), api/core/step_decomposition.py
+             (_normalize_latex, _ensure_math_delimiters), and the renderers
+             web/src/components/shared/math-text.tsx + mobile/src/components/MathText.tsx.
+          2. Decide whether there's a real bug and, if so, the root cause (cite file:line).
+             It's fine to conclude 'no bug — output is correct'.
+          3. Post a GitHub issue with \`gh issue create\` (label: llm-debug): title =
+             '[debug] <function>: <one-line root cause or no-bug>', body = root cause +
+             a concrete suggested fix (file:line). If the fix is SMALL and OBVIOUS, also
+             open a DRAFT PR (\`gh pr create --draft\`); never merge.
+          4. Do NOT paste raw user content / PII into the issue beyond the minimal snippet
+             needed to show the bug.
+          Then stop and print the issue URL."
+          claude -p "$PROMPT" --dangerously-skip-permissions --allowedTools "Bash Edit Write Read"
