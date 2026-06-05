@@ -12,7 +12,9 @@ on:
 permissions:
   contents: read
   issues: write
-  pull-requests: write
+  # v1 is issue-only (read + report). No pull-requests: write and no Edit/Write
+  # tools — the agent acts on model-generated (user-steerable) content, so it
+  # can't author code or open PRs. Auto-fix PRs are a deliberate follow-up.
 
 concurrency:
   group: debug-llm-call-${{ github.event.client_payload.call_id }}
@@ -60,9 +62,10 @@ jobs:
              It's fine to conclude 'no bug — output is correct'.
           3. Post a GitHub issue with \`gh issue create\` (label: llm-debug): title =
              '[debug] <function>: <one-line root cause or no-bug>', body = root cause +
-             a concrete suggested fix (file:line). If the fix is SMALL and OBVIOUS, also
-             open a DRAFT PR (\`gh pr create --draft\`); never merge.
+             a concrete suggested fix (file:line). Do NOT write code or open a PR —
+             this is investigate-and-report only.
           4. Do NOT paste raw user content / PII into the issue beyond the minimal snippet
              needed to show the bug.
           Then stop and print the issue URL."
-          claude -p "$PROMPT" --dangerously-skip-permissions --allowedTools "Bash Edit Write Read"
+          # Read + Bash only (no Edit/Write): investigate + `gh issue create`, never author code.
+          claude -p "$PROMPT" --dangerously-skip-permissions --allowedTools "Bash Read"

@@ -317,13 +317,14 @@ async def debug_llm_call(
     if call is None:
         raise HTTPException(status_code=404, detail="LLM call not found")
 
+    # Only the fields the workflow needs, each truncated, so client_payload stays
+    # well under GitHub's ~64KB cap (metadata is unbounded + unused — omitted).
     payload: dict[str, object] = {
         "call_id": str(call.id),
         "function": call.function,
         "model": call.model,
         "input_text": (call.input_text or "")[:_DISPATCH_TEXT_CAP],
         "output_text": (call.output_text or "")[:_DISPATCH_TEXT_CAP],
-        "metadata": call.call_metadata or {},
     }
     try:
         status_code = await _github_dispatch(payload)
