@@ -135,6 +135,24 @@ def _label_padding(texts: list[str]) -> float:
     return max(_PADDING, overhang)
 
 
+def _text(
+    x: float, y: float, content: str, *,
+    size: float = _LABEL_FONT_SIZE, dx: float = 0.0, dy: float = 0.0,
+) -> str:
+    """One centered <text> node in the renderer's standard style (font,
+    middle anchors, theme stroke). Coordinates are already in SVG space
+    (the caller negates cartesian y); `content` is escaped here. Single
+    source of truth for label styling so a font/anchor/theming change is
+    a one-line edit instead of ~12."""
+    off = (f' dx="{dx:.4f}"' if dx else "") + (f' dy="{dy:.4f}"' if dy else "")
+    return (
+        f'<text x="{x:.4f}" y="{y:.4f}" '
+        f'font-family="{_FONT_FAMILY}" font-size="{size:.4f}" '
+        f'text-anchor="middle" dominant-baseline="middle" '
+        f'fill="{_STROKE}"{off}>{_escape(content)}</text>'
+    )
+
+
 def _render_triangle(
     spec: TriangleFigure, coords: dict[str, Point],
 ) -> str:
@@ -305,12 +323,10 @@ def _circle_annotation_labels(
     out: list[str] = []
     if annotation.show_center:
         cx, cy = center
-        out.append(
-            f'<text x="{cx:.4f}" y="{-cy:.4f}" '
-            f'font-family="{_FONT_FAMILY}" font-size="{_VERTEX_FONT_SIZE}" '
-            'text-anchor="middle" dominant-baseline="middle" '
-            f'dx="0.18" dy="0.25" fill="{_STROKE}">{_escape(annotation.center_label)}</text>',
-        )
+        out.append(_text(
+            cx, -cy, annotation.center_label,
+            size=_VERTEX_FONT_SIZE, dx=0.18, dy=0.25,
+        ))
     if annotation.radius_label and radius_endpoint is not None:
         # Midpoint of the radius line, with a small perpendicular
         # offset so the label doesn't sit on top of the line.
@@ -322,12 +338,7 @@ def _circle_annotation_labels(
         # Perpendicular = rotate (dx,dy)/norm by 90° = (-dy, dx)/norm.
         ox = (-dy / norm) * _LABEL_OFFSET * 0.6
         oy = (dx / norm) * _LABEL_OFFSET * 0.6
-        out.append(
-            f'<text x="{mid_x + ox:.4f}" y="{-(mid_y + oy):.4f}" '
-            f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
-            'text-anchor="middle" dominant-baseline="middle" '
-            f'fill="{_STROKE}">{_escape(annotation.radius_label)}</text>',
-        )
+        out.append(_text(mid_x + ox, -(mid_y + oy), annotation.radius_label))
     return out
 
 
@@ -382,12 +393,7 @@ def _render_polygon(
         norm = math.hypot(dx, dy) or 1.0
         ox = (dx / norm) * _LABEL_OFFSET
         oy = (dy / norm) * _LABEL_OFFSET
-        parts.append(
-            f'<text x="{x + ox:.4f}" y="{-(y + oy):.4f}" '
-            f'font-family="{_FONT_FAMILY}" font-size="{_VERTEX_FONT_SIZE}" '
-            'text-anchor="middle" dominant-baseline="middle" '
-            f'fill="{_STROKE}">{_escape(v)}</text>',
-        )
+        parts.append(_text(x + ox, -(y + oy), v, size=_VERTEX_FONT_SIZE))
 
     # 3. Side labels — perpendicular to the edge, on the outside
     # (away from the centroid).
@@ -409,12 +415,7 @@ def _render_polygon(
             nx, ny = -nx, -ny
         label_x = mid_x + nx * _LABEL_OFFSET
         label_y = mid_y + ny * _LABEL_OFFSET
-        parts.append(
-            f'<text x="{label_x:.4f}" y="{-label_y:.4f}" '
-            f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
-            'text-anchor="middle" dominant-baseline="middle" '
-            f'fill="{_STROKE}">{_escape(text)}</text>',
-        )
+        parts.append(_text(label_x, -label_y, text))
 
     # 4. Angle labels — sit slightly inside the vertex, toward centroid.
     for v, text in spec.angle_labels.items():
@@ -423,12 +424,7 @@ def _render_polygon(
         norm = math.hypot(dx, dy) or 1.0
         ox = (dx / norm) * _LABEL_OFFSET * 1.2
         oy = (dy / norm) * _LABEL_OFFSET * 1.2
-        parts.append(
-            f'<text x="{x + ox:.4f}" y="{-(y + oy):.4f}" '
-            f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
-            'text-anchor="middle" dominant-baseline="middle" '
-            f'fill="{_STROKE}">{_escape(text)}</text>',
-        )
+        parts.append(_text(x + ox, -(y + oy), text))
 
     parts.append("</svg>")
     return "".join(parts)
@@ -523,12 +519,10 @@ def _render_circle(
 
     # 6. Center label.
     if spec.show_center:
-        parts.append(
-            f'<text x="0" y="0" '
-            f'font-family="{_FONT_FAMILY}" font-size="{_VERTEX_FONT_SIZE}" '
-            'text-anchor="middle" dominant-baseline="middle" '
-            f'fill="{_STROKE}" dx="0.15" dy="0.25">{_escape(spec.center_label)}</text>',
-        )
+        parts.append(_text(
+            0.0, 0.0, spec.center_label,
+            size=_VERTEX_FONT_SIZE, dx=0.15, dy=0.25,
+        ))
 
     # 7. Point labels — offset radially outward so they don't sit on
     # top of the circle outline.
@@ -539,12 +533,7 @@ def _render_circle(
         norm = math.hypot(x, y) or 1.0  # 1.0 guard for degenerate radius=0 (impossible: validator)
         ox = (x / norm) * _LABEL_OFFSET
         oy = (y / norm) * _LABEL_OFFSET
-        parts.append(
-            f'<text x="{x + ox:.4f}" y="{-(y + oy):.4f}" '
-            f'font-family="{_FONT_FAMILY}" font-size="{_VERTEX_FONT_SIZE}" '
-            'text-anchor="middle" dominant-baseline="middle" '
-            f'fill="{_STROKE}">{_escape(display)}</text>',
-        )
+        parts.append(_text(x + ox, -(y + oy), display, size=_VERTEX_FONT_SIZE))
 
     # 8. Chord labels — midpoint of chord, offset perpendicular OUTWARD
     # (away from center).
@@ -575,12 +564,7 @@ def _render_circle(
         else:
             ox = (mid_x / norm) * _LABEL_OFFSET
             oy = (mid_y / norm) * _LABEL_OFFSET
-        parts.append(
-            f'<text x="{mid_x + ox:.4f}" y="{-(mid_y + oy):.4f}" '
-            f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
-            'text-anchor="middle" dominant-baseline="middle" '
-            f'fill="{_STROKE}">{_escape(label)}</text>',
-        )
+        parts.append(_text(mid_x + ox, -(mid_y + oy), label))
 
     # 9. Radius label — midpoint of the radius line, perpendicular
     # offset for readability.
@@ -595,12 +579,7 @@ def _render_circle(
         # Perpendicular unit vector: rotate (rx,ry)/norm by 90° = (-ry, rx)/norm
         ox = (-ry / norm) * _LABEL_OFFSET * 0.6
         oy = (rx / norm) * _LABEL_OFFSET * 0.6
-        parts.append(
-            f'<text x="{mid_x + ox:.4f}" y="{-(mid_y + oy):.4f}" '
-            f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
-            'text-anchor="middle" dominant-baseline="middle" '
-            f'fill="{_STROKE}">{_escape(spec.radius_label)}</text>',
-        )
+        parts.append(_text(mid_x + ox, -(mid_y + oy), spec.radius_label))
 
     parts.append("</svg>")
     return "".join(parts)
@@ -666,12 +645,7 @@ def _vertex_label(
     else:
         ox = (dx / norm) * _LABEL_OFFSET
         oy = (dy / norm) * _LABEL_OFFSET
-    return (
-        f'<text x="{x + ox:.4f}" y="{y_svg + oy:.4f}" '
-        f'font-family="{_FONT_FAMILY}" font-size="{_VERTEX_FONT_SIZE}" '
-        'text-anchor="middle" dominant-baseline="middle" '
-        f'fill="{_STROKE}">{_escape(text)}</text>'
-    )
+    return _text(x + ox, y_svg + oy, text, size=_VERTEX_FONT_SIZE)
 
 
 def _side_label(
@@ -708,12 +682,7 @@ def _side_label(
     label_x = mid_x + nx * _LABEL_OFFSET
     label_y_cart = mid_y + ny * _LABEL_OFFSET
     label_y_svg = -label_y_cart
-    return (
-        f'<text x="{label_x:.4f}" y="{label_y_svg:.4f}" '
-        f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
-        'text-anchor="middle" dominant-baseline="middle" '
-        f'fill="{_STROKE}">{_escape(text)}</text>'
-    )
+    return _text(label_x, label_y_svg, text)
 
 
 def _angle_label_text(
@@ -738,12 +707,7 @@ def _angle_label_text(
     else:
         ox = (dx / norm) * _LABEL_OFFSET * 1.4
         oy = (dy / norm) * _LABEL_OFFSET * 1.4
-    return (
-        f'<text x="{x + ox:.4f}" y="{y_svg + oy:.4f}" '
-        f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
-        'text-anchor="middle" dominant-baseline="middle" '
-        f'fill="{_STROKE}">{_escape(text)}</text>'
-    )
+    return _text(x + ox, y_svg + oy, text)
 
 
 def _escape(text: str) -> str:

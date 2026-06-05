@@ -88,7 +88,9 @@ def solve_triangle(spec: TriangleFigure) -> dict[str, Point]:
     #   vertex." ASA generalizes cleanly.
     # - 2 sides + 1 angle → SAS (angle must be at the shared vertex).
     if n_sides == 3:
-        coords = _solve_sss(spec, sides)  # type: ignore[arg-type]
+        # Pass the non-None-narrowed dict (n_sides==3 ⇒ all three present),
+        # which is typed dict[str, float] — no cast/ignore needed.
+        coords = _solve_sss(spec, known_sides)
     elif n_angles >= 2 and n_sides >= 1:
         coords = _solve_asa(spec, sides, angles)
     elif n_sides == 2 and n_angles >= 1:

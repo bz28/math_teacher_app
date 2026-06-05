@@ -728,7 +728,7 @@ def test_render_polygon_square_outputs_svg() -> None:
     assert ">s<" in svg
 
 
-def test_render_polygon_irregular_pentagon() -> None:
+def test_render_polygon_regular_pentagon() -> None:
     svg = render_figure(
         {
             "shape": "polygon",

@@ -12,7 +12,7 @@ ToolSchema = dict[str, Any]
 # ---------------------------------------------------------------------------
 # Geometry figure (shared across question generation, regeneration, and
 # step-decomposition schemas). Mirrors api/core/geometry/dsl.py.
-# Discriminator: `shape` ∈ {triangle, circle}. The LLM picks the variant
+# Discriminator: `shape` ∈ {triangle, circle, polygon}. The LLM picks the variant
 # based on the problem. Extending to new shapes is additive — append a
 # new branch to _FIGURE_SCHEMA's anyOf without touching consumers.
 # ---------------------------------------------------------------------------
