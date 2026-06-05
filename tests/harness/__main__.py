@@ -104,6 +104,8 @@ def _parse(argv: list[str]) -> argparse.Namespace:
         ("approve", "mark a proposal approved (ready to execute)"),
         ("reject", "mark a proposal rejected (never re-surfaced)"),
         ("show", "print one proposal in full"),
+        ("done", "mark a proposal done (PR opened)"),
+        ("execute", "print the subagent execution brief for an approved proposal"),
     ):
         sp = imp_sub.add_parser(verb, help=helptext)
         sp.add_argument("id", help="proposal id (12-char hash from `improve proposals`)")
@@ -262,9 +264,38 @@ def _run_improve_queue(args: argparse.Namespace) -> int:
         print(f"status: {target.status}")
         return 0
 
-    new_status = "approved" if cmd == "approve" else "rejected"
+    new_status = {"approve": "approved", "reject": "rejected", "done": "done"}[cmd]
     queue.set_status(args.id, new_status)
     print(f"[improve:{cmd}] {args.id} → {new_status}: {target.proposal.get('title')}")
+    return 0
+
+
+def _run_improve_execute(args: argparse.Namespace) -> int:
+    """Print the subagent execution brief for an approved proposal, gated by the
+    execution budget. The orchestrating agent spawns a worktree-isolated subagent
+    with this brief; it does NOT code here (Python can't run /autopilot)."""
+    from tests.harness.improver.budget import BudgetCaps, Ledger, check_execute
+    from tests.harness.improver.execute import build_brief
+    from tests.harness.improver.state import Queue
+
+    queue = Queue.load()
+    target = queue.get(args.id)
+    if target is None:
+        print(f"[improve:execute] no proposal with id {args.id!r}")
+        return 1
+    if target.status != "approved":
+        print(f"[improve:execute] {args.id} is '{target.status}', not 'approved' — approve it first.")
+        return 1
+
+    caps = BudgetCaps.from_env()
+    ledger = Ledger.load()
+    verdict = check_execute(caps, ledger)
+    if not verdict.ok:
+        print(f"[improve:execute] BLOCKED — {verdict.reason}")
+        return 1
+
+    ledger.record("execute", note=f"brief for {target.id}: {target.proposal.get('title')}")
+    print(build_brief(target.proposal, branch=f"improver/{target.id}"))
     return 0
 
 
@@ -408,7 +439,9 @@ def main(argv: list[str]) -> int:
         improve_cmd = getattr(args, "improve_cmd", None)
         if improve_cmd == "budget":
             return _run_improve_budget(args)
-        if improve_cmd in ("proposals", "approve", "reject", "show"):
+        if improve_cmd == "execute":
+            return _run_improve_execute(args)
+        if improve_cmd in ("proposals", "approve", "reject", "show", "done"):
             return _run_improve_queue(args)
         return _run_improve_scan(args)
     if args.cmd == "explore":
