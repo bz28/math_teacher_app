@@ -32,6 +32,11 @@ class Probe(ABC):
     #: short, filesystem-safe name used in CLI + report (e.g. "geometry")
     name: str
 
+    #: the default natural-language steer passed to generation when no
+    #: per-scenario constraint overrides it. Recorded on the run summary so
+    #: the admin dashboard shows exactly what prompt a run tested.
+    default_constraint: str = ""
+
     @abstractmethod
     def relevant_paths(self) -> list[str]:
         """Path substrings whose change means this probe should run. The

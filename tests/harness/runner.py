@@ -41,6 +41,9 @@ class RunResult:
     captures: list[CaptureResult] = field(default_factory=list)
     cost_usd: float | None = None
     note: str = ""
+    #: the natural-language steer this run tested (the probe's default, or a
+    #: caller override). Surfaced in the admin dashboard.
+    prompt: str = ""
 
 
 @dataclass
@@ -49,6 +52,8 @@ class RunConfig:
     web_base: str
     mode: str
     judge_sample: int = 3
+    #: override the probe's default_constraint for this run (None → default).
+    constraint: str | None = None
 
 
 def _summary_fields(result: RunResult) -> dict[str, object]:
@@ -69,16 +74,15 @@ def _summary_fields(result: RunResult) -> dict[str, object]:
         "cost_usd": result.cost_usd,
         "passed": len(result.items) > 0 and det_pass == len(result.items),
         "note": result.note,
+        "prompt": result.prompt,
     }
 
 
-async def persist_run_summary(
-    result: RunResult, report_path: str, report_html: str, summary_db_url: str,
-) -> bool:
-    """Write a one-row run summary (including the self-contained HTML report)
-    to the MAIN app DB the admin dashboard reads, separate from the harness
-    test DB. Best-effort: returns False on any failure rather than crashing
-    the run."""
+async def write_harness_run(fields: dict[str, object], summary_db_url: str) -> bool:
+    """Insert one HarnessRun row into the MAIN app DB the admin dashboard reads
+    (separate from the harness's own test DB). Shared by the run and explore
+    paths. Best-effort: returns False on any failure rather than crashing the
+    harness — the summary is observability, never load-bearing."""
     try:
         from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -87,17 +91,23 @@ async def persist_run_summary(
         engine = create_async_engine(summary_db_url)
         try:
             async with async_sessionmaker(engine, expire_on_commit=False)() as s:
-                s.add(HarnessRun(
-                    report_path=report_path,
-                    report_html=report_html,
-                    **_summary_fields(result),
-                ))
+                s.add(HarnessRun(**fields))
                 await s.commit()
         finally:
             await engine.dispose()
         return True
     except Exception:  # noqa: BLE001 — summary is observability, never fatal
         return False
+
+
+async def persist_run_summary(
+    result: RunResult, report_html: str, summary_db_url: str,
+) -> bool:
+    """Write a one-row run summary (including the self-contained HTML report)
+    to the admin dashboard's DB. Best-effort via write_harness_run."""
+    return await write_harness_run(
+        {"report_html": report_html, **_summary_fields(result)}, summary_db_url,
+    )
 
 
 async def run_probe(probe: Probe, cfg: RunConfig) -> RunResult:
@@ -112,7 +122,8 @@ async def run_probe(probe: Probe, cfg: RunConfig) -> RunResult:
         assignment_id=seed.assignment_id,
     )
 
-    items = await probe.generate(ctx)
+    constraint = cfg.constraint or probe.default_constraint
+    items = await probe.generate(ctx, constraint)
     item_results = [ItemResult(it, probe.deterministic_checks(it)) for it in items]
 
     rubric = probe.judge_rubric()
@@ -121,7 +132,11 @@ async def run_probe(probe: Probe, cfg: RunConfig) -> RunResult:
 
     capture_results: list[CaptureResult] = []
     for i, cap in enumerate(caps):
-        score = await judge_card(cap, rubric) if i < cfg.judge_sample else None
+        score = (
+            await judge_card(cap, rubric, probe_name=probe.name)
+            if i < cfg.judge_sample
+            else None
+        )
         capture_results.append(CaptureResult(cap, score))
 
     cost = await run_cost(cfg.mode, started)
@@ -129,6 +144,7 @@ async def run_probe(probe: Probe, cfg: RunConfig) -> RunResult:
         probe_name=probe.name, mode=cfg.mode,
         items=item_results, captures=capture_results, cost_usd=cost,
         note=f"{len(items)} figure items generated; {len(caps)} cards captured",
+        prompt=constraint,
     )
 
 

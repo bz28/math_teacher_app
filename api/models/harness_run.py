@@ -4,7 +4,7 @@ A run-level summary the admin dashboard surfaces in its own "Harness Runs"
 tab. The harness executes against a separate database, but writes this
 summary into the MAIN app DB so the dashboard (which reads the main DB)
 can show run history, scores, and cost without a cross-DB connection. The
-deep per-run detail lives in the harness's HTML report (report_path).
+deep per-run detail lives in the self-contained HTML report (report_html).
 """
 
 import uuid
@@ -38,7 +38,10 @@ class HarnessRun(Base):
     cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    report_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The natural-language steer this run tested: for a normal run the probe's
+    # constraint prompt; for an exploration the list of scenario constraints.
+    # This is the "what prompt did we test" the dashboard surfaces per row.
+    prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     # The self-contained HTML report (embeds screenshots) so the admin
     # dashboard can render it in-app, regardless of which machine ran the
     # harness. One per run, so reports don't overwrite each other.

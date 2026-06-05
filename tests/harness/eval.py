@@ -57,7 +57,9 @@ def _build_judge_schema(dimensions: list[str]) -> ToolSchema:
     }
 
 
-async def judge_card(capture: CardCapture, rubric: JudgeRubric) -> JudgeScore | None:
+async def judge_card(
+    capture: CardCapture, rubric: JudgeRubric, *, probe_name: str,
+) -> JudgeScore | None:
     """Score one card screenshot with the Haiku vision judge. Returns None
     when there's no image to judge."""
     if capture.png is None:
@@ -85,8 +87,12 @@ async def judge_card(capture: CardCapture, rubric: JudgeRubric) -> JudgeScore | 
             max_tokens=512,
             # Pin the cassette key to the card's identity, not the screenshot
             # bytes (which jitter across runs), so replay is reproducible.
+            # Namespace by probe so two probes' card #0 can't collide on the
+            # same cassette.
             call_metadata={
-                "harness_cassette_key": f"judge:{capture.item_index}:{capture.kind}",
+                "harness_cassette_key": (
+                    f"judge:{probe_name}:{capture.item_index}:{capture.kind}"
+                ),
             },
         )
     except CassetteMissError:
