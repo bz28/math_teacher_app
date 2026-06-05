@@ -5,9 +5,13 @@ name: Improver execute
 # proposal and open a DRAFT PR (never merges). You already confirmed the
 # approach by approving the bullet plan; you stay the final gate at PR review.
 #
-# Secrets: reuses CLAUDE_API_KEY (the coding agent bills the metered key, not
-# your subscription). Optionally swap to a CLAUDE_CODE_OAUTH_TOKEN to bill the
-# Pro plan instead.
+# Auth: the coding agent IS Claude Code, which is included in your Claude plan —
+# so it runs on a long-lived plan token (CLAUDE_CODE_OAUTH_TOKEN from
+# `claude setup-token`), NOT the metered API key. No per-token charge on top of
+# the plan you already pay for; runs are infrequent (approval-gated + 8/week
+# cap) so they won't exhaust the limit. (The scan can't use the plan — it makes
+# raw Anthropic SDK calls, which only accept an API key — so it stays on the
+# cheap metered key.)
 #
 # NOTE: headless coding-in-CI is the one part not yet shake-down tested (it
 # can't be dispatched until the workflow is on the default branch). Expect to
@@ -33,7 +37,8 @@ jobs:
       startsWith(github.event.comment.body, 'approve ')
     runs-on: ubuntu-latest
     env:
-      ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      # The coding agent bills your Claude PLAN, not the API (see header).
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       GH_TOKEN: ${{ github.token }}
       IMPROVER_STATE_DIR: ${{ github.workspace }}/_improver_state
     steps:
