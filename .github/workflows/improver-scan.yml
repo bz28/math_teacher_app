@@ -1,0 +1,166 @@
+name: Improver scan
+
+# Autonomous improver, laptop-off. Boots an EPHEMERAL stack (Postgres + API +
+# web + headless Chromium) per run — no always-on server — scans the real app,
+# files the ranked proposals as a GitHub issue, and persists the queue + budget
+# ledger to the `improver/state` branch so dedupe + caps survive between runs.
+#
+# Repo secrets (Settings → Secrets → Actions):
+#   CLAUDE_CODE_OAUTH_TOKEN — `claude setup-token`; the judging runs on your
+#     Claude plan (included), not the API.
+#   CLAUDE_API_KEY — only for the app's own corpus-re-verify generation (raw
+#     SDK, can't use the plan); Haiku-cheap.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *" # ~every 6h, off the :00 mark; budget ledger is the hard cap
+  workflow_dispatch: # manual trigger for testing / on-demand scans
+    inputs:
+      max_surfaces:
+        description: "Cap surfaces (0 = all)"
+        default: "12"
+
+permissions:
+  contents: write # push the improver/state branch
+  issues: write # file the proposal digest
+
+concurrency:
+  group: improver-state # shared with improver-execute: never race the state branch
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_harness
+      JWT_SECRET: improver-ephemeral-secret # consistent within the job (seed + API share it)
+      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }} # app SDK calls (corpus re-verify)
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }} # plan-billed judging
+      APP_ENV: test
+      SENTRY_DSN: ""
+      HARNESS_LLM_MODE: auto
+      HARNESS_API_BASE: http://localhost:8000/v1
+      HARNESS_WEB_BASE: http://localhost:3000
+      IMPROVER_STATE_DIR: ${{ github.workspace }}/_improver_state
+      NEXT_PUBLIC_API_URL: http://localhost:8000/v1
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mathapp
+          POSTGRES_PASSWORD: mathapp
+          POSTGRES_DB: mathapp_harness
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python deps + Chromium
+        run: |
+          pip install -e ".[dev]"
+          python -m playwright install --with-deps chromium
+
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Migrate the ephemeral harness DB
+        run: alembic upgrade head
+
+      - name: Build + start the web app
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          (pnpm start -p 3000 &) # served at :3000
+
+      - name: Start the API (harness DB, cassette mode)
+        run: (python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --log-level warning &)
+
+      - name: Wait for API + web to be healthy
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8000/v1/health >/dev/null 2>&1 && \
+            curl -sf http://localhost:3000 >/dev/null 2>&1 && echo "up" && exit 0
+            sleep 3
+          done
+          echo "stack did not come up in time" && exit 1
+
+      - name: Restore queue + ledger from improver/state
+        run: |
+          mkdir -p "$IMPROVER_STATE_DIR"
+          if git fetch origin improver/state 2>/dev/null; then
+            git show origin/improver/state:proposals.json > "$IMPROVER_STATE_DIR/proposals.json" 2>/dev/null || true
+            git show origin/improver/state:ledger.json    > "$IMPROVER_STATE_DIR/ledger.json"    2>/dev/null || true
+          fi
+
+      # Plan-billed scan, in three steps so the "intelligence" runs on your
+      # Claude plan, not the metered API: gather ($0) → judge (plan) → ingest.
+      - name: Gather evidence ($0 — browser + detectors + screenshots, no LLM)
+        run: |
+          python -m tests.harness improve gather \
+            --dir "$IMPROVER_STATE_DIR/evidence" --apps web \
+            --max-surfaces "${{ github.event.inputs.max_surfaces || '12' }}"
+
+      - name: Judge on the Claude plan (Claude Code headless)
+        working-directory: ${{ env.IMPROVER_STATE_DIR }}/evidence
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          # Reads findings.json + shots/, writes proposals.json (billed to the plan).
+          claude -p "$(cat JUDGE_PROMPT.txt)" \
+            --dangerously-skip-permissions --allowedTools "Read Write Bash"
+
+      - name: Ingest plan-judged proposals (rank, dedupe, queue)
+        run: |
+          # --summary-db "" : CI can't reach the prod DB (local runs populate the
+          # admin "Harness Runs" tab). The GitHub issue + state ledger track CI.
+          python -m tests.harness improve ingest \
+            --dir "$IMPROVER_STATE_DIR/evidence" --summary-db ""
+          cp -f "$IMPROVER_STATE_DIR/evidence/findings.json" "$IMPROVER_STATE_DIR/" 2>/dev/null || true
+
+      - name: Upload the scan evidence (screenshots + findings + proposals)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: improver-evidence
+          path: ${{ env.IMPROVER_STATE_DIR }}/evidence
+          if-no-files-found: ignore
+
+      - name: File the proposal digest as an issue
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DIGEST=$(python -m tests.harness improve digest 2>/dev/null || true)
+          if [ -z "$DIGEST" ] || echo "$DIGEST" | grep -q "No open proposals"; then
+            echo "no open proposals — skipping issue"; exit 0
+          fi
+          BODY=$(printf 'Autonomous improver run %s. Comment `approve <id>` to ship one (opens a PR, never merges) or `reject <id>` to drop it. Full screenshot report is in the run artifacts.\n\n%s' "$(date -u +%Y-%m-%dT%H:%MZ)" "$DIGEST")
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Improver proposals — $(date -u +%Y-%m-%d)" \
+            --label improver --body "$BODY" || echo "issue create skipped"
+
+      - name: Persist queue + ledger to improver/state
+        if: always()
+        run: |
+          git config user.name "improver-bot"
+          git config user.email "improver@users.noreply.github.com"
+          TMP=$(mktemp -d)
+          cp -f "$IMPROVER_STATE_DIR"/proposals.json "$TMP/" 2>/dev/null || true
+          cp -f "$IMPROVER_STATE_DIR"/ledger.json    "$TMP/" 2>/dev/null || true
+          git checkout --orphan improver-state-tmp
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          find . -maxdepth 1 -not -name '.git' -not -name '.' -exec rm -rf {} + 2>/dev/null || true
+          cp -f "$TMP"/*.json . 2>/dev/null || true
+          git add -A
+          git commit -m "improver state $(date -u +%FT%TZ)" >/dev/null 2>&1 || { echo "nothing to persist"; exit 0; }
+          git push -f origin improver-state-tmp:improver/state
