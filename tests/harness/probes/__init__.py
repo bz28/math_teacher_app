@@ -12,6 +12,7 @@ from tests.harness.probes.geometry import GeometryProbe
 
 PROBES: dict[str, Callable[[int], Probe]] = {
     "geometry": lambda count: GeometryProbe(count=count),
-    # `count` is per-topic here (6 curated topics), so keep it small.
-    "generation": lambda count: GenerationProbe(count=count),
+    # Curated probe: the per-topic count is a fixed property of the suite, not
+    # the CLI --count, so a default `--probe generation` run is predictable.
+    "generation": lambda count: GenerationProbe(),
 }
