@@ -16,7 +16,8 @@ function fmtCost(c: number | null): string {
 function resultChip(r: HarnessRun): { text: string; bg: string; title: string } {
   if (r.passed) return { text: "PASS", bg: "#1f7a3d", title: r.note ?? "" };
   const promoted = (r.note ?? "").match(/(\d+)\s+promoted/);
-  if (promoted) return { text: `${promoted[1]} promoted`, bg: "#b5731f", title: r.note ?? "" };
+  if (promoted && Number(promoted[1]) > 0)
+    return { text: `${promoted[1]} promoted`, bg: "#b5731f", title: r.note ?? "" };
   const failed = r.det_total - r.det_pass;
   if (failed > 0) return { text: `${failed} failed`, bg: "#b03a2e", title: r.note ?? "" };
   return { text: "review", bg: "#b5731f", title: r.note ?? "" };
