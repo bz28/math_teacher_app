@@ -4,6 +4,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from api.core.constants import DECOMPOSITION_CACHE_MAX_SIZE, DECOMPOSITION_CACHE_TTL_SECONDS
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
@@ -79,7 +80,24 @@ _SYSTEM_PROMPT_TEMPLATE = (
     "    \"functions\": [{{\"fn\": \"x^2-4\"}}],\n"
     "    \"xRange\": [-5,5], \"yRange\": [-5,10]}}@@\n"
     "  - Physics/other: use <svg> blocks as before\n\n"
-    "For answer_type, use \"diagram\" with @@{{...}}@@ notation for chemistry/graph answers."
+    "For answer_type, use \"diagram\" with @@{{...}}@@ notation for chemistry/graph answers.\n\n"
+
+    "Per-step geometry figures:\n"
+    "- For geometry problems where the construction evolves step by "
+    "step (drop a perpendicular, draw an altitude, construct a "
+    "midsegment), attach a `figure_spec` to the step that introduces "
+    "the new construction. The renderer draws the updated triangle "
+    "with the new mark, replacing the previous step's figure.\n"
+    "- For purely algebraic steps inside a geometry solution, OMIT "
+    "the figure_spec — repeating the same diagram with no visual "
+    "change is noise.\n"
+    "- v1 supports triangle figures only. If a step needs a circle, "
+    "polygon, or coordinate-plane figure, just describe it in prose "
+    "for now; skip the figure_spec rather than emit a wrong shape.\n"
+    "- Use single-character vertex names; reuse the names from the "
+    "problem text so students can track which vertex is which.\n"
+    "- For 90° angles use `right_angle_at` (also draws the square "
+    "marker). Use the `angles` field only for non-right angles.\n"
 )
 
 
@@ -94,7 +112,11 @@ def _build_system_prompt(subject: str) -> str:
 @dataclass
 class Decomposition:
     problem: str
-    steps: list[dict[str, str]]
+    # Each step is {"title", "description"} plus an optional
+    # {"figure_spec", "figure_svg"} pair when the step carries a
+    # geometry figure. Mixed value type — values are str except for
+    # figure_spec which is a dict.
+    steps: list[dict[str, Any]]
     final_answer: str
     problem_type: str
     answer_type: str = "text"
@@ -139,8 +161,23 @@ def _ensure_math_delimiters(answer: str) -> str:
     return answer
 
 
-def _parse_decomposition(data: dict[str, object]) -> tuple[list[dict[str, str]], str, str]:
-    """Parse LLM JSON response into steps, final_answer, and answer_type."""
+def _parse_decomposition(
+    data: dict[str, object],
+) -> tuple[list[dict[str, Any]], str, str]:
+    """Parse LLM JSON response into steps, final_answer, and answer_type.
+
+    Steps may carry an optional `figure_spec` (validated + rendered to
+    `figure_svg` here so downstream consumers — solution_steps JSON in
+    the bank item, the workshop UI, the student step display — get a
+    ready-to-render SVG without having to know about the geometry
+    module). Failures degrade gracefully: a bad figure on step N drops
+    that step's diagram, never the step itself.
+    """
+    # Local import — keeps step_decomposition.py importable without
+    # pulling in the geometry module's sympy dependency (none today,
+    # but the boundary holds for when it does).
+    from api.core.geometry import FigureSpecError, render_figure
+
     steps_data = data["steps"]
     final_answer = data.get("final_answer", "")
     answer_type = str(data.get("answer_type", "text"))
@@ -148,12 +185,22 @@ def _parse_decomposition(data: dict[str, object]) -> tuple[list[dict[str, str]],
     if not isinstance(steps_data, list):
         raise ValueError("Expected 'steps' to be a list")
 
-    steps: list[dict[str, str]] = []
+    steps: list[dict[str, Any]] = []
     for s in steps_data:
         if isinstance(s, dict):
             title = _normalize_latex(str(s.get("title", "")))
             description = _normalize_latex(str(s.get("description", "")))
-            steps.append({"title": title, "description": description})
+            step: dict[str, Any] = {"title": title, "description": description}
+            raw_figure = s.get("figure_spec")
+            if isinstance(raw_figure, dict):
+                try:
+                    step["figure_svg"] = render_figure(raw_figure)
+                    step["figure_spec"] = raw_figure
+                except FigureSpecError as e:
+                    logger.warning(
+                        "step figure_spec rejected (keeping step, dropping figure): %s", e,
+                    )
+            steps.append(step)
         else:
             # Backward compat: plain string from older prompt format
             steps.append({"title": "", "description": _normalize_latex(str(s))})
