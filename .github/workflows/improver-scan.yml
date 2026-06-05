@@ -31,7 +31,8 @@ jobs:
     env:
       DATABASE_URL: postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_harness
       JWT_SECRET: improver-ephemeral-secret # consistent within the job (seed + API share it)
-      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }} # app SDK calls (corpus re-verify)
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }} # plan-billed judging
       APP_ENV: test
       SENTRY_DSN: ""
       HARNESS_LLM_MODE: auto
@@ -99,22 +100,36 @@ jobs:
             git show origin/improver/state:ledger.json    > "$IMPROVER_STATE_DIR/ledger.json"    2>/dev/null || true
           fi
 
-      - name: Run the improver scan
+      # Plan-billed scan, in three steps so the "intelligence" runs on your
+      # Claude plan, not the metered API: gather ($0) → judge (plan) → ingest.
+      - name: Gather evidence ($0 — browser + detectors + screenshots, no LLM)
         run: |
-          # --summary-db "" : CI can't reach the prod DB, so skip the dashboard
-          # row (local scans populate the admin "Harness Runs" tab). The GitHub
-          # issue + run artifact + state-branch ledger are CI's tracking surface.
-          python -m tests.harness improve scan --mode auto --apps web \
-            --max-surfaces "${{ github.event.inputs.max_surfaces || '12' }}" \
-            --summary-db "" \
-            --out "$IMPROVER_STATE_DIR/improve.html" | tee /tmp/scan.out
+          python -m tests.harness improve gather \
+            --dir "$IMPROVER_STATE_DIR/evidence" --apps web \
+            --max-surfaces "${{ github.event.inputs.max_surfaces || '12' }}"
 
-      - name: Upload the scan report
+      - name: Judge on the Claude plan (Claude Code headless)
+        working-directory: ${{ env.IMPROVER_STATE_DIR }}/evidence
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          # Reads findings.json + shots/, writes proposals.json (billed to the plan).
+          claude -p "$(cat JUDGE_PROMPT.txt)" \
+            --dangerously-skip-permissions --allowedTools "Read Write Bash"
+
+      - name: Ingest plan-judged proposals (rank, dedupe, queue)
+        run: |
+          # --summary-db "" : CI can't reach the prod DB (local runs populate the
+          # admin "Harness Runs" tab). The GitHub issue + state ledger track CI.
+          python -m tests.harness improve ingest \
+            --dir "$IMPROVER_STATE_DIR/evidence" --summary-db ""
+          cp -f "$IMPROVER_STATE_DIR/evidence/findings.json" "$IMPROVER_STATE_DIR/" 2>/dev/null || true
+
+      - name: Upload the scan evidence (screenshots + findings + proposals)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: improver-report
-          path: ${{ env.IMPROVER_STATE_DIR }}/improve.html
+          name: improver-evidence
+          path: ${{ env.IMPROVER_STATE_DIR }}/evidence
           if-no-files-found: ignore
 
       - name: File the proposal digest as an issue
