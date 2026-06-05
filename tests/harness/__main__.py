@@ -585,6 +585,7 @@ def main(argv: list[str]) -> int:
         if improve_cmd in ("proposals", "approve", "reject", "show", "done", "digest"):
             return _run_improve_queue(args)
         return _run_improve_scan(args)
+
     if args.cmd == "explore":
         return _run_explore(args)
     if args.cmd == "for-diff":
