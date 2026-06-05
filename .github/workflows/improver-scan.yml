@@ -5,8 +5,11 @@ name: Improver scan
 # files the ranked proposals as a GitHub issue, and persists the queue + budget
 # ledger to the `improver/state` branch so dedupe + caps survive between runs.
 #
-# Requires one repo secret: CLAUDE_API_KEY (Settings → Secrets → Actions).
-# Bills that metered Console key, never the Claude Pro subscription.
+# Repo secrets (Settings → Secrets → Actions):
+#   CLAUDE_CODE_OAUTH_TOKEN — `claude setup-token`; the judging runs on your
+#     Claude plan (included), not the API.
+#   CLAUDE_API_KEY — only for the app's own corpus-re-verify generation (raw
+#     SDK, can't use the plan); Haiku-cheap.
 
 on:
   schedule:

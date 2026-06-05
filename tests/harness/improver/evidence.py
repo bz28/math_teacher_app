@@ -12,7 +12,6 @@ already paid for, while the cheap mechanical part stays free.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
 from pathlib import Path
 
 from tests.harness.improver.proposals import CATEGORIES, SIZES, Proposal, _coerce
@@ -102,7 +101,3 @@ def evidence_summary(out_dir: Path) -> str:
     surfaces = f.get("surfaces", [])
     hits = sum(len(s.get("hits", [])) for s in surfaces)
     return f"{len(surfaces)} surfaces, {hits} hits"
-
-
-# asdict is re-exported for callers that want to serialize a Proposal directly.
-__all__ = ["JUDGE_PROMPT", "save_evidence", "load_proposals", "evidence_summary", "asdict"]
