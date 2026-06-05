@@ -42,6 +42,7 @@ export default function LLMCalls() {
     setSearchParams(params);
   };
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [debugState, setDebugState] = useState<Record<string, string>>({});
   const [offset, setOffset] = useState(0);
   // Schools list used to populate the School dropdown. Loaded once
   // on mount — cheap query and rarely changes. If it fails the
@@ -113,6 +114,19 @@ export default function LLMCalls() {
     const next = new URLSearchParams(searchParams);
     next.set("submission", id);
     setSearchParams(next);
+  };
+
+  const handleDebug = async (callId: string) => {
+    if (!window.confirm("Dispatch a debugging agent for this call? It runs on GitHub and posts its findings as an issue.")) {
+      return;
+    }
+    setDebugState((s) => ({ ...s, [callId]: "sending" }));
+    try {
+      await api.debugLLMCall(callId);
+      setDebugState((s) => ({ ...s, [callId]: "sent" }));
+    } catch {
+      setDebugState((s) => ({ ...s, [callId]: "error" }));
+    }
   };
 
   if (!data) return <p className="loading">Loading…</p>;
@@ -433,6 +447,18 @@ export default function LLMCalls() {
                               </Link>
                             </div>
                           )}
+                          <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10 }}>
+                            <button
+                              onClick={() => handleDebug(c.id)}
+                              disabled={debugState[c.id] === "sending"}
+                              style={{ fontSize: 13, fontWeight: 600, padding: "4px 10px", cursor: "pointer" }}
+                            >
+                              🔍 Debug with agent
+                            </button>
+                            {debugState[c.id] === "sending" && <span style={{ fontSize: 13, color: "var(--muted-2)" }}>Dispatching…</span>}
+                            {debugState[c.id] === "sent" && <span style={{ fontSize: 13, color: "var(--ok, green)" }}>Dispatched — see GitHub issues.</span>}
+                            {debugState[c.id] === "error" && <span style={{ fontSize: 13, color: "var(--danger, crimson)" }}>Dispatch failed (token configured?).</span>}
+                          </div>
                         </div>
                       </div>
                     </td>

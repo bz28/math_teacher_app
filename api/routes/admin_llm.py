@@ -3,10 +3,12 @@
 import uuid as uuid_lib
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.config import settings
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.llm_call import LLMCall
@@ -14,6 +16,10 @@ from api.models.user import User
 from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL, time_range
 
 router = APIRouter()
+
+# Cap each dispatched text field so client_payload stays well under GitHub's
+# ~64KB repository_dispatch limit.
+_DISPATCH_TEXT_CAP = 20000
 
 
 @router.get("/llm-calls")
@@ -265,3 +271,67 @@ async def llm_calls(
             for r in user_rows
         ],
     }
+
+
+async def _github_dispatch(payload: dict[str, object]) -> int:
+    """Fire a `debug-llm-call` repository_dispatch. Returns the HTTP status.
+    Isolated so tests can stub it without touching the test HTTP client."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.post(
+            f"https://api.github.com/repos/{settings.github_repo}/dispatches",
+            headers={
+                "Authorization": f"Bearer {settings.github_dispatch_token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            json={"event_type": "debug-llm-call", "client_payload": payload},
+        )
+    return resp.status_code
+
+
+@router.post("/llm-calls/{call_id}/debug")
+async def debug_llm_call(
+    call_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
+) -> dict[str, str]:
+    """Fire a GitHub Actions agent to debug this one prod LLM call.
+
+    Dispatches a `debug-llm-call` repository_dispatch carrying the call's
+    input/output; the workflow runs Claude Code to trace it through the
+    rendering pipeline and post a GitHub issue with the root cause. Admin-only.
+    """
+    if not settings.github_dispatch_token:
+        raise HTTPException(
+            status_code=503,
+            detail="debug agent not configured (set GITHUB_DISPATCH_TOKEN)",
+        )
+    try:
+        cid = uuid_lib.UUID(call_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid call_id") from None
+
+    call = (
+        await db.execute(select(LLMCall).where(LLMCall.id == cid))
+    ).scalar_one_or_none()
+    if call is None:
+        raise HTTPException(status_code=404, detail="LLM call not found")
+
+    # Only the fields the workflow needs, each truncated, so client_payload stays
+    # well under GitHub's ~64KB cap (metadata is unbounded + unused — omitted).
+    payload: dict[str, object] = {
+        "call_id": str(call.id),
+        "function": call.function,
+        "model": call.model,
+        "input_text": (call.input_text or "")[:_DISPATCH_TEXT_CAP],
+        "output_text": (call.output_text or "")[:_DISPATCH_TEXT_CAP],
+    }
+    try:
+        status_code = await _github_dispatch(payload)
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"GitHub dispatch failed: {e}") from e
+    if status_code not in (200, 204):
+        raise HTTPException(
+            status_code=502, detail=f"GitHub dispatch rejected ({status_code})",
+        )
+    return {"status": "dispatched", "call_id": str(call.id)}
