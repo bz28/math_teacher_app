@@ -28,6 +28,7 @@ export default function HarnessRuns() {
   const [error, setError] = useState<string | null>(null);
   const [reportHtml, setReportHtml] = useState<string | null>(null);
   const [loadingReport, setLoadingReport] = useState<string | null>(null);
+  const [promptOpen, setPromptOpen] = useState<string | null>(null);
 
   const openReport = (id: string) => {
     setLoadingReport(id);
@@ -133,19 +134,27 @@ export default function HarnessRuns() {
               </td>
               <td style={{ padding: 8, whiteSpace: "nowrap" }}>{r.probe}</td>
               <td style={{ padding: 8 }}>{r.mode}</td>
-              <td
-                style={{
-                  padding: 8,
-                  maxWidth: 240,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  color: "#555",
-                }}
-                title={r.prompt ?? ""}
-              >
-                {r.prompt ?? "—"}
-              </td>
+              {r.prompt ? (
+                <td
+                  onClick={() => setPromptOpen(r.prompt)}
+                  title="Click to view the full prompt"
+                  style={{
+                    padding: 8,
+                    maxWidth: 240,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    color: "#3a6ea5",
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                    textDecorationStyle: "dotted",
+                  }}
+                >
+                  {r.prompt}
+                </td>
+              ) : (
+                <td style={{ padding: 8, color: "#999" }}>—</td>
+              )}
               <td style={{ padding: 8 }}>
                 {(() => {
                   const chip = resultChip(r);
@@ -202,6 +211,68 @@ export default function HarnessRuns() {
           )}
         </tbody>
       </table>
+
+      {promptOpen !== null && (
+        <div
+          onClick={() => setPromptOpen(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50,
+            padding: 24,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              borderRadius: 10,
+              width: "min(720px, 92vw)",
+              maxHeight: "80vh",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "10px 16px",
+                borderBottom: "1px solid #eee",
+              }}
+            >
+              <b style={{ fontSize: 13 }}>Prompt tested</b>
+              <button
+                onClick={() => setPromptOpen(null)}
+                style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer" }}
+              >
+                ✕
+              </button>
+            </div>
+            <pre
+              style={{
+                margin: 0,
+                padding: 16,
+                overflow: "auto",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                fontFamily: "system-ui, sans-serif",
+                fontSize: 13,
+                lineHeight: 1.5,
+                color: "#1a1a17",
+              }}
+            >
+              {promptOpen}
+            </pre>
+          </div>
+        </div>
+      )}
 
       {reportHtml !== null && (
         <div
