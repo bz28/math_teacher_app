@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import html
 from pathlib import Path
+from typing import Any
 
 from tests.harness.runner import CaptureResult, ItemResult, RunResult
 from tests.harness.types import JudgeScore
@@ -56,6 +57,28 @@ def _det_summary(it: ItemResult) -> str:
     return (
         f'<span class="badge err">{len(failed)} of {len(it.checks)} failed</span>'
         f'<ul class="checks">{rows}</ul>'
+    )
+
+
+def _solution_html(steps: list[Any] | None) -> str:
+    """Render the worked solution the AI produced (each step's title +
+    description) so a reader can SEE what the correctness judge scored, not
+    just the score. Empty when there are no steps."""
+    if not steps:
+        return ""
+    rows = []
+    for i, s in enumerate(steps):
+        if not isinstance(s, dict):
+            continue
+        title = html.escape(str(s.get("title") or ""))
+        desc = html.escape(str(s.get("description") or ""))
+        head = f"Step {i + 1}{' · ' + title if title else ''}"
+        rows.append(f"<li><b>{head}</b><br>{desc}</li>")
+    if not rows:
+        return ""
+    return (
+        '<details class="solution" open><summary>Worked solution</summary>'
+        f'<ol class="soln">{"".join(rows)}</ol></details>'
     )
 
 
@@ -133,6 +156,7 @@ def write_report(result: RunResult, out_path: Path) -> Path:
         if has_correctness:
             j = result.item_judgments[i] if i < len(result.item_judgments) else None
             ans = it.item.raw.get("final_answer") or "(none)"
+            parts.append(_solution_html(it.item.raw.get("solution_steps")))
             parts.append(
                 f'<div class="answer"><b>Stated answer:</b> {html.escape(str(ans))}</div>'
             )
@@ -176,6 +200,10 @@ def write_report(result: RunResult, out_path: Path) -> Path:
   .scores {{ font-size:11px; color:#555; margin-top:6px; }}
   .rationale {{ font-size:12px; color:#3a382f; margin-top:3px; font-style:italic; }}
   .answer {{ font-size:12px; color:#3a382f; margin-top:8px; }}
+  .solution {{ margin-top:8px; font-size:12px; color:#3a382f; }}
+  .solution summary {{ cursor:pointer; font-weight:600; }}
+  ol.soln {{ margin:6px 0 0; padding-left:18px; line-height:1.6; }}
+  ol.soln li {{ margin-bottom:6px; }}
   .correctness {{ margin-top:8px; padding:8px 10px; border:1px solid #efe9d9;
                   border-radius:8px; background:#fff; }}
 </style></head><body>
