@@ -71,6 +71,29 @@ def _surface_card(o: PageObservation) -> str:
     )
 
 
+def proposals_digest_md(proposals: list[dict[str, object]]) -> str:
+    """Explain-simple bullet plan for the proposals you approve from — readable
+    on a phone, one card each. Used as the GitHub-issue body in the cloud loop."""
+    if not proposals:
+        return "_No open proposals._"
+
+    def _score(d: dict[str, object]) -> float:
+        v = d.get("score", 0)
+        return float(v) if isinstance(v, (int, float)) else 0.0
+
+    cards = []
+    for p in sorted(proposals, key=_score, reverse=True):
+        cards.append(
+            f"### {p.get('title')}  `{p.get('id')}`\n"
+            f"- **What:** {p.get('change')}\n"
+            f"- **Why:** {p.get('rationale')}\n"
+            f"- **Size / risk:** {p.get('est_size')} · {p.get('category')} · {p.get('severity')} "
+            f"(confidence {p.get('confidence')})\n"
+            f"- **Approve:** comment `approve {p.get('id')}`  ·  **Skip:** `reject {p.get('id')}`"
+        )
+    return "\n\n".join(cards)
+
+
 def write_scan_report(
     observations: list[PageObservation],
     proposals: list[Proposal],

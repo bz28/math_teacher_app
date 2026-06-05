@@ -118,11 +118,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          OPEN=$(python -m tests.harness improve proposals 2>/dev/null || true)
-          if echo "$OPEN" | grep -q "queue empty"; then
+          DIGEST=$(python -m tests.harness improve digest 2>/dev/null || true)
+          if [ -z "$DIGEST" ] || echo "$DIGEST" | grep -q "No open proposals"; then
             echo "no open proposals — skipping issue"; exit 0
           fi
-          BODY=$(printf 'Autonomous improver run %s.\n\nApprove with `improve approve <id>` (or reply here), reject with `improve reject <id>`.\n\n```\n%s\n```\n\nFull screenshot report is in the run artifacts.' "$(date -u +%Y-%m-%dT%H:%MZ)" "$OPEN")
+          BODY=$(printf 'Autonomous improver run %s. Comment `approve <id>` to ship one (opens a PR, never merges) or `reject <id>` to drop it. Full screenshot report is in the run artifacts.\n\n%s' "$(date -u +%Y-%m-%dT%H:%MZ)" "$DIGEST")
           gh issue create --repo "$GITHUB_REPOSITORY" \
             --title "Improver proposals — $(date -u +%Y-%m-%d)" \
             --label improver --body "$BODY" || echo "issue create skipped"

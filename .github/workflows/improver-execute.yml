@@ -1,0 +1,100 @@
+name: Improver execute
+
+# Option A — hands-off coding. When YOU comment `approve <id>` on an improver
+# proposal issue, this runs Claude Code headless to implement that one approved
+# proposal and open a DRAFT PR (never merges). You already confirmed the
+# approach by approving the bullet plan; you stay the final gate at PR review.
+#
+# Secrets: reuses CLAUDE_API_KEY (the coding agent bills the metered key, not
+# your subscription). Optionally swap to a CLAUDE_CODE_OAUTH_TOKEN to bill the
+# Pro plan instead.
+#
+# NOTE: headless coding-in-CI is the one part not yet shake-down tested (it
+# can't be dispatched until the workflow is on the default branch). Expect to
+# iterate it on the first real run.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  execute:
+    # Only on an improver-labelled issue, only a comment from the repo owner,
+    # only when it starts with "approve " — so a random commenter can never
+    # trigger an autonomous coding run.
+    if: >-
+      contains(join(github.event.issue.labels.*.name, ','), 'improver') &&
+      github.event.comment.author_association == 'OWNER' &&
+      startsWith(github.event.comment.body, 'approve ')
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      IMPROVER_STATE_DIR: ${{ github.workspace }}/_improver_state
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the fix may branch off a non-default base
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e ".[dev]"
+
+      - name: Acknowledge
+        run: gh issue comment "${{ github.event.issue.number }}" --body "On it — implementing and opening a draft PR. 🤖"
+
+      - name: Restore queue from improver/state
+        run: |
+          mkdir -p "$IMPROVER_STATE_DIR"
+          git fetch origin improver/state 2>/dev/null || true
+          git show origin/improver/state:proposals.json > "$IMPROVER_STATE_DIR/proposals.json" 2>/dev/null || true
+          git show origin/improver/state:ledger.json    > "$IMPROVER_STATE_DIR/ledger.json"    2>/dev/null || true
+
+      - name: Approve + build the execution brief
+        id: brief
+        run: |
+          ID=$(printf '%s' "${{ github.event.comment.body }}" | awk '{print $2}' | tr -cd 'a-f0-9')
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          python -m tests.harness improve approve "$ID" || true
+          # `improve execute` is budget-gated; it prints the subagent brief.
+          python -m tests.harness improve execute "$ID" > "$IMPROVER_STATE_DIR/brief.txt"
+          test -s "$IMPROVER_STATE_DIR/brief.txt" || { echo "no brief (blocked or unknown id)"; exit 1; }
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Implement headless + open draft PR
+        run: |
+          BRIEF=$(cat "$IMPROVER_STATE_DIR/brief.txt")
+          PROMPT="$BRIEF
+
+          You are running in GitHub Actions (non-interactive). Use \`gh\` (GH_TOKEN is set) to open a DRAFT PR. Post a short explain-simple bullet summary of the plan as the PR description. Do not merge. If you cannot keep the change small/safe, comment that on issue #${{ github.event.issue.number }} and stop."
+          claude -p "$PROMPT" --dangerously-skip-permissions --allowedTools "Bash Edit Write Read" 2>&1 | tee /tmp/claude.out
+
+      - name: Mark done + report back
+        if: always()
+        run: |
+          ID="${{ steps.brief.outputs.id }}"
+          python -m tests.harness improve done "$ID" 2>/dev/null || true
+          PR=$(gh pr list --search "improver/$ID in:head" --json url --jq '.[0].url' 2>/dev/null || true)
+          gh issue comment "${{ github.event.issue.number }}" --body "Execution for \`$ID\` finished. ${PR:+PR: $PR}${PR:-(no PR opened — see the run log)}"
+
+      - name: Persist queue + ledger to improver/state
+        if: always()
+        run: |
+          git config user.name "improver-bot"
+          git config user.email "improver@users.noreply.github.com"
+          TMP=$(mktemp -d)
+          cp -f "$IMPROVER_STATE_DIR"/proposals.json "$TMP/" 2>/dev/null || true
+          cp -f "$IMPROVER_STATE_DIR"/ledger.json    "$TMP/" 2>/dev/null || true
+          git checkout --orphan improver-state-tmp
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          find . -maxdepth 1 -not -name '.git' -not -name '.' -exec rm -rf {} + 2>/dev/null || true
+          cp -f "$TMP"/*.json . 2>/dev/null || true
+          git add -A && git commit -m "improver state $(date -u +%FT%TZ)" >/dev/null 2>&1 || exit 0
+          git push -f origin improver-state-tmp:improver/state

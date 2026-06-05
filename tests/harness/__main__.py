@@ -103,6 +103,7 @@ def _parse(argv: list[str]) -> argparse.Namespace:
 
     imp_sub.add_parser("budget", help="show the improver's rolling-window budget usage")
     imp_sub.add_parser("proposals", help="list the durable proposal queue")
+    imp_sub.add_parser("digest", help="explain-simple bullet plan of open proposals (markdown)")
     for verb, helptext in (
         ("approve", "mark a proposal approved (ready to execute)"),
         ("reject", "mark a proposal rejected (never re-surfaced)"),
@@ -243,6 +244,12 @@ def _run_improve_queue(args: argparse.Namespace) -> int:
     def _score(it: object) -> float:
         v = getattr(it, "proposal", {}).get("score", 0)
         return float(v) if isinstance(v, (int, float)) else 0.0
+
+    if cmd == "digest":
+        from tests.harness.improver.report import proposals_digest_md
+        open_props = [it.proposal for it in queue.by_status("proposed")]
+        print(proposals_digest_md(open_props))
+        return 0
 
     if cmd == "proposals":
         live = queue.by_status("proposed", "approved")
@@ -454,7 +461,7 @@ def main(argv: list[str]) -> int:
             return _run_improve_budget(args)
         if improve_cmd == "execute":
             return _run_improve_execute(args)
-        if improve_cmd in ("proposals", "approve", "reject", "show", "done"):
+        if improve_cmd in ("proposals", "approve", "reject", "show", "done", "digest"):
             return _run_improve_queue(args)
         return _run_improve_scan(args)
     if args.cmd == "explore":
