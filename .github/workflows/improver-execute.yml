@@ -21,6 +21,12 @@ on:
   issue_comment:
     types: [created]
 
+# Shared with improver-scan so a scan and an execute never race the
+# improver/state branch (force-push would clobber the other's ledger/queue).
+concurrency:
+  group: improver-state
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: write
@@ -62,8 +68,12 @@ jobs:
 
       - name: Approve + build the execution brief
         id: brief
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }} # via env, never inlined into the shell
         run: |
-          ID=$(printf '%s' "${{ github.event.comment.body }}" | awk '{print $2}' | tr -cd 'a-f0-9')
+          # tr -cd keeps only hex so the id is safe; COMMENT_BODY as env (not
+          # ${{ }} inlined) closes the script-injection hole.
+          ID=$(printf '%s' "$COMMENT_BODY" | awk '{print $2}' | tr -cd 'a-f0-9')
           echo "id=$ID" >> "$GITHUB_OUTPUT"
           python -m tests.harness improve approve "$ID" || true
           # `improve execute` is budget-gated; it prints the subagent brief.

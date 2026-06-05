@@ -25,7 +25,7 @@ permissions:
   issues: write # file the proposal digest
 
 concurrency:
-  group: improver-scan # never let two scans race the state branch
+  group: improver-state # shared with improver-execute: never race the state branch
   cancel-in-progress: false
 
 jobs:
