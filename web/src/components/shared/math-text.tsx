@@ -52,10 +52,13 @@ type Segment =
  */
 // \n (newline) is ambiguous with legitimate prose, so — unlike the other
 // control chars — we only restore it when "n" + the run is a real \n-command.
-// Requiring a letter immediately after the newline means multiline math
-// (newline -> spaces -> token, e.g. inside `aligned`) is never touched.
+// Real multiline math separates rows with `\\` + whitespace (newline -> space
+// -> token), which doesn't match `\n[letter]`, so it's left alone. The residual
+// edge is a BARE newline immediately before a command-letter run; to shrink it
+// we drop the 1-char-suffix commands (\ne, \nu, \ni) that collide most easily
+// with a row starting "e"/"u"/"i" — \neq, \nabla, etc. still restore.
 const N_COMMANDS = new Set([
-  "neq", "ne", "nabla", "nu", "ni", "not", "nmid", "nleq", "ngeq", "nless",
+  "neq", "nabla", "not", "nmid", "nleq", "ngeq", "nless",
   "ngtr", "nparallel", "ncong", "nsim", "nsubseteq", "nsupseteq",
   "nrightarrow", "nleftarrow", "natural",
 ]);

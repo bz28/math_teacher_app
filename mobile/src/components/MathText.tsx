@@ -41,9 +41,11 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;");
 }
 
-// \n is ambiguous with prose, so restore it only for real \n-commands.
+// \n is ambiguous with prose, so restore it only for real \n-commands. The
+// 1-char-suffix ones (\ne, \nu, \ni) collide most easily with a multiline-math
+// row starting "e"/"u"/"i", so they're dropped; \neq, \nabla, etc. still restore.
 const N_COMMANDS = new Set([
-  "neq", "ne", "nabla", "nu", "ni", "not", "nmid", "nleq", "ngeq", "nless",
+  "neq", "nabla", "not", "nmid", "nleq", "ngeq", "nless",
   "ngtr", "nparallel", "ncong", "nsim", "nsubseteq", "nsupseteq",
   "nrightarrow", "nleftarrow", "natural",
 ]);

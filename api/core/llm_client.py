@@ -562,6 +562,13 @@ def _normalize_arrays(
     only when that produces the corruption fingerprint (or fails), re-parse with
     LaTeX backslashes escaped — preserving legit newlines and properly-escaped
     content untouched.
+
+    The fingerprint is `\f\v\b\r` only: those are never legitimate here. `\t`/`\n`
+    are intentionally excluded (they're legit tabs/newlines), so a `\t`/`\n`-only
+    LaTeX command (`\times`, `\neq`) that's single-escaped *and* co-located with
+    nothing from the `\f\v\b\r` family won't trip detection here — those are caught
+    by the frontend restore net (math-text.tsx). The common case (any `\frac`/
+    `\vec`/etc. present) does trip it and fixes the whole element.
     """
     properties = schema.get("input_schema", {}).get("properties", {})
     for key, prop in properties.items():
