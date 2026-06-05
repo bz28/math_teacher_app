@@ -23,6 +23,7 @@ concurrency:
 jobs:
   debug:
     runs-on: ubuntu-latest
+    timeout-minutes: 15  # bound Actions cost if an injected output loops
     env:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       GH_TOKEN: ${{ github.token }}
