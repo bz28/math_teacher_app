@@ -31,11 +31,14 @@ def where_to_look(surface_key: str) -> list[str]:
     return hits or ["(search the repo for the surface above)"]
 
 
-def build_brief(proposal: dict[str, object], *, branch: str) -> str:
+def build_brief(proposal: dict[str, object], *, branch: str, base: str = "main") -> str:
     """The full subagent prompt to implement one approved proposal end-to-end,
-    stopping at PR-open."""
+    stopping at PR-open. `base` is the *preferred* base branch, but the agent is
+    told to verify the target code actually lives there and fall back to the
+    branch that has it (this repo stacks unmerged features)."""
     surface = str(proposal.get("surface_key", ""))
-    where = "\n".join(f"  - {p}" for p in where_to_look(surface))
+    paths = where_to_look(surface)
+    where = "\n".join(f"  - {p}" for p in paths)
     return f"""You are implementing ONE approved improvement in the math_teacher_app repo.
 Follow the repo's CLAUDE.md workflow exactly. Work autonomously through to an
 open PR, then STOP — do not merge.
@@ -59,7 +62,12 @@ open PR, then STOP — do not merge.
 - Branch: {branch}. Conventional-commit messages. Do NOT push to main.
 
 ## Steps
-1. `/plan` the change briefly, then implement it on {branch}.
+0. Pick the right base. Preferred base is `{base}`, BUT this repo stacks
+   unmerged feature work — so first verify the files under "Where to look" exist
+   on it (`git cat-file -e {base}:<path>`). If they DON'T, find the branch that
+   does (`git branch -a --contains` / search) and branch off that instead. Don't
+   open a PR against a base that lacks the code.
+1. Create `{branch}` off the chosen base, `/plan` the change briefly, implement.
 2. If a harness probe covers the touched files, run
    `python -m tests.harness for-diff --base main --mode replay` and fold in the result.
 3. Run a fresh, cold-context `/review` (or the code-review skill) and address
