@@ -7,7 +7,10 @@ end-to-end regression guard for the _normalize_arrays / escaping bug class: if
 LaTeX gets mangled before rendering, real generated text shows it and the run
 FAILs — no browser needed (the corruption is in the text, not the pixels).
 
-LIVE probe (like generation): run with --mode record/auto.
+LIVE probe (like generation): run with --mode record/auto. The corruption check
+itself is $0/deterministic, but this inherits GenerationProbe.judge_items, so a
+cheap Haiku correctness judge also runs per item — so cost is generation + judge,
+not zero.
 """
 
 from __future__ import annotations
