@@ -71,8 +71,9 @@ jobs:
         env:
           COMMENT_BODY: ${{ github.event.comment.body }} # via env, never inlined into the shell
         run: |
-          # tr -cd keeps only hex so the id is safe; COMMENT_BODY as env (not
-          # ${{ }} inlined) closes the script-injection hole.
+          # tr -cd keeps only hex so the id is safe; COMMENT_BODY comes in as an
+          # env var (never inlined into this script) — that closes the
+          # script-injection hole.
           ID=$(printf '%s' "$COMMENT_BODY" | awk '{print $2}' | tr -cd 'a-f0-9')
           echo "id=$ID" >> "$GITHUB_OUTPUT"
           python -m tests.harness improve approve "$ID" || true
