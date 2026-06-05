@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type HarnessRunsData } from "../lib/api";
+import { api, type HarnessRun, type HarnessRunsData } from "../lib/api";
 
 const PAGE_SIZE = 50;
 
@@ -7,6 +7,19 @@ function fmtCost(c: number | null): string {
   if (c === null) return "—";
   if (c === 0) return "$0 (replay)";
   return `$${c.toFixed(4)}`;
+}
+
+/** A self-explaining result chip. A pass is green; a non-pass says *why* in
+ *  one word — explore runs report how many scenarios promoted to the
+ *  regression corpus, normal runs how many deterministic checks failed — so
+ *  the operator never has to open the report to know what needs a look. */
+function resultChip(r: HarnessRun): { text: string; bg: string; title: string } {
+  if (r.passed) return { text: "PASS", bg: "#1f7a3d", title: r.note ?? "" };
+  const promoted = (r.note ?? "").match(/(\d+)\s+promoted/);
+  if (promoted) return { text: `${promoted[1]} promoted`, bg: "#b5731f", title: r.note ?? "" };
+  const failed = r.det_total - r.det_pass;
+  if (failed > 0) return { text: `${failed} failed`, bg: "#b03a2e", title: r.note ?? "" };
+  return { text: "review", bg: "#b5731f", title: r.note ?? "" };
 }
 
 export default function HarnessRuns() {
@@ -69,18 +82,44 @@ export default function HarnessRuns() {
         ))}
       </div>
 
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+      {/* tableLayout:auto overrides the global `table-layout:fixed`, which
+          would force all 11 columns to equal width and ellipsis-truncate
+          every header. Auto sizes each column to its content; the Prompt
+          cell stays capped (maxWidth + ellipsis) so a long steer can't
+          stretch the row. */}
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          fontSize: 13,
+          tableLayout: "auto",
+        }}
+      >
         <thead>
-          <tr style={{ textAlign: "left", borderBottom: "2px solid #e2ddcf" }}>
+          <tr
+            style={{
+              textAlign: "left",
+              borderBottom: "2px solid #e2ddcf",
+              whiteSpace: "nowrap",
+            }}
+          >
             <th style={{ padding: 8 }}>When</th>
             <th style={{ padding: 8 }}>Probe</th>
             <th style={{ padding: 8 }}>Mode</th>
-            <th style={{ padding: 8 }}>Prompt tested</th>
+            <th style={{ padding: 8 }} title="The steer this run tested (hover a cell for the full text)">
+              Prompt
+            </th>
             <th style={{ padding: 8 }}>Result</th>
             <th style={{ padding: 8 }}>Items</th>
-            <th style={{ padding: 8 }}>Det. checks</th>
-            <th style={{ padding: 8 }}>Cards</th>
-            <th style={{ padding: 8 }}>Judge mean</th>
+            <th style={{ padding: 8 }} title="Deterministic checks passed / total">
+              Det.
+            </th>
+            <th style={{ padding: 8 }} title="Card screenshots captured">
+              Cards
+            </th>
+            <th style={{ padding: 8 }} title="Mean Haiku judge score / 5 (samples)">
+              Judge
+            </th>
             <th style={{ padding: 8 }}>Cost</th>
             <th style={{ padding: 8 }}>Report</th>
           </tr>
@@ -91,12 +130,12 @@ export default function HarnessRuns() {
               <td style={{ padding: 8, whiteSpace: "nowrap" }}>
                 {new Date(r.created_at).toLocaleString()}
               </td>
-              <td style={{ padding: 8 }}>{r.probe}</td>
+              <td style={{ padding: 8, whiteSpace: "nowrap" }}>{r.probe}</td>
               <td style={{ padding: 8 }}>{r.mode}</td>
               <td
                 style={{
                   padding: 8,
-                  maxWidth: 280,
+                  maxWidth: 240,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
@@ -107,24 +146,31 @@ export default function HarnessRuns() {
                 {r.prompt ?? "—"}
               </td>
               <td style={{ padding: 8 }}>
-                <span
-                  style={{
-                    fontSize: 11,
-                    padding: "1px 7px",
-                    borderRadius: 6,
-                    color: "#fff",
-                    background: r.passed ? "#1f7a3d" : "#b03a2e",
-                  }}
-                >
-                  {r.passed ? "PASS" : "CHECK"}
-                </span>
+                {(() => {
+                  const chip = resultChip(r);
+                  return (
+                    <span
+                      title={chip.title}
+                      style={{
+                        fontSize: 11,
+                        padding: "1px 7px",
+                        borderRadius: 6,
+                        color: "#fff",
+                        whiteSpace: "nowrap",
+                        background: chip.bg,
+                      }}
+                    >
+                      {chip.text}
+                    </span>
+                  );
+                })()}
               </td>
               <td style={{ padding: 8 }}>{r.items_generated}</td>
-              <td style={{ padding: 8 }}>
+              <td style={{ padding: 8, whiteSpace: "nowrap" }}>
                 {r.det_pass}/{r.det_total}
               </td>
               <td style={{ padding: 8 }}>{r.captures}</td>
-              <td style={{ padding: 8 }}>
+              <td style={{ padding: 8, whiteSpace: "nowrap" }}>
                 {r.judge_mean !== null ? `${r.judge_mean}/5 (${r.judge_count})` : "—"}
               </td>
               <td style={{ padding: 8 }}>{fmtCost(r.cost_usd)}</td>
