@@ -209,6 +209,11 @@ def _serialize_item(
         "used_in": used_in or [],
         "source_doc_ids": item.source_doc_ids,
         "generation_prompt": item.generation_prompt,
+        # figure_spec is the structured source-of-truth (a future
+        # visual editor will mutate this); figure_svg is the cached
+        # rendered display artifact. Both null on non-geometry items.
+        "figure_spec": item.figure_spec,
+        "figure_svg": item.figure_svg,
         "has_previous_version": item.previous_question is not None,
         "chat_messages": item.chat_messages or [],
         "chat_soft_cap": CHAT_SOFT_CAP,
@@ -538,10 +543,15 @@ async def revert_bank_item(
     item.final_answer = item.previous_final_answer or ""
     if item.previous_status:
         item.status = item.previous_status
+    # Restore the figure alongside the prose so the two stay in sync.
+    item.figure_spec = item.previous_figure_spec
+    item.figure_svg = item.previous_figure_svg
     item.previous_question = None
     item.previous_solution_steps = None
     item.previous_final_answer = None
     item.previous_status = None
+    item.previous_figure_spec = None
+    item.previous_figure_svg = None
     await db.commit()
     return _serialize_item(item, await used_in_for_item(db, item))
 

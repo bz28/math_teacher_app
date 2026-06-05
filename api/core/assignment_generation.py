@@ -49,7 +49,35 @@ student level — NOT absolute math/science difficulty:
 - medium: chains two techniques OR requires choosing the right
   approach from several options. Mid-textbook practice.
 - hard: synthesis, unusual setup, or a non-obvious step. Tough but
-  solvable with practice for THIS course."""
+  solvable with practice for THIS course.
+
+# Figures (diagrams)
+
+Some problems genuinely need a diagram to be understood —
+right-triangle trigonometry, Pythagorean theorem, congruence /
+similarity setups, problems referencing "the triangle below."
+Emit `figure_spec` for those, NOT for algebra, word problems, or
+anything where the prose already carries the full picture. A
+figure that decorates rather than informs is noise.
+
+v1 supports triangles only. If a problem needs a circle, polygon,
+coordinate-plane setup, or other non-triangle figure, either reword
+it so prose carries the figure, or skip the problem — don't emit a
+mis-shaped figure_spec.
+
+When you do emit one:
+- Use single-character vertex names (A, B, C).
+- Provide enough constraints to determine the triangle (3 sides;
+  or 2 sides + 1 angle; or 1 side + 2 angles). Don't leave it
+  underspecified.
+- Don't emit the same edge twice (e.g. don't include both 'AB' and
+  'BA' — pick one).
+- For a 90° angle use `right_angle_at` (also draws the square
+  marker). Use the `angles` field only for non-right angles.
+- side_labels / angle_labels are what STUDENTS see on the figure
+  — match the variable names or numbers the problem text uses
+  (e.g. side_label 'c' when the question asks the student to
+  find c)."""
 
 
 def _build_question_generation_prompt(subject: str) -> str:
@@ -218,11 +246,19 @@ async def generate_questions(
         for q in questions:
             if not isinstance(q, dict) or "text" not in q:
                 continue
-            normalized.append({
+            entry: dict[str, Any] = {
                 "title": str(q.get("title") or "")[:120],
                 "text": str(q["text"]),
                 "difficulty": str(q.get("difficulty") or "medium"),
-            })
+            }
+            # Pass figure_spec through if the model emitted one. The
+            # consumer (question_bank_generation) renders + stores it.
+            # Keep the raw dict here; validation happens at render
+            # time so we can degrade-gracefully on bad specs rather
+            # than dropping the whole question.
+            if isinstance(q.get("figure_spec"), dict):
+                entry["figure_spec"] = q["figure_spec"]
+            normalized.append(entry)
 
         return normalized[:count]
 

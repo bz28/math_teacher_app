@@ -254,6 +254,10 @@ class VariationPayload(BaseModel):
     distractors: list[str]
     solution_steps: list[Any] | None
     difficulty: str
+    # Rendered SVG when the bank item has a geometry figure. Null for
+    # everything else. Frontend renders inline above the question via
+    # DOMPurify + dangerouslySetInnerHTML.
+    figure_svg: str | None = None
 
 
 class NextVariationServed(BaseModel):
@@ -321,6 +325,9 @@ class StudentPracticeProblem(BaseModel):
     bank_item_id: str
     position: int
     question: str
+    # Pre-rendered SVG for problems that have a geometry figure. Null
+    # for everything else. Frontend renders inline above the question.
+    figure_svg: str | None = None
     solution_steps: list[dict[str, Any]] | None
     final_answer: str | None
     distractors: list[str] | None
@@ -349,6 +356,11 @@ class StudentHomeworkProblem(BaseModel):
     bank_item_id: str
     position: int
     question: str
+    # Pre-rendered SVG for problems that have a geometry figure. Null
+    # for everything else. The figure is part of the problem (not the
+    # answer), so it's safe to ship pre-submission — students need to
+    # see what they're solving.
+    figure_svg: str | None = None
     # NOTE: final_answer and solution_steps are deliberately NOT exposed
     # for HW primaries — the homework problem is locked and the student
     # is not supposed to be able to read the answer (or any AI-assisted
@@ -544,6 +556,7 @@ def _serialize(item: QuestionBankItem) -> VariationPayload:
         distractors=list(item.distractors or []),
         solution_steps=item.solution_steps,
         difficulty=item.difficulty,
+        figure_svg=item.figure_svg,
     )
 
 
@@ -1129,6 +1142,7 @@ async def homework_detail(
             bank_item_id=str(item.id),
             position=pos,
             question=item.question,
+            figure_svg=item.figure_svg,
             difficulty=item.difficulty,
             approved_variation_count=counts.get(str(pid), 0),
             format=item.format,
@@ -1240,6 +1254,7 @@ async def practice_detail(
             bank_item_id=str(it.id),
             position=pos,
             question=it.question,
+            figure_svg=it.figure_svg,
             solution_steps=it.solution_steps,
             final_answer=it.final_answer,
             distractors=it.distractors,

@@ -76,6 +76,25 @@ class QuestionBankItem(Base):
     # status: pending / approved / rejected / archived
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
 
+    # Structured figure spec (JSON DSL — see api/core/geometry/dsl.py).
+    # The LLM emits this when a question benefits from a diagram. The
+    # solver + renderer turn it into figure_svg below at generation
+    # time. Stored alongside the rendered SVG so future visual editors
+    # can re-render after teacher tweaks without losing the LLM-
+    # generated source-of-truth.
+    figure_spec: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # Cached SVG rendered from figure_spec. Frontend embeds this
+    # directly (after DOMPurify); we don't re-render on every read.
+    # NULL when the question has no figure.
+    figure_svg: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # One-level undo for the figure, parallel to the previous_* family
+    # below. Snapshotted in snapshot_history() so revert atomically
+    # restores prose AND figure — otherwise an undo could leave the
+    # old question text alongside the new (or cleared) diagram.
+    previous_figure_spec: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    previous_figure_svg: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # True while at least one published assignment references this item.
     # While locked, content edits / status changes / delete are refused.
     locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
