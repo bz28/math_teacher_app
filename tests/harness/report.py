@@ -13,6 +13,7 @@ import html
 from pathlib import Path
 
 from tests.harness.runner import CaptureResult, ItemResult, RunResult
+from tests.harness.types import JudgeScore
 
 
 def _png_data_uri(png: bytes | None) -> str:
@@ -58,6 +59,20 @@ def _det_summary(it: ItemResult) -> str:
     )
 
 
+def _correctness_html(j: JudgeScore | None) -> str:
+    """Render the text judge's per-problem correctness scores (well_posed,
+    answer_correct, steps_valid) + rationale, or a 'not judged' note."""
+    if j is None:
+        return '<div class="rationale">(correctness not judged)</div>'
+    scores = " · ".join(f"{html.escape(d)} {v}/5" for d, v in j.scores.items())
+    flag = _badge(j.mean >= 4, f"correctness {j.mean}/5")
+    return (
+        f'<div class="correctness">{flag}'
+        f'<div class="scores">{scores}</div>'
+        f'<div class="rationale">{html.escape(j.rationale)}</div></div>'
+    )
+
+
 def _view(c: CaptureResult) -> str:
     cap = c.capture
     flags = []
@@ -92,11 +107,12 @@ def _view(c: CaptureResult) -> str:
 
 def write_report(result: RunResult, out_path: Path) -> Path:
     det_passed = sum(1 for it in result.items if it.passed)
-    judged = [c for c in result.captures if c.judge is not None]
+    judge_means = [c.judge.mean for c in result.captures if c.judge is not None]
+    judge_means += [j.mean for j in result.item_judgments if j is not None]
     mean_judge = (
-        round(sum(c.judge.mean for c in judged if c.judge) / len(judged), 2)
-        if judged else None
+        round(sum(judge_means) / len(judge_means), 2) if judge_means else None
     )
+    has_correctness = any(j is not None for j in result.item_judgments)
     cost = "$0.00 (replay)" if result.cost_usd == 0 else (
         f"${result.cost_usd:.4f}" if result.cost_usd is not None else "n/a"
     )
@@ -111,16 +127,25 @@ def write_report(result: RunResult, out_path: Path) -> Path:
             caps_by_item.get(i, []),
             key=lambda c: 0 if c.capture.kind == "question" else 1,
         )
-        views_html = "".join(_view(c) for c in views) or (
-            '<div class="noimg">no page capture for this question</div>'
-        )
+        parts: list[str] = []
+        if views:
+            parts.append(f'<div class="views">{"".join(_view(c) for c in views)}</div>')
+        if has_correctness:
+            j = result.item_judgments[i] if i < len(result.item_judgments) else None
+            ans = it.item.raw.get("final_answer") or "(none)"
+            parts.append(
+                f'<div class="answer"><b>Stated answer:</b> {html.escape(str(ans))}</div>'
+            )
+            parts.append(_correctness_html(j))
+        if not parts:
+            parts.append('<div class="noimg">no page capture for this question</div>')
         blocks.append(
             f'<section class="qblock">'
             f'<div class="qhead"><span class="qnum">Question {i + 1}</span>'
             f'<span class="qtitle">{html.escape(it.item.label)}</span>'
             f'<span class="qdet">{_det_summary(it)}</span></div>'
             f'<div class="qtext">{html.escape(it.item.problem_text[:220])}</div>'
-            f'<div class="views">{views_html}</div>'
+            f'{"".join(parts)}'
             f'</section>'
         )
 
@@ -150,15 +175,17 @@ def write_report(result: RunResult, out_path: Path) -> Path:
   .noimg {{ color:#b03a2e; font-size:12px; padding:14px; }}
   .scores {{ font-size:11px; color:#555; margin-top:6px; }}
   .rationale {{ font-size:12px; color:#3a382f; margin-top:3px; font-style:italic; }}
+  .answer {{ font-size:12px; color:#3a382f; margin-top:8px; }}
+  .correctness {{ margin-top:8px; padding:8px 10px; border:1px solid #efe9d9;
+                  border-radius:8px; background:#fff; }}
 </style></head><body>
 <h1>Harness report — {html.escape(result.probe_name)} <small>({html.escape(result.mode)} mode)</small></h1>
 <div class="summary">
   <b>{len(result.items)}</b> questions generated · deterministic checks passed
   <b>{det_passed}/{len(result.items)}</b>
-  {f'· judge mean <b>{mean_judge}/5</b> over {len(judged)} views' if mean_judge is not None else ''}
+  {f'· judge mean <b>{mean_judge}/5</b> over {len(judge_means)} judged' if mean_judge is not None else ''}
   · spent <b>{cost}</b><br>
-  <small>Each question shows two views: how it renders on the page, and its worked
-  solution. {html.escape(result.note)}</small>
+  <small>{html.escape(result.note)}</small>
 </div>
 {_prompt_block(result.prompt)}
 {''.join(blocks) or '<i>no questions generated</i>'}

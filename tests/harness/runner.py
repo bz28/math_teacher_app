@@ -11,10 +11,16 @@ import asyncio
 from dataclasses import dataclass, field
 
 from tests.harness.browser import HarnessBrowser
-from tests.harness.eval import JudgeScore, judge_card
+from tests.harness.eval import judge_card
 from tests.harness.probe import Probe
 from tests.harness.seed import seed_world
-from tests.harness.types import CardCapture, CheckResult, GeneratedItem, HarnessContext
+from tests.harness.types import (
+    CardCapture,
+    CheckResult,
+    GeneratedItem,
+    HarnessContext,
+    JudgeScore,
+)
 
 
 @dataclass
@@ -44,6 +50,9 @@ class RunResult:
     #: the natural-language steer this run tested (the probe's default, or a
     #: caller override). Surfaced in the admin dashboard.
     prompt: str = ""
+    #: optional per-item LLM judgments aligned to `items` by index (e.g. a text
+    #: judge scoring problem correctness). Empty for figure-only probes.
+    item_judgments: list[JudgeScore | None] = field(default_factory=list)
 
 
 @dataclass
@@ -58,7 +67,11 @@ class RunConfig:
 
 def _summary_fields(result: RunResult) -> dict[str, object]:
     det_pass = sum(1 for it in result.items if it.passed)
+    # The dashboard's single "judge mean" spans both judge flavors: the vision
+    # judge (figure quality, from captures) and the text judge (problem
+    # correctness, from item_judgments). A probe uses one or the other.
     judged = [c.judge for c in result.captures if c.judge is not None]
+    judged += [j for j in result.item_judgments if j is not None]
     judge_mean = (
         round(sum(j.mean for j in judged) / len(judged), 2) if judged else None
     )
@@ -126,25 +139,33 @@ async def run_probe(probe: Probe, cfg: RunConfig) -> RunResult:
     items = await probe.generate(ctx, constraint)
     item_results = [ItemResult(it, probe.deterministic_checks(it)) for it in items]
 
-    rubric = probe.judge_rubric()
-    async with HarnessBrowser(ctx.web_base) as browser:
-        caps = await probe.capture_cards(ctx, browser, items)
-
+    # Vision pass — only for probes that screenshot rendered cards.
     capture_results: list[CaptureResult] = []
-    for i, cap in enumerate(caps):
-        score = (
-            await judge_card(cap, rubric, probe_name=probe.name)
-            if i < cfg.judge_sample
-            else None
-        )
-        capture_results.append(CaptureResult(cap, score))
+    if probe.needs_browser:
+        rubric = probe.judge_rubric()
+        async with HarnessBrowser(ctx.web_base) as browser:
+            caps = await probe.capture_cards(ctx, browser, items)
+        for i, cap in enumerate(caps):
+            score = (
+                await judge_card(cap, rubric, probe_name=probe.name)
+                if i < cfg.judge_sample
+                else None
+            )
+            capture_results.append(CaptureResult(cap, score))
+
+    # Text pass — per-item judging that needs no screenshot (e.g. correctness).
+    item_judgments = await probe.judge_items(items)
 
     cost = await run_cost(cfg.mode, started)
+    note = (
+        f"{len(items)} items generated; {len(capture_results)} cards captured"
+        if probe.needs_browser
+        else f"{len(items)} items generated; {len([j for j in item_judgments if j])} judged"
+    )
     return RunResult(
         probe_name=probe.name, mode=cfg.mode,
         items=item_results, captures=capture_results, cost_usd=cost,
-        note=f"{len(items)} figure items generated; {len(caps)} cards captured",
-        prompt=constraint,
+        note=note, prompt=constraint, item_judgments=item_judgments,
     )
 
 
