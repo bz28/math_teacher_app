@@ -17,6 +17,12 @@ output:
 
 No browser: there's no figure to screenshot here, so needs_browser is False and
 the runner skips Chromium. Correctness comes from judge_items (the text judge).
+
+Run in `--mode record`/`auto` (~$0.23 for the full 6-topic × 2 sweep). Replay is
+only partially deterministic for this probe: every topic generates into the SAME
+seeded assignment, so a later topic's generation prompt can depend on the bank
+state the earlier topics left behind, and that ordering doesn't always reproduce
+on replay. Full $0-replay would need per-topic seed isolation (a follow-up).
 """
 
 from __future__ import annotations
