@@ -48,8 +48,11 @@ def test_rank_filter_drops_forbidden_and_oversized() -> None:
 def test_forbidden_catches_inflected_auth_schema_terms() -> None:
     # Regression for the cold-review finding: \b boundaries missed these.
     for change in ("rework authentication", "add authorization checks",
-                   "edit two schemas", "add a migration", "use OAuth"):
+                   "edit two schemas", "add a migration", "use OAuth",
+                   "tweak the checkout", "subscription paywall copy"):
         assert _p("x", change=change).forbidden, change
+    # And the surface itself is scanned, not just title/change.
+    assert _p("Tidy the form", surface="web.public.login", change="spacing").forbidden
     assert not _p("Fix nav overflow", change="tighten the gap").forbidden
 
 

@@ -28,12 +28,15 @@ SIZES = ["S", "M", "L"]
 _SIZE_RANK = {"S": 1, "M": 2, "L": 3}
 _SEVERITY_WEIGHT = {"high": 3.0, "medium": 2.0, "low": 1.0}
 
-# A proposal touching any of these is dropped pre-approval — too risky for the
-# autonomous loop regardless of how small it looks. Substring (no \b) on stems
-# so "authentication"/"authorization"/"oauth"/"schemas"/"migrations" all match;
-# over-blocking a few innocents (e.g. "author") is the safe side for a guard.
+# First-pass triage, NOT a hard guarantee — the real safety boundary is the
+# human approval gate + the execution brief's stop-rule + PR review (nothing
+# auto-merges). This just keeps obviously-risky proposals out of the queue.
+# Substring (no \b) on stems so "authentication"/"oauth"/"schemas"/"migrations"
+# match; over-blocking a few innocents (e.g. "author") is the safe side.
 _FORBIDDEN = re.compile(
-    r"(schema|migrat|auth|login|password|billing|payment|stripe|token|secret|credential)", re.I,
+    r"(schema|migrat|auth|login|password|billing|payment|stripe|token|secret"
+    r"|credential|checkout|subscription|paywall)",
+    re.I,
 )
 
 
@@ -64,7 +67,9 @@ class Proposal:
 
     @property
     def forbidden(self) -> bool:
-        return bool(_FORBIDDEN.search(f"{self.title} {self.change}"))
+        # Scan the surface too, so a proposal targeting e.g. a login/billing
+        # surface is caught even when its title/change read innocuously.
+        return bool(_FORBIDDEN.search(f"{self.surface_key} {self.title} {self.change}"))
 
 
 def _signal(observations: list[PageObservation]) -> list[dict[str, object]]:
