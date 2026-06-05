@@ -6,8 +6,8 @@ Flow it owns:
                        items that came back with a figure.
   deterministic_checks() re-render the figure_spec (consistency), and confirm the
                        stored figure_svg is well-formed. Free, no LLM, no browser.
-  capture_cards()      drive the teacher review UI (workshop modal) to screenshot
-                       each figure as the teacher actually sees it on the page.
+  capture_cards()      drive the teacher review UI (a full-page review view, not
+                       a modal) to screenshot each figure as the teacher sees it.
   judge_rubric()       the dimensions + rubric the sampled Haiku judge scores.
 
 The teacher-review navigation uses resilient text/role selectors; if the live
@@ -49,6 +49,7 @@ _JOB_TERMINAL = {"done", "failed"}
 
 class GeometryProbe(Probe):
     name = "geometry"
+    default_constraint = _GEOMETRY_CONSTRAINT
 
     def __init__(self, count: int = 6) -> None:
         self.count = count
@@ -105,7 +106,7 @@ class GeometryProbe(Probe):
                     "count": self.count,
                     "assignment_id": ctx.assignment_id,
                     "unit_id": ctx.unit_id,
-                    "constraint": constraint or _GEOMETRY_CONSTRAINT,
+                    "constraint": constraint or self.default_constraint,
                 },
             )
             resp.raise_for_status()

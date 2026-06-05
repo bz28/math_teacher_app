@@ -26,6 +26,17 @@ def _badge(ok: bool, label: str) -> str:
     return f'<span class="badge {cls}">{html.escape(label)}</span>'
 
 
+def _prompt_block(prompt: str) -> str:
+    """The 'Prompt tested' panel — what steered this run's generation. Empty
+    string when no prompt was recorded (older rows)."""
+    if not prompt:
+        return ""
+    return (
+        '<div class="summary"><b>Prompt tested:</b><br>'
+        f"<small>{html.escape(prompt)}</small></div>"
+    )
+
+
 _VIEW_TITLE = {
     "question": "Question — as the page renders it",
     "solution": "Worked solution — steps + per-step figures",
@@ -149,6 +160,7 @@ def write_report(result: RunResult, out_path: Path) -> Path:
   <small>Each question shows two views: how it renders on the page, and its worked
   solution. {html.escape(result.note)}</small>
 </div>
+{_prompt_block(result.prompt)}
 {''.join(blocks) or '<i>no questions generated</i>'}
 </body></html>"""
 

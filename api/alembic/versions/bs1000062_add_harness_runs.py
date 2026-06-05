@@ -34,7 +34,7 @@ def upgrade() -> None:
         sa.Column("cost_usd", sa.Float(), nullable=True),
         sa.Column("passed", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("note", sa.Text(), nullable=True),
-        sa.Column("report_path", sa.Text(), nullable=True),
+        sa.Column("prompt", sa.Text(), nullable=True),
         sa.Column("report_html", sa.Text(), nullable=True),
         sa.Column(
             "created_at", sa.DateTime(timezone=True),

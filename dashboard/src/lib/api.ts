@@ -252,7 +252,7 @@ export interface HarnessRun {
   cost_usd: number | null;
   passed: boolean;
   note: string | null;
-  report_path: string | null;
+  prompt: string | null;
   created_at: string;
 }
 

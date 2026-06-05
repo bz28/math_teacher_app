@@ -136,9 +136,7 @@ def _run_for_diff(args: argparse.Namespace) -> int:
             result = await run_probe(probe, cfg)
             out_path = Path(args.out.replace(".html", f".{name}.html"))
             write_report(result, out_path)
-            await persist_run_summary(
-                result, str(out_path), out_path.read_text(), args.summary_db,
-            )
+            await persist_run_summary(result, out_path.read_text(), args.summary_db)
             det = sum(1 for it in result.items if it.passed)
             ok = len(result.items) > 0 and det == len(result.items)
             failed = failed or not ok
@@ -241,9 +239,7 @@ def main(argv: list[str]) -> int:
         result = await run_probe(probe, cfg)
         out_path = write_report(result, Path(args.out))
         report_html = out_path.read_text()
-        summary_ok = await persist_run_summary(
-            result, str(out_path), report_html, args.summary_db,
-        )
+        summary_ok = await persist_run_summary(result, report_html, args.summary_db)
         return result, out_path, summary_ok
 
     result, out, summary_ok = asyncio.run(_execute())

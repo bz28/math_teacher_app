@@ -28,7 +28,7 @@ def _serialize(r: HarnessRun) -> dict[str, Any]:
         "cost_usd": r.cost_usd,
         "passed": r.passed,
         "note": r.note,
-        "report_path": r.report_path,
+        "prompt": r.prompt,
         "created_at": r.created_at.isoformat(),
     }
 

@@ -75,6 +75,7 @@ export default function HarnessRuns() {
             <th style={{ padding: 8 }}>When</th>
             <th style={{ padding: 8 }}>Probe</th>
             <th style={{ padding: 8 }}>Mode</th>
+            <th style={{ padding: 8 }}>Prompt tested</th>
             <th style={{ padding: 8 }}>Result</th>
             <th style={{ padding: 8 }}>Items</th>
             <th style={{ padding: 8 }}>Det. checks</th>
@@ -92,6 +93,19 @@ export default function HarnessRuns() {
               </td>
               <td style={{ padding: 8 }}>{r.probe}</td>
               <td style={{ padding: 8 }}>{r.mode}</td>
+              <td
+                style={{
+                  padding: 8,
+                  maxWidth: 280,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  color: "#555",
+                }}
+                title={r.prompt ?? ""}
+              >
+                {r.prompt ?? "—"}
+              </td>
               <td style={{ padding: 8 }}>
                 <span
                   style={{
@@ -134,7 +148,7 @@ export default function HarnessRuns() {
           ))}
           {data.runs.length === 0 && (
             <tr>
-              <td colSpan={10} style={{ padding: 16, color: "#999" }}>
+              <td colSpan={11} style={{ padding: 16, color: "#999" }}>
                 No harness runs yet.
               </td>
             </tr>

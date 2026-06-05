@@ -223,7 +223,7 @@ def write_explore_report(result: ExploreResult, out_path: Path) -> str:
             f"<td>{r.items}</td><td>{r.det_pass}/{r.det_total}</td>"
             f'<td>{"yes" if r.shape_match else "no"}</td>'
             f'<td><b style="color:{"#1f7a3d" if ok else "#b03a2e"}">'
-            f'{"PASS" if ok else "FAIL"}</b></td>'
+            f'{"PASS" if ok else "FAIL → promoted to corpus"}</b></td>'
             f"<td>{html.escape(_fail_reason(r))}</td></tr>"
         )
     passed = result.passed
@@ -257,36 +257,33 @@ async def persist_explore_summary(
 ) -> bool:
     """Write a run-summary row for an exploration so it shows in the admin
     'Harness Runs' tab (probe suffixed with ·explore). Best-effort."""
-    try:
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from tests.harness.runner import write_harness_run
 
-        from api.models.harness_run import HarnessRun
-
-        total = len(result.results)
-        passed = result.passed
-        engine = create_async_engine(summary_db_url)
-        try:
-            async with async_sessionmaker(engine, expire_on_commit=False)() as s:
-                s.add(HarnessRun(
-                    probe=f"{result.probe_name}·explore",
-                    mode=mode,
-                    items_generated=sum(r.items for r in result.results),
-                    det_pass=sum(r.det_pass for r in result.results),
-                    det_total=sum(r.det_total for r in result.results),
-                    captures=0,
-                    judge_count=0,
-                    judge_mean=None,
-                    cost_usd=cost_usd,
-                    passed=total > 0 and passed == total,
-                    note=(
-                        f"{passed}/{total} scenarios passed; "
-                        f"{total - passed} promoted to corpus"
-                    ),
-                    report_html=report_html,
-                ))
-                await s.commit()
-        finally:
-            await engine.dispose()
-        return True
-    except Exception:  # noqa: BLE001 — observability, never fatal
-        return False
+    total = len(result.results)
+    passed = result.passed
+    # The "prompt" for an exploration is the set of scenarios it tested —
+    # one line each so the dashboard shows exactly what was probed.
+    prompt = "\n".join(
+        f"• {r.scenario.name}: {r.scenario.constraint}" for r in result.results
+    )
+    return await write_harness_run(
+        {
+            "probe": f"{result.probe_name}·explore",
+            "mode": mode,
+            "items_generated": sum(r.items for r in result.results),
+            "det_pass": sum(r.det_pass for r in result.results),
+            "det_total": sum(r.det_total for r in result.results),
+            "captures": 0,
+            "judge_count": 0,
+            "judge_mean": None,
+            "cost_usd": cost_usd,
+            "passed": total > 0 and passed == total,
+            "note": (
+                f"{passed}/{total} scenarios passed; "
+                f"{total - passed} promoted to corpus"
+            ),
+            "prompt": prompt,
+            "report_html": report_html,
+        },
+        summary_db_url,
+    )
