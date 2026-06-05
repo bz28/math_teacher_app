@@ -18,11 +18,12 @@ output:
 No browser: there's no figure to screenshot here, so needs_browser is False and
 the runner skips Chromium. Correctness comes from judge_items (the text judge).
 
-Run in `--mode record`/`auto` (~$0.23 for the full 6-topic × 2 sweep). Replay is
-only partially deterministic for this probe: every topic generates into the SAME
-seeded assignment, so a later topic's generation prompt can depend on the bank
-state the earlier topics left behind, and that ordering doesn't always reproduce
-on replay. Full $0-replay would need per-topic seed isolation (a follow-up).
+This is a LIVE probe by design — run it in `--mode record`/`auto` (~$0.23 for the
+full 6-topic × 2 sweep). Unlike the geometry probe, $0 replay doesn't apply here:
+replay freezes the AI's output, but the AI's output is exactly what this probe
+judges (is the problem correct, is a figure appropriate). Replaying would just
+re-report the same frozen verdict, so there's nothing to gain by caching it —
+run it live whenever you want a fresh read on generation quality.
 """
 
 from __future__ import annotations
