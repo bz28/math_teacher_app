@@ -121,6 +121,19 @@ diagram on a Pythagorean problem):
   "show_center": true
 }}
 
+**Compound — circle inscribed in triangle** (AMC-style):
+{{
+  "type": "geometry",
+  "shape": "triangle",
+  "vertices": ["A", "B", "C"],
+  "side_lengths": {{"AB": 9, "BC": 12, "CA": 15}},
+  "right_angle_at": ["B"],
+  "inscribed_circle": {{"show_center": true, "radius_label": "r"}}
+}}
+DO NOT emit a separate circle figure for "inscribed in triangle"
+problems — use the triangle's inscribed_circle field. Renderer
+guarantees the circle is geometrically consistent with the triangle.
+
 Rules:
 - Triangles need enough constraints to determine the shape
   (3 sides; or 2 sides + 1 angle; or 1 side + 2 angles). Use

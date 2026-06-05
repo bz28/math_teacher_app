@@ -101,6 +101,11 @@ _SYSTEM_PROMPT_TEMPLATE = (
     "- Circles: positive `radius` + named points on the circumference "
     "with angle in degrees CCW from the positive x-axis. Chords are "
     "two-character identifiers.\n"
+    "- Compound (circle inscribed in / circumscribed around a "
+    "triangle): use `shape='triangle'` and set the optional "
+    "`inscribed_circle` or `circumscribed_circle` field. The "
+    "renderer computes the circle from the triangle's own "
+    "geometry — don't try to coordinate two separate shapes.\n"
     "- Reuse the names from the problem text so students can track "
     "which point is which across steps.\n"
 )

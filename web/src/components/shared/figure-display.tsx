@@ -32,9 +32,15 @@ export function FigureDisplay({ svg, className }: FigureDisplayProps) {
     <div
       role="img"
       aria-label="Geometry figure"
+      // Width-driven layout: cap container width, let height follow
+      // the SVG's intrinsic aspect ratio. We force the inner <svg>
+      // to `width:100%; height:auto; display:block` — without these
+      // the browser falls back to the SVG's default 300x150 sizing
+      // and figures with large coordinate-space side lengths render
+      // way too big, overlapping the question text.
       className={
-        "geometry-figure mx-auto my-3 flex max-h-56 w-full max-w-md items-center justify-center " +
-        "[&_svg]:h-auto [&_svg]:max-h-full [&_svg]:w-auto [&_svg]:max-w-full " +
+        "geometry-figure mx-auto my-3 w-full max-w-sm " +
+        "[&_svg]:block [&_svg]:h-auto [&_svg]:w-full " +
         (className ?? "")
       }
       // The SVG is pre-sanitized via DOMPurify above. Required for
