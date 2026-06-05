@@ -7,3 +7,6 @@ __pycache__/
 # pass/fail, so its scores aren't a versioned artifact. Generation cassettes
 # (_cassettes/call_claude_json.json) ARE committed as regression fixtures.
 _cassettes/call_claude_vision.json
+
+# Improver budget ledger + proposal queue (state branch holds the canonical copy)
+_state/

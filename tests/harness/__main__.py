@@ -92,7 +92,10 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     scan.add_argument("--max-size", default="M", choices=["S", "M", "L"], help="drop bigger proposals")
     scan.add_argument("--no-judge", action="store_true", help="skip the UX vision judge ($)")
     scan.add_argument("--no-propose", action="store_true", help="scan only; skip ideation ($)")
+    scan.add_argument("--ignore-budget", action="store_true", help="bypass the budget gate (manual runs)")
     scan.add_argument("--out", default="tests/harness/_reports/improve.html")
+
+    imp_sub.add_parser("budget", help="show the improver's rolling-window budget usage")
     return p.parse_args(argv)
 
 
@@ -212,17 +215,54 @@ def _run_explore(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_improve_budget(args: argparse.Namespace) -> int:
+    """Print the improver's rolling-window budget usage vs. caps."""
+    from datetime import UTC, datetime
+
+    from tests.harness.improver.budget import (
+        BudgetCaps,
+        Ledger,
+        check_execute,
+        check_scan,
+        improver_api_key,
+    )
+
+    caps = BudgetCaps.from_env()
+    ledger = Ledger.load()
+    now = datetime.now(UTC)
+    print("[improve:budget]")
+    print(f"  api key:     {'separate IMPROVER key' if improver_api_key() else 'subscription/default key'}")
+    print(f"  scans / 5h:  {ledger.scans_in_5h(now)} / {caps.max_scans_per_5h}")
+    print(f"  execs / 7d:  {ledger.executions_in_7d(now)} / {caps.max_executions_per_7d}")
+    print(f"  spend / 7d:  ${ledger.spend_in_7d(now):.2f} / ${caps.max_usd_per_7d:.2f}")
+    print(f"  scan now?    {check_scan(caps, ledger, now=now).reason}")
+    print(f"  execute now? {check_execute(caps, ledger, now=now).reason}")
+    return 0
+
+
 def _run_improve_scan(args: argparse.Namespace) -> int:
     """Scan the configured surfaces, detect + judge, and synthesize ranked
-    proposals into an HTML report a human can eyeball. The accuracy gate before
-    any automation (Phases 3-5)."""
+    proposals into an HTML report a human can eyeball. Gated + metered by the
+    budget governor so it can never run past its rolling-window allowance."""
+    from datetime import UTC, datetime
+
     from tests.harness.browser import HarnessBrowser
+    from tests.harness.improver.budget import BudgetCaps, Ledger, check_scan
     from tests.harness.improver.proposals import Proposal, dedupe, generate_proposals
     from tests.harness.improver.report import write_scan_report
     from tests.harness.improver.scanner import scan_surfaces
     from tests.harness.improver.surfaces import surfaces_for
     from tests.harness.improver.types import PageObservation
+    from tests.harness.runner import run_cost
     from tests.harness.seed import seed_world
+
+    caps = BudgetCaps.from_env()
+    ledger = Ledger.load()
+    if not args.ignore_budget:
+        verdict = check_scan(caps, ledger)
+        if not verdict.ok:
+            print(f"[improve:scan] SKIPPED — {verdict.reason}")
+            return 0
 
     apps = tuple(a.strip() for a in args.apps.split(",") if a.strip())
     surfaces = surfaces_for(apps)
@@ -234,7 +274,8 @@ def _run_improve_scan(args: argparse.Namespace) -> int:
         }.items() if v
     }
 
-    async def _exec() -> tuple[list[PageObservation], list[Proposal]]:
+    async def _exec() -> tuple[list[PageObservation], list[Proposal], float | None]:
+        started = datetime.now(UTC)
         seed = await seed_world()
         async with HarnessBrowser(args.web_base) as browser:
             obs = await scan_surfaces(
@@ -244,15 +285,18 @@ def _run_improve_scan(args: argparse.Namespace) -> int:
             [] if args.no_propose
             else dedupe(await generate_proposals(obs, max_size=args.max_size), set())
         )
-        return obs, proposals
+        cost = await run_cost(args.mode, started)
+        return obs, proposals, cost
 
-    obs, proposals = asyncio.run(_exec())
+    obs, proposals, cost = asyncio.run(_exec())
+    ledger.record("scan", cost_usd=cost or 0.0, note=f"{len(proposals)} proposals")
     out = write_scan_report(obs, proposals, Path(args.out))
     scanned = sum(1 for o in obs if o.ok)
     hits = sum(len(o.hits) for o in obs)
     print(
         f"\n[improve:scan:{args.mode}] {scanned}/{len(obs)} surfaces loaded, "
-        f"{hits} hits, {len(proposals)} proposals",
+        f"{hits} hits, {len(proposals)} proposals, "
+        f"cost={'$0 (replay)' if cost == 0 else f'${cost}'}",
     )
     for p in proposals[:12]:
         print(f"  [{p.score:.2f}] {p.est_size}/{p.severity:<6} {p.surface_key}: {p.title}")
@@ -282,11 +326,20 @@ def main(argv: list[str]) -> int:
 
     # Must be set before importing api/runner: cassette mode + DB target.
     # Force (not setdefault) so an ambient DATABASE_URL — e.g. one pointing at
-    # the main DB — can't leak in and get seeded into.
-    os.environ["HARNESS_LLM_MODE"] = args.mode
-    os.environ["DATABASE_URL"] = _safe_db(args.db)
+    # the main DB — can't leak in and get seeded into. getattr keeps subcommands
+    # that don't seed (e.g. `improve budget`) from needing these flags.
+    os.environ["HARNESS_LLM_MODE"] = getattr(args, "mode", "replay")
+    os.environ["DATABASE_URL"] = _safe_db(getattr(args, "db", _DEFAULT_DB))
 
     if args.cmd == "improve":
+        # Bill the improver's LLM spend to its dedicated Console key when set, so
+        # the subscription is never touched. Must precede any api.* import.
+        from tests.harness.improver.budget import improver_api_key
+        key = improver_api_key()
+        if key:
+            os.environ["CLAUDE_API_KEY"] = key
+        if getattr(args, "improve_cmd", None) == "budget":
+            return _run_improve_budget(args)
         return _run_improve_scan(args)
     if args.cmd == "explore":
         return _run_explore(args)
