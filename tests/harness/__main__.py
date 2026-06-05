@@ -100,6 +100,11 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     scan.add_argument("--no-features", action="store_true", help="skip the feature-ideation source")
     scan.add_argument("--ignore-budget", action="store_true", help="bypass the budget gate (manual runs)")
     scan.add_argument("--out", default="tests/harness/_reports/improve.html")
+    scan.add_argument(
+        "--summary-db",
+        default=os.environ.get("HARNESS_SUMMARY_DB", _DEFAULT_SUMMARY_DB),
+        help="MAIN app DB for the admin 'Harness Runs' row (empty to skip)",
+    )
 
     imp_sub.add_parser("budget", help="show the improver's rolling-window budget usage")
     imp_sub.add_parser("proposals", help="list the durable proposal queue")
@@ -343,7 +348,7 @@ def _run_improve_scan(args: argparse.Namespace) -> int:
     from tests.harness.browser import HarnessBrowser
     from tests.harness.improver.budget import BudgetCaps, Ledger, check_scan
     from tests.harness.improver.proposals import Proposal, generate_proposals, merge
-    from tests.harness.improver.report import write_scan_report
+    from tests.harness.improver.report import persist_scan_summary, write_scan_report
     from tests.harness.improver.scanner import scan_surfaces
     from tests.harness.improver.sources import content_quality_proposals, feature_proposals
     from tests.harness.improver.state import Queue
@@ -410,6 +415,15 @@ def _run_improve_scan(args: argparse.Namespace) -> int:
     out = write_scan_report(obs, proposals, Path(args.out))
     scanned = sum(1 for o in obs if o.ok)
     hits = sum(len(o.hits) for o in obs)
+    # Row in the admin "Harness Runs" tab (main DB, own engine — seeding still
+    # used the harness DB). Per-call cost is already logged to "LLM Calls".
+    summary_ok = False
+    if args.summary_db:
+        summary_ok = asyncio.run(persist_scan_summary(
+            scanned=scanned, total=len(obs), hits=hits, proposals=len(added),
+            report_html=out.read_text(), cost_usd=cost, mode=args.mode,
+            summary_db_url=args.summary_db,
+        ))
     cost_str = "$0 (replay)" if cost == 0 else (f"~${cost_for_ledger} (est)" if cost is None else f"${cost}")
     print(
         f"\n[improve:scan:{args.mode}] {scanned}/{len(obs)} surfaces loaded, "
@@ -419,6 +433,7 @@ def _run_improve_scan(args: argparse.Namespace) -> int:
         print(f"  [{p.score:.2f}] {p.est_size}/{p.severity:<6} {p.category:<11} {p.id}  {p.title}")
     print(f"report: {out}")
     print(f"queue:  {queue.path}")
+    print(f"admin 'Harness Runs' row: {'written' if summary_ok else 'skipped'}")
     return 0
 
 

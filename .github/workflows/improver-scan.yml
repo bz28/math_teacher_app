@@ -101,8 +101,12 @@ jobs:
 
       - name: Run the improver scan
         run: |
+          # --summary-db "" : CI can't reach the prod DB, so skip the dashboard
+          # row (local scans populate the admin "Harness Runs" tab). The GitHub
+          # issue + run artifact + state-branch ledger are CI's tracking surface.
           python -m tests.harness improve scan --mode auto --apps web \
             --max-surfaces "${{ github.event.inputs.max_surfaces || '12' }}" \
+            --summary-db "" \
             --out "$IMPROVER_STATE_DIR/improve.html" | tee /tmp/scan.out
 
       - name: Upload the scan report

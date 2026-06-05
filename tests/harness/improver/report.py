@@ -71,6 +71,38 @@ def _surface_card(o: PageObservation) -> str:
     )
 
 
+async def persist_scan_summary(
+    *, scanned: int, total: int, hits: int, proposals: int,
+    report_html: str, cost_usd: float | None, mode: str, summary_db_url: str,
+) -> bool:
+    """Write one run-summary row per scan into the MAIN app DB so the admin
+    'Harness Runs' tab shows the improver alongside the harness (cost, proposal
+    count, surfaces, embedded report). Best-effort — never fails the scan."""
+    try:
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        from api.models.harness_run import HarnessRun
+
+        engine = create_async_engine(summary_db_url)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as s:
+                s.add(HarnessRun(
+                    probe="improver", mode=mode,
+                    items_generated=proposals, captures=scanned,
+                    det_pass=scanned, det_total=total,
+                    judge_count=0, judge_mean=None,
+                    cost_usd=cost_usd, passed=scanned > 0,
+                    note=f"{proposals} proposals · {scanned}/{total} surfaces loaded · {hits} hits",
+                    report_html=report_html,
+                ))
+                await s.commit()
+        finally:
+            await engine.dispose()
+        return True
+    except Exception:  # noqa: BLE001 — observability, never fatal
+        return False
+
+
 def proposals_digest_md(proposals: list[dict[str, object]]) -> str:
     """Explain-simple bullet plan for the proposals you approve from — readable
     on a phone, one card each. Used as the GitHub-issue body in the cloud loop."""
