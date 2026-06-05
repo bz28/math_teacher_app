@@ -72,3 +72,17 @@ class JudgeRubric:
 
     dimensions: list[str]  # e.g. ["accuracy", "labeling", "legibility", "fit", "polish"]
     instructions: str  # rubric prose handed to the judge
+
+
+@dataclass
+class JudgeScore:
+    """One LLM judge's per-dimension scores (1-5) + a one-line rationale.
+    Used by both the vision judge (figure quality) and the text judge
+    (problem correctness)."""
+
+    scores: dict[str, int] = field(default_factory=dict)
+    rationale: str = ""
+
+    @property
+    def mean(self) -> float:
+        return round(sum(self.scores.values()) / len(self.scores), 2) if self.scores else 0.0

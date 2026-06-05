@@ -23,6 +23,7 @@ from tests.harness.types import (
     GeneratedItem,
     HarnessContext,
     JudgeRubric,
+    JudgeScore,
 )
 
 
@@ -36,6 +37,11 @@ class Probe(ABC):
     #: per-scenario constraint overrides it. Recorded on the run summary so
     #: the admin dashboard shows exactly what prompt a run tested.
     default_constraint: str = ""
+
+    #: whether this probe needs a browser. Figure probes screenshot rendered
+    #: cards (True); a text-only probe that judges problem correctness has no
+    #: page to shoot (False) and the runner skips booting Chromium for it.
+    needs_browser: bool = True
 
     @abstractmethod
     def relevant_paths(self) -> list[str]:
@@ -65,7 +71,6 @@ class Probe(ABC):
         """Free, objective checks for one item (renders, consistent,
         present, well-formed). No network, no LLM."""
 
-    @abstractmethod
     async def capture_cards(
         self,
         ctx: HarnessContext,
@@ -75,8 +80,18 @@ class Probe(ABC):
         """Drive the running app in the browser to screenshot the rendered
         question cards for these items, from the view this probe verifies.
         Owns the feature-specific UI navigation (e.g. opening a review
-        modal). Returns one capture per card it could shoot."""
+        modal). Returns one capture per card it could shoot. Default: no
+        captures (a text-only probe with needs_browser=False)."""
+        return []
 
-    @abstractmethod
     def judge_rubric(self) -> JudgeRubric:
-        """The scoring rubric for the sampled LLM judge."""
+        """The scoring rubric for the sampled vision judge. Default: empty
+        (a probe that captures no cards never invokes the vision judge)."""
+        return JudgeRubric(dimensions=[], instructions="")
+
+    async def judge_items(self, items: list[GeneratedItem]) -> list[JudgeScore | None]:
+        """Optional per-item LLM judging that doesn't depend on a screenshot —
+        e.g. a text judge that re-solves each problem to score correctness.
+        Returns one JudgeScore (or None) per item, aligned by index. Default:
+        no item-level judging."""
+        return []
