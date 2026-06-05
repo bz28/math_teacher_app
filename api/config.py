@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     # Claude API
     claude_api_key: str
 
+    # GitHub — used by the admin "Debug with agent" button to dispatch a
+    # debug-llm-call workflow. Empty token disables the feature (endpoint 503s).
+    github_dispatch_token: str = ""
+    github_repo: str = "bz28/math_teacher_app"
+
     # Sentry
     sentry_dsn: str = ""
 
