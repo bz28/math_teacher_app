@@ -76,6 +76,23 @@ def _parse(argv: list[str]) -> argparse.Namespace:
         "--summary-db",
         default=os.environ.get("HARNESS_SUMMARY_DB", _DEFAULT_SUMMARY_DB),
     )
+
+    imp = sub.add_parser("improve", help="autonomous improver: scan real pages -> proposals")
+    imp_sub = imp.add_subparsers(dest="improve_cmd", required=True)
+    scan = imp_sub.add_parser("scan", help="scan surfaces, detect + judge, propose improvements")
+    # Default to `auto`: first run records the judge/proposal cassettes, later
+    # runs replay them for $0.
+    scan.add_argument("--mode", default="auto", choices=["replay", "record", "auto"])
+    scan.add_argument("--db", default=os.environ.get("HARNESS_DATABASE_URL", _DEFAULT_DB))
+    scan.add_argument("--apps", default="web", help="comma list: web,admin,mobile_web")
+    scan.add_argument("--web-base", default=os.environ.get("HARNESS_WEB_BASE", _DEFAULT_WEB))
+    scan.add_argument("--admin-base", default=os.environ.get("HARNESS_ADMIN_BASE", ""))
+    scan.add_argument("--mobile-base", default=os.environ.get("HARNESS_MOBILE_BASE", ""))
+    scan.add_argument("--max-surfaces", type=int, default=0, help="cap surfaces (0 = all)")
+    scan.add_argument("--max-size", default="M", choices=["S", "M", "L"], help="drop bigger proposals")
+    scan.add_argument("--no-judge", action="store_true", help="skip the UX vision judge ($)")
+    scan.add_argument("--no-propose", action="store_true", help="scan only; skip ideation ($)")
+    scan.add_argument("--out", default="tests/harness/_reports/improve.html")
     return p.parse_args(argv)
 
 
@@ -195,6 +212,54 @@ def _run_explore(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_improve_scan(args: argparse.Namespace) -> int:
+    """Scan the configured surfaces, detect + judge, and synthesize ranked
+    proposals into an HTML report a human can eyeball. The accuracy gate before
+    any automation (Phases 3-5)."""
+    from tests.harness.browser import HarnessBrowser
+    from tests.harness.improver.proposals import Proposal, dedupe, generate_proposals
+    from tests.harness.improver.report import write_scan_report
+    from tests.harness.improver.scanner import scan_surfaces
+    from tests.harness.improver.surfaces import surfaces_for
+    from tests.harness.improver.types import PageObservation
+    from tests.harness.seed import seed_world
+
+    apps = tuple(a.strip() for a in args.apps.split(",") if a.strip())
+    surfaces = surfaces_for(apps)
+    if args.max_surfaces:
+        surfaces = surfaces[: args.max_surfaces]
+    bases: dict[str, str] = {
+        k: v for k, v in {
+            "web": args.web_base, "admin": args.admin_base, "mobile_web": args.mobile_base,
+        }.items() if v
+    }
+
+    async def _exec() -> tuple[list[PageObservation], list[Proposal]]:
+        seed = await seed_world()
+        async with HarnessBrowser(args.web_base) as browser:
+            obs = await scan_surfaces(
+                browser, surfaces, bases, seed, judge=not args.no_judge,
+            )
+        proposals = (
+            [] if args.no_propose
+            else dedupe(await generate_proposals(obs, max_size=args.max_size), set())
+        )
+        return obs, proposals
+
+    obs, proposals = asyncio.run(_exec())
+    out = write_scan_report(obs, proposals, Path(args.out))
+    scanned = sum(1 for o in obs if o.ok)
+    hits = sum(len(o.hits) for o in obs)
+    print(
+        f"\n[improve:scan:{args.mode}] {scanned}/{len(obs)} surfaces loaded, "
+        f"{hits} hits, {len(proposals)} proposals",
+    )
+    for p in proposals[:12]:
+        print(f"  [{p.score:.2f}] {p.est_size}/{p.severity:<6} {p.surface_key}: {p.title}")
+    print(f"report: {out}")
+    return 0
+
+
 _PROTECTED_DBS = {"mathapp"}  # the main app DB — never seed/generate into it
 
 
@@ -221,6 +286,8 @@ def main(argv: list[str]) -> int:
     os.environ["HARNESS_LLM_MODE"] = args.mode
     os.environ["DATABASE_URL"] = _safe_db(args.db)
 
+    if args.cmd == "improve":
+        return _run_improve_scan(args)
     if args.cmd == "explore":
         return _run_explore(args)
     if args.cmd == "for-diff":

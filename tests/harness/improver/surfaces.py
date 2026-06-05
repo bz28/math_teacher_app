@@ -95,7 +95,7 @@ CATALOG: list[Surface] = [
 DEFAULT_APPS: tuple[App, ...] = ("web",)
 
 
-def surfaces_for(apps: tuple[App, ...] = DEFAULT_APPS) -> list[Surface]:
+def surfaces_for(apps: tuple[str, ...] = DEFAULT_APPS) -> list[Surface]:
     """The catalog filtered to the given apps (default: the ones that scan
     cleanly today)."""
     allow = set(apps)

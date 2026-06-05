@@ -19,7 +19,7 @@ from playwright.async_api import ConsoleMessage
 from tests.harness.browser import HarnessBrowser
 from tests.harness.improver.detectors import run_detectors
 from tests.harness.improver.judge import judge_page
-from tests.harness.improver.types import App, PageObservation, Surface
+from tests.harness.improver.types import PageObservation, Surface
 from tests.harness.seed import Seed
 
 
@@ -98,7 +98,7 @@ async def scan_surface(
 async def scan_surfaces(
     browser: HarnessBrowser,
     surfaces: list[Surface],
-    bases: dict[App, str],
+    bases: dict[str, str],
     seed: Seed,
     *,
     judge: bool = True,
