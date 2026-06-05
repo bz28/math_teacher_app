@@ -1,0 +1,129 @@
+"""Extra proposal sources beyond the UI scanner.
+
+The page scanner only sees rendered UI, so on its own the improver proposes only
+visual/UX/a11y/perf work. These widen the lens to the other two things Ben
+asked for:
+
+  * content_quality_proposals — folds the harness's own AI-OUTPUT quality signal
+    (the explorer's promoted-failure corpus) into fix proposals, so persistent
+    generation defects become tracked, shippable work. Reuses the corpus the
+    harness already maintains; $0 when there are no recorded failures.
+  * feature_proposals — a conservative product-gap pass over the route catalog
+    suggesting SMALL new features, with damped confidence so speculative ideas
+    always rank below objective findings and never lead.
+
+Both emit the same Proposal type, so they flow through the identical
+dedupe -> rank -> approve -> execute pipeline as the UI proposer.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+
+from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
+from tests.harness.cassette import CassetteMissError
+from tests.harness.improver.proposals import _SCHEMA, Proposal, _coerce, rank_filter
+from tests.harness.improver.types import Surface
+
+# Feature ideas are inherently softer than observed defects; damp their
+# confidence so they sort below anything grounded in real signal.
+_FEATURE_CONFIDENCE_DAMP = 0.6
+
+_CONTENT_SYSTEM = (
+    "You are a senior engineer improving an AI math-content GENERATOR. You are "
+    "given its known failure cases (a regression corpus the test harness "
+    "promoted because generation errored, produced the wrong shape, or failed a "
+    "deterministic check). Propose concrete, small code/prompt fixes that would "
+    "make generation handle these cases correctly. Set surface_key to "
+    "'generation:<probe>'. Category should be 'bug' or 'content'. Group related "
+    "failures into one proposal. Be specific about the fix."
+)
+
+_FEATURE_SYSTEM = (
+    "You are a pragmatic product manager for a math-education app. Given its map "
+    "of routes/screens, propose a FEW small, high-value feature additions or "
+    "flow improvements that fill obvious gaps. Hard rules: each must be small "
+    "and independently shippable; nothing touching auth, billing, or data "
+    "schema; concrete, not vague. Prefer 2-4 strong ideas. Be conservative — "
+    "these are suggestions a human will vet."
+)
+
+
+async def content_quality_proposals(
+    *, model: str = MODEL_REASON, max_size: str = "M",
+) -> list[Proposal]:
+    """Turn the harness's promoted generation-failure corpus into fix proposals.
+    Returns [] when no failures are recorded or the cassette misses in replay."""
+    from tests.harness.explorer import load_corpus
+    from tests.harness.probes import PROBES
+
+    failures: list[dict[str, object]] = []
+    for name, factory in PROBES.items():
+        scenarios = load_corpus(name)
+        if not scenarios:
+            continue
+        fix_in = factory(1).relevant_paths()
+        for sc in scenarios:
+            failures.append({
+                "probe": name, "scenario": sc.name, "constraint": sc.constraint,
+                "expected": sc.expected_shapes, "rationale": sc.rationale,
+                "fix_in": fix_in,
+            })
+    if not failures:
+        return []
+    blob = json.dumps(failures, sort_keys=True)
+    key = hashlib.sha1(blob.encode()).hexdigest()[:16]
+    user = (
+        "Known AI-generation failures (promoted regression corpus):\n\n"
+        f"{blob}\n\nPropose concrete fixes per the rules."
+    )
+    try:
+        result = await call_claude_json(
+            _CONTENT_SYSTEM, user, LLMMode.JUDGE, tool_schema=_SCHEMA,
+            model=model, max_tokens=3072,
+            call_metadata={"harness_cassette_key": f"content_quality:{key}"},
+        )
+    except CassetteMissError:
+        return []
+    raw = result.get("proposals", [])
+    if not isinstance(raw, list):
+        return []
+    return rank_filter([_coerce(p) for p in raw if isinstance(p, dict)], max_size=max_size)
+
+
+async def feature_proposals(
+    surfaces: list[Surface], *, model: str = MODEL_REASON, max_size: str = "M",
+) -> list[Proposal]:
+    """Conservative product-gap pass over the route catalog. Confidence is damped
+    so feature ideas never outrank observed defects."""
+    catalog = [
+        {"key": s.key, "title": s.title, "role": s.role, "app": s.app}
+        for s in surfaces
+    ]
+    blob = json.dumps(catalog, sort_keys=True)
+    key = hashlib.sha1(blob.encode()).hexdigest()[:16]
+    user = (
+        f"App surface map (routes):\n\n{blob}\n\n"
+        "Propose a few small, high-value feature additions or flow improvements."
+    )
+    try:
+        result = await call_claude_json(
+            _FEATURE_SYSTEM, user, LLMMode.JUDGE, tool_schema=_SCHEMA,
+            model=model, max_tokens=3072,
+            call_metadata={"harness_cassette_key": f"features:{key}"},
+        )
+    except CassetteMissError:
+        return []
+    raw = result.get("proposals", [])
+    if not isinstance(raw, list):
+        return []
+    out: list[Proposal] = []
+    for p in raw:
+        if not isinstance(p, dict):
+            continue
+        prop = _coerce(p)
+        prop.category = "feature"
+        prop.confidence = round(prop.confidence * _FEATURE_CONFIDENCE_DAMP, 3)
+        out.append(prop)
+    return rank_filter(out, max_size=max_size)

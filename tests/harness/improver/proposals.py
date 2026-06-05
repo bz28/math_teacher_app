@@ -195,6 +195,14 @@ def _rank(proposals: list[Proposal]) -> list[Proposal]:
     return sorted(proposals, key=lambda p: p.score, reverse=True)
 
 
+def merge(batches: list[list[Proposal]], *, seen_ids: set[str] | None = None) -> list[Proposal]:
+    """Combine proposals from several sources (UI, content-quality, features),
+    rank the union by impact-per-effort, and dedupe against each other + the
+    seen set."""
+    flat = [p for batch in batches for p in batch]
+    return dedupe(_rank(flat), seen_ids or set())
+
+
 def dedupe(proposals: list[Proposal], seen_ids: set[str]) -> list[Proposal]:
     """Drop proposals already proposed or declined (by stable id), and collapse
     duplicates within this batch."""
