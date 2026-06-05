@@ -16,6 +16,6 @@ string, or raises FigureSpecError on invalid input.
 """
 
 from api.core.geometry.dsl import FigureSpec, FigureSpecError
-from api.core.geometry.renderer import render_figure
+from api.core.geometry.renderer import render_figure, render_figure_or_none
 
-__all__ = ["FigureSpec", "FigureSpecError", "render_figure"]
+__all__ = ["FigureSpec", "FigureSpecError", "render_figure", "render_figure_or_none"]

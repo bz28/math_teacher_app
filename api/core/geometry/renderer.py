@@ -13,6 +13,7 @@ calm and textbook-like, not decorative.
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any
 
@@ -65,6 +66,8 @@ _LABEL_OFFSET = 0.22
 _CANONICAL_SPAN = 5.0
 
 
+logger = logging.getLogger(__name__)
+
 # FigureSpec is a discriminated union; use TypeAdapter so Pydantic
 # dispatches to the right shape variant from `spec.shape`.
 _FIGURE_SPEC_ADAPTER: TypeAdapter[FigureSpec] = TypeAdapter(FigureSpec)
@@ -104,6 +107,31 @@ def render_figure(spec_dict: dict[str, Any]) -> str:
     # Unreachable — discriminated union exhausts the shape variants,
     # but mypy doesn't know that without an explicit assert_never.
     raise FigureSpecError(f"unknown figure shape: {type(spec).__name__}")
+
+
+def render_figure_or_none(raw_spec: Any, *, context: str = "figure_spec") -> str | None:
+    """Render a figure spec to SVG, returning None on ANY failure.
+
+    The degrade contract shared by every generation/decomposition call
+    site: a bad figure must never tank the surrounding question or step.
+    A non-dict (the model emitted no figure) returns None silently. A
+    FigureSpecError (malformed spec) logs at warning level. Any other
+    exception is a renderer bug — logged with a full traceback so it
+    stays visible in monitoring — and still degrades to None rather than
+    propagating. `context` tags the log line (e.g. "step figure_spec").
+    """
+    if not isinstance(raw_spec, dict):
+        return None
+    try:
+        return render_figure(raw_spec)
+    except FigureSpecError as e:
+        logger.warning("%s rejected by renderer (dropping figure): %s", context, e)
+        return None
+    except Exception:
+        logger.exception(
+            "unexpected error rendering %s (dropping figure); spec=%r", context, raw_spec,
+        )
+        return None
 
 
 def _scale_to_canonical(coords: dict[str, Point]) -> dict[str, Point]:

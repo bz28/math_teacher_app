@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
 from api.core.document_vision import MAX_VISION_IMAGES, build_vision_content, fetch_document_images
-from api.core.geometry import FigureSpecError, render_figure
+from api.core.geometry import render_figure_or_none
 from api.core.image_utils import to_content_block
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import GENERATE_QUESTIONS_SCHEMA, REGENERATE_QA_SCHEMA
@@ -66,26 +66,14 @@ def _render_step_figures(
         if not isinstance(step, dict):
             continue
         rendered: dict[str, Any] = dict(step)
-        raw = step.get("figure_spec")
-        if isinstance(raw, dict):
-            try:
-                rendered["figure_svg"] = render_figure(raw)
-                rendered["figure_spec"] = raw
-            except FigureSpecError as e:
-                logger.warning(
-                    "step figure_spec rejected on regenerate (keeping step): %s", e,
-                )
-                rendered.pop("figure_spec", None)
-                rendered.pop("figure_svg", None)
-            except Exception:
-                # Broad catch — any renderer bug drops the step
-                # figure but keeps the step. Logged with traceback.
-                logger.exception(
-                    "unexpected error rendering step figure_spec (keeping step); spec=%r",
-                    raw,
-                )
-                rendered.pop("figure_spec", None)
-                rendered.pop("figure_svg", None)
+        svg = render_figure_or_none(step.get("figure_spec"), context="step figure_spec")
+        if svg:
+            rendered["figure_svg"] = svg
+        else:
+            # No spec, or it failed to render — drop both keys so a
+            # downstream reader never sees a spec without its svg.
+            rendered.pop("figure_spec", None)
+            rendered.pop("figure_svg", None)
         out.append(rendered)
     return out
 
@@ -95,36 +83,13 @@ def _resolve_figure(
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Validate + render a figure spec emitted by the LLM.
 
-    Returns (spec, svg) — both None if the model didn't emit one, or
-    if rendering raises ANY exception. We catch broadly on purpose:
-    a bad figure shouldn't tank the whole batch under any failure
-    mode. The renderer is supposed to raise only FigureSpecError,
-    but bugs in label-placement or coord-lookup can surface as
-    KeyError / IndexError / AttributeError — none of those should
-    kill a perfectly-valid question. Log with the full traceback so
-    real renderer bugs are still visible in monitoring.
+    Returns (spec, svg) — both None if the model didn't emit one or if
+    rendering failed (see `render_figure_or_none` for the degrade
+    contract). The spec is only returned alongside a successful svg so
+    a persisted question never carries a spec without its rendering.
     """
-    if not isinstance(raw_spec, dict):
-        return None, None
-    try:
-        svg = render_figure(raw_spec)
-    except FigureSpecError as e:
-        logger.warning(
-            "figure_spec rejected by renderer (keeping question, dropping figure): %s",
-            e,
-        )
-        return None, None
-    except Exception:
-        # Defense-in-depth: an unexpected renderer error is a bug we
-        # want to fix, but it must NOT take down the surrounding
-        # question. exc_info=True so the traceback lands in logs.
-        logger.exception(
-            "unexpected error rendering figure_spec (keeping question, "
-            "dropping figure); spec=%r",
-            raw_spec,
-        )
-        return None, None
-    return raw_spec, svg
+    svg = render_figure_or_none(raw_spec, context="figure_spec")
+    return (raw_spec, svg) if svg else (None, None)
 
 
 def schedule_generation_job(job_id: uuid.UUID) -> None:
