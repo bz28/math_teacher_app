@@ -50,6 +50,19 @@ type Segment =
  * (use raw strings or explicit double-escape before json.dumps), but
  * existing responses in the wild need to render correctly too.
  */
+// \n (newline) is ambiguous with legitimate prose, so — unlike the other
+// control chars — we only restore it when "n" + the run is a real \n-command.
+// Real multiline math separates rows with `\\` + whitespace (newline -> space
+// -> token), which doesn't match `\n[letter]`, so it's left alone. The residual
+// edge is a BARE newline immediately before a command-letter run; to shrink it
+// we drop the 1-char-suffix commands (\ne, \nu, \ni) that collide most easily
+// with a row starting "e"/"u"/"i" — \neq, \nabla, etc. still restore.
+const N_COMMANDS = new Set([
+  "neq", "nabla", "not", "nmid", "nleq", "ngeq", "nless",
+  "ngtr", "nparallel", "ncong", "nsim", "nsubseteq", "nsupseteq",
+  "nrightarrow", "nleftarrow", "natural",
+]);
+
 function restoreBrokenLatexCommands(mathSegment: string): string {
   return (
     mathSegment
@@ -63,6 +76,8 @@ function restoreBrokenLatexCommands(mathSegment: string): string {
       .replace(/\v([a-zA-Z]+)/g, "\\v$1")
       // \x08 (backspace) ate a backslash: \backslash, \beta, \because, \binom, \bigcap, \bullet, \bar, \bot, …
       .replace(/\x08([a-zA-Z]+)/g, "\\b$1")
+      // \n ate a backslash: \neq, \nabla, … — whitelisted (see N_COMMANDS).
+      .replace(/\n([a-zA-Z]+)/g, (m, run) => (N_COMMANDS.has("n" + run) ? "\\n" + run : m))
   );
 }
 

@@ -16,6 +16,7 @@ import inspect
 import json
 import logging
 import os
+import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -508,18 +509,66 @@ def _extract_tool_result(
     raise ValueError("No tool_use block in response")
 
 
+# Control chars that are NEVER legitimate inside solution/extraction JSON, so
+# their presence after a plain parse is the signature of LaTeX backslashes being
+# read as JSON escapes (\frac -> \f formfeed, \rightarrow -> \r CR, \beta -> \b
+# backspace, \vec -> \v vtab). \n (newline) and \t (tab) are intentionally
+# EXCLUDED — they're legitimately used in descriptions, so we don't treat them
+# as corruption on their own.
+_CORRUPTION_CHARS = "\f\v\b\r"
+
+# A backslash inside a single-escaped LaTeX array is literal LaTeX — INCLUDING
+# the pair in a `\\` matrix line-break, which must become four so json.loads
+# yields two. The only structural backslash is `\"` (an embedded quote), so we
+# double every backslash that isn't followed by a quote.
+_LATEX_BACKSLASH_RE = re.compile(r'\\(?!")')
+
+
+def _escape_latex_backslashes(value: str) -> str:
+    return _LATEX_BACKSLASH_RE.sub(r"\\\\", value)
+
+
+def _has_corruption(obj: object) -> bool:
+    """True if any string in the parsed structure contains a strong-corruption
+    control char — the fingerprint of LaTeX mangled by a plain json.loads."""
+    if isinstance(obj, str):
+        return any(c in obj for c in _CORRUPTION_CHARS)
+    if isinstance(obj, list):
+        return any(_has_corruption(x) for x in obj)
+    if isinstance(obj, dict):
+        return any(_has_corruption(v) for v in obj.values())
+    return False
+
+
+def _try_json_list(value: str) -> list[object] | None:
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, list) else None
+
+
 def _normalize_arrays(
     result: dict[str, object],
     schema: ToolSchema,
 ) -> dict[str, object]:
-    """Coerce stringified JSON arrays back into actual arrays based on schema.
+    """Coerce stringified JSON array fields back into actual arrays.
 
-    Claude's tool use occasionally returns array fields as JSON-encoded strings
-    instead of actual arrays. Two flavors:
-    1. Plain text content: the inner string is valid JSON, parses cleanly.
-    2. LaTeX-heavy content (matrices, fractions, etc.): the inner string has
-       unescaped backslashes like `\\begin{bmatrix}` which are invalid JSON.
-       We retry by doubling every backslash so they become literal backslashes.
+    Claude's tool use occasionally returns array fields as JSON-encoded strings.
+    A plain `json.loads` is correct for properly-escaped JSON (real arrays Claude
+    stringified, plain text) — but when the inner LaTeX is single-escaped
+    (`\\frac` written as `\frac`), `json.loads` silently decodes `\f/\r/\b/\v`
+    into control characters, corrupting the math. So we parse plain first and,
+    only when that produces the corruption fingerprint (or fails), re-parse with
+    LaTeX backslashes escaped — preserving legit newlines and properly-escaped
+    content untouched.
+
+    The fingerprint is `\f\v\b\r` only: those are never legitimate here. `\t`/`\n`
+    are intentionally excluded (they're legit tabs/newlines), so a `\t`/`\n`-only
+    LaTeX command (`\times`, `\neq`) that's single-escaped *and* co-located with
+    nothing from the `\f\v\b\r` family won't trip detection here — those are caught
+    by the frontend restore net (math-text.tsx). The common case (any `\frac`/
+    `\vec`/etc. present) does trip it and fixes the whole element.
     """
     properties = schema.get("input_schema", {}).get("properties", {})
     for key, prop in properties.items():
@@ -529,28 +578,14 @@ def _normalize_arrays(
         if not isinstance(value, str):
             continue
 
-        parsed: object = None
-
-        # Strategy 1: parse as-is (works for plain text with valid JSON escapes)
-        try:
-            candidate = json.loads(value)
-            if isinstance(candidate, list):
-                parsed = candidate
-        except json.JSONDecodeError:
-            pass
-
-        # Strategy 2: double all backslashes (works for unescaped LaTeX)
-        if parsed is None:
-            try:
-                escaped = value.replace("\\", "\\\\")
-                candidate = json.loads(escaped)
-                if isinstance(candidate, list):
-                    parsed = candidate
-            except json.JSONDecodeError:
-                pass
-
-        if isinstance(parsed, list):
-            result[key] = parsed
+        plain = _try_json_list(value)
+        if plain is None or _has_corruption(plain):
+            safe = _try_json_list(_escape_latex_backslashes(value))
+            if safe is not None and not _has_corruption(safe):
+                result[key] = safe
+                continue
+        if plain is not None:
+            result[key] = plain
     return result
 
 
