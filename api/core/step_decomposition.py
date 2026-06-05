@@ -38,7 +38,7 @@ def _cache_get(problem: str) -> "Decomposition | None":
         return None
 
     # Re-render step figures using the current renderer.
-    from api.core.geometry import FigureSpecError, render_figure
+    from api.core.geometry import render_figure_or_none
 
     refreshed_steps: list[dict[str, Any]] = []
     for s in decomp.steps:
@@ -46,19 +46,12 @@ def _cache_get(problem: str) -> "Decomposition | None":
             refreshed_steps.append(s)
             continue
         rendered = dict(s)
-        spec = s.get("figure_spec")
-        if isinstance(spec, dict):
-            try:
-                rendered["figure_svg"] = render_figure(spec)
-            except FigureSpecError:
-                # Renderer changes may have made a previously-valid
-                # spec invalid — drop the figure rather than crash.
-                rendered.pop("figure_svg", None)
-            except Exception:
-                logger.exception("re-render of cached step figure failed; spec=%r", spec)
-                rendered.pop("figure_svg", None)
+        svg = render_figure_or_none(s.get("figure_spec"), context="cached step figure")
+        if svg:
+            rendered["figure_svg"] = svg
         else:
-            # No spec → ensure there's no leftover stale figure_svg.
+            # No spec, or a renderer change invalidated a previously-valid
+            # one — drop any stale svg rather than crash.
             rendered.pop("figure_svg", None)
         refreshed_steps.append(rendered)
 
@@ -252,7 +245,7 @@ def _parse_decomposition(
     # Local import — keeps step_decomposition.py importable without
     # pulling in the geometry module's sympy dependency (none today,
     # but the boundary holds for when it does).
-    from api.core.geometry import FigureSpecError, render_figure
+    from api.core.geometry import render_figure_or_none
 
     steps_data = data["steps"]
     final_answer = data.get("final_answer", "")
@@ -268,22 +261,10 @@ def _parse_decomposition(
             description = _normalize_latex(str(s.get("description", "")))
             step: dict[str, Any] = {"title": title, "description": description}
             raw_figure = s.get("figure_spec")
-            if isinstance(raw_figure, dict):
-                try:
-                    step["figure_svg"] = render_figure(raw_figure)
-                    step["figure_spec"] = raw_figure
-                except FigureSpecError as e:
-                    logger.warning(
-                        "step figure_spec rejected (keeping step, dropping figure): %s", e,
-                    )
-                except Exception:
-                    # Defense-in-depth: any renderer bug drops the
-                    # step figure but keeps the step. Full traceback
-                    # in logs so the actual bug is visible.
-                    logger.exception(
-                        "unexpected error rendering step figure_spec (keeping step); spec=%r",
-                        raw_figure,
-                    )
+            svg = render_figure_or_none(raw_figure, context="step figure_spec")
+            if svg:
+                step["figure_svg"] = svg
+                step["figure_spec"] = raw_figure
             steps.append(step)
         else:
             # Backward compat: plain string from older prompt format
