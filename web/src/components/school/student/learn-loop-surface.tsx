@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { schoolStudent, type VariationPayload } from "@/lib/api";
 import { Card } from "@/components/ui";
+import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
 import {
   StepTimeline,
@@ -239,6 +240,7 @@ export function LearnLoopSurface({
       {/* Current variation question */}
       <Card variant="elevated">
         <p className="text-xs font-semibold text-text-muted">Problem</p>
+        <FigureDisplay svg={variation.figure_svg} />
         <div className="mt-1 text-base font-medium text-text-primary">
           <MathText text={variation.question} />
         </div>

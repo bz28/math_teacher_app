@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { schoolStudent, type VariationPayload } from "@/lib/api";
+import { FigureDisplay } from "@/components/shared/figure-display";
 import { MCQCard } from "@/components/shared/mcq-card";
 import { AnchorBanner } from "./_pieces/anchor-banner";
 import { cn } from "@/lib/utils";
@@ -198,6 +199,8 @@ export function PracticeLoopSurface({
       </div>
 
       <AnchorBanner position={problemPosition} question={anchorQuestion} />
+
+      <FigureDisplay svg={variation.figure_svg} />
 
       {choices.length < 2 ? (
         // Defensive fallback: a variation whose distractors weren't

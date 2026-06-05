@@ -8,6 +8,7 @@ import {
   type StudentPracticeDetail,
   type StudentPracticeProblem,
 } from "@/lib/api";
+import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
 import { MCQCard } from "@/components/shared/mcq-card";
 
@@ -106,9 +107,11 @@ function ProblemCard({ problem }: { problem: StudentPracticeProblem }) {
           {problem.position}
         </span>
         <div className="min-w-0 flex-1">
-          {/* MCQCard re-renders the question when Answer is expanded,
-              so suppress it here in that mode to avoid rendering the
-              same question twice. */}
+          {/* The figure always renders — a geometry MCQ is unanswerable
+              without its diagram. Only the question TEXT is suppressed in
+              answer mode, because MCQCard re-renders that text and we don't
+              want it twice (MCQCard does NOT render the figure). */}
+          <FigureDisplay svg={problem.figure_svg} />
           {mode !== "answer" && (
             <div className="text-base text-text-primary">
               <MathText text={problem.question} />

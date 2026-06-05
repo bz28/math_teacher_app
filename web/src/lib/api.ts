@@ -1550,6 +1550,16 @@ export interface BankItem {
   }[];
   source_doc_ids: string[] | null;
   generation_prompt: string | null;
+  /** Structured figure spec (the JSON DSL the LLM emits). Canonical
+   *  source-of-truth — future visual editors mutate this; the SVG
+   *  below is the cached display artifact. Null for non-geometry
+   *  items. Shape mirrors api/core/geometry/dsl.py's TriangleFigure
+   *  but the frontend treats it as opaque JSON for now. */
+  figure_spec: Record<string, unknown> | null;
+  /** Pre-rendered SVG string. Frontend embeds it inline above the
+   *  question via DOMPurify + dangerouslySetInnerHTML. Null for
+   *  non-geometry items. */
+  figure_svg: string | null;
   has_previous_version: boolean;
   chat_messages: BankChatMessage[];
   chat_soft_cap: number;
@@ -1643,6 +1653,8 @@ export interface StudentPracticeProblem {
   bank_item_id: string;
   position: number;
   question: string;
+  /** Pre-rendered geometry SVG; null when the problem has no figure. */
+  figure_svg: string | null;
   solution_steps: { title?: string; description: string }[] | null;
   final_answer: string | null;
   distractors: string[] | null;
@@ -1667,6 +1679,10 @@ export interface StudentHomeworkProblem {
   bank_item_id: string;
   position: number;
   question: string;
+  /** Pre-rendered geometry SVG; null when the question has no figure.
+   *  Safe to ship pre-submission because the figure is part of the
+   *  problem, not the answer. */
+  figure_svg: string | null;
   // final_answer is intentionally omitted: the HW primary is locked
   // and the student must not be able to read the answer client-side.
   difficulty: string;
@@ -1761,6 +1777,8 @@ export interface SubmitHomeworkResponse {
 export interface VariationPayload {
   bank_item_id: string;
   question: string;
+  /** Pre-rendered geometry SVG; null when the look-alike has no figure. */
+  figure_svg: string | null;
   final_answer: string | null;
   distractors: string[];
   solution_steps: { title?: string; description?: string }[] | null;
