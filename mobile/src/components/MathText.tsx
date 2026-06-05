@@ -41,12 +41,26 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;");
 }
 
+// \n is ambiguous with prose, so restore it only for real \n-commands.
+const N_COMMANDS = new Set([
+  "neq", "ne", "nabla", "nu", "ni", "not", "nmid", "nleq", "ngeq", "nless",
+  "ngtr", "nparallel", "ncong", "nsim", "nsubseteq", "nsupseteq",
+  "nrightarrow", "nleftarrow", "natural",
+]);
+
 function renderLatex(latex: string, displayMode: boolean): string {
-  // Fix lost backslashes: if `\t` was interpreted as a tab character by the
-  // JS string pipeline (happens when the API JSON's `\\times` gets double-
-  // unescaped), restore it so katex sees `\t` as the start of `\times`,
-  // `\theta`, `\tau`, `\text{...}`, etc. Real tabs in LaTeX are meaningless.
-  const fixed = latex.replace(/\t/g, "\\t");
+  // Restore backslashes the JSON pipeline turned into control chars: when the
+  // API's `\\frac`/`\\times` get double-unescaped, `\f`/`\t`/`\r`/`\v`/`\b`
+  // become control characters. Restore each before a letter run so katex sees
+  // the real command. (Real control chars are meaningless in LaTeX.) The real
+  // fix is on the backend — `_normalize_arrays` — this stays for legacy data.
+  const fixed = latex
+    .replace(/\r([a-zA-Z]+)/g, "\\r$1")
+    .replace(/\t([a-zA-Z]+)/g, "\\t$1")
+    .replace(/\f([a-zA-Z]+)/g, "\\f$1")
+    .replace(/\v([a-zA-Z]+)/g, "\\v$1")
+    .replace(/\x08([a-zA-Z]+)/g, "\\b$1")
+    .replace(/\n([a-zA-Z]+)/g, (m, run) => (N_COMMANDS.has("n" + run) ? "\\n" + run : m));
   try {
     return katex.renderToString(fixed, {
       displayMode,

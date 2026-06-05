@@ -50,6 +50,16 @@ type Segment =
  * (use raw strings or explicit double-escape before json.dumps), but
  * existing responses in the wild need to render correctly too.
  */
+// \n (newline) is ambiguous with legitimate prose, so — unlike the other
+// control chars — we only restore it when "n" + the run is a real \n-command.
+// Requiring a letter immediately after the newline means multiline math
+// (newline -> spaces -> token, e.g. inside `aligned`) is never touched.
+const N_COMMANDS = new Set([
+  "neq", "ne", "nabla", "nu", "ni", "not", "nmid", "nleq", "ngeq", "nless",
+  "ngtr", "nparallel", "ncong", "nsim", "nsubseteq", "nsupseteq",
+  "nrightarrow", "nleftarrow", "natural",
+]);
+
 function restoreBrokenLatexCommands(mathSegment: string): string {
   return (
     mathSegment
@@ -63,6 +73,8 @@ function restoreBrokenLatexCommands(mathSegment: string): string {
       .replace(/\v([a-zA-Z]+)/g, "\\v$1")
       // \x08 (backspace) ate a backslash: \backslash, \beta, \because, \binom, \bigcap, \bullet, \bar, \bot, …
       .replace(/\x08([a-zA-Z]+)/g, "\\b$1")
+      // \n ate a backslash: \neq, \nabla, … — whitelisted (see N_COMMANDS).
+      .replace(/\n([a-zA-Z]+)/g, (m, run) => (N_COMMANDS.has("n" + run) ? "\\n" + run : m))
   );
 }
 
