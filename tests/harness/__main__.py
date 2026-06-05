@@ -106,6 +106,26 @@ def _parse(argv: list[str]) -> argparse.Namespace:
         help="MAIN app DB for the admin 'Harness Runs' row (empty to skip)",
     )
 
+    # Plan-billed path: gather evidence cheaply ($0), judge on the Claude plan,
+    # then ingest the agent's proposals through the same queue/dashboard.
+    gather = imp_sub.add_parser("gather", help="scan + save screenshots/findings for plan-side judging (no LLM)")
+    gather.add_argument("--dir", required=True, help="output evidence dir")
+    gather.add_argument("--db", default=os.environ.get("HARNESS_DATABASE_URL", _DEFAULT_DB))
+    gather.add_argument("--mode", default="replay", choices=["replay", "record", "auto"])
+    gather.add_argument("--apps", default="web")
+    gather.add_argument("--web-base", default=os.environ.get("HARNESS_WEB_BASE", _DEFAULT_WEB))
+    gather.add_argument("--admin-base", default=os.environ.get("HARNESS_ADMIN_BASE", ""))
+    gather.add_argument("--mobile-base", default=os.environ.get("HARNESS_MOBILE_BASE", ""))
+    gather.add_argument("--max-surfaces", type=int, default=0)
+    gather.add_argument("--ignore-budget", action="store_true")
+
+    ingest = imp_sub.add_parser("ingest", help="load plan-judged proposals.json -> rank, dedupe, queue, dashboard")
+    ingest.add_argument("--dir", required=True, help="evidence dir holding proposals.json")
+    ingest.add_argument("--max-size", default="M", choices=["S", "M", "L"])
+    ingest.add_argument(
+        "--summary-db", default=os.environ.get("HARNESS_SUMMARY_DB", _DEFAULT_SUMMARY_DB),
+    )
+
     imp_sub.add_parser("budget", help="show the improver's rolling-window budget usage")
     imp_sub.add_parser("proposals", help="list the durable proposal queue")
     imp_sub.add_parser("digest", help="explain-simple bullet plan of open proposals (markdown)")
@@ -314,6 +334,88 @@ def _run_improve_execute(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_improve_gather(args: argparse.Namespace) -> int:
+    """Plan path, step 1: scan + save screenshots + findings.json with NO LLM, so
+    a Claude Code agent can judge it on your plan. Budget-gated like a scan."""
+    from tests.harness.browser import HarnessBrowser
+    from tests.harness.improver.budget import BudgetCaps, Ledger, check_scan
+    from tests.harness.improver.evidence import evidence_summary, save_evidence
+    from tests.harness.improver.scanner import scan_surfaces
+    from tests.harness.improver.surfaces import surfaces_for
+    from tests.harness.improver.types import PageObservation
+    from tests.harness.seed import seed_world
+
+    caps = BudgetCaps.from_env()
+    ledger = Ledger.load()
+    if not args.ignore_budget:
+        verdict = check_scan(caps, ledger)
+        if not verdict.ok:
+            print(f"[improve:gather] SKIPPED — {verdict.reason}")
+            return 0
+
+    apps = tuple(a.strip() for a in args.apps.split(",") if a.strip())
+    surfaces = surfaces_for(apps)
+    if args.max_surfaces:
+        surfaces = surfaces[: args.max_surfaces]
+    bases: dict[str, str] = {
+        k: v for k, v in {
+            "web": args.web_base, "admin": args.admin_base, "mobile_web": args.mobile_base,
+        }.items() if v
+    }
+
+    async def _exec() -> list[PageObservation]:
+        seed = await seed_world()
+        async with HarnessBrowser(args.web_base) as browser:
+            return await scan_surfaces(browser, surfaces, bases, seed, judge=False)
+
+    obs = asyncio.run(_exec())
+    ledger.record("scan", cost_usd=0.0, note="plan-path gather (no LLM)")
+    out = save_evidence(obs, surfaces, Path(args.dir))
+    print(f"\n[improve:gather] {evidence_summary(out)} → {out}")
+    print(f"next: judge on your plan — read {out}/JUDGE_PROMPT.txt + the shots, write "
+          f"{out}/proposals.json, then `improve ingest --dir {out}`")
+    return 0
+
+
+def _run_improve_ingest(args: argparse.Namespace) -> int:
+    """Plan path, step 2: load the agent's proposals.json, rank + dedupe + drop
+    oversized/forbidden, queue them, and write the admin dashboard row."""
+    from tests.harness.improver.evidence import load_proposals
+    from tests.harness.improver.proposals import merge, rank_filter
+    from tests.harness.improver.report import persist_scan_summary, proposals_digest_md
+    from tests.harness.improver.state import Queue
+
+    props = load_proposals(Path(args.dir))
+    if not props:
+        print(f"[improve:ingest] no usable proposals.json in {args.dir}")
+        return 1
+    queue = Queue.load()
+    ranked = merge([rank_filter(props, max_size=args.max_size)], seen_ids=queue.seen_ids())
+    added = queue.add(ranked)
+
+    findings = {}
+    try:
+        findings = json.loads((Path(args.dir) / "findings.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        pass
+    surfaces = findings.get("surfaces", [])
+    scanned = sum(1 for s in surfaces if s.get("ok"))
+    hits = sum(len(s.get("hits", [])) for s in surfaces)
+    if args.summary_db:
+        open_props = [it.proposal for it in queue.by_status("proposed")]
+        digest_html = f"<pre>{proposals_digest_md(open_props)}</pre>"
+        asyncio.run(persist_scan_summary(
+            scanned=scanned, total=len(surfaces), hits=hits, proposals=len(added),
+            report_html=digest_html, cost_usd=None, mode="plan", summary_db_url=args.summary_db,
+        ))
+
+    print(f"\n[improve:ingest] {len(added)} new proposals queued (plan-judged)")
+    for p in ranked[:12]:
+        print(f"  [{p.score:.2f}] {p.est_size}/{p.severity:<6} {p.category:<11} {p.id}  {p.title}")
+    print(f"queue: {queue.path}")
+    return 0
+
+
 def _run_improve_budget(args: argparse.Namespace) -> int:
     """Print the improver's rolling-window budget usage vs. caps."""
     from datetime import UTC, datetime
@@ -474,6 +576,10 @@ def main(argv: list[str]) -> int:
         improve_cmd = getattr(args, "improve_cmd", None)
         if improve_cmd == "budget":
             return _run_improve_budget(args)
+        if improve_cmd == "gather":
+            return _run_improve_gather(args)
+        if improve_cmd == "ingest":
+            return _run_improve_ingest(args)
         if improve_cmd == "execute":
             return _run_improve_execute(args)
         if improve_cmd in ("proposals", "approve", "reject", "show", "done", "digest"):
