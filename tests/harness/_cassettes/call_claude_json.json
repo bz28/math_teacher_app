@@ -1,0 +1,500 @@
+{
+  "0535fe36238f6dae31c168a19728674b": {
+    "meta": {
+      "mode": "practice_eval",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: A regular hexagon has a side length of $12$ cm. (a) Find the perimeter of the hexagon. (b) Find the measure",
+      "recorded_at": 1780588706.0115972
+    },
+    "response": {
+      "distractors": [
+        "$60$ cm",
+        "$84$ cm",
+        "$144$ cm"
+      ]
+    }
+  },
+  "09d7e4740f1ada4a5b13741335d8c06b": {
+    "meta": {
+      "mode": "practice_eval",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: In circle $O$, the radius is $r = 13$. Chord $AB$ is drawn such that it is perpendicular to radius $OC$ at ",
+      "recorded_at": 1780588704.7833521
+    },
+    "response": {
+      "distractors": [
+        "$AB = 10$",
+        "$AB = 26$",
+        "$AB = 20$"
+      ]
+    }
+  },
+  "1b17b9005a65597489624961d711df8a": {
+    "meta": {
+      "mode": "practice_eval",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: In triangle $PQR$, side $PQ = 30$, side $QR = 40$, and the included angle at $Q$ measures $90\u00b0$. Find the l",
+      "recorded_at": 1780588704.7847328
+    },
+    "response": {
+      "distractors": [
+        "$PR = 50, \\quad \\angle P \\approx 37\u00b0$",
+        "$PR = 70, \\quad \\angle P \\approx 53\u00b0$",
+        "$PR = \\sqrt{1300}, \\quad \\angle P \\approx 53\u00b0$"
+      ]
+    }
+  },
+  "3d44de2a499fc3d4920fa559c5e1bc23": {
+    "meta": {
+      "mode": "practice_eval",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: In right triangle $ABC$, the right angle is at $C$. The two legs measure $AC = 3$ and $BC = 4$. Find the le",
+      "recorded_at": 1780588704.780407
+    },
+    "response": {
+      "distractors": [
+        "$AB = 7$",
+        "$AB = \\sqrt{25} = 5.0$",
+        "$AB = \\sqrt{7}$"
+      ]
+    }
+  },
+  "4e3747c01d2b73fb9f666c54f2c7a08e": {
+    "meta": {
+      "mode": "generate_questions",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Teacher's instructions:\nEvery problem MUST be a geometry problem that requires a diagram: triangles (include at leas",
+      "recorded_at": 1780588684.151349
+    },
+    "response": {
+      "questions": [
+        {
+          "difficulty": "easy",
+          "figure_spec": {
+            "right_angle_at": [
+              "C"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "AB": "c",
+              "AC": "3",
+              "BC": "4"
+            },
+            "side_lengths": {
+              "AB": 5,
+              "AC": 3,
+              "BC": 4
+            },
+            "type": "geometry",
+            "vertices": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "text": "In right triangle $ABC$, the right angle is at $C$. The two legs measure $AC = 3$ and $BC = 4$. Find the length of the hypotenuse $AB$. Leave your answer in simplest exact form.",
+          "title": "Right triangle \u2014 find the hypotenuse"
+        },
+        {
+          "difficulty": "medium",
+          "figure_spec": {
+            "angle_labels": {
+              "P": "?\u00b0"
+            },
+            "right_angle_at": [
+              "Q"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "PQ": "30",
+              "PR": "PR",
+              "QR": "40"
+            },
+            "side_lengths": {
+              "PQ": 30,
+              "QR": 40
+            },
+            "type": "geometry",
+            "vertices": [
+              "P",
+              "Q",
+              "R"
+            ]
+          },
+          "text": "In triangle $PQR$, side $PQ = 30$, side $QR = 40$, and the included angle at $Q$ measures $90\u00b0$. Find the length of side $PR$ and the measure of angle $P$ to the nearest degree.",
+          "title": "Find missing angle and side \u2014 SAS triangle"
+        },
+        {
+          "difficulty": "medium",
+          "figure_spec": {
+            "center_label": "O",
+            "chord_labels": {
+              "AB": "AB = ?"
+            },
+            "chords": [
+              "AB"
+            ],
+            "points": {
+              "A": 120,
+              "B": 60
+            },
+            "radius": 13,
+            "radius_label": "13",
+            "shape": "circle",
+            "show_center": true,
+            "type": "geometry"
+          },
+          "text": "In circle $O$, the radius is $r = 13$. Chord $AB$ is drawn such that it is perpendicular to radius $OC$ at a point $M$ that bisects both the chord and the radius, with $OM = 5$. Using the relationship between the radius, the perpendicular distance from the center to the chord, and the half-chord length, find the full length of chord $AB$.",
+          "title": "Circle chord \u2014 find chord length from radius"
+        },
+        {
+          "difficulty": "hard",
+          "figure_spec": {
+            "n_sides": 6,
+            "shape": "polygon",
+            "side_labels": {
+              "AB": "12 cm"
+            },
+            "side_length": 12,
+            "type": "geometry"
+          },
+          "text": "A regular hexagon has a side length of $12$ cm. (a) Find the perimeter of the hexagon. (b) Find the measure of each interior angle. (c) The hexagon is divided into congruent equilateral triangles from its center. Find the area of one such triangle, and use it to find the total area of the hexagon. Leave your answer in simplest radical form.",
+          "title": "Regular hexagon \u2014 find perimeter and interior angles"
+        }
+      ]
+    }
+  },
+  "69a26d80ddf1b60c2f92f3f87c6276c6": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: In right triangle $ABC$, the right angle is at $C$. The two legs measure $AC = 3$ and $BC = 4$. Find the le",
+      "recorded_at": 1780588694.855045
+    },
+    "response": {
+      "answer_type": "text",
+      "final_answer": "$AB = 5$",
+      "steps": [
+        {
+          "description": "We have a right triangle with the **right angle at C**, meaning the two legs are $AC = 3$ and $BC = 4$, and the hypotenuse is the side **opposite** the right angle \u2014 that's $AB$.\n\nThe **Pythagorean Theorem** says: in any right triangle, the square of the hypotenuse equals the sum of the squares of the two legs:\n$$a^2 + b^2 = c^2$$\nwhere $c$ is always the hypotenuse. Our job is to plug in the two known legs and solve for $c = AB$.",
+          "figure_spec": {
+            "right_angle_at": [
+              "C"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "AB": "?",
+              "AC": "3",
+              "BC": "4"
+            },
+            "side_lengths": {
+              "AC": 3,
+              "BC": 4
+            },
+            "type": "geometry",
+            "vertices": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "title": "Understand the Setup"
+        },
+        {
+          "description": "Substitute $AC = 3$ and $BC = 4$ into $AC^2 + BC^2 = AB^2$:\n$$3^2 + 4^2 = AB^2$$\n$$9 + 16 = AB^2$$\n$$25 = AB^2$$",
+          "figure_spec": {
+            "right_angle_at": [
+              "C"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "AB": "AB",
+              "AC": "3",
+              "BC": "4"
+            },
+            "side_lengths": {
+              "AC": 3,
+              "BC": 4
+            },
+            "type": "geometry",
+            "vertices": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "title": "Apply the Theorem"
+        },
+        {
+          "description": "Take the square root of both sides. Since a length must be **positive**, we take only the positive root:\n$$AB = \\sqrt{25} = 5$$\nThis is already a whole number, so no simplification is needed.",
+          "figure_spec": {
+            "right_angle_at": [
+              "C"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "AB": "5",
+              "AC": "3",
+              "BC": "4"
+            },
+            "side_lengths": {
+              "AC": 3,
+              "BC": 4
+            },
+            "type": "geometry",
+            "vertices": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "title": "Solve for AB"
+        }
+      ]
+    }
+  },
+  "ce57e8611ba06d2ba974729309a78e6b": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: In triangle $PQR$, side $PQ = 30$, side $QR = 40$, and the included angle at $Q$ measures $90\u00b0$. Find the l",
+      "recorded_at": 1780588699.1670752
+    },
+    "response": {
+      "answer_type": "text",
+      "final_answer": "$PR = 50, \\quad \\angle P \\approx 53\u00b0$",
+      "steps": [
+        {
+          "description": "We have triangle $PQR$ with a **right angle at $Q$**, so $PR$ is the **hypotenuse** \u2014 the side directly across from the right angle. The two legs are $PQ = 30$ and $QR = 40$. This is a classic right-triangle problem: use the **Pythagorean theorem** to find the missing side, then use **trigonometry** to find the missing angle.",
+          "figure_spec": {
+            "right_angle_at": [
+              "Q"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "PQ": "30",
+              "PR": "?",
+              "QR": "40"
+            },
+            "side_lengths": {
+              "PQ": 30,
+              "QR": 40
+            },
+            "type": "geometry",
+            "vertices": [
+              "P",
+              "Q",
+              "R"
+            ]
+          },
+          "title": "Understand the Setup"
+        },
+        {
+          "description": "For any right triangle, the hypotenuse squared equals the sum of the two legs squared:\n$$PR^2 = PQ^2 + QR^2 = 30^2 + 40^2 = 900 + 1600 = 2500$$\n\nRecognizing $2500 = 50^2$ immediately gives us:\n$$PR = 50$$\n\nThis is the famous **3-4-5 Pythagorean triple**, scaled by a factor of $10$.",
+          "figure_spec": {
+            "right_angle_at": [
+              "Q"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "PQ": "30",
+              "PR": "50",
+              "QR": "40"
+            },
+            "side_lengths": {
+              "PQ": 30,
+              "QR": 40
+            },
+            "type": "geometry",
+            "vertices": [
+              "P",
+              "Q",
+              "R"
+            ]
+          },
+          "title": "Apply the Pythagorean Theorem"
+        },
+        {
+          "description": "Angle $P$ is at vertex $P$. Looking from $P$, the side **opposite** is $QR = 40$ and the side **adjacent** is $PQ = 30$. Tangent is opposite over adjacent:\n$$\\tan(P) = \\frac{QR}{PQ} = \\frac{40}{30} = \\frac{4}{3}$$\n\nApplying the inverse tangent:\n$$P = \\arctan\\!\\left(\\frac{4}{3}\\right) \\approx 53.13\u00b0 \\approx \\mathbf{53\u00b0}$$",
+          "figure_spec": {
+            "angle_labels": {
+              "P": "53\u00b0",
+              "Q": "90\u00b0",
+              "R": "37\u00b0"
+            },
+            "right_angle_at": [
+              "Q"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "PQ": "30",
+              "PR": "50",
+              "QR": "40"
+            },
+            "side_lengths": {
+              "PQ": 30,
+              "QR": 40
+            },
+            "type": "geometry",
+            "vertices": [
+              "P",
+              "Q",
+              "R"
+            ]
+          },
+          "title": "Find Angle P with Tangent"
+        }
+      ]
+    }
+  },
+  "cf37233703d2a28d8fa14857386c921e": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: In circle $O$, the radius is $r = 13$. Chord $AB$ is drawn such that it is perpendicular to radius $OC$ at ",
+      "recorded_at": 1780588696.4854589
+    },
+    "response": {
+      "answer_type": "text",
+      "final_answer": "$AB = 24$",
+      "steps": [
+        {
+          "description": "We have a circle with center $O$ and radius $r = 13$. A chord $AB$ is drawn, and a radius $OC$ drops **perpendicularly** onto $AB$ at point $M$, where $OM = 5$.\n\nThe key geometric fact: **a radius drawn perpendicular to a chord always bisects that chord**. This means $M$ is the exact midpoint of $AB$, so $AM = MB$.\n\nThis creates a right triangle $OMA$, where:\n- $OA$ = radius = $13$ (hypotenuse)\n- $OM$ = perpendicular distance from center to chord = $5$ (one leg)\n- $AM$ = half the chord length = **unknown** (other leg)\n\nThe Pythagorean theorem will unlock the answer directly.",
+          "figure_spec": {
+            "right_angle_at": [
+              "M"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "MA": "?",
+              "OA": "13",
+              "OM": "5"
+            },
+            "type": "geometry",
+            "vertices": [
+              "O",
+              "M",
+              "A"
+            ]
+          },
+          "title": "Understand the Setup"
+        },
+        {
+          "description": "In right triangle $OMA$, the hypotenuse is the radius $OA = 13$:\n$$OA^2 = OM^2 + AM^2$$\n$$13^2 = 5^2 + AM^2$$\n$$169 = 25 + AM^2$$\n$$AM^2 = 144$$\n$$AM = 12$$\n\nSo the **half-chord** length is $12$.",
+          "figure_spec": {
+            "right_angle_at": [
+              "M"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "MA": "12",
+              "OA": "13",
+              "OM": "5"
+            },
+            "type": "geometry",
+            "vertices": [
+              "O",
+              "M",
+              "A"
+            ]
+          },
+          "title": "Apply the Pythagorean Theorem"
+        },
+        {
+          "description": "Since $M$ bisects $AB$, both halves are equal: $AM = MB = 12$.\n$$AB = AM + MB = 12 + 12 = 24$$",
+          "title": "Find Full Chord Length"
+        }
+      ]
+    }
+  },
+  "f9ddc97e25033492eaf39d7f017a8fdc": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: A regular hexagon has a side length of $12$ cm. (a) Find the perimeter of the hexagon. (b) Find the measure",
+      "recorded_at": 1780588703.135652
+    },
+    "response": {
+      "answer_type": "text",
+      "final_answer": "**(a)** Perimeter $= 72$ cm\n\n**(b)** Each interior angle $= 120\u00b0$\n\n**(c)** Area of one triangle $= 36\\sqrt{3}$ cm\u00b2\n\nTotal area of hexagon $= 216\\sqrt{3}$ cm\u00b2",
+      "steps": [
+        {
+          "description": "A **regular hexagon** has all 6 sides equal and all 6 angles equal. With side length $s = 12$ cm, we need to find:\n- **(a)** The perimeter \u2014 total distance around the outside\n- **(b)** Each interior angle \u2014 using the polygon angle formula\n- **(c)** The total area \u2014 by splitting the hexagon into 6 equilateral triangles from the center\n\nThe key insight for part (c): a regular hexagon is made of exactly **6 congruent equilateral triangles**, each with the same side length as the hexagon. This is the elegant shortcut that makes area easy.",
+          "figure_spec": {
+            "n_sides": 6,
+            "shape": "polygon",
+            "side_labels": {
+              "AB": "12 cm"
+            },
+            "side_length": 12,
+            "type": "geometry"
+          },
+          "title": "Understand the Problem"
+        },
+        {
+          "description": "A regular hexagon has **6 equal sides**, so the perimeter is simply:\n$$P = 6 \\times s = 6 \\times 12 = 72 \\text{ cm}$$",
+          "title": "Find the Perimeter"
+        },
+        {
+          "description": "For any **regular polygon** with $n$ sides, the sum of all interior angles is $(n-2) \\times 180\u00b0$. Dividing by $n$ gives each individual angle.\n\nWith $n = 6$:\n$$\\text{Each interior angle} = \\frac{(6-2) \\times 180\u00b0}{6} = \\frac{4 \\times 180\u00b0}{6} = \\frac{720\u00b0}{6} = 120\u00b0$$",
+          "title": "Find Each Interior Angle"
+        },
+        {
+          "description": "Drawing lines from the center to each of the 6 vertices splits the hexagon into **6 identical triangles**. Each triangle has:\n- Two sides that are radii of the hexagon\n- One side that is a side of the hexagon ($12$ cm)\n\nSince the hexagon is regular, by symmetry each of the 6 central angles equals $\\frac{360\u00b0}{6} = 60\u00b0$. Two sides of each triangle are equal (both radii), and the angle between them is $60\u00b0$ \u2014 this forces all three angles to be $60\u00b0$, making every triangle **equilateral** with side length $12$ cm.",
+          "figure_spec": {
+            "n_sides": 6,
+            "shape": "polygon",
+            "side_length": 12,
+            "type": "geometry",
+            "vertex_names": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "F"
+            ]
+          },
+          "title": "Identify the 6 Equilateral Triangles"
+        },
+        {
+          "description": "The area of an equilateral triangle with side $a$ is derived by dropping a height $h$ from the apex to the base, splitting it into two 30-60-90 triangles:\n$$h = \\frac{\\sqrt{3}}{2}a$$\n\nSo the area is:\n$$A_{\\triangle} = \\frac{1}{2} \\times a \\times h = \\frac{1}{2} \\times a \\times \\frac{\\sqrt{3}}{2}a = \\frac{\\sqrt{3}}{4}a^2$$\n\nSubstituting $a = 12$:\n$$A_{\\triangle} = \\frac{\\sqrt{3}}{4} \\times 12^2 = \\frac{\\sqrt{3}}{4} \\times 144 = 36\\sqrt{3} \\text{ cm}^2$$",
+          "figure_spec": {
+            "angle_labels": {
+              "A": "60\u00b0",
+              "B": "60\u00b0",
+              "C": "60\u00b0"
+            },
+            "angles": {
+              "A": 60,
+              "B": 60,
+              "C": 60
+            },
+            "shape": "triangle",
+            "side_labels": {
+              "AB": "12",
+              "AC": "12",
+              "BC": "12"
+            },
+            "side_lengths": {
+              "AB": 12,
+              "AC": 12,
+              "BC": 12
+            },
+            "type": "geometry",
+            "vertices": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "title": "Area of One Equilateral Triangle"
+        },
+        {
+          "description": "Since the hexagon is made of **6 congruent equilateral triangles**:\n$$A_{\\text{hexagon}} = 6 \\times A_{\\triangle} = 6 \\times 36\\sqrt{3} = 216\\sqrt{3} \\text{ cm}^2$$",
+          "title": "Total Area of the Hexagon"
+        }
+      ]
+    }
+  }
+}

@@ -32,4 +32,12 @@ Present the tiers separately and use the `AskUserQuestion` tool to ask which tie
 
 Be direct and specific. Reference exact file paths and line numbers.
 
+**Harness check (when the changeset touches a probed feature).** The autonomous test harness (`tests/harness/`) drives the real app to verify AI-generated output renders correctly. If any changed file matches a probe's `relevant_paths()` (geometry today — `api/core/geometry/`, the figure-generation/decomposition paths, `figure-display.tsx`), run it and fold the result into the review:
+
+```
+python -m tests.harness for-diff --base main --mode replay
+```
+
+It auto-selects the probe(s) for the changeset and prints PASS/FAIL per probe. Treat a deterministic FAIL (figure doesn't render/isn't consistent) as **P1**, and a judge-flagged render (overflow/clipping/low score) as **P2**. Requires the local stack up (API on :8000 against the harness DB, web on :3000, cassettes recorded); if it isn't, note that the harness was skipped rather than silently omitting it. For a deeper pass on generation quality, `python -m tests.harness explore --mode auto` (costs a few cents) hunts for new failing cases and promotes them to the regression corpus.
+
 **Do not apply any fixes** until the user explicitly approves. When fixes are approved, use reliable fixes only — no bandages, no hardcoded shortcuts.
