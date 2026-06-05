@@ -108,6 +108,9 @@ class GenerationProbe(Probe):
         # Problems generated per topic. Small — figure-appropriateness +
         # correctness only need a few examples per topic to be meaningful.
         self.count = count
+        # Instance attribute so subclasses (e.g. LatexProbe) can run the same
+        # generation machinery over a different topic set.
+        self.scenarios = _SCENARIOS
 
     def relevant_paths(self) -> list[str]:
         return [
@@ -143,7 +146,7 @@ class GenerationProbe(Probe):
         base = f"{ctx.api_base}/teacher/courses/{ctx.course_id}/question-bank"
         # Normal run: the full curated sweep. An explicit override (e.g. an
         # explorer scenario) → that single topic, figure expectation unknown.
-        scenarios = _SCENARIOS
+        scenarios = self.scenarios
         if constraint and constraint != self.default_constraint:
             scenarios = [_Scenario("custom", constraint, expect_figure=None)]
         out: list[GeneratedItem] = []
