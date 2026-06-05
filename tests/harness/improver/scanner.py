@@ -17,6 +17,8 @@ import time
 from playwright.async_api import ConsoleMessage
 
 from tests.harness.browser import HarnessBrowser
+from tests.harness.improver.detectors import run_detectors
+from tests.harness.improver.judge import judge_page
 from tests.harness.improver.types import App, PageObservation, Surface
 from tests.harness.seed import Seed
 
@@ -49,11 +51,12 @@ async def scan_surface(
     base_url: str,
     seed: Seed,
     *,
+    judge: bool = True,
     timeout_ms: int = 30000,
 ) -> PageObservation:
-    """Open one surface authenticated for its role, time the load, and capture a
-    full-page screenshot + console errors. Detectors (Phase 1) run separately on
-    the returned observation + live page."""
+    """Open one surface authenticated for its role, time the load, screenshot the
+    full page, then run the objective detectors (live DOM) and — unless `judge`
+    is off — the UX vision judge. All signal lands on `obs.hits`."""
     path = surface.resolve(seed_ids(seed))
     full_url = path if "://" in path else f"{base_url.rstrip('/')}{path}"
     access, refresh = _tokens_for(surface.role, seed)
@@ -78,10 +81,17 @@ async def scan_surface(
             obs.load_ms = (time.monotonic() - started) * 1000
             obs.png = await page.screenshot(full_page=True)
             obs.ok = True
+            # Objective detectors need the live page, so run them before the
+            # context closes; the judge only needs the screenshot bytes.
+            obs.hits = await run_detectors(page, load_ms=obs.load_ms)
         except Exception as e:  # noqa: BLE001 — a broken route is data, not a crash
             obs.error = str(e)[:200]
 
     obs.console_errors = errors
+    if judge and obs.png is not None:
+        obs.hits.extend(await judge_page(
+            obs.png, surface_key=surface.key, title=surface.title, role=surface.role,
+        ))
     return obs
 
 
@@ -91,6 +101,7 @@ async def scan_surfaces(
     bases: dict[App, str],
     seed: Seed,
     *,
+    judge: bool = True,
     timeout_ms: int = 30000,
 ) -> list[PageObservation]:
     """Scan every surface serially (each in its own context). Surfaces whose app
@@ -104,5 +115,7 @@ async def scan_surfaces(
                 error=f"no base URL configured for app '{s.app}'",
             ))
             continue
-        out.append(await scan_surface(browser, s, base, seed, timeout_ms=timeout_ms))
+        out.append(await scan_surface(
+            browser, s, base, seed, judge=judge, timeout_ms=timeout_ms,
+        ))
     return out
