@@ -33,6 +33,7 @@ dev = [
     "mypy>=1.13.0",
     "types-python-jose>=3.3.0",
     "playwright>=1.49.0",  # autonomous browser harness (tests/harness)
+    "pillow>=11.0.0",  # downscale page screenshots before the vision judge (improver)
 ]
 
 [tool.ruff]

@@ -16,12 +16,36 @@ than a console error.
 from __future__ import annotations
 
 import base64
+import io
 from typing import Any
+
+from PIL import Image
 
 from api.core.llm_client import MODEL_HAIKU, LLMMode, call_claude_vision
 from api.core.llm_schemas import ToolSchema
 from tests.harness.cassette import CassetteMissError
 from tests.harness.improver.types import DetectorHit
+
+# Anthropic rejects images whose longest edge exceeds 8000px and downscales
+# anything over ~1568px anyway, so we shrink full-page shots (which at 2x device
+# scale routinely exceed both) to this long edge — fixing the hard limit and
+# roughly halving vision-token cost with no loss of assessable detail.
+_MAX_EDGE = 1568
+
+
+def _downscale(png: bytes, max_edge: int = _MAX_EDGE) -> bytes:
+    """Shrink a PNG so its longest edge is <= max_edge. Returns the input
+    unchanged if it's already small enough or can't be decoded."""
+    try:
+        img = Image.open(io.BytesIO(png))
+        if max(img.size) <= max_edge:
+            return png
+        img.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception:  # noqa: BLE001 — a bad image just goes un-resized
+        return png
 
 _CATEGORIES = ["visual", "hierarchy", "spacing", "affordance", "content", "state"]
 
@@ -77,7 +101,7 @@ async def judge_page(
     image, the cassette misses in replay, or the screen looks clean."""
     if png is None:
         return []
-    b64 = base64.b64encode(png).decode("ascii")
+    b64 = base64.b64encode(_downscale(png)).decode("ascii")
     user_content = [
         {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
         {"type": "text", "text": f"{_INSTRUCTIONS}\n\nScreen: {title} (role: {role})."},
@@ -96,6 +120,8 @@ async def judge_page(
     except CassetteMissError:
         # Judge cassettes are a local cache; on a fresh replay checkout there's
         # nothing to replay. The judge is advisory — skip, don't fail the scan.
+        return []
+    except Exception:  # noqa: BLE001 — one page's judge error is data, not a crash
         return []
     hits: list[DetectorHit] = []
     for issue in result.get("issues", []):
