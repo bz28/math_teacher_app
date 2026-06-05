@@ -51,11 +51,18 @@ _FEATURE_SYSTEM = (
 
 
 async def content_quality_proposals(
-    *, model: str = MODEL_REASON, max_size: str = "M",
+    *, api_base: str, web_base: str,
+    model: str = MODEL_REASON, max_size: str = "M", verify: bool = True,
 ) -> list[Proposal]:
     """Turn the harness's promoted generation-failure corpus into fix proposals.
-    Returns [] when no failures are recorded or the cassette misses in replay."""
-    from tests.harness.explorer import load_corpus
+
+    When `verify` (default), each promoted failure is re-run through the LIVE
+    generator first and only the ones that STILL fail are proposed — so we never
+    propose fixing a defect that's already been fixed (a real gap an execution
+    demo caught: the corpus keeps fixed failures, and stale entries led to a
+    dead-end proposal). Returns [] when nothing still fails or the cassette
+    misses in replay."""
+    from tests.harness.explorer import explore, load_corpus
     from tests.harness.probes import PROBES
 
     failures: list[dict[str, object]] = []
@@ -63,7 +70,14 @@ async def content_quality_proposals(
         scenarios = load_corpus(name)
         if not scenarios:
             continue
-        fix_in = factory(1).relevant_paths()
+        probe = factory(1)
+        fix_in = probe.relevant_paths()
+        if verify:
+            try:
+                verified = await explore(probe, scenarios, api_base, web_base)
+                scenarios = [r.scenario for r in verified.results if not r.passed]
+            except Exception:  # noqa: BLE001 — can't re-verify → skip, never propose stale
+                continue
         for sc in scenarios:
             failures.append({
                 "probe": name, "scenario": sc.name, "constraint": sc.constraint,

@@ -87,6 +87,7 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     scan.add_argument("--db", default=os.environ.get("HARNESS_DATABASE_URL", _DEFAULT_DB))
     scan.add_argument("--apps", default="web", help="comma list: web,admin,mobile_web")
     scan.add_argument("--web-base", default=os.environ.get("HARNESS_WEB_BASE", _DEFAULT_WEB))
+    scan.add_argument("--api-base", default=os.environ.get("HARNESS_API_BASE", _DEFAULT_API))
     scan.add_argument("--admin-base", default=os.environ.get("HARNESS_ADMIN_BASE", ""))
     scan.add_argument("--mobile-base", default=os.environ.get("HARNESS_MOBILE_BASE", ""))
     scan.add_argument("--max-surfaces", type=int, default=0, help="cap surfaces (0 = all)")
@@ -94,6 +95,8 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     scan.add_argument("--no-judge", action="store_true", help="skip the UX vision judge ($)")
     scan.add_argument("--no-propose", action="store_true", help="scan only; skip all ideation ($)")
     scan.add_argument("--no-content", action="store_true", help="skip the AI-output quality source")
+    scan.add_argument("--no-verify-corpus", action="store_true",
+                      help="propose corpus failures without re-checking they still reproduce")
     scan.add_argument("--no-features", action="store_true", help="skip the feature-ideation source")
     scan.add_argument("--ignore-budget", action="store_true", help="bypass the budget gate (manual runs)")
     scan.add_argument("--out", default="tests/harness/_reports/improve.html")
@@ -375,7 +378,10 @@ def _run_improve_scan(args: argparse.Namespace) -> int:
         if not args.no_propose:
             batches.append(await generate_proposals(obs, max_size=args.max_size))
             if not args.no_content:
-                batches.append(await content_quality_proposals(max_size=args.max_size))
+                batches.append(await content_quality_proposals(
+                    api_base=args.api_base, web_base=args.web_base,
+                    max_size=args.max_size, verify=not args.no_verify_corpus,
+                ))
             if not args.no_features:
                 batches.append(await feature_proposals(surfaces, max_size=args.max_size))
         # Dedupe against everything ever queued so known/rejected ideas never
