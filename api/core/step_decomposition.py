@@ -21,7 +21,14 @@ _cache: dict[str, tuple[float, "Decomposition"]] = {}
 
 
 def _cache_get(problem: str) -> "Decomposition | None":
-    """Get a cached decomposition if it exists and hasn't expired."""
+    """Get a cached decomposition if it exists and hasn't expired.
+
+    Re-renders any step figures at read time so that a renderer-code
+    update (deploy, hotfix) takes effect immediately instead of being
+    masked by 30-minute-old cached SVGs. The cached Decomposition
+    holds only the structured spec (figure_spec dict); figure_svg is
+    rendered fresh here.
+    """
     entry = _cache.get(problem)
     if entry is None:
         return None
@@ -29,16 +36,64 @@ def _cache_get(problem: str) -> "Decomposition | None":
     if time.monotonic() - ts > DECOMPOSITION_CACHE_TTL_SECONDS:
         del _cache[problem]
         return None
-    return decomp
+
+    # Re-render step figures using the current renderer.
+    from api.core.geometry import render_figure_or_none
+
+    refreshed_steps: list[dict[str, Any]] = []
+    for s in decomp.steps:
+        if not isinstance(s, dict):
+            refreshed_steps.append(s)
+            continue
+        rendered = dict(s)
+        svg = render_figure_or_none(s.get("figure_spec"), context="cached step figure")
+        if svg:
+            rendered["figure_svg"] = svg
+        else:
+            # No spec, or a renderer change invalidated a previously-valid
+            # one — drop any stale svg rather than crash.
+            rendered.pop("figure_svg", None)
+        refreshed_steps.append(rendered)
+
+    return Decomposition(
+        problem=decomp.problem,
+        steps=refreshed_steps,
+        final_answer=decomp.final_answer,
+        problem_type=decomp.problem_type,
+        answer_type=decomp.answer_type,
+    )
 
 
 def _cache_set(problem: str, decomp: "Decomposition") -> None:
-    """Cache a decomposition result."""
+    """Cache a decomposition result.
+
+    Strips rendered figure_svg before storing so the cache holds
+    only the canonical figure_spec. Re-rendering happens on read so
+    renderer-code updates take effect immediately. Without this, a
+    deploy that fixes a renderer bug would leave stale SVGs in the
+    in-process cache for up to DECOMPOSITION_CACHE_TTL_SECONDS.
+    """
     # Evict oldest entry if cache is full (dict is insertion-ordered in Python 3.7+)
     if len(_cache) >= DECOMPOSITION_CACHE_MAX_SIZE:
         oldest_key = next(iter(_cache))
         del _cache[oldest_key]
-    _cache[problem] = (time.monotonic(), decomp)
+
+    stripped_steps: list[dict[str, Any]] = []
+    for s in decomp.steps:
+        if not isinstance(s, dict):
+            stripped_steps.append(s)
+            continue
+        stripped = {k: v for k, v in s.items() if k != "figure_svg"}
+        stripped_steps.append(stripped)
+
+    cacheable = Decomposition(
+        problem=decomp.problem,
+        steps=stripped_steps,
+        final_answer=decomp.final_answer,
+        problem_type=decomp.problem_type,
+        answer_type=decomp.answer_type,
+    )
+    _cache[problem] = (time.monotonic(), cacheable)
 
 _SYSTEM_PROMPT_TEMPLATE = (
     "You are a {professor_role}.\n\n"
@@ -101,6 +156,10 @@ _SYSTEM_PROMPT_TEMPLATE = (
     "- Circles: positive `radius` + named points on the circumference "
     "with angle in degrees CCW from the positive x-axis. Chords are "
     "two-character identifiers.\n"
+    "- Polygons (4+ sides — squares, hexagons, etc.): use "
+    "`shape='polygon'` with `n_sides` (regular) or "
+    "`vertex_positions` (irregular). Don't use polygon mode for "
+    "triangles — `shape='triangle'` has the constraint solver.\n"
     "- Compound (circle inscribed in / circumscribed around a "
     "triangle): use `shape='triangle'` and set the optional "
     "`inscribed_circle` or `circumscribed_circle` field. The "
@@ -186,7 +245,7 @@ def _parse_decomposition(
     # Local import — keeps step_decomposition.py importable without
     # pulling in the geometry module's sympy dependency (none today,
     # but the boundary holds for when it does).
-    from api.core.geometry import FigureSpecError, render_figure
+    from api.core.geometry import render_figure_or_none
 
     steps_data = data["steps"]
     final_answer = data.get("final_answer", "")
@@ -202,22 +261,10 @@ def _parse_decomposition(
             description = _normalize_latex(str(s.get("description", "")))
             step: dict[str, Any] = {"title": title, "description": description}
             raw_figure = s.get("figure_spec")
-            if isinstance(raw_figure, dict):
-                try:
-                    step["figure_svg"] = render_figure(raw_figure)
-                    step["figure_spec"] = raw_figure
-                except FigureSpecError as e:
-                    logger.warning(
-                        "step figure_spec rejected (keeping step, dropping figure): %s", e,
-                    )
-                except Exception:
-                    # Defense-in-depth: any renderer bug drops the
-                    # step figure but keeps the step. Full traceback
-                    # in logs so the actual bug is visible.
-                    logger.exception(
-                        "unexpected error rendering step figure_spec (keeping step); spec=%r",
-                        raw_figure,
-                    )
+            svg = render_figure_or_none(raw_figure, context="step figure_spec")
+            if svg:
+                step["figure_svg"] = svg
+                step["figure_spec"] = raw_figure
             steps.append(step)
         else:
             # Backward compat: plain string from older prompt format

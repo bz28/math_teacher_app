@@ -548,13 +548,28 @@ def _mcq_choices_for_student(item: QuestionBankItem) -> list[str]:
     return [c for _, c in sorted(zip(digest[:4], choices))]
 
 
+def _student_solution_steps(steps: list[Any] | None) -> list[Any] | None:
+    """Drop the raw `figure_spec` DSL from each step before sending to a
+    student. The student frontend renders only the pre-computed
+    `figure_svg`; `figure_spec` is the structured geometry the renderer
+    consumed and is dead weight (and needless internal detail) on the
+    wire. Non-dict steps pass through untouched.
+    """
+    if not steps:
+        return steps
+    return [
+        {k: v for k, v in s.items() if k != "figure_spec"} if isinstance(s, dict) else s
+        for s in steps
+    ]
+
+
 def _serialize(item: QuestionBankItem) -> VariationPayload:
     return VariationPayload(
         bank_item_id=str(item.id),
         question=item.question,
         final_answer=item.final_answer,
         distractors=list(item.distractors or []),
-        solution_steps=item.solution_steps,
+        solution_steps=_student_solution_steps(item.solution_steps),
         difficulty=item.difficulty,
         figure_svg=item.figure_svg,
     )
@@ -1255,7 +1270,7 @@ async def practice_detail(
             position=pos,
             question=it.question,
             figure_svg=it.figure_svg,
-            solution_steps=it.solution_steps,
+            solution_steps=_student_solution_steps(it.solution_steps),
             final_answer=it.final_answer,
             distractors=it.distractors,
             difficulty=it.difficulty,

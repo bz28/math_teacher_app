@@ -95,11 +95,27 @@ async def create_session(
             subject=subject, image_base64=image_base64,
         )
         problem_type = decomposition.problem_type
-        steps_data = [
-            {"title": s.get("title", ""), "description": s["description"]} if isinstance(s, dict)
-            else {"title": "", "description": str(s)}
-            for s in decomposition.steps
-        ]
+        # Carry per-step geometry figures through to the stored
+        # session. `figure_svg` is the pre-rendered SVG (consumed
+        # directly by StepTimeline); `figure_spec` is the canonical
+        # source-of-truth. Earlier versions of this list-comp only
+        # kept {title, description}, which dropped step diagrams on
+        # the way into learn-mode sessions — students saw text-only
+        # walkthroughs even when the decomposition produced figures.
+        steps_data = []
+        for s in decomposition.steps:
+            if isinstance(s, dict):
+                step: dict[str, Any] = {
+                    "title": s.get("title", ""),
+                    "description": s["description"],
+                }
+                if s.get("figure_spec"):
+                    step["figure_spec"] = s["figure_spec"]
+                if s.get("figure_svg"):
+                    step["figure_svg"] = s["figure_svg"]
+                steps_data.append(step)
+            else:
+                steps_data.append({"title": "", "description": str(s)})
         if not steps_data:
             raise RuntimeError("Decomposition returned no steps")
 

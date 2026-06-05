@@ -632,7 +632,9 @@ async def reject_bank_item(
 
 
 @router.post("/question-bank/{item_id}/regenerate")
+@limiter.limit("6/minute")
 async def regenerate_bank_item(
+    request: Request,
     body: RegenerateRequest,
     item: QuestionBankItem = Depends(get_bank_item),
     current_user: CurrentUser = Depends(require_teacher),
@@ -718,7 +720,9 @@ async def delete_bank_item(
 
 
 @router.post("/question-bank/{item_id}/chat")
+@limiter.limit("10/minute")
 async def post_chat_message(
+    request: Request,
     body: ChatMessageRequest,
     item: QuestionBankItem = Depends(get_bank_item),
     current_user: CurrentUser = Depends(require_teacher),
@@ -802,16 +806,27 @@ async def accept_chat_proposal(
             item.solution_steps = _render_step_figures(cleaned_steps)
     if proposal.get("final_answer") is not None:
         item.final_answer = str(proposal["final_answer"])
-    # Top-level question-figure on the proposal — mirrors what
-    # regenerate_one does: any change resolves through _resolve_figure
-    # so a bad spec drops the figure without dropping the question.
-    # When the proposal omits figure_spec, we leave the existing one
-    # alone (the chat-prompt rules say the AI sets fields to null when
-    # unchanged).
+    # Top-level question-figure on the proposal. Three cases:
+    #   1. Proposal includes a NEW figure_spec → render + persist.
+    #   2. Proposal rewrites the question but omits figure_spec →
+    #      clear the stale figure. Preview-side UI (workshop-modal's
+    #      previewFigureSvg) already hides the figure in this case
+    #      so the teacher sees "no diagram" before accepting; persist
+    #      logic must match what they previewed, otherwise we'd save
+    #      old-figure-paired-with-new-prose. Caught by the full-stack
+    #      audit as a state desync between preview and accept.
+    #   3. Proposal touches neither question nor figure_spec → leave
+    #      the existing figure alone.
     if proposal.get("figure_spec") is not None:
         new_figure_spec, new_figure_svg = _resolve_figure(proposal["figure_spec"])
         item.figure_spec = new_figure_spec
         item.figure_svg = new_figure_svg
+    elif proposal.get("question") is not None:
+        # Question rewritten without a fresh figure → the old figure
+        # almost certainly no longer describes the new question.
+        # Match what the preview showed (no figure).
+        item.figure_spec = None
+        item.figure_svg = None
 
     # Build a NEW list with NEW dict copies for any modified message.
     # In-place dict mutation (e.g. `m["accepted"] = True`) would be a
@@ -823,7 +838,7 @@ async def accept_chat_proposal(
     # used in core/question_bank_chat.py's superseded_history.
     item.chat_messages = [
         {**m, "accepted": True} if i == body.message_index
-        else {**m, "superseded": True} if (
+        else _shed_resolved_figure_svg({**m, "superseded": True}) if (
             m.get("role") == "ai"
             and m.get("proposal")
             and not m.get("accepted")
@@ -855,11 +870,44 @@ async def discard_chat_proposal(
     # New dict for the discarded message — see accept_chat_proposal
     # above for why in-place mutation doesn't persist.
     item.chat_messages = [
-        {**m, "discarded": True} if i == body.message_index else m
+        _shed_resolved_figure_svg({**m, "discarded": True})
+        if i == body.message_index else m
         for i, m in enumerate(existing)
     ]
     await db.commit()
     return _serialize_item(item, await used_in_for_item(db, item))
+
+
+def _shed_resolved_figure_svg(msg: dict[str, Any]) -> dict[str, Any]:
+    """Strip pre-rendered figure_svg from a resolved (accepted is
+    handled separately via accept_chat_proposal mutating the item
+    directly, so accept doesn't pass through here; this is for
+    discarded + superseded paths) chat-message proposal.
+
+    Background: at proposal time the chat orchestrator pre-renders
+    the figure_svg so the preview UI can show it before Accept.
+    Once a proposal is resolved (discarded or superseded), nothing
+    will ever need to render that SVG again — and a single rendered
+    SVG can run several KB. Over a long chat with several geometry
+    revisions, accumulated stale SVGs bloat the chat_messages JSON
+    column. Stripping leaves the canonical figure_spec in place
+    (compact, useful for audit/replay) but drops the rendered cache.
+    """
+    proposal = msg.get("proposal")
+    if not isinstance(proposal, dict):
+        return msg
+    cleaned_proposal: dict[str, Any] = {
+        k: v for k, v in proposal.items() if k != "figure_svg"
+    }
+    # Per-step figure_svg also goes — same rationale, same size impact.
+    steps = cleaned_proposal.get("solution_steps")
+    if isinstance(steps, list):
+        cleaned_proposal["solution_steps"] = [
+            {k: v for k, v in s.items() if k != "figure_svg"}
+            if isinstance(s, dict) else s
+            for s in steps
+        ]
+    return {**msg, "proposal": cleaned_proposal}
 
 
 @router.post("/question-bank/{item_id}/chat/clear")

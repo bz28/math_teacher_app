@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
 from api.core.document_vision import MAX_VISION_IMAGES, build_vision_content, fetch_document_images
-from api.core.geometry import FigureSpecError, render_figure
+from api.core.geometry import render_figure_or_none
 from api.core.image_utils import to_content_block
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import GENERATE_QUESTIONS_SCHEMA, REGENERATE_QA_SCHEMA
@@ -66,26 +66,14 @@ def _render_step_figures(
         if not isinstance(step, dict):
             continue
         rendered: dict[str, Any] = dict(step)
-        raw = step.get("figure_spec")
-        if isinstance(raw, dict):
-            try:
-                rendered["figure_svg"] = render_figure(raw)
-                rendered["figure_spec"] = raw
-            except FigureSpecError as e:
-                logger.warning(
-                    "step figure_spec rejected on regenerate (keeping step): %s", e,
-                )
-                rendered.pop("figure_spec", None)
-                rendered.pop("figure_svg", None)
-            except Exception:
-                # Broad catch — any renderer bug drops the step
-                # figure but keeps the step. Logged with traceback.
-                logger.exception(
-                    "unexpected error rendering step figure_spec (keeping step); spec=%r",
-                    raw,
-                )
-                rendered.pop("figure_spec", None)
-                rendered.pop("figure_svg", None)
+        svg = render_figure_or_none(step.get("figure_spec"), context="step figure_spec")
+        if svg:
+            rendered["figure_svg"] = svg
+        else:
+            # No spec, or it failed to render — drop both keys so a
+            # downstream reader never sees a spec without its svg.
+            rendered.pop("figure_spec", None)
+            rendered.pop("figure_svg", None)
         out.append(rendered)
     return out
 
@@ -95,36 +83,13 @@ def _resolve_figure(
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Validate + render a figure spec emitted by the LLM.
 
-    Returns (spec, svg) — both None if the model didn't emit one, or
-    if rendering raises ANY exception. We catch broadly on purpose:
-    a bad figure shouldn't tank the whole batch under any failure
-    mode. The renderer is supposed to raise only FigureSpecError,
-    but bugs in label-placement or coord-lookup can surface as
-    KeyError / IndexError / AttributeError — none of those should
-    kill a perfectly-valid question. Log with the full traceback so
-    real renderer bugs are still visible in monitoring.
+    Returns (spec, svg) — both None if the model didn't emit one or if
+    rendering failed (see `render_figure_or_none` for the degrade
+    contract). The spec is only returned alongside a successful svg so
+    a persisted question never carries a spec without its rendering.
     """
-    if not isinstance(raw_spec, dict):
-        return None, None
-    try:
-        svg = render_figure(raw_spec)
-    except FigureSpecError as e:
-        logger.warning(
-            "figure_spec rejected by renderer (keeping question, dropping figure): %s",
-            e,
-        )
-        return None, None
-    except Exception:
-        # Defense-in-depth: an unexpected renderer error is a bug we
-        # want to fix, but it must NOT take down the surrounding
-        # question. exc_info=True so the traceback lands in logs.
-        logger.exception(
-            "unexpected error rendering figure_spec (keeping question, "
-            "dropping figure); spec=%r",
-            raw_spec,
-        )
-        return None, None
-    return raw_spec, svg
+    svg = render_figure_or_none(raw_spec, context="figure_spec")
+    return (raw_spec, svg) if svg else (None, None)
 
 
 def schedule_generation_job(job_id: uuid.UUID) -> None:
@@ -186,6 +151,14 @@ Rules:
 - Rate each problem's difficulty based on the content
 - Extract at most 40 problems. If the worksheet has more, extract the
   first 40 and stop.
+- DO NOT emit a `figure_spec` on any extracted problem. The
+  extraction job's contract is "copy the textbook verbatim" — and
+  the geometry DSL only covers triangles / circles / polygons, so
+  any attempt to translate a textbook figure into a spec would
+  either fail or produce a structurally-different diagram. Leave
+  figure_spec null and rely on the bracket-described figure text in
+  the problem itself. The teacher will see the original photo
+  alongside the extracted problem on review.
 """
 
 
@@ -318,6 +291,26 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
                 "or framing so each variation is its own problem.\n\n"
                 f"Reference question:\n{parent.question}"
             )
+            # If the parent has a structured figure, hand its spec to
+            # the model so the variations stay figure-coherent (same
+            # shape family, different numbers). Without this, a
+            # triangle-with-figure parent commonly spawned children
+            # that either dropped the figure entirely or invented a
+            # structurally different one — the variation tree was
+            # figure-incoherent by construction.
+            if parent.figure_spec:
+                import json as _json
+                seed_block += (
+                    "\n\nThe reference question has a structured "
+                    "geometry figure. Each variation should carry "
+                    "the SAME shape family (triangle, circle, "
+                    "polygon, compound) — vary only the numeric "
+                    "values, labels, and orientation. Don't drop "
+                    "the figure entirely and don't switch to a "
+                    "different shape.\n\n"
+                    f"Reference figure_spec (for shape reference):\n"
+                    f"{_json.dumps(parent.figure_spec, indent=2)}"
+                )
             constraint_text = (
                 f"{seed_block}\n\nAdditional constraint: {job.constraint}"
                 if job.constraint else seed_block

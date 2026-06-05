@@ -13,6 +13,7 @@ calm and textbook-like, not decorative.
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any
 
@@ -22,6 +23,7 @@ from api.core.geometry.dsl import (
     CircleFigure,
     FigureSpec,
     FigureSpecError,
+    PolygonFigure,
     TriangleCircleAnnotation,
     TriangleFigure,
 )
@@ -30,13 +32,20 @@ from api.core.geometry.solver import (
     circumcircle_of_triangle,
     incircle_of_triangle,
     solve_circle,
+    solve_polygon,
     solve_triangle,
 )
 
 # Visual constants — single source of truth so tweaks land in one
 # place. Sizes are in SVG user units; the viewBox is computed to fit
 # the figure with PADDING units of margin on each side.
-_STROKE = "#14130f"
+# `currentColor` lets the SVG inherit the surrounding CSS `color`
+# property, so figures pick up the theme's text color (light text in
+# dark mode, dark text in light mode). Without this, a hardcoded
+# near-black stroke is invisible against the dark-mode bg #14130F.
+# The frontend container (FigureDisplay) sets `color: var(--color-text)`
+# so every line, label, and dot adapts to the active theme.
+_STROKE = "currentColor"
 _STROKE_WIDTH = 0.04
 _FONT_FAMILY = "system-ui, sans-serif"
 _LABEL_FONT_SIZE = 0.22
@@ -45,6 +54,19 @@ _PADDING = 0.6
 _RIGHT_ANGLE_SIZE = 0.25
 _LABEL_OFFSET = 0.22
 
+# Every visual constant above (stroke width, font sizes, marker sizes,
+# label offsets) is an ABSOLUTE user-space length. They're tuned to look
+# right when the figure spans roughly this many units. But the solver
+# places vertices at the spec's literal magnitudes — a "3-4-5 triangle"
+# spans ~5 units while a "130-140-150 field" spans ~150 and a fractional
+# figure spans <1. Without normalization the text/stroke would be
+# invisible on large figures and dwarf small ones. So every render
+# function first rescales the solved coordinates so the figure's longest
+# dimension equals _CANONICAL_SPAN, making the constants always correct.
+_CANONICAL_SPAN = 5.0
+
+
+logger = logging.getLogger(__name__)
 
 # FigureSpec is a discriminated union; use TypeAdapter so Pydantic
 # dispatches to the right shape variant from `spec.shape`.
@@ -58,10 +80,10 @@ def render_figure(spec_dict: dict[str, Any]) -> str:
     problem. The caller (question_bank_generation in PR 2) catches
     and decides whether to fall back to no-figure or retry.
 
-    Specs without an explicit `shape` field default to "triangle".
-    This preserves backwards compatibility with specs persisted
-    before the circle branch landed (those rows have no `shape`
-    discriminator since the schema's default was triangle).
+    A spec without an explicit `shape` defaults to "triangle" — a
+    convenience for the common case and for terse hand-written specs;
+    the generation schema always emits `shape`, so this only affects
+    callers that build specs by hand.
     """
     if "shape" not in spec_dict:
         spec_dict = {**spec_dict, "shape": "triangle"}
@@ -79,9 +101,84 @@ def render_figure(spec_dict: dict[str, Any]) -> str:
     if isinstance(spec, CircleFigure):
         coords = solve_circle(spec)
         return _render_circle(spec, coords)
+    if isinstance(spec, PolygonFigure):
+        names, poly_coords = solve_polygon(spec)
+        return _render_polygon(spec, names, poly_coords)
     # Unreachable — discriminated union exhausts the shape variants,
     # but mypy doesn't know that without an explicit assert_never.
     raise FigureSpecError(f"unknown figure shape: {type(spec).__name__}")
+
+
+def render_figure_or_none(raw_spec: Any, *, context: str = "figure_spec") -> str | None:
+    """Render a figure spec to SVG, returning None on ANY failure.
+
+    The degrade contract shared by every generation/decomposition call
+    site: a bad figure must never tank the surrounding question or step.
+    A non-dict (the model emitted no figure) returns None silently. A
+    FigureSpecError (malformed spec) logs at warning level. Any other
+    exception is a renderer bug — logged with a full traceback so it
+    stays visible in monitoring — and still degrades to None rather than
+    propagating. `context` tags the log line (e.g. "step figure_spec").
+    """
+    if not isinstance(raw_spec, dict):
+        return None
+    try:
+        return render_figure(raw_spec)
+    except FigureSpecError as e:
+        logger.warning("%s rejected by renderer (dropping figure): %s", context, e)
+        return None
+    except Exception:
+        logger.exception(
+            "unexpected error rendering %s (dropping figure); spec=%r", context, raw_spec,
+        )
+        return None
+
+
+def _scale_to_canonical(coords: dict[str, Point]) -> dict[str, Point]:
+    """Rescale coordinates so the figure's longest dimension equals
+    _CANONICAL_SPAN, keeping the absolute visual constants correct at
+    any input magnitude. Origin-relative scaling preserves shape and
+    relative position exactly; the viewBox re-centers afterward."""
+    xs = [p[0] for p in coords.values()]
+    ys = [p[1] for p in coords.values()]
+    span = max(max(xs) - min(xs), max(ys) - min(ys))
+    if span <= 0:
+        return coords  # single point / degenerate — nothing to scale
+    factor = _CANONICAL_SPAN / span
+    return {k: (x * factor, y * factor) for k, (x, y) in coords.items()}
+
+
+def _label_padding(texts: list[str]) -> float:
+    """Extra viewBox margin so the longest label can't clip past the
+    edge. A label anchored _LABEL_OFFSET outside the figure can extend up
+    to its full text width further (worst case: it sits on the figure's
+    extreme edge). Estimate that width from the character count (SVG can't
+    measure text server-side) with a generous per-char width, so we
+    over-reserve rather than clip. Falls back to _PADDING for short labels."""
+    longest = max((len(t) for t in texts), default=0)
+    # ~0.6em/char (generous for a proportional font) at the label font
+    # size, reserved in full beyond the offset so even a long label on the
+    # extreme edge can't clip.
+    overhang = _LABEL_OFFSET + longest * _LABEL_FONT_SIZE * 0.6
+    return max(_PADDING, overhang)
+
+
+def _text(
+    x: float, y: float, content: str, *,
+    size: float = _LABEL_FONT_SIZE, dx: float = 0.0, dy: float = 0.0,
+) -> str:
+    """One centered <text> node in the renderer's standard style (font,
+    middle anchors, theme stroke). Coordinates are already in SVG space
+    (the caller negates cartesian y); `content` is escaped here. Single
+    source of truth for label styling so a font/anchor/theming change is
+    a one-line edit instead of ~12."""
+    off = (f' dx="{dx:.4f}"' if dx else "") + (f' dy="{dy:.4f}"' if dy else "")
+    return (
+        f'<text x="{x:.4f}" y="{y:.4f}" '
+        f'font-family="{_FONT_FAMILY}" font-size="{size:.4f}" '
+        f'text-anchor="middle" dominant-baseline="middle" '
+        f'fill="{_STROKE}"{off}>{_escape(content)}</text>'
+    )
 
 
 def _render_triangle(
@@ -93,6 +190,7 @@ def _render_triangle(
     angle, labels) in z-order — text on top.
     """
     a, b, c = spec.vertices
+    coords = _scale_to_canonical(coords)
     xs = [coords[v][0] for v in spec.vertices]
     ys = [coords[v][1] for v in spec.vertices]
 
@@ -110,8 +208,14 @@ def _render_triangle(
         xs.extend([cc[0] - cr, cc[0] + cr])
         ys.extend([cc[1] - cr, cc[1] + cr])
 
-    min_x, max_x = min(xs) - _PADDING, max(xs) + _PADDING
-    min_y, max_y = min(ys) - _PADDING, max(ys) + _PADDING
+    pad = _label_padding([
+        *spec.side_labels.values(),
+        *spec.angle_labels.values(),
+        *spec.vertex_labels.values(),
+        *spec.vertices,
+    ])
+    min_x, max_x = min(xs) - pad, max(xs) + pad
+    min_y, max_y = min(ys) - pad, max(ys) + pad
     width = max_x - min_x
     height = max_y - min_y
 
@@ -247,12 +351,10 @@ def _circle_annotation_labels(
     out: list[str] = []
     if annotation.show_center:
         cx, cy = center
-        out.append(
-            f'<text x="{cx:.4f}" y="{-cy:.4f}" '
-            f'font-family="{_FONT_FAMILY}" font-size="{_VERTEX_FONT_SIZE}" '
-            'text-anchor="middle" dominant-baseline="middle" '
-            f'dx="0.18" dy="0.25" fill="{_STROKE}">{_escape(annotation.center_label)}</text>',
-        )
+        out.append(_text(
+            cx, -cy, annotation.center_label,
+            size=_VERTEX_FONT_SIZE, dx=0.18, dy=0.25,
+        ))
     if annotation.radius_label and radius_endpoint is not None:
         # Midpoint of the radius line, with a small perpendicular
         # offset so the label doesn't sit on top of the line.
@@ -264,13 +366,96 @@ def _circle_annotation_labels(
         # Perpendicular = rotate (dx,dy)/norm by 90° = (-dy, dx)/norm.
         ox = (-dy / norm) * _LABEL_OFFSET * 0.6
         oy = (dx / norm) * _LABEL_OFFSET * 0.6
-        out.append(
-            f'<text x="{mid_x + ox:.4f}" y="{-(mid_y + oy):.4f}" '
-            f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
-            'text-anchor="middle" dominant-baseline="middle" '
-            f'fill="{_STROKE}">{_escape(annotation.radius_label)}</text>',
-        )
+        out.append(_text(mid_x + ox, -(mid_y + oy), annotation.radius_label))
     return out
+
+
+def _render_polygon(
+    spec: PolygonFigure, names: list[str], coords: dict[str, Point],
+) -> str:
+    """Compose the SVG for a polygon. Layout sequence:
+    viewBox → polygon outline → vertex dots + labels → side labels →
+    angle labels.
+    """
+    coords = _scale_to_canonical(coords)
+    xs = [coords[v][0] for v in names]
+    ys = [coords[v][1] for v in names]
+    pad = _label_padding([
+        *spec.side_labels.values(),
+        *spec.angle_labels.values(),
+        *names,
+    ])
+    min_x, max_x = min(xs) - pad, max(xs) + pad
+    min_y, max_y = min(ys) - pad, max(ys) + pad
+    width = max_x - min_x
+    height = max_y - min_y
+
+    parts: list[str] = []
+    parts.append(
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'viewBox="{min_x:.4f} {-max_y:.4f} {width:.4f} {height:.4f}" '
+        f'preserveAspectRatio="xMidYMid meet" '
+        f'role="img" aria-label="Geometry figure">',
+    )
+    parts.append('<g transform="scale(1,-1)">')
+
+    # 1. Polygon outline as one polygon element — clean miters at
+    # vertices.
+    points_attr = " ".join(f"{coords[v][0]:.4f},{coords[v][1]:.4f}" for v in names)
+    parts.append(
+        f'<polygon points="{points_attr}" fill="none" '
+        f'stroke="{_STROKE}" stroke-width="{_STROKE_WIDTH}" '
+        'stroke-linejoin="round"/>',
+    )
+
+    parts.append("</g>")  # close flip — text uses upright SVG coords
+
+    # 2. Vertex labels — same outward-from-centroid heuristic the
+    # triangle path uses, scaled for n vertices.
+    cx_avg = sum(coords[v][0] for v in names) / len(names)
+    cy_avg = sum(coords[v][1] for v in names) / len(names)
+    for v in names:
+        x, y = coords[v]
+        # Vector from centroid to vertex, normalized.
+        dx, dy = x - cx_avg, y - cy_avg
+        norm = math.hypot(dx, dy) or 1.0
+        ox = (dx / norm) * _LABEL_OFFSET
+        oy = (dy / norm) * _LABEL_OFFSET
+        parts.append(_text(x + ox, -(y + oy), v, size=_VERTEX_FONT_SIZE))
+
+    # 3. Side labels — perpendicular to the edge, on the outside
+    # (away from the centroid).
+    for edge_key, text in spec.side_labels.items():
+        v1, v2 = edge_key[0], edge_key[1]
+        if v1 not in coords or v2 not in coords:
+            continue  # defensive — validator already enforces
+        x1, y1 = coords[v1]
+        x2, y2 = coords[v2]
+        mid_x = (x1 + x2) / 2
+        mid_y = (y1 + y2) / 2
+        # Perpendicular to edge, outward (= away from centroid).
+        edge_x = x2 - x1
+        edge_y = y2 - y1
+        norm = math.hypot(edge_x, edge_y) or 1.0
+        # Two perpendiculars; pick the one pointing AWAY from centroid.
+        nx, ny = -edge_y / norm, edge_x / norm
+        if (mid_x - cx_avg) * nx + (mid_y - cy_avg) * ny < 0:
+            nx, ny = -nx, -ny
+        label_x = mid_x + nx * _LABEL_OFFSET
+        label_y = mid_y + ny * _LABEL_OFFSET
+        parts.append(_text(label_x, -label_y, text))
+
+    # 4. Angle labels — sit slightly inside the vertex, toward centroid.
+    for v, text in spec.angle_labels.items():
+        x, y = coords[v]
+        dx, dy = cx_avg - x, cy_avg - y
+        norm = math.hypot(dx, dy) or 1.0
+        ox = (dx / norm) * _LABEL_OFFSET * 1.2
+        oy = (dy / norm) * _LABEL_OFFSET * 1.2
+        parts.append(_text(x + ox, -(y + oy), text))
+
+    parts.append("</svg>")
+    return "".join(parts)
 
 
 def _render_circle(
@@ -281,10 +466,24 @@ def _render_circle(
     labeled → center dot if requested → point dots + labels → label
     text on top.
     """
+    # Normalize so the circle's diameter equals _CANONICAL_SPAN, keeping
+    # the absolute visual constants legible regardless of the spec's
+    # radius (r=0.5 vs r=500 both render the same on-screen size).
+    scale = _CANONICAL_SPAN / (2 * spec.radius)
+    radius = spec.radius * scale
+    coords = {k: (x * scale, y * scale) for k, (x, y) in coords.items()}
+
     # Bounding box: extend radius units around center, plus padding.
-    bound = spec.radius
-    min_x, max_x = -bound - _PADDING, bound + _PADDING
-    min_y, max_y = -bound - _PADDING, bound + _PADDING
+    pad = _label_padding([
+        *spec.point_labels.values(),
+        *spec.chord_labels.values(),
+        *spec.points,
+        spec.center_label if spec.show_center else "",
+        spec.radius_label or "",
+    ])
+    bound = radius
+    min_x, max_x = -bound - pad, bound + pad
+    min_y, max_y = -bound - pad, bound + pad
     width = max_x - min_x
     height = max_y - min_y
 
@@ -299,7 +498,7 @@ def _render_circle(
 
     # 1. Circle outline.
     parts.append(
-        f'<circle cx="0" cy="0" r="{spec.radius:.4f}" '
+        f'<circle cx="0" cy="0" r="{radius:.4f}" '
         f'fill="none" stroke="{_STROKE}" stroke-width="{_STROKE_WIDTH}"/>',
     )
 
@@ -348,12 +547,10 @@ def _render_circle(
 
     # 6. Center label.
     if spec.show_center:
-        parts.append(
-            f'<text x="0" y="0" '
-            f'font-family="{_FONT_FAMILY}" font-size="{_VERTEX_FONT_SIZE}" '
-            'text-anchor="middle" dominant-baseline="middle" '
-            f'fill="{_STROKE}" dx="0.15" dy="0.25">{_escape(spec.center_label)}</text>',
-        )
+        parts.append(_text(
+            0.0, 0.0, spec.center_label,
+            size=_VERTEX_FONT_SIZE, dx=0.15, dy=0.25,
+        ))
 
     # 7. Point labels — offset radially outward so they don't sit on
     # top of the circle outline.
@@ -364,12 +561,7 @@ def _render_circle(
         norm = math.hypot(x, y) or 1.0  # 1.0 guard for degenerate radius=0 (impossible: validator)
         ox = (x / norm) * _LABEL_OFFSET
         oy = (y / norm) * _LABEL_OFFSET
-        parts.append(
-            f'<text x="{x + ox:.4f}" y="{-(y + oy):.4f}" '
-            f'font-family="{_FONT_FAMILY}" font-size="{_VERTEX_FONT_SIZE}" '
-            'text-anchor="middle" dominant-baseline="middle" '
-            f'fill="{_STROKE}">{_escape(display)}</text>',
-        )
+        parts.append(_text(x + ox, -(y + oy), display, size=_VERTEX_FONT_SIZE))
 
     # 8. Chord labels — midpoint of chord, offset perpendicular OUTWARD
     # (away from center).
@@ -400,12 +592,7 @@ def _render_circle(
         else:
             ox = (mid_x / norm) * _LABEL_OFFSET
             oy = (mid_y / norm) * _LABEL_OFFSET
-        parts.append(
-            f'<text x="{mid_x + ox:.4f}" y="{-(mid_y + oy):.4f}" '
-            f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
-            'text-anchor="middle" dominant-baseline="middle" '
-            f'fill="{_STROKE}">{_escape(label)}</text>',
-        )
+        parts.append(_text(mid_x + ox, -(mid_y + oy), label))
 
     # 9. Radius label — midpoint of the radius line, perpendicular
     # offset for readability.
@@ -420,12 +607,7 @@ def _render_circle(
         # Perpendicular unit vector: rotate (rx,ry)/norm by 90° = (-ry, rx)/norm
         ox = (-ry / norm) * _LABEL_OFFSET * 0.6
         oy = (rx / norm) * _LABEL_OFFSET * 0.6
-        parts.append(
-            f'<text x="{mid_x + ox:.4f}" y="{-(mid_y + oy):.4f}" '
-            f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
-            'text-anchor="middle" dominant-baseline="middle" '
-            f'fill="{_STROKE}">{_escape(spec.radius_label)}</text>',
-        )
+        parts.append(_text(mid_x + ox, -(mid_y + oy), spec.radius_label))
 
     parts.append("</svg>")
     return "".join(parts)
@@ -491,12 +673,7 @@ def _vertex_label(
     else:
         ox = (dx / norm) * _LABEL_OFFSET
         oy = (dy / norm) * _LABEL_OFFSET
-    return (
-        f'<text x="{x + ox:.4f}" y="{y_svg + oy:.4f}" '
-        f'font-family="{_FONT_FAMILY}" font-size="{_VERTEX_FONT_SIZE}" '
-        'text-anchor="middle" dominant-baseline="middle" '
-        f'fill="{_STROKE}">{_escape(text)}</text>'
-    )
+    return _text(x + ox, y_svg + oy, text, size=_VERTEX_FONT_SIZE)
 
 
 def _side_label(
@@ -533,12 +710,7 @@ def _side_label(
     label_x = mid_x + nx * _LABEL_OFFSET
     label_y_cart = mid_y + ny * _LABEL_OFFSET
     label_y_svg = -label_y_cart
-    return (
-        f'<text x="{label_x:.4f}" y="{label_y_svg:.4f}" '
-        f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
-        'text-anchor="middle" dominant-baseline="middle" '
-        f'fill="{_STROKE}">{_escape(text)}</text>'
-    )
+    return _text(label_x, label_y_svg, text)
 
 
 def _angle_label_text(
@@ -563,12 +735,7 @@ def _angle_label_text(
     else:
         ox = (dx / norm) * _LABEL_OFFSET * 1.4
         oy = (dy / norm) * _LABEL_OFFSET * 1.4
-    return (
-        f'<text x="{x + ox:.4f}" y="{y_svg + oy:.4f}" '
-        f'font-family="{_FONT_FAMILY}" font-size="{_LABEL_FONT_SIZE}" '
-        'text-anchor="middle" dominant-baseline="middle" '
-        f'fill="{_STROKE}">{_escape(text)}</text>'
-    )
+    return _text(x + ox, y_svg + oy, text)
 
 
 def _escape(text: str) -> str:

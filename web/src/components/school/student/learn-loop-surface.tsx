@@ -79,6 +79,10 @@ export function LearnLoopSurface({
     return raw.map((s) => ({
       title: s.title,
       description: s.description ?? "",
+      // Step-level figure passes through. Without this the
+      // practice/learn loops render text-only steps even when the
+      // variation's solution had per-step diagrams.
+      figure_svg: s.figure_svg ?? null,
     }));
   }, [variation.solution_steps]);
 

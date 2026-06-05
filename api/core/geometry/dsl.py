@@ -122,6 +122,21 @@ class TriangleFigure(BaseModel):
             if vertex not in names:
                 raise ValueError(f"vertex_labels references unknown vertex: {vertex}")
 
+        # show_tangent_points is only meaningful for the INSCRIBED
+        # circle (the renderer marks where the incircle touches each
+        # side). Setting it on circumscribed_circle is a silent no-op
+        # at render time — surface the misuse explicitly so callers
+        # know to put the flag on the right annotation.
+        if (
+            self.circumscribed_circle is not None
+            and self.circumscribed_circle.show_tangent_points
+        ):
+            raise ValueError(
+                "show_tangent_points is only valid on inscribed_circle "
+                "(tangent points are the incircle's contact points with "
+                "the triangle's sides); set it there instead.",
+            )
+
         # Canonicalize edge keys so 'AB' and 'BA' resolve to the same
         # edge. We reject contradictory duplicates (LLM emits both
         # 'AB' and 'BA' with different values) rather than silently
@@ -241,11 +256,145 @@ class CircleFigure(BaseModel):
         return self
 
 
+class PolygonFigure(BaseModel):
+    """A polygon — regular (square, pentagon, hexagon, n-gon) or
+    irregular (explicit vertex positions).
+
+    Two modes, distinguished by which fields are set:
+    - **Regular mode**: set `n_sides` (and optionally `side_length`).
+      Vertices auto-place evenly on a circle. Default vertex naming
+      is A, B, C, ... but you can override with `vertex_names`.
+    - **Irregular mode**: set `vertex_positions` as a list of
+      [x, y] pairs. Names default to A, B, C, ... matching the
+      order of vertex_positions; override with `vertex_names`.
+
+    Triangles already have their own shape (TriangleFigure) with full
+    SSS/SAS/ASA solving — DON'T use PolygonFigure for triangles
+    (n_sides=3 is rejected at validation time to prevent that path).
+    """
+
+    type: Literal["geometry"] = "geometry"
+    shape: Literal["polygon"] = "polygon"
+
+    # Regular-mode fields.
+    n_sides: int | None = None
+    side_length: float = 1.0
+
+    # Irregular-mode fields.
+    vertex_positions: list[tuple[float, float]] | None = None
+
+    # Display: applies to both modes.
+    vertex_names: list[str] | None = None
+    side_labels: dict[EdgeKey, str] = Field(default_factory=dict)
+    # Per-vertex angle label (text shown inside the corner) — keyed
+    # by the vertex's name (A, B, C, ... or whatever vertex_names says).
+    angle_labels: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate(self) -> PolygonFigure:
+        regular = self.n_sides is not None
+        irregular = self.vertex_positions is not None
+        if regular == irregular:
+            raise ValueError(
+                "polygon must set EITHER n_sides (regular) OR "
+                "vertex_positions (irregular), not both or neither",
+            )
+
+        if regular:
+            assert self.n_sides is not None  # for type checkers
+            if self.n_sides < 4:
+                raise ValueError(
+                    "polygon n_sides must be >= 4; use shape='triangle' "
+                    "for 3-vertex shapes (the triangle path has the "
+                    "constraint solver — polygon mode is for shapes "
+                    "the LLM specifies by side count or position list)",
+                )
+            if self.n_sides > 20:
+                raise ValueError(
+                    "polygon n_sides capped at 20 — beyond that the "
+                    "renderer is making circles, not polygons",
+                )
+            if self.side_length <= 0:
+                raise ValueError(f"side_length must be positive (got {self.side_length})")
+            count = self.n_sides
+        else:
+            assert self.vertex_positions is not None
+            count = len(self.vertex_positions)
+            if count < 4:
+                raise ValueError(
+                    "irregular polygon needs at least 4 vertices",
+                )
+
+        if self.vertex_names is not None:
+            if len(self.vertex_names) != count:
+                raise ValueError(
+                    f"vertex_names length {len(self.vertex_names)} != "
+                    f"vertex count {count}",
+                )
+            if len(set(self.vertex_names)) != len(self.vertex_names):
+                raise ValueError("vertex_names must be distinct")
+            # Single-char enforcement: side_labels uses two-character
+            # edge keys ("AB"); supporting multi-char names ("P1")
+            # would require restructuring side_labels into a list of
+            # (vertex_a, vertex_b, label) tuples. v1 stays string-keyed
+            # for LLM simplicity, so vertex_names must be one char each.
+            for name in self.vertex_names:
+                if len(name) != 1:
+                    raise ValueError(
+                        f"vertex_names entries must be single characters (got {name!r}); "
+                        "multi-char names break the two-character edge-key format "
+                        "used by side_labels",
+                    )
+
+        # Default vertex names: A, B, C, ... — must align with edge
+        # keys and angle_labels referencing them.
+        names = self.vertex_names or [chr(ord("A") + i) for i in range(count)]
+        name_set = set(names)
+        for v in self.angle_labels:
+            if v not in name_set:
+                raise ValueError(f"angle_labels references unknown vertex: {v}")
+
+        # side_labels: single-char vertex keys, canonicalize order
+        # (AB ≡ BA), require adjacency (the edge must connect two
+        # CONSECUTIVE vertices in drawing order — labeling a diagonal
+        # would render in the wrong place because the renderer
+        # midpoint-positions labels assuming a side, not a diagonal).
+        adjacent_pairs: set[str] = set()
+        for i, v in enumerate(names):
+            nxt = names[(i + 1) % count]
+            adjacent_pairs.add(v + nxt if v < nxt else nxt + v)
+
+        def _canon(edge: str) -> str:
+            return edge if edge[0] < edge[1] else edge[1] + edge[0]
+
+        seen_edges: dict[str, str] = {}
+        for edge in self.side_labels:
+            if len(edge) != 2 or not all(c in name_set for c in edge):
+                raise ValueError(
+                    f"side_labels edge key {edge!r} must reference two vertex names",
+                )
+            canon = _canon(edge)
+            if canon not in adjacent_pairs:
+                raise ValueError(
+                    f"side_labels edge {edge!r} is not a polygon side — "
+                    "it connects two non-adjacent vertices (a diagonal). "
+                    "Side labels can only annotate the polygon's edges.",
+                )
+            if canon in seen_edges and seen_edges[canon] != edge:
+                raise ValueError(
+                    f"side_labels has both {seen_edges[canon]!r} and {edge!r} — "
+                    "these reference the same edge; emit one form only",
+                )
+            seen_edges[canon] = edge
+
+        return self
+
+
 # Discriminated union over the supported shapes. Pydantic uses the
 # `shape` field to dispatch validation; the JSON schema generated by
 # Pydantic includes a properly-typed oneOf branch per shape so the
 # LLM tool-use validator picks up shape-specific required fields.
 FigureSpec = Annotated[
-    TriangleFigure | CircleFigure,
+    TriangleFigure | CircleFigure | PolygonFigure,
     Field(discriminator="shape"),
 ]

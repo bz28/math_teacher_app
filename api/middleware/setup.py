@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from api.config import settings
 from api.middleware.logging import LoggingMiddleware
@@ -24,6 +25,14 @@ def configure_middleware(app: FastAPI) -> None:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
+
+    # Gzip compression. SVG figure_svg + solution_steps JSON are both
+    # highly compressible (text formats with repetitive structure).
+    # The bank list endpoint can return 3-10MB of payload for a
+    # full-of-geometry course; gzip typically gets a 5-10x reduction.
+    # `minimum_size=1024` skips compressing trivially-small responses
+    # where the gzip header would dominate the savings.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     # Structured logging with correlation IDs
     app.add_middleware(LoggingMiddleware)
