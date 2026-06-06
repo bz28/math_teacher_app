@@ -2,19 +2,21 @@
 
 import hashlib
 import json
+import secrets as secrets_lib
 import uuid as uuid_lib
 from datetime import UTC, datetime
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import Date, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
 from api.core.llm_client import _CORRUPTION_CHARS
 from api.database import get_db
-from api.middleware.auth import CurrentUser, require_admin
+from api.middleware.auth import CurrentUser, get_current_user, require_admin
 from api.models.llm_call import LLMCall
 from api.models.user import User
 from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL, time_range
@@ -361,12 +363,36 @@ def _parse_cursor(since: str | None, hours: int) -> tuple[datetime, uuid_lib.UUI
     return ts, cursor_id
 
 
+# Optional bearer so the dependency can fall through to service-key auth when no
+# JWT is presented (the default HTTPBearer would 403 before our code runs).
+_optional_bearer = HTTPBearer(auto_error=False)
+
+
+async def require_admin_or_service_key(
+    x_improver_key: str | None = Header(default=None, alias="X-Improver-Key"),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Authorize the defect endpoint by EITHER the static improver service key
+    (for the scheduled CI scanner — admin JWTs expire in minutes, useless as a
+    stored secret) OR a normal admin JWT (interactive/dashboard use). The key
+    compare is constant-time; an empty configured key disables service-key auth."""
+    key = settings.improver_api_key
+    if key and x_improver_key and secrets_lib.compare_digest(x_improver_key, key):
+        return
+    if credentials is not None:
+        user = await get_current_user(credentials, db)  # full check; raises on bad/expired/inactive
+        if user.role == "admin":
+            return
+    raise HTTPException(status_code=403, detail="admin access or improver service key required")
+
+
 @router.get("/llm-calls/defects")
 async def llm_call_defects(
     since: str | None = Query(default=None, description="keyset cursor '<iso>|<id>'; URL-encode the '+'"),
     hours: int = Query(default=24, ge=1, le=720),
     limit: int = Query(default=1000, ge=1, le=5000),
-    current_user: CurrentUser = Depends(require_admin),
+    _: None = Depends(require_admin_or_service_key),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Recent LLM calls whose output looks defective — failed calls, or outputs

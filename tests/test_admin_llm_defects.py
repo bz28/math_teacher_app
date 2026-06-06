@@ -13,9 +13,11 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 
+from api.config import settings
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
 from api.models.llm_call import LLMCall
@@ -97,6 +99,43 @@ async def test_non_admin_forbidden(client: AsyncClient) -> None:
     student = create_access_token(student_id, "student")
     r = await client.get("/v1/admin/llm-calls/defects", headers=auth_headers(student))
     assert r.status_code == 403
+
+
+async def test_no_auth_at_all_forbidden(client: AsyncClient) -> None:
+    await _seed_admin()
+    r = await client.get("/v1/admin/llm-calls/defects")
+    assert r.status_code == 403
+
+
+async def test_service_key_authorizes_without_jwt(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The scheduled CI scanner authenticates with the static service key, NOT a
+    # (15-min) admin JWT.
+    admin_id, _ = await _seed_admin()
+    monkeypatch.setattr(settings, "improver_api_key", "svc-secret-123")
+    await _seed_calls([_call(function="solve", output="boom", success=False,
+                             when=datetime.now(UTC) - timedelta(minutes=5))])
+    r = await client.get("/v1/admin/llm-calls/defects", headers={"X-Improver-Key": "svc-secret-123"})
+    assert r.status_code == 200
+    assert r.json()["defect_groups"] == 1
+
+
+async def test_wrong_service_key_forbidden(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_admin()
+    monkeypatch.setattr(settings, "improver_api_key", "svc-secret-123")
+    r = await client.get("/v1/admin/llm-calls/defects", headers={"X-Improver-Key": "nope"})
+    assert r.status_code == 403
+
+
+async def test_admin_jwt_still_authorizes(client: AsyncClient) -> None:
+    # The interactive admin path keeps working even with no service key set.
+    admin_id, _ = await _seed_admin()
+    token = create_access_token(admin_id, "admin")
+    r = await client.get("/v1/admin/llm-calls/defects", headers=auth_headers(token))
+    assert r.status_code == 200
 
 
 async def test_groups_recurring_defects_and_ignores_healthy(client: AsyncClient) -> None:

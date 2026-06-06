@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     # endpoint (503).
     harness_ingest_token: str = ""
 
+    # Improver — a static service key the scheduled LLM-defect scan presents
+    # (X-Improver-Key) to the read-only defect endpoint. Admin JWTs expire in
+    # minutes, so they can't be a stored CI secret; this long random key can.
+    # Empty disables service-key auth (admin JWT still works); rotate to revoke.
+    improver_api_key: str = ""
+
     # Sentry
     sentry_dsn: str = ""
 
