@@ -155,7 +155,7 @@ async def ingest_harness_run(
         )
     if payload.report_html and len(payload.report_html) > _MAX_REPORT_HTML:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail="report_html too large",
         )
     row = HarnessRun(**payload.model_dump())
