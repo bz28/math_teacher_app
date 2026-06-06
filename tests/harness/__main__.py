@@ -125,6 +125,10 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     ingest.add_argument(
         "--summary-db", default=os.environ.get("HARNESS_SUMMARY_DB", _DEFAULT_SUMMARY_DB),
     )
+    ingest.add_argument(
+        "--summary-url", default=os.environ.get("HARNESS_SUMMARY_URL", ""),
+        help="prod ingest endpoint for the admin 'Harness Runs' row (CI; can't reach prod DB)",
+    )
 
     imp_sub.add_parser("budget", help="show the improver's rolling-window budget usage")
     imp_sub.add_parser("proposals", help="list the durable proposal queue")
@@ -138,6 +142,18 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     ):
         sp = imp_sub.add_parser(verb, help=helptext)
         sp.add_argument("id", help="proposal id (12-char hash from `improve proposals`)")
+        # `done` also records an execute-summary row in the admin tab — opt-in,
+        # so a bare `improve done <id>` keeps its old status-only behaviour.
+        if verb == "done":
+            sp.add_argument("--pr", default="", help="PR url opened for this proposal")
+            sp.add_argument(
+                "--summary-url", default=os.environ.get("HARNESS_SUMMARY_URL", ""),
+                help="prod ingest endpoint for the admin 'Harness Runs' row (CI)",
+            )
+            sp.add_argument(
+                "--summary-db", default="",
+                help="MAIN app DB for the row (local; empty to skip)",
+            )
     return p.parse_args(argv)
 
 
@@ -302,6 +318,17 @@ def _run_improve_queue(args: argparse.Namespace) -> int:
     new_status = {"approve": "approved", "reject": "rejected", "done": "done"}[cmd]
     queue.set_status(args.id, new_status)
     print(f"[improve:{cmd}] {args.id} → {new_status}: {target.proposal.get('title')}")
+
+    # On `done`, record an execute-summary row so the admin 'Harness Runs' tab
+    # shows fixes alongside ideation. Opt-in: only when a destination is set.
+    if cmd == "done" and (args.summary_db or args.summary_url):
+        from tests.harness.improver.report import persist_execute_summary
+        asyncio.run(persist_execute_summary(
+            proposal_id=args.id, title=str(target.proposal.get("title", "")),
+            pr_url=args.pr,
+            summary_db_url=args.summary_db, summary_url=args.summary_url,
+            token=os.environ.get("HARNESS_INGEST_TOKEN", ""),
+        ))
     return 0
 
 
@@ -401,12 +428,14 @@ def _run_improve_ingest(args: argparse.Namespace) -> int:
     surfaces = findings.get("surfaces", [])
     scanned = sum(1 for s in surfaces if s.get("ok"))
     hits = sum(len(s.get("hits", [])) for s in surfaces)
-    if args.summary_db:
+    if args.summary_db or args.summary_url:
         open_props = [it.proposal for it in queue.by_status("proposed")]
         digest_html = f"<pre>{proposals_digest_md(open_props)}</pre>"
         asyncio.run(persist_scan_summary(
             scanned=scanned, total=len(surfaces), hits=hits, proposals=len(added),
-            report_html=digest_html, cost_usd=None, mode="plan", summary_db_url=args.summary_db,
+            report_html=digest_html, cost_usd=None, mode="plan",
+            summary_db_url=args.summary_db, summary_url=args.summary_url,
+            token=os.environ.get("HARNESS_INGEST_TOKEN", ""),
         ))
 
     print(f"\n[improve:ingest] {len(added)} new proposals queued (plan-judged)")
