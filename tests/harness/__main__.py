@@ -372,6 +372,8 @@ def _run_improve_gather(args: argparse.Namespace) -> int:
     it also re-verifies the promoted-failure corpus and folds the still-failing
     AI-generation defects into findings.json (the only LLM here — API-billed,
     cassette-cached). Budget-gated like a scan."""
+    from datetime import UTC, datetime
+
     from tests.harness.browser import HarnessBrowser
     from tests.harness.improver.budget import BudgetCaps, Ledger, check_scan
     from tests.harness.improver.evidence import evidence_summary, save_evidence
@@ -379,6 +381,7 @@ def _run_improve_gather(args: argparse.Namespace) -> int:
     from tests.harness.improver.sources import corpus_failures
     from tests.harness.improver.surfaces import surfaces_for
     from tests.harness.improver.types import PageObservation
+    from tests.harness.runner import run_cost
     from tests.harness.seed import seed_world
 
     caps = BudgetCaps.from_env()
@@ -399,21 +402,29 @@ def _run_improve_gather(args: argparse.Namespace) -> int:
         }.items() if v
     }
 
-    async def _exec() -> tuple[list[PageObservation], list[dict[str, object]]]:
+    async def _exec() -> tuple[list[PageObservation], list[dict[str, object]], float | None]:
         seed = await seed_world()
         async with HarnessBrowser(args.web_base) as browser:
             observations = await scan_surfaces(browser, surfaces, bases, seed, judge=False)
         failures: list[dict[str, object]] = []
+        cost: float | None = 0.0
         if not args.no_content:
+            started = datetime.now(UTC)
             failures = await corpus_failures(
                 api_base=args.api_base, web_base=args.web_base,
                 verify=not args.no_verify_corpus,
             )
-        return observations, failures
+            cost = await run_cost(args.mode, started)
+        return observations, failures, cost
 
-    obs, gen_failures = asyncio.run(_exec())
+    obs, gen_failures, cost = asyncio.run(_exec())
+    # Re-verifying the corpus against the live generator is API-billed in
+    # record/auto — never log $0 on a billable run or the 7d $ cap degrades to
+    # the scan-count cap alone (mirrors `improve scan`).
+    if cost is None:
+        cost = 0.0 if args.mode == "replay" else 0.50
     note = "plan-path gather (no LLM)" if args.no_content else "plan-path gather (+corpus re-verify)"
-    ledger.record("scan", cost_usd=0.0, note=note)
+    ledger.record("scan", cost_usd=cost, note=note)
     out = save_evidence(obs, surfaces, Path(args.dir), generation_failures=gen_failures)
     extra = f", {len(gen_failures)} still-failing generation case(s)" if gen_failures else ""
     print(f"\n[improve:gather] {evidence_summary(out)}{extra} → {out}")
