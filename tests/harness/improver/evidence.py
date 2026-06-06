@@ -30,6 +30,12 @@ overflow, slow loads — high confidence) with what you SEE in its screenshot
 also propose a few SMALL new features from the `catalog` where there's an
 obvious gap (mark those lower-confidence).
 
+If `findings.json` has a non-empty `generation_failures` array, ALSO propose
+fixes for those — they are AI-generation defects the harness re-verified as
+STILL failing (each carries its `probe`, the failing `scenario`/`constraint`,
+and `fix_in` paths to start from). Set `surface_key` to "generation:<probe>",
+category "bug" or "content", and group related failures into one proposal.
+
 Rules: be specific (name the change, not "improve X"); each proposal small and
 independently shippable; NEVER touch auth, billing, or database schema; group
 related hits on one surface into one proposal; prefer 4-8 strong proposals over
@@ -47,8 +53,14 @@ def save_evidence(
     observations: list[PageObservation],
     catalog: list[Surface],
     out_dir: Path,
+    *,
+    generation_failures: list[dict[str, object]] | None = None,
 ) -> Path:
-    """Write screenshots + findings.json for the agent to judge. Returns the dir."""
+    """Write screenshots + findings.json for the agent to judge. Returns the dir.
+
+    `generation_failures` (the re-verified promoted-failure corpus from
+    `sources.corpus_failures`) is folded into findings.json so the plan-billed
+    judge proposes AI-generation fixes alongside the UI work."""
     shots = out_dir / "shots"
     shots.mkdir(parents=True, exist_ok=True)
     surfaces: list[dict[str, object]] = []
@@ -74,6 +86,7 @@ def save_evidence(
             {"key": s.key, "title": s.title, "role": s.role, "app": s.app}
             for s in catalog
         ],
+        "generation_failures": generation_failures or [],
     }
     (out_dir / "findings.json").write_text(json.dumps(findings, indent=2))
     (out_dir / "JUDGE_PROMPT.txt").write_text(JUDGE_PROMPT)

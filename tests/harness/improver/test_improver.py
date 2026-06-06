@@ -123,3 +123,24 @@ def test_where_to_look_and_brief() -> None:
                          "severity": "high", "est_size": "S"}, branch="improver/abc123")
     assert "improver/abc123" in brief
     assert "abc123" in brief and "STOP" in brief and "schema, auth, or billing" in brief
+
+
+# --- evidence (Channel D: content-quality corpus into the plan path) ------
+
+def test_save_evidence_folds_generation_failures_into_findings(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The re-verified corpus failures must reach findings.json so the
+    plan-billed judge can propose generation fixes, and the JUDGE_PROMPT must
+    tell it to."""
+    import json
+
+    from tests.harness.improver.evidence import JUDGE_PROMPT, save_evidence
+
+    failures = [{"probe": "geometry", "scenario": "triangle", "constraint": "c",
+                 "expected": ["triangle"], "rationale": "r", "fix_in": ["api/x.py"]}]
+    out = save_evidence([], [], tmp_path, generation_failures=failures)
+    findings = json.loads((out / "findings.json").read_text())
+    assert findings["generation_failures"] == failures
+    # default (no failures passed) still emits the key, empty — never KeyError
+    out2 = save_evidence([], [], tmp_path / "empty")
+    assert json.loads((out2 / "findings.json").read_text())["generation_failures"] == []
+    assert "generation_failures" in JUDGE_PROMPT

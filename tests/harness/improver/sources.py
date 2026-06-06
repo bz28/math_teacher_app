@@ -50,18 +50,17 @@ _FEATURE_SYSTEM = (
 )
 
 
-async def content_quality_proposals(
-    *, api_base: str, web_base: str,
-    model: str = MODEL_REASON, max_size: str = "M", verify: bool = True,
-) -> list[Proposal]:
-    """Turn the harness's promoted generation-failure corpus into fix proposals.
-
-    When `verify` (default), each promoted failure is re-run through the LIVE
-    generator first and only the ones that STILL fail are proposed — so we never
-    propose fixing a defect that's already been fixed (a real gap an execution
-    demo caught: the corpus keeps fixed failures, and stale entries led to a
-    dead-end proposal). Returns [] when nothing still fails or the cassette
-    misses in replay."""
+async def corpus_failures(
+    *, api_base: str, web_base: str, verify: bool = True,
+) -> list[dict[str, object]]:
+    """Re-verify the harness's promoted generation-failure corpus against the
+    LIVE generator and return the entries that STILL fail — one dict per failure
+    (probe, scenario, constraint, expected, rationale, fix_in). Shared by both
+    proposal paths: `content_quality_proposals` (API-billed, makes its own
+    fix-proposal call) and the plan-billed `gather` step (writes these as
+    evidence the headless judge proposes from). `verify=False` returns the whole
+    corpus without re-running it. Re-verifying is what stops us proposing fixes
+    for defects that have already been fixed."""
     from tests.harness.explorer import explore, load_corpus
     from tests.harness.probes import PROBES
 
@@ -84,6 +83,22 @@ async def content_quality_proposals(
                 "expected": sc.expected_shapes, "rationale": sc.rationale,
                 "fix_in": fix_in,
             })
+    return failures
+
+
+async def content_quality_proposals(
+    *, api_base: str, web_base: str,
+    model: str = MODEL_REASON, max_size: str = "M", verify: bool = True,
+) -> list[Proposal]:
+    """Turn the harness's promoted generation-failure corpus into fix proposals.
+
+    When `verify` (default), each promoted failure is re-run through the LIVE
+    generator first and only the ones that STILL fail are proposed — so we never
+    propose fixing a defect that's already been fixed (a real gap an execution
+    demo caught: the corpus keeps fixed failures, and stale entries led to a
+    dead-end proposal). Returns [] when nothing still fails or the cassette
+    misses in replay."""
+    failures = await corpus_failures(api_base=api_base, web_base=web_base, verify=verify)
     if not failures:
         return []
     blob = json.dumps(failures, sort_keys=True)
