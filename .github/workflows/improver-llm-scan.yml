@@ -4,14 +4,15 @@ name: Improver LLM-defect scan
 # asks the BACKEND (which holds the prod DB) for recent defective LLM calls —
 # failures + the control-char corruption fingerprint (the LaTeX-class bug) —
 # turns each recurring defect into ONE proposal, and files them for approval.
-# Prod DB credentials never leave the backend: this job only holds a scoped
-# admin API token. State (queue + budget ledger + the incremental watermark)
-# lives on the `improver/state` branch, same as the UI scan.
+# Prod DB credentials never leave the backend: this job only holds a static
+# service key. State (queue + budget ledger + the incremental watermark) lives
+# on the `improver/state` branch, same as the UI scan.
 #
 # Repo secrets (Settings → Secrets → Actions):
-#   IMPROVER_ADMIN_TOKEN — a scoped admin JWT for the defect endpoint.
-#   PROD_API_BASE        — the prod API root, e.g. https://api.example.com/v1.
-# Until both are set the job no-ops (the CLI skips when the token is absent).
+#   IMPROVER_API_KEY — the static service key, matching the backend's
+#                      `improver_api_key` setting (X-Improver-Key auth).
+#   PROD_API_BASE    — the prod API root, e.g. https://api.example.com/v1.
+# Until both are set the job no-ops (the CLI skips when the key is absent).
 
 on:
   schedule:
@@ -40,7 +41,7 @@ jobs:
       CLAUDE_API_KEY: unused-no-llm-in-this-job
       APP_ENV: test
       IMPROVER_STATE_DIR: ${{ github.workspace }}/_improver_state
-      IMPROVER_ADMIN_TOKEN: ${{ secrets.IMPROVER_ADMIN_TOKEN }}
+      IMPROVER_API_KEY: ${{ secrets.IMPROVER_API_KEY }}
       PROD_API_BASE: ${{ secrets.PROD_API_BASE }}
     steps:
       - uses: actions/checkout@v4
@@ -62,8 +63,8 @@ jobs:
       - name: Skip if not configured
         id: gate
         run: |
-          if [ -z "$IMPROVER_ADMIN_TOKEN" ] || [ -z "$PROD_API_BASE" ]; then
-            echo "IMPROVER_ADMIN_TOKEN / PROD_API_BASE not set — feature off; skipping."
+          if [ -z "$IMPROVER_API_KEY" ] || [ -z "$PROD_API_BASE" ]; then
+            echo "IMPROVER_API_KEY / PROD_API_BASE not set — feature off; skipping."
             echo "configured=false" >> "$GITHUB_OUTPUT"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"

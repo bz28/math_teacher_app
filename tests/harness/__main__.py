@@ -131,8 +131,8 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     )
 
     # Channel A: mine the backend's production LLM-call defects (over HTTP, with
-    # an admin token) into proposals.json. Pairs with `ingest`. Token via the
-    # IMPROVER_ADMIN_TOKEN env var so it never lands in argv/CI logs.
+    # the service key) into proposals.json. Pairs with `ingest`. Key via the
+    # IMPROVER_API_KEY env var so it never lands in argv/CI logs.
     lsc = imp_sub.add_parser("llm-scan", help="turn prod LLM-call defects into proposals (Channel A)")
     lsc.add_argument("--dir", required=True, help="output dir for proposals.json")
     lsc.add_argument("--api-base", default=os.environ.get("HARNESS_API_BASE", _DEFAULT_API),
@@ -457,8 +457,8 @@ def _run_improve_ingest(args: argparse.Namespace) -> int:
 
 
 def _run_improve_llm_scan(args: argparse.Namespace) -> int:
-    """Channel A: GET the backend's production LLM-call defects (admin token via
-    IMPROVER_ADMIN_TOKEN), turn each group into a deterministic fix Proposal in
+    """Channel A: GET the backend's production LLM-call defects (service key via
+    IMPROVER_API_KEY), turn each group into a deterministic fix Proposal in
     proposals.json (hand off to `improve ingest`), and advance the keyset
     watermark so the next scan sees only new defects.
 
@@ -479,9 +479,9 @@ def _run_improve_llm_scan(args: argparse.Namespace) -> int:
     )
     from tests.harness.improver.proposals import to_dict
 
-    token = os.environ.get("IMPROVER_ADMIN_TOKEN", "")
-    if not token:
-        print("[improve:llm-scan] IMPROVER_ADMIN_TOKEN not set — skipping (feature off until configured)")
+    service_key = os.environ.get("IMPROVER_API_KEY", "")
+    if not service_key:
+        print("[improve:llm-scan] IMPROVER_API_KEY not set — skipping (feature off until configured)")
         return 0
 
     ledger = Ledger.load()
@@ -489,7 +489,7 @@ def _run_improve_llm_scan(args: argparse.Namespace) -> int:
     since = read_watermark(sdir)
     try:
         data = asyncio.run(fetch_defects(
-            api_base=args.api_base, token=token, since=since,
+            api_base=args.api_base, service_key=service_key, since=since,
             hours=args.hours, limit=args.limit,
         ))
     except Exception as e:  # noqa: BLE001 — surface auth/connectivity loudly, don't half-advance state

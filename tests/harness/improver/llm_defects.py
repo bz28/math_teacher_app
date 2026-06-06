@@ -5,8 +5,8 @@ The backend's read-only `/admin/llm-calls/defects` endpoint
 control-char corruption fingerprint (the LaTeX-class bug), grouped by signature
 with a keyset `watermark`. This module is the CI half of the loop:
 
-  1. `fetch_defects` — GET those groups over HTTP with an admin Bearer token, so
-     prod DB credentials never leave the backend.
+  1. `fetch_defects` — GET those groups over HTTP with the static improver
+     service key, so prod DB credentials never leave the backend.
   2. `defects_to_proposals` — deterministically ($0, no LLM) turn each group into
      a fix Proposal that flows through the SAME dedupe → rank → approve → execute
      pipeline as every other source. The defect IS the evidence; the execute
@@ -31,12 +31,14 @@ _WATERMARK_FILE = "llm_watermark.txt"
 
 
 async def fetch_defects(
-    *, api_base: str, token: str, since: str | None,
+    *, api_base: str, service_key: str, since: str | None,
     hours: int = 24, limit: int = 1000, timeout: float = 30.0,
 ) -> dict[str, object]:
     """GET the defect groups + watermark from the backend. `api_base` is the API
-    root (e.g. https://api.example.com/v1); the endpoint is appended. Raises on a
-    non-2xx so the caller (and CI) sees auth/connectivity failures loudly."""
+    root (e.g. https://api.example.com/v1); the endpoint is appended. Auth is the
+    static improver service key (X-Improver-Key header) — admin JWTs expire in
+    minutes and can't be a stored CI secret. Raises on a non-2xx so CI sees auth /
+    connectivity failures loudly (the key rides in a header, never the URL)."""
     params: dict[str, str | int] = {"hours": hours, "limit": limit}
     if since:
         params["since"] = since
@@ -44,7 +46,7 @@ async def fetch_defects(
         resp = await client.get(
             f"{api_base.rstrip('/')}/admin/llm-calls/defects",
             params=params,
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"X-Improver-Key": service_key},
         )
     resp.raise_for_status()
     data: dict[str, object] = resp.json()
