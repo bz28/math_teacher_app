@@ -412,7 +412,7 @@ def _run_improve_gather(args: argparse.Namespace) -> int:
             started = datetime.now(UTC)
             failures = await corpus_failures(
                 api_base=args.api_base, web_base=args.web_base,
-                verify=not args.no_verify_corpus,
+                verify=not args.no_verify_corpus, mode=args.mode,
             )
             cost = await run_cost(args.mode, started)
         return observations, failures, cost

@@ -50,8 +50,18 @@ _FEATURE_SYSTEM = (
 )
 
 
+def _still_failing(results: list, mode: str) -> list:  # type: ignore[type-arg]
+    """The scenarios that genuinely still fail. In `replay`, a scenario that
+    ERRORED (vs ran and failed a check) is a cassette gap — infra noise, not a
+    real defect — so it's dropped; in record/auto an error is a real failure."""
+    return [
+        r.scenario for r in results
+        if not r.passed and not (mode == "replay" and r.error)
+    ]
+
+
 async def corpus_failures(
-    *, api_base: str, web_base: str, verify: bool = True,
+    *, api_base: str, web_base: str, verify: bool = True, mode: str = "auto",
 ) -> list[dict[str, object]]:
     """Re-verify the harness's promoted generation-failure corpus against the
     LIVE generator and return the entries that STILL fail — one dict per failure
@@ -60,7 +70,12 @@ async def corpus_failures(
     fix-proposal call) and the plan-billed `gather` step (writes these as
     evidence the headless judge proposes from). `verify=False` returns the whole
     corpus without re-running it. Re-verifying is what stops us proposing fixes
-    for defects that have already been fixed."""
+    for defects that have already been fixed.
+
+    In `replay` mode a scenario that ERRORED (rather than ran and failed a check)
+    is a cassette gap — infra noise, not a real defect — so it's dropped, lest a
+    missing cassette masquerade as a still-failing generation bug. In
+    record/auto an error IS a real generation failure worth proposing."""
     from tests.harness.explorer import explore, load_corpus
     from tests.harness.probes import PROBES
 
@@ -74,7 +89,7 @@ async def corpus_failures(
         if verify:
             try:
                 verified = await explore(probe, scenarios, api_base, web_base)
-                scenarios = [r.scenario for r in verified.results if not r.passed]
+                scenarios = _still_failing(verified.results, mode)
             except Exception:  # noqa: BLE001 — can't re-verify → skip, never propose stale
                 continue
         for sc in scenarios:

@@ -144,3 +144,18 @@ def test_save_evidence_folds_generation_failures_into_findings(tmp_path) -> None
     out2 = save_evidence([], [], tmp_path / "empty")
     assert json.loads((out2 / "findings.json").read_text())["generation_failures"] == []
     assert "generation_failures" in JUDGE_PROMPT
+
+
+def test_still_failing_drops_replay_cassette_gaps() -> None:
+    """A replay-mode cassette gap (errored, didn't run) must not masquerade as a
+    still-failing generation defect; in record/auto an error is a real failure."""
+    from types import SimpleNamespace
+
+    from tests.harness.improver.sources import _still_failing
+
+    def r(name: str, passed: bool, error: str | None) -> SimpleNamespace:
+        return SimpleNamespace(scenario=name, passed=passed, error=error)
+
+    results = [r("ok", True, None), r("real_fail", False, None), r("cassette_gap", False, "miss")]
+    assert _still_failing(results, "auto") == ["real_fail", "cassette_gap"]  # both kept
+    assert _still_failing(results, "replay") == ["real_fail"]                # gap dropped
