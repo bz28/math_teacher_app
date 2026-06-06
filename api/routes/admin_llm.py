@@ -3,12 +3,12 @@
 import hashlib
 import json
 import uuid as uuid_lib
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import Date, cast, func, select
+from sqlalchemy import Date, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
@@ -334,9 +334,36 @@ def _defect_signature(function: str, kind: str, fingerprint: str) -> str:
     return hashlib.sha1(f"{function}:{kind}:{marker}".encode()).hexdigest()[:12]
 
 
+def _parse_cursor(since: str | None, hours: int) -> tuple[datetime, uuid_lib.UUID | None]:
+    """Parse the opaque scan cursor into a keyset `(created_at, id)` position.
+
+    The cursor is `"<iso-timestamp>|<uuid>"` (the `|<uuid>` half is optional, so a
+    human can pass a plain ISO timestamp). Including the row id makes paging a
+    true keyset: scanning `(created_at, id) > (since_ts, since_id)` can never skip
+    or double-count rows that share a `created_at` at the `limit` boundary. A
+    naive timestamp (no offset) is assumed UTC so it compares against the
+    tz-aware `created_at` instead of raising. Empty cursor → last `hours`."""
+    if not since:
+        return time_range(hours), None
+    ts_part, _, id_part = since.partition("|")
+    try:
+        ts = datetime.fromisoformat(ts_part)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="invalid since timestamp") from e
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=UTC)
+    cursor_id: uuid_lib.UUID | None = None
+    if id_part:
+        try:
+            cursor_id = uuid_lib.UUID(id_part)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="invalid since cursor id") from e
+    return ts, cursor_id
+
+
 @router.get("/llm-calls/defects")
 async def llm_call_defects(
-    since: str | None = Query(default=None, description="ISO timestamp; only calls strictly after it"),
+    since: str | None = Query(default=None, description="keyset cursor '<iso>|<id>'; URL-encode the '+'"),
     hours: int = Query(default=24, ge=1, le=720),
     limit: int = Query(default=1000, ge=1, le=5000),
     current_user: CurrentUser = Depends(require_admin),
@@ -345,28 +372,30 @@ async def llm_call_defects(
     """Recent LLM calls whose output looks defective — failed calls, or outputs
     carrying the control-char corruption fingerprint (the LaTeX-class bug) —
     grouped by (function, signature) so a recurring defect is ONE row. Drives
-    the improver's production-defect channel. `watermark` is the max `created_at`
-    scanned; pass it back as `since` next run for incremental, no-overlap scans."""
-    if since:
-        try:
-            since_dt = datetime.fromisoformat(since)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail="invalid since timestamp") from e
-    else:
-        since_dt = time_range(hours)
+    the improver's production-defect channel.
 
+    `watermark` is an opaque keyset cursor `'<iso>|<id>'` of the last row scanned;
+    pass it back as `since` next run for incremental, skip-free scans. Callers
+    MUST URL-encode it (the ISO offset contains a `+`)."""
+    since_ts, since_id = _parse_cursor(since, hours)
+    # Keyset pagination on (created_at, id): a unique tiebreak so truncating at
+    # `limit` can never skip or double-count rows sharing a created_at.
+    if since_id is None:
+        keyset = LLMCall.created_at > since_ts
+    else:
+        keyset = or_(
+            LLMCall.created_at > since_ts,
+            and_(LLMCall.created_at == since_ts, LLMCall.id > since_id),
+        )
     rows = (await db.execute(
         select(LLMCall)
-        .where(LLMCall.created_at > since_dt)
-        .order_by(LLMCall.created_at)
+        .where(keyset)
+        .order_by(LLMCall.created_at, LLMCall.id)
         .limit(limit)
     )).scalars().all()
 
     groups: dict[str, dict[str, Any]] = {}
-    watermark = since_dt
     for row in rows:
-        if row.created_at > watermark:
-            watermark = row.created_at
         defect = _defect_of(row)
         if defect is None:
             continue
@@ -391,9 +420,16 @@ async def llm_call_defects(
             group["last_seen"] = row.created_at.isoformat()
 
     defects = sorted(groups.values(), key=lambda d: d["count"], reverse=True)
+    # Composite watermark = the last scanned row's keyset position. On an empty
+    # scan, echo the input cursor back so the caller holds its place.
+    if rows:
+        last = rows[-1]
+        watermark = f"{last.created_at.isoformat()}|{last.id}"
+    else:
+        watermark = since or since_ts.isoformat()
     return {
-        "since": since_dt.isoformat(),
-        "watermark": watermark.isoformat(),
+        "since": since,
+        "watermark": watermark,
         "scanned": len(rows),
         "defect_groups": len(defects),
         "defects": defects,

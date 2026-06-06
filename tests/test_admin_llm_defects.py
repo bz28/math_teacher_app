@@ -119,8 +119,9 @@ async def test_groups_recurring_defects_and_ignores_healthy(client: AsyncClient)
     assert by_count["decompose"]["count"] == 3  # the 3 recurring corrupts collapsed
     assert by_count["decompose"]["kind"] == "corrupt"
     assert by_count["solve"]["count"] == 1 and by_count["solve"]["kind"] == "failed"
-    # watermark advanced to the newest scanned row (the healthy one at +4m).
-    assert body["watermark"] == (base + timedelta(minutes=4)).isoformat()
+    # watermark is a composite cursor "<iso>|<id>" of the newest scanned row
+    # (the healthy one at +4m).
+    assert body["watermark"].startswith((base + timedelta(minutes=4)).isoformat() + "|")
 
 
 async def test_since_filters_older_rows(client: AsyncClient) -> None:
@@ -144,3 +145,43 @@ async def test_invalid_since_400(client: AsyncClient) -> None:
     token = create_access_token(admin_id, "admin")
     r = await client.get("/v1/admin/llm-calls/defects?since=not-a-date", headers=auth_headers(token))
     assert r.status_code == 400
+
+
+async def test_naive_since_does_not_crash(client: AsyncClient) -> None:
+    # Regression: an offset-less ISO `since` used to TypeError (500) when compared
+    # against the tz-aware created_at. It must be treated as UTC.
+    admin_id, _ = await _seed_admin()
+    await _seed_calls([_call(function="solve", output="boom", success=False,
+                             when=datetime.now(UTC) - timedelta(minutes=5))])
+    token = create_access_token(admin_id, "admin")
+    naive = (datetime.now(UTC) - timedelta(hours=1)).replace(tzinfo=None).isoformat()
+    r = await client.get("/v1/admin/llm-calls/defects", params={"since": naive}, headers=auth_headers(token))
+    assert r.status_code == 200
+    assert r.json()["defect_groups"] == 1
+
+
+async def test_keyset_paging_never_skips_duplicate_timestamps(client: AsyncClient) -> None:
+    # Regression: three defects sharing the EXACT same created_at, paged at
+    # limit=2. A created_at-only strict-`>` cursor would drop the row beyond the
+    # limit that shares the boundary timestamp; the composite (created_at, id)
+    # cursor must drain all three.
+    admin_id, _ = await _seed_admin()
+    ts = datetime.now(UTC) - timedelta(minutes=10)
+    await _seed_calls([
+        _call(function="solve", output="boom", success=False, when=ts),
+        _call(function="decompose", output="boom", success=False, when=ts),
+        _call(function="grade", output="boom", success=False, when=ts),
+    ])
+    token = create_access_token(admin_id, "admin")
+    cursor: str | None = (ts - timedelta(seconds=1)).isoformat()
+    seen: set[str] = set()
+    for _ in range(5):  # bounded; should drain in 2 pages of 2
+        r = await client.get("/v1/admin/llm-calls/defects",
+                             params={"since": cursor, "limit": 2}, headers=auth_headers(token))
+        assert r.status_code == 200
+        body = r.json()
+        if body["scanned"] == 0:
+            break
+        seen.update(d["function"] for d in body["defects"])
+        cursor = body["watermark"]
+    assert seen == {"solve", "decompose", "grade"}  # none skipped across pages
