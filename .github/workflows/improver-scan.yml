@@ -145,6 +145,10 @@ jobs:
             echo "no open proposals — skipping issue"; exit 0
           fi
           BODY=$(printf 'Autonomous improver run %s. Comment `approve <id>` to ship one (opens a PR, never merges) or `reject <id>` to drop it. Full screenshot report is in the run artifacts.\n\n%s' "$(date -u +%Y-%m-%dT%H:%MZ)" "$DIGEST")
+          # Self-heal the label: a fresh repo (or a deleted label) would otherwise
+          # make `gh issue create --label` fail and silently drop the whole digest.
+          gh label create improver --color 5319e7 \
+            --description "Autonomous improver proposals" 2>/dev/null || true
           gh issue create --repo "$GITHUB_REPOSITORY" \
             --title "Improver proposals — $(date -u +%Y-%m-%d)" \
             --label improver --body "$BODY" || echo "issue create skipped"
