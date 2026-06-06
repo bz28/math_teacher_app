@@ -140,7 +140,6 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     lsc.add_argument("--hours", type=int, default=24, help="window when no watermark exists yet")
     lsc.add_argument("--limit", type=int, default=1000)
     lsc.add_argument("--max-size", default="M", choices=["S", "M", "L"])
-    lsc.add_argument("--ignore-budget", action="store_true")
 
     imp_sub.add_parser("budget", help="show the improver's rolling-window budget usage")
     imp_sub.add_parser("proposals", help="list the durable proposal queue")
@@ -461,12 +460,17 @@ def _run_improve_llm_scan(args: argparse.Namespace) -> int:
     """Channel A: GET the backend's production LLM-call defects (admin token via
     IMPROVER_ADMIN_TOKEN), turn each group into a deterministic fix Proposal in
     proposals.json (hand off to `improve ingest`), and advance the keyset
-    watermark so the next scan sees only new defects. Budget-gated like a scan.
+    watermark so the next scan sees only new defects.
+
+    This channel is $0 — an HTTP GET plus deterministic conversion, no LLM calls
+    — so it does NOT consume the billed-scan budget (`max_scans_per_5h`), which
+    exists to cap spend; the cron is its rate limit. It's recorded under a
+    distinct ledger kind for observability only.
 
     The watermark advances even on a downstream ingest failure; that's fine
     because a *recurring* defect keeps producing new calls past the watermark and
     re-surfaces next run — only a one-off that never repeats could be missed."""
-    from tests.harness.improver.budget import BudgetCaps, Ledger, check_scan, state_dir
+    from tests.harness.improver.budget import Ledger, state_dir
     from tests.harness.improver.llm_defects import (
         defects_to_proposals,
         fetch_defects,
@@ -480,14 +484,7 @@ def _run_improve_llm_scan(args: argparse.Namespace) -> int:
         print("[improve:llm-scan] IMPROVER_ADMIN_TOKEN not set — skipping (feature off until configured)")
         return 0
 
-    caps = BudgetCaps.from_env()
     ledger = Ledger.load()
-    if not args.ignore_budget:
-        verdict = check_scan(caps, ledger)
-        if not verdict.ok:
-            print(f"[improve:llm-scan] SKIPPED — {verdict.reason}")
-            return 0
-
     sdir = state_dir()
     since = read_watermark(sdir)
     try:
@@ -509,7 +506,7 @@ def _run_improve_llm_scan(args: argparse.Namespace) -> int:
         json.dumps([to_dict(p) for p in proposals], indent=2)
     )
 
-    ledger.record("scan", cost_usd=0.0, note=f"llm-scan: {len(defects)} defect group(s)")
+    ledger.record("llm-scan", cost_usd=0.0, note=f"{len(defects)} defect group(s)")
     watermark = data.get("watermark")
     if isinstance(watermark, str) and watermark:
         write_watermark(sdir, watermark)
