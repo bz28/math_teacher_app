@@ -130,6 +130,18 @@ def _parse(argv: list[str]) -> argparse.Namespace:
         help="prod ingest endpoint for the admin 'Harness Runs' row (CI; can't reach prod DB)",
     )
 
+    # Channel A: mine the backend's production LLM-call defects (over HTTP, with
+    # an admin token) into proposals.json. Pairs with `ingest`. Token via the
+    # IMPROVER_ADMIN_TOKEN env var so it never lands in argv/CI logs.
+    lsc = imp_sub.add_parser("llm-scan", help="turn prod LLM-call defects into proposals (Channel A)")
+    lsc.add_argument("--dir", required=True, help="output dir for proposals.json")
+    lsc.add_argument("--api-base", default=os.environ.get("HARNESS_API_BASE", _DEFAULT_API),
+                     help="API root to query (e.g. the prod /v1 base)")
+    lsc.add_argument("--hours", type=int, default=24, help="window when no watermark exists yet")
+    lsc.add_argument("--limit", type=int, default=1000)
+    lsc.add_argument("--max-size", default="M", choices=["S", "M", "L"])
+    lsc.add_argument("--ignore-budget", action="store_true")
+
     imp_sub.add_parser("budget", help="show the improver's rolling-window budget usage")
     imp_sub.add_parser("proposals", help="list the durable proposal queue")
     imp_sub.add_parser("digest", help="explain-simple bullet plan of open proposals (markdown)")
@@ -445,6 +457,70 @@ def _run_improve_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_improve_llm_scan(args: argparse.Namespace) -> int:
+    """Channel A: GET the backend's production LLM-call defects (admin token via
+    IMPROVER_ADMIN_TOKEN), turn each group into a deterministic fix Proposal in
+    proposals.json (hand off to `improve ingest`), and advance the keyset
+    watermark so the next scan sees only new defects. Budget-gated like a scan.
+
+    The watermark advances even on a downstream ingest failure; that's fine
+    because a *recurring* defect keeps producing new calls past the watermark and
+    re-surfaces next run — only a one-off that never repeats could be missed."""
+    from tests.harness.improver.budget import BudgetCaps, Ledger, check_scan, state_dir
+    from tests.harness.improver.llm_defects import (
+        defects_to_proposals,
+        fetch_defects,
+        read_watermark,
+        write_watermark,
+    )
+    from tests.harness.improver.proposals import to_dict
+
+    token = os.environ.get("IMPROVER_ADMIN_TOKEN", "")
+    if not token:
+        print("[improve:llm-scan] IMPROVER_ADMIN_TOKEN not set — skipping (feature off until configured)")
+        return 0
+
+    caps = BudgetCaps.from_env()
+    ledger = Ledger.load()
+    if not args.ignore_budget:
+        verdict = check_scan(caps, ledger)
+        if not verdict.ok:
+            print(f"[improve:llm-scan] SKIPPED — {verdict.reason}")
+            return 0
+
+    sdir = state_dir()
+    since = read_watermark(sdir)
+    try:
+        data = asyncio.run(fetch_defects(
+            api_base=args.api_base, token=token, since=since,
+            hours=args.hours, limit=args.limit,
+        ))
+    except Exception as e:  # noqa: BLE001 — surface auth/connectivity loudly, don't half-advance state
+        print(f"[improve:llm-scan] fetch failed: {e}")
+        return 1
+
+    defects = data.get("defects") or []
+    if not isinstance(defects, list):
+        defects = []
+    proposals = defects_to_proposals(defects, max_size=args.max_size)
+    out_dir = Path(args.dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "proposals.json").write_text(
+        json.dumps([to_dict(p) for p in proposals], indent=2)
+    )
+
+    ledger.record("scan", cost_usd=0.0, note=f"llm-scan: {len(defects)} defect group(s)")
+    watermark = data.get("watermark")
+    if isinstance(watermark, str) and watermark:
+        write_watermark(sdir, watermark)
+
+    print(f"\n[improve:llm-scan] {len(defects)} defect group(s) → {len(proposals)} proposal(s) "
+          f"→ {out_dir}/proposals.json")
+    print(f"watermark: {watermark}")
+    print(f"next: improve ingest --dir {out_dir}")
+    return 0
+
+
 def _run_improve_budget(args: argparse.Namespace) -> int:
     """Print the improver's rolling-window budget usage vs. caps."""
     from datetime import UTC, datetime
@@ -609,6 +685,8 @@ def main(argv: list[str]) -> int:
             return _run_improve_gather(args)
         if improve_cmd == "ingest":
             return _run_improve_ingest(args)
+        if improve_cmd == "llm-scan":
+            return _run_improve_llm_scan(args)
         if improve_cmd == "execute":
             return _run_improve_execute(args)
         if improve_cmd in ("proposals", "approve", "reject", "show", "done", "digest"):
