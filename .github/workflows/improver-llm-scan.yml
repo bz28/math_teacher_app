@@ -8,10 +8,12 @@ name: Improver LLM-defect scan
 # service key. State (queue + budget ledger + the incremental watermark) lives
 # on the `improver/state` branch, same as the UI scan.
 #
-# Repo secrets (Settings → Secrets → Actions):
-#   IMPROVER_API_KEY — the static service key, matching the backend's
-#                      `improver_api_key` setting (X-Improver-Key auth).
-#   PROD_API_BASE    — the prod API root, e.g. https://api.example.com/v1.
+# Config (Settings → Secrets and variables → Actions):
+#   IMPROVER_API_KEY (secret)   — the static service key, matching the backend's
+#                                 `improver_api_key` setting (X-Improver-Key auth).
+#   PROD_API_BASE (variable)    — the prod API root incl. /v1; shared with the
+#                                 harness-runs ingest feature (a repo *variable*,
+#                                 not a secret — it's not sensitive).
 # Until both are set the job no-ops (the CLI skips when the key is absent).
 
 on:
@@ -42,7 +44,7 @@ jobs:
       APP_ENV: test
       IMPROVER_STATE_DIR: ${{ github.workspace }}/_improver_state
       IMPROVER_API_KEY: ${{ secrets.IMPROVER_API_KEY }}
-      PROD_API_BASE: ${{ secrets.PROD_API_BASE }}
+      PROD_API_BASE: ${{ vars.PROD_API_BASE }}
     steps:
       - uses: actions/checkout@v4
 
