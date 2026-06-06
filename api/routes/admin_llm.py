@@ -1,6 +1,9 @@
 """Admin LLM call analytics endpoint."""
 
+import hashlib
+import json
 import uuid as uuid_lib
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -9,6 +12,7 @@ from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
+from api.core.llm_client import _CORRUPTION_CHARS
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.llm_call import LLMCall
@@ -270,6 +274,129 @@ async def llm_calls(
             {"id": str(r.id), "email": r.email}
             for r in user_rows
         ],
+    }
+
+
+# --- production-defect channel (autonomous improver) ----------------------
+# Surfaces defective prod LLM calls so the improver can propose fixes from REAL
+# failures (the LaTeX-class bug lived here). Read-only; the CI scan calls this
+# with an admin token so prod DB credentials never leave the backend.
+
+_DEFECT_SAMPLE_CAP = 2000  # per-group sample text — enough to recognize the bug
+_CHAR_NAMES = {
+    "\f": "formfeed(\\f)", "\v": "vtab(\\v)",
+    "\b": "backspace(\\b)", "\r": "carriage-return(\\r)",
+}
+
+
+def _corruption_chars(output_text: str | None) -> str:
+    """The distinct control chars (the LaTeX-class fingerprint) in a logged
+    output. Structured outputs are stored as `json.dumps(result)`, where the
+    corruption hides as control chars INSIDE parsed string values — so parse
+    first and walk the structure; fall back to the raw string for non-JSON
+    (free-text) outputs. Returns "" when clean."""
+    if not output_text:
+        return ""
+    try:
+        obj: object = json.loads(output_text)
+    except (json.JSONDecodeError, ValueError):
+        obj = output_text
+    found: set[str] = set()
+
+    def _walk(o: object) -> None:
+        if isinstance(o, str):
+            found.update(c for c in _CORRUPTION_CHARS if c in o)
+        elif isinstance(o, list):
+            for x in o:
+                _walk(x)
+        elif isinstance(o, dict):
+            for v in o.values():
+                _walk(v)
+
+    _walk(obj)
+    return "".join(sorted(found))
+
+
+def _defect_of(row: LLMCall) -> tuple[str, str] | None:
+    """Classify a logged call: ('failed', '') for an errored call, ('corrupt',
+    <chars>) for control-char corruption, else None (healthy)."""
+    if not row.success:
+        return ("failed", "")
+    chars = _corruption_chars(row.output_text)
+    return ("corrupt", chars) if chars else None
+
+
+def _defect_signature(function: str, kind: str, fingerprint: str) -> str:
+    """Stable 12-char key collapsing recurring instances of the SAME defect into
+    one group, so a bug hitting thousands of calls is one proposal, not a flood.
+    Keyed on (function, kind, corruption fingerprint)."""
+    marker = fingerprint.encode().hex() if fingerprint else kind
+    return hashlib.sha1(f"{function}:{kind}:{marker}".encode()).hexdigest()[:12]
+
+
+@router.get("/llm-calls/defects")
+async def llm_call_defects(
+    since: str | None = Query(default=None, description="ISO timestamp; only calls strictly after it"),
+    hours: int = Query(default=24, ge=1, le=720),
+    limit: int = Query(default=1000, ge=1, le=5000),
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Recent LLM calls whose output looks defective — failed calls, or outputs
+    carrying the control-char corruption fingerprint (the LaTeX-class bug) —
+    grouped by (function, signature) so a recurring defect is ONE row. Drives
+    the improver's production-defect channel. `watermark` is the max `created_at`
+    scanned; pass it back as `since` next run for incremental, no-overlap scans."""
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="invalid since timestamp") from e
+    else:
+        since_dt = time_range(hours)
+
+    rows = (await db.execute(
+        select(LLMCall)
+        .where(LLMCall.created_at > since_dt)
+        .order_by(LLMCall.created_at)
+        .limit(limit)
+    )).scalars().all()
+
+    groups: dict[str, dict[str, Any]] = {}
+    watermark = since_dt
+    for row in rows:
+        if row.created_at > watermark:
+            watermark = row.created_at
+        defect = _defect_of(row)
+        if defect is None:
+            continue
+        kind, fingerprint = defect
+        sig = _defect_signature(row.function, kind, fingerprint)
+        group = groups.get(sig)
+        if group is None:
+            # rows are ascending by created_at, so the first hit is the earliest.
+            groups[sig] = {
+                "signature": sig, "function": row.function, "kind": kind,
+                "corruption_chars": [_CHAR_NAMES.get(c, repr(c)) for c in fingerprint],
+                "count": 1,
+                "first_seen": row.created_at.isoformat(),
+                "last_seen": row.created_at.isoformat(),
+                "sample_call_id": str(row.id),
+                "sample_model": row.model,
+                "sample_input": (row.input_text or "")[:_DEFECT_SAMPLE_CAP],
+                "sample_output": (row.output_text or "")[:_DEFECT_SAMPLE_CAP],
+            }
+        else:
+            group["count"] += 1
+            group["last_seen"] = row.created_at.isoformat()
+
+    defects = sorted(groups.values(), key=lambda d: d["count"], reverse=True)
+    return {
+        "since": since_dt.isoformat(),
+        "watermark": watermark.isoformat(),
+        "scanned": len(rows),
+        "defect_groups": len(defects),
+        "defects": defects,
     }
 
 
