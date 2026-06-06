@@ -83,3 +83,30 @@ async def test_valid_ingest_writes_row(client: AsyncClient) -> None:
     assert rows[0].items_generated == 3
     assert rows[0].passed is True
     assert rows[0].report_html == "<pre>digest</pre>"
+
+
+async def test_harness_payloads_match_ingest_schema(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The field dicts the harness builds must satisfy the endpoint's schema.
+    Producer (tests/harness) and consumer (api) live in different layers, so
+    this guards against silent drift between them."""
+    from api.routes.admin_harness import HarnessRunIngest
+    from tests.harness.improver import report as rpt
+
+    captured: dict[str, object] = {}
+
+    async def fake_deliver(fields: dict[str, object], **_: object) -> bool:
+        captured["fields"] = fields
+        return True
+
+    monkeypatch.setattr(rpt, "deliver_harness_run", fake_deliver)
+
+    await rpt.persist_scan_summary(
+        scanned=1, total=2, hits=0, proposals=3, report_html="<pre/>",
+        cost_usd=None, mode="plan", summary_url="x",
+    )
+    HarnessRunIngest(**captured["fields"])  # raises on drift
+
+    await rpt.persist_execute_summary(
+        proposal_id="abc", title="t", pr_url="http://x", summary_url="x",
+    )
+    HarnessRunIngest(**captured["fields"])
