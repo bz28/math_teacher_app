@@ -59,6 +59,18 @@ async def test_bad_token_returns_401(client: AsyncClient) -> None:
     assert r.status_code == 401
 
 
+async def test_non_ascii_token_returns_401(client: AsyncClient) -> None:
+    # A raw client can send Latin-1 header bytes (0x80–0xFF); Starlette decodes
+    # them as a non-ASCII str. The token check must fail cleanly (401), not
+    # crash secrets.compare_digest into a 500. Pass bytes to bypass httpx's
+    # ASCII-only str-header guard and exercise the real server-side path.
+    r = await client.post(
+        "/v1/admin/harness-runs/ingest", json=_PAYLOAD,
+        headers={"X-Harness-Token": "töken".encode("latin-1")},
+    )
+    assert r.status_code == 401
+
+
 async def test_oversized_report_returns_413(client: AsyncClient) -> None:
     payload = {**_PAYLOAD, "report_html": "x" * (512 * 1024 + 1)}
     r = await client.post(

@@ -88,7 +88,14 @@ async def deliver_harness_run(
                 r = await client.post(
                     summary_url, json=fields, headers={"X-Harness-Token": token},
                 )
-                return r.status_code < 300
+            if r.status_code >= 300:
+                # Surface, don't swallow: a silent failure here is the exact
+                # "invisible runs" symptom this path exists to fix. The most
+                # likely cause is PROD_API_BASE missing the /v1 prefix (→ 404).
+                print(f"[harness-run] ingest POST {summary_url} -> {r.status_code}; "
+                      f"row not recorded (check PROD_API_BASE includes /v1 + token)")
+                return False
+            return True
         if summary_db_url:
             from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -103,7 +110,9 @@ async def deliver_harness_run(
                 await engine.dispose()
             return True
         return False
-    except Exception:  # noqa: BLE001 — observability, never fatal
+    except Exception as e:  # noqa: BLE001 — observability, never fatal
+        if summary_url:
+            print(f"[harness-run] ingest delivery to {summary_url} failed: {e!r}")
         return False
 
 

@@ -121,6 +121,9 @@ jobs:
 
       - name: Ingest plan-judged proposals (rank, dedupe, queue)
         env:
+          # PROD_API_BASE must include the /v1 prefix (e.g.
+          # https://…up.railway.app/v1) — the route is /v1/admin/harness-runs/
+          # ingest, and a missing /v1 silently 404s every POST.
           INGEST_URL: ${{ vars.PROD_API_BASE }}
           HARNESS_INGEST_TOKEN: ${{ secrets.HARNESS_INGEST_TOKEN }}
         run: |

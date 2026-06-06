@@ -4,7 +4,7 @@ import secrets
 import uuid as uuid_lib
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.config import settings
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
+from api.middleware.rate_limit import limiter
 from api.models.harness_run import HarnessRun
 
 router = APIRouter()
@@ -132,7 +133,9 @@ class HarnessRunIngest(BaseModel):
 
 
 @router.post("/harness-runs/ingest", status_code=status.HTTP_201_CREATED)
+@limiter.limit("60/minute")
 async def ingest_harness_run(
+    request: Request,
     payload: HarnessRunIngest,
     x_harness_token: str | None = Header(default=None),
     db: AsyncSession = Depends(get_db),
@@ -149,7 +152,10 @@ async def ingest_harness_run(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Harness ingest not configured",
         )
-    if not x_harness_token or not secrets.compare_digest(x_harness_token, token):
+    # Compare as bytes: Starlette decodes headers as Latin-1, so a non-ASCII
+    # token would make compare_digest raise (→ 500) instead of cleanly failing.
+    supplied = (x_harness_token or "").encode("utf-8")
+    if not secrets.compare_digest(supplied, token.encode("utf-8")):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid harness token",
         )
