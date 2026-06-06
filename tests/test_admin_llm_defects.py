@@ -130,6 +130,19 @@ async def test_wrong_service_key_forbidden(
     assert r.status_code == 403
 
 
+async def test_unset_key_rejects_empty_header(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Security guard for the short-circuit: with service-key auth UNSET, an empty
+    # X-Improver-Key must NOT authorize — even though compare_digest('', '') is
+    # True. The `if key and ...` short-circuit (key="" is falsy) is what prevents
+    # the bypass; this regression-tests that the operands never get reordered.
+    await _seed_admin()
+    monkeypatch.setattr(settings, "improver_api_key", "")
+    r = await client.get("/v1/admin/llm-calls/defects", headers={"X-Improver-Key": ""})
+    assert r.status_code == 403
+
+
 async def test_admin_jwt_still_authorizes(client: AsyncClient) -> None:
     # The interactive admin path keeps working even with no service key set.
     admin_id, _ = await _seed_admin()
