@@ -123,3 +123,39 @@ def test_where_to_look_and_brief() -> None:
                          "severity": "high", "est_size": "S"}, branch="improver/abc123")
     assert "improver/abc123" in brief
     assert "abc123" in brief and "STOP" in brief and "schema, auth, or billing" in brief
+
+
+# --- evidence (Channel D: content-quality corpus into the plan path) ------
+
+def test_save_evidence_folds_generation_failures_into_findings(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The re-verified corpus failures must reach findings.json so the
+    plan-billed judge can propose generation fixes, and the JUDGE_PROMPT must
+    tell it to."""
+    import json
+
+    from tests.harness.improver.evidence import JUDGE_PROMPT, save_evidence
+
+    failures = [{"probe": "geometry", "scenario": "triangle", "constraint": "c",
+                 "expected": ["triangle"], "rationale": "r", "fix_in": ["api/x.py"]}]
+    out = save_evidence([], [], tmp_path, generation_failures=failures)
+    findings = json.loads((out / "findings.json").read_text())
+    assert findings["generation_failures"] == failures
+    # default (no failures passed) still emits the key, empty — never KeyError
+    out2 = save_evidence([], [], tmp_path / "empty")
+    assert json.loads((out2 / "findings.json").read_text())["generation_failures"] == []
+    assert "generation_failures" in JUDGE_PROMPT
+
+
+def test_still_failing_drops_replay_cassette_gaps() -> None:
+    """A replay-mode cassette gap (errored, didn't run) must not masquerade as a
+    still-failing generation defect; in record/auto an error is a real failure."""
+    from types import SimpleNamespace
+
+    from tests.harness.improver.sources import _still_failing
+
+    def r(name: str, passed: bool, error: str | None) -> SimpleNamespace:
+        return SimpleNamespace(scenario=name, passed=passed, error=error)
+
+    results = [r("ok", True, None), r("real_fail", False, None), r("cassette_gap", False, "miss")]
+    assert _still_failing(results, "auto") == ["real_fail", "cassette_gap"]  # both kept
+    assert _still_failing(results, "replay") == ["real_fail"]                # gap dropped

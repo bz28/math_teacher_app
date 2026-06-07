@@ -50,18 +50,32 @@ _FEATURE_SYSTEM = (
 )
 
 
-async def content_quality_proposals(
-    *, api_base: str, web_base: str,
-    model: str = MODEL_REASON, max_size: str = "M", verify: bool = True,
-) -> list[Proposal]:
-    """Turn the harness's promoted generation-failure corpus into fix proposals.
+def _still_failing(results: list, mode: str) -> list:  # type: ignore[type-arg]
+    """The scenarios that genuinely still fail. In `replay`, a scenario that
+    ERRORED (vs ran and failed a check) is a cassette gap — infra noise, not a
+    real defect — so it's dropped; in record/auto an error is a real failure."""
+    return [
+        r.scenario for r in results
+        if not r.passed and not (mode == "replay" and r.error)
+    ]
 
-    When `verify` (default), each promoted failure is re-run through the LIVE
-    generator first and only the ones that STILL fail are proposed — so we never
-    propose fixing a defect that's already been fixed (a real gap an execution
-    demo caught: the corpus keeps fixed failures, and stale entries led to a
-    dead-end proposal). Returns [] when nothing still fails or the cassette
-    misses in replay."""
+
+async def corpus_failures(
+    *, api_base: str, web_base: str, verify: bool = True, mode: str = "auto",
+) -> list[dict[str, object]]:
+    """Re-verify the harness's promoted generation-failure corpus against the
+    LIVE generator and return the entries that STILL fail — one dict per failure
+    (probe, scenario, constraint, expected, rationale, fix_in). Shared by both
+    proposal paths: `content_quality_proposals` (API-billed, makes its own
+    fix-proposal call) and the plan-billed `gather` step (writes these as
+    evidence the headless judge proposes from). `verify=False` returns the whole
+    corpus without re-running it. Re-verifying is what stops us proposing fixes
+    for defects that have already been fixed.
+
+    In `replay` mode a scenario that ERRORED (rather than ran and failed a check)
+    is a cassette gap — infra noise, not a real defect — so it's dropped, lest a
+    missing cassette masquerade as a still-failing generation bug. In
+    record/auto an error IS a real generation failure worth proposing."""
     from tests.harness.explorer import explore, load_corpus
     from tests.harness.probes import PROBES
 
@@ -75,7 +89,7 @@ async def content_quality_proposals(
         if verify:
             try:
                 verified = await explore(probe, scenarios, api_base, web_base)
-                scenarios = [r.scenario for r in verified.results if not r.passed]
+                scenarios = _still_failing(verified.results, mode)
             except Exception:  # noqa: BLE001 — can't re-verify → skip, never propose stale
                 continue
         for sc in scenarios:
@@ -84,6 +98,22 @@ async def content_quality_proposals(
                 "expected": sc.expected_shapes, "rationale": sc.rationale,
                 "fix_in": fix_in,
             })
+    return failures
+
+
+async def content_quality_proposals(
+    *, api_base: str, web_base: str,
+    model: str = MODEL_REASON, max_size: str = "M", verify: bool = True,
+) -> list[Proposal]:
+    """Turn the harness's promoted generation-failure corpus into fix proposals.
+
+    When `verify` (default), each promoted failure is re-run through the LIVE
+    generator first and only the ones that STILL fail are proposed — so we never
+    propose fixing a defect that's already been fixed (a real gap an execution
+    demo caught: the corpus keeps fixed failures, and stale entries led to a
+    dead-end proposal). Returns [] when nothing still fails or the cassette
+    misses in replay."""
+    failures = await corpus_failures(api_base=api_base, web_base=web_base, verify=verify)
     if not failures:
         return []
     blob = json.dumps(failures, sort_keys=True)
