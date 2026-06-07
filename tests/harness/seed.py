@@ -26,6 +26,7 @@ from api.models.user import User
 class Seed:
     teacher_id: str
     student_id: str
+    student_email: str  # for flows that drive the real login form (password "x")
     course_id: str
     unit_id: str
     assignment_id: str
@@ -54,8 +55,9 @@ async def seed_world() -> Seed:
             password_hash=hash_password("x"), grade_level=12, role="teacher",
             name="Harness Teacher", school_id=school.id,
         )
+        student_email = f"harness_student_{uuid.uuid4().hex[:6]}@t.com"
         student = User(
-            email=f"harness_student_{uuid.uuid4().hex[:6]}@t.com",
+            email=student_email,
             password_hash=hash_password("x"), grade_level=8, role="student",
             name="Harness Student",
         )
@@ -106,6 +108,7 @@ async def seed_world() -> Seed:
 
         return Seed(
             teacher_id=str(teacher.id), student_id=str(student.id),
+            student_email=student_email,
             course_id=str(course.id), unit_id=str(unit.id),
             assignment_id=str(assignment.id),
             teacher_token=create_access_token(str(teacher.id), "teacher"),

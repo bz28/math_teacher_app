@@ -167,6 +167,20 @@ class HarnessBrowser:
         )
 
     @asynccontextmanager
+    async def plain_page(self) -> AsyncIterator[Page]:
+        """Yield a Page in a fresh UNauthenticated context (no token injection),
+        for flows that drive the real login / sign-up path from logged-out."""
+        assert self._browser is not None, "browser not started"
+        ctx = await self._browser.new_context(
+            viewport={"width": 1100, "height": 1400}, device_scale_factor=2,
+        )
+        try:
+            page = await ctx.new_page()
+            yield page
+        finally:
+            await ctx.close()
+
+    @asynccontextmanager
     async def authed_page(
         self, access_token: str, refresh_token: str,
         *, access_key: str = _ACCESS_KEY, refresh_key: str = _REFRESH_KEY,
