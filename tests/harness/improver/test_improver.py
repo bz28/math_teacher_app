@@ -159,3 +159,25 @@ def test_still_failing_drops_replay_cassette_gaps() -> None:
     results = [r("ok", True, None), r("real_fail", False, None), r("cassette_gap", False, "miss")]
     assert _still_failing(results, "auto") == ["real_fail", "cassette_gap"]  # both kept
     assert _still_failing(results, "replay") == ["real_fail"]                # gap dropped
+
+
+# --- admin scan (Channel B) -----------------------------------------------
+
+def test_admin_role_routing_and_reachable_within_cap() -> None:
+    """The admin role injects the admin token pair, and admin surfaces aren't
+    crowded out of the scan's 17-surface cap by the web pages."""
+    from types import SimpleNamespace
+
+    from tests.harness.improver.scanner import _tokens_for
+    from tests.harness.improver.surfaces import surfaces_for
+
+    seed = SimpleNamespace(
+        admin_token="at", admin_refresh="ar",
+        student_token="st", student_refresh="sr",
+        teacher_token="tt", teacher_refresh="tr",
+    )
+    assert _tokens_for("admin", seed) == ("at", "ar")    # type: ignore[arg-type]
+    assert _tokens_for("public", seed) == ("", "")        # type: ignore[arg-type]
+    # catalog order puts admin right after the public pages, so [:17] includes it
+    within_cap = surfaces_for(("web", "admin"))[:17]
+    assert any(s.app == "admin" for s in within_cap)

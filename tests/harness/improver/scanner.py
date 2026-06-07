@@ -36,12 +36,13 @@ def seed_ids(seed: Seed) -> dict[str, str]:
 
 def _tokens_for(role: str, seed: Seed) -> tuple[str, str]:
     """Which seeded (access, refresh) pair to inject for a surface's role.
-    Public pages get empty tokens (the app treats absent/empty as logged-out);
-    admin has no seeded user yet so it also falls through to empty."""
+    Public pages get empty tokens (the app treats absent/empty as logged-out)."""
     if role == "teacher":
         return seed.teacher_token, seed.teacher_refresh
     if role == "student":
         return seed.student_token, seed.student_refresh
+    if role == "admin":
+        return seed.admin_token, seed.admin_refresh
     return "", ""
 
 
@@ -60,6 +61,12 @@ async def scan_surface(
     path = surface.resolve(seed_ids(seed))
     full_url = path if "://" in path else f"{base_url.rstrip('/')}{path}"
     access, refresh = _tokens_for(surface.role, seed)
+    # The admin dashboard stores its session under different localStorage keys
+    # than the web app, so admin surfaces must inject under those.
+    key_kwargs = (
+        {"access_key": "admin_access_token", "refresh_key": "admin_refresh_token"}
+        if surface.app == "admin" else {}
+    )
 
     obs = PageObservation(
         surface_key=surface.key, url=full_url, role=surface.role, ok=False,
@@ -70,7 +77,7 @@ async def scan_surface(
         if msg.type == "error":
             errors.append(msg.text)
 
-    async with browser.authed_page(access, refresh) as page:
+    async with browser.authed_page(access, refresh, **key_kwargs) as page:
         page.on("console", _on_console)
         page.on("pageerror", lambda e: errors.append(str(e)))
         try:

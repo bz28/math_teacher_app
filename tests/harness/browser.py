@@ -37,6 +37,11 @@ from playwright.async_api import (
 # login.)
 _ACCESS_KEY = "veradic_access_token"
 _REFRESH_KEY = "veradic_refresh_token"
+# The admin dashboard (dashboard/src/lib/api.ts) keeps its session under its OWN
+# localStorage keys, not the web app's — so admin surfaces must inject under
+# these or the dashboard auth guard bounces to /login.
+_ADMIN_ACCESS_KEY = "admin_access_token"
+_ADMIN_REFRESH_KEY = "admin_refresh_token"
 
 
 def find_cached_chromium() -> str | None:
@@ -93,17 +98,19 @@ class HarnessBrowser:
 
     async def _context_for(
         self, access_token: str, refresh_token: str,
+        *, access_key: str = _ACCESS_KEY, refresh_key: str = _REFRESH_KEY,
     ) -> BrowserContext:
         assert self._browser is not None, "browser not started"
         ctx = await self._browser.new_context(
             viewport={"width": 1100, "height": 1400}, device_scale_factor=2,
         )
         # Inject both tokens before any app script runs, so the SPA boots
-        # authenticated rather than bouncing to /login.
+        # authenticated rather than bouncing to /login. Keys default to the web
+        # app's; admin surfaces pass the dashboard's keys.
         script = (
             f"try {{ var ls = window.localStorage;"
-            f"ls.setItem({json.dumps(_ACCESS_KEY)}, {json.dumps(access_token)});"
-            f"ls.setItem({json.dumps(_REFRESH_KEY)}, {json.dumps(refresh_token)});"
+            f"ls.setItem({json.dumps(access_key)}, {json.dumps(access_token)});"
+            f"ls.setItem({json.dumps(refresh_key)}, {json.dumps(refresh_token)});"
             f"}} catch (e) {{}}"
         )
         await ctx.add_init_script(script)
@@ -162,11 +169,15 @@ class HarnessBrowser:
     @asynccontextmanager
     async def authed_page(
         self, access_token: str, refresh_token: str,
+        *, access_key: str = _ACCESS_KEY, refresh_key: str = _REFRESH_KEY,
     ) -> AsyncIterator[Page]:
         """Yield a Page in a fresh context authenticated with the given
         tokens, for probes that drive custom UI flows (clicks, modals). The
-        context is torn down on exit."""
-        ctx = await self._context_for(access_token, refresh_token)
+        context is torn down on exit. `access_key`/`refresh_key` default to the
+        web app's localStorage keys; pass the dashboard's for admin surfaces."""
+        ctx = await self._context_for(
+            access_token, refresh_token, access_key=access_key, refresh_key=refresh_key,
+        )
         try:
             page = await ctx.new_page()
             yield page

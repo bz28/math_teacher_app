@@ -9,10 +9,12 @@ Routes mirror the actual file-based routers:
 the seeded world (tests/harness/seed.py:Seed) at scan time.
 
 Auth note: web surfaces authenticate via the localStorage token injection in
-HarnessBrowser (`veradic_access_token`). admin and mobile_web use different
-token storage + an admin user that `seed_world()` does not yet mint, so they
-are excluded from the default scan set until that plumbing lands (Phase 0.5).
-Track them here now so the catalog is the single source of truth.
+HarnessBrowser (`veradic_access_token`). Admin is now wired too — `seed_world()`
+mints a platform admin and the scanner injects under the dashboard's own
+`admin_access_token`/`admin_refresh_token` keys — so admin scans whenever
+`--apps` includes it (DEFAULT_APPS stays web-only; the scan workflow opts into
+`web,admin`). mobile_web still uses Expo SecureStore + a compile-time API base
+that Playwright can't inject, so it remains excluded until that lands.
 """
 
 from __future__ import annotations
@@ -86,12 +88,14 @@ _MOBILE_WEB = [
     Surface("mobile.solve", "mobile_web", "/", "student", "Mobile solve tab"),
 ]
 
+# Admin sits right after the public pages so a modest surface cap (e.g. 17 =
+# 12 public + 5 admin) covers both without the authed web app crowding it out.
 CATALOG: list[Surface] = [
-    *_WEB_PUBLIC, *_WEB_STUDENT, *_WEB_TEACHER, *_ADMIN, *_MOBILE_WEB,
+    *_WEB_PUBLIC, *_ADMIN, *_WEB_STUDENT, *_WEB_TEACHER, *_MOBILE_WEB,
 ]
 
-# Apps with working auth + base-url plumbing today. admin/mobile_web join once
-# their token injection + (for admin) an admin-user seed land.
+# Apps with working auth + base-url plumbing today. mobile_web joins once its
+# Expo/SecureStore token injection lands (admin is now wired).
 DEFAULT_APPS: tuple[App, ...] = ("web",)
 
 

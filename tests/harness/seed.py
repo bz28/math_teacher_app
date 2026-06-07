@@ -33,6 +33,9 @@ class Seed:
     student_token: str
     teacher_refresh: str
     student_refresh: str
+    admin_id: str
+    admin_token: str
+    admin_refresh: str
 
 
 async def seed_world() -> Seed:
@@ -56,7 +59,14 @@ async def seed_world() -> Seed:
             password_hash=hash_password("x"), grade_level=8, role="student",
             name="Harness Student",
         )
-        s.add_all([teacher, student])
+        # Platform-level admin (no school) so the improver can scan the admin
+        # dashboard surfaces, which sit behind require_admin.
+        admin = User(
+            email=f"harness_admin_{uuid.uuid4().hex[:6]}@t.com",
+            password_hash=hash_password("x"), grade_level=99, role="admin",
+            name="Harness Admin",
+        )
+        s.add_all([teacher, student, admin])
         await s.flush()
 
         course = Course(name="Geometry Harness", subject="math", school_id=school.id)
@@ -91,6 +101,7 @@ async def seed_world() -> Seed:
         # access and a refresh token present to consider us logged in.
         teacher_refresh = await create_refresh_token(s, teacher.id)
         student_refresh = await create_refresh_token(s, student.id)
+        admin_refresh = await create_refresh_token(s, admin.id)
         await s.commit()
 
         return Seed(
@@ -100,4 +111,7 @@ async def seed_world() -> Seed:
             teacher_token=create_access_token(str(teacher.id), "teacher"),
             student_token=create_access_token(str(student.id), "student"),
             teacher_refresh=teacher_refresh, student_refresh=student_refresh,
+            admin_id=str(admin.id),
+            admin_token=create_access_token(str(admin.id), "admin"),
+            admin_refresh=admin_refresh,
         )
