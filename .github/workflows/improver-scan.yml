@@ -183,9 +183,15 @@ jobs:
           # make `gh issue create --label` fail and silently drop the whole digest.
           gh label create improver --color 5319e7 \
             --description "Autonomous improver proposals" 2>/dev/null || true
-          gh issue create --repo "$GITHUB_REPOSITORY" \
+          # Create first, then assign best-effort: a bot-filed unassigned issue
+          # is silent under the default watch setting, so assign the owner to
+          # notify them — but never let an assign failure (org-owned repo,
+          # transient API error) drop the whole digest issue.
+          URL=$(gh issue create --repo "$GITHUB_REPOSITORY" \
             --title "Improver proposals — $(date -u +%Y-%m-%d)" \
-            --label improver --body "$BODY" || echo "issue create skipped"
+            --label improver --body "$BODY") || { echo "issue create skipped"; URL=""; }
+          [ -n "$URL" ] && gh issue edit "$URL" \
+            --add-assignee "${{ github.repository_owner }}" 2>/dev/null || true
 
       - name: Persist queue + ledger to improver/state
         if: always()

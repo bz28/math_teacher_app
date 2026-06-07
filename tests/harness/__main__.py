@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import html
 import json
 import os
 import sys
@@ -469,8 +470,14 @@ def _run_improve_ingest(args: argparse.Namespace) -> int:
     scanned = sum(1 for s in surfaces if s.get("ok"))
     hits = sum(len(s.get("hits", [])) for s in surfaces)
     if args.summary_db or args.summary_url:
-        open_props = [it.proposal for it in queue.by_status("proposed")]
-        digest_html = f"<pre>{proposals_digest_md(open_props)}</pre>"
+        from tests.harness.improver.proposals import to_dict
+
+        # This run's OWN proposals (matches the ITEMS=len(added) column on the
+        # row); the full open backlog lives on the GitHub issue. html.escape so
+        # proposals that literally mention tags (e.g. "<ul>") render as text in
+        # the report's <pre>, not as parsed markup that the browser swallows.
+        run_props = [to_dict(p) for p in added]
+        digest_html = f"<pre>{html.escape(proposals_digest_md(run_props))}</pre>"
         asyncio.run(persist_scan_summary(
             scanned=scanned, total=len(surfaces), hits=hits, proposals=len(added),
             report_html=digest_html, cost_usd=None, mode="plan",
