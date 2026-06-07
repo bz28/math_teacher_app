@@ -1,8 +1,9 @@
 """Browser flow tests — drive real multi-step user journeys and report only
 HARD failures, so the improver catches "the feature is broken when you click
 it", not just "the page looks off" (the load-only scan) or "the AI output is
-wrong" (the probes). A failed flow becomes evidence the judge turns into a
-proposal — the same pipeline as detector hits and generation defects.
+wrong" (the probes). A broken journey becomes a human ALERT in the scan's
+GitHub issue — NOT an auto-fix proposal, because journeys usually live on
+auth/billing surfaces the agent must never edit (see flow_alert_md).
 
 Conservative by design. A flow fails ONLY on a definitive, high-confidence
 signal: a required element never appears, or a required navigation never

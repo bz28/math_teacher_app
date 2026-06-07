@@ -523,6 +523,8 @@ def _run_improve_flow_alert(args: argparse.Namespace) -> int:
         findings = json.loads((Path(args.dir) / "findings.json").read_text())
     except (OSError, json.JSONDecodeError):
         return 0
+    if not isinstance(findings, dict):
+        return 0
     alert = flow_alert_md(findings.get("flow_failures") or [])
     if alert:
         print(alert)
