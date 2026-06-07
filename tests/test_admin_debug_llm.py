@@ -11,7 +11,7 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from api.config import settings
 from api.core.auth import create_access_token, hash_password
@@ -113,3 +113,20 @@ async def test_llm_calls_response_exposes_repo(client: AsyncClient, monkeypatch:
     r = await client.get("/v1/admin/llm-calls", headers=auth_headers(token))
     assert r.status_code == 200
     assert r.json()["repo"] == "owner/repo"
+
+
+async def test_debug_dispatch_marks_call_debugged(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    # So the dashboard shows the "Debug results" link only for calls actually
+    # debugged. The stamp persists in the call's metadata.
+    admin_id, _, call_id = await _seed()
+
+    async def fake_dispatch(payload: dict[str, object]) -> int:
+        return 204
+
+    monkeypatch.setattr(admin_llm, "_github_dispatch", fake_dispatch)
+    token = create_access_token(admin_id, "admin")
+    r = await client.post(f"/v1/admin/llm-calls/{call_id}/debug", headers=auth_headers(token))
+    assert r.status_code == 200
+    async with get_session_factory()() as s:
+        call = (await s.execute(select(LLMCall).where(LLMCall.id == uuid.UUID(call_id)))).scalar_one()
+        assert call.call_metadata and "debug_dispatched_at" in call.call_metadata

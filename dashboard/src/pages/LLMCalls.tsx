@@ -455,15 +455,17 @@ export default function LLMCalls() {
                             >
                               🔍 Debug with agent
                             </button>
-                            <a
-                              href={`https://github.com/${data.repo}/issues?q=${encodeURIComponent(`is:issue label:llm-debug ${c.id}`)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ fontSize: 13, fontWeight: 600 }}
-                              title="Open the debug agent's findings for this call on GitHub"
-                            >
-                              🔗 Debug results
-                            </a>
+                            {(debugState[c.id] === "sent" || Boolean(c.metadata?.debug_dispatched_at)) && (
+                              <a
+                                href={`https://github.com/${data.repo}/issues?q=${encodeURIComponent(`is:issue label:llm-debug ${c.id}`)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ fontSize: 13, fontWeight: 600 }}
+                                title="Open the debug agent's findings for this call on GitHub"
+                              >
+                                🔗 Debug results
+                              </a>
+                            )}
                             {debugState[c.id] === "sending" && <span style={{ fontSize: 13, color: "var(--muted-2)" }}>Dispatching…</span>}
                             {debugState[c.id] === "sent" && <span style={{ fontSize: 13, color: "var(--ok, green)" }}>Dispatched — results appear under 🔗 once the agent finishes.</span>}
                             {debugState[c.id] === "error" && <span style={{ fontSize: 13, color: "var(--danger, crimson)" }}>Dispatch failed (token configured?).</span>}
