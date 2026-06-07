@@ -99,9 +99,12 @@ jobs:
           # Self-heal the label so a fresh repo can't silently drop the digest.
           gh label create improver --color 5319e7 \
             --description "Autonomous improver proposals" 2>/dev/null || true
+          # Assign the owner so GitHub actually notifies them — a bot-filed,
+          # unassigned issue is silent under the default watch setting.
           gh issue create --repo "$GITHUB_REPOSITORY" \
             --title "Improver — prod LLM defects $(date -u +%Y-%m-%d)" \
-            --label improver --body "$BODY" || echo "issue create skipped"
+            --label improver --assignee "${{ github.repository_owner }}" \
+            --body "$BODY" || echo "issue create skipped"
 
       # The watermark rides on the shared improver/state branch. The UI scan /
       # execute orphan-commit only proposals.json + ledger.json, so they may wipe
