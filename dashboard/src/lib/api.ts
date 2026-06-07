@@ -402,6 +402,7 @@ export interface LLMCallsData {
   }[];
   total_count: number;
   users: { id: string; email: string }[];
+  repo: string;
 }
 
 export interface QualityData {

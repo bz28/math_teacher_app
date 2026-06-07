@@ -103,3 +103,13 @@ async def test_dispatch_rejected_returns_502(client: AsyncClient, monkeypatch: p
     token = create_access_token(admin_id, "admin")
     r = await client.post(f"/v1/admin/llm-calls/{call_id}/debug", headers=auth_headers(token))
     assert r.status_code == 502
+
+
+async def test_llm_calls_response_exposes_repo(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The dashboard builds the "Debug results" back-link from repo + call id.
+    admin_id, _, _ = await _seed()
+    monkeypatch.setattr(settings, "github_repo", "owner/repo")
+    token = create_access_token(admin_id, "admin")
+    r = await client.get("/v1/admin/llm-calls", headers=auth_headers(token))
+    assert r.status_code == 200
+    assert r.json()["repo"] == "owner/repo"

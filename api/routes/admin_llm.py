@@ -276,6 +276,9 @@ async def llm_calls(
             {"id": str(r.id), "email": r.email}
             for r in user_rows
         ],
+        # Lets the dashboard build a "Debug results" link to the GitHub issue the
+        # debug agent files (labelled llm-debug, with the call id in its body).
+        "repo": settings.github_repo,
     }
 
 
