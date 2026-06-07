@@ -1,16 +1,22 @@
 """Admin LLM call analytics endpoint."""
 
+import hashlib
+import json
+import secrets as secrets_lib
 import uuid as uuid_lib
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import Date, cast, func, select
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import Date, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
+from api.core.llm_client import _CORRUPTION_CHARS
 from api.database import get_db
-from api.middleware.auth import CurrentUser, require_admin
+from api.middleware.auth import CurrentUser, get_current_user, require_admin
 from api.models.llm_call import LLMCall
 from api.models.user import User
 from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL, time_range
@@ -270,6 +276,189 @@ async def llm_calls(
             {"id": str(r.id), "email": r.email}
             for r in user_rows
         ],
+    }
+
+
+# --- production-defect channel (autonomous improver) ----------------------
+# Surfaces defective prod LLM calls so the improver can propose fixes from REAL
+# failures (the LaTeX-class bug lived here). Read-only; the CI scan calls this
+# with an admin token so prod DB credentials never leave the backend.
+
+_DEFECT_SAMPLE_CAP = 2000  # per-group sample text — enough to recognize the bug
+_CHAR_NAMES = {
+    "\f": "formfeed(\\f)", "\v": "vtab(\\v)",
+    "\b": "backspace(\\b)", "\r": "carriage-return(\\r)",
+}
+
+
+def _corruption_chars(output_text: str | None) -> str:
+    """The distinct control chars (the LaTeX-class fingerprint) in a logged
+    output. Structured outputs are stored as `json.dumps(result)`, where the
+    corruption hides as control chars INSIDE parsed string values — so parse
+    first and walk the structure; fall back to the raw string for non-JSON
+    (free-text) outputs. Returns "" when clean."""
+    if not output_text:
+        return ""
+    try:
+        obj: object = json.loads(output_text)
+    except (json.JSONDecodeError, ValueError):
+        obj = output_text
+    found: set[str] = set()
+
+    def _walk(o: object) -> None:
+        if isinstance(o, str):
+            found.update(c for c in _CORRUPTION_CHARS if c in o)
+        elif isinstance(o, list):
+            for x in o:
+                _walk(x)
+        elif isinstance(o, dict):
+            for v in o.values():
+                _walk(v)
+
+    _walk(obj)
+    return "".join(sorted(found))
+
+
+def _defect_of(row: LLMCall) -> tuple[str, str] | None:
+    """Classify a logged call: ('failed', '') for an errored call, ('corrupt',
+    <chars>) for control-char corruption, else None (healthy)."""
+    if not row.success:
+        return ("failed", "")
+    chars = _corruption_chars(row.output_text)
+    return ("corrupt", chars) if chars else None
+
+
+def _defect_signature(function: str, kind: str, fingerprint: str) -> str:
+    """Stable 12-char key collapsing recurring instances of the SAME defect into
+    one group, so a bug hitting thousands of calls is one proposal, not a flood.
+    Keyed on (function, kind, corruption fingerprint)."""
+    marker = fingerprint.encode().hex() if fingerprint else kind
+    return hashlib.sha1(f"{function}:{kind}:{marker}".encode()).hexdigest()[:12]
+
+
+def _parse_cursor(since: str | None, hours: int) -> tuple[datetime, uuid_lib.UUID | None]:
+    """Parse the opaque scan cursor into a keyset `(created_at, id)` position.
+
+    The cursor is `"<iso-timestamp>|<uuid>"` (the `|<uuid>` half is optional, so a
+    human can pass a plain ISO timestamp). Including the row id makes paging a
+    true keyset: scanning `(created_at, id) > (since_ts, since_id)` can never skip
+    or double-count rows that share a `created_at` at the `limit` boundary. A
+    naive timestamp (no offset) is assumed UTC so it compares against the
+    tz-aware `created_at` instead of raising. Empty cursor → last `hours`."""
+    if not since:
+        return time_range(hours), None
+    ts_part, _, id_part = since.partition("|")
+    try:
+        ts = datetime.fromisoformat(ts_part)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="invalid since timestamp") from e
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=UTC)
+    cursor_id: uuid_lib.UUID | None = None
+    if id_part:
+        try:
+            cursor_id = uuid_lib.UUID(id_part)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="invalid since cursor id") from e
+    return ts, cursor_id
+
+
+# Optional bearer so the dependency can fall through to service-key auth when no
+# JWT is presented (the default HTTPBearer would 403 before our code runs).
+_optional_bearer = HTTPBearer(auto_error=False)
+
+
+async def require_admin_or_service_key(
+    x_improver_key: str | None = Header(default=None, alias="X-Improver-Key"),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Authorize the defect endpoint by EITHER the static improver service key
+    (for the scheduled CI scanner — admin JWTs expire in minutes, useless as a
+    stored secret) OR a normal admin JWT (interactive/dashboard use). The key
+    compare is constant-time; an empty configured key disables service-key auth."""
+    key = settings.improver_api_key
+    if key and x_improver_key and secrets_lib.compare_digest(x_improver_key, key):
+        return
+    if credentials is not None:
+        user = await get_current_user(credentials, db)  # full check; raises on bad/expired/inactive
+        if user.role == "admin":
+            return
+    raise HTTPException(status_code=403, detail="admin access or improver service key required")
+
+
+@router.get("/llm-calls/defects")
+async def llm_call_defects(
+    since: str | None = Query(default=None, description="keyset cursor '<iso>|<id>'; URL-encode the '+'"),
+    hours: int = Query(default=24, ge=1, le=720),
+    limit: int = Query(default=1000, ge=1, le=5000),
+    _: None = Depends(require_admin_or_service_key),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Recent LLM calls whose output looks defective — failed calls, or outputs
+    carrying the control-char corruption fingerprint (the LaTeX-class bug) —
+    grouped by (function, signature) so a recurring defect is ONE row. Drives
+    the improver's production-defect channel.
+
+    `watermark` is an opaque keyset cursor `'<iso>|<id>'` of the last row scanned;
+    pass it back as `since` next run for incremental, skip-free scans. Callers
+    MUST URL-encode it (the ISO offset contains a `+`)."""
+    since_ts, since_id = _parse_cursor(since, hours)
+    # Keyset pagination on (created_at, id): a unique tiebreak so truncating at
+    # `limit` can never skip or double-count rows sharing a created_at.
+    if since_id is None:
+        keyset = LLMCall.created_at > since_ts
+    else:
+        keyset = or_(
+            LLMCall.created_at > since_ts,
+            and_(LLMCall.created_at == since_ts, LLMCall.id > since_id),
+        )
+    rows = (await db.execute(
+        select(LLMCall)
+        .where(keyset)
+        .order_by(LLMCall.created_at, LLMCall.id)
+        .limit(limit)
+    )).scalars().all()
+
+    groups: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        defect = _defect_of(row)
+        if defect is None:
+            continue
+        kind, fingerprint = defect
+        sig = _defect_signature(row.function, kind, fingerprint)
+        group = groups.get(sig)
+        if group is None:
+            # rows are ascending by created_at, so the first hit is the earliest.
+            groups[sig] = {
+                "signature": sig, "function": row.function, "kind": kind,
+                "corruption_chars": [_CHAR_NAMES.get(c, repr(c)) for c in fingerprint],
+                "count": 1,
+                "first_seen": row.created_at.isoformat(),
+                "last_seen": row.created_at.isoformat(),
+                "sample_call_id": str(row.id),
+                "sample_model": row.model,
+                "sample_input": (row.input_text or "")[:_DEFECT_SAMPLE_CAP],
+                "sample_output": (row.output_text or "")[:_DEFECT_SAMPLE_CAP],
+            }
+        else:
+            group["count"] += 1
+            group["last_seen"] = row.created_at.isoformat()
+
+    defects = sorted(groups.values(), key=lambda d: d["count"], reverse=True)
+    # Composite watermark = the last scanned row's keyset position. On an empty
+    # scan, echo the input cursor back so the caller holds its place.
+    if rows:
+        last = rows[-1]
+        watermark = f"{last.created_at.isoformat()}|{last.id}"
+    else:
+        watermark = since or since_ts.isoformat()
+    return {
+        "since": since,
+        "watermark": watermark,
+        "scanned": len(rows),
+        "defect_groups": len(defects),
+        "defects": defects,
     }
 
 
