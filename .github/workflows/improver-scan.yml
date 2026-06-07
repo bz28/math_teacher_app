@@ -84,8 +84,13 @@ jobs:
           pnpm build
           (pnpm start -p 3000 &) # served at :3000
 
+      # Best-effort: the admin dashboard is lower-value than the web scan and a
+      # separate build, so a dashboard build/boot failure must NOT sink the run
+      # — continue-on-error keeps the web scan alive; admin surfaces then just
+      # record per-surface errors (caught in scan_surfaces).
       - name: Build + serve the admin dashboard
         working-directory: dashboard
+        continue-on-error: true
         run: |
           npm ci
           npm run build                       # VITE_API_URL defaults to :8000/v1, which matches
@@ -94,15 +99,24 @@ jobs:
       - name: Start the API (harness DB, cassette mode)
         run: (python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --log-level warning &)
 
-      - name: Wait for API + web + dashboard to be healthy
+      - name: Wait for API + web (dashboard best-effort)
         run: |
+          ok=0
           for i in $(seq 1 60); do
-            curl -sf http://localhost:8000/v1/health >/dev/null 2>&1 && \
-            curl -sf http://localhost:3000 >/dev/null 2>&1 && \
-            curl -sf http://localhost:5173 >/dev/null 2>&1 && echo "up" && exit 0
+            if curl -sf http://localhost:8000/v1/health >/dev/null 2>&1 \
+               && curl -sf http://localhost:3000 >/dev/null 2>&1; then
+              ok=1; echo "api+web up"; break
+            fi
             sleep 3
           done
-          echo "stack did not come up in time" && exit 1
+          [ "$ok" = 1 ] || { echo "api/web did not come up in time"; exit 1; }
+          # Dashboard is best-effort — warn but never fail the run if it's down.
+          dash=0
+          for i in $(seq 1 10); do
+            if curl -sf http://localhost:5173 >/dev/null 2>&1; then dash=1; echo "dashboard up"; break; fi
+            sleep 2
+          done
+          [ "$dash" = 1 ] || echo "::warning::admin dashboard not up — admin surfaces skipped/errored; web scan continues"
 
       - name: Restore queue + ledger from improver/state
         run: |
