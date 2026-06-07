@@ -36,6 +36,12 @@ STILL failing (each carries its `probe`, the failing `scenario`/`constraint`,
 and `fix_in` paths to start from). Set `surface_key` to "generation:<probe>",
 category "bug" or "content", and group related failures into one proposal.
 
+If `findings.json` has a non-empty `flow_failures` array, ALSO propose fixes —
+these are BROKEN USER JOURNEYS the harness drove end-to-end (each carries the
+`flow` name + the specific `issues`). They are high-signal: a real user cannot
+complete the journey. Set `surface_key` to "flow:<flow>", category "bug",
+severity "high", and cite the issue text.
+
 Rules: be specific (name the change, not "improve X"); each proposal small and
 independently shippable; NEVER touch auth, billing, or database schema; group
 related hits on one surface into one proposal; prefer 4-8 strong proposals over
@@ -55,12 +61,14 @@ def save_evidence(
     out_dir: Path,
     *,
     generation_failures: list[dict[str, object]] | None = None,
+    flow_failures: list[dict[str, object]] | None = None,
 ) -> Path:
     """Write screenshots + findings.json for the agent to judge. Returns the dir.
 
     `generation_failures` (the re-verified promoted-failure corpus from
-    `sources.corpus_failures`) is folded into findings.json so the plan-billed
-    judge proposes AI-generation fixes alongside the UI work."""
+    `sources.corpus_failures`) and `flow_failures` (broken user journeys from
+    `flows.run_flows`) are folded into findings.json so the plan-billed judge
+    proposes AI-generation and broken-journey fixes alongside the UI work."""
     shots = out_dir / "shots"
     shots.mkdir(parents=True, exist_ok=True)
     surfaces: list[dict[str, object]] = []
@@ -87,6 +95,7 @@ def save_evidence(
             for s in catalog
         ],
         "generation_failures": generation_failures or [],
+        "flow_failures": flow_failures or [],
     }
     (out_dir / "findings.json").write_text(json.dumps(findings, indent=2))
     (out_dir / "JUDGE_PROMPT.txt").write_text(JUDGE_PROMPT)
