@@ -66,7 +66,8 @@ async def _login_flow(browser: HarnessBrowser, web_base: str, seed: Seed) -> Flo
             await page.wait_for_url(lambda url: "/login" not in url, timeout=_TIMEOUT_MS)
         except PlaywrightTimeoutError:
             issues.append(
-                "login did not complete — still on /login after submitting valid credentials",
+                "login never left /login after submitting the seeded student's "
+                "credentials (server error, JS exception, or broken auth)",
             )
 
     return FlowResult("login", "Student login", not issues, issues)
@@ -95,8 +96,24 @@ async def run_flows(
 
 
 def flow_failures(results: list[FlowResult]) -> list[dict[str, object]]:
-    """The failed journeys, shaped as findings.json evidence for the judge."""
+    """The failed journeys, recorded in findings.json. NOT proposal evidence —
+    a broken journey usually lives on an auth/billing surface the agent must
+    never edit, so these are surfaced as a human alert (see flow_alert_md), not
+    fed to the fix pipeline."""
     return [
         {"flow": r.name, "title": r.title, "issues": r.issues}
         for r in results if not r.passed
     ]
+
+
+def flow_alert_md(failures: list[dict[str, object]]) -> str:
+    """A human alert for broken journeys — they page YOU rather than entering
+    the auto-fix queue, because the agent can't (and must not) edit auth/billing
+    code. Empty string when nothing broke (caller skips the alert)."""
+    if not failures:
+        return ""
+    lines = ["### ⚠️ Broken user journeys — needs your attention (not auto-fixable)"]
+    for f in failures:
+        issues = "; ".join(str(i) for i in (f.get("issues") or []))
+        lines.append(f"- **{f.get('title') or f.get('flow')}**: {issues}")
+    return "\n".join(lines)

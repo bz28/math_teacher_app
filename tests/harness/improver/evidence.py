@@ -36,11 +36,9 @@ STILL failing (each carries its `probe`, the failing `scenario`/`constraint`,
 and `fix_in` paths to start from). Set `surface_key` to "generation:<probe>",
 category "bug" or "content", and group related failures into one proposal.
 
-If `findings.json` has a non-empty `flow_failures` array, ALSO propose fixes —
-these are BROKEN USER JOURNEYS the harness drove end-to-end (each carries the
-`flow` name + the specific `issues`). They are high-signal: a real user cannot
-complete the journey. Set `surface_key` to "flow:<flow>", category "bug",
-severity "high", and cite the issue text.
+Do NOT create proposals for the `flow_failures` array — broken user journeys
+are surfaced to a human as an alert (they usually live on auth/billing surfaces
+the agent must never edit). Ignore them here.
 
 Rules: be specific (name the change, not "improve X"); each proposal small and
 independently shippable; NEVER touch auth, billing, or database schema; group

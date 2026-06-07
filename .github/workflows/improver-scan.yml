@@ -175,10 +175,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           DIGEST=$(python -m tests.harness improve digest 2>/dev/null || true)
-          if [ -z "$DIGEST" ] || echo "$DIGEST" | grep -q "No open proposals"; then
-            echo "no open proposals — skipping issue"; exit 0
+          # Broken user journeys aren't proposals (the agent can't edit
+          # auth/billing) — they ride along as a human alert at the top.
+          ALERT=$(python -m tests.harness improve flow-alert --dir "$IMPROVER_STATE_DIR/evidence" 2>/dev/null || true)
+          NO_PROPOSALS=$( { [ -z "$DIGEST" ] || echo "$DIGEST" | grep -q "No open proposals"; } && echo 1 || echo "" )
+          if [ -n "$NO_PROPOSALS" ] && [ -z "$ALERT" ]; then
+            echo "no proposals and no broken journeys — skipping issue"; exit 0
           fi
-          BODY=$(printf 'Autonomous improver run %s. Comment `approve <id>` to ship one (opens a PR, never merges) or `reject <id>` to drop it. Full screenshot report is in the run artifacts.\n\n%s' "$(date -u +%Y-%m-%dT%H:%MZ)" "$DIGEST")
+          BODY=$(printf 'Autonomous improver run %s. Comment `approve <id>` to ship one (opens a PR, never merges) or `reject <id>` to drop it. Full screenshot report is in the run artifacts.\n\n%s\n\n%s' "$(date -u +%Y-%m-%dT%H:%MZ)" "$ALERT" "$DIGEST")
           # Self-heal the label: a fresh repo (or a deleted label) would otherwise
           # make `gh issue create --label` fail and silently drop the whole digest.
           gh label create improver --color 5319e7 \

@@ -149,6 +149,11 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     lsc.add_argument("--limit", type=int, default=1000)
     lsc.add_argument("--max-size", default="M", choices=["S", "M", "L"])
 
+    fa = imp_sub.add_parser(
+        "flow-alert", help="print a human alert (markdown) for broken journeys in a gather dir",
+    )
+    fa.add_argument("--dir", required=True, help="gather evidence dir holding findings.json")
+
     imp_sub.add_parser("budget", help="show the improver's rolling-window budget usage")
     imp_sub.add_parser("proposals", help="list the durable proposal queue")
     imp_sub.add_parser("digest", help="explain-simple bullet plan of open proposals (markdown)")
@@ -507,6 +512,23 @@ def _run_improve_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_improve_flow_alert(args: argparse.Namespace) -> int:
+    """Print a human alert (markdown) for broken journeys recorded in a gather
+    dir's findings.json. Broken journeys aren't proposals (the agent can't edit
+    auth/billing), so the scan workflow folds this into the issue it files —
+    paging you. Empty output (and exit 0) when nothing broke."""
+    from tests.harness.improver.flows import flow_alert_md
+
+    try:
+        findings = json.loads((Path(args.dir) / "findings.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return 0
+    alert = flow_alert_md(findings.get("flow_failures") or [])
+    if alert:
+        print(alert)
+    return 0
+
+
 def _run_improve_llm_scan(args: argparse.Namespace) -> int:
     """Channel A: GET the backend's production LLM-call defects (service key via
     IMPROVER_API_KEY), turn each group into a deterministic fix Proposal in
@@ -733,6 +755,8 @@ def main(argv: list[str]) -> int:
             return _run_improve_gather(args)
         if improve_cmd == "ingest":
             return _run_improve_ingest(args)
+        if improve_cmd == "flow-alert":
+            return _run_improve_flow_alert(args)
         if improve_cmd == "llm-scan":
             return _run_improve_llm_scan(args)
         if improve_cmd == "execute":
