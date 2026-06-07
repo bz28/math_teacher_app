@@ -17,8 +17,8 @@ on:
   workflow_dispatch: # manual trigger for testing / on-demand scans
     inputs:
       max_surfaces:
-        description: "Cap surfaces (0 = all)"
-        default: "12"
+        description: "Cap surfaces (0 = all); 17 = 12 public web + 5 admin"
+        default: "17"
 
 permissions:
   contents: write # push the improver/state branch
@@ -41,6 +41,7 @@ jobs:
       HARNESS_LLM_MODE: auto
       HARNESS_API_BASE: http://localhost:8000/v1
       HARNESS_WEB_BASE: http://localhost:3000
+      HARNESS_ADMIN_BASE: http://localhost:5173
       IMPROVER_STATE_DIR: ${{ github.workspace }}/_improver_state
       NEXT_PUBLIC_API_URL: http://localhost:8000/v1
     services:
@@ -83,17 +84,39 @@ jobs:
           pnpm build
           (pnpm start -p 3000 &) # served at :3000
 
+      # Best-effort: the admin dashboard is lower-value than the web scan and a
+      # separate build, so a dashboard build/boot failure must NOT sink the run
+      # — continue-on-error keeps the web scan alive; admin surfaces then just
+      # record per-surface errors (caught in scan_surfaces).
+      - name: Build + serve the admin dashboard
+        working-directory: dashboard
+        continue-on-error: true
+        run: |
+          npm ci
+          npm run build                       # VITE_API_URL defaults to :8000/v1, which matches
+          (npm run preview -- --port 5173 --host 127.0.0.1 &) # served at :5173
+
       - name: Start the API (harness DB, cassette mode)
         run: (python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --log-level warning &)
 
-      - name: Wait for API + web to be healthy
+      - name: Wait for API + web (dashboard best-effort)
         run: |
+          ok=0
           for i in $(seq 1 60); do
-            curl -sf http://localhost:8000/v1/health >/dev/null 2>&1 && \
-            curl -sf http://localhost:3000 >/dev/null 2>&1 && echo "up" && exit 0
+            if curl -sf http://localhost:8000/v1/health >/dev/null 2>&1 \
+               && curl -sf http://localhost:3000 >/dev/null 2>&1; then
+              ok=1; echo "api+web up"; break
+            fi
             sleep 3
           done
-          echo "stack did not come up in time" && exit 1
+          [ "$ok" = 1 ] || { echo "api/web did not come up in time"; exit 1; }
+          # Dashboard is best-effort — warn but never fail the run if it's down.
+          dash=0
+          for i in $(seq 1 10); do
+            if curl -sf http://localhost:5173 >/dev/null 2>&1; then dash=1; echo "dashboard up"; break; fi
+            sleep 2
+          done
+          [ "$dash" = 1 ] || echo "::warning::admin dashboard not up — admin surfaces skipped/errored; web scan continues"
 
       - name: Restore queue + ledger from improver/state
         run: |
@@ -108,8 +131,8 @@ jobs:
       - name: Gather evidence ($0 — browser + detectors + screenshots, no LLM)
         run: |
           python -m tests.harness improve gather \
-            --dir "$IMPROVER_STATE_DIR/evidence" --apps web \
-            --max-surfaces "${{ github.event.inputs.max_surfaces || '12' }}"
+            --dir "$IMPROVER_STATE_DIR/evidence" --apps web,admin \
+            --max-surfaces "${{ github.event.inputs.max_surfaces || '17' }}"
 
       - name: Judge on the Claude plan (Claude Code headless)
         working-directory: ${{ env.IMPROVER_STATE_DIR }}/evidence
