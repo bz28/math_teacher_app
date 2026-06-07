@@ -71,36 +71,96 @@ def _surface_card(o: PageObservation) -> str:
     )
 
 
+async def deliver_harness_run(
+    fields: dict[str, object], *,
+    summary_db_url: str = "", summary_url: str = "", token: str = "",
+) -> bool:
+    """Write one HarnessRun row to the admin 'Harness Runs' tab, via whichever
+    transport is configured. Two paths: an HTTPS POST to the prod ingest
+    endpoint (``summary_url`` — used by CI, which can't reach prod Postgres) or
+    a direct DB insert (``summary_db_url`` — local runs). ``summary_url`` wins
+    when both are set. Best-effort — returns False, never raises."""
+    try:
+        if summary_url:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=15) as client:
+                r = await client.post(
+                    summary_url, json=fields, headers={"X-Harness-Token": token},
+                )
+            if r.status_code >= 300:
+                # Surface, don't swallow: a silent failure here is the exact
+                # "invisible runs" symptom this path exists to fix. The most
+                # likely cause is PROD_API_BASE missing the /v1 prefix (→ 404).
+                print(f"[harness-run] ingest POST {summary_url} -> {r.status_code}; "
+                      f"row not recorded (check PROD_API_BASE includes /v1 + token)")
+                return False
+            return True
+        if summary_db_url:
+            from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+            from api.models.harness_run import HarnessRun
+
+            engine = create_async_engine(summary_db_url)
+            try:
+                async with async_sessionmaker(engine, expire_on_commit=False)() as s:
+                    s.add(HarnessRun(**fields))
+                    await s.commit()
+            finally:
+                await engine.dispose()
+            return True
+        return False
+    except Exception as e:  # noqa: BLE001 — observability, never fatal
+        if summary_url:
+            print(f"[harness-run] ingest delivery to {summary_url} failed: {e!r}")
+        return False
+
+
 async def persist_scan_summary(
     *, scanned: int, total: int, hits: int, proposals: int,
-    report_html: str, cost_usd: float | None, mode: str, summary_db_url: str,
+    report_html: str, cost_usd: float | None, mode: str,
+    summary_db_url: str = "", summary_url: str = "", token: str = "",
 ) -> bool:
-    """Write one run-summary row per scan into the MAIN app DB so the admin
-    'Harness Runs' tab shows the improver alongside the harness (cost, proposal
-    count, surfaces, embedded report). Best-effort — never fails the scan."""
-    try:
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    """One run-summary row per scan so the admin 'Harness Runs' tab shows the
+    improver's ideation (cost, proposal count, surfaces, embedded report)."""
+    return await deliver_harness_run(
+        {
+            "probe": "improver", "mode": mode,
+            "items_generated": proposals, "captures": scanned,
+            "det_pass": scanned, "det_total": total,
+            "judge_count": 0, "judge_mean": None,
+            "cost_usd": cost_usd, "passed": scanned > 0,
+            "note": f"{proposals} proposals · {scanned}/{total} surfaces loaded · {hits} hits",
+            "report_html": report_html,
+        },
+        summary_db_url=summary_db_url, summary_url=summary_url, token=token,
+    )
 
-        from api.models.harness_run import HarnessRun
 
-        engine = create_async_engine(summary_db_url)
-        try:
-            async with async_sessionmaker(engine, expire_on_commit=False)() as s:
-                s.add(HarnessRun(
-                    probe="improver", mode=mode,
-                    items_generated=proposals, captures=scanned,
-                    det_pass=scanned, det_total=total,
-                    judge_count=0, judge_mean=None,
-                    cost_usd=cost_usd, passed=scanned > 0,
-                    note=f"{proposals} proposals · {scanned}/{total} surfaces loaded · {hits} hits",
-                    report_html=report_html,
-                ))
-                await s.commit()
-        finally:
-            await engine.dispose()
-        return True
-    except Exception:  # noqa: BLE001 — observability, never fatal
-        return False
+async def persist_execute_summary(
+    *, proposal_id: str, title: str, pr_url: str,
+    summary_db_url: str = "", summary_url: str = "", token: str = "",
+) -> bool:
+    """One row per executed (implemented) proposal so the tab shows fixes, not
+    just ideation. Plan-billed, so the dollar cost is unknown (null)."""
+    opened = bool(pr_url)
+    outcome = f"PR: {html.escape(pr_url)}" if opened else "No PR opened — see the run log."
+    report = (
+        f"<pre>Executed proposal {html.escape(proposal_id)}\n"
+        f"{html.escape(title)}\n\n{outcome}</pre>"
+    )
+    return await deliver_harness_run(
+        {
+            "probe": "improver", "mode": "execute",
+            "items_generated": 1, "captures": 0,
+            "det_pass": 1 if opened else 0, "det_total": 1,
+            "judge_count": 0, "judge_mean": None,
+            "cost_usd": None, "passed": opened,
+            "note": f"executed {proposal_id} · {pr_url or 'no PR opened'} · {title}",
+            "report_html": report,
+        },
+        summary_db_url=summary_db_url, summary_url=summary_url, token=token,
+    )
 
 
 def proposals_digest_md(proposals: list[dict[str, object]]) -> str:

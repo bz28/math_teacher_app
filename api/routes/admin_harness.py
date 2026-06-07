@@ -1,17 +1,26 @@
 """Admin endpoint: autonomous test-harness run history."""
 
+import secrets
 import uuid as uuid_lib
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.config import settings
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
+from api.middleware.rate_limit import limiter
 from api.models.harness_run import HarnessRun
 
 router = APIRouter()
+
+# Cap the remotely-writable report so a leaked ingest token can't bloat a row.
+# CI sends a few KB of text digest — screenshots stay in the run artifacts, not
+# here — so this is generous headroom, not a real constraint on honest callers.
+_MAX_REPORT_HTML = 512 * 1024
 
 
 def _serialize(r: HarnessRun) -> dict[str, Any]:
@@ -102,3 +111,60 @@ async def harness_run_report(
             status_code=status.HTTP_404_NOT_FOUND, detail="Report not found",
         )
     return {"html": row.report_html}
+
+
+class HarnessRunIngest(BaseModel):
+    """Run-summary payload for the service-authenticated ingest path. Fields map
+    1:1 to the writable HarnessRun columns; id + created_at are server-set."""
+
+    probe: str = Field(max_length=50)
+    mode: str = Field(max_length=20)
+    items_generated: int = 0
+    det_pass: int = 0
+    det_total: int = 0
+    captures: int = 0
+    judge_count: int = 0
+    judge_mean: float | None = None
+    cost_usd: float | None = None
+    passed: bool = False
+    note: str | None = None
+    prompt: str | None = None
+    report_html: str | None = None
+
+
+@router.post("/harness-runs/ingest", status_code=status.HTTP_201_CREATED)
+@limiter.limit("60/minute")
+async def ingest_harness_run(
+    request: Request,
+    payload: HarnessRunIngest,
+    x_harness_token: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Service-authenticated write path for the "Harness Runs" tab.
+
+    CI (GitHub Actions) can't open a Postgres connection to prod, so the
+    autonomous harness POSTs its run summary here instead of writing the row
+    directly. Guarded by a shared secret (``X-Harness-Token``), never a user
+    session — disabled (503) when the token isn't configured."""
+    token = settings.harness_ingest_token
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Harness ingest not configured",
+        )
+    # Compare as bytes: Starlette decodes headers as Latin-1, so a non-ASCII
+    # token would make compare_digest raise (→ 500) instead of cleanly failing.
+    supplied = (x_harness_token or "").encode("utf-8")
+    if not secrets.compare_digest(supplied, token.encode("utf-8")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid harness token",
+        )
+    if payload.report_html and len(payload.report_html) > _MAX_REPORT_HTML:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="report_html too large",
+        )
+    row = HarnessRun(**payload.model_dump())
+    db.add(row)
+    await db.commit()
+    return {"id": str(row.id)}

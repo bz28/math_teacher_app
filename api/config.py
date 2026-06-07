@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     github_dispatch_token: str = ""
     github_repo: str = "bz28/math_teacher_app"
 
+    # Harness ingest — shared secret that lets CI (GitHub Actions, which can't
+    # open a Postgres connection to prod) POST autonomous-harness run summaries
+    # to the admin "Harness Runs" tab over HTTPS. Empty token disables the
+    # endpoint (503).
+    harness_ingest_token: str = ""
+
     # Sentry
     sentry_dsn: str = ""
 

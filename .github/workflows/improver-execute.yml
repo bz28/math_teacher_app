@@ -94,10 +94,20 @@ jobs:
 
       - name: Mark done + report back
         if: always()
+        env:
+          # PROD_API_BASE must include the /v1 prefix — see improver-scan.yml.
+          INGEST_URL: ${{ vars.PROD_API_BASE }}
+          HARNESS_INGEST_TOKEN: ${{ secrets.HARNESS_INGEST_TOKEN }}
         run: |
           ID="${{ steps.brief.outputs.id }}"
-          python -m tests.harness improve done "$ID" 2>/dev/null || true
+          # Resolve the PR first so `improve done` can record it on the admin
+          # "Harness Runs" row (over HTTPS — CI can't reach prod Postgres).
           PR=$(gh pr list --search "improver/$ID in:head" --json url --jq '.[0].url' 2>/dev/null || true)
+          DONE_ARGS=("$ID" --pr "$PR")
+          if [ -n "$INGEST_URL" ] && [ -n "$HARNESS_INGEST_TOKEN" ]; then
+            DONE_ARGS+=(--summary-url "$INGEST_URL/admin/harness-runs/ingest")
+          fi
+          python -m tests.harness improve done "${DONE_ARGS[@]}" 2>/dev/null || true
           gh issue comment "${{ github.event.issue.number }}" --body "Execution for \`$ID\` finished. ${PR:+PR: $PR}${PR:-(no PR opened — see the run log)}"
 
       - name: Persist queue + ledger to improver/state

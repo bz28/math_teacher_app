@@ -120,11 +120,22 @@ jobs:
             --dangerously-skip-permissions --allowedTools "Read Write Bash"
 
       - name: Ingest plan-judged proposals (rank, dedupe, queue)
+        env:
+          # PROD_API_BASE must include the /v1 prefix (e.g.
+          # https://…up.railway.app/v1) — the route is /v1/admin/harness-runs/
+          # ingest, and a missing /v1 silently 404s every POST.
+          INGEST_URL: ${{ vars.PROD_API_BASE }}
+          HARNESS_INGEST_TOKEN: ${{ secrets.HARNESS_INGEST_TOKEN }}
         run: |
-          # --summary-db "" : CI can't reach the prod DB (local runs populate the
-          # admin "Harness Runs" tab). The GitHub issue + state ledger track CI.
-          python -m tests.harness improve ingest \
-            --dir "$IMPROVER_STATE_DIR/evidence" --summary-db ""
+          # CI can't open a Postgres connection to prod, so --summary-db "" and
+          # POST the run summary to the admin ingest endpoint over HTTPS instead
+          # (populates the "Harness Runs" tab). Only when both URL + token are
+          # set, so the scan never fails on a half-configured repo.
+          ARGS=(--dir "$IMPROVER_STATE_DIR/evidence" --summary-db "")
+          if [ -n "$INGEST_URL" ] && [ -n "$HARNESS_INGEST_TOKEN" ]; then
+            ARGS+=(--summary-url "$INGEST_URL/admin/harness-runs/ingest")
+          fi
+          python -m tests.harness improve ingest "${ARGS[@]}"
           cp -f "$IMPROVER_STATE_DIR/evidence/findings.json" "$IMPROVER_STATE_DIR/" 2>/dev/null || true
 
       - name: Upload the scan evidence (screenshots + findings + proposals)

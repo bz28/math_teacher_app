@@ -320,7 +320,11 @@ export default function HarnessRuns() {
             <iframe
               title="Harness report"
               srcDoc={reportHtml}
-              sandbox="allow-same-origin"
+              // Fully opaque sandbox: no scripts, no same-origin access. The
+              // report is now remotely writable (CI POSTs it through the ingest
+              // endpoint), so it's untrusted HTML. Self-contained inline CSS +
+              // base64 data-URI screenshots still render under this lockdown.
+              sandbox=""
               style={{ flex: 1, border: "none", width: "100%" }}
             />
           </div>
