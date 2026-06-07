@@ -276,6 +276,9 @@ async def llm_calls(
             {"id": str(r.id), "email": r.email}
             for r in user_rows
         ],
+        # Lets the dashboard build a "Debug results" link to the GitHub issue the
+        # debug agent files (labelled llm-debug, with the call id in its body).
+        "repo": settings.github_repo,
     }
 
 
@@ -523,4 +526,12 @@ async def debug_llm_call(
         raise HTTPException(
             status_code=502, detail=f"GitHub dispatch rejected ({status_code})",
         )
+    # Mark the call debugged so the dashboard shows its "Debug results" link only
+    # for calls actually dispatched. Reassign (not mutate) so SQLAlchemy flags
+    # the JSON column dirty.
+    call.call_metadata = {
+        **(call.call_metadata or {}),
+        "debug_dispatched_at": datetime.now(UTC).isoformat(),
+    }
+    await db.commit()
     return {"status": "dispatched", "call_id": str(call.id)}

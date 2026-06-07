@@ -63,8 +63,9 @@ jobs:
              It's fine to conclude 'no bug — output is correct'.
           3. Post a GitHub issue with \`gh issue create\` (label: llm-debug): title =
              '[debug] <function>: <one-line root cause or no-bug>', body = root cause +
-             a concrete suggested fix (file:line). Do NOT write code or open a PR —
-             this is investigate-and-report only.
+             a concrete suggested fix (file:line). END the body with the exact line
+             'Debugged call id: $CALL_ID' so the admin dashboard can link back to
+             this issue. Do NOT write code or open a PR — investigate-and-report only.
           4. Do NOT paste raw user content / PII into the issue beyond the minimal snippet
              needed to show the bug.
           Then stop and print the issue URL."
