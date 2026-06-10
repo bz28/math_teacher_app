@@ -17,6 +17,7 @@ import IndependentStudents from "./pages/IndependentStudents";
 import IndependentTeachers from "./pages/IndependentTeachers";
 import TeacherDetail from "./pages/TeacherDetail";
 import Admins from "./pages/Admins";
+import AuditLogs from "./pages/AuditLogs";
 import SubmissionTrace from "./pages/SubmissionTrace";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/admins" element={<Admins />} />
 
           {/* Diagnostics. */}
+          <Route path="/audit-logs" element={<AuditLogs />} />
           <Route path="/llm-calls" element={<LLMCalls />} />
           <Route path="/harness-runs" element={<HarnessRuns />} />
           <Route path="/quality" element={<Quality />} />
