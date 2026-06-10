@@ -81,8 +81,13 @@ async def _logout_flow(browser: HarnessBrowser, web_base: str, seed: Seed) -> Fl
     issues: list[str] = []
     async with browser.authed_page(seed.student_token, seed.student_refresh) as page:
         await page.goto(
+            # domcontentloaded, not networkidle (which _login_flow already uses):
+            # /home is a chatty SPA and networkidle can time out on a still-open
+            # connection, which run_flows swallows — silently SKIPPING a real
+            # broken logout instead of reporting it. The Sign Out control is in
+            # the hydrated layout, so domcontentloaded is enough to find it.
             f"{web_base.rstrip('/')}/home",
-            wait_until="networkidle", timeout=_TIMEOUT_MS,
+            wait_until="domcontentloaded", timeout=_TIMEOUT_MS,
         )
         try:
             await page.click("button:has-text('Sign Out')", timeout=_TIMEOUT_MS)

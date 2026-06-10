@@ -33,9 +33,12 @@ _SEVERITY_WEIGHT = {"high": 3.0, "medium": 2.0, "low": 1.0}
 # auto-merges). This just keeps obviously-risky proposals out of the queue.
 # Substring (no \b) on stems so "authentication"/"oauth"/"schemas"/"migrations"
 # match; over-blocking a few innocents (e.g. "author") is the safe side.
+# logout/sign-out/session sit alongside login: the flow-test arm surfaces broken
+# logout journeys, and while those never become proposals directly, this is the
+# secondary net if the judge ever authored one off that evidence.
 _FORBIDDEN = re.compile(
-    r"(schema|migrat|auth|login|password|billing|payment|stripe|token|secret"
-    r"|credential|checkout|subscription|paywall)",
+    r"(schema|migrat|auth|login|logout|sign.?out|session|password|billing"
+    r"|payment|stripe|token|secret|credential|checkout|subscription|paywall)",
     re.I,
 )
 
