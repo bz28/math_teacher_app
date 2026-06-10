@@ -46,10 +46,18 @@ related hits on one surface into one proposal; prefer 4-8 strong proposals over
 a long mediocre list.
 
 Write `proposals.json` as a JSON array; each item:
-  {{ "surface_key": str, "title": str (imperative),
+  {{ "surface_key": str, "defect_key": str, "title": str (imperative),
      "category": one of {CATEGORIES}, "severity": "high"|"medium"|"low",
      "rationale": str (cite the evidence), "change": str (the specific change),
      "est_size": one of {SIZES}, "confidence": number 0..1 }}
+
+`defect_key` is a canonical lowercase '<category>/<defect>' slug (e.g.
+"a11y/link-in-text-block", "bug/404-shared-asset"). It is the dedup anchor:
+reuse the SAME key for the SAME underlying defect every run, and list ALL
+affected surfaces in `surface_key` (comma-separated) on that one proposal —
+do NOT emit a separate proposal per surface for the same defect. The key must
+not vary with the wording of the title.
+
 Then stop — `improve ingest` will rank, dedupe, and queue them."""
 
 
