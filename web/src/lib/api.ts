@@ -350,24 +350,18 @@ async function refreshAccessToken(): Promise<RefreshResult> {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
-    // Cookie-first: the HttpOnly refresh cookie travels automatically
-    // with credentials:include, so we don't read from localStorage.
-    // If the cookie is missing or expired, the server returns 401 and
-    // we map it to auth_rejected like any other invalid-credentials
-    // result. Body is empty — backend accepts either path.
+    const rt = getRefreshToken();
+    if (!rt) return "auth_rejected" as const;
     try {
       const res = await fetch(`${BASE_URL}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-        credentials: "include",
+        body: JSON.stringify({ refresh_token: rt }),
       });
       if (res.status === 401) return "auth_rejected" as const;
       if (!res.ok) return "transient_error" as const;
-      // Server set fresh HttpOnly cookies on the response; no need to
-      // saveTokens(). We still parse the body so any future caller
-      // that wants the token strings can find them.
-      await res.json().catch(() => ({}));
+      const data: TokenPair = await res.json();
+      saveTokens(data);
       return "success" as const;
     } catch {
       return "transient_error" as const;
@@ -390,13 +384,10 @@ async function apiFetch<T>(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
-  // Cookie-first auth: the browser sends the HttpOnly access cookie
-  // automatically with credentials:include. We no longer attach an
-  // Authorization Bearer header here — that path remains in mobile's
-  // separate API client (mobile/src/services/api.ts) because
-  // expo-secure-store isn't cookie-based.
+  const token = getAccessToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(fetchOpts.headers as Record<string, string> | undefined),
   };
 
@@ -406,7 +397,6 @@ async function apiFetch<T>(
       ...fetchOpts,
       headers,
       signal: controller.signal,
-      credentials: "include",
     });
   } catch (e) {
     // `fetch` only rejects when the request never received a response
@@ -534,14 +524,6 @@ export const auth = {
    *  data-access requirement. */
   myData() {
     return apiFetch<Record<string, unknown>>("/auth/my-data");
-  },
-
-  /** Server-side logout — clears HttpOnly auth cookies. The caller
-   *  should also clear local token storage via clearTokens() to
-   *  fully sign out across the dual-path (cookie + localStorage)
-   *  auth model. */
-  logout() {
-    return apiFetch<void>("/auth/logout", { method: "POST" });
   },
 
   me() {
@@ -1196,8 +1178,9 @@ export const teacher = {
   async exportGradesCSV(courseId: string, sectionId?: string): Promise<void> {
     const qs = sectionId ? `?section_id=${sectionId}` : "";
     const path = `/teacher/courses/${courseId}/grades/export.csv${qs}`;
+    const token = getAccessToken();
     const res = await fetch(`${BASE_URL}${path}`, {
-      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) {
       throw new ApiError(res.status, await res.json().catch(() => ({})));

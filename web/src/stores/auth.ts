@@ -3,7 +3,9 @@
 import { create } from "zustand";
 import {
   auth as authApi,
+  saveTokens,
   clearTokens,
+  hasStoredTokens,
   isMfaChallenge,
   ApiError,
   type User,
@@ -66,20 +68,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   pendingMfa: null,
 
   async loadUser() {
-    // Cookie-first restore: HttpOnly cookies aren't visible to JS, so
-    // we can't synchronously probe whether the user is logged in.
-    // Always attempt /auth/me; the request carries the cookie via
-    // credentials:"include". The legacy `hasStoredTokens()` gate
-    // would falsely report "not logged in" for any cookie-only
-    // session (e.g. localStorage cleared, signed in on another tab).
+    if (!hasStoredTokens()) {
+      set({ loading: false });
+      return;
+    }
     try {
       const user = await authApi.me();
       set({ user, loading: false });
     } catch (err) {
-      // Only clear local token state on definitive auth rejection
-      // (401). Network errors and server errors leave any legacy
-      // localStorage tokens intact so a transient failure doesn't
-      // force a re-login.
+      // Only clear tokens on definitive auth rejection (401).
+      // Network errors and server errors leave tokens intact so the
+      // user isn't logged out by a transient failure.
       const isAuthError = err instanceof ApiError && err.status === 401;
       if (isAuthError) {
         clearTokens();
@@ -99,10 +98,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         });
         return { mfa_required: true };
       }
-      // Cookie carries auth — the server already set HttpOnly cookies
-      // on the response. Skipping saveTokens(): localStorage tokens
-      // would be a dead-write (apiFetch no longer reads them) and an
-      // unnecessary XSS surface. Mobile clients have their own store.
+      saveTokens(result);
       const user = await authApi.me();
       set({ user, loading: false });
       return { mfa_required: false };
@@ -121,9 +117,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     set({ loading: true, error: null });
     try {
-      // Cookies set on the response carry auth; don't save tokens
-      // to localStorage. See login() for rationale.
-      await authApi.loginVerifyMfa(pending.mfaPendingToken, code);
+      const tokens = await authApi.loginVerifyMfa(pending.mfaPendingToken, code);
+      saveTokens(tokens);
       const user = await authApi.me();
       set({ user, loading: false, pendingMfa: null });
     } catch (err) {
@@ -153,9 +148,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   async register(data) {
     set({ loading: true, error: null });
     try {
-      // Cookies set on the response carry auth; don't save tokens
-      // to localStorage. See login() for rationale.
-      await authApi.register(data);
+      const tokens = await authApi.register(data);
+      saveTokens(tokens);
       const user = await authApi.me();
       set({ user, loading: false });
     } catch (err) {
@@ -167,11 +161,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout() {
-    // Fire-and-forget the server logout so HttpOnly cookies get
-    // cleared. A failure here is non-fatal — local token state is
-    // cleared synchronously below, and the cookies expire eventually
-    // anyway. Don't await; the user expects an instant sign-out.
-    authApi.logout().catch(() => {});
     clearTokens();
     set({ user: null, loading: false, error: null, pendingMfa: null });
   },

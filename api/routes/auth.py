@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,7 +50,7 @@ from api.core.mfa import (
     verify_code,
 )
 from api.database import get_db
-from api.middleware.auth import COOKIE_ACCESS, COOKIE_REFRESH, get_current_user_full
+from api.middleware.auth import get_current_user_full
 from api.middleware.rate_limit import limiter
 from api.models.app_stat import AppStat
 from api.models.course import Course, CourseTeacher
@@ -81,51 +81,6 @@ from api.schemas.auth import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
-    """Issue HttpOnly + Secure + SameSite=Lax cookies for both tokens.
-
-    HttpOnly means JavaScript can't read them — an XSS on the marketing
-    site can't steal a teacher session the way it can with localStorage.
-    SameSite=Lax blocks most cross-site form-submission CSRF without
-    needing an explicit token. Secure is conditional on env so dev
-    over plain HTTP still works.
-
-    Set on /auth/login (no-MFA path), /auth/login/verify-mfa,
-    /auth/register, and /auth/refresh — every endpoint that hands out
-    a fresh token pair.
-    """
-    secure = settings.app_env != "development"
-    response.set_cookie(
-        key=COOKIE_ACCESS,
-        value=access_token,
-        max_age=settings.jwt_access_token_expire_minutes * 60,
-        httponly=True,
-        secure=secure,
-        samesite="lax",
-        path="/",
-    )
-    response.set_cookie(
-        key=COOKIE_REFRESH,
-        value=refresh_token,
-        max_age=settings.jwt_refresh_token_expire_days * 24 * 60 * 60,
-        httponly=True,
-        secure=secure,
-        samesite="lax",
-        path="/",
-    )
-
-
-def _clear_auth_cookies(response: Response) -> None:
-    """Set expired cookies on the same path so the browser drops them.
-
-    Called on logout and account deletion. Pairing path="/" with the
-    same name we set them with is required — different path means
-    different cookie identity.
-    """
-    response.delete_cookie(COOKIE_ACCESS, path="/")
-    response.delete_cookie(COOKIE_REFRESH, path="/")
 
 
 @router.post("/check-email")
@@ -179,7 +134,6 @@ async def validate_section_invite(token: str, db: AsyncSession = Depends(get_db)
 async def register(
     request: Request,
     body: RegisterRequest,
-    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     # COPPA gate before any DB work. Runs first so an under-13 attempting
@@ -372,7 +326,6 @@ async def register(
             ),
         ))
 
-    _set_auth_cookies(response, access_token, refresh_token)
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
@@ -479,7 +432,6 @@ async def _load_section_invite(
 async def login(
     request: Request,
     body: LoginRequest,
-    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse | MfaChallengeResponse:
     """Verify password, optionally issue an MFA challenge.
@@ -528,7 +480,6 @@ async def login(
 
     access_token = create_access_token(str(user.id), user.role)
     refresh_token = await create_refresh_token(db, user.id)
-    _set_auth_cookies(response, access_token, refresh_token)
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
@@ -537,7 +488,6 @@ async def login(
 async def login_verify_mfa(
     request: Request,
     body: LoginVerifyMfaRequest,
-    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     """Complete an MFA login by submitting the emailed 6-digit code.
@@ -613,7 +563,6 @@ async def login_verify_mfa(
 
     access_token = create_access_token(str(user.id), user.role)
     refresh_token = await create_refresh_token(db, user.id)
-    _set_auth_cookies(response, access_token, refresh_token)
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
@@ -659,32 +608,12 @@ async def mfa_disable(
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(
-    request: Request,
-    response: Response,
-    body: RefreshRequest | None = None,
-    db: AsyncSession = Depends(get_db),
-) -> TokenResponse:
-    # Cookie-first refresh path: browsers send the refresh cookie
-    # automatically, so the body can be empty. Mobile / API clients
-    # continue to pass {refresh_token: ...} explicitly.
-    refresh_token_value = (body.refresh_token if body else None) or request.cookies.get(COOKIE_REFRESH)
-    if not refresh_token_value:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token")
-    result = await rotate_refresh_token(db, refresh_token_value)
+async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+    result = await rotate_refresh_token(db, body.refresh_token)
     if result is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
     access_token, new_refresh, _ = result
-    _set_auth_cookies(response, access_token, new_refresh)
     return TokenResponse(access_token=access_token, refresh_token=new_refresh)
-
-
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(response: Response) -> None:
-    """Clear auth cookies. Stateless — nothing on the server to revoke
-    here since refresh tokens are independently expired on use; this
-    just makes the browser drop the cookies it has."""
-    _clear_auth_cookies(response)
 
 
 @router.get("/me", response_model=UserResponse)
