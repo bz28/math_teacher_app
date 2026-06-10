@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import html
 import json
 import os
 import sys
@@ -475,8 +474,12 @@ def _run_improve_ingest(args: argparse.Namespace) -> int:
 
     props = load_proposals(Path(args.dir))
     if not props:
-        print(f"[improve:ingest] no usable proposals.json in {args.dir}")
-        return 1
+        # No proposals is the HEALTHY case for the LLM-defect channel (0 prod
+        # defects) and a valid one for the UI scan (a clean app). It's a no-op,
+        # not a failure — returning non-zero here painted every defect-free run
+        # red on the 6-hourly cron.
+        print(f"[improve:ingest] no proposals to ingest in {args.dir} — nothing to do")
+        return 0
     queue = Queue.load()
     ranked = merge([rank_filter(props, max_size=args.max_size)], seen_ids=queue.seen_ids())
     added = queue.add(ranked)
@@ -493,11 +496,13 @@ def _run_improve_ingest(args: argparse.Namespace) -> int:
         from tests.harness.improver.proposals import to_dict
 
         # This run's OWN proposals (matches the ITEMS=len(added) column on the
-        # row); the full open backlog lives on the GitHub issue. html.escape so
-        # proposals that literally mention tags (e.g. "<ul>") render as text in
-        # the report's <pre>, not as parsed markup that the browser swallows.
+        # row); the full open backlog lives on the GitHub issue.
         run_props = [to_dict(p) for p in added]
-        digest_html = f"<pre>{html.escape(proposals_digest_md(run_props))}</pre>"
+        # proposals_digest_md already escapes its dynamic fields, so the only
+        # raw markup left is the static scaffolding (###, backticks) — which is
+        # exactly what we want shown verbatim in the <pre>. Re-escaping here
+        # would double-encode (&lt; → &amp;lt;) and show entities to the user.
+        digest_html = f"<pre>{proposals_digest_md(run_props)}</pre>"
         asyncio.run(persist_scan_summary(
             scanned=scanned, total=len(surfaces), hits=hits, proposals=len(added),
             report_html=digest_html, cost_usd=None, mode="plan",

@@ -173,12 +173,20 @@ def proposals_digest_md(proposals: list[dict[str, object]]) -> str:
         v = d.get("score", 0)
         return float(v) if isinstance(v, (int, float)) else 0.0
 
+    # Proposal prose routinely names HTML tags (e.g. "wrap each <li> in a <ul>").
+    # GitHub renders issue bodies as markdown-with-HTML, so an unescaped <ul>
+    # gets parsed as a real (empty) list element and the words vanish. Escape
+    # the free-text fields; the id sits inside `backticks` (literal) and the
+    # enum/number fields can't contain markup.
+    def esc(v: object) -> str:
+        return html.escape(str(v), quote=False)
+
     cards = []
     for p in sorted(proposals, key=_score, reverse=True):
         cards.append(
-            f"### {p.get('title')}  `{p.get('id')}`\n"
-            f"- **What:** {p.get('change')}\n"
-            f"- **Why:** {p.get('rationale')}\n"
+            f"### {esc(p.get('title'))}  `{p.get('id')}`\n"
+            f"- **What:** {esc(p.get('change'))}\n"
+            f"- **Why:** {esc(p.get('rationale'))}\n"
             f"- **Size / risk:** {p.get('est_size')} · {p.get('category')} · {p.get('severity')} "
             f"(confidence {p.get('confidence')})\n"
             f"- **Approve:** comment `approve {p.get('id')}`  ·  **Skip:** `reject {p.get('id')}`"
