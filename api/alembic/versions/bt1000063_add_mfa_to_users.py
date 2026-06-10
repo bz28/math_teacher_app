@@ -1,7 +1,7 @@
 """add MFA columns to users
 
-Revision ID: br1000061
-Revises: bq1000060
+Revision ID: bt1000063
+Revises: bs1000062
 Create Date: 2026-05-23 00:00:00.000000
 
 Adds email-based MFA support. Login flow:
@@ -30,8 +30,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "br1000061"
-down_revision: str | None = "bq1000060"
+revision: str = "bt1000063"
+down_revision: str | None = "bs1000062"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

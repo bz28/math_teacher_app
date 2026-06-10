@@ -1,7 +1,7 @@
 """add admin_audit_log table
 
-Revision ID: bt1000063
-Revises: bs1000062
+Revision ID: bv1000065
+Revises: bu1000064
 Create Date: 2026-05-23 00:00:00.000000
 
 Records administrative actions that mutate accounts, roles, or other
@@ -19,8 +19,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "bt1000063"
-down_revision: str | None = "bs1000062"
+revision: str = "bv1000065"
+down_revision: str | None = "bu1000064"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

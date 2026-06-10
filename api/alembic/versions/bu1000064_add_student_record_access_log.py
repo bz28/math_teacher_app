@@ -1,7 +1,7 @@
 """add student_record_access_log table for FERPA audit trail
 
-Revision ID: bs1000062
-Revises: br1000061
+Revision ID: bu1000064
+Revises: bt1000063
 Create Date: 2026-05-23 00:00:00.000000
 
 FERPA requires schools to maintain a record of disclosures of and
@@ -22,8 +22,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "bs1000062"
-down_revision: str | None = "br1000061"
+revision: str = "bu1000064"
+down_revision: str | None = "bt1000063"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
