@@ -180,22 +180,15 @@ jobs:
           ALERT=$(python -m tests.harness improve flow-alert --dir "$IMPROVER_STATE_DIR/evidence" 2>/dev/null || true)
           NO_PROPOSALS=$( { [ -z "$DIGEST" ] || echo "$DIGEST" | grep -q "No open proposals"; } && echo 1 || echo "" )
           if [ -n "$NO_PROPOSALS" ] && [ -z "$ALERT" ]; then
-            echo "no proposals and no broken journeys — skipping issue"; exit 0
+            echo "no proposals and no broken journeys — leaving the backlog as-is"; exit 0
           fi
-          BODY=$(printf 'Autonomous improver run %s. Comment `approve <id>` to ship one (opens a PR, never merges) or `reject <id>` to drop it. Full screenshot report is in the run artifacts.\n\n%s\n\n%s' "$(date -u +%Y-%m-%dT%H:%MZ)" "$ALERT" "$DIGEST")
-          # Self-heal the label: a fresh repo (or a deleted label) would otherwise
-          # make `gh issue create --label` fail and silently drop the whole digest.
-          gh label create improver --color 5319e7 \
-            --description "Autonomous improver proposals" 2>/dev/null || true
-          # Create first, then assign best-effort: a bot-filed unassigned issue
-          # is silent under the default watch setting, so assign the owner to
-          # notify them — but never let an assign failure (org-owned repo,
-          # transient API error) drop the whole digest issue.
-          URL=$(gh issue create --repo "$GITHUB_REPOSITORY" \
-            --title "Improver proposals — $(date -u +%Y-%m-%d)" \
-            --label improver --body "$BODY") || { echo "issue create skipped"; URL=""; }
-          [ -n "$URL" ] && gh issue edit "$URL" \
-            --add-assignee "${{ github.repository_owner }}" 2>/dev/null || true
+          # Upsert the single living "Improver backlog" issue (carry-forward:
+          # the body is the WHOLE open queue, rewritten in place each run). The
+          # broken-journey alert goes via ALERT_BODY → a COMMENT, so the later
+          # LLM-defect scan's body overwrite can't clobber it.
+          printf 'Open improver proposals — refreshed %s. Comment `approve <id>` to ship one (opens a PR, never merges) or `reject <id>` to drop it. Unfixed proposals carry forward here until you act on them. Full screenshot report is in the latest scan run artifacts.\n\n%s' \
+            "$(date -u +%Y-%m-%dT%H:%MZ)" "$DIGEST" \
+            | ALERT_BODY="$ALERT" bash tests/harness/improver/file_backlog.sh
 
       - name: Persist queue + ledger to improver/state
         if: always()
