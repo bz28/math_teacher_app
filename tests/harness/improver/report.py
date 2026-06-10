@@ -163,9 +163,18 @@ async def persist_execute_summary(
     )
 
 
+# Section order for the digest. The scarce, high-intent PRODUCT proposals
+# (features, content-quality) come first so they're never buried under the wall
+# of mechanical a11y/bug fixes that objective detectors generate in bulk — the
+# whole reason those two arms looked "dead" was that they sorted to the bottom.
+# Unknown categories fall to the end, alphabetically.
+_DIGEST_SECTION_ORDER = ["feature", "content", "bug", "a11y", "visual", "performance"]
+
+
 def proposals_digest_md(proposals: list[dict[str, object]]) -> str:
     """Explain-simple bullet plan for the proposals you approve from — readable
-    on a phone, one card each. Used as the GitHub-issue body in the cloud loop."""
+    on a phone, grouped by category so features/content stay visible. Used as
+    the GitHub-issue body in the cloud loop."""
     if not proposals:
         return "_No open proposals._"
 
@@ -181,9 +190,8 @@ def proposals_digest_md(proposals: list[dict[str, object]]) -> str:
     def esc(v: object) -> str:
         return html.escape(str(v), quote=False)
 
-    cards = []
-    for p in sorted(proposals, key=_score, reverse=True):
-        cards.append(
+    def _card(p: dict[str, object]) -> str:
+        return (
             f"### {esc(p.get('title'))}  `{p.get('id')}`\n"
             f"- **What:** {esc(p.get('change'))}\n"
             f"- **Why:** {esc(p.get('rationale'))}\n"
@@ -191,7 +199,19 @@ def proposals_digest_md(proposals: list[dict[str, object]]) -> str:
             f"(confidence {p.get('confidence')})\n"
             f"- **Approve:** comment `approve {p.get('id')}`  ·  **Skip:** `reject {p.get('id')}`"
         )
-    return "\n\n".join(cards)
+
+    buckets: dict[str, list[dict[str, object]]] = {}
+    for p in proposals:
+        buckets.setdefault(str(p.get("category") or "other"), []).append(p)
+    ordered = [c for c in _DIGEST_SECTION_ORDER if c in buckets]
+    ordered += sorted(c for c in buckets if c not in _DIGEST_SECTION_ORDER)
+
+    census = " · ".join(f"{len(buckets[c])} {c}" for c in ordered)
+    out = [f"**{len(proposals)} open** — {census}"]
+    for c in ordered:
+        cards = "\n\n".join(_card(p) for p in sorted(buckets[c], key=_score, reverse=True))
+        out.append(f"## {c.capitalize()} ({len(buckets[c])})\n\n{cards}")
+    return "\n\n".join(out)
 
 
 def write_scan_report(

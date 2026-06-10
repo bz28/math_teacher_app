@@ -76,6 +76,23 @@ def test_forbidden_catches_inflected_auth_schema_terms() -> None:
     assert not _p("Fix nav overflow", change="tighten the gap").forbidden
 
 
+def test_digest_groups_by_category_and_escapes_tags() -> None:
+    from tests.harness.improver.proposals import to_dict
+    from tests.harness.improver.report import proposals_digest_md
+
+    a11y = to_dict(_p("Wrap each <li> in a <ul>", change="fix the <ul>", conf=0.95))
+    a11y["category"] = "a11y"
+    feature = to_dict(_p("Add a dashboard filter", conf=0.4))
+    feature["category"] = "feature"
+    md = proposals_digest_md([a11y, feature])
+    # Product proposals surface above the a11y wall, regardless of (lower) score.
+    assert md.index("## Feature") < md.index("## A11y")
+    # The census line counts both buckets.
+    assert "1 feature" in md and "1 a11y" in md
+    # Literal tags are escaped so GitHub renders them as text, not real elements.
+    assert "&lt;li&gt;" in md and "<li>" not in md
+
+
 def test_dedupe_and_merge() -> None:
     a = _p("Fix the list", defect_key="a11y/list")
     b = _p("Underline links", defect_key="a11y/links")
