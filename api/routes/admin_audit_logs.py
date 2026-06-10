@@ -28,7 +28,7 @@ from api.models.admin_audit_log import AdminAuditLog
 from api.models.student_record_access_log import StudentRecordAccessLog
 from api.models.user import User
 
-router = APIRouter()
+router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 async def _name_map(
