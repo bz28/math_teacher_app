@@ -55,7 +55,7 @@ from api.middleware.rate_limit import limiter
 from api.models.app_stat import AppStat
 from api.models.course import Course, CourseTeacher
 from api.models.llm_call import LLMCall
-from api.models.school import School
+from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.section_invite import SectionInvite
@@ -240,13 +240,6 @@ async def register(
         if section_course and section_course.school_id is not None:
             school_id = section_course.school_id
 
-    # Teacher self-signup is now allowed (no invite required). A solo
-    # teacher lands here with role=teacher and no invite/section/join
-    # token — we let them through. They get school_id=NULL, which
-    # makes the entitlement layer treat them as an independent free
-    # teacher (daily generation cap applies). The teacher-via-invite
-    # branch above still sets school_id when an invite is present.
-
     # Join code (student): validate up-front so we don't create a user if
     # the code is bad. Mutually exclusive with invite flows (either invite
     # already picked the section/school, or the student is self-signing up).
@@ -275,6 +268,25 @@ async def register(
         # with a leaked join code to escalate into a teacher attached
         # to that school. Mirrors the section_invite override above.
         role = "student"
+
+    # Teacher self-signup with no invite/section/join token: provision a
+    # synthetic personal school so every teacher (and any student who
+    # later joins their section) has a stamped school_id. Entitlements
+    # still cap them via the `kind='individual'` signal, and the
+    # ck_users_school_required_for_teacher CHECK constraint requires a
+    # non-NULL school_id for teachers.
+    if role == "teacher" and school_id is None:
+        display_name = body.name.strip() or body.email.split("@")[0]
+        personal_school = School(
+            name=f"{display_name}'s classroom",
+            kind=SCHOOL_KIND_INDIVIDUAL,
+            contact_name=display_name,
+            contact_email=body.email,
+            is_active=True,
+        )
+        db.add(personal_school)
+        await db.flush()
+        school_id = personal_school.id
 
     user = User(
         email=body.email,
