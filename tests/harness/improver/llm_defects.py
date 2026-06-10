@@ -95,6 +95,9 @@ def defects_to_proposals(
             surface_key=f"llm:{fn}", title=title, category="bug",
             severity=severity, rationale=rationale, change=change,
             est_size="M", confidence=confidence,
+            # Canonical dedup anchor: one defect per (kind, function), stable
+            # across runs regardless of the count baked into the title.
+            defect_key=f"llm-{kind}/{fn}",
         ))
     return rank_filter(out, max_size=max_size)
 

@@ -17,18 +17,34 @@ from tests.harness.improver.state import Queue
 _NOW = datetime(2026, 6, 5, 12, 0, tzinfo=UTC)
 
 
-def _p(title: str, *, surface: str = "web.app.home", size: str = "S",
-       sev: str = "high", conf: float = 0.9, change: str = "x") -> Proposal:
+def _p(title: str, *, surface: str = "web.app.home", defect_key: str = "",
+       size: str = "S", sev: str = "high", conf: float = 0.9,
+       change: str = "x") -> Proposal:
     return Proposal(
         surface_key=surface, title=title, category="visual", severity=sev,
         rationale="r", change=change, est_size=size, confidence=conf,
+        # Default the dedup key to the title so callers that don't care about
+        # dedup get one id per distinct title (the old behaviour).
+        defect_key=defect_key or title,
     )
 
 
 # --- proposals ------------------------------------------------------------
 
-def test_id_stable_and_score_orders() -> None:
-    assert _p("Fix nav").id == _p("fix   nav").id  # normalized
+def test_id_keys_on_defect_not_wording() -> None:
+    # Same defect, reworded title → SAME id (the whole point of defect_key).
+    a = _p("Fix invalid list markup", defect_key="a11y/list")
+    b = _p("Repair broken <ul> nesting", defect_key="a11y/list")
+    assert a.id == b.id
+    # Same defect class, genuinely different surface → distinct ids.
+    landing = _p("x", surface="web.public.landing", defect_key="a11y/list")
+    admin = _p("x", surface="admin.quality", defect_key="a11y/list")
+    assert landing.id != admin.id
+    # The surface SET is order-independent (grouped multi-surface fixes).
+    assert _p("x", surface="b,a", defect_key="k").id == _p("x", surface="a,b", defect_key="k").id
+
+
+def test_score_orders() -> None:
     high = _p("a", size="S", sev="high", conf=1.0)   # 1*3/1 = 3.0
     low = _p("b", size="L", sev="low", conf=1.0)     # 1*1/3 ≈ 0.33
     assert high.score > low.score
@@ -61,12 +77,13 @@ def test_forbidden_catches_inflected_auth_schema_terms() -> None:
 
 
 def test_dedupe_and_merge() -> None:
-    a, b = _p("A"), _p("B")
-    dup = _p("a")  # same id as A
-    assert {p.title for p in dedupe([a, b, dup], set())} == {"A", "B"}
+    a = _p("Fix the list", defect_key="a11y/list")
+    b = _p("Underline links", defect_key="a11y/links")
+    dup = _p("Repair list markup", defect_key="a11y/list")  # reworded a → same id
+    assert {p.title for p in dedupe([a, b, dup], set())} == {"Fix the list", "Underline links"}
     assert dedupe([a], {a.id}) == []  # already seen
     merged = merge([[b], [a]])  # merge ranks the union
-    assert {p.title for p in merged} == {"A", "B"}
+    assert {p.defect_key for p in merged} == {"a11y/list", "a11y/links"}
 
 
 # --- budget ---------------------------------------------------------------
@@ -96,10 +113,12 @@ def test_execute_cap_and_spend_ceiling(tmp_path) -> None:  # type: ignore[no-unt
 
 def test_queue_add_dedupes_and_status(tmp_path) -> None:  # type: ignore[no-untyped-def]
     q = Queue.load(tmp_path)
-    added = q.add([_p("A"), _p("B"), _p("a")], now=_NOW)    # 'a' dupes 'A'
+    # third entry reworded but same defect_key as the first → deduped on add.
+    added = q.add([_p("A", defect_key="k1"), _p("B", defect_key="k2"),
+                   _p("a", defect_key="k1")], now=_NOW)
     assert {p.title for p in added} == {"A", "B"}
-    assert q.add([_p("A")], now=_NOW) == []                 # already queued
-    aid = _p("A").id
+    assert q.add([_p("A", defect_key="k1")], now=_NOW) == []  # already queued
+    aid = _p("A", defect_key="k1").id
     assert q.set_status(aid, "approved", now=_NOW)
     assert [it.id for it in q.by_status("approved")] == [aid]
     reloaded = Queue.load(tmp_path).get(aid)  # persisted across reload

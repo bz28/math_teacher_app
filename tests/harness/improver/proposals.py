@@ -53,12 +53,28 @@ class Proposal:
     change: str  # the concrete proposed change
     est_size: str  # S | M | L
     confidence: float  # 0..1, the model's own confidence it's a real win
+    # Canonical, controlled-vocabulary slug for the underlying defect (e.g.
+    # "a11y/link-in-text-block"). The dedup anchor — see `id`. The author (LLM
+    # judge, or the deterministic miners) reuses the SAME key for the SAME
+    # defect across runs, even when the prose changes.
+    defect_key: str = ""
     evidence: list[str] = field(default_factory=list)
 
     @property
     def id(self) -> str:
-        """Stable signature so the same idea dedupes across runs."""
-        norm = re.sub(r"\s+", " ", f"{self.surface_key}:{self.title}".lower()).strip()
+        """Stable signature so the same defect dedupes across runs.
+
+        Keyed on the canonical ``defect_key`` plus the order-independent SET of
+        affected surfaces — NOT the free-text title, which the model rewords
+        every run ("invalid"/"malformed"/"broken list markup" → 4 ids for one
+        fix). Same defect + same surfaces → one id regardless of wording; the
+        same defect class on a genuinely different surface stays distinct.
+        Falls back to the title when no defect_key is set (legacy rows)."""
+        surfaces = ",".join(sorted(
+            s.strip() for s in self.surface_key.split(",") if s.strip()
+        ))
+        anchor = self.defect_key.strip() or self.title
+        norm = re.sub(r"\s+", " ", f"{surfaces}:{anchor}".lower()).strip()
         return hashlib.sha1(norm.encode()).hexdigest()[:12]
 
     @property
@@ -110,6 +126,12 @@ _SCHEMA: ToolSchema = {
                     "type": "object",
                     "properties": {
                         "surface_key": {"type": "string", "description": "which observed surface this is for"},
+                        "defect_key": {"type": "string", "description": (
+                            "canonical lowercase slug for the underlying defect, "
+                            "'<category>/<defect>', e.g. 'a11y/link-in-text-block', "
+                            "'bug/404-shared-asset'. Use the SAME key whenever you "
+                            "see the SAME defect — across surfaces and across runs — "
+                            "so reworded duplicates collapse.")},
                         "title": {"type": "string", "description": "short imperative title"},
                         "category": {"type": "string", "enum": CATEGORIES},
                         "severity": {"type": "string", "enum": ["high", "medium", "low"]},
@@ -118,8 +140,9 @@ _SCHEMA: ToolSchema = {
                         "est_size": {"type": "string", "enum": SIZES, "description": "S=<1h, M=half-day, L=bigger"},
                         "confidence": {"type": "number", "description": "0..1 that this is a real, worthwhile win"},
                     },
-                    "required": ["surface_key", "title", "category", "severity",
-                                 "rationale", "change", "est_size", "confidence"],
+                    "required": ["surface_key", "defect_key", "title", "category",
+                                 "severity", "rationale", "change", "est_size",
+                                 "confidence"],
                 },
             },
         },
@@ -136,7 +159,11 @@ _SYSTEM = (
     "shows an obvious gap, but keep them small. Be conservative with confidence: "
     "objective detector hits (console errors, a11y, overflow) are reliable; "
     "judge (UX) hits are softer. Never propose changes to database schema, auth, "
-    "or billing. Prefer 3-6 strong proposals over a long mediocre list."
+    "or billing. Prefer 3-6 strong proposals over a long mediocre list. "
+    "For each proposal set `defect_key` to a canonical '<category>/<defect>' "
+    "slug (e.g. 'a11y/link-in-text-block') and REUSE the same slug for the same "
+    "underlying defect every time — it is how duplicates are collapsed across "
+    "runs, so it must not vary with the wording of the title."
 )
 
 
@@ -191,6 +218,7 @@ def _coerce(p: dict[str, object]) -> Proposal:
         change=str(p.get("change", "")).strip(),
         est_size=est_size if est_size in SIZES else "M",
         confidence=min(1.0, max(0.0, confidence)),
+        defect_key=str(p.get("defect_key", "")).strip(),
     )
 
 
