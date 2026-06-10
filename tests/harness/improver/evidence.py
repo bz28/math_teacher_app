@@ -26,9 +26,14 @@ shippable improvements.
 
 For each surface: combine the objective detector hits (console errors, a11y,
 overflow, slow loads — high confidence) with what you SEE in its screenshot
-(spacing, hierarchy, contrast, affordances, copy, broken/empty states). You may
-also propose a few SMALL new features from the `catalog` where there's an
-obvious gap (mark those lower-confidence).
+(spacing, hierarchy, contrast, affordances, copy, broken/empty states).
+
+ALWAYS include 1-2 SMALL new-feature or product-gap ideas drawn from the
+`catalog` (category "feature", lower-confidence). Propose them IN ADDITION to
+the defect fixes, never instead of them — they are tracked in their own
+section and must not be skipped just because the objective a11y/bug hits are
+more numerous or higher-confidence. If a surface is genuinely featureless,
+say so in the rationale rather than omitting the idea entirely.
 
 If `findings.json` has a non-empty `generation_failures` array, ALSO propose
 fixes for those — they are AI-generation defects the harness re-verified as
