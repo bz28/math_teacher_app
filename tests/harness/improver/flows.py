@@ -74,11 +74,34 @@ async def _login_flow(browser: HarnessBrowser, web_base: str, seed: Seed) -> Flo
     return FlowResult("login", "Student login", not issues, issues)
 
 
+async def _logout_flow(browser: HarnessBrowser, web_base: str, seed: Seed) -> FlowResult:
+    """Authenticated → click Sign Out → land back on /login. Tests session
+    teardown end-to-end (auth-class, like login: a break here pages you, it is
+    never auto-fixed)."""
+    issues: list[str] = []
+    async with browser.authed_page(seed.student_token, seed.student_refresh) as page:
+        await page.goto(
+            f"{web_base.rstrip('/')}/home",
+            wait_until="networkidle", timeout=_TIMEOUT_MS,
+        )
+        try:
+            await page.click("button:has-text('Sign Out')", timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            issues.append("no Sign Out control found while authenticated on /home")
+            return FlowResult("logout", "Student logout", False, issues)
+        try:
+            await page.wait_for_url(lambda url: "/login" in url, timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            issues.append("Sign Out did not return to /login — logout may be broken")
+
+    return FlowResult("logout", "Student logout", not issues, issues)
+
+
 # Register new journeys here. Each returns a FlowResult; for a real app failure
 # append an issue, but RAISE on unexpected infra errors so run_flows drops them.
-# (Deferred: the practice journey needs an LLM-generated batch + multi-page
-# entry — verify it can't flake before adding it.)
-_FLOWS = (_login_flow,)
+# (Deferred: the practice/learn journeys need LLM generation + a queue-based
+# multi-page entry — a real build + a per-scan cost decision, not a quick add.)
+_FLOWS = (_login_flow, _logout_flow)
 
 
 async def run_flows(
