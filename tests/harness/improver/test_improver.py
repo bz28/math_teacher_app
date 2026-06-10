@@ -49,7 +49,11 @@ def test_forbidden_catches_inflected_auth_schema_terms() -> None:
     # Regression for the cold-review finding: \b boundaries missed these.
     for change in ("rework authentication", "add authorization checks",
                    "edit two schemas", "add a migration", "use OAuth",
-                   "tweak the checkout", "subscription paywall copy"):
+                   "tweak the checkout", "subscription paywall copy",
+                   # logout/session journeys: the flow-test arm surfaces these,
+                   # so the secondary net must cover them too (not just login).
+                   "fix the logout redirect", "Sign Out button broken",
+                   "clear the user session"):
         assert _p("x", change=change).forbidden, change
     # And the surface itself is scanned, not just title/change.
     assert _p("Tidy the form", surface="web.public.login", change="spacing").forbidden

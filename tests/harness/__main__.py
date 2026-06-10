@@ -123,6 +123,8 @@ def _parse(argv: list[str]) -> argparse.Namespace:
                         help="skip the AI-output quality corpus (keeps gather strictly $0)")
     gather.add_argument("--no-verify-corpus", action="store_true",
                         help="don't re-run the corpus against the live generator (use it as-is)")
+    gather.add_argument("--no-flows", action="store_true",
+                        help="skip the browser flow tests (login etc.)")
     gather.add_argument("--ignore-budget", action="store_true")
 
     ingest = imp_sub.add_parser("ingest", help="load plan-judged proposals.json -> rank, dedupe, queue, dashboard")
@@ -146,6 +148,11 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     lsc.add_argument("--hours", type=int, default=24, help="window when no watermark exists yet")
     lsc.add_argument("--limit", type=int, default=1000)
     lsc.add_argument("--max-size", default="M", choices=["S", "M", "L"])
+
+    fa = imp_sub.add_parser(
+        "flow-alert", help="print a human alert (markdown) for broken journeys in a gather dir",
+    )
+    fa.add_argument("--dir", required=True, help="gather evidence dir holding findings.json")
 
     imp_sub.add_parser("budget", help="show the improver's rolling-window budget usage")
     imp_sub.add_parser("proposals", help="list the durable proposal queue")
@@ -414,10 +421,19 @@ def _run_improve_gather(args: argparse.Namespace) -> int:
         }.items() if v
     }
 
-    async def _exec() -> tuple[list[PageObservation], list[dict[str, object]], float | None]:
+    async def _exec() -> tuple[
+        list[PageObservation], list[dict[str, object]], list[dict[str, object]], float | None,
+    ]:
         seed = await seed_world()
+        flow_fails: list[dict[str, object]] = []
         async with HarnessBrowser(args.web_base) as browser:
             observations = await scan_surfaces(browser, surfaces, bases, seed, judge=False)
+            # Flow tests reuse the same browser + seed (web journeys only).
+            if not args.no_flows and "web" in bases:
+                from tests.harness.improver.flows import flow_failures, run_flows
+                flow_fails = flow_failures(
+                    await run_flows(browser, args.web_base, seed),
+                )
         failures: list[dict[str, object]] = []
         cost: float | None = 0.0
         if not args.no_content:
@@ -427,9 +443,9 @@ def _run_improve_gather(args: argparse.Namespace) -> int:
                 verify=not args.no_verify_corpus, mode=args.mode,
             )
             cost = await run_cost(args.mode, started)
-        return observations, failures, cost
+        return observations, failures, flow_fails, cost
 
-    obs, gen_failures, cost = asyncio.run(_exec())
+    obs, gen_failures, flow_fails, cost = asyncio.run(_exec())
     # Re-verifying the corpus against the live generator is API-billed in
     # record/auto — never log $0 on a billable run or the 7d $ cap degrades to
     # the scan-count cap alone (mirrors `improve scan`).
@@ -437,8 +453,12 @@ def _run_improve_gather(args: argparse.Namespace) -> int:
         cost = 0.0 if args.mode == "replay" else 0.50
     note = "plan-path gather (no LLM)" if args.no_content else "plan-path gather (+corpus re-verify)"
     ledger.record("scan", cost_usd=cost, note=note)
-    out = save_evidence(obs, surfaces, Path(args.dir), generation_failures=gen_failures)
+    out = save_evidence(
+        obs, surfaces, Path(args.dir),
+        generation_failures=gen_failures, flow_failures=flow_fails,
+    )
     extra = f", {len(gen_failures)} still-failing generation case(s)" if gen_failures else ""
+    extra += f", {len(flow_fails)} broken flow(s)" if flow_fails else ""
     print(f"\n[improve:gather] {evidence_summary(out)}{extra} → {out}")
     print(f"next: judge on your plan — read {out}/JUDGE_PROMPT.txt + the shots, write "
           f"{out}/proposals.json, then `improve ingest --dir {out}`")
@@ -489,6 +509,25 @@ def _run_improve_ingest(args: argparse.Namespace) -> int:
     for p in ranked[:12]:
         print(f"  [{p.score:.2f}] {p.est_size}/{p.severity:<6} {p.category:<11} {p.id}  {p.title}")
     print(f"queue: {queue.path}")
+    return 0
+
+
+def _run_improve_flow_alert(args: argparse.Namespace) -> int:
+    """Print a human alert (markdown) for broken journeys recorded in a gather
+    dir's findings.json. Broken journeys aren't proposals (the agent can't edit
+    auth/billing), so the scan workflow folds this into the issue it files —
+    paging you. Empty output (and exit 0) when nothing broke."""
+    from tests.harness.improver.flows import flow_alert_md
+
+    try:
+        findings = json.loads((Path(args.dir) / "findings.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return 0
+    if not isinstance(findings, dict):
+        return 0
+    alert = flow_alert_md(findings.get("flow_failures") or [])
+    if alert:
+        print(alert)
     return 0
 
 
@@ -718,6 +757,8 @@ def main(argv: list[str]) -> int:
             return _run_improve_gather(args)
         if improve_cmd == "ingest":
             return _run_improve_ingest(args)
+        if improve_cmd == "flow-alert":
+            return _run_improve_flow_alert(args)
         if improve_cmd == "llm-scan":
             return _run_improve_llm_scan(args)
         if improve_cmd == "execute":
