@@ -93,21 +93,13 @@ jobs:
         run: |
           DIGEST=$(python -m tests.harness improve digest 2>/dev/null || true)
           if [ -z "$DIGEST" ] || echo "$DIGEST" | grep -q "No open proposals"; then
-            echo "no open proposals — skipping issue"; exit 0
+            echo "no open proposals — leaving the backlog as-is"; exit 0
           fi
-          BODY=$(printf 'Autonomous improver (production LLM-call defects) %s. Comment `approve <id>` to ship one (opens a PR, never merges) or `reject <id>` to drop it.\n\n%s' "$(date -u +%Y-%m-%dT%H:%MZ)" "$DIGEST")
-          # Self-heal the label so a fresh repo can't silently drop the digest.
-          gh label create improver --color 5319e7 \
-            --description "Autonomous improver proposals" 2>/dev/null || true
-          # Create first, then assign best-effort: a bot-filed unassigned issue
-          # is silent under the default watch setting, so assign the owner to
-          # notify them — but never let an assign failure (org-owned repo,
-          # transient API error) drop the whole digest issue.
-          URL=$(gh issue create --repo "$GITHUB_REPOSITORY" \
-            --title "Improver — prod LLM defects $(date -u +%Y-%m-%d)" \
-            --label improver --body "$BODY") || { echo "issue create skipped"; URL=""; }
-          [ -n "$URL" ] && gh issue edit "$URL" \
-            --add-assignee "${{ github.repository_owner }}" 2>/dev/null || true
+          # Upsert the single shared "Improver backlog" issue — both channels
+          # write to one queue, so `improve digest` is the whole open backlog.
+          printf 'Open improver proposals — refreshed %s. Comment `approve <id>` to ship one (opens a PR, never merges) or `reject <id>` to drop it. Unfixed proposals carry forward here until you act on them.\n\n%s' \
+            "$(date -u +%Y-%m-%dT%H:%MZ)" "$DIGEST" \
+            | bash tests/harness/improver/file_backlog.sh
 
       # The watermark rides on the shared improver/state branch. The UI scan /
       # execute orphan-commit only proposals.json + ledger.json, so they may wipe
