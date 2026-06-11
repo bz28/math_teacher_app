@@ -70,6 +70,19 @@ jobs:
         id: brief
         env:
           COMMENT_BODY: ${{ github.event.comment.body }} # via env, never inlined into the shell
+          # `improve approve`/`execute` import the harness, which imports
+          # api.config.Settings — that validates these fields at import time even
+          # though approve/execute make NO database or LLM calls (they only read
+          # the queue and write a brief). Placeholders satisfy the import;
+          # nothing connects. Without them the step crashed on a Settings
+          # ValidationError and no PR was ever opened.
+          #
+          # Deliberately step-scoped, NOT job-level: a real CLAUDE_API_KEY in the
+          # `claude -p` step could make the coding agent bill the metered API
+          # instead of the plan token (CLAUDE_CODE_OAUTH_TOKEN). Keep it here.
+          DATABASE_URL: postgresql+asyncpg://placeholder/unused
+          JWT_SECRET: improver-execute-unused
+          CLAUDE_API_KEY: unused-no-llm-calls-in-this-step
         run: |
           # tr -cd keeps only hex so the id is safe; COMMENT_BODY comes in as an
           # env var (never inlined into this script) — that closes the
