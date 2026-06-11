@@ -93,6 +93,42 @@ def test_digest_groups_by_category_and_escapes_tags() -> None:
     assert "&lt;li&gt;" in md and "<li>" not in md
 
 
+def test_digest_bounds_body_for_large_backlog() -> None:
+    """Regression: a large carried-forward backlog rendered verbose blew past
+    GitHub's 65,536-char issue-body limit, so the create/edit was silently
+    rejected and no backlog issue ever appeared. max_chars must bound the body
+    while keeping EVERY proposal listed and the high-value ones shown in full."""
+    from tests.harness.improver.proposals import to_dict
+    from tests.harness.improver.report import proposals_digest_md
+
+    props = []
+    for i in range(20):
+        # Some titles are long (no hard cap on title length) — the reserve must
+        # be computed from the real one-liner length, not a constant, or the
+        # tail gets dropped by the final truncate guard.
+        title = f"a11y fix {i} " + ("very long title token " * 10 if i % 3 == 0 else "")
+        p = to_dict(_p(title.strip(), change="A" * 500, conf=0.5))
+        p["category"] = "a11y"
+        p["rationale"] = "why " * 80
+        props.append(p)
+    feature = to_dict(_p("Important product feature", change="F" * 500, conf=0.9))
+    feature["category"] = "feature"
+    feature["rationale"] = "why " * 80
+    props.append(feature)
+
+    full = proposals_digest_md(props)                       # unbounded
+    bounded = proposals_digest_md(props, max_chars=12000)
+
+    assert len(full) > 12000, "test setup: verbose render should overflow"
+    assert len(bounded) <= 12000, "bounded body must fit the budget"
+    # Every proposal is still listed (full card or one-liner) — nothing dropped.
+    for p in props:
+        assert f"`{p['id']}`" in bounded
+    # The scarce feature proposal is shown in FULL (What/Why inline), not buried
+    # under the a11y wall.
+    assert f"`{feature['id']}`\n- **What:**" in bounded
+
+
 def test_dedupe_and_merge() -> None:
     a = _p("Fix the list", defect_key="a11y/list")
     b = _p("Underline links", defect_key="a11y/links")
