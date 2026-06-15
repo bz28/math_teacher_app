@@ -7,5 +7,23 @@
     ],
     "adversarial": true,
     "rationale": "Probes two known failure modes simultaneously: the near-degenerate sliver geometry collapses interior angles close to 0\u00b0 and 180\u00b0 (risking label-overlap and stroke-scaling breakdown), while the excessively long side labels stress-test clipping and layout on a figure with almost no interior space."
+  },
+  {
+    "name": "Near-Degenerate Sliver Triangle",
+    "constraint": "Generate a triangle question using ASA with angles 2\u00b0 and 3\u00b0 and included side 10; label all three sides and all three angles; ask for the missing side lengths.",
+    "expected_shapes": [
+      "triangle"
+    ],
+    "adversarial": true,
+    "rationale": "A triangle with angles 2\u00b0, 3\u00b0, 175\u00b0 is an extreme sliver. This stresses stroke scaling, label overlap/clipping on the two nearly-collinear sides, and whether the right-angle mark is incorrectly injected."
+  },
+  {
+    "name": "Inconsistent SSS + False Right-Angle Mark",
+    "constraint": "Generate a triangle question using SSS with sides 5, 5, 12 (violates triangle inequality) AND apply a right-angle mark at the vertex between the two sides of length 5; ask for area.",
+    "expected_shapes": [
+      "triangle"
+    ],
+    "adversarial": true,
+    "rationale": "5+5 < 12 breaks the triangle inequality, and the right-angle mark contradicts any realizable geometry. Tests whether the system detects the inconsistency, refuses gracefully, or silently renders nonsense."
   }
 ]
