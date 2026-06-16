@@ -23,6 +23,16 @@ TITLE="Improver backlog"
 BODY="$(cat)"
 ALERT_BODY="${ALERT_BODY:-}"
 
+# Hard safety net: GitHub rejects issue bodies over 65,536 chars. The digest
+# renderer already bounds itself (compact fallback for a large backlog), but
+# cap here too so an oversized body always posts (truncated) rather than the
+# create/edit being rejected. Leave margin under the limit for multibyte chars.
+MAX_BODY=65000
+if [ "${#BODY}" -gt "$MAX_BODY" ]; then
+  BODY="${BODY:0:$MAX_BODY}"
+  BODY+=$'\n\n_…truncated to fit the GitHub issue-body limit — full list is in the scan run artifacts._'
+fi
+
 # Self-heal the label so a fresh repo (or a deleted label) can't drop the issue.
 gh label create improver --color 5319e7 \
   --description "Autonomous improver proposals" 2>/dev/null || true
@@ -34,15 +44,18 @@ NUM="$(gh issue list --repo "$GITHUB_REPOSITORY" --label improver --state open \
   --jq "map(select(.title==\"$TITLE\")) | .[0].number // empty" 2>/dev/null || true)"
 
 if [ -n "$NUM" ]; then
+  # Surface a failed refresh as a CI warning (not silent) — a green run that
+  # quietly never updated the backlog is how this stayed broken for days.
   gh issue edit "$NUM" --repo "$GITHUB_REPOSITORY" --body "$BODY" >/dev/null \
-    && echo "refreshed backlog issue #$NUM" || echo "backlog refresh skipped"
+    && echo "refreshed backlog issue #$NUM" \
+    || echo "::warning::improver backlog refresh failed for issue #$NUM (API error or body too large)"
 else
   # Create, then assign best-effort: a bot-filed unassigned issue is silent
   # under the default watch setting, so assign the owner to notify them — but
   # never let an assign failure drop the whole issue.
   URL="$(gh issue create --repo "$GITHUB_REPOSITORY" \
     --title "$TITLE" --label improver --body "$BODY")" \
-    || { echo "backlog create skipped"; exit 0; }
+    || { echo "::warning::improver backlog create failed (API error or body too large)"; exit 0; }
   echo "created backlog issue $URL"
   NUM="${URL##*/}"  # trailing path segment is the issue number
   gh issue edit "$URL" --repo "$GITHUB_REPOSITORY" \
