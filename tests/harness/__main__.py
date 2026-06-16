@@ -312,7 +312,11 @@ def _run_improve_queue(args: argparse.Namespace) -> int:
     if cmd == "digest":
         from tests.harness.improver.report import proposals_digest_md
         open_props = [it.proposal for it in queue.by_status("proposed")]
-        print(proposals_digest_md(open_props))
+        # Bound the digest for the GitHub-issue body. Issue bodies are hard-
+        # capped at 65,536 chars; the scan workflow prepends a ~280-char header
+        # before this digest, and file_backlog.sh applies a final byte-cap — so
+        # leave margin here. Over budget → hybrid (all proposals still listed).
+        print(proposals_digest_md(open_props, max_chars=64000))
         return 0
 
     if cmd == "proposals":

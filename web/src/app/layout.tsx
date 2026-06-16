@@ -182,8 +182,8 @@ export default function RootLayout({
         <ToastProvider>
           <AuthProvider>{children}</AuthProvider>
         </ToastProvider>
-        <Analytics />
-        <SpeedInsights />
+        {process.env.VERCEL && <Analytics />}
+        {process.env.VERCEL && <SpeedInsights />}
         {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && (
           <>
             <Script
