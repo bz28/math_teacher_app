@@ -171,10 +171,21 @@ async def persist_execute_summary(
 _DIGEST_SECTION_ORDER = ["feature", "content", "bug", "a11y", "visual", "performance"]
 
 
-def proposals_digest_md(proposals: list[dict[str, object]]) -> str:
+def proposals_digest_md(
+    proposals: list[dict[str, object]], max_chars: int | None = None
+) -> str:
     """Explain-simple bullet plan for the proposals you approve from — readable
     on a phone, grouped by category so features/content stay visible. Used as
-    the GitHub-issue body in the cloud loop."""
+    the GitHub-issue body in the cloud loop.
+
+    `max_chars` bounds the output for the GitHub-issue body (issue bodies are
+    hard-capped at 65,536 chars; a large carried-forward backlog blows past it
+    and the create/edit is silently rejected). When the full verbose digest
+    would exceed the budget, fall back to a compact one-line-per-proposal
+    listing so EVERY proposal stays visible and approvable — the full detail
+    lives in the scan run's artifacts. Pass None (the default) to never bound
+    it (e.g. the per-run HTML report, which isn't subject to the issue limit).
+    """
     if not proposals:
         return "_No open proposals._"
 
@@ -200,18 +211,72 @@ def proposals_digest_md(proposals: list[dict[str, object]]) -> str:
             f"- **Approve:** comment `approve {p.get('id')}`  ·  **Skip:** `reject {p.get('id')}`"
         )
 
+    def _line(p: dict[str, object]) -> str:
+        # One scannable line — id, severity, title — small enough that the whole
+        # backlog fits the issue-body budget. Detail is in the run artifacts.
+        return f"- `{p.get('id')}` **{p.get('severity')}** — {esc(p.get('title'))}"
+
     buckets: dict[str, list[dict[str, object]]] = {}
     for p in proposals:
         buckets.setdefault(str(p.get("category") or "other"), []).append(p)
     ordered = [c for c in _DIGEST_SECTION_ORDER if c in buckets]
     ordered += sorted(c for c in buckets if c not in _DIGEST_SECTION_ORDER)
-
     census = " · ".join(f"{len(buckets[c])} {c}" for c in ordered)
-    out = [f"**{len(proposals)} open** — {census}"]
+
+    def _render(row, header, sep):
+        out = [header]
+        for c in ordered:
+            body = sep.join(row(p) for p in sorted(buckets[c], key=_score, reverse=True))
+            out.append(f"## {c.capitalize()} ({len(buckets[c])})\n\n{body}")
+        return "\n\n".join(out)
+
+    verbose = _render(_card, f"**{len(proposals)} open** — {census}", "\n\n")
+    if max_chars is None or len(verbose) <= max_chars:
+        return verbose
+
+    # Over budget: hybrid. Walk proposals in display order (feature/content
+    # first, then by score) giving each a full card until the budget is nearly
+    # spent, then one-liners for the rest — keeping a reserve so the remaining
+    # proposals are ALWAYS renderable as compact lines within budget. You get
+    # the full What/Why inline for the high-value proposals; the mechanical bulk
+    # stays a scannable list. Full detail for any item is in the scan run
+    # artifacts or `improve show <id>`.
+    # Reserve room for the not-yet-rendered tail using the ACTUAL longest
+    # one-liner (titles have no hard length cap), so a verbose card is only
+    # taken when every remaining proposal is still guaranteed to fit as a
+    # compact line. A constant upper bound would under-reserve for unusually
+    # long titles and could drop the tail.
+    max_line = max((len(_line(p)) + 2 for p in proposals), default=2)
+    header = (
+        f"**{len(proposals)} open** — {census}\n\n"
+        "_Top proposals shown in full; the rest are one-liners so the whole "
+        "backlog fits one issue. Full What/Why for any item: the latest scan "
+        "run's artifacts or `improve show <id>`. Comment `approve <id>` / "
+        "`reject <id>`._"
+    )
+    total = len(proposals)
+    remaining = max_chars - len(header) - 64  # slack for headers/separators
+    out = [header]
+    seen = 0
     for c in ordered:
-        cards = "\n\n".join(_card(p) for p in sorted(buckets[c], key=_score, reverse=True))
-        out.append(f"## {c.capitalize()} ({len(buckets[c])})\n\n{cards}")
-    return "\n\n".join(out)
+        rows = []
+        for p in sorted(buckets[c], key=_score, reverse=True):
+            reserve = (total - seen - 1) * max_line
+            card = _card(p)
+            if len(card) + 2 <= remaining - reserve:
+                rows.append(card)
+                remaining -= len(card) + 2
+            else:
+                line = _line(p)
+                rows.append(line)
+                remaining -= len(line) + 2
+            seen += 1
+        out.append(f"## {c.capitalize()} ({len(buckets[c])})\n\n" + "\n\n".join(rows))
+    body = "\n\n".join(out)
+    if len(body) > max_chars:  # pathological titles — final guard
+        footer = "\n\n_…truncated — full list in the scan run artifacts._"
+        body = body[: max(0, max_chars - len(footer))].rstrip() + footer
+    return body
 
 
 def write_scan_report(
