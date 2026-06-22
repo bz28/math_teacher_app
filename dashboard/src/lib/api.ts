@@ -269,6 +269,10 @@ export const api = {
   harnessReport: (id: string) => request<{ html: string }>(`/admin/harness-runs/${id}/report`),
   quality: (params?: Record<string, string>) => request<QualityData>("/admin/quality", params),
   users: (params?: Record<string, string>) => request<UsersData>("/admin/users", params),
+  studentAccessLog: (params?: Record<string, string>) =>
+    request<StudentAccessLogData>("/admin/audit-logs/student-access", params),
+  adminActionLog: (params?: Record<string, string>) =>
+    request<AdminActionLogData>("/admin/audit-logs/admin-actions", params),
   updateUserRole: (userId: string, role: string) => mutate<{ status: string }>(`/admin/users/${userId}/role`, "PATCH", { role }),
   deleteUser: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}`, "DELETE"),
   updateUserSubscription: (userId: string, tier: string, status: string) =>
@@ -703,5 +707,50 @@ export interface UsersData {
       submissions_30d: number;
     };
   }[];
+}
+
+// ── Audit logs ──
+
+export interface StudentAccessLogEntry {
+  id: string;
+  accessor_user_id: string | null;
+  accessor_name: string | null;
+  accessor_email: string | null;
+  accessor_role: string;
+  target_student_id: string | null;
+  target_student_name: string | null;
+  record_type: string;
+  record_id: string | null;
+  school_id: string | null;
+  ip_address: string | null;
+  accessed_at: string;
+}
+
+export interface StudentAccessLogData {
+  total: number;
+  limit: number;
+  offset: number;
+  entries: StudentAccessLogEntry[];
+}
+
+export interface AdminActionLogEntry {
+  id: string;
+  admin_user_id: string | null;
+  admin_name: string | null;
+  admin_email: string | null;
+  admin_role: string;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  metadata: Record<string, unknown> | null;
+  ip_address: string | null;
+  performed_at: string;
+}
+
+export interface AdminActionLogData {
+  total: number;
+  limit: number;
+  offset: number;
+  entries: AdminActionLogEntry[];
 }
 
