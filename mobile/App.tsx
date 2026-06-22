@@ -19,8 +19,10 @@ import { PaywallScreen } from "./src/components/PaywallScreen";
 import { SessionReviewScreen } from "./src/components/SessionReviewScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
 import { SolveScreen } from "./src/components/SolveScreen";
+import { TeacherGateScreen } from "./src/components/TeacherGateScreen";
 import { useColors } from "./src/theme";
-import { clearAuth, fetchAndStoreUserId, getUserId, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
+import { clearAuth, fetchMe, getUserId, getUserRole, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
+import { decideLanding } from "./src/utils/routing";
 import { initRevenueCat } from "./src/services/revenuecat";
 import { useEntitlementStore } from "./src/stores/entitlements";
 import { useOnboardingFlags } from "./src/stores/onboardingFlags";
@@ -29,7 +31,7 @@ import { useSessionStore } from "./src/stores/session";
 import { loadThemePref } from "./src/stores/themePref";
 import { ONBOARDING_KEY } from "./src/constants/storageKeys";
 
-type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "weak-spots";
+type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "weak-spots" | "teacher-gate";
 
 const TAB_SCREENS: Screen[] = ["solve", "history-list", "weak-spots", "account"];
 const SCREEN_TO_TAB: Record<string, TabKey> = {
@@ -82,14 +84,21 @@ function AppRoot() {
         return;
       }
       const restored = await loadStoredAuth();
-      if (restored) {
-        const userId = getUserId();
-        if (userId) {
-          await initRevenueCat(userId).catch(() => {});
-        }
-        fetchEntitlements().catch(() => {});
+      if (!restored) {
+        setScreen("auth");
+        return;
       }
-      setScreen(restored ? "solve" : "auth");
+      // Teachers/admins get the web-app gate, not the student UI.
+      if (decideLanding(getUserRole()) === "teacher-gate") {
+        setScreen("teacher-gate");
+        return;
+      }
+      const userId = getUserId();
+      if (userId) {
+        await initRevenueCat(userId).catch(() => {});
+      }
+      fetchEntitlements().catch(() => {});
+      setScreen("solve");
     });
   }, [fetchEntitlements, initializeOnboardingFlags]);
 
@@ -119,8 +128,16 @@ function AppRoot() {
       <SafeAreaProvider>
         <AuthScreen
           onAuth={async (justRegistered) => {
+            // Resolve role before routing so a teacher who signs in lands
+            // on the gate, not the student UI. Registration is always a
+            // student, so we skip the role check on that path.
+            const me = await fetchMe();
+            if (!justRegistered && decideLanding(me?.role) === "teacher-gate") {
+              setScreen("teacher-gate");
+              return;
+            }
             setScreen("solve");
-            const userId = getUserId() ?? await fetchAndStoreUserId();
+            const userId = me?.id ?? getUserId();
             // Await init for new registrations so the post-signup paywall
             // doesn't open before RC is configured — otherwise getOfferings
             // throws and the trial pitch silently collapses to "Subscribe
@@ -138,7 +155,20 @@ function AppRoot() {
               usePaywallStore.getState().show("post_signup");
             }
           }}
+          onTeacherGate={() => setScreen("teacher-gate")}
           defaultToRegister={fromOnboarding}
+        />
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    );
+  } else if (screen === "teacher-gate") {
+    screenNode = (
+      <SafeAreaProvider>
+        <TeacherGateScreen
+          onLogout={async () => {
+            await clearAuth();
+            setScreen("auth");
+          }}
         />
         <StatusBar style="auto" />
       </SafeAreaProvider>
