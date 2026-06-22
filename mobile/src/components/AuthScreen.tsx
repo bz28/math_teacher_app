@@ -21,6 +21,7 @@ import { LoginForm } from "./LoginForm";
 import { useFadeInUp } from "../hooks/useFadeInUp";
 import { checkEmail, register, saveTokens, saveUserName } from "../services/api";
 import { errorMessage } from "../utils/errorMessage";
+import { normalizeJoinCode } from "../utils/joinCode";
 import { useColors, useGradients, spacing, radii, typography, gradients, type ColorPalette } from "../theme";
 
 interface AuthScreenProps {
@@ -57,6 +58,7 @@ export function AuthScreen({ onAuth, onTeacherGate, defaultToRegister = false }:
   const [age, setAge] = useState<number>(DEFAULT_AGE);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [joinCode, setJoinCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +90,8 @@ export function AuthScreen({ onAuth, onTeacherGate, defaultToRegister = false }:
       const normalizedEmail = email.trim().toLowerCase();
       await checkEmail(normalizedEmail);
       const gradeLevel = ageToGradeLevel(age);
-      const resp = await register(normalizedEmail, password, name.trim(), gradeLevel);
+      const code = normalizeJoinCode(joinCode);
+      const resp = await register(normalizedEmail, password, name.trim(), gradeLevel, code || undefined);
       await saveTokens(resp.access_token, resp.refresh_token);
       await saveUserName(name.trim());
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -146,6 +149,8 @@ export function AuthScreen({ onAuth, onTeacherGate, defaultToRegister = false }:
     onEmailChange={setEmail}
     password={password}
     onPasswordChange={setPassword}
+    joinCode={joinCode}
+    onJoinCodeChange={setJoinCode}
     showPassword={showPassword}
     onTogglePassword={() => setShowPassword(!showPassword)}
     loading={loading}
@@ -319,12 +324,14 @@ function AgeStep({ name, age, onAgeChange, onNext, onBack, stepNumber }: {
 
 /* ── Step 3: Credentials ──────────────────────────────────── */
 
-function CredentialsStep({ name, email, onEmailChange, password, onPasswordChange, showPassword, onTogglePassword, loading, error, onSubmit, onBack, onSwitch, stepNumber }: {
+function CredentialsStep({ name, email, onEmailChange, password, onPasswordChange, joinCode, onJoinCodeChange, showPassword, onTogglePassword, loading, error, onSubmit, onBack, onSwitch, stepNumber }: {
   name: string;
   email: string;
   onEmailChange: (v: string) => void;
   password: string;
   onPasswordChange: (v: string) => void;
+  joinCode: string;
+  onJoinCodeChange: (v: string) => void;
   showPassword: boolean;
   onTogglePassword: () => void;
   loading: boolean;
@@ -402,6 +409,22 @@ function CredentialsStep({ name, email, onEmailChange, password, onPasswordChang
               />
             </TouchableOpacity>
           </View>
+
+          <View style={styles.inputWrap}>
+            <Ionicons name="school-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              value={joinCode}
+              onChangeText={(v) => onJoinCodeChange(v.toUpperCase())}
+              placeholder="Class code (optional)"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              placeholderTextColor={colors.textMuted}
+            />
+          </View>
+          <Text style={styles.joinHint}>
+            Have a code from your teacher? Enter it to join your class.
+          </Text>
 
           {error && <ErrorRow message={error} />}
 
@@ -489,6 +512,12 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     fontSize: 15,
     color: colors.textSecondary,
     textAlign: "center",
+  },
+  joinHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: -spacing.sm,
+    paddingHorizontal: spacing.xs,
   },
 
   // Form

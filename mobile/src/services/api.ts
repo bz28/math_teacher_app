@@ -434,12 +434,22 @@ export const login = (email: string, password: string) =>
 export const checkEmail = (email: string) =>
   apiPost<{ available: boolean }>("/auth/check-email", { email });
 
-export const register = (email: string, password: string, name: string, gradeLevel: number) =>
+export const register = (
+  email: string,
+  password: string,
+  name: string,
+  gradeLevel: number,
+  joinCode?: string,
+) =>
   apiPost<{ access_token: string; refresh_token: string }>("/auth/register", {
     email,
     password,
     name,
     grade_level: gradeLevel,
+    // Only sent when the student entered a class code. The backend then
+    // enrolls them in that section and stamps school_id (and the code
+    // satisfies the COPPA school-consent exception for under-13s).
+    ...(joinCode ? { join_code: joinCode } : {}),
   });
 
 export const forgotPassword = (email: string) =>
