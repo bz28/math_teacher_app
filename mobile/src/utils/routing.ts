@@ -2,18 +2,22 @@
 // imports) so it's unit-testable without a render harness — App.tsx
 // calls it after login and after token restore to pick the first screen.
 
-export type Landing = "teacher-gate" | "solve";
+export type Landing = "teacher-gate" | "school-home" | "solve";
 
 /**
  * Where a freshly-authenticated user should land.
  *
- * Teachers and admins have no mobile surface yet — the dashboard lives
- * on the web — so they're routed to a graceful "use the web app" gate
- * instead of being dropped into the student study UI. Everyone else
- * (students, with or without a school) lands on the study screen.
+ * - Teachers/admins -> the web-app gate (no mobile dashboard).
+ * - Students with a school -> their classroom home (assignments, grades).
+ * - Everyone else (personal learners) -> the study screen.
  */
-export function decideLanding(role: string | null | undefined): Landing {
-  return role === "teacher" || role === "admin" ? "teacher-gate" : "solve";
+export function decideLanding(
+  role: string | null | undefined,
+  schoolId: string | null | undefined,
+): Landing {
+  if (role === "teacher" || role === "admin") return "teacher-gate";
+  if (role === "student" && schoolId) return "school-home";
+  return "solve";
 }
 
 /**
