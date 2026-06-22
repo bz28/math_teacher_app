@@ -54,6 +54,8 @@ const LLM_TIMEOUT_MS = 30_000;
 
 const USER_NAME_KEY = "user_name";
 const USER_ID_KEY = "user_id";
+const USER_ROLE_KEY = "user_role";
+const USER_SCHOOL_KEY = "user_school_id";
 
 let _authToken: string | null = null;
 let _refreshToken: string | null = null;
@@ -61,6 +63,8 @@ let _refreshPromise: Promise<boolean> | null = null;
 let _onSessionExpired: (() => void) | null = null;
 let _userName: string | null = null;
 let _userId: string | null = null;
+let _userRole: string | null = null;
+let _userSchoolId: string | null = null;
 /** Whether the last refresh failure was a definitive auth rejection (401) vs transient error */
 let _lastRefreshWasAuthRejection = false;
 
@@ -116,42 +120,75 @@ export function getUserId(): string | null {
   return _userId;
 }
 
+/** Account role ("student" | "teacher" | "admin"). Null until /auth/me resolves. */
+export function getUserRole(): string | null {
+  return _userRole;
+}
+
+/** School the user belongs to, or null for personal learners. */
+export function getUserSchoolId(): string | null {
+  return _userSchoolId;
+}
+
+export interface Me {
+  id: string;
+  name?: string;
+  role: string;
+  school_id: string | null;
+  school_name?: string | null;
+}
+
+/** Cache + persist the identity fields we route on (id, name, role, school). */
+async function cacheMe(data: Me): Promise<void> {
+  _userRole = data.role ?? null;
+  _userSchoolId = data.school_id ?? null;
+  await Promise.all([
+    data.id ? saveUserId(data.id) : Promise.resolve(),
+    data.name ? saveUserName(data.name) : Promise.resolve(),
+    SecureStore.setItemAsync(USER_ROLE_KEY, _userRole ?? ""),
+    SecureStore.setItemAsync(USER_SCHOOL_KEY, _userSchoolId ?? ""),
+  ]);
+}
+
 /**
- * Fetch current user info from /auth/me and store the user ID.
- * Useful after login/register when we only have tokens but no user ID yet.
+ * Fetch the current user from /auth/me and cache the fields the app
+ * routes on (id, name, role, school_id). Returns null on failure.
  */
-export async function fetchAndStoreUserId(): Promise<string | null> {
+export async function fetchMe(): Promise<Me | null> {
   try {
-    const data = await apiGet<{ id: string; name?: string }>("/auth/me");
-    if (data.id) await saveUserId(data.id);
-    if (data.name) await saveUserName(data.name);
-    return data.id ?? null;
+    const data = await apiGet<Me>("/auth/me");
+    await cacheMe(data);
+    return data;
   } catch {
     return null;
   }
 }
 
 export async function loadStoredAuth(): Promise<boolean> {
-  const [access, refresh, storedName, storedId] = await Promise.all([
+  const [access, refresh, storedName, storedId, storedRole, storedSchool] = await Promise.all([
     SecureStore.getItemAsync(ACCESS_TOKEN_KEY),
     SecureStore.getItemAsync(REFRESH_TOKEN_KEY),
     SecureStore.getItemAsync(USER_NAME_KEY),
     SecureStore.getItemAsync(USER_ID_KEY),
+    SecureStore.getItemAsync(USER_ROLE_KEY),
+    SecureStore.getItemAsync(USER_SCHOOL_KEY),
   ]);
   if (!access || !refresh) return false;
   _authToken = access;
   _refreshToken = refresh;
   _userName = storedName;
   _userId = storedId;
+  // Seed role/school from cache so offline cold-starts can still route
+  // correctly; the /auth/me below refreshes them when the network is up.
+  _userRole = storedRole || null;
+  _userSchoolId = storedSchool || null;
   // Verify the access token is still valid
   try {
     const resp = await fetchWithTimeout(`${API_BASE}/auth/me`, {
       headers: { Authorization: `Bearer ${access}` },
     });
     if (resp.ok) {
-      const data = await resp.json();
-      if (data.name) await saveUserName(data.name);
-      if (data.id) await saveUserId(data.id);
+      await cacheMe(await resp.json());
       return true;
     }
     if (resp.status === 401) return await _tryRefresh();
@@ -169,11 +206,15 @@ export async function clearAuth() {
   _refreshToken = null;
   _userName = null;
   _userId = null;
+  _userRole = null;
+  _userSchoolId = null;
   await Promise.all([
     SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
     SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY),
     SecureStore.deleteItemAsync(USER_NAME_KEY),
     SecureStore.deleteItemAsync(USER_ID_KEY),
+    SecureStore.deleteItemAsync(USER_ROLE_KEY),
+    SecureStore.deleteItemAsync(USER_SCHOOL_KEY),
   ]);
 }
 
@@ -380,8 +421,15 @@ export const completePracticeBatchSession = (id: string, totalQuestions: number,
   });
 
 // Auth API
+// A login either grants tokens or — for MFA-enabled (teacher/admin)
+// accounts — returns an `mfa_pending_token` with no access token. Mobile
+// has no MFA code-entry flow, so the caller treats a token-less response
+// as "a teacher signed in" and routes to the web-app gate.
 export const login = (email: string, password: string) =>
-  apiPost<{ access_token: string; refresh_token: string }>("/auth/login", { email, password });
+  apiPost<{ access_token?: string; refresh_token?: string; mfa_pending_token?: string }>(
+    "/auth/login",
+    { email, password },
+  );
 
 export const checkEmail = (email: string) =>
   apiPost<{ available: boolean }>("/auth/check-email", { email });

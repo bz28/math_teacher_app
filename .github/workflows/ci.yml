@@ -77,6 +77,10 @@ jobs:
         working-directory: mobile
         run: npx tsc --noEmit
 
+      - name: Test
+        working-directory: mobile
+        run: npx jest --ci
+
   web:
     runs-on: ubuntu-latest
     steps:

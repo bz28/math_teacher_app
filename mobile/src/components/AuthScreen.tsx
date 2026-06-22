@@ -28,6 +28,9 @@ interface AuthScreenProps {
    *  the user just created an account, so the caller can present
    *  the post-signup paywall. */
   onAuth: (justRegistered?: boolean) => void;
+  /** Called when a teacher/admin signs in (detected via an MFA challenge,
+   *  which is teacher/admin-only) — they're routed to the web-app gate. */
+  onTeacherGate: () => void;
   defaultToRegister?: boolean;
 }
 
@@ -45,7 +48,7 @@ function ageToGradeLevel(age: number): number {
 
 type RegisterStep = "name" | "age" | "credentials";
 
-export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProps) {
+export function AuthScreen({ onAuth, onTeacherGate, defaultToRegister = false }: AuthScreenProps) {
   const [isLogin, setIsLogin] = useState(!defaultToRegister);
   const [registerStep, setRegisterStep] = useState<RegisterStep>("name");
 
@@ -110,7 +113,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
 
   // ── Login ──────────────────────────────────────────────
   if (isLogin) {
-    return <LoginForm onAuth={onAuth} onSwitchToRegister={switchMode} />;
+    return <LoginForm onAuth={onAuth} onTeacherGate={onTeacherGate} onSwitchToRegister={switchMode} />;
   }
 
   // ── Register Step 1: Name ──────────────────────────────

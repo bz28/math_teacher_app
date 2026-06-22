@@ -19,6 +19,7 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { Eyebrow } from "./Eyebrow";
 import { useFadeInUp } from "../hooks/useFadeInUp";
 import { forgotPassword, login, saveTokens } from "../services/api";
+import { isMfaChallenge } from "../utils/routing";
 import { errorMessage } from "../utils/errorMessage";
 import { useColors, useGradients, spacing, radii, typography, gradients, type ColorPalette } from "../theme";
 
@@ -27,10 +28,13 @@ interface LoginFormProps {
    *  is forwarded from AuthScreen but is always omitted here — login
    *  is never a "first-time" event. */
   onAuth: (justRegistered?: boolean) => void;
+  /** Called when login returns an MFA challenge (teacher/admin-only) — the
+   *  app has no MFA flow, so these accounts are routed to the web gate. */
+  onTeacherGate: () => void;
   onSwitchToRegister: () => void;
 }
 
-export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
+export function LoginForm({ onAuth, onTeacherGate, onSwitchToRegister }: LoginFormProps) {
   const colors = useColors();
   const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -50,7 +54,15 @@ export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
     setLoading(true);
     try {
       const resp = await login(email.trim().toLowerCase(), password);
-      await saveTokens(resp.access_token, resp.refresh_token);
+      // An MFA challenge (no tokens) means a teacher/admin account — the
+      // app can't complete MFA, so route them to the web gate instead of
+      // saving undefined tokens.
+      if (isMfaChallenge(resp)) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        onTeacherGate();
+        return;
+      }
+      await saveTokens(resp.access_token!, resp.refresh_token!);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onAuth();
     } catch (e) {
