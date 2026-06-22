@@ -8,11 +8,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import stripe
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.audit_log import log_admin_action
 from api.core.auth import hash_password
 from api.core.email import send_email
 from api.core.entitlements import (
@@ -528,6 +529,7 @@ class UpdateSubscriptionRequest(BaseModel):
 async def update_user_role(
     user_id: str,
     body: UpdateRoleRequest,
+    request: Request,
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
@@ -548,6 +550,16 @@ async def update_user_role(
     user.role = body.role
     user.updated_by_id = current_user.user_id
     user.updated_by_name = current_user.name
+    await log_admin_action(
+        db,
+        admin_user_id=current_user.user_id,
+        admin_role=current_user.role,
+        action="user.role_change",
+        target_type="user",
+        target_id=user_id,
+        metadata={"old_role": old_role, "new_role": body.role},
+        request=request,
+    )
     await db.commit()
     logger.info(
         "AUDIT: admin=%s changed role of user=%s from '%s' to '%s'",
@@ -560,6 +572,7 @@ async def update_user_role(
 async def update_user_subscription(
     user_id: str,
     body: UpdateSubscriptionRequest,
+    request: Request,
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
@@ -626,6 +639,20 @@ async def update_user_subscription(
         user.subscription_provider = user.subscription_provider or "admin"
     user.updated_by_id = current_user.user_id
     user.updated_by_name = current_user.name
+    await log_admin_action(
+        db,
+        admin_user_id=current_user.user_id,
+        admin_role=current_user.role,
+        action="user.subscription_change",
+        target_type="user",
+        target_id=user_id,
+        metadata={
+            "old_tier": old_tier, "old_status": old_status,
+            "new_tier": user.subscription_tier, "new_status": user.subscription_status,
+            "stripe_cancelled": stripe_cancelled,
+        },
+        request=request,
+    )
     await db.commit()
     logger.info(
         "AUDIT: admin=%s changed subscription of user=%s from tier='%s'/status='%s' to tier='%s'/status='%s'",
@@ -637,6 +664,7 @@ async def update_user_subscription(
 @router.delete("/users/{user_id}")
 async def delete_user(
     user_id: str,
+    request: Request,
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
@@ -650,6 +678,18 @@ async def delete_user(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete your own account")
 
     logger.info("AUDIT: admin=%s deleted user=%s (email=%s)", current_user.user_id, user_id, user.email)
+    # Stamp the audit row before the delete — target_id is a plain UUID (no FK),
+    # so it survives the user row; email/role are captured here for the trail.
+    await log_admin_action(
+        db,
+        admin_user_id=current_user.user_id,
+        admin_role=current_user.role,
+        action="user.delete",
+        target_type="user",
+        target_id=user_id,
+        metadata={"email": user.email, "role": user.role},
+        request=request,
+    )
     await db.delete(user)
     await db.commit()
     return {"status": "ok"}

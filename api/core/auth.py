@@ -30,9 +30,16 @@ def create_access_token(user_id: str, role: str) -> str:
 def decode_access_token(token: str) -> dict[str, object] | None:
     try:
         payload: dict[str, object] = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
-        return payload
     except JWTError:
         return None
+    # Reject non-access tokens. The short-lived "mfa_pending" token (issued after
+    # the password step but before the second factor) is signed with the same
+    # secret, so without this guard it would authenticate normal endpoints and
+    # defeat MFA. Real access tokens carry no "type" claim — any token that has
+    # one is not an access token and must not pass here.
+    if payload.get("type") is not None:
+        return None
+    return payload
 
 
 def _hash_refresh_token(token: str) -> str:

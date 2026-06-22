@@ -243,7 +243,7 @@ async def get_student_grades(
     # FERPA: a teacher just read one student's full grade record.
     # Authorization is confirmed above (teacher owns the course, student
     # is enrolled in the section), so log the access before returning.
-    # GET handlers don't otherwise commit, so commit the audit row here.
+    # The helper commits its own row and never raises.
     await log_student_record_access(
         db,
         accessor_user_id=current_user.user_id,
@@ -253,7 +253,6 @@ async def get_student_grades(
         accessor_school_id=course.school_id,
         request=request,
     )
-    await db.commit()
 
     # Detail view shows every published HW assigned to this section —
     # including ones still mid-grading — so a teacher who's partway
@@ -436,7 +435,6 @@ async def export_course_grades_csv(
         accessor_school_id=course.school_id,
         request=request,
     )
-    await db.commit()
 
     # Roster (re-using the same shape as /grades for consistency).
     enrollments_q = (
