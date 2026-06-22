@@ -4,7 +4,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useColors, spacing, typography, type ColorPalette } from "../theme";
 
-export type TabKey = "solve" | "history" | "review" | "account";
+export type TabKey =
+  | "solve"
+  | "history"
+  | "review"
+  | "account"
+  | "school-home"
+  | "grades";
 
 interface Tab {
   key: TabKey;
@@ -13,19 +19,29 @@ interface Tab {
   iconActive: keyof typeof Ionicons.glyphMap;
 }
 
-const TABS: Tab[] = [
+/** Personal-learner tabs (default). */
+export const PERSONAL_TABS: Tab[] = [
   { key: "solve", label: "Study", icon: "flash-outline", iconActive: "flash" },
   { key: "history", label: "History", icon: "time-outline", iconActive: "time" },
   { key: "review", label: "Review", icon: "alert-circle-outline", iconActive: "alert-circle" },
   { key: "account", label: "Account", icon: "person-outline", iconActive: "person" },
 ];
 
+/** School-student tabs: classroom first, study tools still available. */
+export const SCHOOL_TABS: Tab[] = [
+  { key: "school-home", label: "Home", icon: "home-outline", iconActive: "home" },
+  { key: "grades", label: "Grades", icon: "ribbon-outline", iconActive: "ribbon" },
+  { key: "solve", label: "Study", icon: "flash-outline", iconActive: "flash" },
+  { key: "account", label: "Account", icon: "person-outline", iconActive: "person" },
+];
+
 interface Props {
   active: TabKey;
   onChange: (key: TabKey) => void;
+  tabs?: Tab[];
 }
 
-export function BottomTabBar({ active, onChange }: Props) {
+export function BottomTabBar({ active, onChange, tabs = PERSONAL_TABS }: Props) {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -36,7 +52,7 @@ export function BottomTabBar({ active, onChange }: Props) {
         { paddingBottom: Math.max(insets.bottom, spacing.sm) },
       ]}
     >
-      {TABS.map((t) => {
+      {tabs.map((t) => {
         const isActive = t.key === active;
         return (
           <TouchableOpacity
