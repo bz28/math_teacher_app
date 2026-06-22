@@ -4,13 +4,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { Eyebrow } from "./Eyebrow";
 import { InProgressCard, CompletedCard } from "./HistoryCards";
-import { PaywallScreen } from "./PaywallScreen";
-import { UpgradePrompt } from "./UpgradePrompt";
 import { getSessionHistory, type SessionHistoryItem } from "../services/api";
 import { useEntitlementStore } from "../stores/entitlements";
-import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
-import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
+import { usePaywallStore } from "../stores/paywall";
+import { useTrialEligibility } from "../hooks/useTrialEligibility";
+import { colors, spacing, radii, typography, gradients } from "../theme";
 
 export type Mode = "learn" | "practice" | "mock_test";
 
@@ -59,8 +59,8 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
   const isPro = useEntitlementStore((s) => s.isPro);
   const sessionsRemaining = useEntitlementStore((s) => s.sessionsRemaining);
   const dailySessionsLimit = useEntitlementStore((s) => s.dailySessionsLimit);
-  const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
-  const { show: showUpgrade, promptProps, paywallVisible, paywallTrigger, closePaywall } = useUpgradePrompt();
+  const showPaywall = usePaywallStore((s) => s.show);
+  const trialEligible = useTrialEligibility();
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -101,10 +101,10 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
             return (
               <AnimatedPressable
                 key={mode.id}
-                style={[styles.modeCard, shadows.md]}
+                style={styles.modeCard}
                 onPress={() => {
                   if (!isPro && sessionsRemaining() <= 0) {
-                    showUpgrade("create_session", "Daily Limit Reached", `You've used all ${dailySessionsLimit} problems for today. Upgrade to Pro for unlimited access.`);
+                    showPaywall("create_session");
                     return;
                   }
                   onSelect(mode.id);
@@ -124,9 +124,23 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
                     </View>
                     <Text style={styles.modeTagline}>{mode.tagline}</Text>
                     {showSessionCount && (
-                      <Text style={styles.modeSessionCount}>
-                        {sessionsRemaining()} of {dailySessionsLimit} free sessions left today
-                      </Text>
+                      <>
+                        <Text style={styles.modeSessionCount}>
+                          {sessionsRemaining()} of {dailySessionsLimit} free sessions left today
+                        </Text>
+                        <Text
+                          style={styles.modeUpgradeLink}
+                          onPress={(e) => {
+                            // Stop the parent mode card from also receiving the
+                            // tap and starting a session.
+                            e.stopPropagation();
+                            showPaywall("create_session");
+                          }}
+                          suppressHighlighting
+                        >
+                          {trialEligible ? "✨ Start 3-day free trial" : "Upgrade now"}
+                        </Text>
+                      </>
                     )}
                   </View>
                   <Ionicons
@@ -154,7 +168,7 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
             {inProgress.length > 0 && (
               <View style={styles.historySection}>
                 <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionLabel}>CONTINUE LEARNING</Text>
+                  <Eyebrow>Continue learning</Eyebrow>
                   {inProgress.length > SECTION_PREVIEW_LIMIT && (
                     <AnimatedPressable onPress={onViewAllHistory}>
                       <Text style={styles.seeAllText}>See All</Text>
@@ -177,7 +191,7 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
             {completed.length > 0 && (
               <View style={styles.historySection}>
                 <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionLabel}>COMPLETED</Text>
+                  <Eyebrow>Completed</Eyebrow>
                   {(completed.length > SECTION_PREVIEW_LIMIT || hasMore) && (
                     <AnimatedPressable onPress={onViewAllHistory}>
                       <Text style={styles.seeAllText}>See All</Text>
@@ -199,13 +213,6 @@ export function ModeSelectScreen({ subject, onSelect, onBack, onViewSession, onV
         )}
       </ScrollView>
 
-      <UpgradePrompt {...promptProps} />
-      <PaywallScreen
-        visible={paywallVisible}
-        onClose={closePaywall}
-        onPurchaseComplete={() => { closePaywall(); fetchEntitlements(); }}
-        trigger={paywallTrigger}
-      />
     </SafeAreaView>
   );
 }
@@ -233,7 +240,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xxl,
   },
   title: {
-    ...typography.hero,
+    ...typography.displaySerifItalic,
+    fontSize: 36,
+    lineHeight: 42,
     color: colors.text,
   },
 
@@ -291,6 +300,13 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontWeight: "500",
   },
+  modeUpgradeLink: {
+    fontSize: 11,
+    color: colors.white,
+    marginTop: 2,
+    fontWeight: "700",
+    textDecorationLine: "underline",
+  },
 
   // History sections
   historySection: {
@@ -302,12 +318,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: spacing.md,
   },
-  sectionLabel: {
-    ...typography.small,
-    color: colors.textMuted,
-    letterSpacing: 1,
-    marginBottom: spacing.md,
-  },
+  // sectionLabel retired -- Eyebrow primitive now carries the section voice
   seeAllText: {
     ...typography.caption,
     color: colors.primary,

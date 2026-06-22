@@ -7,7 +7,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
+import { CompletionReward, type CompletionRewardRef } from "./CompletionReward";
 import { MathText } from "./MathText";
 import { useSessionStore } from "../stores/session";
 import { sessionStyles as styles } from "./sessionStyles";
@@ -22,7 +22,7 @@ interface PracticeSummaryProps {
 export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const confettiRef = useRef<ConfettiOverlayRef>(null);
+  const confettiRef = useRef<CompletionRewardRef>(null);
   const {
     practiceBatch,
     togglePracticeFlag,
@@ -66,7 +66,6 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
 
   return (
     <View style={styles.container}>
-      {score >= 70 && <ConfettiOverlay ref={confettiRef} />}
       <View style={[styles.stickyHeader, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <AnimatedPressable onPress={handleBack} style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs, minHeight: 44 }} accessibilityRole="button" accessibilityLabel="Go back">
@@ -184,6 +183,9 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
           <Text style={styles.homeButtonText}>Return Home</Text>
         </AnimatedPressable>
       </ScrollView>
+      {/* Reward sits LAST so it renders above the score card on iOS; combined
+          with elevation: 9999 inside the component it also wins on Android. */}
+      {score >= 70 && <CompletionReward ref={confettiRef} />}
     </View>
   );
 }

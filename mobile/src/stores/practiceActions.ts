@@ -35,10 +35,25 @@ export function createPracticeActions(set: StoreSet, get: StoreGet) {
       const { subject } = get();
       set({ ...initialState, subject, phase: "loading" });
       try {
-        const [{ problems }, { id: sessionId }] = await Promise.all([
+        const [{ problems: generated }, { id: sessionId }] = await Promise.all([
           generatePracticeProblems(problem, count, subject),
           createPracticeBatchSession(problem),
         ]);
+        // count > 0 returns question text only — answer + distractors come back
+        // empty. Solve each in parallel and AWAIT all before going active, so
+        // the MC grid never renders "Loading choices…" and grading has answers
+        // to compare against. Mirrors the mock-test backfill.
+        const solved = await Promise.allSettled(
+          generated.map((q) =>
+            generatePracticeProblems(q.question, 0, subject).then((res) => res.problems[0]),
+          ),
+        );
+        const problems = generated.map((q, i) => {
+          const r = solved[i];
+          // Keep the freshly-generated question text; solve_problem sometimes
+          // lightly reformats it. Per-item failure leaves that one unsolved.
+          return r.status === "fulfilled" && r.value ? { ...r.value, question: q.question } : q;
+        });
         set({
           practiceBatch: createBatch(problems, sessionId),
           phase: "practice_active",

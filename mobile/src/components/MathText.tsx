@@ -27,12 +27,38 @@ interface MathTextProps {
   text: string;
   style?: TextStyle;
   numberOfLines?: number;
+  /**
+   * Compact mode: wrapper shrinks to the WebView's measured content width
+   * instead of filling parent (default `width: 100%`). Used for inline
+   * chips/badges where a wide bubble around a small fraction would leave
+   * dead space. Layout starts at INITIAL_COMPACT_W so KaTeX has room to
+   * render; once `getBoundingClientRect()` reports the real content size
+   * the wrapper resizes to it. `display: inline-block` on #content keeps
+   * its intrinsic width after the parent shrinks.
+   */
+  compact?: boolean;
 }
+
+// Initial render width in compact mode — wide enough for most inline
+// expressions ($\frac{a}{b}$, $x^2 + y^2$). After the WebView reports
+// actual content width, the wrapper shrinks. If a chip's content is
+// wider than this, it still renders correctly (inline-block doesn't
+// constrain) but the first paint may briefly clip.
+const INITIAL_COMPACT_W = 200;
 
 // Single source of truth for the math/bold tokenizer. Use .test() directly
 // (lastIndex is always 0 for a non-global regex) and create a fresh global
 // clone in buildHtml() so matchAll() has its own iterator state.
-const MATH_OR_BOLD_RE = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\*\*[^*]+\*\*)/;
+//
+// Inline `$...$` rejects content that starts with `<digit>+[\s,]` — that's
+// dollar-denominated money in a word problem (e.g. `costs $5 and $10`,
+// `$1,000`), not LaTeX. Without this guard the regex eats text between
+// unrelated `$` signs and silently collapses to a KaTeX-fallback string
+// with the dollars stripped (`costs 5 and 10`).
+//
+// `.` is intentionally NOT in the disallowed set so decimal LaTeX
+// literals (`$3.14$`, `$5.5x$`, `$3.14 \times 2$`) still render as math.
+const MATH_OR_BOLD_RE = /(\$\$[\s\S]+?\$\$|\$(?!\d+[\s,])[^$\n]+?\$|\*\*[^*]+\*\*)/;
 
 function escapeHtml(s: string): string {
   return s
@@ -80,7 +106,7 @@ function renderLatex(latex: string, displayMode: boolean): string {
 // so they get the .m-display block wrapper with overflow-x: auto.
 const MULTILINE_ENV_RE = /\\begin\{(p|b|v|V|B|small)?matrix\b|\\begin\{cases\b|\\begin\{align(ed)?\*?\b|\\begin\{array\b/;
 
-function buildHtml(text: string, color: string, fontSize: number, fontWeight: string): string {
+function buildHtml(text: string, color: string, fontSize: number, fontWeight: string, compact = false): string {
   const parts: string[] = [];
   const pattern = new RegExp(MATH_OR_BOLD_RE.source, "g");
   let last = 0;
@@ -134,29 +160,32 @@ function buildHtml(text: string, color: string, fontSize: number, fontWeight: st
 </style>
 </head>
 <body>
-<div id="content">${body}</div>
+<div id="content"${compact ? ' style="display:inline-block;"' : ''}>${body}</div>
 <script>
-  var lastH = 0;
-  function postHeight() {
+  var lastW = 0, lastH = 0;
+  function postSize() {
     var el = document.getElementById('content');
     if (!el) return;
-    var h = Math.ceil(el.getBoundingClientRect().height);
-    if (h > 0 && h !== lastH && window.ReactNativeWebView) {
+    var rect = el.getBoundingClientRect();
+    var w = Math.ceil(rect.width);
+    var h = Math.ceil(rect.height);
+    if (h > 0 && (h !== lastH || w !== lastW) && window.ReactNativeWebView) {
       lastH = h;
-      window.ReactNativeWebView.postMessage(String(h));
+      lastW = w;
+      window.ReactNativeWebView.postMessage(JSON.stringify({w: w, h: h}));
     }
   }
   function init() {
-    postHeight();
+    postSize();
     // ResizeObserver fires once after layout and then only when the
     // content box actually changes — far fewer round-trips than the
     // previous fixed-delay polling. Webkit on iOS has had it since 13.4.
     if (typeof ResizeObserver !== 'undefined') {
-      new ResizeObserver(postHeight).observe(document.getElementById('content'));
+      new ResizeObserver(postSize).observe(document.getElementById('content'));
     }
     // Fallback: fonts.ready catches late-loading KaTeX webfonts on
     // platforms where ResizeObserver doesn't cover font metric changes.
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(postHeight);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(postSize);
   }
   if (document.readyState === 'complete') init();
   else window.addEventListener('load', init);
@@ -165,9 +194,9 @@ function buildHtml(text: string, color: string, fontSize: number, fontWeight: st
 </html>`;
 }
 
-export function MathText({ text, style, numberOfLines }: MathTextProps) {
+export function MathText({ text, style, numberOfLines, compact }: MathTextProps) {
   const colors = useColors();
-  const [height, setHeight] = useState(20);
+  const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 20 });
 
   // All hooks must run unconditionally on every render — React tracks them
   // by call order. Previously, useMemo lived below the empty-text and
@@ -180,8 +209,8 @@ export function MathText({ text, style, numberOfLines }: MathTextProps) {
   const fontWeight = String(style?.fontWeight ?? "400");
 
   const html = useMemo(
-    () => (hasMath ? buildHtml(text, color, fontSize, fontWeight) : ""),
-    [hasMath, text, color, fontSize, fontWeight],
+    () => (hasMath ? buildHtml(text, color, fontSize, fontWeight, compact) : ""),
+    [hasMath, text, color, fontSize, fontWeight, compact],
   );
 
   const defaultTextStyle = useMemo<TextStyle>(
@@ -200,8 +229,15 @@ export function MathText({ text, style, numberOfLines }: MathTextProps) {
     );
   }
 
+  // Compact mode: shrink wrapper to measured content width. Until the
+  // first {w,h} message arrives, render at INITIAL_COMPACT_W so KaTeX
+  // has horizontal room. Non-compact keeps the legacy width:100% behavior.
+  const wrapStyle = compact
+    ? { width: size.w || INITIAL_COMPACT_W, height: size.h }
+    : { height: size.h };
+
   return (
-    <View style={[styles.webviewWrap, { height }]}>
+    <View style={[compact ? styles.webviewWrapCompact : styles.webviewWrap, wrapStyle]}>
       <WebView
         source={{ html }}
         style={styles.webview}
@@ -215,8 +251,17 @@ export function MathText({ text, style, numberOfLines }: MathTextProps) {
         backgroundColor="transparent"
         automaticallyAdjustContentInsets={false}
         onMessage={(e) => {
-          const h = parseInt(e.nativeEvent.data, 10);
-          if (!isNaN(h) && h > 0 && Math.abs(h - height) > 1) setHeight(h);
+          try {
+            const { w, h } = JSON.parse(e.nativeEvent.data);
+            if (typeof h !== "number" || h <= 0) return;
+            setSize((prev) => {
+              const nextW = compact && typeof w === "number" && w > 0 ? w : prev.w;
+              if (Math.abs(prev.h - h) <= 1 && Math.abs(prev.w - nextW) <= 1) return prev;
+              return { w: nextW, h };
+            });
+          } catch {
+            // ignore malformed payload
+          }
         }}
       />
     </View>
@@ -226,6 +271,9 @@ export function MathText({ text, style, numberOfLines }: MathTextProps) {
 const styles = StyleSheet.create({
   webviewWrap: {
     width: "100%",
+    backgroundColor: "transparent",
+  },
+  webviewWrapCompact: {
     backgroundColor: "transparent",
   },
   webview: {

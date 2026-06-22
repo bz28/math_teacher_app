@@ -13,7 +13,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { MathText } from "./MathText";
-import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
+import { useColors, useGradients, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 interface Props {
   problems: string[] | null;
@@ -53,6 +53,7 @@ export function ExtractionModal({
   onManualSelect,
 }: Props) {
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Modal
@@ -312,7 +313,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   addText: {
     ...typography.button,
-    color: colors.white,
+    color: colors.textOnPrimary,
   },
   disabled: { opacity: 0.4 },
   manualSelectBtn: {

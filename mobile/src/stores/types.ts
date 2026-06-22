@@ -136,4 +136,3 @@ export const initialState = {
 
 export type StoreSet = (partial: Partial<SessionState>) => void;
 export type StoreGet = () => SessionState;
-export type StoreSubscribe = (listener: (state: SessionState) => void) => () => void;

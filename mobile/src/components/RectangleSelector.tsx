@@ -14,7 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { GradientButton } from "./GradientButton";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
+import { useColors, useGradients, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 export interface Rectangle {
   id: number;
@@ -53,6 +53,7 @@ export function RectangleSelector({
   maxRectangles = 10,
 }: RectangleSelectorProps) {
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const [rectangles, setRectangles] = useState<Rectangle[]>([]);
@@ -352,7 +353,7 @@ export function RectangleSelector({
       {/* Header */}
       <LinearGradient colors={gradients.header} style={styles.header}>
         <AnimatedPressable onPress={onCancel} style={styles.headerBackBtn} scaleDown={0.9}>
-          <Ionicons name="chevron-back" size={22} color={colors.white} />
+          <Ionicons name="chevron-back" size={22} color={colors.textOnPrimary} />
         </AnimatedPressable>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Select Problems</Text>
@@ -425,7 +426,7 @@ export function RectangleSelector({
                   onPress={() => deleteRect(r.id)}
                   scaleDown={0.85}
                 >
-                  <Ionicons name="close" size={10} color={colors.white} />
+                  <Ionicons name="close" size={10} color={colors.textOnPrimary} />
                 </AnimatedPressable>
                 <View style={[styles.handle, styles.handleTL]} />
                 <View style={[styles.handle, styles.handleTR]} />
@@ -544,7 +545,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   headerTitle: {
     ...typography.bodyBold,
-    color: colors.white,
+    color: colors.textOnPrimary,
     fontSize: 17,
   },
   headerSubtitle: {
@@ -598,7 +599,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   rectLabelText: {
     fontSize: 11,
     fontWeight: "700",
-    color: colors.white,
+    color: colors.textOnPrimary,
   },
   rectDelete: {
     position: "absolute",
@@ -676,7 +677,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   toastText: {
     ...typography.label,
-    color: colors.white,
+    color: colors.textOnPrimary,
     fontSize: 13,
   },
 

@@ -163,7 +163,7 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
             onPress={() => onResume(sessionId)}
             scaleDown={0.97}
           >
-            <Ionicons name="play" size={18} color={colors.white} />
+            <Ionicons name="play" size={18} color={colors.textOnPrimary} />
             <Text style={styles.actionButtonText}>Resume Session</Text>
           </AnimatedPressable>
         ) : (
@@ -181,9 +181,9 @@ export function SessionReviewScreen({ sessionId, onBack, onPracticeSimilar, onRe
             disabled={practiceLoading}
           >
             {practiceLoading ? (
-              <ActivityIndicator size="small" color={colors.white} />
+              <ActivityIndicator size="small" color={colors.textOnPrimary} />
             ) : (
-              <Ionicons name="refresh" size={18} color={colors.white} />
+              <Ionicons name="refresh" size={18} color={colors.textOnPrimary} />
             )}
             <Text style={styles.actionButtonText}>
               {practiceLoading ? "Generating..." : "Practice Similar Problem"}
@@ -514,7 +514,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   actionButtonText: {
     ...typography.button,
-    color: colors.white,
+    color: colors.textOnPrimary,
   },
 
   // End session

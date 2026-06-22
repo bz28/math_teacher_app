@@ -3,13 +3,19 @@ import { View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SecureStore from "expo-secure-store";
+import {
+  useFonts,
+  InstrumentSerif_400Regular,
+  InstrumentSerif_400Regular_Italic,
+} from "@expo-google-fonts/instrument-serif";
 import { AccountScreen } from "./src/components/AccountScreen";
 import { AuthScreen } from "./src/components/AuthScreen";
 import { BottomTabBar, type TabKey } from "./src/components/BottomTabBar";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
 import { HistoryListScreen } from "./src/components/HistoryListScreen";
-import { LibraryScreen } from "./src/components/LibraryScreen";
+import { WeakSpotsScreen } from "./src/components/WeakSpotsScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
+import { PaywallScreen } from "./src/components/PaywallScreen";
 import { SessionReviewScreen } from "./src/components/SessionReviewScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
 import { SolveScreen } from "./src/components/SolveScreen";
@@ -18,23 +24,24 @@ import { clearAuth, fetchAndStoreUserId, getUserId, loadStoredAuth, setOnSession
 import { initRevenueCat } from "./src/services/revenuecat";
 import { useEntitlementStore } from "./src/stores/entitlements";
 import { useOnboardingFlags } from "./src/stores/onboardingFlags";
+import { usePaywallStore } from "./src/stores/paywall";
 import { useSessionStore } from "./src/stores/session";
 import { loadThemePref } from "./src/stores/themePref";
 import { ONBOARDING_KEY } from "./src/constants/storageKeys";
 
-type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "library";
+type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "weak-spots";
 
-const TAB_SCREENS: Screen[] = ["solve", "history-list", "library", "account"];
+const TAB_SCREENS: Screen[] = ["solve", "history-list", "weak-spots", "account"];
 const SCREEN_TO_TAB: Record<string, TabKey> = {
   solve: "solve",
   "history-list": "history",
-  library: "library",
+  "weak-spots": "review",
   account: "account",
 };
 const TAB_TO_SCREEN: Record<TabKey, Screen> = {
   solve: "solve",
   history: "history-list",
-  library: "library",
+  review: "weak-spots",
   account: "account",
 };
 
@@ -53,6 +60,9 @@ function AppRoot() {
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
   const startPracticeBatch = useSessionStore((s) => s.startPracticeBatch);
   const initializeOnboardingFlags = useOnboardingFlags((s) => s.initialize);
+  const paywallVisible = usePaywallStore((s) => s.visible);
+  const paywallTrigger = usePaywallStore((s) => s.trigger);
+  const hidePaywall = usePaywallStore((s) => s.hide);
 
   useEffect(() => {
     setOnSessionExpired(() => {
@@ -85,8 +95,14 @@ function AppRoot() {
 
   if (screen === null) return null;
 
+  // Compute the active screen as a child node, then render it once
+  // with the global PaywallScreen mounted alongside. This way any
+  // screen can open the paywall via usePaywallStore.show(...) without
+  // needing its own local <PaywallScreen> mount.
+  let screenNode: React.ReactNode = null;
+
   if (screen === "onboarding") {
-    return (
+    screenNode = (
       <SafeAreaProvider>
         <OnboardingScreen
           onComplete={async () => {
@@ -98,29 +114,37 @@ function AppRoot() {
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
-  }
-
-  if (screen === "auth") {
-    return (
+  } else if (screen === "auth") {
+    screenNode = (
       <SafeAreaProvider>
         <AuthScreen
-          onAuth={async () => {
+          onAuth={async (justRegistered) => {
             setScreen("solve");
             const userId = getUserId() ?? await fetchAndStoreUserId();
+            // Await init for new registrations so the post-signup paywall
+            // doesn't open before RC is configured — otherwise getOfferings
+            // throws and the trial pitch silently collapses to "Subscribe
+            // Now $79.99/yr" while the hero still says "Start your free
+            // trial". For existing logins we don't need to block.
             if (userId) {
-              initRevenueCat(userId).catch(() => {});
+              if (justRegistered) {
+                await initRevenueCat(userId).catch(() => {});
+              } else {
+                initRevenueCat(userId).catch(() => {});
+              }
             }
             fetchEntitlements().catch(() => {});
+            if (justRegistered) {
+              usePaywallStore.getState().show("post_signup");
+            }
           }}
           defaultToRegister={fromOnboarding}
         />
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
-  }
-
-  // Tab screens — wrapped in shared layout with bottom tab bar
-  if (TAB_SCREENS.includes(screen)) {
+  } else if (TAB_SCREENS.includes(screen)) {
+    // Tab screens — wrapped in shared layout with bottom tab bar
     const tabBar = (
       <BottomTabBar
         active={SCREEN_TO_TAB[screen]}
@@ -152,8 +176,14 @@ function AppRoot() {
           }}
         />
       );
-    } else if (screen === "library") {
-      content = <LibraryScreen />;
+    } else if (screen === "weak-spots") {
+      content = (
+        <WeakSpotsScreen
+          subject={subject}
+          onSubjectChange={setSubject}
+          onStartPractice={() => setScreen("session")}
+        />
+      );
     } else if (screen === "account") {
       content = (
         <AccountScreen
@@ -167,7 +197,7 @@ function AppRoot() {
       );
     }
 
-    return (
+    screenNode = (
       <SafeAreaProvider>
         <View style={tabHostStyle}>
           <View style={{ flex: 1 }}>{content}</View>
@@ -176,10 +206,8 @@ function AppRoot() {
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
-  }
-
-  if (screen === "session-review" && reviewSessionId) {
-    return (
+  } else if (screen === "session-review" && reviewSessionId) {
+    screenNode = (
       <SafeAreaProvider>
         <ErrorBoundary onReset={() => setScreen("solve")}>
           <SessionReviewScreen
@@ -198,10 +226,8 @@ function AppRoot() {
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
-  }
-
-  if (screen === "session") {
-    return (
+  } else if (screen === "session") {
+    screenNode = (
       <SafeAreaProvider>
         <ErrorBoundary onReset={() => { setProblemQueue([]); setScreen("solve"); }}>
           <SessionScreen
@@ -220,11 +246,32 @@ function AppRoot() {
     );
   }
 
-  // Fallback (shouldn't hit) — redirect to solve
-  return null;
+  return (
+    <>
+      {screenNode}
+      <PaywallScreen
+        visible={paywallVisible}
+        trigger={paywallTrigger}
+        onClose={hidePaywall}
+        onPurchaseComplete={() => {
+          hidePaywall();
+          fetchEntitlements().catch(() => {});
+        }}
+      />
+    </>
+  );
 }
 
 export default function App() {
+  // Kick off Instrument Serif loading but don't gate first paint on it.
+  // If the font registration is slow (Expo Go in particular), serif
+  // headlines briefly render with the system fallback and swap in once
+  // loaded. A flash of unstyled text is much better than a black screen
+  // forever if useFonts never resolves.
+  useFonts({
+    InstrumentSerif_400Regular,
+    InstrumentSerif_400Regular_Italic,
+  });
   return (
     <ErrorBoundary>
       <AppRoot />

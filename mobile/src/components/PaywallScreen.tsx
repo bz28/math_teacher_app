@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import type { PurchasesIntroPrice, PurchasesPackage } from "react-native-purchases";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { Eyebrow } from "./Eyebrow";
 import {
   getEligibleProductIds,
   getOfferings,
@@ -22,7 +23,7 @@ import {
 } from "../services/revenuecat";
 import { useEntitlementStore } from "../stores/entitlements";
 import { LEGAL_URLS } from "../constants/legal";
-import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
+import { colors, spacing, radii, typography, gradients } from "../theme";
 
 interface PaywallProps {
   visible: boolean;
@@ -51,17 +52,22 @@ const FEATURES = [
   "Full session history",
 ];
 
-const TRIGGER_MESSAGES: Record<string, { title: string; subtitle: string }> = {
+/**
+ * Hero copy used when we can't (or don't want to) show the free-trial
+ * framing — typically the user has already redeemed their trial, so
+ * pitching "3 days free" would be a lie.
+ */
+const TRIGGER_MESSAGES_NO_TRIAL: Record<string, { title: string; subtitle: string }> = {
   create_session: {
-    title: "You've hit today's limit",
+    title: "You've hit your 24-hour limit",
     subtitle: "Upgrade for unlimited problem sessions",
   },
   image_scan: {
-    title: "You've hit today's limit",
+    title: "You've hit your 24-hour limit",
     subtitle: "Upgrade for unlimited image scans",
   },
   chat_message: {
-    title: "You've hit today's limit",
+    title: "You've hit your 24-hour limit",
     subtitle: "Upgrade for unlimited chat messages",
   },
   work_diagnosis: {
@@ -69,6 +75,11 @@ const TRIGGER_MESSAGES: Record<string, { title: string; subtitle: string }> = {
     subtitle: "Get AI-powered grading on your work",
   },
 };
+
+/** Triggers where, if the user is eligible for the annual trial, we
+ *  override the hero copy with the trial-first framing. Post-signup
+ *  always uses the trial framing when eligible. */
+const LIMIT_TRIGGERS = new Set(["create_session", "image_scan", "chat_message"]);
 
 export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }: PaywallProps) {
   const [selectedPlan, setSelectedPlan] = useState<PlanId>("annual");
@@ -82,32 +93,97 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
     setLoadingOfferings(true);
     setSelectedPlan("annual");
 
-    getOfferings()
-      .then(async (offerings) => {
-        const current = offerings.current;
-        const annualPkg = current?.annual ?? null;
-        const weeklyPkg = current?.weekly ?? null;
-        const productIds = [annualPkg?.product.identifier, weeklyPkg?.product.identifier]
-          .filter((id): id is string => !!id);
-        let eligibleProductIds: Set<string>;
-        try {
-          eligibleProductIds = await getEligibleProductIds(productIds);
-        } catch {
-          // Defensive: never advertise a trial we can't verify the user gets.
-          eligibleProductIds = new Set();
-        }
-        setPlans(buildPlans(annualPkg, weeklyPkg, eligibleProductIds));
-      })
-      .catch(() => {
-        setPlans(buildPlans(null, null, new Set()));
-      })
-      .finally(() => setLoadingOfferings(false));
+    // Retry getOfferings with backoff — RevenueCat may not be configured
+    // yet on the very first paywall open right after register, and a
+    // single-shot failure here silently strips the trial pitch. Mirrors
+    // the retry strategy in useTrialEligibility.ts.
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const delays = [0, 600, 1500, 3500];
+    let attempt = 0;
+
+    const tryLoad = () => {
+      getOfferings()
+        .then(async (offerings) => {
+          if (cancelled) return;
+          const current = offerings.current;
+          const annualPkg = current?.annual ?? null;
+          const weeklyPkg = current?.weekly ?? null;
+          const productIds = [annualPkg?.product.identifier, weeklyPkg?.product.identifier]
+            .filter((id): id is string => !!id);
+          let eligibleProductIds: Set<string>;
+          try {
+            eligibleProductIds = await getEligibleProductIds(productIds);
+          } catch {
+            // Defensive: never advertise a trial we can't verify the user gets.
+            eligibleProductIds = new Set();
+          }
+          if (cancelled) return;
+          setPlans(buildPlans(annualPkg, weeklyPkg, eligibleProductIds));
+          setLoadingOfferings(false);
+        })
+        .catch(() => {
+          attempt += 1;
+          if (cancelled) return;
+          if (attempt >= delays.length) {
+            setPlans(buildPlans(null, null, new Set()));
+            setLoadingOfferings(false);
+            return;
+          }
+          timer = setTimeout(tryLoad, delays[attempt]);
+        });
+    };
+
+    tryLoad();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [visible]);
 
   const selectedPlanOption = plans.find((p) => p.id === selectedPlan);
-  const ctaLabel = selectedPlanOption?.ctaTrialLabel || "Subscribe Now";
+  const annualPlanOption = plans.find((p) => p.id === "annual");
+
+  // While offerings are loading we don't yet know eligibility — default
+  // to assuming the user can claim the trial so we don't show a colder
+  // "you've hit your limit" message and then flip to the trial pitch a
+  // moment later. Once loaded, we go strictly by what RevenueCat says.
+  const annualTrialEligible = loadingOfferings ? true : !!annualPlanOption?.trialText;
+
+  // Trial-first framing applies on post-signup and limit-hit triggers,
+  // but ONLY when the user can actually redeem the annual trial — otherwise
+  // hero ("Start your free trial") and CTA ("Subscribe Now $79.99") fall
+  // out of sync because the CTA copy is driven by real product data.
+  const showTrialFraming =
+    annualTrialEligible &&
+    (trigger === "post_signup" ||
+      (trigger !== undefined && LIMIT_TRIGGERS.has(trigger)));
+
+  let heroTitle: string;
+  let heroSubtitle: string;
+  if (showTrialFraming) {
+    heroTitle = "Start your free trial";
+    heroSubtitle = annualPlanOption?.trialText && annualPlanOption?.priceText
+      ? `${annualPlanOption.trialText}, then ${annualPlanOption.priceText} — annual only, first-time subscribers`
+      : "3 days free, then annual — first-time subscribers only";
+  } else if (trigger && TRIGGER_MESSAGES_NO_TRIAL[trigger]) {
+    heroTitle = TRIGGER_MESSAGES_NO_TRIAL[trigger].title;
+    heroSubtitle = TRIGGER_MESSAGES_NO_TRIAL[trigger].subtitle;
+  } else {
+    heroTitle = "Unlock Veradic AI Pro";
+    heroSubtitle = "No limits. No restrictions. Just learn.";
+  }
+
+  // CTA copy. Tied directly to `showTrialFraming` (not `trialText`) so the
+  // hero and CTA always agree — including the loading window where we've
+  // assumed eligibility but offerings haven't returned yet.
+  const isAnnualSelected = selectedPlan === "annual";
+  const ctaLabel = showTrialFraming && isAnnualSelected
+    ? "Start Free Trial"
+    : selectedPlanOption?.ctaTrialLabel || "Subscribe Now";
   const ctaSublabel = selectedPlanOption?.trialText
-    ? `then ${selectedPlanOption.priceText}`
+    ? `3 days free, then ${selectedPlanOption.priceText}`
     : selectedPlanOption?.priceText ?? "";
 
   const handleSubscribe = async () => {
@@ -159,7 +235,7 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
         bounces={false}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero header */}
+        {/* Hero header — serif editorial moment over signature gradient */}
         <LinearGradient
           colors={gradients.primary}
           start={{ x: 0, y: 0 }}
@@ -170,29 +246,17 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
             <Ionicons name="close" size={22} color="rgba(255,255,255,0.7)" />
           </TouchableOpacity>
 
-          <View style={styles.iconCircle}>
-            <Ionicons name="diamond" size={32} color={colors.primary} />
-          </View>
-
-          {trigger && TRIGGER_MESSAGES[trigger] ? (
-            <>
-              <Text style={styles.heroTitle}>{TRIGGER_MESSAGES[trigger].title}</Text>
-              <Text style={styles.heroSubtitle}>{TRIGGER_MESSAGES[trigger].subtitle}</Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.heroTitle}>Unlock Veradic AI Pro</Text>
-              <Text style={styles.heroSubtitle}>No limits. No restrictions. Just learn.</Text>
-            </>
-          )}
+          <Eyebrow tone="invert" style={styles.heroEyebrow}>Veradic Pro</Eyebrow>
+          <Text style={styles.heroTitle}>{heroTitle}</Text>
+          <Text style={styles.heroSubtitle}>{heroSubtitle}</Text>
         </LinearGradient>
 
         {/* Features */}
         <View style={styles.featureSection}>
-          <Text style={styles.featureSectionTitle}>Everything in Pro</Text>
+          <Eyebrow style={styles.featureSectionTitle}>Everything in Pro</Eyebrow>
           {FEATURES.map((feature) => (
             <View key={feature} style={styles.featureRow}>
-              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+              <Ionicons name="checkmark" size={18} color={colors.primary} />
               <Text style={styles.featureText}>{feature}</Text>
             </View>
           ))}
@@ -232,7 +296,17 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
                         )}
                       </View>
                       {plan.trialText ? (
-                        <Text style={[styles.planSub, isSelected && styles.planSubSelected]}>{plan.trialText}</Text>
+                        // Annual with trial — emphasize, since this is the
+                        // one and only place users see a free trial offered.
+                        <Text style={[styles.planTrialSub, isSelected && styles.planTrialSubSelected]}>
+                          ✨ {plan.trialText}
+                        </Text>
+                      ) : !isAnnual && annualTrialEligible ? (
+                        // Weekly card while annual trial is on the table —
+                        // be explicit so nobody assumes weekly is also free.
+                        <Text style={[styles.planSub, isSelected && styles.planSubSelected]}>
+                          No free trial — bills weekly
+                        </Text>
                       ) : null}
                     </View>
                   </View>
@@ -287,6 +361,13 @@ export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }:
             Subscription auto-renews unless canceled at least 24 hours before the end of the current period. Manage or cancel anytime in your App Store account settings.
           </Text>
         )}
+
+        {/* Continue free — explicit dismiss for the post-signup and
+            limit-hit flows where users need a clear "no thanks" path
+            beyond the small × in the corner. */}
+        <TouchableOpacity onPress={onClose} disabled={purchasing} style={styles.continueFreeButton}>
+          <Text style={styles.continueFreeText}>Continue with free version</Text>
+        </TouchableOpacity>
 
         {/* Secondary actions */}
         <View style={styles.secondaryActions}>
@@ -388,12 +469,10 @@ const styles = StyleSheet.create({
   // Hero
   hero: {
     width: "100%",
-    paddingTop: spacing.xxxl + 20,
-    paddingBottom: spacing.xxl,
+    paddingTop: spacing.xxxl + 28,
+    paddingBottom: spacing.xxl + spacing.sm,
     paddingHorizontal: spacing.xxl,
     alignItems: "center",
-    borderBottomLeftRadius: radii.xl,
-    borderBottomRightRadius: radii.xl,
   },
   closeButton: {
     position: "absolute",
@@ -402,47 +481,39 @@ const styles = StyleSheet.create({
     zIndex: 10,
     padding: spacing.xs,
   },
-  iconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.white,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: spacing.lg,
-    ...shadows.md,
+  heroEyebrow: {
+    marginBottom: spacing.md,
+    opacity: 0.85,
   },
   heroTitle: {
-    ...typography.title,
+    ...typography.displaySerifItalic,
     color: colors.white,
     textAlign: "center",
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   heroSubtitle: {
     ...typography.body,
     color: "rgba(255,255,255,0.85)",
     textAlign: "center",
     fontSize: 15,
+    lineHeight: 22,
+    paddingHorizontal: spacing.md,
   },
 
   // Features
   featureSection: {
     alignSelf: "stretch",
     paddingHorizontal: spacing.xxl,
-    paddingTop: spacing.xl,
+    paddingTop: spacing.xxl,
     paddingBottom: spacing.md,
   },
   featureSectionTitle: {
-    ...typography.label,
-    color: colors.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
     marginBottom: spacing.md,
   },
   featureRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm + 2,
+    gap: spacing.md,
     paddingVertical: spacing.xs + 2,
   },
   featureText: {
@@ -466,15 +537,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 2,
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    borderWidth: 1,
     borderColor: colors.border,
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.lg,
   },
   planCardSelected: {
     borderColor: colors.primary,
+    borderWidth: 1.5,
     backgroundColor: colors.primaryBg,
   },
   saveBadge: {
@@ -550,6 +622,16 @@ const styles = StyleSheet.create({
     color: colors.primary,
     opacity: 0.8,
   },
+  planTrialSub: {
+    ...typography.caption,
+    color: colors.success,
+    fontWeight: "700",
+    fontSize: 12,
+    marginTop: 3,
+  },
+  planTrialSubSelected: {
+    color: colors.success,
+  },
   planRight: {
     alignItems: "flex-end",
   },
@@ -575,11 +657,9 @@ const styles = StyleSheet.create({
   ctaWrap: {
     alignSelf: "stretch",
     paddingHorizontal: spacing.xxl,
-    ...shadows.md,
-    borderRadius: radii.xl,
   },
   ctaButton: {
-    borderRadius: radii.xl,
+    borderRadius: radii.md,
     paddingVertical: 16,
     alignItems: "center",
     justifyContent: "center",
@@ -616,11 +696,24 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
 
+  // Continue with free version (explicit dismiss CTA)
+  continueFreeButton: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  continueFreeText: {
+    ...typography.bodyBold,
+    color: colors.textSecondary,
+    fontSize: 15,
+    textAlign: "center",
+  },
+
   // Secondary
   secondaryActions: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: spacing.lg,
+    marginTop: spacing.xs,
   },
   secondaryButton: {
     paddingVertical: spacing.sm,

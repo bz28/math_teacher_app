@@ -2,12 +2,21 @@ import * as SecureStore from "expo-secure-store";
 
 const DEV_HOST = process.env.EXPO_PUBLIC_API_HOST ?? "localhost";
 const DEV_PORT = process.env.EXPO_PUBLIC_API_PORT ?? "8000";
+// Any known public tunnel host -> HTTPS without port. Direct LAN/localhost
+// dev keeps http+port. Add new tunnel suffixes here as we adopt them.
 const isNgrok = DEV_HOST.endsWith(".ngrok-free.dev");
+const isCloudflareTunnel = DEV_HOST.endsWith(".trycloudflare.com");
+const isTunnel = isNgrok || isCloudflareTunnel;
 const API_BASE = __DEV__
-  ? isNgrok
+  ? isTunnel
     ? `https://${DEV_HOST}/v1`
     : `http://${DEV_HOST}:${DEV_PORT}/v1`
   : "https://mathteacherapp-production.up.railway.app/v1";
+
+// One-time diagnostic on bundle load. If Metro served a stale bundle
+// (i.e. expo started without --clear after .env changed), this will
+// print a host that doesn't match mobile/.env — that's the smoking gun.
+if (__DEV__) console.warn(`[api] API_BASE = ${API_BASE}`);
 
 const ACCESS_TOKEN_KEY = "access_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
@@ -55,10 +64,25 @@ let _userId: string | null = null;
 /** Whether the last refresh failure was a definitive auth rejection (401) vs transient error */
 let _lastRefreshWasAuthRejection = false;
 
+// When the dev backend is fronted by ngrok-free, every request without
+// this header gets the HTML "ERR_NGROK_6024 — you are about to visit"
+// interstitial instead of the real API response. The fetch then either
+// throws "Network request failed" trying to parse HTML as JSON or
+// silently fails downstream. Setting the header on every request via
+// the central wrapper makes the interstitial vanish.
+function withNgrokBypass(headers: HeadersInit | undefined): HeadersInit | undefined {
+  if (!isNgrok) return headers;
+  return { ...(headers ?? {}), "ngrok-skip-browser-warning": "1" };
+}
+
 function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
-  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(id));
+  return fetch(url, {
+    ...init,
+    headers: withNgrokBypass(init.headers),
+    signal: controller.signal,
+  }).finally(() => clearTimeout(id));
 }
 
 export function setOnSessionExpired(callback: () => void) {
@@ -320,6 +344,23 @@ export interface SessionHistoryResponse {
 export const getSessionHistory = (subject: string, limit = 20, offset = 0) =>
   apiGet<SessionHistoryResponse>(`/session/history?subject=${subject}&limit=${limit}&offset=${offset}`);
 
+// Weak spots — recent problems where the student's submitted work was
+// flagged by diagnosis. Powers the Review tab.
+export interface WeakSpotItem {
+  problem_text: string;
+  summary: string;
+  submitted_at: string;
+  session_id: string | null;
+  issue_count: number;
+}
+
+export interface WeakSpotsResponse {
+  items: WeakSpotItem[];
+}
+
+export const getWeakSpots = (subject: string, limit = 20) =>
+  apiGet<WeakSpotsResponse>(`/weak-spots?subject=${subject}&limit=${limit}`);
+
 export const createMockTestSession = (problem: string, allProblems?: string[]) =>
   apiPost<{ id: string }>("/session/mock-test", { problem, all_problems: allProblems ?? [] });
 
@@ -389,8 +430,23 @@ export interface PracticeProblem {
   distractors?: string[];
 }
 
-export const generatePracticeProblems = (problem: string, count: number, subject: string = "math") =>
-  apiPost<{ problems: PracticeProblem[] }>("/practice/generate", { problem, count, subject }, LLM_TIMEOUT_MS);
+/**
+ * Call /practice/generate with one of two shapes:
+ *   - `problem: string` + `count > 0`  → backend generates `count` similar problems from this source
+ *   - `problem: string` + `count === 0` → backend solves the problem (returns answer + distractors)
+ *   - `problems: string[]` + `count > 0` → backend round-robins across sources, returns `count` total
+ *   - `problems: string[]` + `count === 0` → backend returns one similar per source (length-preserving)
+ */
+export const generatePracticeProblems = (
+  problem: string | string[],
+  count: number,
+  subject: string = "math",
+) => {
+  const body = Array.isArray(problem)
+    ? { problems: problem, count, subject }
+    : { problem, count, subject };
+  return apiPost<{ problems: PracticeProblem[] }>("/practice/generate", body, LLM_TIMEOUT_MS);
+};
 
 export const checkPracticeAnswer = (question: string, correctAnswer: string, userAnswer: string, subject: string = "math") =>
   apiPost<{ is_correct: boolean }>("/practice/check", {

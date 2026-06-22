@@ -6,8 +6,17 @@ import {
   getSession,
   respondToStep,
 } from "../services/api";
+import { useEntitlementStore } from "./entitlements";
 import { errorMessage } from "../utils/errorMessage";
 import { initialState, type SessionPhase, type StoreGet, type StoreSet } from "./types";
+
+/** Refresh server-side usage counters in the background after a
+ *  session is created, so the home screen / mode picker reflect the
+ *  decomp the server just charged for. Best-effort — failures don't
+ *  surface to the user. */
+function refreshEntitlementsSoon() {
+  useEntitlementStore.getState().fetchEntitlements().catch(() => {});
+}
 
 export function createLearnActions(set: StoreSet, get: StoreGet) {
   return {
@@ -18,6 +27,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
       try {
         const session = await createSession(problem, mode, subject, image);
         set({ session, phase: "awaiting_input", lastResponse: null });
+        refreshEntitlementsSoon();
       } catch (e) {
         if (e instanceof EntitlementError) throw e;
         set({ phase: "error", error: errorMessage(e) });
@@ -51,8 +61,19 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
             preloadedSessions: {},
           },
         });
+        refreshEntitlementsSoon();
 
-        // Pre-generate sessions for remaining problems in background
+        // Pre-generate sessions for the rest in parallel, so advancing
+        // through the queue is instant.
+        //
+        // Safety vs. the server-side race: handleGo (Input/Solve) caps
+        // allProblems.length at sessionsRemaining for free users, so N
+        // parallel preloads are guaranteed to fit under the limit even
+        // if every concurrent request reads the LLMCall count before
+        // the others commit. We tried serializing here for belt-and-
+        // suspenders but it made advancing visibly stutter when the
+        // user finished a problem faster than the next preload — and
+        // the cap was already enough to make the race unreachable.
         if (problems.length > 1) {
           problems.slice(1).forEach((p, i) => {
             const queueIndex = i + 1;
@@ -66,6 +87,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
                     preloadedSessions: { ...lq.preloadedSessions, [queueIndex]: s },
                   },
                 });
+                refreshEntitlementsSoon();
               })
               .catch(() => {});
           });
@@ -106,6 +128,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
           lastResponse: null,
           learnQueue: { ...learnQueue, currentIndex: nextIndex },
         });
+        refreshEntitlementsSoon();
       } catch (e) {
         set({ phase: "error", error: errorMessage(e) });
       }
@@ -221,6 +244,7 @@ export function createLearnActions(set: StoreSet, get: StoreGet) {
       try {
         const newSession = await createSession(problem, "learn", subject);
         set({ session: newSession, phase: "awaiting_input", lastResponse: null, error: null });
+        refreshEntitlementsSoon();
       } catch (e) {
         if (e instanceof EntitlementError) throw e;
         set({ phase: "error", error: errorMessage(e) });

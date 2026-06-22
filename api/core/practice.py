@@ -27,6 +27,8 @@ Rules:
 - Each distractor should target a common student mistake (sign errors, off-by-one, \
 wrong formula, partial solution, etc.)
 - Distractors must be clearly wrong but look reasonable to a student who made an error
+- All 3 distractors must be DISTINCT from each other and from the correct answer. \
+Do not return the same value twice, even with different reasoning behind each.
 - Use LaTeX $ delimiters for ALL math, even simple expressions
 - CRITICAL — NO EXPLANATIONS: each distractor must contain ONLY the wrong answer value. \
 Do NOT append any commentary, label, or reason. Specifically forbidden are trailing \
@@ -99,7 +101,27 @@ async def generate_distractors(
         )
         distractors = result.get("distractors", [])
         if isinstance(distractors, list) and len(distractors) >= 3:
-            return [_strip_distractor_leak(str(d)) for d in distractors[:3]]
+            # Strip leaked explanations, drop anything that collapses to the
+            # correct answer or to a previous distractor. Without dedup the
+            # MC grid shows three identical options that all select together
+            # when Claude returns differently-annotated-but-same-value rows
+            # like ["5 (sign error)", "5 (off by one)", "5 (forgot)"]; all
+            # three strip to "5".
+            cleaned: list[str] = []
+            seen: set[str] = {final_answer.strip().lower()}
+            for d in distractors:
+                s = _strip_distractor_leak(str(d))
+                key = s.strip().lower()
+                if not key or key in seen:
+                    continue
+                cleaned.append(s)
+                seen.add(key)
+            if len(cleaned) >= 3:
+                return cleaned[:3]
+            # Fewer than 3 unique distractors made it through. Return what
+            # we have — MockTestScreen will render however many options
+            # exist; better than 3 duplicates.
+            return cleaned
     except Exception:
         logger.warning("Failed to generate distractors for: %s", problem[:80])
 

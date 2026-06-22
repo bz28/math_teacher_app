@@ -19,28 +19,17 @@ import { GradientButton } from "./GradientButton";
 import { ExtractionModal } from "./ExtractionModal";
 import { ImagePreview } from "./ImagePreview";
 import { MockTestConfig } from "./MockTestConfig";
-import { PaywallScreen } from "./PaywallScreen";
-import { UpgradePrompt } from "./UpgradePrompt";
 import { RectangleSelector } from "./RectangleSelector";
+import { MathText } from "./MathText";
 import { useImageExtraction } from "../hooks/useImageExtraction";
-import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
 import { EntitlementError } from "../services/api";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
+import { usePaywallStore } from "../stores/paywall";
 import { SubjectPills, getSubjectMeta } from "./SubjectPills";
-import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
+import { useColors, useGradients, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 
 const MAX_PROBLEMS = 10;
-const CHIP_PREVIEW_LIMIT = 30;
-
-// Queue chips show the problem text inline. Long word problems turn into
-// awkward single-line ellipsis that cuts mid-word; hard-truncating before
-// render keeps the pill compact and readable.
-function truncateForChip(text: string): string {
-  const oneLine = text.replace(/\s+/g, " ").trim();
-  if (oneLine.length <= CHIP_PREVIEW_LIMIT) return oneLine;
-  return oneLine.slice(0, CHIP_PREVIEW_LIMIT).trimEnd() + "…";
-}
 
 type Mode = "learn" | "mock_test";
 
@@ -63,6 +52,7 @@ export function SolveScreen({
   onSessionError,
 }: Props) {
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const inputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -77,6 +67,10 @@ export function SolveScreen({
   const [untimed, setUntimed] = useState(true);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(30);
   const [multipleChoice, setMultipleChoice] = useState(true);
+  // Number of questions to generate in "Generate similar" mode. Decoupled
+  // from the source count so the user can seed with 3 problems and ask for
+  // a 10-question test (backend round-robins across the sources).
+  const [questionCount, setQuestionCount] = useState(5);
 
   const problemQueue = useSessionStore((s) => s.problemQueue);
   const setProblemQueue = useSessionStore((s) => s.setProblemQueue);
@@ -88,7 +82,7 @@ export function SolveScreen({
   const sessionPhase = useSessionStore((s) => s.phase);
   const sessionError = useSessionStore((s) => s.error);
 
-  const { show: showUpgrade, promptProps, paywallVisible, paywallTrigger, closePaywall } = useUpgradePrompt();
+  const showPaywall = usePaywallStore((s) => s.show);
 
   // Subscribe to the raw used/limit primitives (NOT the sessionsRemaining /
   // scansRemaining function selectors — those return stable refs that never
@@ -143,7 +137,7 @@ export function SolveScreen({
     setError,
     subject,
     isPro ? undefined : () => scansLeft,
-    isPro ? undefined : () => showUpgrade("image_scan", "Scan Limit Reached", `You've used all ${dailyScansLimit} image scans for today. Upgrade to Pro for unlimited scans.`),
+    isPro ? undefined : () => showPaywall("image_scan"),
   );
 
   const handleConfirmExtraction = () => {
@@ -168,16 +162,18 @@ export function SolveScreen({
     const text = input.trim();
     if (!text) return;
     if (!isPro && problemQueue.length >= maxQueueSize) {
-      const remaining = sessionsLeft;
-      const msg = problemQueue.length > 0
-        ? `Your queue is full — you have ${remaining} problem${remaining !== 1 ? "s" : ""} remaining today. Remove one to add another, or upgrade to Pro.`
-        : `You've used all ${dailySessionsLimit} problems for today. Upgrade to Pro for unlimited access.`;
-      showUpgrade("create_session", "Queue Full", msg);
+      showPaywall("create_session");
       return;
     }
     if (problemQueue.length >= MAX_PROBLEMS) return;
     setProblemQueue([...problemQueue, text]);
     setInput("");
+    // Imperatively clear the native TextInput too. Controlled
+    // multiline TextInputs on iOS sometimes drop the value="" reset
+    // when the queue/input state both change in the same tick — the
+    // queue updates but the typed text visibly stays put. .clear()
+    // forces the native view to match the new "" state.
+    inputRef.current?.clear();
     setError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     inputRef.current?.focus();
@@ -209,7 +205,15 @@ export function SolveScreen({
     setError(null);
 
     if (!isPro && sessionsLeft <= 0) {
-      showUpgrade("create_session", "Daily Limit Reached", `You've used all ${dailySessionsLimit} problems for today. Upgrade to Pro for unlimited access.`);
+      showPaywall("create_session");
+      return;
+    }
+    // Mock test counts as one session credit regardless of problem
+    // count, so the per-problem cap only applies to the learn-queue
+    // path. Without this, queue + currently-typed input could push
+    // the total past sessionsLeft and all problems would be sent.
+    if (!isPro && mode !== "mock_test" && allProblems.length > sessionsLeft) {
+      showPaywall("create_session");
       return;
     }
 
@@ -223,7 +227,7 @@ export function SolveScreen({
 
     try {
       if (mode === "mock_test") {
-        const generateCount = examType === "generate_similar" ? allProblems.length : 0;
+        const generateCount = examType === "generate_similar" ? questionCount : 0;
         const timeLimit = untimed ? null : timeLimitMinutes;
         await startMockTest(allProblems, generateCount, timeLimit, multipleChoice);
       } else if (allProblems.length === 1) {
@@ -234,7 +238,7 @@ export function SolveScreen({
     } catch (e) {
       if (e instanceof EntitlementError) {
         onSessionError();
-        showUpgrade(e.entitlement, "Daily Limit Reached", e.message);
+        showPaywall(e.entitlement);
         return;
       }
     }
@@ -296,7 +300,7 @@ export function SolveScreen({
     const noun = n === 1 ? "problem" : "problems";
     if (mode === "mock_test") {
       if (examType === "generate_similar") {
-        return `${n} example${n !== 1 ? "s" : ""} → ${n} generated question${n !== 1 ? "s" : ""}`;
+        return `${n} example${n !== 1 ? "s" : ""} → ${questionCount} generated question${questionCount !== 1 ? "s" : ""}`;
       }
       return `${n} question${n !== 1 ? "s" : ""}`;
     }
@@ -341,7 +345,7 @@ export function SolveScreen({
                     size={16}
                     color={isActive ? colors.white : colors.textMuted}
                   />
-                  <Text style={[styles.modeTabText, isActive && { color: colors.white }]}>
+                  <Text style={[styles.modeTabText, isActive && { color: colors.textOnPrimary }]}>
                     {m.label}
                   </Text>
                 </TouchableOpacity>
@@ -356,7 +360,7 @@ export function SolveScreen({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.greetingTitle}>
+          <Text style={styles.greetingTitle} numberOfLines={1} adjustsFontSizeToFit>
             {mode === "mock_test" ? "What do you want to test?" : "What do you want to learn?"}
           </Text>
 
@@ -371,6 +375,8 @@ export function SolveScreen({
               onTimeLimitChange={setTimeLimitMinutes}
               multipleChoice={multipleChoice}
               onMultipleChoiceChange={setMultipleChoice}
+              questionCount={questionCount}
+              onQuestionCountChange={setQuestionCount}
               themeColor={theme.primary}
             />
           )}
@@ -387,10 +393,10 @@ export function SolveScreen({
               colors={gradients[activeSubject.gradient]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={[styles.snapCard, shadows.lg, extracting && styles.cardDisabled]}
+              style={[styles.snapCard, extracting && styles.cardDisabled]}
             >
               <View style={styles.snapIconWrap}>
-                <Ionicons name="camera" size={28} color={colors.white} />
+                <Ionicons name="camera" size={28} color={colors.textOnPrimary} />
               </View>
               <View>
                 <Text style={styles.snapTitle}>Snap a problem</Text>
@@ -407,7 +413,7 @@ export function SolveScreen({
             accessibilityRole="button"
             accessibilityLabel="Choose a photo from gallery"
           >
-            <View style={[styles.compactCard, shadows.sm, extracting && styles.cardDisabled]}>
+            <View style={[styles.compactCard, extracting && styles.cardDisabled]}>
               <Ionicons name="images-outline" size={22} color={theme.primary} />
               <Text style={[styles.compactCardText, { color: theme.primary }]}>Choose from gallery</Text>
               <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -455,7 +461,7 @@ export function SolveScreen({
                 accessibilityRole="button"
                 accessibilityLabel="Add to queue"
               >
-                <Ionicons name="add" size={18} color={colors.white} />
+                <Ionicons name="add" size={18} color={colors.textOnPrimary} />
               </TouchableOpacity>
             )}
           </View>
@@ -480,12 +486,11 @@ export function SolveScreen({
                       accessibilityLabel={`Edit problem ${i + 1}`}
                       style={styles.queueChipTextWrap}
                     >
-                      <Text
-                        numberOfLines={1}
+                      <MathText
+                        text={p}
+                        compact
                         style={{ ...typography.label, color: theme.primary, fontSize: 13 }}
-                      >
-                        {truncateForChip(p)}
-                      </Text>
+                      />
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => handleRemoveFromQueue(i)}
@@ -503,7 +508,7 @@ export function SolveScreen({
 
           {/* Extracting indicator */}
           {extracting && (
-            <View style={[styles.extractingCard, shadows.sm]}>
+            <View style={styles.extractingCard}>
               <ActivityIndicator size="small" color={colors.primary} />
               <Text style={styles.extractingText}>
                 {extractionProgress
@@ -589,13 +594,6 @@ export function SolveScreen({
         onManualSelect={imageUri && imageDimensions ? startManualSelect : undefined}
       />
 
-      <UpgradePrompt {...promptProps} />
-      <PaywallScreen
-        visible={paywallVisible}
-        onClose={closePaywall}
-        onPurchaseComplete={() => { closePaywall(); fetchEntitlements(); }}
-        trigger={paywallTrigger}
-      />
     </SafeAreaView>
   );
 }
@@ -610,6 +608,7 @@ function QuotaFooter({
   themeColor: string;
 }) {
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const pct = limit > 0 ? (limit - remaining) / limit : 0;
   return (
@@ -663,12 +662,14 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     paddingBottom: spacing.xxl,
   },
 
-  // Hero — slightly smaller so both learn/test fit on one line
+  // Hero — serif italic carries the editorial moment. Single-line headline;
+  // adjustsFontSizeToFit on the Text lets it shrink on iPhone SE if the
+  // mock-test copy ("What do you want to test?") runs long.
   greetingTitle: {
-    ...typography.title,
-    fontSize: 22,
+    ...typography.displaySerifItalic,
+    fontSize: 28,
+    lineHeight: 34,
     color: colors.text,
-    lineHeight: 28,
     marginBottom: spacing.lg,
   },
 
@@ -693,7 +694,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   snapTitle: {
     ...typography.bodyBold,
-    color: colors.white,
+    color: colors.textOnPrimary,
     fontSize: 16,
   },
   snapSubtitle: {
@@ -708,8 +709,10 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.xl,
     marginBottom: spacing.sm,
@@ -728,8 +731,8 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     alignItems: "flex-start",
     gap: spacing.sm,
     backgroundColor: colors.inputBg,
-    borderRadius: radii.lg,
-    borderWidth: 1.5,
+    borderRadius: radii.md,
+    borderWidth: 1,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     marginBottom: spacing.md,
@@ -789,8 +792,10 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
+    backgroundColor: colors.card,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.md,
@@ -841,7 +846,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   quotaConfirmBtnText: {
     ...typography.label,
-    color: colors.white,
+    color: colors.textOnPrimary,
   },
 
   // Error

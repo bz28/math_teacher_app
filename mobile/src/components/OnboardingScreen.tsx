@@ -1,31 +1,18 @@
-import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Animated, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { Eyebrow } from "./Eyebrow";
 import { useFadeInUp } from "../hooks/useFadeInUp";
-import { colors, spacing, radii, typography, shadows, gradients } from "../theme";
+import { colors, spacing, radii, typography, gradients } from "../theme";
 
 interface OnboardingScreenProps {
   onComplete: () => void;
 }
 
 const TOTAL_SLIDES = 4;
-
-/** Gentle continuous pulse used by the hero logo */
-function usePulse() {
-  const scale = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(scale, { toValue: 1.05, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(scale, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ]),
-    ).start();
-  }, []);
-  return { transform: [{ scale }] };
-}
 
 export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const [slideIndex, setSlideIndex] = useState(0);
@@ -88,38 +75,35 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 /* ── Slide 1: Welcome ──────────────────────────────────── */
 
 function WelcomeSlide() {
-  const logoAnim = useFadeInUp(0, 600);
-  const pulseAnim = usePulse();
-  const taglineAnim = useFadeInUp(200, 500);
+  const eyebrowAnim = useFadeInUp(0, 500);
+  const taglineAnim = useFadeInUp(200, 600);
   const subtitleAnim = useFadeInUp(400, 500);
   const pillsAnim = useFadeInUp(600, 500);
 
   return (
     <View style={styles.slideCenter}>
-      <Animated.View style={[logoAnim, pulseAnim]}>
-        <LinearGradient colors={gradients.primary} style={styles.heroLogo}>
-          <Text style={styles.heroLogoText}>V</Text>
-        </LinearGradient>
+      <Animated.View style={eyebrowAnim}>
+        <Eyebrow style={styles.welcomeEyebrow}>Veradic</Eyebrow>
       </Animated.View>
 
       <Animated.Text style={[styles.heroTagline, taglineAnim]}>
-        Welcome to Veradic
+        Learn every step.
       </Animated.Text>
 
       <Animated.Text style={[styles.heroSubtitle, subtitleAnim]}>
-        Your AI tutor for math, science,{"\n"}and chemistry — learn every step.
+        Your AI tutor for math, science,{"\n"}and chemistry.
       </Animated.Text>
 
       <Animated.View style={[styles.pillRow, pillsAnim]}>
-        <View style={[styles.pill, shadows.sm]}>
+        <View style={styles.pill}>
           <Ionicons name="camera" size={14} color={colors.primary} />
           <Text style={styles.pillText}>Snap</Text>
         </View>
-        <View style={[styles.pill, shadows.sm]}>
+        <View style={styles.pill}>
           <Ionicons name="book" size={14} color={colors.primary} />
           <Text style={styles.pillText}>Learn</Text>
         </View>
-        <View style={[styles.pill, shadows.sm]}>
+        <View style={styles.pill}>
           <Ionicons name="infinite" size={14} color={colors.primary} />
           <Text style={styles.pillText}>Practice</Text>
         </View>
@@ -145,7 +129,7 @@ function SnapSlide() {
       </Animated.Text>
 
       {/* Mock viewfinder with a math problem inside */}
-      <Animated.View style={[styles.previewFrame, shadows.lg, previewAnim]}>
+      <Animated.View style={[styles.previewFrame, previewAnim]}>
         <View style={[styles.frameCorner, styles.cornerTL]} />
         <View style={[styles.frameCorner, styles.cornerTR]} />
         <View style={[styles.frameCorner, styles.cornerBL]} />
@@ -215,7 +199,7 @@ function LearnSlide() {
       </View>
 
       {/* Ask hint bubble */}
-      <Animated.View style={[styles.askHint, shadows.sm, askAnim]}>
+      <Animated.View style={[styles.askHint, askAnim]}>
         <Ionicons name="chatbubble-ellipses" size={14} color={colors.primary} />
         <Text style={styles.askHintText}>
           Stuck on a step? Tap <Text style={styles.askHintBold}>Ask</Text> to chat with Veradic.
@@ -249,7 +233,7 @@ function PracticeSlide() {
             colors={gradients.primary}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.modeCard, shadows.md]}
+            style={styles.modeCard}
           >
             <Ionicons name="book" size={22} color={colors.white} />
             <View style={styles.modeCardText}>
@@ -264,7 +248,7 @@ function PracticeSlide() {
             colors={gradients.warning}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.modeCard, shadows.md]}
+            style={styles.modeCard}
           >
             <Ionicons name="document-text" size={22} color={colors.white} />
             <View style={styles.modeCardText}>
@@ -279,7 +263,7 @@ function PracticeSlide() {
             colors={gradients.success}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={[styles.modeCard, shadows.md]}
+            style={styles.modeCard}
           >
             <Ionicons name="infinite" size={22} color={colors.white} />
             <View style={styles.modeCardText}>
@@ -358,7 +342,9 @@ const styles = StyleSheet.create({
 
   // Shared slide title/subtitle
   slideTitle: {
-    ...typography.title,
+    ...typography.displaySerifItalic,
+    fontSize: 32,
+    lineHeight: 38,
     color: colors.text,
     textAlign: "center",
     marginBottom: spacing.sm,
@@ -372,26 +358,15 @@ const styles = StyleSheet.create({
   },
 
   // Welcome slide
-  heroLogo: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: spacing.xxl,
-  },
-  heroLogoText: {
-    fontSize: 44,
-    fontWeight: "800",
-    color: colors.white,
-    letterSpacing: -1,
+  welcomeEyebrow: {
+    marginBottom: spacing.xl,
   },
   heroTagline: {
-    fontSize: 30,
-    fontWeight: "800",
+    ...typography.displaySerifItalic,
+    fontSize: 44,
+    lineHeight: 48,
     color: colors.text,
     textAlign: "center",
-    letterSpacing: -0.5,
     marginBottom: spacing.md,
   },
   heroSubtitle: {
@@ -409,12 +384,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderColor: colors.border,
   },
   pillText: {
     ...typography.label,

@@ -86,6 +86,14 @@ export function ProblemChat({
           Ask
         </Button>
       </div>
+
+      {/* AI disclosure — kept quiet so it reads as a footnote, not a
+          warning. Procurement asks for this on AI-generated surfaces;
+          surfacing it once near the input keeps every reply visibly
+          attributable without bracketing each message. */}
+      <p className="pt-1 text-[11px] text-text-muted">
+        AI-generated. Verify before reuse.
+      </p>
     </div>
   );
 }

@@ -16,18 +16,23 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { Eyebrow } from "./Eyebrow";
 import { useFadeInUp } from "../hooks/useFadeInUp";
 import { forgotPassword, login, saveTokens } from "../services/api";
 import { errorMessage } from "../utils/errorMessage";
-import { useColors, spacing, radii, typography, gradients, type ColorPalette } from "../theme";
+import { useColors, useGradients, spacing, radii, typography, gradients, type ColorPalette } from "../theme";
 
 interface LoginFormProps {
-  onAuth: () => void;
+  /** Called on successful login. The optional `justRegistered` flag
+   *  is forwarded from AuthScreen but is always omitted here — login
+   *  is never a "first-time" event. */
+  onAuth: (justRegistered?: boolean) => void;
   onSwitchToRegister: () => void;
 }
 
 export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -81,13 +86,8 @@ export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={styles.header}>
-          <Animated.View style={[styles.heroIconWrap, logoAnim]}>
-            <LinearGradient
-              colors={gradients.primary}
-              style={styles.heroIconGradient}
-            >
-              <Text style={styles.logoText}>V</Text>
-            </LinearGradient>
+          <Animated.View style={logoAnim}>
+            <Eyebrow style={styles.brandEyebrow}>Veradic</Eyebrow>
           </Animated.View>
           <Animated.View style={headerAnim}>
             <Text style={styles.title}>Welcome back</Text>
@@ -163,7 +163,7 @@ export function LoginForm({ onAuth, onSwitchToRegister }: LoginFormProps) {
               style={styles.primaryButton}
             >
               {loading ? (
-                <ActivityIndicator color={colors.white} />
+                <ActivityIndicator color={colors.textOnPrimary} />
               ) : (
                 <Text style={styles.primaryButtonText}>Sign In</Text>
               )}
@@ -198,27 +198,16 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     alignItems: "center",
     marginBottom: spacing.xxl + 4,
   },
-  heroIconWrap: {
+  brandEyebrow: {
     marginBottom: spacing.lg,
   },
-  heroIconGradient: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  logoText: {
-    fontSize: 38,
-    fontWeight: "800",
-    color: colors.white,
-    letterSpacing: -1,
-  },
   title: {
-    ...typography.title,
+    ...typography.displaySerifItalic,
+    fontSize: 36,
+    lineHeight: 42,
     color: colors.text,
     textAlign: "center",
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   subtitle: {
     ...typography.body,
@@ -232,7 +221,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
     backgroundColor: colors.inputBg,
@@ -269,7 +258,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     alignItems: "center",
   },
   primaryButtonText: {
-    color: colors.white,
+    color: colors.textOnPrimary,
     ...typography.button,
   },
   buttonDisabled: { opacity: 0.4 },

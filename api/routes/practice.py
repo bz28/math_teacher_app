@@ -40,10 +40,32 @@ async def generate(
     await check_entitlement(db, user, Entitlement.CREATE_SESSION)
 
     try:
-        # Batch generate similar question texts — solving is done separately by the frontend
+        # Generate-similar mode. Three shapes feed it:
+        #   1. `problems` (list) + `count == 0` — one similar per source,
+        #      length-preserving (default behaviour).
+        #   2. `problems` (list) + `count > 0` — round-robin across sources to
+        #      produce `count` total. A 3-source, 10-question ask becomes
+        #      [P1,P2,P3,P1,P2,P3,P1,P2,P3,P1] so each source seeds roughly
+        #      count/len(sources) of the outputs instead of all clones of P1.
+        #   3. `problem` (singular) + `count > 0` — generate `count` similar
+        #      problems from this one source ("Try a practice problem" path).
+        sources: list[str] | None = None
         if body.problems:
+            if body.count > 0 and body.count != len(body.problems):
+                per_source = body.count // len(body.problems)
+                extras = body.count % len(body.problems)
+                expanded: list[str] = []
+                for i, src in enumerate(body.problems):
+                    expanded.extend([src] * (per_source + (1 if i < extras else 0)))
+                sources = expanded
+            else:
+                sources = body.problems
+        elif body.problem and body.count > 0:
+            sources = [body.problem] * body.count
+
+        if sources is not None:
             question_texts = await generate_similar_questions(
-                body.problems,
+                sources,
                 user_id=str(user.id),
                 subject=body.subject,
                 difficulty=body.difficulty,
@@ -52,7 +74,8 @@ async def generate(
                 problems=[PracticeProblem(question=q, answer="", distractors=[]) for q in question_texts]
             )
 
-        # Solve a single problem — decompose + distractors
+        # Solve a single problem — decompose + distractors. count == 0 path,
+        # used by mock-test "Use as exam" to resolve each source's answer.
         problem = body.problem or ""
         result = await solve_problem(
             problem,

@@ -1,10 +1,10 @@
 import { useMemo } from "react";
-import { Platform, StyleSheet, Text, View, TouchableOpacity } from "react-native";
+import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useColors, spacing, typography, type ColorPalette } from "../theme";
 
-export type TabKey = "solve" | "history" | "library" | "account";
+export type TabKey = "solve" | "history" | "review" | "account";
 
 interface Tab {
   key: TabKey;
@@ -16,7 +16,7 @@ interface Tab {
 const TABS: Tab[] = [
   { key: "solve", label: "Study", icon: "flash-outline", iconActive: "flash" },
   { key: "history", label: "History", icon: "time-outline", iconActive: "time" },
-  { key: "library", label: "Library", icon: "library-outline", iconActive: "library" },
+  { key: "review", label: "Review", icon: "alert-circle-outline", iconActive: "alert-circle" },
   { key: "account", label: "Account", icon: "person-outline", iconActive: "person" },
 ];
 
@@ -64,18 +64,9 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   bar: {
     flexDirection: "row",
     borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    backgroundColor: colors.white,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
     paddingTop: spacing.sm,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.04,
-        shadowRadius: 8,
-      },
-      android: { elevation: 8 },
-    }),
   },
   tab: {
     flex: 1,
@@ -84,8 +75,8 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   label: {
-    ...typography.caption,
-    fontSize: 11,
+    ...typography.eyebrow,
+    fontSize: 10,
     color: colors.textMuted,
   },
   labelActive: {
