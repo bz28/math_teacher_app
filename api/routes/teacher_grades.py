@@ -18,10 +18,11 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.audit_log import log_student_record_access
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
@@ -201,6 +202,7 @@ async def get_student_grades(
     course_id: uuid.UUID,
     section_id: uuid.UUID,
     student_id: uuid.UUID,
+    request: Request,
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -212,7 +214,7 @@ async def get_student_grades(
     was made in) rather than current SectionEnrollment, so a student
     who moved sections keeps their old-section grades attached to the
     old section's class average — which is the historical truth."""
-    await get_teacher_course(db, course_id, current_user.user_id)
+    course = await get_teacher_course(db, course_id, current_user.user_id)
 
     # Verify section belongs to course AND student is enrolled in this
     # specific section. Both in one query — a missing row (no match)
@@ -237,6 +239,20 @@ async def get_student_grades(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Student not enrolled in this section",
         )
+
+    # FERPA: a teacher just read one student's full grade record.
+    # Authorization is confirmed above (teacher owns the course, student
+    # is enrolled in the section), so log the access before returning.
+    # The helper commits its own row and never raises.
+    await log_student_record_access(
+        db,
+        accessor_user_id=current_user.user_id,
+        accessor_role=current_user.role,
+        target_student_id=student_id,
+        record_type="grades",
+        accessor_school_id=course.school_id,
+        request=request,
+    )
 
     # Detail view shows every published HW assigned to this section —
     # including ones still mid-grading — so a teacher who's partway
@@ -386,6 +402,7 @@ def _slug(text: str) -> str:
 @router.get("/courses/{course_id}/grades/export.csv")
 async def export_course_grades_csv(
     course_id: uuid.UUID,
+    request: Request,
     section_id: uuid.UUID | None = None,
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
@@ -405,6 +422,19 @@ async def export_course_grades_csv(
     a teacher viewing one period exports just that period.
     """
     course = await get_teacher_course(db, course_id, current_user.user_id)
+
+    # FERPA: exporting the gradebook is a bulk disclosure of student
+    # records. Log it as a single export event (target_student_id=None
+    # since it spans the roster) before producing the file.
+    await log_student_record_access(
+        db,
+        accessor_user_id=current_user.user_id,
+        accessor_role=current_user.role,
+        target_student_id=None,
+        record_type="grades_export",
+        accessor_school_id=course.school_id,
+        request=request,
+    )
 
     # Roster (re-using the same shape as /grades for consistency).
     enrollments_q = (

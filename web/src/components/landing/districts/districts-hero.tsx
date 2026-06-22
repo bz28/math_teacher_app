@@ -5,7 +5,10 @@ import { Eyebrow } from "../eyebrow";
 /**
  * Hero for /for-districts — the page admins land on when forwarded a
  * sales email. Tone is "we know how district procurement works" —
- * compliance-forward, restrained, paperwork-aesthetic.
+ * compliance-forward, restrained, paperwork-aesthetic. Lead with
+ * teacher-side value (the audit flagged this page as under-selling
+ * the admin-workflow payoff and over-indexing on data compliance);
+ * compliance follows immediately below.
  */
 export function DistrictsHero() {
   return (
@@ -13,15 +16,16 @@ export function DistrictsHero() {
       <div className="mx-auto max-w-3xl text-center">
         <Eyebrow>For superintendents and curriculum directors</Eyebrow>
         <h1 className="mt-8 text-display-xl text-[color:var(--color-text)]">
-          District-ready{" "}
+          Built for your teachers.{" "}
           <span className="font-serif italic font-normal text-[color:var(--color-primary-dark)]">
-            from day one.
+            Cleared by your procurement team.
           </span>
         </h1>
         <p className="mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
-          Veradic is built to clear procurement before it clears the
-          classroom. Compliance, paperwork, and a pilot path — all
-          documented here.
+          Veradic grades homework, surfaces integrity concerns early,
+          and gives every student unlimited guided practice — all
+          under teacher control. The compliance, paperwork, and pilot
+          path are documented below.
         </p>
         <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
           <Link

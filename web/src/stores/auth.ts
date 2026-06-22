@@ -6,19 +6,41 @@ import {
   saveTokens,
   clearTokens,
   hasStoredTokens,
+  isMfaChallenge,
   ApiError,
   type User,
 } from "@/lib/api";
+
+/** Login outcome surfaced to the caller. `mfa_required` means the
+ *  user must complete an MFA challenge via `verifyMfa()` before being
+ *  considered logged in. */
+export type LoginOutcome = { mfa_required: false } | { mfa_required: true };
 
 interface AuthState {
   user: User | null;
   loading: boolean;
   error: string | null;
 
+  /** Pending MFA challenge — set after a login() call that returned an
+   *  MFA-required response. Cleared by verifyMfa() success, cancelMfa(),
+   *  or any other login(). */
+  pendingMfa: { mfaPendingToken: string; email: string } | null;
+
   /** Try to restore session from stored tokens. */
   loadUser: () => Promise<void>;
 
-  login: (email: string, password: string) => Promise<void>;
+  /** Submit password. If the account has MFA enabled, returns
+   *  {mfa_required: true} and the caller must follow up with
+   *  verifyMfa(code). Otherwise the user is fully logged in. */
+  login: (email: string, password: string) => Promise<LoginOutcome>;
+
+  /** Submit the 6-digit MFA code to complete login. Uses the pending
+   *  challenge stashed by the prior login() call. */
+  verifyMfa: (code: string) => Promise<void>;
+
+  /** Discard the pending MFA challenge — e.g. user clicks "back" from
+   *  the code entry screen. */
+  cancelMfa: () => void;
 
   register: (data: {
     email: string;
@@ -39,10 +61,11 @@ interface AuthState {
   clearError: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   loading: true,
   error: null,
+  pendingMfa: null,
 
   async loadUser() {
     if (!hasStoredTokens()) {
@@ -65,18 +88,61 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   async login(email, password) {
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, pendingMfa: null });
     try {
-      const tokens = await authApi.login(email, password);
-      saveTokens(tokens);
+      const result = await authApi.login(email, password);
+      if (isMfaChallenge(result)) {
+        set({
+          loading: false,
+          pendingMfa: { mfaPendingToken: result.mfa_pending_token, email },
+        });
+        return { mfa_required: true };
+      }
+      saveTokens(result);
       const user = await authApi.me();
       set({ user, loading: false });
+      return { mfa_required: false };
     } catch (err) {
       const message =
         (err as ApiError)?.message ?? "Login failed. Please try again.";
       set({ loading: false, error: message });
       throw err;
     }
+  },
+
+  async verifyMfa(code) {
+    const pending = get().pendingMfa;
+    if (!pending) {
+      throw new Error("No pending MFA challenge");
+    }
+    set({ loading: true, error: null });
+    try {
+      const tokens = await authApi.loginVerifyMfa(pending.mfaPendingToken, code);
+      saveTokens(tokens);
+      const user = await authApi.me();
+      set({ user, loading: false, pendingMfa: null });
+    } catch (err) {
+      const message =
+        (err as ApiError)?.message ?? "Code verification failed.";
+      // Some errors (expired, too many attempts, invalid challenge)
+      // mean the pending token is no longer usable — clear it so the
+      // UI drops back to the password step. "Incorrect code" leaves
+      // the challenge intact so the user can try again.
+      const fatal =
+        err instanceof ApiError &&
+        err.status === 401 &&
+        !/incorrect code/i.test(err.message);
+      set({
+        loading: false,
+        error: message,
+        pendingMfa: fatal ? null : get().pendingMfa,
+      });
+      throw err;
+    }
+  },
+
+  cancelMfa() {
+    set({ pendingMfa: null, error: null });
   },
 
   async register(data) {
@@ -96,7 +162,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout() {
     clearTokens();
-    set({ user: null, loading: false, error: null });
+    set({ user: null, loading: false, error: null, pendingMfa: null });
   },
 
   async deleteAccount(password: string) {

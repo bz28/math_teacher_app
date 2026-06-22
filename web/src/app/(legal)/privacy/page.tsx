@@ -59,14 +59,32 @@ const sections = [
     id: "third-party-services",
     title: "Third-Party Services",
     content: `
-      <p>Veradic relies on trusted third-party service providers to operate. These providers may process your data on behalf of Veradic in the following categories:</p>
+      <p>Veradic relies on a small number of trusted third-party service providers ("Subprocessors") to operate. These providers may process your data on Veradic's behalf in the following categories:</p>
       <ul>
-        <li><strong>AI Service Providers</strong> — Veradic sends problem content to AI language model providers to generate tutoring responses.</li>
-        <li><strong>Cloud Hosting Providers</strong> — Veradic uses cloud infrastructure providers to host and deliver the Service.</li>
-        <li><strong>Payment Processors</strong> — Third-party payment processors and app store platforms handle subscription billing for Veradic.</li>
-        <li><strong>Analytics Services</strong> — Veradic uses analytics tools to understand how the Service is used and to improve performance.</li>
+        <li><strong>AI Service Providers</strong> — Veradic sends problem content to AI language model providers to generate tutoring responses. These providers do not use Veradic customer data to train their models.</li>
+        <li><strong>Cloud Hosting and Database Providers</strong> — Veradic uses cloud infrastructure providers to host the Service and store account, session, and assignment data. Data is encrypted in transit and at rest.</li>
+        <li><strong>Email Delivery</strong> — Veradic uses a transactional email provider to deliver account notifications, password resets, and multi-factor authentication codes.</li>
+        <li><strong>Payment Processors</strong> — Third-party payment processors and app store platforms handle subscription billing for Veradic. Veradic does not directly store payment card details.</li>
+        <li><strong>Error Monitoring</strong> — Veradic uses error-monitoring tools to detect and resolve technical issues. Student-generated content is not intentionally captured in error reports.</li>
+        <li><strong>Analytics Services</strong> — Veradic uses analytics tools to understand product usage and improve performance. Analytics are not used on student-facing routes within school deployments.</li>
       </ul>
-      <p>We select service providers we believe maintain appropriate security practices. Veradic may change its service providers at any time without notice to you.</p>
+      <p>A current, named list of Veradic's subprocessors is available on request from <a href="mailto:support@veradicai.com" class="text-primary hover:underline">support@veradicai.com</a>. Where a school district has executed a Data Privacy Agreement that requires advance notice of subprocessor changes, Veradic will provide such notice in accordance with that agreement.</p>
+    `,
+  },
+  {
+    id: "data-minimization",
+    title: "Data Minimization",
+    content: `
+      <p>Veradic collects only the personal information necessary to provide the Service. We do not collect, request, or retain data beyond what is required to operate Veradic, deliver tutoring and grading features, and maintain account security.</p>
+      <p>Specifically, Veradic:</p>
+      <ul>
+        <li>Does not collect government identification numbers, financial account information beyond what payment processors handle on Veradic's behalf, or sensitive demographic information beyond grade level</li>
+        <li>Does not sell personal information to third parties</li>
+        <li>Does not use student work, conversations with the AI tutor, integrity-review transcripts, or grades to train AI models — Veradic's or anyone else's</li>
+        <li>Does not share teacher activity data with school districts or third parties beyond what is necessary to provide contracted school-deployment features</li>
+        <li>Does not use behavioral profiling for advertising or marketing</li>
+      </ul>
+      <p>Veradic reviews its data practices periodically and updates this policy as data flows change.</p>
     `,
   },
   {
@@ -130,5 +148,5 @@ const sections = [
 ];
 
 export default function PrivacyPage() {
-  return <LegalPage title="Privacy Policy" lastUpdated="April 3, 2026" sections={sections} />;
+  return <LegalPage title="Privacy Policy" lastUpdated="May 24, 2026" sections={sections} />;
 }

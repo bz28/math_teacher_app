@@ -10,10 +10,14 @@ import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
 import { LogoMark } from "@/components/shared/logo-mark";
 
+// Self-signup grade options. Grades below 8 are intentionally absent:
+// students under 13 (proxied by grade < 8) must join via teacher invite
+// or section invite so the COPPA school-consent exception applies. The
+// floor is 8th grade (~13) — the old "6-8" band let grade 6-7 (under 13)
+// self-attest into a passing value, bypassing the gate. The backend also
+// rejects grade_level < 8 on invite-less /register calls — see RegisterRequest.
 const GRADE_OPTIONS = [
-  { label: "K-2", value: 2 },
-  { label: "3-5", value: 5 },
-  { label: "6-8", value: 8 },
+  { label: "8th grade", value: 8 },
   { label: "9-12", value: 12 },
   { label: "College", value: 16 },
 ];

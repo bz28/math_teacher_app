@@ -14,11 +14,12 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.audit_log import log_student_record_access
 from api.core.integrity_pipeline import (
     MAX_STUDENT_TURNS,
     PROBLEM_STATUS_DIAGNOSIS_ONLY,
@@ -633,6 +634,7 @@ class TeacherIntegrityDetail(BaseModel):
 @router.get("/teacher/integrity/submissions/{submission_id}")
 async def teacher_get_integrity_detail(
     submission_id: uuid.UUID,
+    request: Request,
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> TeacherIntegrityDetail:
@@ -645,6 +647,18 @@ async def teacher_get_integrity_detail(
     if sub is None:
         raise HTTPException(status_code=404, detail="Submission not found")
     await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
+
+    # FERPA: teacher is reading one student's submission transcript +
+    # work extraction. Ownership confirmed above; log before returning.
+    await log_student_record_access(
+        db,
+        accessor_user_id=current_user.user_id,
+        accessor_role=current_user.role,
+        target_student_id=sub.student_id,
+        record_type="integrity_submission",
+        record_id=submission_id,
+        request=request,
+    )
 
     check = await _load_check_for_submission(db, submission_id)
     if check is None:

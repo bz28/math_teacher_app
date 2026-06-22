@@ -16,6 +16,23 @@ export interface TokenPair {
   token_type: string;
 }
 
+/** Returned from /auth/login when the account has MFA enabled. The
+ *  client must collect a 6-digit code from the user and POST to
+ *  /auth/login/verify-mfa with this pending_token to receive real
+ *  tokens. See api/core/mfa.py for the server-side contract. */
+export interface MfaChallenge {
+  mfa_required: true;
+  mfa_pending_token: string;
+}
+
+/** Discriminated union of the two /auth/login response shapes. Callers
+ *  must check `mfa_required` before treating the value as a TokenPair. */
+export type LoginResult = TokenPair | MfaChallenge;
+
+export function isMfaChallenge(r: LoginResult): r is MfaChallenge {
+  return (r as MfaChallenge).mfa_required === true;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -31,6 +48,7 @@ export interface User {
   is_pro: boolean;
   has_stripe_customer: boolean;
   is_preview: boolean;
+  mfa_enabled: boolean;
 }
 
 export interface InviteData {
@@ -476,10 +494,36 @@ export const auth = {
   },
 
   login(email: string, password: string) {
-    return apiFetch<TokenPair>("/auth/login", {
+    return apiFetch<LoginResult>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
+  },
+
+  loginVerifyMfa(mfaPendingToken: string, code: string) {
+    return apiFetch<TokenPair>("/auth/login/verify-mfa", {
+      method: "POST",
+      body: JSON.stringify({ mfa_pending_token: mfaPendingToken, code }),
+    });
+  },
+
+  mfaEnable() {
+    return apiFetch<void>("/auth/mfa/enable", { method: "POST" });
+  },
+
+  mfaDisable(password: string) {
+    return apiFetch<void>("/auth/mfa/disable", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    });
+  },
+
+  /** Personal-data export — returns everything Veradic holds about
+   *  the requesting user (account, activity summary, role-specific
+   *  records). For teachers this satisfies the PA Personnel Files Act
+   *  data-access requirement. */
+  myData() {
+    return apiFetch<Record<string, unknown>>("/auth/my-data");
   },
 
   me() {
