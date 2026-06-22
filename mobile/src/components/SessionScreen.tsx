@@ -24,16 +24,14 @@ import { SessionSkeleton, PracticeSkeleton } from "./SkeletonLoader";
 import { LearnSummary } from "./LearnSummary";
 import { LoadingHero } from "./LoadingHero";
 import { MathText } from "./MathText";
-import { ConfettiOverlay, type ConfettiOverlayRef } from "./ConfettiOverlay";
-import { PaywallScreen } from "./PaywallScreen";
-import { UpgradePrompt } from "./UpgradePrompt";
+import { CompletionReward, type CompletionRewardRef } from "./CompletionReward";
 import { EntitlementError } from "../services/api";
 import { useSessionStore } from "../stores/session";
 import { useEntitlementStore } from "../stores/entitlements";
 import { useOnboardingFlags } from "../stores/onboardingFlags";
-import { useUpgradePrompt } from "../hooks/useUpgradePrompt";
+import { usePaywallStore } from "../stores/paywall";
 import { askForReviewIfAvailable } from "../services/ratings";
-import { useColors, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
+import { useColors, useGradients, spacing, radii, typography, shadows, gradients, type ColorPalette } from "../theme";
 import { makeSessionScreenStyles } from "./sessionScreenStyles";
 
 // Ask for an App Store rating after the user finishes this many learn-mode
@@ -51,13 +49,14 @@ interface SessionScreenProps {
 export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeSessionScreenStyles(colors), [colors]);
   const readerStyles = useMemo(() => makeReaderStyles(colors), [colors]);
   const chatStyles = useMemo(() => makeChatStyles(colors), [colors]);
   const compactStyles = useMemo(() => makeCompactStyles(colors), [colors]);
   const inputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
-  const confettiRef = useRef<ConfettiOverlayRef>(null);
+  const confettiRef = useRef<CompletionRewardRef>(null);
   const [input, setInput] = useState("");
   const [askMode, setAskMode] = useState(false);
 
@@ -79,14 +78,13 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
 
   const isPro = useEntitlementStore((s) => s.isPro);
   const chatsRemaining = useEntitlementStore((s) => s.chatsRemaining);
-  const dailyChatsLimit = useEntitlementStore((s) => s.dailyChatsLimit);
   const fetchEntitlements = useEntitlementStore((s) => s.fetchEntitlements);
   const completedSessionCount = useOnboardingFlags((s) => s.completedSessionCount);
   const hasRequestedReview = useOnboardingFlags((s) => s.hasRequestedReview);
   const incrementCompletedSessionCount = useOnboardingFlags((s) => s.incrementCompletedSessionCount);
   const markRequestedReview = useOnboardingFlags((s) => s.markRequestedReview);
   const didCountCompletionRef = useRef(false);
-  const { show: showUpgrade, promptProps, paywallVisible: chatPaywallVisible, paywallTrigger, closePaywall } = useUpgradePrompt();
+  const showPaywall = usePaywallStore((s) => s.show);
 
   const isBatchMode = !!practiceBatch;
   const isLearnQueue = !!learnQueue;
@@ -225,7 +223,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
   const handleAsk = async () => {
     if (!input.trim()) return;
     if (!isPro && chatsRemaining() <= 0) {
-      showUpgrade("chat_message", "Chat Limit Reached", `You've used all ${dailyChatsLimit} chat messages for today. Upgrade to Pro for unlimited chat.`);
+      showPaywall("chat_message");
       return;
     }
     const text = input.trim();
@@ -233,7 +231,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     try {
       await askAboutStep(text);
     } catch (e) {
-      if (e instanceof EntitlementError) { showUpgrade(e.entitlement, "Chat Limit Reached", e.message); return; }
+      if (e instanceof EntitlementError) { showPaywall(e.entitlement); return; }
     }
     fetchEntitlements();
   };
@@ -242,7 +240,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
     try {
       await advanceStep();
     } catch (e) {
-      if (e instanceof EntitlementError) showUpgrade(e.entitlement, "Daily Limit Reached", e.message);
+      if (e instanceof EntitlementError) showPaywall(e.entitlement);
     }
   };
 
@@ -406,7 +404,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
                 accessibilityRole="button"
                 accessibilityLabel="Send question"
               >
-                <Ionicons name="arrow-up" size={20} color={colors.white} />
+                <Ionicons name="arrow-up" size={20} color={colors.textOnPrimary} />
               </TouchableOpacity>
             </View>
           ) : (
@@ -427,7 +425,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
                   <Text style={readerStyles.primaryActionText}>
                     {phase === "thinking" ? "…" : session.status === "completed" ? "I understand" : "I get it"}
                   </Text>
-                  <Ionicons name="arrow-forward" size={18} color={colors.white} />
+                  <Ionicons name="arrow-forward" size={18} color={colors.textOnPrimary} />
                 </LinearGradient>
               </TouchableOpacity>
               <TouchableOpacity
@@ -447,14 +445,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
         </View>
       )}
 
-      {phase === "completed" && <ConfettiOverlay ref={confettiRef} />}
-      <UpgradePrompt {...promptProps} />
-      <PaywallScreen
-        visible={chatPaywallVisible}
-        onClose={closePaywall}
-        onPurchaseComplete={() => { closePaywall(); fetchEntitlements(); }}
-        trigger={paywallTrigger}
-      />
+      {phase === "completed" && <CompletionReward ref={confettiRef} />}
     </KeyboardAvoidingView>
   );
 }
@@ -462,6 +453,7 @@ export function SessionScreen({ onBack, onHome }: SessionScreenProps) {
 function CompletedStepRow({ index, title, description, isLast }: { index: number; title?: string; description: string; isLast: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const colors = useColors();
+  const gradients = useGradients();
   const compactStyles = useMemo(() => makeCompactStyles(colors), [colors]);
   return (
     <TouchableOpacity
@@ -471,7 +463,7 @@ function CompletedStepRow({ index, title, description, isLast }: { index: number
     >
       <View style={compactStyles.historyDotCol}>
         <View style={compactStyles.historyDot}>
-          <Ionicons name="checkmark" size={10} color={colors.white} />
+          <Ionicons name="checkmark" size={10} color={colors.textOnPrimary} />
         </View>
         {!isLast && <View style={compactStyles.historyLine} />}
       </View>
@@ -501,6 +493,7 @@ function CompletedStepRow({ index, title, description, isLast }: { index: number
 function ProblemHeaderRow({ problem, hasImage, hasFollowing }: { problem: string; hasImage: boolean; hasFollowing: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const colors = useColors();
+  const gradients = useGradients();
   const compactStyles = useMemo(() => makeCompactStyles(colors), [colors]);
   return (
     <TouchableOpacity
@@ -510,7 +503,7 @@ function ProblemHeaderRow({ problem, hasImage, hasFollowing }: { problem: string
     >
       <View style={compactStyles.historyDotCol}>
         <View style={compactStyles.problemDot}>
-          <Ionicons name="document-text" size={11} color={colors.white} />
+          <Ionicons name="document-text" size={11} color={colors.textOnPrimary} />
         </View>
         {hasFollowing && <View style={compactStyles.historyLine} />}
       </View>
@@ -609,7 +602,7 @@ const makeReaderStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   primaryActionText: {
     ...typography.button,
-    color: colors.white,
+    color: colors.textOnPrimary,
   },
   secondaryAction: {
     flex: 1,
@@ -714,7 +707,7 @@ const makeChatStyles = (colors: ColorPalette) => StyleSheet.create({
   bubbleUserText: {
     ...typography.body,
     fontSize: 14,
-    color: colors.white,
+    color: colors.textOnPrimary,
   },
   bubbleTutor: {
     // Explicit width (not maxWidth) so the WebView inside MathText resolves

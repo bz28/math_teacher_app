@@ -38,7 +38,7 @@ export function ImagePreview({
       <SafeAreaView style={styles.safe}>
         <View style={styles.header}>
           <AnimatedPressable onPress={onBack} style={styles.backBtn} scaleDown={0.9}>
-            <Ionicons name="chevron-back" size={22} color={colors.white} />
+            <Ionicons name="chevron-back" size={22} color={colors.textOnPrimary} />
           </AnimatedPressable>
           <Text style={styles.title}>Confirm</Text>
           <View style={styles.backBtn} />
@@ -111,7 +111,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   title: {
     ...typography.bodyBold,
-    color: colors.white,
+    color: colors.textOnPrimary,
     fontSize: 17,
     flex: 1,
     textAlign: "center" as const,

@@ -273,7 +273,7 @@ export function RectangleSelector({
         <img
           ref={imgRef}
           src={`data:image/jpeg;base64,${imageBase64}`}
-          alt="Uploaded"
+          alt="Uploaded image — drag to select problems"
           className="block w-full max-h-[60vh] object-contain"
           onLoad={(e) => {
             const el = e.currentTarget;

@@ -16,6 +16,7 @@ from sqlalchemy import select
 
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
+from api.models.admin_audit_log import AdminAuditLog
 from api.models.course import Course, CourseTeacher
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
@@ -124,3 +125,38 @@ async def test_audit_endpoint_is_admin_only(
         headers=auth_headers(teacher_token),
     )
     assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_role_change_writes_admin_audit_row(
+    client: AsyncClient, grade_world: dict[str, uuid.UUID]
+) -> None:
+    """An admin mutation (role change) records an AdminAuditLog row and the
+    admin-actions read endpoint surfaces it — guards log_admin_action being
+    wired in rather than dead code."""
+    admin_token = create_access_token(str(grade_world["admin_id"]), "admin")
+    r = await client.patch(
+        f"/v1/admin/users/{grade_world['student_id']}/role",
+        json={"role": "teacher"},
+        headers=auth_headers(admin_token),
+    )
+    assert r.status_code == 200, r.text
+
+    async with get_session_factory()() as s:
+        rows = (await s.execute(
+            select(AdminAuditLog).where(AdminAuditLog.target_id == grade_world["student_id"])
+        )).scalars().all()
+    assert len(rows) == 1, "exactly one admin-action row should be logged"
+    row = rows[0]
+    assert row.admin_user_id == grade_world["admin_id"]
+    assert row.action == "user.role_change"
+    assert row.target_type == "user"
+    assert row.action_metadata == {"old_role": "student", "new_role": "teacher"}
+
+    surfaced = await client.get(
+        "/v1/admin/audit-logs/admin-actions",
+        params={"action": "user.role_change"},
+        headers=auth_headers(admin_token),
+    )
+    assert surfaced.status_code == 200, surfaced.text
+    assert surfaced.json()["total"] >= 1

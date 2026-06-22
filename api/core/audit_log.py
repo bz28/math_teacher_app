@@ -6,15 +6,19 @@ Two related logs:
 - `log_admin_action` — every admin write (delete, role change, export,
   etc.). Powers procurement-required admin activity reports.
 
-Both helpers are designed to be called from inside route handlers
-after authorization has already been confirmed. They add a row to
-the caller's existing transaction without flushing or committing, so
-the log lives or dies with the surrounding work — if the request
-rolls back, the audit entry rolls back too (we don't want to log
-accesses that didn't actually return data).
+Both helpers are called from route handlers after authorization has
+been confirmed, and neither ever raises: a transient DB error in the
+audit write must not break the underlying request. Failures are logged
+and dropped.
 
-Helpers never raise: a transient DB error in the audit write must not
-break the underlying request. Failures are logged and dropped.
+They differ in how the row is persisted, because their call sites do:
+- `log_student_record_access` runs in read (GET) handlers whose only
+  write is the audit row, so it commits its own row — wrapped so a
+  commit failure rolls back and the read still serves.
+- `log_admin_action` runs inside an admin write handler and only adds
+  the row; the handler's own commit persists it atomically with the
+  mutation, so a failed commit fails the whole action (correct — an
+  action that didn't happen shouldn't be logged).
 """
 
 import logging
@@ -66,7 +70,9 @@ async def log_student_record_access(
 ) -> None:
     """Record one teacher/admin read of a student record.
 
-    Caller is responsible for committing the surrounding transaction.
+    Commits its own row (the calling GET handler has no other write).
+    On any failure the row is rolled back and the read proceeds — a
+    logging error must not 500 an already-authorized read.
     """
     try:
         entry = StudentRecordAccessLog(
@@ -79,8 +85,10 @@ async def log_student_record_access(
             ip_address=_client_ip(request),
         )
         db.add(entry)
+        await db.commit()
     except Exception:
         logger.exception("Failed to log student record access")
+        await db.rollback()
 
 
 async def log_admin_action(

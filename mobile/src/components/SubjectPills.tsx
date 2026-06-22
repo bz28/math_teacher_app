@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { useColors, spacing, radii, typography, gradients, type ColorPalette } from "../theme";
+import { useColors, useGradients, spacing, radii, typography, gradients, type ColorPalette } from "../theme";
 
 export type SubjectKey = "math" | "physics" | "chemistry";
 
@@ -35,6 +35,7 @@ interface Props {
 
 export function SubjectPills({ active, onChange }: Props) {
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.outer}>
@@ -61,7 +62,7 @@ export function SubjectPills({ active, onChange }: Props) {
                   end={{ x: 1, y: 1 }}
                   style={styles.pill}
                 >
-                  <Ionicons name={s.icon} size={16} color={colors.white} />
+                  <Ionicons name={s.icon} size={16} color={colors.textOnPrimary} />
                   <Text style={styles.pillText}>{s.label}</Text>
                 </LinearGradient>
               ) : (
@@ -104,7 +105,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   pillText: {
     ...typography.label,
-    color: colors.white,
+    color: colors.textOnPrimary,
     fontSize: 13,
   },
   pillTextInactive: {

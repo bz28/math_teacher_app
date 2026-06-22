@@ -117,6 +117,23 @@ async def test_me_with_invalid_token(client: AsyncClient) -> None:
     assert resp.status_code == 401
 
 
+@pytest.mark.asyncio
+async def test_mfa_pending_token_cannot_authenticate(client: AsyncClient) -> None:
+    """The mfa_pending token proves only the password step — it must NOT
+    authenticate normal endpoints, or it would defeat the second factor and
+    expose the personal-data export at /auth/my-data."""
+    from api.core.auth import decode_access_token
+    from api.core.mfa import create_pending_token
+
+    reg = await client.post(REGISTER_URL, json=_user("pending@test.com"))
+    payload = decode_access_token(reg.json()["access_token"])
+    assert payload is not None  # a real access token still decodes
+    pending = create_pending_token(str(payload["sub"]))
+    for url in (ME_URL, "/v1/auth/my-data"):
+        resp = await client.get(url, headers={"Authorization": f"Bearer {pending}"})
+        assert resp.status_code == 401, f"{url} accepted the mfa_pending token"
+
+
 # ── Teacher self-signup ──────────────────────────────────────────────
 
 

@@ -3,6 +3,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-nat
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { Eyebrow } from "./Eyebrow";
 import { InProgressCard, CompletedCard } from "./HistoryCards";
 import { SubjectPills } from "./SubjectPills";
 import { getSessionHistory, type SessionHistoryItem } from "../services/api";
@@ -90,7 +91,7 @@ export function HistoryListScreen({ subject, onSubjectChange, onBack, onViewSess
           {/* Continue Learning */}
           {inProgress.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>CONTINUE LEARNING</Text>
+              <Eyebrow style={styles.sectionEyebrow}>Continue learning</Eyebrow>
               <View style={styles.historyList}>
                 {inProgress.map((item) => (
                   <InProgressCard
@@ -106,7 +107,7 @@ export function HistoryListScreen({ subject, onSubjectChange, onBack, onViewSess
           {/* Completed */}
           {completed.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>COMPLETED</Text>
+              <Eyebrow style={styles.sectionEyebrow}>Completed</Eyebrow>
               <View style={styles.historyList}>
                 {completed.map((item) => (
                   <CompletedCard
@@ -154,7 +155,9 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   backText: { color: colors.primary, ...typography.bodyBold },
   title: {
-    ...typography.hero,
+    ...typography.displaySerifItalic,
+    fontSize: 36,
+    lineHeight: 42,
     color: colors.text,
     marginBottom: spacing.xxl,
     paddingHorizontal: spacing.xl,
@@ -175,10 +178,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   section: {
     marginBottom: spacing.xxl,
   },
-  sectionLabel: {
-    ...typography.small,
-    color: colors.textMuted,
-    letterSpacing: 1,
+  sectionEyebrow: {
     marginBottom: spacing.md,
   },
   historyList: {

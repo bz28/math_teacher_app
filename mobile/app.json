@@ -10,13 +10,13 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F7F5F0"
     },
     "android": {
       "package": "com.veradicai.app",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0E5238",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -28,7 +28,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.veradicai.app",
-      "buildNumber": "8",
+      "buildNumber": "9",
       "supportsTablet": true,
       "config": {
         "usesNonExemptEncryption": false
@@ -45,7 +45,8 @@
           "cameraPermission": "Allow Veradic to use your camera to scan math problems and handwritten work for tutoring feedback.",
           "photosPermission": "Allow Veradic to access your photos to scan math problems and handwritten work for tutoring feedback."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {

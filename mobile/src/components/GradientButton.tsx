@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { ActivityIndicator, Text, StyleSheet, type ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { AnimatedPressable } from "./AnimatedPressable";
-import { useColors, radii, spacing, typography, gradients, type ColorPalette } from "../theme";
+import { useColors, useGradients, radii, spacing, typography, gradients, type ColorPalette } from "../theme";
 
 type GradientPreset = keyof typeof gradients;
 
@@ -24,6 +24,7 @@ export function GradientButton({
   style,
 }: GradientButtonProps) {
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <AnimatedPressable
@@ -38,7 +39,7 @@ export function GradientButton({
         style={[styles.button, style]}
       >
         {loading ? (
-          <ActivityIndicator color={colors.white} size="small" />
+          <ActivityIndicator color={colors.textOnPrimary} size="small" />
         ) : (
           <Text style={styles.text}>{label}</Text>
         )}
@@ -55,7 +56,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     alignItems: "center",
   },
   text: {
-    color: colors.white,
+    color: colors.textOnPrimary,
     ...typography.button,
   },
   disabled: {

@@ -659,7 +659,6 @@ async def teacher_get_integrity_detail(
         record_id=submission_id,
         request=request,
     )
-    await db.commit()
 
     check = await _load_check_for_submission(db, submission_id)
     if check is None:

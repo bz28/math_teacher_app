@@ -16,14 +16,18 @@ import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
+import { Eyebrow } from "./Eyebrow";
 import { LoginForm } from "./LoginForm";
 import { useFadeInUp } from "../hooks/useFadeInUp";
 import { checkEmail, register, saveTokens, saveUserName } from "../services/api";
 import { errorMessage } from "../utils/errorMessage";
-import { useColors, spacing, radii, typography, gradients, type ColorPalette } from "../theme";
+import { useColors, useGradients, spacing, radii, typography, gradients, type ColorPalette } from "../theme";
 
 interface AuthScreenProps {
-  onAuth: () => void;
+  /** Called on successful auth. `justRegistered` is true only when
+   *  the user just created an account, so the caller can present
+   *  the post-signup paywall. */
+  onAuth: (justRegistered?: boolean) => void;
   defaultToRegister?: boolean;
 }
 
@@ -85,7 +89,7 @@ export function AuthScreen({ onAuth, defaultToRegister = false }: AuthScreenProp
       await saveTokens(resp.access_token, resp.refresh_token);
       await saveUserName(name.trim());
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      onAuth();
+      onAuth(true);
     } catch (e) {
       setError(errorMessage(e));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -160,6 +164,7 @@ function NameStep({ name, onNameChange, onNext, onSwitch, stepNumber }: {
   stepNumber: number;
 }) {
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const headerAnim = useFadeInUp(0, 500);
   const inputAnim = useFadeInUp(200, 500);
@@ -172,9 +177,8 @@ function NameStep({ name, onNameChange, onNext, onSwitch, stepNumber }: {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <Animated.View style={[styles.header, headerAnim]}>
-          <Text style={styles.titleEmoji}>👋</Text>
+          <Eyebrow style={styles.stepEyebrow}>Step {stepNumber} of {TOTAL_STEPS}</Eyebrow>
           <Text style={styles.title}>What should we{"\n"}call you?</Text>
-          <StepIndicator current={stepNumber} total={TOTAL_STEPS} />
         </Animated.View>
 
         <Animated.View style={[styles.form, inputAnim]}>
@@ -238,6 +242,7 @@ function AgeStep({ name, age, onAgeChange, onNext, onBack, stepNumber }: {
   stepNumber: number;
 }) {
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const headerAnim = useFadeInUp(0, 400);
   const pickerAnim = useFadeInUp(150, 400);
@@ -255,8 +260,8 @@ function AgeStep({ name, age, onAgeChange, onNext, onBack, stepNumber }: {
         </AnimatedPressable>
 
         <Animated.View style={[styles.header, headerAnim]}>
+          <Eyebrow style={styles.stepEyebrow}>Step {stepNumber} of {TOTAL_STEPS}</Eyebrow>
           <Text style={styles.title}>How old are you,{"\n"}{name.trim()}?</Text>
-          <StepIndicator current={stepNumber} total={TOTAL_STEPS} />
         </Animated.View>
 
         <Animated.View style={[styles.ageDisplayWrap, pickerAnim]}>
@@ -327,6 +332,7 @@ function CredentialsStep({ name, email, onEmailChange, password, onPasswordChang
   stepNumber: number;
 }) {
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const headerAnim = useFadeInUp(0, 400);
   const formAnim = useFadeInUp(200, 400);
@@ -352,8 +358,8 @@ function CredentialsStep({ name, email, onEmailChange, password, onPasswordChang
         </AnimatedPressable>
 
         <Animated.View style={[styles.header, headerAnim]}>
+          <Eyebrow style={styles.stepEyebrow}>Step {stepNumber} of {TOTAL_STEPS}</Eyebrow>
           <Text style={styles.title}>Almost there,{"\n"}{name.trim()}!</Text>
-          <StepIndicator current={stepNumber} total={TOTAL_STEPS} />
         </Animated.View>
 
         <Animated.View style={[styles.form, formAnim]}>
@@ -409,7 +415,7 @@ function CredentialsStep({ name, email, onEmailChange, password, onPasswordChang
               style={styles.primaryButton}
             >
               {loading ? (
-                <ActivityIndicator color={colors.white} />
+                <ActivityIndicator color={colors.textOnPrimary} />
               ) : (
                 <Text style={styles.primaryButtonText}>Create Account</Text>
               )}
@@ -430,27 +436,9 @@ function CredentialsStep({ name, email, onEmailChange, password, onPasswordChang
 
 /* ── Shared Components ──────────────────────────────────── */
 
-function StepIndicator({ current, total }: { current: number; total: number }) {
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  return (
-    <View style={styles.stepRow}>
-      {Array.from({ length: total }, (_, i) => (
-        <View
-          key={i}
-          style={[
-            styles.stepDot,
-            i + 1 < current && styles.stepDotDone,
-            i + 1 === current && styles.stepDotActive,
-          ]}
-        />
-      ))}
-    </View>
-  );
-}
-
 function ErrorRow({ message }: { message: string }) {
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.errorWrap}>
@@ -483,42 +471,21 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     marginBottom: spacing.xxl + 4,
   },
   title: {
-    ...typography.title,
+    ...typography.displaySerifItalic,
+    fontSize: 32,
+    lineHeight: 38,
     color: colors.text,
     textAlign: "center",
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
-  titleEmoji: {
-    fontSize: 40,
-    marginBottom: spacing.md,
+  stepEyebrow: {
+    marginBottom: spacing.lg,
   },
   subtitle: {
     ...typography.body,
     fontSize: 15,
     color: colors.textSecondary,
     textAlign: "center",
-  },
-
-  // Step indicator
-  stepRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  stepDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.border,
-  },
-  stepDotActive: {
-    backgroundColor: colors.primary,
-    width: 24,
-    borderRadius: radii.pill,
-  },
-  stepDotDone: {
-    backgroundColor: colors.primaryLight,
   },
 
   // Form
@@ -528,7 +495,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
     backgroundColor: colors.inputBg,
@@ -572,7 +539,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     alignItems: "center",
   },
   primaryButtonText: {
-    color: colors.white,
+    color: colors.textOnPrimary,
     ...typography.button,
   },
   buttonDisabled: { opacity: 0.4 },
@@ -617,10 +584,10 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     paddingVertical: spacing.lg,
   },
   ageNumber: {
-    fontSize: 80,
-    fontWeight: "800",
+    ...typography.displaySerif,
+    fontSize: 96,
+    lineHeight: 100,
     color: colors.primary,
-    lineHeight: 88,
   },
   ageUnit: {
     ...typography.body,

@@ -4,7 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { useSessionStore } from "../stores/session";
-import { useColors, spacing, shadows, gradients } from "../theme";
+import { useColors, useGradients, spacing, shadows, gradients } from "../theme";
 import { makeSessionScreenStyles } from "./sessionScreenStyles";
 
 interface CompletedCardProps {
@@ -14,6 +14,7 @@ interface CompletedCardProps {
 
 export function CompletedCard({ onBack, onHome }: CompletedCardProps) {
   const colors = useColors();
+  const gradients = useGradients();
   const styles = useMemo(() => makeSessionScreenStyles(colors), [colors]);
   const {
     session,
