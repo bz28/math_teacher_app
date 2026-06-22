@@ -13,10 +13,9 @@ import {
   type QuizResult,
   type StoreGet,
   type StoreSet,
-  type StoreSubscribe,
 } from "./types";
 
-export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: StoreSubscribe) {
+export function createMockTestActions(set: StoreSet, get: StoreGet) {
   return {
     startMockTest: async (problems: string[], generateCount: number, timeLimitMinutes: number | null, multipleChoice: boolean = true) => {
       const { subject } = get();
@@ -169,29 +168,15 @@ export function createMockTestActions(set: StoreSet, get: StoreGet, subscribe: S
     },
 
     submitMockTest: async () => {
-      const { mockTest } = get();
-      if (!mockTest) return;
+      // startMockTest awaits every solve before the test goes active, so all
+      // answers are already resolved here — nothing to wait for. A question
+      // whose solve failed keeps answer:"" and grades as the student left it,
+      // rather than blocking submission forever (the old wait deadlocked here).
+      const mt = get().mockTest;
+      if (!mt) return;
 
       set({ phase: "loading" });
       try {
-        // Wait for all correct answers to be resolved
-        const answersResolved = mockTest.questions.every((q) => q.answer !== "");
-        if (!answersResolved) {
-          await new Promise<void>((resolve) => {
-            const unsub = subscribe((state) => {
-              if (!state.mockTest) { unsub(); resolve(); return; }
-              if (state.mockTest.questions.every((q) => q.answer !== "")) {
-                unsub();
-                resolve();
-              }
-            });
-          });
-        }
-
-        // Re-read after potential wait
-        const mt = get().mockTest;
-        if (!mt) return;
-
         // Batch check all answered questions
         const checkPromises = mt.questions.map(async (q, i) => {
           const userAnswer = mt.answers[i];
