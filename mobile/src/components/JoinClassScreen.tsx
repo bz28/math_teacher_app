@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -92,12 +91,12 @@ export function JoinClassScreen({ onBack, onJoined }: Props) {
           )}
 
           <Button
-            label={loading ? "" : "Join class"}
+            label="Join class"
             onPress={submit}
-            disabled={loading || !code.trim()}
+            loading={loading}
+            disabled={!code.trim()}
             style={styles.submit}
           />
-          {loading && <ActivityIndicator color={colors.primary} style={styles.spinner} />}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -159,5 +158,4 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   errorText: { color: colors.error, fontSize: 14, flex: 1 },
   submit: { marginTop: spacing.sm },
-  spinner: { marginTop: spacing.md },
 });
