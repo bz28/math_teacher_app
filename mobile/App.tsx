@@ -10,18 +10,21 @@ import {
 } from "@expo-google-fonts/instrument-serif";
 import { AccountScreen } from "./src/components/AccountScreen";
 import { AuthScreen } from "./src/components/AuthScreen";
-import { BottomTabBar, type TabKey } from "./src/components/BottomTabBar";
+import { BottomTabBar, PERSONAL_TABS, SCHOOL_TABS, type TabKey } from "./src/components/BottomTabBar";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
+import { GradesScreen } from "./src/components/GradesScreen";
 import { HistoryListScreen } from "./src/components/HistoryListScreen";
+import { JoinClassScreen } from "./src/components/JoinClassScreen";
 import { WeakSpotsScreen } from "./src/components/WeakSpotsScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
 import { PaywallScreen } from "./src/components/PaywallScreen";
+import { SchoolHomeScreen } from "./src/components/SchoolHomeScreen";
 import { SessionReviewScreen } from "./src/components/SessionReviewScreen";
 import { SessionScreen } from "./src/components/SessionScreen";
 import { SolveScreen } from "./src/components/SolveScreen";
 import { TeacherGateScreen } from "./src/components/TeacherGateScreen";
 import { useColors } from "./src/theme";
-import { clearAuth, fetchMe, getUserId, getUserRole, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
+import { clearAuth, fetchMe, getUserId, getUserRole, getUserSchoolId, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
 import { decideLanding } from "./src/utils/routing";
 import { initRevenueCat } from "./src/services/revenuecat";
 import { useEntitlementStore } from "./src/stores/entitlements";
@@ -31,20 +34,27 @@ import { useSessionStore } from "./src/stores/session";
 import { loadThemePref } from "./src/stores/themePref";
 import { ONBOARDING_KEY } from "./src/constants/storageKeys";
 
-type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "weak-spots" | "teacher-gate";
+type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "weak-spots" | "teacher-gate" | "school-home" | "grades" | "join-class";
 
-const TAB_SCREENS: Screen[] = ["solve", "history-list", "weak-spots", "account"];
+// Two tab sets share the same screen<->tab maps (each screen maps to exactly
+// one tab key); only which screens form the bar differs by audience.
+const PERSONAL_TAB_SCREENS: Screen[] = ["solve", "history-list", "weak-spots", "account"];
+const SCHOOL_TAB_SCREENS: Screen[] = ["school-home", "grades", "solve", "account"];
 const SCREEN_TO_TAB: Record<string, TabKey> = {
   solve: "solve",
   "history-list": "history",
   "weak-spots": "review",
   account: "account",
+  "school-home": "school-home",
+  grades: "grades",
 };
-const TAB_TO_SCREEN: Record<TabKey, Screen> = {
+const TAB_TO_SCREEN: Record<string, Screen> = {
   solve: "solve",
   history: "history-list",
   review: "weak-spots",
   account: "account",
+  "school-home": "school-home",
+  grades: "grades",
 };
 
 function AppRoot() {
@@ -52,6 +62,9 @@ function AppRoot() {
   const [subject, setSubject] = useState("math");
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
   const [fromOnboarding, setFromOnboarding] = useState(false);
+  // School-enrolled students get a classroom-first tab set (Home/Grades/Study/
+  // Account); everyone else keeps the personal-learner tabs. Set at auth time.
+  const [isSchoolStudent, setIsSchoolStudent] = useState(false);
   const colors = useColors();
   const tabHostStyle = useMemo(
     () => ({ flex: 1, backgroundColor: colors.background }),
@@ -70,6 +83,7 @@ function AppRoot() {
     setOnSessionExpired(() => {
       setScreen("auth");
       setFromOnboarding(false);
+      setIsSchoolStudent(false);
     });
 
     // Hydrate theme preference from secure storage (best-effort)
@@ -88,8 +102,9 @@ function AppRoot() {
         setScreen("auth");
         return;
       }
+      const landing = decideLanding(getUserRole(), getUserSchoolId());
       // Teachers/admins get the web-app gate, not the student UI.
-      if (decideLanding(getUserRole()) === "teacher-gate") {
+      if (landing === "teacher-gate") {
         setScreen("teacher-gate");
         return;
       }
@@ -98,6 +113,11 @@ function AppRoot() {
         await initRevenueCat(userId).catch(() => {});
       }
       fetchEntitlements().catch(() => {});
+      if (landing === "school-home") {
+        setIsSchoolStudent(true);
+        setScreen("school-home");
+        return;
+      }
       setScreen("solve");
     });
   }, [fetchEntitlements, initializeOnboardingFlags]);
@@ -128,16 +148,22 @@ function AppRoot() {
       <SafeAreaProvider>
         <AuthScreen
           onAuth={async (justRegistered) => {
-            // Resolve role before routing so a teacher who signs in lands
-            // on the gate, not the student UI. Registration is always a
-            // student, so we skip the role check on that path.
+            // Resolve role/school before routing so a teacher who signs in
+            // lands on the gate and a school student lands on their home,
+            // not the personal study UI.
             const me = await fetchMe();
-            if (!justRegistered && decideLanding(me?.role) === "teacher-gate") {
+            const landing = decideLanding(me?.role, me?.school_id);
+            if (!justRegistered && landing === "teacher-gate") {
               setScreen("teacher-gate");
               return;
             }
-            setScreen("solve");
             const userId = me?.id ?? getUserId();
+            if (landing === "school-home") {
+              setIsSchoolStudent(true);
+              setScreen("school-home");
+            } else {
+              setScreen("solve");
+            }
             // Await init for new registrations so the post-signup paywall
             // doesn't open before RC is configured — otherwise getOfferings
             // throws and the trial pitch silently collapses to "Subscribe
@@ -151,7 +177,8 @@ function AppRoot() {
               }
             }
             fetchEntitlements().catch(() => {});
-            if (justRegistered) {
+            // School students are covered by their school — never pitch them Pro.
+            if (justRegistered && landing !== "school-home") {
               usePaywallStore.getState().show("post_signup");
             }
           }}
@@ -167,23 +194,30 @@ function AppRoot() {
         <TeacherGateScreen
           onLogout={async () => {
             await clearAuth();
+            setIsSchoolStudent(false);
             setScreen("auth");
           }}
         />
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );
-  } else if (TAB_SCREENS.includes(screen)) {
-    // Tab screens — wrapped in shared layout with bottom tab bar
+  } else if ((isSchoolStudent ? SCHOOL_TAB_SCREENS : PERSONAL_TAB_SCREENS).includes(screen)) {
+    // Tab screens — wrapped in shared layout with bottom tab bar. School
+    // students get the classroom tab set; everyone else the personal one.
     const tabBar = (
       <BottomTabBar
+        tabs={isSchoolStudent ? SCHOOL_TABS : PERSONAL_TABS}
         active={SCREEN_TO_TAB[screen]}
         onChange={(tab) => setScreen(TAB_TO_SCREEN[tab])}
       />
     );
 
     let content: React.ReactNode = null;
-    if (screen === "solve") {
+    if (screen === "school-home") {
+      content = <SchoolHomeScreen onJoinClass={() => setScreen("join-class")} />;
+    } else if (screen === "grades") {
+      content = <GradesScreen />;
+    } else if (screen === "solve") {
       content = (
         <ErrorBoundary onReset={() => { setProblemQueue([]); setScreen("solve"); }}>
           <SolveScreen
@@ -217,10 +251,11 @@ function AppRoot() {
     } else if (screen === "account") {
       content = (
         <AccountScreen
-          onBack={() => setScreen("solve")}
+          onBack={() => setScreen(isSchoolStudent ? "school-home" : "solve")}
           onLogout={async () => {
             await clearAuth();
             setFromOnboarding(false);
+            setIsSchoolStudent(false);
             setScreen("auth");
           }}
         />
@@ -233,6 +268,22 @@ function AppRoot() {
           <View style={{ flex: 1 }}>{content}</View>
           {tabBar}
         </View>
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    );
+  } else if (screen === "join-class") {
+    screenNode = (
+      <SafeAreaProvider>
+        <JoinClassScreen
+          onBack={() => setScreen("school-home")}
+          onJoined={async () => {
+            // A successful join may have just turned a personal student into a
+            // school student (school_id now set) — refresh and route home.
+            await fetchMe();
+            setIsSchoolStudent(true);
+            setScreen("school-home");
+          }}
+        />
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );

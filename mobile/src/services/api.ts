@@ -382,6 +382,47 @@ export interface SessionHistoryResponse {
   has_more: boolean;
 }
 
+// ── School student ─────────────────────────────────────────
+export interface SchoolAssignment {
+  assignment_id: string;
+  title: string;
+  type: string;
+  due_at: string | null;
+  course_id: string;
+  course_name: string;
+  section_name: string;
+  status: "not_started" | "submitted";
+  is_late: boolean;
+}
+
+export interface SchoolGrade {
+  assignment_id: string;
+  title: string;
+  course_id: string;
+  course_name: string;
+  section_name: string;
+  final_score: number;
+  published_at: string;
+}
+
+export interface SchoolDashboard {
+  first_name: string;
+  due_this_week: SchoolAssignment[];
+  overdue: SchoolAssignment[];
+  in_review: SchoolAssignment[];
+  recently_graded: SchoolGrade[];
+}
+
+export const getSchoolDashboard = () =>
+  apiGet<SchoolDashboard>("/school/student/dashboard");
+
+export const getSchoolGrades = () =>
+  apiGet<{ grades: SchoolGrade[] }>("/school/student/grades");
+
+/** Enroll the current student in a section by join code. */
+export const joinSection = (joinCode: string) =>
+  apiPost<{ status: string; section_id: string }>("/teacher/join", { join_code: joinCode });
+
 export const getSessionHistory = (subject: string, limit = 20, offset = 0) =>
   apiGet<SessionHistoryResponse>(`/session/history?subject=${subject}&limit=${limit}&offset=${offset}`);
 
