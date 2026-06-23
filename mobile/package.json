@@ -11,6 +11,12 @@
   },
   "jest": {
     "preset": "jest-expo",
+    "setupFiles": [
+      "<rootDir>/jest.preenv.js"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/jest.setup.tsx"
+    ],
     "testMatch": [
       "**/*.test.ts",
       "**/*.test.tsx"
@@ -40,6 +46,7 @@
   },
   "devDependencies": {
     "@expo/ngrok": "^4.1.0",
+    "@testing-library/react-native": "^14.0.0",
     "@types/jest": "^29.5.14",
     "@types/react": "~19.1.10",
     "jest": "^29.7.0",
