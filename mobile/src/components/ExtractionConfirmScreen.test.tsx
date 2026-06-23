@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react-native";
 import { ExtractionConfirmScreen } from "./ExtractionConfirmScreen";
-import { flush } from "../test-utils";
+import { flush, waitForText } from "../test-utils";
 import * as api from "../services/api";
 
 jest.mock("../services/api", () => ({
@@ -37,8 +37,7 @@ describe("ExtractionConfirmScreen", () => {
     mockedApi.getSubmission.mockResolvedValue(SUBMISSION as never);
     render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);
 
-    await flush();
-    expect(screen.getByText("Did we read this right?")).toBeTruthy();
+    expect(await waitForText("Did we read this right?")).toBeTruthy();
     expect(screen.getByText("x equals 2")).toBeTruthy(); // grouped step
     expect(screen.getByText(/Answer: 2/)).toBeTruthy();
   });
@@ -49,8 +48,7 @@ describe("ExtractionConfirmScreen", () => {
     const onIntegrityCheck = jest.fn();
     render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={onIntegrityCheck} />);
 
-    await flush();
-    fireEvent.press(screen.getByText("Looks right"));
+    fireEvent.press(await waitForText("Looks right"));
     await flush();
 
     expect(mockedApi.confirmExtraction).toHaveBeenCalledWith("sub-1");
@@ -66,8 +64,7 @@ describe("ExtractionConfirmScreen", () => {
     } as never);
     render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);
 
-    await flush();
-    expect(screen.getByText("Submitted!")).toBeTruthy();
+    expect(await waitForText("Submitted!")).toBeTruthy();
     expect(screen.queryByText("Did we read this right?")).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react-native";
 import { SchoolHomeScreen } from "./SchoolHomeScreen";
-import { flush } from "../test-utils";
+import { waitForText } from "../test-utils";
 import * as api from "../services/api";
 
 jest.mock("../services/api", () => ({ getSchoolDashboard: jest.fn() }));
@@ -34,8 +34,7 @@ describe("SchoolHomeScreen", () => {
     const onOpenAssignment = jest.fn();
     render(<SchoolHomeScreen onJoinClass={jest.fn()} onOpenAssignment={onOpenAssignment} />);
 
-    await flush();
-    expect(screen.getByText("Hi, Sam.")).toBeTruthy();
+    expect(await waitForText("Hi, Sam.")).toBeTruthy();
     expect(screen.getByText("Due this week")).toBeTruthy();
 
     fireEvent.press(screen.getByLabelText("Fractions practice"));
@@ -49,7 +48,6 @@ describe("SchoolHomeScreen", () => {
     } as never);
     render(<SchoolHomeScreen onJoinClass={jest.fn()} onOpenAssignment={jest.fn()} />);
 
-    await flush();
-    expect(screen.getByText("You're all caught up")).toBeTruthy();
+    expect(await waitForText("You're all caught up")).toBeTruthy();
   });
 });

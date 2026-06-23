@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react-native";
 import { IntegrityChatScreen } from "./IntegrityChatScreen";
-import { flush } from "../test-utils";
+import { flush, waitForText } from "../test-utils";
 import * as api from "../services/api";
 
 jest.mock("../services/api", () => ({
@@ -27,8 +27,7 @@ describe("IntegrityChatScreen", () => {
     mockedApi.getIntegrityState.mockResolvedValue(STATE as never);
     render(<IntegrityChatScreen submissionId="sub-1" onExit={jest.fn()} />);
 
-    await flush();
-    expect(screen.getByText("Problem 3")).toBeTruthy();
+    expect(await waitForText("Problem 3")).toBeTruthy();
     expect(screen.getByText("What is 2+2?")).toBeTruthy();
     expect(screen.getByText("How did you get your answer?")).toBeTruthy();
   });
@@ -46,7 +45,7 @@ describe("IntegrityChatScreen", () => {
     } as never);
     render(<IntegrityChatScreen submissionId="sub-1" onExit={jest.fn()} />);
 
-    await flush();
+    await waitForText("How did you get your answer?");
     fireEvent.changeText(screen.getByPlaceholderText("Explain how you solved it…"), "I added two and two");
     await flush(); // let the input state update before send reads it
     fireEvent.press(screen.getByLabelText("Send"));
