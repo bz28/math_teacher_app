@@ -1,4 +1,10 @@
 import * as SecureStore from "expo-secure-store";
+import type { components } from "./api-schema.gen";
+
+// Server-derived schema types (generated from the FastAPI OpenAPI spec via
+// `npm run gen:api`). Aliasing the client types to these makes backend contract
+// drift a compile error instead of a runtime surprise.
+type Schemas = components["schemas"];
 
 const DEV_HOST = process.env.EXPO_PUBLIC_API_HOST ?? "localhost";
 const DEV_PORT = process.env.EXPO_PUBLIC_API_PORT ?? "8000";
@@ -383,35 +389,9 @@ export interface SessionHistoryResponse {
 }
 
 // ── School student ─────────────────────────────────────────
-export interface SchoolAssignment {
-  assignment_id: string;
-  title: string;
-  type: string;
-  due_at: string | null;
-  course_id: string;
-  course_name: string;
-  section_name: string;
-  status: "not_started" | "submitted";
-  is_late: boolean;
-}
-
-export interface SchoolGrade {
-  assignment_id: string;
-  title: string;
-  course_id: string;
-  course_name: string;
-  section_name: string;
-  final_score: number;
-  published_at: string;
-}
-
-export interface SchoolDashboard {
-  first_name: string;
-  due_this_week: SchoolAssignment[];
-  overdue: SchoolAssignment[];
-  in_review: SchoolAssignment[];
-  recently_graded: SchoolGrade[];
-}
+export type SchoolAssignment = Schemas["DashboardAssignment"];
+export type SchoolGrade = Schemas["DashboardGrade"];
+export type SchoolDashboard = Schemas["StudentDashboardResponse"];
 
 export const getSchoolDashboard = () =>
   apiGet<SchoolDashboard>("/school/student/dashboard");
@@ -423,39 +403,9 @@ export const getSchoolGrades = () =>
 export const joinSection = (joinCode: string) =>
   apiPost<{ status: string; section_id: string }>("/teacher/join", { join_code: joinCode });
 
-export interface HomeworkProblem {
-  bank_item_id: string;
-  position: number;
-  question: string;
-  figure_svg: string | null;
-  difficulty: string;
-  format: "frq" | "mcq";
-  mcq_choices: string[];
-}
-
-export interface HomeworkGradeBreakdown {
-  problem_id: string;
-  score_status: "full" | "partial" | "zero";
-  percent: number;
-  feedback: string | null;
-}
-
-export interface HomeworkDetail {
-  assignment_id: string;
-  title: string;
-  description: string | null;
-  type: string;
-  due_at: string | null;
-  course_id: string;
-  course_name: string;
-  problems: HomeworkProblem[];
-  submitted: boolean;
-  submission_id: string | null;
-  submitted_at: string | null;
-  final_score: number | null;
-  grade_published_at: string | null;
-  breakdown: HomeworkGradeBreakdown[] | null;
-}
+export type HomeworkProblem = Schemas["StudentHomeworkProblem"];
+export type HomeworkGradeBreakdown = Schemas["StudentProblemFeedback"];
+export type HomeworkDetail = Schemas["StudentHomeworkDetail"];
 
 export const getHomework = (assignmentId: string) =>
   apiGet<HomeworkDetail>(`/school/student/homework/${assignmentId}`);
@@ -521,32 +471,12 @@ export const flagExtraction = (submissionId: string) =>
 
 export const MIN_INTEGRITY_MESSAGE_CHARS = 5;
 
-export interface IntegrityProblem {
-  problem_id: string;
-  /** 1-based position on the homework — what to show the student. */
-  hw_position: number;
-  status: string;
-  question: string | null;
-}
-
-export interface IntegrityTurn {
-  ordinal: number;
-  role: "agent" | "student";
-  content: string;
-  created_at: string;
-  is_variant_probe: boolean;
-}
-
+export type IntegrityProblem = Schemas["ProblemSummary"];
+export type IntegrityTurn = Schemas["TurnOut"];
 // overall_status: no_check | extracting | awaiting_student | in_progress |
 // complete | skipped_unreadable. disposition is teacher-only (null to the
 // student until complete, and even then pass/flag look the same at the door).
-export interface IntegrityState {
-  submission_id: string;
-  overall_status: string;
-  disposition: string | null;
-  problems: IntegrityProblem[];
-  transcript: IntegrityTurn[];
-}
+export type IntegrityState = Schemas["IntegrityStateResponse"];
 
 export const getIntegrityState = (submissionId: string) =>
   apiGet<IntegrityState>(`/school/student/integrity/submissions/${submissionId}`);

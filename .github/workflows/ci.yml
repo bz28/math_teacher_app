@@ -58,6 +58,20 @@ jobs:
           SENTRY_DSN: ""
         run: pytest tests/ -v -m "not integration"
 
+      - name: OpenAPI spec is up to date
+        env:
+          # database_url is required by Settings at import; a dummy value is
+          # fine — app.openapi() never connects.
+          DATABASE_URL: postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_test
+          JWT_SECRET: ci-test-secret
+          CLAUDE_API_KEY: sk-ant-ci-fake-key
+          APP_ENV: test
+          SENTRY_DSN: ""
+        run: |
+          python -m scripts.dump_openapi
+          git diff --exit-code mobile/openapi.json \
+            || { echo "::error::mobile/openapi.json is stale — run 'python -m scripts.dump_openapi' and commit."; exit 1; }
+
   mobile:
     runs-on: ubuntu-latest
     steps:
@@ -81,6 +95,13 @@ jobs:
       - name: Test
         working-directory: mobile
         run: npx jest --ci
+
+      - name: API types match the spec
+        working-directory: mobile
+        run: |
+          npm run gen:api
+          git diff --exit-code src/services/api-schema.gen.ts \
+            || { echo "::error::mobile/src/services/api-schema.gen.ts is stale — run 'npm run gen:api' and commit."; exit 1; }
 
   web:
     runs-on: ubuntu-latest
