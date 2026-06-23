@@ -1,9 +1,7 @@
 /* Global mocks so screen/component tests can render in-process without the
    native runtime. The API layer is mocked per-test (jest.mock) since each
-   screen drives different endpoints. */
-
-// React 19 requires this flag for React Native Testing Library's act() support.
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+   screen drives different endpoints. (IS_REACT_ACT_ENVIRONMENT is set
+   pre-env in jest.preenv.js.) */
 
 // Haptics: no-op, but keep the enums the screens reference.
 jest.mock("expo-haptics", () => ({
