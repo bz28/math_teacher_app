@@ -468,23 +468,34 @@ export const submitHomework = (assignmentId: string, files: string[]) =>
     30_000,
   );
 
+// The Vision extraction wire shape — a flat list of steps and final
+// answers, each tagged with the 1-based HW problem_position it belongs to
+// (null = unattributed scratchwork). The UI groups by position. Mirrors
+// the web client's IntegrityExtraction.
 export interface ExtractionStep {
+  step_num: number;
+  problem_position: number | null;
   latex: string;
   plain_english: string;
-  edited: boolean;
 }
 
-export interface ExtractionProblem {
-  position: number;
-  student_answer: string | null;
-  student_steps: ExtractionStep[];
+export interface ExtractionFinalAnswer {
+  problem_position: number;
+  answer_latex: string;
+  answer_plain: string;
+}
+
+export interface Extraction {
+  steps: ExtractionStep[];
+  final_answers: ExtractionFinalAnswer[];
+  confidence: number;
 }
 
 export interface SubmissionState {
   submission_id: string;
   submitted_at: string;
   is_late: boolean;
-  extraction: { problems: ExtractionProblem[]; overall_confidence: "high" | "medium" | "low" } | null;
+  extraction: Extraction | null;
   extraction_confirmed_at: string | null;
   extraction_flagged_at: string | null;
   integrity_check_enabled: boolean;

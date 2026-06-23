@@ -12,6 +12,7 @@ import {
   getSubmission,
   type SubmissionState,
 } from "../services/api";
+import { confidenceBand, groupExtraction } from "../utils/extraction";
 import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
 
 const POLL_MS = 2500;
@@ -54,7 +55,11 @@ export function ExtractionConfirmScreen({ assignmentId, onDone }: Props) {
         setError(false);
         if (!settled(s)) timer.current = setTimeout(tick, POLL_MS);
       } catch {
-        if (active) setError(true);
+        if (!active) return;
+        setError(true);
+        // Transient blip — keep polling so the screen recovers on its own
+        // rather than stalling on the spinner until the user re-enters.
+        timer.current = setTimeout(tick, POLL_MS);
       }
     };
     tick();
@@ -131,7 +136,8 @@ export function ExtractionConfirmScreen({ assignmentId, onDone }: Props) {
   }
 
   // Extraction ready → confirm or flag.
-  const conf = state.extraction.overall_confidence;
+  const band = confidenceBand(state.extraction.confidence);
+  const groups = groupExtraction(state.extraction);
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -140,36 +146,40 @@ export function ExtractionConfirmScreen({ assignmentId, onDone }: Props) {
         <Text style={styles.subtitle}>
           Here's what we pulled from your photos. Confirm it's right so we can grade it accurately.
         </Text>
-        {conf !== "high" && (
+        {band !== "high" && (
           <View style={styles.confidenceBadge}>
             <Ionicons name="alert-circle-outline" size={14} color={colors.warningDark} />
             <Text style={styles.confidenceText}>
-              {conf === "low" ? "Some parts were hard to read" : "Double-check the parts below"}
+              {band === "low" ? "Some parts were hard to read" : "Double-check the parts below"}
             </Text>
           </View>
         )}
 
-        {state.extraction.problems.map((p) => (
-          <View key={p.position} style={styles.problem}>
-            <Text style={styles.problemNum}>Problem {p.position}</Text>
-            {p.student_steps.length === 0 && p.student_answer == null ? (
-              <Text style={styles.emptyStep}>No work read for this problem.</Text>
-            ) : (
-              <>
-                {p.student_steps.map((s, i) => (
-                  <MathText
-                    key={i}
-                    text={s.plain_english || s.latex}
-                    style={{ ...typography.body, fontSize: 14, color: colors.text }}
-                  />
-                ))}
-                {p.student_answer != null && (
-                  <Text style={styles.answer}>Answer: {p.student_answer}</Text>
-                )}
-              </>
-            )}
+        {groups.length === 0 ? (
+          <View style={styles.problem}>
+            <Text style={styles.emptyStep}>We couldn't read any work from your photos.</Text>
           </View>
-        ))}
+        ) : (
+          groups.map((g) => (
+            <View key={g.position ?? "other"} style={styles.problem}>
+              <Text style={styles.problemNum}>
+                {g.position == null ? "Other work" : `Problem ${g.position}`}
+              </Text>
+              {g.steps.map((s, i) => (
+                <MathText
+                  key={`${s.step_num}-${i}`}
+                  text={s.plain_english || s.latex}
+                  style={{ ...typography.body, fontSize: 14, color: colors.text }}
+                />
+              ))}
+              {g.finalAnswer && (g.finalAnswer.answer_plain || g.finalAnswer.answer_latex) ? (
+                <Text style={styles.answer}>
+                  Answer: {g.finalAnswer.answer_plain || g.finalAnswer.answer_latex}
+                </Text>
+              ) : null}
+            </View>
+          ))
+        )}
 
         <View style={styles.actions}>
           <Button label="Looks right" onPress={() => act(confirmExtraction)} loading={acting} />
