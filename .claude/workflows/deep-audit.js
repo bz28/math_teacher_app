@@ -21,7 +21,7 @@ const EMPHASIS = cfg.emphasis || 'code quality and cleanliness'
 
 if (!shards.length) {
   log('No shards provided in args — nothing to audit.')
-  return { tiers: { P0: [], P1: [], P2: [], P3: [] }, summary: 'No shards provided.', stats: {} }
+  return { tiers: { P0: [], P1: [], P2: [], P3: [] }, summary: 'No shards provided.', stats: { shards: 0, confirmed: 0 } }
 }
 
 const FINDING_ITEM = {
@@ -50,7 +50,6 @@ const VERDICT_SCHEMA = {
   required: ['refuted', 'reasoning'],
   properties: {
     refuted: { type: 'boolean', description: 'true if the finding does NOT hold up under scrutiny' },
-    confidence: { type: 'string', enum: ['low', 'medium', 'high'] },
     reasoning: { type: 'string' },
   },
 }

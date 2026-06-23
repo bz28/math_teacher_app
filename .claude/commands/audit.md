@@ -36,7 +36,7 @@ Invoke the `deep-audit` workflow by **scriptPath** (named-workflow lookup does n
 Workflow({ scriptPath: ".claude/workflows/deep-audit.js", args: { shards: <the array>, verifySkeptics: 2, emphasis: "code quality and cleanliness" } })
 ```
 
-It runs Review (one agent/shard) → Verify (2 independent skeptics per finding, strict — survives only if neither refutes) → Synthesize (dedupe across shards, tier P0–P3). It returns `{ tiers: {P0,P1,P2,P3}, summary, stats }`. Everything it returns is already **confirmed** (survived adversarial verification) — there is no `suspected` bucket to relay.
+It runs Review (one agent/shard) → Verify (2 independent skeptics per finding, strict — survives only if all skeptics answer and none refute; a skeptic that fails to answer drops the finding) → Synthesize (dedupe across shards, tier P0–P3). It returns `{ tiers: {P0,P1,P2,P3}, summary, stats }`. Everything it returns is already **confirmed** (survived adversarial verification) — there is no `suspected` bucket to relay.
 
 ## 3. Present and drive fixes
 
