@@ -423,6 +423,91 @@ export const getSchoolGrades = () =>
 export const joinSection = (joinCode: string) =>
   apiPost<{ status: string; section_id: string }>("/teacher/join", { join_code: joinCode });
 
+export interface HomeworkProblem {
+  bank_item_id: string;
+  position: number;
+  question: string;
+  figure_svg: string | null;
+  difficulty: string;
+  format: "frq" | "mcq";
+  mcq_choices: string[];
+}
+
+export interface HomeworkGradeBreakdown {
+  problem_id: string;
+  score_status: "full" | "partial" | "zero";
+  percent: number;
+  feedback: string | null;
+}
+
+export interface HomeworkDetail {
+  assignment_id: string;
+  title: string;
+  description: string | null;
+  type: string;
+  due_at: string | null;
+  course_id: string;
+  course_name: string;
+  problems: HomeworkProblem[];
+  submitted: boolean;
+  submission_id: string | null;
+  submitted_at: string | null;
+  final_score: number | null;
+  grade_published_at: string | null;
+  breakdown: HomeworkGradeBreakdown[] | null;
+}
+
+export const getHomework = (assignmentId: string) =>
+  apiGet<HomeworkDetail>(`/school/student/homework/${assignmentId}`);
+
+/** Submit photos of handwritten work. 30s — server kicks off extraction. */
+export const submitHomework = (assignmentId: string, files: string[]) =>
+  apiPost<{ submission_id: string; submitted_at: string; is_late: boolean }>(
+    `/school/student/homework/${assignmentId}/submit`,
+    { files },
+    30_000,
+  );
+
+export interface ExtractionStep {
+  latex: string;
+  plain_english: string;
+  edited: boolean;
+}
+
+export interface ExtractionProblem {
+  position: number;
+  student_answer: string | null;
+  student_steps: ExtractionStep[];
+}
+
+export interface SubmissionState {
+  submission_id: string;
+  submitted_at: string;
+  is_late: boolean;
+  extraction: { problems: ExtractionProblem[]; overall_confidence: "high" | "medium" | "low" } | null;
+  extraction_confirmed_at: string | null;
+  extraction_flagged_at: string | null;
+  integrity_check_enabled: boolean;
+  ai_grading_enabled: boolean;
+}
+
+export const getSubmission = (assignmentId: string) =>
+  apiGet<SubmissionState>(`/school/student/homework/${assignmentId}/submission`);
+
+/** Sign off on the OCR'd work so grading/integrity can run. */
+export const confirmExtraction = (submissionId: string) =>
+  apiPost<{ status: string; already_confirmed: boolean }>(
+    `/school/student/submissions/${submissionId}/confirm-extraction`,
+    { edits: null },
+  );
+
+/** "The reader got it wrong" — routes the submission to manual teacher grading. */
+export const flagExtraction = (submissionId: string) =>
+  apiPost<{ status: string; already_flagged: boolean }>(
+    `/school/student/submissions/${submissionId}/flag-extraction`,
+    {},
+  );
+
 export const getSessionHistory = (subject: string, limit = 20, offset = 0) =>
   apiGet<SessionHistoryResponse>(`/session/history?subject=${subject}&limit=${limit}&offset=${offset}`);
 
