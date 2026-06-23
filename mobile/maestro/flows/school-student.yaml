@@ -1,0 +1,23 @@
+# A school student signs in → classroom home → grades. The headline journey.
+# Needs a school student enrolled in a class: export STUDENT_EMAIL / STUDENT_PASSWORD.
+appId: com.veradicai.app
+env:
+  EMAIL: ${STUDENT_EMAIL}
+  PASSWORD: ${STUDENT_PASSWORD}
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Welcome back"
+- tapOn: "Email"
+- inputText: ${EMAIL}
+- tapOn: "Password"
+- inputText: ${PASSWORD}
+- tapOn: "Sign In"
+# Classroom home (the school-student tab set: Home / Grades / Study / Account).
+- assertVisible: "Your classes"
+- takeScreenshot: school-home
+- tapOn: "Grades"
+- assertVisible: "Your grades."
+- takeScreenshot: grades
+- tapOn: "Home"
+- assertVisible: "Your classes"

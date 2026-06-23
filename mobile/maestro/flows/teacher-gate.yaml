@@ -1,0 +1,18 @@
+# A teacher signs in → lands on the "use the web app" gate (not the student UI).
+# Needs a teacher account: export TEACHER_EMAIL / TEACHER_PASSWORD.
+appId: com.veradicai.app
+env:
+  EMAIL: ${TEACHER_EMAIL}
+  PASSWORD: ${TEACHER_PASSWORD}
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Welcome back"
+- tapOn: "Email"
+- inputText: ${EMAIL}
+- tapOn: "Password"
+- inputText: ${PASSWORD}
+- tapOn: "Sign In"
+- assertVisible: "Teacher account"
+- assertVisible: "Open the web app"
+- takeScreenshot: teacher-gate

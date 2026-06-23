@@ -1,0 +1,9 @@
+# Launches the app and confirms the login screen renders. The cheapest
+# "does it boot and paint" check. (Selectors are by visible copy; if a future
+# RNTL run shows the onboarding screen first, tap through it before this.)
+appId: com.veradicai.app
+---
+- launchApp:
+    clearState: true
+- assertVisible: "Welcome back"
+- takeScreenshot: login
