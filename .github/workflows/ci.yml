@@ -65,7 +65,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # 22 to satisfy @testing-library/react-native@14's engine floor (^22.13 || >=24).
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: mobile/package-lock.json
 
