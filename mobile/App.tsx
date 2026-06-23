@@ -12,8 +12,10 @@ import { AccountScreen } from "./src/components/AccountScreen";
 import { AuthScreen } from "./src/components/AuthScreen";
 import { BottomTabBar, PERSONAL_TABS, SCHOOL_TABS, type TabKey } from "./src/components/BottomTabBar";
 import { ErrorBoundary } from "./src/components/ErrorBoundary";
+import { ExtractionConfirmScreen } from "./src/components/ExtractionConfirmScreen";
 import { GradesScreen } from "./src/components/GradesScreen";
 import { HistoryListScreen } from "./src/components/HistoryListScreen";
+import { HomeworkScreen } from "./src/components/HomeworkScreen";
 import { JoinClassScreen } from "./src/components/JoinClassScreen";
 import { WeakSpotsScreen } from "./src/components/WeakSpotsScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
@@ -34,7 +36,7 @@ import { useSessionStore } from "./src/stores/session";
 import { loadThemePref } from "./src/stores/themePref";
 import { ONBOARDING_KEY } from "./src/constants/storageKeys";
 
-type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "weak-spots" | "teacher-gate" | "school-home" | "grades" | "join-class";
+type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "weak-spots" | "teacher-gate" | "school-home" | "grades" | "join-class" | "homework" | "extraction-confirm";
 
 // Two tab sets share the same screen<->tab maps (each screen maps to exactly
 // one tab key); only which screens form the bar differs by audience.
@@ -61,6 +63,7 @@ function AppRoot() {
   const [screen, setScreen] = useState<Screen | null>(null);
   const [subject, setSubject] = useState("math");
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
+  const [activeHomeworkId, setActiveHomeworkId] = useState<string | null>(null);
   const [fromOnboarding, setFromOnboarding] = useState(false);
   // School-enrolled students get a classroom-first tab set (Home/Grades/Study/
   // Account); everyone else keeps the personal-learner tabs. Set at auth time.
@@ -214,7 +217,15 @@ function AppRoot() {
 
     let content: React.ReactNode = null;
     if (screen === "school-home") {
-      content = <SchoolHomeScreen onJoinClass={() => setScreen("join-class")} />;
+      content = (
+        <SchoolHomeScreen
+          onJoinClass={() => setScreen("join-class")}
+          onOpenAssignment={(id) => {
+            setActiveHomeworkId(id);
+            setScreen("homework");
+          }}
+        />
+      );
     } else if (screen === "grades") {
       content = <GradesScreen />;
     } else if (screen === "solve") {
@@ -284,6 +295,31 @@ function AppRoot() {
             setScreen("school-home");
           }}
         />
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    );
+  } else if (screen === "homework" && activeHomeworkId) {
+    screenNode = (
+      <SafeAreaProvider>
+        <ErrorBoundary onReset={() => setScreen("school-home")}>
+          <HomeworkScreen
+            assignmentId={activeHomeworkId}
+            onBack={() => setScreen("school-home")}
+            onSubmitted={() => setScreen("extraction-confirm")}
+          />
+        </ErrorBoundary>
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    );
+  } else if (screen === "extraction-confirm" && activeHomeworkId) {
+    screenNode = (
+      <SafeAreaProvider>
+        <ErrorBoundary onReset={() => setScreen("school-home")}>
+          <ExtractionConfirmScreen
+            assignmentId={activeHomeworkId}
+            onDone={() => setScreen("school-home")}
+          />
+        </ErrorBoundary>
         <StatusBar style="auto" />
       </SafeAreaProvider>
     );

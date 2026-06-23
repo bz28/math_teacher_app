@@ -10,11 +10,14 @@ import {
   type SchoolDashboard,
   type SchoolGrade,
 } from "../services/api";
+import { scoreColor } from "../utils/scoreColor";
 import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
 
 interface Props {
   /** Push the "join another class" flow. */
   onJoinClass: () => void;
+  /** Open a homework assignment (view problems + submit). */
+  onOpenAssignment: (assignmentId: string) => void;
 }
 
 /**
@@ -23,7 +26,7 @@ interface Props {
  * what's due this week, what's submitted-and-waiting, and recent grades.
  * Read-only in this chunk — opening an assignment to submit arrives next.
  */
-export function SchoolHomeScreen({ onJoinClass }: Props) {
+export function SchoolHomeScreen({ onJoinClass, onOpenAssignment }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [data, setData] = useState<SchoolDashboard | null>(null);
@@ -110,10 +113,10 @@ export function SchoolHomeScreen({ onJoinClass }: Props) {
             </View>
           ) : (
             <>
-              <Section title="Overdue" tone="error" items={data!.overdue} colors={colors} styles={styles} />
-              <Section title="Due this week" items={data!.due_this_week} colors={colors} styles={styles} />
-              <Section title="In review" items={data!.in_review} colors={colors} styles={styles} muted />
-              <GradedSection items={data!.recently_graded} colors={colors} styles={styles} />
+              <Section title="Overdue" tone="error" items={data!.overdue} colors={colors} styles={styles} onOpen={onOpenAssignment} />
+              <Section title="Due this week" items={data!.due_this_week} colors={colors} styles={styles} onOpen={onOpenAssignment} />
+              <Section title="In review" items={data!.in_review} colors={colors} styles={styles} muted onOpen={onOpenAssignment} />
+              <GradedSection items={data!.recently_graded} colors={colors} styles={styles} onOpen={onOpenAssignment} />
             </>
           )}
         </ScrollView>
@@ -129,6 +132,7 @@ function Section({
   styles,
   tone,
   muted,
+  onOpen,
 }: {
   title: string;
   items: SchoolAssignment[];
@@ -136,13 +140,20 @@ function Section({
   styles: ReturnType<typeof makeStyles>;
   tone?: "error";
   muted?: boolean;
+  onOpen: (assignmentId: string) => void;
 }) {
   if (items.length === 0) return null;
   return (
     <View style={styles.section}>
       <Text style={[styles.sectionLabel, tone === "error" && { color: colors.error }]}>{title}</Text>
       {items.map((a) => (
-        <View key={a.assignment_id} style={styles.row}>
+        <AnimatedPressable
+          key={a.assignment_id}
+          style={styles.row}
+          onPress={() => onOpen(a.assignment_id)}
+          accessibilityRole="button"
+          accessibilityLabel={a.title}
+        >
           <View style={styles.rowMain}>
             <Text style={styles.rowTitle} numberOfLines={1}>{a.title}</Text>
             <Text style={styles.rowMeta} numberOfLines={1}>
@@ -156,7 +167,7 @@ function Section({
               {tone === "error" ? (a.is_late ? "Late" : "Overdue") : formatDue(a.due_at)}
             </Text>
           )}
-        </View>
+        </AnimatedPressable>
       ))}
     </View>
   );
@@ -166,17 +177,25 @@ function GradedSection({
   items,
   colors,
   styles,
+  onOpen,
 }: {
   items: SchoolGrade[];
   colors: ColorPalette;
   styles: ReturnType<typeof makeStyles>;
+  onOpen: (assignmentId: string) => void;
 }) {
   if (items.length === 0) return null;
   return (
     <View style={styles.section}>
       <Text style={styles.sectionLabel}>Recently graded</Text>
       {items.map((g) => (
-        <View key={g.assignment_id} style={styles.row}>
+        <AnimatedPressable
+          key={g.assignment_id}
+          style={styles.row}
+          onPress={() => onOpen(g.assignment_id)}
+          accessibilityRole="button"
+          accessibilityLabel={g.title}
+        >
           <View style={styles.rowMain}>
             <Text style={styles.rowTitle} numberOfLines={1}>{g.title}</Text>
             <Text style={styles.rowMeta} numberOfLines={1}>
@@ -186,16 +205,10 @@ function GradedSection({
           <Text style={[styles.score, { color: scoreColor(g.final_score, colors) }]}>
             {Math.round(g.final_score)}%
           </Text>
-        </View>
+        </AnimatedPressable>
       ))}
     </View>
   );
-}
-
-function scoreColor(score: number, colors: ColorPalette): string {
-  if (score >= 80) return colors.success;
-  if (score >= 60) return colors.textSecondary;
-  return colors.error;
 }
 
 function formatDue(iso: string | null): string {

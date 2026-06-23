@@ -5,7 +5,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { Eyebrow } from "./Eyebrow";
 import { getSchoolGrades, type SchoolGrade } from "../services/api";
-import { averageScore, scoreTone, type ScoreTone } from "../utils/grades";
+import { averageScore } from "../utils/grades";
+import { scoreColor } from "../utils/scoreColor";
 import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
 
 /** Every published grade across the student's enrolled courses, newest first. */
@@ -45,7 +46,7 @@ export function GradesScreen() {
         {average != null && (
           <Text style={styles.average}>
             Average{" "}
-            <Text style={[styles.averageValue, { color: toneColor(scoreTone(average), colors) }]}>
+            <Text style={[styles.averageValue, { color: scoreColor(average, colors) }]}>
               {average}%
             </Text>{" "}
             across {grades.length} {grades.length === 1 ? "grade" : "grades"}
@@ -94,7 +95,7 @@ export function GradesScreen() {
                   {g.course_name} · {g.section_name}
                 </Text>
               </View>
-              <Text style={[styles.score, { color: toneColor(scoreTone(g.final_score), colors) }]}>
+              <Text style={[styles.score, { color: scoreColor(g.final_score, colors) }]}>
                 {Math.round(g.final_score)}%
               </Text>
             </View>
@@ -103,12 +104,6 @@ export function GradesScreen() {
       )}
     </SafeAreaView>
   );
-}
-
-function toneColor(tone: ScoreTone, colors: ColorPalette): string {
-  if (tone === "strong") return colors.success;
-  if (tone === "average") return colors.textSecondary;
-  return colors.error;
 }
 
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
