@@ -89,6 +89,14 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // The turn can 409 if the check finalized server-side (completed or
+      // hit the turn cap). Refetch so the UI reflects that — e.g. flips to
+      // "complete" and hides the composer — instead of silently failing.
+      try {
+        setState(await getIntegrityState(submissionId));
+      } catch {
+        /* keep current state; the error haptic already signaled the failure */
+      }
     } finally {
       setSending(false);
     }
