@@ -519,6 +519,46 @@ export const flagExtraction = (submissionId: string) =>
     {},
   );
 
+export const MIN_INTEGRITY_MESSAGE_CHARS = 5;
+
+export interface IntegrityProblem {
+  problem_id: string;
+  /** 1-based position on the homework — what to show the student. */
+  hw_position: number;
+  status: string;
+  question: string | null;
+}
+
+export interface IntegrityTurn {
+  ordinal: number;
+  role: "agent" | "student";
+  content: string;
+  created_at: string;
+  is_variant_probe: boolean;
+}
+
+// overall_status: no_check | extracting | awaiting_student | in_progress |
+// complete | skipped_unreadable. disposition is teacher-only (null to the
+// student until complete, and even then pass/flag look the same at the door).
+export interface IntegrityState {
+  submission_id: string;
+  overall_status: string;
+  disposition: string | null;
+  problems: IntegrityProblem[];
+  transcript: IntegrityTurn[];
+}
+
+export const getIntegrityState = (submissionId: string) =>
+  apiGet<IntegrityState>(`/school/student/integrity/submissions/${submissionId}`);
+
+/** Send a student turn and get the agent's reply (runs the agent loop, so slow). */
+export const postIntegrityTurn = (submissionId: string, message: string, secondsOnTurn: number) =>
+  apiPost<IntegrityState>(
+    `/school/student/integrity/submissions/${submissionId}/turn`,
+    { message, seconds_on_turn: secondsOnTurn, telemetry: { device_type: "mobile" } },
+    LLM_TIMEOUT_MS,
+  );
+
 export const getSessionHistory = (subject: string, limit = 20, offset = 0) =>
   apiGet<SessionHistoryResponse>(`/session/history?subject=${subject}&limit=${limit}&offset=${offset}`);
 

@@ -20,6 +20,8 @@ const POLL_MS = 2500;
 interface Props {
   assignmentId: string;
   onDone: () => void;
+  /** After confirming when integrity is enabled, open the explain-your-work chat. */
+  onIntegrityCheck: (submissionId: string) => void;
 }
 
 /**
@@ -30,7 +32,7 @@ interface Props {
  * neither integrity nor AI grading, there's nothing to confirm — we just
  * acknowledge the submission.
  */
-export function ExtractionConfirmScreen({ assignmentId, onDone }: Props) {
+export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [state, setState] = useState<SubmissionState | null>(null);
@@ -70,21 +72,33 @@ export function ExtractionConfirmScreen({ assignmentId, onDone }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
 
-  const act = useCallback(
-    async (fn: (id: string) => Promise<unknown>) => {
-      if (!state || acting) return;
-      setActing(true);
-      try {
-        await fn(state.submission_id);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        onDone();
-      } catch {
-        setActing(false);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
-    },
-    [state, acting, onDone],
-  );
+  const doConfirm = useCallback(async () => {
+    if (!state || acting) return;
+    setActing(true);
+    try {
+      await confirmExtraction(state.submission_id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Confirming kicks off grading + (if enabled) the integrity check.
+      if (state.integrity_check_enabled) onIntegrityCheck(state.submission_id);
+      else onDone();
+    } catch {
+      setActing(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  }, [state, acting, onDone, onIntegrityCheck]);
+
+  const doFlag = useCallback(async () => {
+    if (!state || acting) return;
+    setActing(true);
+    try {
+      await flagExtraction(state.submission_id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onDone();
+    } catch {
+      setActing(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  }, [state, acting, onDone]);
 
   // ── States ────────────────────────────────────────────
   if (error && !state) {
@@ -182,11 +196,11 @@ export function ExtractionConfirmScreen({ assignmentId, onDone }: Props) {
         )}
 
         <View style={styles.actions}>
-          <Button label="Looks right" onPress={() => act(confirmExtraction)} loading={acting} />
+          <Button label="Looks right" onPress={doConfirm} loading={acting} />
           <Button
             label="The reader got it wrong"
             variant="secondary"
-            onPress={() => act(flagExtraction)}
+            onPress={doFlag}
             disabled={acting}
           />
         </View>

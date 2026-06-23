@@ -16,6 +16,7 @@ import { ExtractionConfirmScreen } from "./src/components/ExtractionConfirmScree
 import { GradesScreen } from "./src/components/GradesScreen";
 import { HistoryListScreen } from "./src/components/HistoryListScreen";
 import { HomeworkScreen } from "./src/components/HomeworkScreen";
+import { IntegrityChatScreen } from "./src/components/IntegrityChatScreen";
 import { JoinClassScreen } from "./src/components/JoinClassScreen";
 import { WeakSpotsScreen } from "./src/components/WeakSpotsScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
@@ -36,7 +37,7 @@ import { useSessionStore } from "./src/stores/session";
 import { loadThemePref } from "./src/stores/themePref";
 import { ONBOARDING_KEY } from "./src/constants/storageKeys";
 
-type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "weak-spots" | "teacher-gate" | "school-home" | "grades" | "join-class" | "homework" | "extraction-confirm";
+type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "weak-spots" | "teacher-gate" | "school-home" | "grades" | "join-class" | "homework" | "extraction-confirm" | "integrity-chat";
 
 // Two tab sets share the same screen<->tab maps (each screen maps to exactly
 // one tab key); only which screens form the bar differs by audience.
@@ -64,6 +65,7 @@ function AppRoot() {
   const [subject, setSubject] = useState("math");
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
   const [activeHomeworkId, setActiveHomeworkId] = useState<string | null>(null);
+  const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null);
   const [fromOnboarding, setFromOnboarding] = useState(false);
   // School-enrolled students get a classroom-first tab set (Home/Grades/Study/
   // Account); everyone else keeps the personal-learner tabs. Set at auth time.
@@ -318,6 +320,22 @@ function AppRoot() {
           <ExtractionConfirmScreen
             assignmentId={activeHomeworkId}
             onDone={() => setScreen("school-home")}
+            onIntegrityCheck={(submissionId) => {
+              setActiveSubmissionId(submissionId);
+              setScreen("integrity-chat");
+            }}
+          />
+        </ErrorBoundary>
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    );
+  } else if (screen === "integrity-chat" && activeSubmissionId) {
+    screenNode = (
+      <SafeAreaProvider>
+        <ErrorBoundary onReset={() => setScreen("school-home")}>
+          <IntegrityChatScreen
+            submissionId={activeSubmissionId}
+            onExit={() => setScreen("school-home")}
           />
         </ErrorBoundary>
         <StatusBar style="auto" />
