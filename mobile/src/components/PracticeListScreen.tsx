@@ -40,7 +40,9 @@ export function PracticeListScreen({ onOpenPractice }: Props) {
     setError(false);
     try {
       const courses = uniqueCourses(await getStudentClasses());
-      const sets = await Promise.all(courses.map((c) => getCoursePractice(c.course_id)));
+      // allSettled so one course's failed fetch doesn't blank the whole list.
+      const settled = await Promise.allSettled(courses.map((c) => getCoursePractice(c.course_id)));
+      const sets = settled.map((r) => (r.status === "fulfilled" ? r.value : []));
       setGroups(courses.map((course, i) => ({ course, sets: sets[i] })).filter((g) => g.sets.length > 0));
     } catch {
       setError(true);

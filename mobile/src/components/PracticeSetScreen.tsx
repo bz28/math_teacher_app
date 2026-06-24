@@ -88,7 +88,9 @@ function ProblemCard({
   colors: ColorPalette;
   styles: ReturnType<typeof makeStyles>;
 }) {
-  const isMc = (problem.distractors?.length ?? 0) > 0;
+  // MCQ only when we have both distractors AND a real answer — otherwise a
+  // null final_answer would render a blank choice that can never be correct.
+  const isMc = (problem.distractors?.length ?? 0) > 0 && !!problem.final_answer;
   const choices = useMemo(
     () => (isMc ? shuffleChoices([problem.final_answer ?? "", ...(problem.distractors ?? [])], problem.position) : []),
     [isMc, problem.final_answer, problem.distractors, problem.position],
@@ -98,14 +100,19 @@ function ProblemCard({
   const [checked, setChecked] = useState(false);
 
   const answer = isMc ? selected ?? "" : typed;
-  const correct = checked && isAnswerCorrect(answer, problem.final_answer);
+  // MCQ is an exact pick from the choices, so compare strictly — that keeps the
+  // verdict and the green-highlight (which is also strict) in lockstep. Only
+  // free-response uses the lenient whitespace/case match.
+  const isRight = () =>
+    isMc ? selected === problem.final_answer : isAnswerCorrect(typed, problem.final_answer);
+  const correct = checked && isRight();
   const steps = (problem.solution_steps ?? []) as Record<string, unknown>[];
 
   const check = () => {
     if (!answer.trim()) return;
     setChecked(true);
     Haptics.notificationAsync(
-      isAnswerCorrect(answer, problem.final_answer)
+      isRight()
         ? Haptics.NotificationFeedbackType.Success
         : Haptics.NotificationFeedbackType.Warning,
     );
