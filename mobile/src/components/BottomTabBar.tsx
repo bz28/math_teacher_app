@@ -27,11 +27,13 @@ export const PERSONAL_TABS: Tab[] = [
   { key: "account", label: "Account", icon: "person-outline", iconActive: "person" },
 ];
 
-/** School-student tabs: classroom first, study tools still available. */
+/** School-student tabs: classroom only. The open-ended personal Study tools
+ * (Learn/Mock/Practice) are intentionally NOT here — a school student must
+ * not be able to ask the AI tutor for a homework answer and submit it on the
+ * same app (matches web, which blocks school students from those routes). */
 export const SCHOOL_TABS: Tab[] = [
   { key: "school-home", label: "Home", icon: "home-outline", iconActive: "home" },
   { key: "grades", label: "Grades", icon: "ribbon-outline", iconActive: "ribbon" },
-  { key: "solve", label: "Study", icon: "flash-outline", iconActive: "flash" },
   { key: "account", label: "Account", icon: "person-outline", iconActive: "person" },
 ];
 

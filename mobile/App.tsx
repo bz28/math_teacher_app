@@ -42,7 +42,7 @@ type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session
 // Two tab sets share the same screen<->tab maps (each screen maps to exactly
 // one tab key); only which screens form the bar differs by audience.
 const PERSONAL_TAB_SCREENS: Screen[] = ["solve", "history-list", "weak-spots", "account"];
-const SCHOOL_TAB_SCREENS: Screen[] = ["school-home", "grades", "solve", "account"];
+const SCHOOL_TAB_SCREENS: Screen[] = ["school-home", "grades", "account"];
 const SCREEN_TO_TAB: Record<string, TabKey> = {
   solve: "solve",
   "history-list": "history",
