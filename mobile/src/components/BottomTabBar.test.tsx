@@ -5,7 +5,7 @@ describe("tab sets", () => {
     // The Study tab is the personal AI tutor; giving it to school students
     // lets them ask for a homework answer and submit it on the same app.
     // Keep it OUT of the school set (matches web's gating).
-    expect(SCHOOL_TABS.map((t) => t.key)).toEqual(["school-home", "grades", "account"]);
+    expect(SCHOOL_TABS.map((t) => t.key)).toEqual(["school-home", "grades", "practice", "account"]);
     expect(SCHOOL_TABS.map((t) => t.key)).not.toContain("solve");
   });
 
