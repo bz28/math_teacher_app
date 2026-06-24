@@ -489,6 +489,23 @@ export const postIntegrityTurn = (submissionId: string, message: string, seconds
     LLM_TIMEOUT_MS,
   );
 
+// ── Teacher-assigned practice (ungraded; self-checked client-side) ──
+export type StudentClass = Schemas["StudentClassSummary"];
+export type PracticeSet = Schemas["StudentPracticeSummary"];
+export type PracticeSetDetail = Schemas["StudentPracticeDetail"];
+export type PracticeSetProblem = Schemas["StudentPracticeProblem"];
+
+/** Sections the student is enrolled in (one row per section; dedupe by course_id). */
+export const getStudentClasses = () =>
+  apiGet<StudentClass[]>("/school/student/classes");
+
+export const getCoursePractice = (courseId: string) =>
+  apiGet<PracticeSet[]>(`/school/student/courses/${courseId}/practice`);
+
+/** Practice problems ship final_answer + distractors so the student self-checks. */
+export const getPracticeDetail = (assignmentId: string) =>
+  apiGet<PracticeSetDetail>(`/school/student/practice/${assignmentId}`);
+
 export const getSessionHistory = (subject: string, limit = 20, offset = 0) =>
   apiGet<SessionHistoryResponse>(`/session/history?subject=${subject}&limit=${limit}&offset=${offset}`);
 
