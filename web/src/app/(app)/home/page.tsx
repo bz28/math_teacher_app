@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
 import Link from "next/link";
-import { Card } from "@/components/ui";
+import { Card, SkeletonCard } from "@/components/ui";
 import { auth, student, type EnrolledCourse } from "@/lib/api";
 import { SUBJECT_CONFIG } from "@/lib/constants";
 
@@ -101,7 +101,7 @@ export default function HomePage() {
           >
             {joining ? "Joining..." : "Join"}
           </button>
-          {joinError && <span className="text-xs text-red-500">{joinError}</span>}
+          {joinError && <span className="text-xs text-error">{joinError}</span>}
         </form>}
       </motion.div>
 
@@ -196,9 +196,14 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Loading state */}
+      {/* Loading state — skeleton cards matching the subject/course grid
+          so the dashboard doesn't flash a bare "Loading…" line. */}
       {loadingCourses && (
-        <div className="py-8 text-center text-text-muted">Loading...</div>
+        <div className="grid gap-6 sm:grid-cols-3">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
       )}
 
       {/* Upgrade CTA for free regular students only */}
