@@ -5,15 +5,23 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
 import Link from "next/link";
-import { Card, SkeletonCard } from "@/components/ui";
+import { PageMasthead } from "@/components/shared/page-masthead";
 import { auth, student, type EnrolledCourse } from "@/lib/api";
 import { SUBJECT_CONFIG } from "@/lib/constants";
 
 const genericSubjects = [
-  { id: "math", description: "Algebra, equations, word problems, and more", modes: ["Learn", "Mock Test"] },
-  { id: "physics", description: "Mechanics, energy, waves, and more", modes: ["Learn", "Mock Test"] },
-  { id: "chemistry", description: "Reactions, balancing equations, stoichiometry, and more", modes: ["Learn", "Mock Test"] },
+  { id: "math", description: "Algebra, equations, and word problems — worked one step at a time." },
+  { id: "physics", description: "Mechanics, energy, and waves, with the reasoning made visible." },
+  { id: "chemistry", description: "Reactions, balancing, and stoichiometry — built up from the idea." },
 ];
+
+// Per-subject hue (the solid accent from SUBJECT_CONFIG), used only as a thin
+// editorial spine — the card surface itself stays calm cream/green.
+const ACCENT: Record<string, string> = {
+  math: "#7C3AED",
+  physics: "#0984E3",
+  chemistry: "#00B894",
+};
 
 export default function HomePage() {
   const user = useAuthStore((s) => s.user);
@@ -23,14 +31,26 @@ export default function HomePage() {
   const [joinCode, setJoinCode] = useState("");
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState("");
+  // Time-of-day greeting + date, computed client-side to avoid hydration drift.
+  const [greeting, setGreeting] = useState("Welcome back");
+  const [dateLabel, setDateLabel] = useState("");
 
   useEffect(() => {
     document.documentElement.removeAttribute("data-subject");
   }, []);
 
+  useEffect(() => {
+    const now = new Date();
+    const h = now.getHours();
+    setGreeting(
+      h < 5 ? "Still at it" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening",
+    );
+    setDateLabel(
+      now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }),
+    );
+  }, []);
+
   // School students belong in the school portal — never on personal /home.
-  // This catches direct nav, page refresh, and the second-click-after-join
-  // case where the join itself 409s but school_id was already stamped.
   useEffect(() => {
     if (user?.role === "student" && user.school_id) {
       router.replace("/school/student");
@@ -45,7 +65,9 @@ export default function HomePage() {
       .finally(() => setLoadingCourses(false));
   };
 
-  useEffect(() => { loadEnrolledCourses(); }, []);
+  useEffect(() => {
+    loadEnrolledCourses();
+  }, []);
 
   async function handleJoinSection(e: React.FormEvent) {
     e.preventDefault();
@@ -54,9 +76,8 @@ export default function HomePage() {
     try {
       await student.joinSection(joinCode.trim());
       setJoinCode("");
-      // Reload the user object — the join endpoint stamps school_id
-      // on the user, which flips them into a school student. Then
-      // route them to the school student portal.
+      // The join endpoint stamps school_id on the user, flipping them into a
+      // school student — reload and route them to the school portal.
       await useAuthStore.getState().loadUser();
       const refreshed = useAuthStore.getState().user;
       if (refreshed?.role === "student" && refreshed.school_id) {
@@ -72,159 +93,126 @@ export default function HomePage() {
   }
 
   const isSchoolStudent = enrolledCourses.length > 0;
+  const firstName = user?.name?.split(" ")[0] ?? "there";
 
   return (
-    <div className="space-y-10">
-      {/* Greeting */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">
-          Hi, {user?.name?.split(" ")[0]}!
-        </h1>
-        <p className="mt-1 text-text-secondary">
-          {isSchoolStudent ? "Here are your classes" : "Ready to learn something new?"}
+    <div className="mx-auto max-w-3xl space-y-12 pb-20">
+      <PageMasthead
+        eyebrow={dateLabel}
+        title={
+          <>
+            {greeting}, <span className="text-primary">{firstName}</span>.
+          </>
+        }
+        subtitle={
+          isSchoolStudent
+            ? "Your classes are ready when you are."
+            : "Three subjects, endless practice. Where will your curiosity go today?"
+        }
+      />
+
+      {/* ── Subjects / Courses ── */}
+      <section className="space-y-5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+          {isSchoolStudent ? "Your classes" : "Choose a subject"}
         </p>
 
-        {/* Join class code — students only */}
-        {user?.role !== "teacher" && <form onSubmit={handleJoinSection} className="mt-4 flex items-center gap-2">
-          <input
-            type="text"
-            value={joinCode}
-            onChange={(e) => { setJoinCode(e.target.value.toUpperCase()); setJoinError(""); }}
-            placeholder="Enter class code"
-            maxLength={6}
-            className="w-36 rounded-[--radius-sm] border border-border bg-input-bg px-3 py-2 text-sm font-mono font-semibold tracking-widest text-text-primary outline-none placeholder:font-sans placeholder:font-normal placeholder:tracking-normal placeholder:text-text-muted focus:border-primary"
-          />
-          <button
-            type="submit"
-            disabled={joinCode.trim().length < 4 || joining}
-            className="rounded-[--radius-sm] bg-primary px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
-          >
-            {joining ? "Joining..." : "Join"}
-          </button>
-          {joinError && <span className="text-xs text-error">{joinError}</span>}
-        </form>}
-      </motion.div>
-
-      {/* School student — enrolled courses */}
-      {isSchoolStudent && (
-        <div className="grid gap-6 sm:grid-cols-2">
-          {enrolledCourses.map((course, i) => {
-            const gradient = SUBJECT_CONFIG[course.subject]?.gradient ?? SUBJECT_CONFIG.math.gradient;
-            return (
-              <motion.div
+        {loadingCourses ? (
+          <div className="grid gap-4 sm:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="h-44 animate-pulse rounded-[--radius-lg] border border-border-light bg-surface"
+              />
+            ))}
+          </div>
+        ) : isSchoolStudent ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {enrolledCourses.map((course, i) => (
+              <SubjectCard
                 key={`${course.id}-${course.section_id}`}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 * i }}
-              >
-                <Card
-                  variant="interactive"
-                  className="relative overflow-hidden"
-                  onClick={() => router.push(`/learn?subject=${course.subject}&section=${course.section_id}`)}
-                >
-                  <div className={`absolute left-0 top-0 h-1 w-full bg-gradient-to-r ${gradient}`} />
-                  <div className="flex items-start gap-4 pt-2">
-                    <div
-                      className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[--radius-md] bg-gradient-to-br ${gradient} text-white shadow-sm`}
-                    >
-                      {course.subject === "physics" ? <PhysicsIcon /> : course.subject === "chemistry" ? <ChemIcon /> : <MathIcon />}
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-bold text-text-primary">{course.name}</h2>
-                      <p className="mt-0.5 text-sm text-text-secondary">
-                        {course.teacher_name} · {course.section_name}
-                      </p>
-                      <div className="mt-3 flex gap-2">
-                        {["Learn", "Practice", "Mock Test"].map((mode) => (
-                          <span
-                            key={mode}
-                            className="rounded-[--radius-pill] bg-primary-bg px-3 py-1 text-xs font-semibold text-primary"
-                          >
-                            {mode}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              </motion.div>
-            );
-          })}
-        </div>
-      )}
+                index={i + 1}
+                accent={ACCENT[course.subject] ?? "#0E5238"}
+                title={course.name}
+                subtitle={`${course.teacher_name} · ${course.section_name}`}
+                modes={["Learn", "Practice", "Mock Test"]}
+                onClick={() =>
+                  router.push(`/learn?subject=${course.subject}&section=${course.section_id}`)
+                }
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-3">
+            {genericSubjects.map((s, i) => (
+              <SubjectCard
+                key={s.id}
+                index={i + 1}
+                accent={ACCENT[s.id]}
+                title={SUBJECT_CONFIG[s.id]?.name ?? s.id}
+                subtitle={s.description}
+                modes={["Learn", "Mock Test"]}
+                onClick={() => router.push(`/learn?subject=${s.id}`)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
 
-      {/* Regular student — generic subjects */}
-      {!isSchoolStudent && !loadingCourses && (
-        <div className="grid gap-6 sm:grid-cols-3">
-          {genericSubjects.map((subject, i) => (
-            <motion.div
-              key={subject.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 * i }}
+      {/* ── Join a class — quiet, secondary ── */}
+      {user?.role !== "teacher" && (
+        <section className="rounded-[--radius-lg] border border-border bg-surface/60 p-5">
+          <form onSubmit={handleJoinSection} className="flex flex-wrap items-center gap-x-4 gap-y-3">
+            <div className="flex-1 min-w-[180px]">
+              <p className="text-sm font-semibold text-text-primary">Have a class code?</p>
+              <p className="text-xs text-text-muted">
+                Join your teacher&apos;s class to get assignments and grades.
+              </p>
+            </div>
+            <input
+              type="text"
+              value={joinCode}
+              onChange={(e) => {
+                setJoinCode(e.target.value.toUpperCase());
+                setJoinError("");
+              }}
+              placeholder="CODE"
+              maxLength={6}
+              aria-label="Class code"
+              className="w-28 rounded-[--radius-sm] border border-border bg-input-bg px-3 py-2 text-center text-sm font-mono font-semibold tracking-[0.2em] text-text-primary outline-none placeholder:tracking-normal placeholder:text-text-muted focus:border-primary"
+            />
+            <button
+              type="submit"
+              disabled={joinCode.trim().length < 4 || joining}
+              className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
             >
-              <Card
-                variant="interactive"
-                className="relative overflow-hidden"
-                onClick={() => router.push(`/learn?subject=${subject.id}`)}
-              >
-                <div className={`absolute left-0 top-0 h-1 w-full bg-gradient-to-r ${SUBJECT_CONFIG[subject.id]?.gradient ?? SUBJECT_CONFIG.math.gradient}`} />
-                <div className="flex items-start gap-4 pt-2">
-                  <div
-                    className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[--radius-md] bg-gradient-to-br ${SUBJECT_CONFIG[subject.id]?.gradient ?? SUBJECT_CONFIG.math.gradient} text-white shadow-sm`}
-                  >
-                    {subject.id === "math" ? <MathIcon /> : subject.id === "physics" ? <PhysicsIcon /> : <ChemIcon />}
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-text-primary">{SUBJECT_CONFIG[subject.id]?.name ?? subject.id}</h2>
-                    <p className="mt-0.5 text-sm text-text-secondary">{subject.description}</p>
-                    <div className="mt-3 flex gap-2">
-                      {subject.modes.map((mode) => (
-                        <span
-                          key={mode}
-                          className="rounded-[--radius-pill] bg-primary-bg px-3 py-1 text-xs font-semibold text-primary"
-                        >
-                          {mode}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
+              {joining ? "Joining…" : "Join"}
+            </button>
+            {joinError && <span className="w-full text-xs text-error">{joinError}</span>}
+          </form>
+        </section>
       )}
 
-      {/* Loading state — skeleton cards matching the subject/course grid
-          so the dashboard doesn't flash a bare "Loading…" line. */}
-      {loadingCourses && (
-        <div className="grid gap-6 sm:grid-cols-3">
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-        </div>
-      )}
-
-      {/* Upgrade CTA for free regular students only */}
+      {/* ── Upgrade — free, non-school students ── */}
       {user && !user.is_pro && !isSchoolStudent && (
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
+          transition={{ duration: 0.5, delay: 0.15 }}
         >
           <Link
             href="/pricing"
-            className="flex items-center justify-between rounded-[--radius-xl] border border-primary/20 bg-primary-bg/50 p-5 transition-colors hover:bg-primary-bg"
+            className="group flex items-center justify-between gap-4 rounded-[--radius-xl] border border-primary/20 bg-primary-bg/40 p-6 transition-colors hover:bg-primary-bg/70"
           >
             <div>
-              <p className="font-bold text-text-primary">Upgrade to Pro</p>
-              <p className="mt-0.5 text-sm text-text-secondary">
-                Unlimited sessions, mock exams, work diagnosis, and more
+              <p className="font-serif text-xl text-text-primary">Veradic Pro</p>
+              <p className="mt-1 max-w-md text-sm text-text-secondary">
+                Unlimited sessions, mock exams, and work diagnosis — for everything you&apos;re
+                working toward.
               </p>
             </div>
-            <span className="shrink-0 rounded-[--radius-pill] bg-primary px-4 py-2 text-xs font-bold text-white">
-              View Plans
+            <span className="shrink-0 rounded-[--radius-pill] bg-primary px-5 py-2.5 text-sm font-bold text-white transition-transform group-hover:translate-x-0.5">
+              View plans
             </span>
           </Link>
         </motion.div>
@@ -233,31 +221,46 @@ export default function HomePage() {
   );
 }
 
-function MathIcon() {
+function SubjectCard({
+  index,
+  accent,
+  title,
+  subtitle,
+  modes,
+  onClick,
+}: {
+  index: number;
+  accent: string;
+  title: string;
+  subtitle: string;
+  modes: string[];
+  onClick: () => void;
+}) {
   return (
-    <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="2" x2="12" y2="22" />
-      <line x1="2" y1="12" x2="22" y2="12" />
-    </svg>
-  );
-}
-
-function ChemIcon() {
-  return (
-    <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 3h6v7l4 9H5l4-9V3z" />
-      <line x1="9" y1="3" x2="15" y2="3" />
-    </svg>
-  );
-}
-
-function PhysicsIcon() {
-  return (
-    <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
-      <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
-      <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
-      <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
-    </svg>
+    <motion.button
+      onClick={onClick}
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, delay: 0.06 * index }}
+      whileHover={{ y: -3 }}
+      className="group relative flex flex-col gap-2.5 overflow-hidden rounded-[--radius-lg] border border-border bg-surface p-6 pl-7 text-left transition-colors hover:border-primary/30 hover:shadow-md"
+    >
+      <span
+        className="absolute left-0 top-5 bottom-5 w-[3px] rounded-full"
+        style={{ backgroundColor: accent }}
+      />
+      <span className="font-fraunces text-sm italic text-text-muted">
+        {String(index).padStart(2, "0")}
+      </span>
+      <h3 className="font-serif text-[1.6rem] leading-tight text-text-primary">{title}</h3>
+      <p className="text-[13px] leading-relaxed text-text-secondary">{subtitle}</p>
+      <div className="mt-2 flex items-center gap-2 text-sm font-semibold text-primary">
+        Start
+        <span className="transition-transform group-hover:translate-x-1">→</span>
+        <span className="ml-auto text-[11px] font-medium uppercase tracking-wider text-text-muted">
+          {modes.join(" · ")}
+        </span>
+      </div>
+    </motion.button>
   );
 }
