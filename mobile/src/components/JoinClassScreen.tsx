@@ -4,7 +4,6 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -13,6 +12,7 @@ import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { Button } from "./Button";
 import { Eyebrow } from "./Eyebrow";
+import { TextField } from "./TextField";
 import { joinSection } from "../services/api";
 import { errorMessage } from "../utils/errorMessage";
 import { normalizeJoinCode } from "../utils/joinCode";
@@ -67,21 +67,19 @@ export function JoinClassScreen({ onBack, onJoined }: Props) {
             Your teacher gives you a short code to join their class.
           </Text>
 
-          <View style={styles.inputWrap}>
-            <Ionicons name="school-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              value={code}
-              onChangeText={(v) => setCode(v.toUpperCase())}
-              placeholder="Class code"
-              autoCapitalize="characters"
-              autoCorrect={false}
-              autoFocus
-              placeholderTextColor={colors.textMuted}
-              returnKeyType="go"
-              onSubmitEditing={submit}
-            />
-          </View>
+          <TextField
+            icon="school-outline"
+            value={code}
+            onChangeText={(v) => setCode(v.toUpperCase())}
+            placeholder="Class code"
+            autoCapitalize="characters"
+            autoCorrect={false}
+            autoFocus
+            returnKeyType="go"
+            onSubmitEditing={submit}
+            style={{ letterSpacing: 2 }}
+            containerStyle={{ marginBottom: spacing.lg }}
+          />
 
           {error && (
             <View style={styles.errorRow}>
@@ -130,25 +128,6 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 15,
     marginBottom: spacing.xxl,
-  },
-  inputWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    backgroundColor: colors.inputBg,
-    marginBottom: spacing.lg,
-  },
-  inputIcon: { marginLeft: 14 },
-  input: {
-    flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 16,
-    ...typography.body,
-    letterSpacing: 2,
-    color: colors.text,
-    includeFontPadding: false,
   },
   errorRow: {
     flexDirection: "row",
