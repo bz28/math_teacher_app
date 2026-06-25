@@ -592,6 +592,9 @@ export const forgotPassword = (email: string) =>
 export const deleteAccount = (password: string) =>
   apiDelete("/auth/account", { password });
 
+/** The user's personal data as a JSON object (account, activity, role-specific). */
+export const getMyData = () => apiGet<Record<string, unknown>>("/auth/my-data");
+
 // Entitlements
 export interface EntitlementLimits {
   daily_sessions_used: number;
