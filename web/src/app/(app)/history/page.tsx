@@ -14,6 +14,8 @@ import { useSessionStore, type Subject } from "@/stores/learn";
 import { Card, Badge, Button, EmptyState } from "@/components/ui";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { CheckIcon } from "@/components/ui/icons";
+import { PageMasthead } from "@/components/shared/page-masthead";
+import { SubjectTabs } from "@/components/shared/subject-tabs";
 import { formatRelativeDate, cn } from "@/lib/utils";
 
 export default function HistoryPage() {
@@ -55,22 +57,20 @@ function PersonalHistory() {
   }, [subject, fetchHistory]);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-12 pb-20">
       <Heading />
-      <div className="flex gap-2">
-        {(["math", "physics", "chemistry"] as const).map((sub) => (
-          <TabButton
-            key={sub}
-            active={subject === sub}
-            onClick={() => {
-              setLocalSubject(sub);
-              setItems([]);
-            }}
-          >
-            {sub === "math" ? "Mathematics" : sub === "physics" ? "Physics" : "Chemistry"}
-          </TabButton>
-        ))}
-      </div>
+      <SubjectTabs
+        active={subject}
+        onSelect={(key) => {
+          setLocalSubject(key as Subject);
+          setItems([]);
+        }}
+        tabs={[
+          { key: "math", label: "Mathematics" },
+          { key: "physics", label: "Physics" },
+          { key: "chemistry", label: "Chemistry" },
+        ]}
+      />
       <SessionList
         loading={loading}
         items={items}
@@ -141,7 +141,7 @@ function SchoolHistory() {
 
   if (courses !== null && courses.length === 0) {
     return (
-      <div className="mx-auto max-w-2xl space-y-6">
+      <div className="mx-auto max-w-3xl space-y-12 pb-20">
         <Heading />
         <EmptyState
           title="No classes yet"
@@ -152,26 +152,27 @@ function SchoolHistory() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-12 pb-20">
       <Heading />
       {courses && courses.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {courses.map((c) => (
-            <TabButton
-              key={c.section_id}
-              active={activeSectionId === c.section_id}
-              onClick={() => {
-                if (activeSectionId !== c.section_id) {
-                  setItems([]);
-                  setActiveSectionId(c.section_id);
-                }
-              }}
-            >
-              {c.name}
-              <span className="ml-1 text-xs opacity-70">· {c.section_name}</span>
-            </TabButton>
-          ))}
-        </div>
+        <SubjectTabs
+          active={activeSectionId ?? ""}
+          onSelect={(key) => {
+            if (activeSectionId !== key) {
+              setItems([]);
+              setActiveSectionId(key);
+            }
+          }}
+          tabs={courses.map((c) => ({
+            key: c.section_id,
+            label: (
+              <>
+                {c.name}
+                <span className="ml-1 text-xs opacity-70">· {c.section_name}</span>
+              </>
+            ),
+          }))}
+        />
       )}
       <SessionList
         loading={loading}
@@ -189,35 +190,15 @@ function SchoolHistory() {
 
 function Heading() {
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-      <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
-        Session History
-      </h1>
-    </motion.div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "rounded-[--radius-pill] px-4 py-2 text-sm font-semibold transition-colors",
-        active
-          ? "bg-primary text-white"
-          : "bg-primary-bg text-primary hover:bg-primary/10",
-      )}
-    >
-      {children}
-    </button>
+    <PageMasthead
+      eyebrow="HISTORY"
+      title={
+        <>
+          Your <span className="text-primary">sessions</span>
+        </>
+      }
+      subtitle="Every problem you've worked through."
+    />
   );
 }
 
@@ -266,11 +247,17 @@ function SessionList({
           <Card
             variant="interactive"
             onClick={() => onReview(item)}
-            className="flex items-start gap-3"
+            className="relative flex items-start gap-4 overflow-hidden pl-6"
           >
             <span
               className={cn(
-                "mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs",
+                "absolute left-0 top-5 bottom-5 w-[3px] rounded-full",
+                item.status === "completed" ? "bg-primary/40" : "bg-border",
+              )}
+            />
+            <span
+              className={cn(
+                "mt-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs",
                 item.status === "completed"
                   ? "bg-success text-white"
                   : "bg-text-muted text-white",
@@ -286,16 +273,16 @@ function SessionList({
               )}
             </span>
             <div className="flex-1 min-w-0">
-              <p className="truncate text-sm font-medium text-text-primary">
+              <p className="truncate font-serif text-[1.15rem] leading-snug text-text-primary">
                 {item.problem.includes("[") && (
-                  <svg className="mr-1 inline h-3.5 w-3.5 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="mr-1.5 inline h-3.5 w-3.5 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
                     <circle cx="12" cy="13" r="4" />
                   </svg>
                 )}
                 {item.problem}
               </p>
-              <p className="mt-0.5 text-xs text-text-muted">
+              <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">
                 {item.current_step}/{item.total_steps} steps &middot;{" "}
                 {formatRelativeDate(item.created_at)}
               </p>
