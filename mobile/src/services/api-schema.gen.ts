@@ -2421,6 +2421,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/courses/{course_id}/setup-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Course Setup Status
+         * @description Booleans driving the first-run "Set up your class" checklist on
+         *     the course workspace. Each flag is an EXISTS probe — we never need
+         *     the actual rows, just whether the teacher has crossed each milestone:
+         *
+         *       has_section        ≥1 section in the course
+         *       has_student        ≥1 student enrolled in any of its sections
+         *       has_materials      ≥1 unit (course materials live under units)
+         *       has_homework       ≥1 homework assignment
+         *       has_published_grade ≥1 submission grade that's been published
+         *
+         *     Ownership is enforced first via get_teacher_course (404s for
+         *     not-yours), so the probes never leak another teacher's milestones.
+         */
+        get: operations["get_course_setup_status_v1_teacher_courses__course_id__setup_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/courses/{course_id}/submissions-inbox": {
         parameters: {
             query?: never;
@@ -9338,6 +9369,39 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_course_setup_status_v1_teacher_courses__course_id__setup_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
                     };
                 };
             };

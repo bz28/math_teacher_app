@@ -12652,6 +12652,59 @@
         ]
       }
     },
+    "/v1/teacher/courses/{course_id}/setup-status": {
+      "get": {
+        "description": "Booleans driving the first-run \"Set up your class\" checklist on\nthe course workspace. Each flag is an EXISTS probe \u2014 we never need\nthe actual rows, just whether the teacher has crossed each milestone:\n\n  has_section        \u22651 section in the course\n  has_student        \u22651 student enrolled in any of its sections\n  has_materials      \u22651 unit (course materials live under units)\n  has_homework       \u22651 homework assignment\n  has_published_grade \u22651 submission grade that's been published\n\nOwnership is enforced first via get_teacher_course (404s for\nnot-yours), so the probes never leak another teacher's milestones.",
+        "operationId": "get_course_setup_status_v1_teacher_courses__course_id__setup_status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Get Course Setup Status V1 Teacher Courses  Course Id  Setup Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Course Setup Status",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
     "/v1/teacher/courses/{course_id}/submissions-inbox": {
       "get": {
         "description": "Per-(HW \u00d7 section) aggregates for the Submissions tab inbox.\n\nOnly published homework is included \u2014 drafts have no student\nsubmissions and clutter the feed. Preview students are excluded\nfrom every count so teachers don't see their \"View as student\"\nscaffolding.\n\nRow shape:\n  { assignment_id, assignment_title, section_id, section_name,\n    due_at, total_students, submitted, flagged, to_grade, dirty,\n    published }\n\nSort + client-side: the frontend orders by urgency or due date and\nrenders pills per count.",
