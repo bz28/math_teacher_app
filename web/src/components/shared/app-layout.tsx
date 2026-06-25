@@ -10,12 +10,14 @@ import { LogoMark } from "@/components/shared/logo-mark";
 import { SchoolStudentLayout } from "@/components/school/student/school-student-layout";
 import { TeacherUsagePill } from "@/components/shared/teacher-usage-pill";
 import { useToast } from "@/components/ui";
+import { FlagIcon } from "@/components/ui/icons";
 
 // ── Student nav items ──
 
 const studentNavItems = [
   { label: "Home", href: "/home", icon: HomeIcon },
   { label: "History", href: "/history", icon: HistoryIcon },
+  { label: "Review", href: "/review", icon: ReviewIcon },
   { label: "Account", href: "/account", icon: AccountIcon },
 ];
 
@@ -407,6 +409,16 @@ function HomeIcon({ active }: { active: boolean }) {
       <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
       <polyline points="9 22 9 12 15 12 15 22" />
     </svg>
+  );
+}
+
+function ReviewIcon({ active }: { active: boolean }) {
+  // Reuses the shared FlagIcon glyph (flagged work → Review), adapted to
+  // the nav's active-aware coloring contract.
+  return (
+    <FlagIcon
+      className={cn("h-5 w-5", active ? "text-text-primary" : "text-text-muted")}
+    />
   );
 }
 

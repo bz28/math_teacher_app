@@ -155,6 +155,20 @@ export interface SessionHistoryResponse {
   has_more: boolean;
 }
 
+/** One flagged problem on the Review (weak-spots) page — work the
+ *  diagnosis pipeline flagged, deduped by problem text. */
+export interface WeakSpotItem {
+  problem_text: string;
+  summary: string;
+  submitted_at: string;
+  session_id: string | null;
+  issue_count: number;
+}
+
+export interface WeakSpotsResponse {
+  items: WeakSpotItem[];
+}
+
 export interface EntitlementLimits {
   daily_sessions_used: number;
   daily_sessions_limit: number | null;
@@ -684,6 +698,20 @@ export const practice = {
       body: JSON.stringify(data),
       timeout: LLM_TIMEOUT,
     });
+  },
+};
+
+// ── Weak-spots (Review) endpoints ──
+
+export const weakSpots = {
+  /** Flagged problems for the signed-in learner, deduped by problem.
+   *  `subject` is required by the backend. */
+  list(subject: string, limit = 20) {
+    const params = new URLSearchParams({
+      subject,
+      limit: String(limit),
+    });
+    return apiFetch<WeakSpotsResponse>(`/weak-spots?${params}`);
   },
 };
 
