@@ -114,15 +114,19 @@ export function MockTestSummary({ mockTest, onToggleFlag, onStartLearnQueue, onR
               </div>
             )}
             {r.isCorrect === false && (
-              <div>
+              <div className="space-y-0.5">
                 <div className="text-xs text-error">Your answer: <MathText text={r.userAnswer ?? ""} /></div>
-                <p className="text-xs text-text-muted italic">Flag this question and learn it to see the answer</p>
+                {r.correctAnswer && (
+                  <div className="text-xs font-medium text-success">Correct answer: <MathText text={r.correctAnswer} /></div>
+                )}
               </div>
             )}
             {r.isCorrect == null && (
-              <div>
+              <div className="space-y-0.5">
                 <p className="text-xs text-text-muted">Unanswered</p>
-                <p className="text-xs text-text-muted italic">Flag this question and learn it to see the answer</p>
+                {r.correctAnswer && (
+                  <div className="text-xs font-medium text-success">Correct answer: <MathText text={r.correctAnswer} /></div>
+                )}
               </div>
             )}
             <DiagnosisTeaser

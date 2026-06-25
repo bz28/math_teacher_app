@@ -84,6 +84,9 @@ export function PracticeSummary({
                 <div className="text-xs text-text-secondary">
                   {result.userAnswer === "(skipped)" ? "Skipped" : <span>Your answer: <MathText text={result.userAnswer} /></span>}
                 </div>
+                {!wasCorrect && result.correctAnswer && (
+                  <div className="text-xs font-medium text-success">Correct answer: <MathText text={result.correctAnswer} /></div>
+                )}
                 <DiagnosisTeaser diagnosis={workSubmissions[i]} />
               </div>
               <button
