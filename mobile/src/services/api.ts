@@ -487,10 +487,15 @@ export const getIntegrityState = (submissionId: string) =>
   apiGet<IntegrityState>(`/school/student/integrity/submissions/${submissionId}`);
 
 /** Send a student turn and get the agent's reply (runs the agent loop, so slow). */
-export const postIntegrityTurn = (submissionId: string, message: string, secondsOnTurn: number) =>
+export const postIntegrityTurn = (
+  submissionId: string,
+  message: string,
+  secondsOnTurn: number,
+  telemetry?: Schemas["TurnTelemetry"],
+) =>
   apiPost<IntegrityState>(
     `/school/student/integrity/submissions/${submissionId}/turn`,
-    { message, seconds_on_turn: secondsOnTurn, telemetry: { device_type: "mobile" } },
+    { message, seconds_on_turn: secondsOnTurn, telemetry: telemetry ?? { device_type: "mobile" } },
     LLM_TIMEOUT_MS,
   );
 
