@@ -1,56 +1,42 @@
-import { Section } from "./section";
 import { Eyebrow } from "./eyebrow";
-import { IntegrityReviewCard } from "./integrity-review-card";
+import { IntegrityInterview } from "./integrity-interview";
 
 /**
- * Section #3 of the homepage — the integrity layer. The page's only
- * choreographed visual moment, by design: every other section is
- * type-led or static product proof, and this one is what a teacher
- * has never seen before, so it earns the attention budget.
- *
- * The framing copy reflects the dual purpose of the integrity check:
- * it surfaces both students who didn't do the work AND students who
- * did the work but don't understand it. That dual-meaning is the
- * pedagogical positioning — not a surveillance tool, an evaluation
- * tool that catches cheating as a side effect.
+ * The integrity layer — the page's signature moment, on its own dark-green
+ * "spotlight" section (the demo's natural home). An animated interview where a
+ * correct answer gets interrogated and flagged, resolving into the real teacher
+ * verdict. Leads with the dual purpose: catches copying AND misunderstanding.
  */
 export function HomeIntegrity() {
   return (
-    <Section variant="alt" id="integrity">
-      <div className="mx-auto max-w-3xl text-center">
-        <Eyebrow>The integrity layer</Eyebrow>
-        <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
-          Know what each student actually understands.
-        </h2>
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
-          After every submission, Veradic asks the student about specific
-          steps in their own work. Some can&rsquo;t explain because they
-          didn&rsquo;t do it. Some can&rsquo;t explain because they
-          don&rsquo;t understand it. Either way, you find out before the
-          unit test.
+    <section
+      id="integrity"
+      className="relative w-full"
+      style={{ background: "radial-gradient(125% 88% at 50% 0%, #0C3325 0%, #08231A 55%, #061812 100%)" }}
+    >
+      <div className="mx-auto w-full max-w-6xl px-6 py-16 md:px-8 md:py-24">
+        <div className="mx-auto max-w-3xl text-center">
+          <Eyebrow variant="invert">The integrity layer</Eyebrow>
+          <h2 className="mt-6 text-display-md text-[#F4F1E8]">
+            Know if they did the work&nbsp;&mdash; and if they{" "}
+            <span className="font-display-serif italic text-[#7FC4A0]">understand it.</span>
+          </h2>
+          <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-[#8FB7A4] md:text-xl">
+            After a submission, Veradic asks the student to explain their own
+            steps. Some can&rsquo;t because they copied. Some can&rsquo;t because
+            they&rsquo;re lost. You catch both &mdash; before the test.
+          </p>
+        </div>
+
+        <div className="mt-12 md:mt-16">
+          <IntegrityInterview />
+        </div>
+
+        <p className="mx-auto mt-10 max-w-2xl text-center text-sm leading-relaxed text-[#6E9684]">
+          You see the grade, the flag, and the full conversation &mdash; and you
+          decide. Veradic drafts; you publish.
         </p>
       </div>
-
-      <div className="mt-14 md:mt-20">
-        <IntegrityReviewCard
-          studentName="Maya Chen"
-          periodLabel="Algebra II · Period 3"
-          assignmentTitle="Problem set 4 — Trig identities"
-          submittedAgo="2 hours ago"
-          score={32}
-          verdict="FLAGGED"
-          headline="Used the double-angle identity correctly but couldn’t explain why it applied."
-          evidenceBullets={[
-            "Couldn’t recall what step 3 represented when asked.",
-            "Said “I think I copied that part” about the substitution.",
-          ]}
-        />
-      </div>
-
-      <p className="mx-auto mt-10 max-w-2xl text-center text-sm leading-relaxed text-[color:var(--color-text-muted)]">
-        You see the verdict, the headline, the full conversation, and you
-        decide. Veradic drafts; you publish.
-      </p>
-    </Section>
+    </section>
   );
 }
