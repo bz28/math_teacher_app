@@ -35,19 +35,14 @@ export function IntegrityInterview() {
   const reduce = useReducedMotion();
   const [phase, setPhase] = useState<Phase>("chat");
   const [run, setRun] = useState(0);
-  const started = useRef(false);
-
-  // Kick off once when scrolled into view (or immediately for reduced motion).
-  useEffect(() => {
-    if (!inView || started.current) return;
-    started.current = true;
-    if (reduce) setPhase("card");
-  }, [inView, reduce]);
 
   const replay = useCallback(() => {
     setPhase("chat");
     setRun((n) => n + 1);
   }, []);
+
+  // Reduced motion: render the resolved verdict directly (no setState-in-effect).
+  const effectivePhase: Phase = reduce ? "card" : phase;
 
   return (
     <div
@@ -68,11 +63,11 @@ export function IntegrityInterview() {
     >
       <div style={{ width: "100%", maxWidth: 600, display: "flex", justifyContent: "center" }}>
         <AnimatePresence mode="wait">
-          {phase === "chat" ? (
+          {effectivePhase === "chat" ? (
             <motion.div key={`chat-${run}`} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.4 }} style={{ width: "100%", maxWidth: 560 }}>
               {inView && !reduce ? <Interview run={run} onDone={() => setPhase("scoring")} /> : <ChatScaffold />}
             </motion.div>
-          ) : phase === "scoring" ? (
+          ) : effectivePhase === "scoring" ? (
             <motion.div
               key={`scoring-${run}`}
               initial={{ opacity: 0 }}
@@ -112,10 +107,11 @@ function Interview({ run, onDone }: { run: number; onDone: () => void }) {
   const timers = useRef<number[]>([]);
 
   const play = useCallback(() => {
+    // No state reset here — the component mounts fresh (and remounts on replay
+    // via its key), so visible/typing already start at 0/null. Scheduling only
+    // async timers keeps this out of the "setState synchronously in effect" rule.
     timers.current.forEach(clearTimeout);
     timers.current = [];
-    setVisible(0);
-    setTyping(null);
     let t = 900;
     const at = (fn: () => void) => timers.current.push(window.setTimeout(fn, t));
     TURNS.forEach((turn, i) => {

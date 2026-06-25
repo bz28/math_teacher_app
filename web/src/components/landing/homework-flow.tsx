@@ -61,8 +61,10 @@ export function HomeworkFlow() {
   const reduce = useReducedMotion();
   const [stage, setStage] = useState(reduce ? 3 : 0);
   const [seq, setSeq] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
   const paused = useRef(false);
   const timers = useRef<number[]>([]);
+  const playRef = useRef<(() => void) | null>(null);
 
   const play = useCallback(() => {
     timers.current.forEach(clearTimeout);
@@ -75,8 +77,13 @@ export function HomeworkFlow() {
       t += dur[s];
       if (i === 3) t += 600;
     });
-    timers.current.push(window.setTimeout(() => play(), t));
+    // Loop via a ref so the callback doesn't reference itself before init.
+    timers.current.push(window.setTimeout(() => playRef.current?.(), t));
   }, []);
+
+  useEffect(() => {
+    playRef.current = play;
+  }, [play]);
 
   useEffect(() => {
     if (reduce) { paused.current = true; return; }
@@ -86,6 +93,7 @@ export function HomeworkFlow() {
 
   const jump = (i: number) => {
     paused.current = true;
+    setIsPaused(true);
     timers.current.forEach(clearTimeout);
     timers.current = [];
     setStage(i);
@@ -104,7 +112,7 @@ export function HomeworkFlow() {
         </AnimatePresence>
       </div>
       <div style={{ textAlign: "center", fontSize: 11.5, color: "#8FB7A4" }}>
-        {paused.current ? "Click a step to replay it" : "Click any step to explore it"}
+        {isPaused ? "Click a step to replay it" : "Click any step to explore it"}
       </div>
     </div>
   );
