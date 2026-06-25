@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
   type ReactNode,
@@ -98,13 +99,23 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [schedule],
   );
 
-  // Pause auto-dismiss while the user is hovering/focused (reading); resume on
-  // leave so a long error message can't vanish mid-read.
-  const pause = useCallback(() => {
-    timers.current.forEach((t) => clearTimeout(t));
-    timers.current.clear();
+  // Pause auto-dismiss while the user hovers/focuses a toast (reading); resume
+  // on leave so a long error can't vanish mid-read. PER-TOAST so activity on one
+  // toast never re-arms or extends another (and a hovered toast stays held).
+  const pauseOne = useCallback((id: number) => {
+    const t = timers.current.get(id);
+    if (t) clearTimeout(t);
+    timers.current.delete(id);
   }, []);
-  const resume = () => toasts.forEach((t) => schedule(t.id));
+
+  // Clear all pending timers on unmount (hygiene; the root provider rarely unmounts).
+  useEffect(() => {
+    const map = timers.current;
+    return () => {
+      map.forEach((t) => clearTimeout(t));
+      map.clear();
+    };
+  }, []);
 
   const api: ToastAPI = {
     success: (m) => push("success", m),
@@ -130,10 +141,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               key={toast.id}
               role={toast.variant === "error" ? "alert" : "status"}
               aria-atomic="true"
-              onMouseEnter={pause}
-              onMouseLeave={resume}
-              onFocus={pause}
-              onBlur={resume}
+              onMouseEnter={() => pauseOne(toast.id)}
+              onMouseLeave={() => schedule(toast.id)}
+              onFocus={() => pauseOne(toast.id)}
+              onBlur={() => schedule(toast.id)}
               layout
               initial={{ opacity: 0, x: 80, scale: 0.95 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
