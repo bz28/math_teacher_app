@@ -336,11 +336,28 @@ export function IntegrityCheckChat({
                 </div>
               )}
             </div>
-            {totalProblems > 0 && (
-              <div className="text-xs font-medium text-text-muted">
-                {problemsVerdicted} of {totalProblems}
-              </div>
-            )}
+            <div className="flex items-center gap-3">
+              {totalProblems > 0 && (
+                <div className="text-xs font-medium text-text-muted">
+                  {problemsVerdicted} of {totalProblems}
+                </div>
+              )}
+              {/* Pause / leave-and-resume. Reuses the same exit path
+                  (onDone) the error and complete states already use —
+                  it just navigates out, never auto-submits or finalizes.
+                  The transcript re-hydrates from the server on remount,
+                  so leaving mid-chat is safe and resumable. */}
+              {!isComplete && (
+                <button
+                  type="button"
+                  onClick={onDone}
+                  title="Your progress is saved — you can finish this later."
+                  className="rounded-[--radius-sm] px-2 py-1 text-xs font-medium text-text-muted hover:text-text-secondary"
+                >
+                  Leave &amp; come back later
+                </button>
+              )}
+            </div>
           </div>
           {totalProblems > 0 && (
             <div className="h-1 w-full bg-border-light">
@@ -396,6 +413,24 @@ export function IntegrityCheckChat({
             ref={scrollRef}
             className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 py-4"
           >
+            {/* Supportive "why am I here" intro. Always shown above
+                the first agent message while the chat is active so an
+                honest, anxious student understands this is routine and
+                non-punitive — not an accusation. Hidden once the check
+                is complete (the terminal panel speaks for itself). */}
+            {!isComplete && (
+              <div className="rounded-[--radius-md] border border-border-light bg-bg-subtle/60 px-4 py-3">
+                <p className="font-serif text-base text-text-primary">
+                  Just talk me through your thinking
+                </p>
+                <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
+                  Your teacher uses a quick chat to hear how you worked
+                  through a problem, in your own words. There are no
+                  trick questions and nothing to look up — just explain
+                  your thinking. It usually takes a few minutes.
+                </p>
+              </div>
+            )}
             {visibleTranscript.map((t) => (
               <TurnBubble key={`${t.ordinal}-${t.role}`} turn={t} />
             ))}
@@ -420,9 +455,13 @@ export function IntegrityCheckChat({
 
           {isComplete ? (
             <div className="border-t border-border-light px-2 py-4 text-center">
-              <div className="text-sm text-text-secondary">
-                Thanks — your work is with your teacher.
-              </div>
+              <p className="font-serif text-base text-text-primary">
+                Thanks for walking me through that!
+              </p>
+              <p className="mt-1 text-sm text-text-secondary">
+                Your teacher has everything they need — you&rsquo;ll see
+                your grade once they publish it.
+              </p>
               {/* Practice nudge — only renders when the agent's disposition
                   suggests more study would help AND a practice set is
                   actually linked to this HW. Any other combination stays
@@ -670,11 +709,14 @@ function TurnBubble({ turn }: { turn: IntegrityTurn }) {
 
 // ────────────────────────────────────────────────────────────────────
 // Practice nudge — end-of-chat CTA to the linked practice tab.
-// Renders only when the agent's disposition suggests extra study
-// would help AND a practice set is actually linked to this HW.
-// Any other combination stays silent: we don't want to nudge
-// students who passed, flag_for_review cases (which are teacher-
-// action anyway), or cases where no practice set exists yet.
+// Renders whenever a practice set is actually linked to this HW, so
+// every student gets a gentle next step — including turn-cap cases
+// where the disposition is null and the student would otherwise be
+// stranded with nowhere to go. We never fabricate a link: when no
+// practice set exists the nudge stays silent. The disposition only
+// tunes the copy (a softer "step by step" lead for tutor_pivot), it
+// no longer gates whether the nudge appears at all. The verdict
+// itself is never surfaced — this is purely an optional next step.
 // ────────────────────────────────────────────────────────────────────
 
 function PracticeNudge({
@@ -687,18 +729,15 @@ function PracticeNudge({
   linkedPracticeId: string | null;
 }) {
   if (!linkedPracticeId) return null;
-  if (disposition !== "needs_practice" && disposition !== "tutor_pivot") {
-    return null;
-  }
   const copy =
-    disposition === "needs_practice"
+    disposition === "tutor_pivot"
       ? {
-          lead: "Want to try a few more like this?",
-          button: "Go to Practice",
+          lead: "Want to walk through this topic step by step?",
+          button: "Go to Learn",
         }
       : {
-          lead: "Not quite clear? Walk through it step by step.",
-          button: "Go to Learn",
+          lead: "Want to practice this topic?",
+          button: "Go to Practice",
         };
   return (
     <div className="mt-3 rounded-[--radius-md] border border-primary/30 bg-primary/5 px-4 py-3 text-center">
