@@ -5,10 +5,13 @@ import Link from "next/link";
 import {
   schoolStudent,
   type StudentDashboardResponse,
+  type StudentClassSummary,
 } from "@/lib/api";
 import { DashboardCard } from "@/components/school/student/dashboard-card";
 import { DashboardAssignmentRow } from "@/components/school/student/dashboard-assignment-row";
 import { StudentGradeRow } from "@/components/school/student/student-grade-row";
+import { SidebarJoinModal } from "@/components/school/student/sidebar-join-modal";
+import { Button } from "@/components/ui";
 
 /**
  * Student Today dashboard. Top of the school-student portal — what
@@ -23,7 +26,15 @@ import { StudentGradeRow } from "@/components/school/student/student-grade-row";
  */
 export default function SchoolStudentDashboard() {
   const [data, setData] = useState<StudentDashboardResponse | null>(null);
+  // Class list drives the zero-classes onboarding branch. Same API the
+  // sidebar uses (schoolStudent.listClasses). `null` = not loaded yet.
+  const [classes, setClasses] = useState<StudentClassSummary[] | null>(null);
+  // Distinguishes "fetch failed" from "genuinely zero classes" — without it, a
+  // transient listClasses error would falsely show the join-a-class onboarding
+  // to an already-enrolled student and hide their real dashboard.
+  const [classesError, setClassesError] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showJoin, setShowJoin] = useState(false);
 
   const load = useCallback(() => {
     schoolStudent
@@ -35,20 +46,39 @@ export default function SchoolStudentDashboard() {
       .catch(() => setError("Couldn't load your dashboard. Please try again."));
   }, []);
 
+  const loadClasses = useCallback(() => {
+    schoolStudent
+      .listClasses()
+      .then((c) => {
+        setClasses(c);
+        setClassesError(false);
+      })
+      .catch(() => {
+        // Resolve to exit the skeleton, but mark the error so we DON'T mistake
+        // it for a zero-classes student — fall through to the normal dashboard.
+        setClasses([]);
+        setClassesError(true);
+      });
+  }, []);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadClasses();
+  }, [load, loadClasses]);
 
   // Revalidate when the student comes back to the tab — covers the
   // "teacher just published my grade, I tab back, I see it" flow
   // without introducing SWR / React Query.
   useEffect(() => {
     const onVis = () => {
-      if (document.visibilityState === "visible") load();
+      if (document.visibilityState === "visible") {
+        load();
+        loadClasses();
+      }
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
-  }, [load]);
+  }, [load, loadClasses]);
 
   if (error) {
     return (
@@ -65,8 +95,52 @@ export default function SchoolStudentDashboard() {
     );
   }
 
-  if (data === null) {
+  if (data === null || classes === null) {
     return <DashboardSkeleton />;
+  }
+
+  // First-run student with no enrolled classes. Showing the normal
+  // "all caught up / no graded work" cards here is misleading and
+  // dead-ends them, so render a welcome + join-class CTA instead.
+  if (classes.length === 0 && !classesError) {
+    return (
+      <>
+        <div className="mx-auto max-w-3xl">
+          <div className="dashboard-card-enter">
+            <Greeting firstName={data.first_name} />
+          </div>
+          <div
+            className="dashboard-card-enter rounded-[--radius-xl] border border-border bg-surface px-6 py-14 text-center"
+            style={{ animationDelay: "80ms" }}
+          >
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-text-muted">
+              Welcome
+            </p>
+            <h2 className="mt-3 font-serif text-2xl text-text-primary">
+              Let&rsquo;s get you into a class
+            </h2>
+            <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-text-secondary">
+              You&rsquo;re not enrolled in any classes yet. Ask your teacher for
+              their class code, then join to see your homework, practice, and
+              grades here.
+            </p>
+            <div className="mt-6 flex justify-center">
+              <Button variant="primary" onClick={() => setShowJoin(true)}>
+                Join your first class
+              </Button>
+            </div>
+          </div>
+        </div>
+        <SidebarJoinModal
+          open={showJoin}
+          onClose={() => setShowJoin(false)}
+          onJoined={() => {
+            loadClasses();
+            load();
+          }}
+        />
+      </>
+    );
   }
 
   const { first_name, due_this_week, overdue, in_review, recently_graded } = data;
