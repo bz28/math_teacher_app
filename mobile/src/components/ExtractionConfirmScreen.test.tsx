@@ -38,11 +38,12 @@ describe("ExtractionConfirmScreen", () => {
     render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);
 
     expect(await waitForText("Did we read this right?")).toBeTruthy();
-    expect(screen.getByText("x equals 2")).toBeTruthy(); // grouped step
-    expect(screen.getByText(/Answer: 2/)).toBeTruthy();
+    // Steps + final answer are editable fields, pre-filled with the OCR text.
+    expect(screen.getByDisplayValue("x equals 2")).toBeTruthy();
+    expect(screen.getByDisplayValue("2")).toBeTruthy();
   });
 
-  it("confirm routes to the integrity chat when integrity is enabled", async () => {
+  it("confirm with no edits routes to the integrity chat", async () => {
     mockedApi.getSubmission.mockResolvedValue(SUBMISSION as never);
     mockedApi.confirmExtraction.mockResolvedValue({ status: "ok", already_confirmed: false } as never);
     const onIntegrityCheck = jest.fn();
@@ -51,8 +52,36 @@ describe("ExtractionConfirmScreen", () => {
     fireEvent.press(await waitForText("Looks right"));
     await flush();
 
-    expect(mockedApi.confirmExtraction).toHaveBeenCalledWith("sub-1");
+    expect(mockedApi.confirmExtraction).toHaveBeenCalledWith("sub-1", {});
     expect(onIntegrityCheck).toHaveBeenCalledWith("sub-1");
+  });
+
+  it("sends OCR corrections, keyed by position:step_num, on confirm", async () => {
+    mockedApi.getSubmission.mockResolvedValue(SUBMISSION as never);
+    mockedApi.confirmExtraction.mockResolvedValue({ status: "ok", already_confirmed: false } as never);
+    render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);
+
+    await waitForText("Did we read this right?");
+    fireEvent.changeText(screen.getByDisplayValue("x equals 2"), "x equals 3");
+    await flush();
+    fireEvent.press(screen.getByText("Looks right"));
+    await flush();
+
+    expect(mockedApi.confirmExtraction).toHaveBeenCalledWith("sub-1", { "1:1": "x equals 3" });
+  });
+
+  it("sends a final-answer correction keyed position:final", async () => {
+    mockedApi.getSubmission.mockResolvedValue(SUBMISSION as never);
+    mockedApi.confirmExtraction.mockResolvedValue({ status: "ok", already_confirmed: false } as never);
+    render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);
+
+    await waitForText("Did we read this right?");
+    fireEvent.changeText(screen.getByDisplayValue("2"), "5");
+    await flush();
+    fireEvent.press(screen.getByText("Looks right"));
+    await flush();
+
+    expect(mockedApi.confirmExtraction).toHaveBeenCalledWith("sub-1", { "1:final": "5" });
   });
 
   it("acknowledges without a confirm UI when no integrity/grading pipeline runs", async () => {
