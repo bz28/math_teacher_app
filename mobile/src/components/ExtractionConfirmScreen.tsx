@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -38,6 +38,9 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
   const [state, setState] = useState<SubmissionState | null>(null);
   const [error, setError] = useState(false);
   const [acting, setActing] = useState(false);
+  // Sparse OCR corrections, keyed "{position}:{step_num}" / "{position}:final".
+  // Only touched fields land here; sent to confirm-extraction.
+  const [edits, setEdits] = useState<Record<string, string>>({});
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const needsExtraction = (s: SubmissionState) => s.integrity_check_enabled || s.ai_grading_enabled;
@@ -76,7 +79,7 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
     if (!state || acting) return;
     setActing(true);
     try {
-      await confirmExtraction(state.submission_id);
+      await confirmExtraction(state.submission_id, edits);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       // Confirming kicks off grading + (if enabled) the integrity check.
       if (state.integrity_check_enabled) onIntegrityCheck(state.submission_id);
@@ -85,7 +88,7 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
       setActing(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
-  }, [state, acting, onDone, onIntegrityCheck]);
+  }, [state, acting, edits, onDone, onIntegrityCheck]);
 
   const doFlag = useCallback(async () => {
     if (!state || acting) return;
@@ -158,7 +161,7 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
         <Eyebrow style={styles.eyebrow}>Check your work</Eyebrow>
         <Text style={styles.title}>Did we read this right?</Text>
         <Text style={styles.subtitle}>
-          Here's what we pulled from your photos. Confirm it's right so we can grade it accurately.
+          Here's what we pulled from your photos. Fix anything we misread, then confirm so we grade it accurately.
         </Text>
         {band !== "high" && (
           <View style={styles.confidenceBadge}>
@@ -174,25 +177,58 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
             <Text style={styles.emptyStep}>We couldn't read any work from your photos.</Text>
           </View>
         ) : (
-          groups.map((g) => (
-            <View key={g.position ?? "other"} style={styles.problem}>
-              <Text style={styles.problemNum}>
-                {g.position == null ? "Other work" : `Problem ${g.position}`}
-              </Text>
-              {g.steps.map((s, i) => (
-                <MathText
-                  key={`${s.step_num}-${i}`}
-                  text={s.plain_english || s.latex}
-                  style={{ ...typography.body, fontSize: 14, color: colors.text }}
-                />
-              ))}
-              {g.finalAnswer && (g.finalAnswer.answer_plain || g.finalAnswer.answer_latex) ? (
-                <Text style={styles.answer}>
-                  Answer: {g.finalAnswer.answer_plain || g.finalAnswer.answer_latex}
+          groups.map((g) => {
+            // The backend keys edits by problem_position, so only positioned
+            // groups are editable; unattributed "Other work" stays read-only.
+            const editable = g.position != null;
+            return (
+              <View key={g.position ?? "other"} style={styles.problem}>
+                <Text style={styles.problemNum}>
+                  {g.position == null ? "Other work" : `Problem ${g.position}`}
                 </Text>
-              ) : null}
-            </View>
-          ))
+                {g.steps.map((s, i) => {
+                  const original = s.plain_english || s.latex;
+                  if (!editable) {
+                    return (
+                      <MathText
+                        key={`${s.step_num}-${i}`}
+                        text={original}
+                        style={{ ...typography.body, fontSize: 14, color: colors.text }}
+                      />
+                    );
+                  }
+                  const key = `${g.position}:${s.step_num}`;
+                  return (
+                    <TextInput
+                      key={`${s.step_num}-${i}`}
+                      style={styles.editField}
+                      value={edits[key] ?? original}
+                      onChangeText={(t) => setEdits((e) => ({ ...e, [key]: t }))}
+                      multiline
+                      placeholder="(blank to remove this line)"
+                      placeholderTextColor={colors.textMuted}
+                    />
+                  );
+                })}
+                {g.finalAnswer && editable ? (
+                  <View style={styles.answerRow}>
+                    <Text style={styles.answerLabel}>Answer</Text>
+                    <TextInput
+                      style={[styles.editField, styles.answerField]}
+                      value={edits[`${g.position}:final`] ?? (g.finalAnswer.answer_plain || g.finalAnswer.answer_latex)}
+                      onChangeText={(t) => setEdits((e) => ({ ...e, [`${g.position}:final`]: t }))}
+                      placeholder="(blank to remove)"
+                      placeholderTextColor={colors.textMuted}
+                    />
+                  </View>
+                ) : g.finalAnswer && (g.finalAnswer.answer_plain || g.finalAnswer.answer_latex) ? (
+                  <Text style={styles.answer}>
+                    Answer: {g.finalAnswer.answer_plain || g.finalAnswer.answer_latex}
+                  </Text>
+                ) : null}
+              </View>
+            );
+          })
         )}
 
         <View style={styles.actions}>
@@ -255,6 +291,20 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   problemNum: { ...typography.eyebrow, fontSize: 10, color: colors.textMuted },
   emptyStep: { ...typography.body, color: colors.textMuted, fontSize: 14, fontStyle: "italic" },
   answer: { ...typography.bodyBold, fontSize: 14, color: colors.text, marginTop: spacing.xs },
+  editField: {
+    ...typography.body,
+    fontSize: 14,
+    color: colors.text,
+    backgroundColor: colors.inputBg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  answerRow: { gap: spacing.xs, marginTop: spacing.xs },
+  answerLabel: { ...typography.eyebrow, fontSize: 10, color: colors.textMuted },
+  answerField: { ...typography.bodyBold },
   actions: { gap: spacing.md, marginTop: spacing.lg },
   flagHint: { ...typography.caption, color: colors.textMuted, fontSize: 12, textAlign: "center" },
 

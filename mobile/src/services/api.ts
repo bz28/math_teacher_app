@@ -456,10 +456,15 @@ export const getSubmission = (assignmentId: string) =>
   apiGet<SubmissionState>(`/school/student/homework/${assignmentId}/submission`);
 
 /** Sign off on the OCR'd work so grading/integrity can run. */
-export const confirmExtraction = (submissionId: string) =>
+/**
+ * Confirm the OCR'd work, optionally with student corrections. `edits` is a
+ * sparse map keyed "{problem_position}:{step_num}" (a step's plain-English) or
+ * "{problem_position}:final" (a final answer); an empty value deletes that row.
+ */
+export const confirmExtraction = (submissionId: string, edits?: Record<string, string>) =>
   apiPost<{ status: string; already_confirmed: boolean }>(
     `/school/student/submissions/${submissionId}/confirm-extraction`,
-    { edits: null },
+    { edits: edits && Object.keys(edits).length > 0 ? edits : null },
   );
 
 /** "The reader got it wrong" — routes the submission to manual teacher grading. */
