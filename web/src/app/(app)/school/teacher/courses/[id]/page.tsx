@@ -299,7 +299,12 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
       <div className="mt-6">
         {tab === "sections" && <SectionsTab courseId={course.id} onChanged={reloadCourse} />}
         {tab === "materials" && <MaterialsTab courseId={course.id} onChanged={reloadCourse} />}
-        {tab === "homework" && <HomeworkTab courseId={course.id} />}
+        {tab === "homework" && (
+          <HomeworkTab
+            courseId={course.id}
+            onGoToMaterials={() => setTab("materials")}
+          />
+        )}
         {tab === "practice" && <PracticeTab courseId={course.id} />}
         {tab === "submissions" && <SubmissionsTab courseId={course.id} />}
         {tab === "grades" && <GradesTab courseId={course.id} />}
