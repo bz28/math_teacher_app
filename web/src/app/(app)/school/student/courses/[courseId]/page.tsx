@@ -103,9 +103,15 @@ function HomeworkList({ courseId }: { courseId: string }) {
     return <p className="py-6 text-center text-text-muted">Loading…</p>;
   if (homework.length === 0) {
     return (
-      <p className="mt-2 text-text-secondary">
-        No homework has been assigned yet. Check back soon.
-      </p>
+      <div className="mt-4 rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle p-8 text-center">
+        <p className="text-sm font-semibold text-text-primary">
+          No homework yet
+        </p>
+        <p className="mt-1 text-xs text-text-muted">
+          You&rsquo;re all set — there&rsquo;s nothing to do in this class right
+          now. New homework will appear here as soon as your teacher assigns it.
+        </p>
+      </div>
     );
   }
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   weakSpots as weakSpotsApi,
@@ -158,7 +159,15 @@ function WeakSpotList({
     return (
       <EmptyState
         title="No weak spots yet"
-        description="They'll show up here when work gets flagged."
+        description="They'll show up here when work gets flagged. In the meantime, get some reps in."
+        action={
+          <Link
+            href="/learn"
+            className="inline-flex items-center justify-center rounded-[--radius-md] border border-border bg-transparent px-4 py-2 text-sm font-semibold text-text-primary transition-colors hover:border-text-primary"
+          >
+            Practice a few problems →
+          </Link>
+        }
       />
     );
   }

@@ -147,7 +147,13 @@ export default function StudentGradesPage() {
 
       {empty ? (
         <div className="rounded-[--radius-xl] border border-dashed border-border-light bg-bg-subtle p-12 text-center">
-          <p className="text-sm text-text-muted">No graded work yet.</p>
+          <p className="text-sm font-semibold text-text-primary">
+            No graded work yet
+          </p>
+          <p className="mx-auto mt-1.5 max-w-sm text-sm text-text-muted">
+            Scores show up here automatically once a teacher publishes them.
+            Nothing for you to do — keep turning in your assignments.
+          </p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-[--radius-xl] border border-border-light bg-surface">
