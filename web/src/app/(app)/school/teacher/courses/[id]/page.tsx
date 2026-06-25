@@ -12,6 +12,7 @@ import {
 } from "@/lib/constants";
 import { formatDueRelative } from "@/lib/utils";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
+import { SetupChecklist } from "@/components/school/teacher/_pieces/setup-checklist";
 import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
 import { HomeworkTab } from "@/components/school/teacher/homework-tab";
@@ -67,6 +68,11 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   const [course, setCourse] = useState<TeacherCourse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Bumped on every course reload so the setup checklist refetches its
+  // milestone booleans when the teacher completes a step (adds a
+  // section, uploads materials, etc.) — those flows already call
+  // reloadCourse via onChanged.
+  const [setupVersion, setSetupVersion] = useState(0);
 
   // Tab state lives in the URL (?tab=materials) so refresh, back/
   // forward, and deep-linked URLs all land on the right tab. Unknown
@@ -192,6 +198,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
     try {
       setCourse(await teacher.course(id));
       setError(null);
+      setSetupVersion((v) => v + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load course");
     } finally {
@@ -257,6 +264,11 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
             clicking into the Submissions tab. */}
         <CourseStatusRow course={course} />
       </motion.div>
+
+      {/* First-run "Set up your class" checklist — sits above the tab
+          bar, hides itself once every step is done or the teacher
+          dismisses it. Purely additive; never blocks the workspace. */}
+      <SetupChecklist courseId={course.id} onNavigate={setTab} version={setupVersion} />
 
       {/* Editorial tab bar — underline-on-active matches the student
           top-bar and app-shell grammar. No tinted pill backgrounds. */}

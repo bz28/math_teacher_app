@@ -779,6 +779,17 @@ export interface TeacherCourse {
   created_at: string;
 }
 
+/** Per-course onboarding milestones driving the first-run "Set up your
+ *  class" checklist on the course workspace. Each flag is an EXISTS
+ *  probe on the backend. */
+export interface CourseSetupStatus {
+  has_section: boolean;
+  has_student: boolean;
+  has_materials: boolean;
+  has_homework: boolean;
+  has_published_grade: boolean;
+}
+
 export interface TeacherSection {
   id: string;
   name: string;
@@ -1013,6 +1024,9 @@ export const teacher = {
   },
   course(id: string) {
     return apiFetch<TeacherCourse>(`/teacher/courses/${id}`);
+  },
+  courseSetupStatus(id: string) {
+    return apiFetch<CourseSetupStatus>(`/teacher/courses/${id}/setup-status`);
   },
   createCourse(data: { name: string; subject?: string; grade_level?: number; description?: string }) {
     return apiFetch<{ id: string }>("/teacher/courses", {
