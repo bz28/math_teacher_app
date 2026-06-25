@@ -1,6 +1,7 @@
 export { Button } from "./button";
 export { Card } from "./card";
 export { Input, Textarea, PasswordInput } from "./input";
+export { Select } from "./select";
 export { Modal } from "./modal";
 export { Badge, statusToBadgeVariant } from "./badge";
 export {
