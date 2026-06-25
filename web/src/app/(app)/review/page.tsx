@@ -13,7 +13,9 @@ import { useSessionStore, type Subject } from "@/stores/learn";
 import { Card, Badge, Button, EmptyState } from "@/components/ui";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { MathText } from "@/components/shared/math-text";
-import { formatRelativeDate, cn } from "@/lib/utils";
+import { PageMasthead } from "@/components/shared/page-masthead";
+import { SubjectTabs } from "@/components/shared/subject-tabs";
+import { formatRelativeDate } from "@/lib/utils";
 
 export default function ReviewPage() {
   useEffect(() => {
@@ -77,23 +79,29 @@ function PersonalReview() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <Heading />
+    <div className="mx-auto max-w-3xl space-y-12 pb-20">
+      <PageMasthead
+        eyebrow="REVIEW"
+        title={
+          <>
+            Your <span className="text-primary">weak spots</span>
+          </>
+        }
+        subtitle="Problems where your work got flagged. Practice more like them."
+      />
 
-      <div className="flex gap-2">
-        {(["math", "physics", "chemistry"] as const).map((sub) => (
-          <TabButton
-            key={sub}
-            active={subject === sub}
-            onClick={() => {
-              setLocalSubject(sub);
-              setItems([]);
-            }}
-          >
-            {sub === "math" ? "Mathematics" : sub === "physics" ? "Physics" : "Chemistry"}
-          </TabButton>
-        ))}
-      </div>
+      <SubjectTabs
+        active={subject}
+        onSelect={(key) => {
+          setLocalSubject(key as Subject);
+          setItems([]);
+        }}
+        tabs={[
+          { key: "math", label: "Mathematics" },
+          { key: "physics", label: "Physics" },
+          { key: "chemistry", label: "Chemistry" },
+        ]}
+      />
 
       <WeakSpotList
         loading={loading}
@@ -104,43 +112,6 @@ function PersonalReview() {
         onRetry={() => fetchWeakSpots(subject)}
       />
     </div>
-  );
-}
-
-function Heading() {
-  return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-      <h1 className="text-2xl font-extrabold tracking-tight text-text-primary">
-        Review
-      </h1>
-      <p className="mt-1 text-sm text-text-muted">
-        Problems where your attached work got flagged. Practice more like them.
-      </p>
-    </motion.div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "rounded-[--radius-pill] px-4 py-2 text-sm font-semibold transition-colors",
-        active
-          ? "bg-primary text-white"
-          : "bg-primary-bg text-primary hover:bg-primary/10",
-      )}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -225,9 +196,10 @@ function WeakSpotCard({
   onPractice: () => void;
 }) {
   return (
-    <Card className="space-y-3">
+    <Card className="relative space-y-3.5 overflow-hidden pl-6">
+      <span className="absolute left-0 top-5 bottom-5 w-[3px] rounded-full bg-primary/40" />
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs text-text-muted">
+        <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">
           {formatRelativeDate(item.submitted_at)}
         </span>
         {item.issue_count > 1 && (
@@ -235,12 +207,12 @@ function WeakSpotCard({
         )}
       </div>
 
-      <div className="text-sm font-medium text-text-primary">
+      <div className="text-[15px] leading-relaxed text-text-primary">
         <MathText text={item.problem_text} />
       </div>
 
       {item.summary && (
-        <p className="text-sm text-text-secondary">{item.summary}</p>
+        <p className="text-sm leading-relaxed text-text-secondary">{item.summary}</p>
       )}
 
       <Button

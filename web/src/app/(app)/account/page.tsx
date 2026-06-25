@@ -9,6 +9,7 @@ import { useEntitlementStore } from "@/stores/entitlements";
 import { getManagementUrl } from "@/services/revenuecat";
 import { auth as authApi, billing, ApiError } from "@/lib/api";
 import { Badge, Button, Modal, PasswordInput } from "@/components/ui";
+import { PageMasthead } from "@/components/shared/page-masthead";
 
 export default function AccountPage() {
   const user = useAuthStore((s) => s.user);
@@ -186,41 +187,50 @@ export default function AccountPage() {
   const initial = user.name?.[0]?.toUpperCase() ?? "?";
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-10">
-      {/* Profile header */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col items-center"
-      >
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light shadow-md">
-          <span className="text-3xl font-extrabold text-white">{initial}</span>
+    <div className="mx-auto max-w-3xl space-y-12 pb-20">
+      {/* Profile header — editorial masthead with the avatar as a quiet
+          trailing mark and the plan badge inline beneath the eyebrow. */}
+      <div className="flex items-start gap-5">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.92 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4 }}
+          className="mt-7 flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light shadow-md"
+        >
+          <span className="text-2xl font-extrabold text-white">{initial}</span>
+        </motion.div>
+        <div className="min-w-0 flex-1">
+          <PageMasthead
+            eyebrow="ACCOUNT"
+            title={user.name ?? "Your account"}
+            subtitle={user.email}
+            action={
+              isSchoolAffiliated ? (
+                <Badge variant="muted">School</Badge>
+              ) : (
+                <Badge variant={isPro ? "success" : "muted"}>
+                  {isPro && <StarIcon />}
+                  {isPro ? "PRO" : "FREE"}
+                </Badge>
+              )
+            }
+          />
         </div>
-        <h1 className="mt-4 text-xl font-bold text-text-primary">{user.name}</h1>
-        <p className="mt-1 text-sm text-text-muted">{user.email}</p>
-        <div className="mt-3">
-          {isSchoolAffiliated ? (
-            <Badge variant="muted">School</Badge>
-          ) : (
-            <Badge variant={isPro ? "success" : "muted"}>
-              {isPro && <StarIcon />}
-              {isPro ? "PRO" : "FREE"}
-            </Badge>
-          )}
-        </div>
-      </motion.div>
+      </div>
 
       {/* Subscription card — hidden for school students (no personal
           subscription to manage). */}
       {isPro && !isSchoolAffiliated && (
-        <motion.div
+        <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="mt-8 rounded-[--radius-xl] border border-border-light bg-surface p-5"
+          className="rounded-[--radius-lg] border border-border bg-surface p-6"
         >
-          <h2 className="text-sm font-bold text-text-primary">Subscription</h2>
-          <div className="mt-3 space-y-2.5 text-sm">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+            Subscription
+          </h2>
+          <div className="mt-4 space-y-2.5 text-sm">
             <div className="flex justify-between">
               <span className="text-text-secondary">Status</span>
               <span className="font-medium capitalize text-text-primary">
@@ -243,11 +253,11 @@ export default function AccountPage() {
             onClick={openPortal}
             disabled={portalLoading || !canManageStripe}
             title={canManageStripe ? undefined : "Subscription management is unavailable for this account. Contact support if you need to make a change."}
-            className="mt-4 w-full rounded-[--radius-pill] border border-border-light py-2.5 text-sm font-bold text-text-primary transition-colors hover:bg-primary-bg disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-5 w-full rounded-[--radius-pill] border border-border py-2.5 text-sm font-bold text-text-primary transition-colors hover:bg-primary-bg disabled:cursor-not-allowed disabled:opacity-50"
           >
             {portalLoading ? "Loading..." : "Manage Subscription"}
           </button>
-        </motion.div>
+        </motion.section>
       )}
 
       {/* Usage card — free students only. Teachers have a totally
@@ -255,19 +265,21 @@ export default function AccountPage() {
           the sidebar meter pill), and these student counters
           (Problems/Scans/Chats) don't apply to them at all. */}
       {!isTeacher && !isPro && !isSchoolAffiliated && loaded && dailySessionsLimit < Infinity && (
-        <motion.div
+        <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="mt-8 rounded-[--radius-xl] border border-border-light bg-surface p-5"
+          className="rounded-[--radius-lg] border border-border bg-surface p-6"
         >
-          <h2 className="text-sm font-bold text-text-primary">Daily Usage</h2>
-          <div className="mt-4 space-y-4">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+            Daily Usage
+          </h2>
+          <div className="mt-5 space-y-4">
             <UsageBar label="Problems" used={dailySessionsUsed} limit={dailySessionsLimit} icon={<BookIcon />} />
             <UsageBar label="Scans" used={dailyScansUsed} limit={dailyScansLimit} icon={<CameraIcon />} />
             <UsageBar label="Chats" used={dailyChatsUsed} limit={dailyChatsLimit} icon={<ChatIcon />} />
           </div>
-        </motion.div>
+        </motion.section>
       )}
 
       {/* Upgrade button — personal free users only. School-linked
@@ -277,7 +289,6 @@ export default function AccountPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="mt-5"
         >
           <Link
             href="/pricing"
@@ -293,16 +304,18 @@ export default function AccountPage() {
           based; uses the same address on file. Required by some
           district procurement processes; opt-in everywhere else. */}
       {showMfaSection && (
-        <motion.div
+        <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.12 }}
-          className="mt-8 rounded-[--radius-xl] border border-border-light bg-surface p-5"
+          className="rounded-[--radius-lg] border border-border bg-surface p-6"
         >
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-sm font-bold text-text-primary">Two-factor authentication</h2>
-              <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+                Two-factor authentication
+              </h2>
+              <p className="mt-2 text-xs leading-relaxed text-text-secondary">
                 {user.mfa_enabled
                   ? `Enabled. We'll email a 6-digit code to ${user.email} each time you sign in.`
                   : "Add a second sign-in step using a code emailed to your address. Recommended for school accounts."}
@@ -324,7 +337,7 @@ export default function AccountPage() {
                 setMfaDisablePassword("");
                 setShowMfaDisableModal(true);
               }}
-              className="mt-4 w-full rounded-[--radius-pill] border border-border-light py-2.5 text-sm font-bold text-text-primary transition-colors hover:bg-primary-bg"
+              className="mt-5 w-full rounded-[--radius-pill] border border-border py-2.5 text-sm font-bold text-text-primary transition-colors hover:bg-primary-bg"
             >
               Disable two-factor
             </button>
@@ -332,12 +345,12 @@ export default function AccountPage() {
             <button
               onClick={handleEnableMfa}
               disabled={mfaLoading}
-              className="mt-4 w-full rounded-[--radius-pill] border border-border-light py-2.5 text-sm font-bold text-text-primary transition-colors hover:bg-primary-bg disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-5 w-full rounded-[--radius-pill] border border-border py-2.5 text-sm font-bold text-text-primary transition-colors hover:bg-primary-bg disabled:cursor-not-allowed disabled:opacity-50"
             >
               {mfaLoading ? "Enabling..." : "Enable two-factor"}
             </button>
           )}
-        </motion.div>
+        </motion.section>
       )}
 
       {/* Sign out */}
@@ -345,7 +358,7 @@ export default function AccountPage() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.15 }}
-        className="mt-10 border-t border-border-light pt-6"
+        className="border-t border-border pt-8"
       >
         <button
           onClick={() => { logout(); router.push("/login"); }}
@@ -405,7 +418,7 @@ export default function AccountPage() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2 }}
-        className="mt-4 flex flex-col items-center gap-3 pb-8"
+        className="flex flex-col items-center gap-3"
       >
         <button
           onClick={handleDownloadData}
