@@ -1621,6 +1621,65 @@
         "title": "InviteTeacherRequest",
         "type": "object"
       },
+      "ItemAnalysisItem": {
+        "properties": {
+          "avg_percent": {
+            "title": "Avg Percent",
+            "type": "number"
+          },
+          "full": {
+            "title": "Full",
+            "type": "integer"
+          },
+          "partial": {
+            "title": "Partial",
+            "type": "integer"
+          },
+          "problem_index": {
+            "title": "Problem Index",
+            "type": "integer"
+          },
+          "problem_text": {
+            "title": "Problem Text",
+            "type": "string"
+          },
+          "zero": {
+            "title": "Zero",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "problem_index",
+          "problem_text",
+          "full",
+          "partial",
+          "zero",
+          "avg_percent"
+        ],
+        "title": "ItemAnalysisItem",
+        "type": "object"
+      },
+      "ItemAnalysisResponse": {
+        "properties": {
+          "graded_count": {
+            "title": "Graded Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ItemAnalysisItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "graded_count",
+          "items"
+        ],
+        "title": "ItemAnalysisResponse",
+        "type": "object"
+      },
       "JoinSectionRequest": {
         "properties": {
           "join_code": {
@@ -10352,6 +10411,55 @@
           }
         ],
         "summary": "Update Assignment",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/assignments/{assignment_id}/item-analysis": {
+      "get": {
+        "description": "Per-problem performance across a homework's graded submissions.\n\nAggregates every graded breakdown, joining each entry to its problem\nby `problem_id` (= bank_item_id) rather than list position, so the\nteacher sees which problems the class struggled with most even when\ngrading/hydration reordered or dropped entries. Items are sorted\nworst-first (ascending avg_percent) but each carries its original\n`problem_index` so the UI can restore assignment order if it wants.\n\nDefensive throughout: an entry for a problem no longer in the\nassignment, a missing `score_status`/`problem_id`, or a null percent\nis skipped rather than raising \u2014 the endpoint never 500s on a\nmalformed grade row. An empty breakdown (`[]`, a retracted grade) is\nnot counted as graded.",
+        "operationId": "item_analysis_v1_teacher_assignments__assignment_id__item_analysis_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assignment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assignment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemAnalysisResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Item Analysis",
         "tags": [
           "teacher"
         ]
