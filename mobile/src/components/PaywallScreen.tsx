@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -23,7 +23,7 @@ import {
 } from "../services/revenuecat";
 import { useEntitlementStore } from "../stores/entitlements";
 import { LEGAL_URLS } from "../constants/legal";
-import { colors, spacing, radii, typography, gradients } from "../theme";
+import { useColors, useGradients, spacing, radii, typography, type ColorPalette } from "../theme";
 
 interface PaywallProps {
   visible: boolean;
@@ -82,6 +82,9 @@ const TRIGGER_MESSAGES_NO_TRIAL: Record<string, { title: string; subtitle: strin
 const LIMIT_TRIGGERS = new Set(["create_session", "image_scan", "chat_message"]);
 
 export function PaywallScreen({ visible, onClose, onPurchaseComplete, trigger }: PaywallProps) {
+  const colors = useColors();
+  const gradients = useGradients();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [selectedPlan, setSelectedPlan] = useState<PlanId>("annual");
   const [plans, setPlans] = useState<PlanOption[]>([]);
   const [loadingOfferings, setLoadingOfferings] = useState(true);
@@ -456,7 +459,7 @@ function formatIntroOffer(intro: PurchasesIntroPrice | null | undefined): {
 // ── Styles ──
 
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   scrollView: {
     flex: 1,
     backgroundColor: colors.background,
