@@ -29,6 +29,10 @@ export default function SchoolStudentDashboard() {
   // Class list drives the zero-classes onboarding branch. Same API the
   // sidebar uses (schoolStudent.listClasses). `null` = not loaded yet.
   const [classes, setClasses] = useState<StudentClassSummary[] | null>(null);
+  // Distinguishes "fetch failed" from "genuinely zero classes" — without it, a
+  // transient listClasses error would falsely show the join-a-class onboarding
+  // to an already-enrolled student and hide their real dashboard.
+  const [classesError, setClassesError] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showJoin, setShowJoin] = useState(false);
 
@@ -45,8 +49,16 @@ export default function SchoolStudentDashboard() {
   const loadClasses = useCallback(() => {
     schoolStudent
       .listClasses()
-      .then(setClasses)
-      .catch(() => setClasses([]));
+      .then((c) => {
+        setClasses(c);
+        setClassesError(false);
+      })
+      .catch(() => {
+        // Resolve to exit the skeleton, but mark the error so we DON'T mistake
+        // it for a zero-classes student — fall through to the normal dashboard.
+        setClasses([]);
+        setClassesError(true);
+      });
   }, []);
 
   useEffect(() => {
@@ -90,7 +102,7 @@ export default function SchoolStudentDashboard() {
   // First-run student with no enrolled classes. Showing the normal
   // "all caught up / no graded work" cards here is misleading and
   // dead-ends them, so render a welcome + join-class CTA instead.
-  if (classes.length === 0) {
+  if (classes.length === 0 && !classesError) {
     return (
       <>
         <div className="mx-auto max-w-3xl">
