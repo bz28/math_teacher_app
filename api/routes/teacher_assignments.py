@@ -1318,6 +1318,130 @@ async def list_submissions(
     return {"submissions": submissions}
 
 
+class ItemAnalysisItem(BaseModel):
+    problem_index: int
+    problem_text: str
+    full: int
+    partial: int
+    zero: int
+    avg_percent: float
+
+
+class ItemAnalysisResponse(BaseModel):
+    graded_count: int
+    items: list[ItemAnalysisItem]
+
+
+# score_status values that map onto the three per-problem buckets. Any
+# other / missing value is ignored so a malformed breakdown entry can't
+# inflate a bucket.
+_ITEM_STATUSES = ("full", "partial", "zero")
+
+
+@router.get("/assignments/{assignment_id}/item-analysis")
+async def item_analysis(
+    assignment_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> ItemAnalysisResponse:
+    """Per-problem performance across a homework's graded submissions.
+
+    Aggregates every graded breakdown, joining each entry to its problem
+    by `problem_id` (= bank_item_id) rather than list position, so the
+    teacher sees which problems the class struggled with most even when
+    grading/hydration reordered or dropped entries. Items are sorted
+    worst-first (ascending avg_percent) but each carries its original
+    `problem_index` so the UI can restore assignment order if it wants.
+
+    Defensive throughout: an entry for a problem no longer in the
+    assignment, a missing `score_status`/`problem_id`, or a null percent
+    is skipped rather than raising — the endpoint never 500s on a
+    malformed grade row. An empty breakdown (`[]`, a retracted grade) is
+    not counted as graded.
+    """
+    a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
+
+    # Canonical problem list the teacher sees (handles HW content,
+    # practice items, and the legacy snapshot shape in one place).
+    hydrated = await hydrate_assignment_content(db, a)
+    problems = (hydrated or {}).get("problems") or []
+    if not problems:
+        return ItemAnalysisResponse(graded_count=0, items=[])
+
+    # Every graded breakdown for this assignment. breakdown IS NOT NULL
+    # is the "graded" signal (matches grade_submission, which only sets
+    # breakdown when the teacher/AI writes per-problem grades).
+    breakdowns = (await db.execute(
+        select(SubmissionGrade.breakdown)
+        .join(Submission, Submission.id == SubmissionGrade.submission_id)
+        .where(
+            Submission.assignment_id == a.id,
+            SubmissionGrade.breakdown.is_not(None),
+        )
+    )).scalars().all()
+
+    # Per-problem accumulators. Breakdown entries are keyed by
+    # `problem_id` (= the problem's bank_item_id), NOT positionally
+    # aligned to the problem list: manual grading de-dupes by id, AI
+    # grading drops un-mappable positions, and hydration drops deleted
+    # bank refs — any of which shifts indices. So we join entries to
+    # problems on the id, never the list position.
+    n = len(problems)
+    bid_to_idx: dict[str, int] = {}
+    for i, problem in enumerate(problems):
+        if isinstance(problem, dict):
+            bid = problem.get("bank_item_id")
+            if bid is not None:
+                bid_to_idx[str(bid)] = i
+
+    counts: list[dict[str, int]] = [{"full": 0, "partial": 0, "zero": 0} for _ in range(n)]
+    percent_sums = [0.0] * n
+    percent_counts = [0] * n
+    graded_count = 0
+
+    for breakdown in breakdowns:
+        # An empty list is the "un-graded" signal (a teacher retracting a
+        # grade clears the entries but leaves breakdown = []); skip it so
+        # it doesn't inflate the graded count.
+        if not isinstance(breakdown, list) or not breakdown:
+            continue
+        graded_count += 1
+        for entry in breakdown:
+            if not isinstance(entry, dict):
+                continue
+            pid = entry.get("problem_id")
+            idx = bid_to_idx.get(str(pid)) if pid is not None else None
+            if idx is None:
+                continue  # entry for a problem no longer in the assignment
+            status_val = entry.get("score_status")
+            if status_val in _ITEM_STATUSES:
+                counts[idx][status_val] += 1
+            percent = entry.get("percent")
+            if isinstance(percent, int | float):
+                percent_sums[idx] += float(percent)
+                percent_counts[idx] += 1
+
+    items: list[ItemAnalysisItem] = []
+    for i, problem in enumerate(problems):
+        text = problem.get("question") if isinstance(problem, dict) else None
+        avg = percent_sums[i] / percent_counts[i] if percent_counts[i] else 0.0
+        items.append(ItemAnalysisItem(
+            problem_index=i,
+            problem_text=text or "",
+            full=counts[i]["full"],
+            partial=counts[i]["partial"],
+            zero=counts[i]["zero"],
+            avg_percent=round(avg, 1),
+        ))
+
+    # Worst-first: lowest average percent at the top so the teacher
+    # lands on the problems the class bombed. Stable tiebreak on
+    # problem_index keeps equal-average rows in assignment order.
+    items.sort(key=lambda it: (it.avg_percent, it.problem_index))
+
+    return ItemAnalysisResponse(graded_count=graded_count, items=items)
+
+
 def _is_grade_dirty(grade: SubmissionGrade | None) -> bool:
     """True if the current draft differs from the published snapshot.
 

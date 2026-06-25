@@ -1877,6 +1877,39 @@ export interface paths {
         patch: operations["update_assignment_v1_teacher_assignments__assignment_id__patch"];
         trace?: never;
     };
+    "/v1/teacher/assignments/{assignment_id}/item-analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Item Analysis
+         * @description Per-problem performance across a homework's graded submissions.
+         *
+         *     Aggregates every graded breakdown, joining each entry to its problem
+         *     by `problem_id` (= bank_item_id) rather than list position, so the
+         *     teacher sees which problems the class struggled with most even when
+         *     grading/hydration reordered or dropped entries. Items are sorted
+         *     worst-first (ascending avg_percent) but each carries its original
+         *     `problem_index` so the UI can restore assignment order if it wants.
+         *
+         *     Defensive throughout: an entry for a problem no longer in the
+         *     assignment, a missing `score_status`/`problem_id`, or a null percent
+         *     is skipped rather than raising — the endpoint never 500s on a
+         *     malformed grade row. An empty breakdown (`[]`, a retracted grade) is
+         *     not counted as graded.
+         */
+        get: operations["item_analysis_v1_teacher_assignments__assignment_id__item_analysis_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/assignments/{assignment_id}/publish": {
         parameters: {
             query?: never;
@@ -3642,6 +3675,28 @@ export interface components {
              * Format: email
              */
             email: string;
+        };
+        /** ItemAnalysisItem */
+        ItemAnalysisItem: {
+            /** Avg Percent */
+            avg_percent: number;
+            /** Full */
+            full: number;
+            /** Partial */
+            partial: number;
+            /** Problem Index */
+            problem_index: number;
+            /** Problem Text */
+            problem_text: string;
+            /** Zero */
+            zero: number;
+        };
+        /** ItemAnalysisResponse */
+        ItemAnalysisResponse: {
+            /** Graded Count */
+            graded_count: number;
+            /** Items */
+            items: components["schemas"]["ItemAnalysisItem"][];
         };
         /** JoinSectionRequest */
         JoinSectionRequest: {
@@ -8007,6 +8062,37 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    item_analysis_v1_teacher_assignments__assignment_id__item_analysis_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemAnalysisResponse"];
                 };
             };
             /** @description Validation Error */

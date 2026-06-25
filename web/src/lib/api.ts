@@ -970,6 +970,27 @@ export interface StudentGradeMissingHw {
   due_at: string | null;
 }
 
+/** One problem's score distribution across all graded submissions on an
+ *  assignment (every section). `full`/`partial`/`zero` are counts of how
+ *  many graded submissions earned that score_status on this problem.
+ *  `avg_percent` is the mean per-problem percent (0–100). */
+export interface ItemAnalysisItem {
+  problem_index: number;
+  problem_text: string;
+  full: number;
+  partial: number;
+  zero: number;
+  avg_percent: number;
+}
+
+/** Assignment-wide item analysis. `items` is sorted worst-first
+ *  (ascending avg_percent). When `graded_count` is 0, items come back
+ *  with all-zero counts. */
+export interface ItemAnalysisResponse {
+  graded_count: number;
+  items: ItemAnalysisItem[];
+}
+
 /** Full published-grade record for one student in one section. */
 export interface StudentGradesResponse {
   student: {
@@ -1178,6 +1199,11 @@ export const teacher = {
   },
   submissions(assignmentId: string) {
     return apiFetch<{ submissions: TeacherSubmissionRow[] }>(`/teacher/assignments/${assignmentId}/submissions`);
+  },
+  /** Assignment-wide per-problem score distribution, worst-first.
+   *  Spans every section of the HW; null/zero-safe when nothing graded. */
+  itemAnalysis(assignmentId: string) {
+    return apiFetch<ItemAnalysisResponse>(`/teacher/assignments/${assignmentId}/item-analysis`);
   },
   /** Inbox feed for the Submissions tab — one row per (published
    *  HW × section) pair with aggregate counts. See backend comment
