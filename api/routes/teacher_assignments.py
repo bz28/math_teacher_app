@@ -1346,16 +1346,18 @@ async def item_analysis(
 ) -> ItemAnalysisResponse:
     """Per-problem performance across a homework's graded submissions.
 
-    Aggregates every graded breakdown (those with a non-null
-    `breakdown`) by problem index so the teacher can see which problems
-    the class struggled with most. Items are sorted worst-first
-    (ascending avg_percent) but each carries its original
+    Aggregates every graded breakdown, joining each entry to its problem
+    by `problem_id` (= bank_item_id) rather than list position, so the
+    teacher sees which problems the class struggled with most even when
+    grading/hydration reordered or dropped entries. Items are sorted
+    worst-first (ascending avg_percent) but each carries its original
     `problem_index` so the UI can restore assignment order if it wants.
 
-    Defensive throughout: a breakdown shorter than the problem list, a
-    missing `score_status`/`percent`, or a null percent is skipped for
-    that problem rather than raising — the endpoint never 500s on a
-    malformed grade row.
+    Defensive throughout: an entry for a problem no longer in the
+    assignment, a missing `score_status`/`problem_id`, or a null percent
+    is skipped rather than raising — the endpoint never 500s on a
+    malformed grade row. An empty breakdown (`[]`, a retracted grade) is
+    not counted as graded.
     """
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
 
@@ -1378,28 +1380,46 @@ async def item_analysis(
         )
     )).scalars().all()
 
-    # Per-problem accumulators, aligned to problem index.
+    # Per-problem accumulators. Breakdown entries are keyed by
+    # `problem_id` (= the problem's bank_item_id), NOT positionally
+    # aligned to the problem list: manual grading de-dupes by id, AI
+    # grading drops un-mappable positions, and hydration drops deleted
+    # bank refs — any of which shifts indices. So we join entries to
+    # problems on the id, never the list position.
     n = len(problems)
+    bid_to_idx: dict[str, int] = {}
+    for i, problem in enumerate(problems):
+        if isinstance(problem, dict):
+            bid = problem.get("bank_item_id")
+            if bid is not None:
+                bid_to_idx[str(bid)] = i
+
     counts: list[dict[str, int]] = [{"full": 0, "partial": 0, "zero": 0} for _ in range(n)]
     percent_sums = [0.0] * n
     percent_counts = [0] * n
+    graded_count = 0
 
     for breakdown in breakdowns:
-        if not isinstance(breakdown, list):
+        # An empty list is the "un-graded" signal (a teacher retracting a
+        # grade clears the entries but leaves breakdown = []); skip it so
+        # it doesn't inflate the graded count.
+        if not isinstance(breakdown, list) or not breakdown:
             continue
-        for i in range(n):
-            if i >= len(breakdown):
-                break  # breakdown shorter than the problem list
-            entry = breakdown[i]
+        graded_count += 1
+        for entry in breakdown:
             if not isinstance(entry, dict):
                 continue
+            pid = entry.get("problem_id")
+            idx = bid_to_idx.get(str(pid)) if pid is not None else None
+            if idx is None:
+                continue  # entry for a problem no longer in the assignment
             status_val = entry.get("score_status")
             if status_val in _ITEM_STATUSES:
-                counts[i][status_val] += 1
+                counts[idx][status_val] += 1
             percent = entry.get("percent")
             if isinstance(percent, int | float):
-                percent_sums[i] += float(percent)
-                percent_counts[i] += 1
+                percent_sums[idx] += float(percent)
+                percent_counts[idx] += 1
 
     items: list[ItemAnalysisItem] = []
     for i, problem in enumerate(problems):
@@ -1419,7 +1439,7 @@ async def item_analysis(
     # problem_index keeps equal-average rows in assignment order.
     items.sort(key=lambda it: (it.avg_percent, it.problem_index))
 
-    return ItemAnalysisResponse(graded_count=len(breakdowns), items=items)
+    return ItemAnalysisResponse(graded_count=graded_count, items=items)
 
 
 def _is_grade_dirty(grade: SubmissionGrade | None) -> bool:

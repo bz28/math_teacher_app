@@ -27,11 +27,15 @@ from api.models.user import User
 from tests.conftest import auth_headers as _auth
 
 
-def _entry(status: str, percent: float) -> dict[str, Any]:
-    """Build one per-problem breakdown entry in the shape grade_submission
-    persists: {problem_id, score_status, percent, feedback}."""
+def _entry(pidx: int, status: str, percent: float) -> dict[str, Any]:
+    """Build one per-problem breakdown entry, referencing a seeded problem
+    by its index. `_seed_two_problem_hw` resolves `_pidx` to the real
+    bank_item_id so the stored breakdown matches the production shape:
+    {problem_id (= bank_item_id), score_status, percent, feedback}. Entries
+    are intentionally *not* positionally aligned to the problem list — the
+    endpoint must join on problem_id, so tests can pass them in any order."""
     return {
-        "problem_id": str(uuid.uuid4()),
+        "_pidx": pidx,
         "score_status": status,
         "percent": percent,
         "feedback": None,
@@ -96,7 +100,8 @@ async def _seed_two_problem_hw(
         )
         s.add_all([p1, p2])
         await s.flush()
-        assignment.content = {"problem_ids": [str(p1.id), str(p2.id)]}
+        problem_ids = [str(p1.id), str(p2.id)]
+        assignment.content = {"problem_ids": problem_ids}
         await s.flush()
 
         for breakdown in graded:
@@ -120,9 +125,18 @@ async def _seed_two_problem_hw(
                 # the grade row off entirely — the endpoint must ignore
                 # this submission.
                 continue
+            stored = [
+                {
+                    "problem_id": problem_ids[e["_pidx"]],
+                    "score_status": e["score_status"],
+                    "percent": e["percent"],
+                    "feedback": e.get("feedback"),
+                }
+                for e in breakdown
+            ]
             s.add(SubmissionGrade(
                 submission_id=sub.id,
-                breakdown=breakdown,
+                breakdown=stored,
                 final_score=None,
                 graded_at=datetime.now(UTC),
             ))
@@ -145,9 +159,9 @@ async def test_item_analysis_aggregates_and_sorts_worst_first(
     #   Problem 1: zero(0), partial(40), zero(0)      -> avg 13.33
     # Problem 1 is the worst, so it must come first.
     world = await _seed_two_problem_hw(graded=[
-        [_entry("full", 100.0), _entry("zero", 0.0)],
-        [_entry("full", 100.0), _entry("partial", 40.0)],
-        [_entry("partial", 50.0), _entry("zero", 0.0)],
+        [_entry(0, "full", 100.0), _entry(1, "zero", 0.0)],
+        [_entry(0, "full", 100.0), _entry(1, "partial", 40.0)],
+        [_entry(0, "partial", 50.0), _entry(1, "zero", 0.0)],
     ])
 
     r = await client.get(
@@ -185,7 +199,7 @@ async def test_item_analysis_ignores_ungraded_submissions(
     # Two submissions: one graded, one with breakdown=None (ungraded).
     # graded_count must be 1 and only the graded breakdown counts.
     world = await _seed_two_problem_hw(graded=[
-        [_entry("full", 100.0), _entry("zero", 0.0)],
+        [_entry(0, "full", 100.0), _entry(1, "zero", 0.0)],
         None,
     ])
 
@@ -229,7 +243,7 @@ async def test_item_analysis_rejects_other_teacher(
     """A teacher who doesn't own the assignment must not read its
     item analysis. get_teacher_assignment guards this (403/404)."""
     world = await _seed_two_problem_hw(graded=[
-        [_entry("full", 100.0), _entry("zero", 0.0)],
+        [_entry(0, "full", 100.0), _entry(1, "zero", 0.0)],
     ])
 
     async with get_session_factory()() as s:
@@ -255,7 +269,7 @@ async def test_item_analysis_tolerates_short_breakdown(
     """A breakdown shorter than the problem list must not IndexError —
     the missing problem simply gets no contribution from that row."""
     world = await _seed_two_problem_hw(graded=[
-        [_entry("full", 100.0)],  # only covers problem 0
+        [_entry(0, "full", 100.0)],  # only covers problem 0
     ])
 
     r = await client.get(
@@ -273,3 +287,57 @@ async def test_item_analysis_tolerates_short_breakdown(
     assert by_index[1]["partial"] == 0
     assert by_index[1]["zero"] == 0
     assert by_index[1]["avg_percent"] == 0.0
+
+
+async def test_item_analysis_joins_by_problem_id_not_position(
+    client: AsyncClient,
+) -> None:
+    """The core contract: breakdown entries are keyed by problem_id, not
+    positionally aligned to the problem list. Feed entries in REVERSE
+    problem order — a positional join would put the zero on problem 0 and
+    full on problem 1 (both wrong); the problem_id join must land full on
+    problem 0 and zero on problem 1."""
+    world = await _seed_two_problem_hw(graded=[
+        # entry for problem 1 first, then problem 0
+        [_entry(1, "zero", 0.0), _entry(0, "full", 100.0)],
+    ])
+
+    r = await client.get(
+        f"/v1/teacher/assignments/{world['assignment_id']}/item-analysis",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    by_index = {it["problem_index"]: it for it in body["items"]}
+    # Problem 0 got full credit despite its entry coming SECOND.
+    assert by_index[0]["full"] == 1
+    assert by_index[0]["zero"] == 0
+    assert by_index[0]["avg_percent"] == 100.0
+    assert by_index[0]["problem_text"] == world["p1_question"]
+    # Problem 1 got zero despite its entry coming FIRST.
+    assert by_index[1]["zero"] == 1
+    assert by_index[1]["full"] == 0
+    assert by_index[1]["avg_percent"] == 0.0
+    assert by_index[1]["problem_text"] == world["p2_question"]
+
+
+async def test_item_analysis_excludes_retracted_empty_breakdown(
+    client: AsyncClient,
+) -> None:
+    """A retracted grade leaves breakdown = [] (not SQL NULL). It must not
+    inflate graded_count or contribute to any problem."""
+    world = await _seed_two_problem_hw(graded=[
+        [_entry(0, "full", 100.0), _entry(1, "full", 100.0)],
+        [],  # retracted grade — empty list, still SQL-not-null
+    ])
+
+    r = await client.get(
+        f"/v1/teacher/assignments/{world['assignment_id']}/item-analysis",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["graded_count"] == 1
+    by_index = {it["problem_index"]: it for it in body["items"]}
+    assert by_index[0]["full"] == 1
+    assert by_index[1]["full"] == 1
