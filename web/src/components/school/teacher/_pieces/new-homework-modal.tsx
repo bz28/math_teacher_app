@@ -117,6 +117,11 @@ export function NewHomeworkModal({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [units, setUnits] = useState<TeacherUnit[] | null>(null);
+  // Inline unit-create (shown when the course has no units yet) so a
+  // first-time teacher doesn't have to bail out to the Materials tab.
+  const [newUnitName, setNewUnitName] = useState("");
+  const [creatingUnit, setCreatingUnit] = useState(false);
+  const [unitError, setUnitError] = useState<string | null>(null);
   const [docs, setDocs] = useState<TeacherDocument[]>([]);
   const [docsLoaded, setDocsLoaded] = useState(false);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
@@ -172,6 +177,28 @@ export function NewHomeworkModal({
     // ignore the unit the teacher just picked. Cheaper than a confirm
     // dialog and matches the picker's filter-mode default view.
     setSelectedDocs(new Set());
+  };
+
+  // Create a unit inline and select it — same API the Materials tab
+  // uses (teacher.createUnit). Refresh the list so the new unit shows
+  // as a selectable chip; the teacher continues without leaving here.
+  const onCreateUnit = async () => {
+    const name = newUnitName.trim();
+    if (!name || creatingUnit) return;
+    setCreatingUnit(true);
+    setUnitError(null);
+    try {
+      const created = await teacher.createUnit(courseId, { name });
+      const refreshed = await teacher.units(courseId);
+      setUnits(refreshed.units);
+      setUnitId(created.id);
+      setSelectedDocs(new Set());
+      setNewUnitName("");
+    } catch (e) {
+      setUnitError(e instanceof Error ? e.message : "Could not create unit");
+    } finally {
+      setCreatingUnit(false);
+    }
   };
 
   const clamp = (v: number) => Math.min(50, Math.max(1, Math.round(v)));
@@ -456,9 +483,40 @@ export function NewHomeworkModal({
             {units === null ? (
               <p className="mt-2 text-xs text-text-muted">Loading units…</p>
             ) : tops.length === 0 ? (
-              <p className="mt-2 text-xs italic text-text-muted">
-                No units yet. Create one in the Materials tab first.
-              </p>
+              <div className="mt-2">
+                <p className="text-xs text-text-muted">
+                  Homework is built from a unit. Name your first one to get
+                  started — you can upload materials to it later.
+                </p>
+                <form
+                  className="mt-2 flex items-center gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void onCreateUnit();
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={newUnitName}
+                    onChange={(e) => setNewUnitName(e.target.value)}
+                    maxLength={200}
+                    placeholder="e.g. Quadratics"
+                    aria-label="New unit name"
+                    disabled={busy || creatingUnit}
+                    className="flex-1 rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:opacity-50"
+                  />
+                  <button
+                    type="submit"
+                    disabled={busy || creatingUnit || !newUnitName.trim()}
+                    className="rounded-[--radius-md] bg-primary px-3 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+                  >
+                    {creatingUnit ? "Creating…" : "Create"}
+                  </button>
+                </form>
+                {unitError && (
+                  <p className="mt-1.5 text-xs text-red-600">{unitError}</p>
+                )}
+              </div>
             ) : (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {tops.map((u) => (

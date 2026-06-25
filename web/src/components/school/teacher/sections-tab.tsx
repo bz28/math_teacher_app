@@ -295,19 +295,6 @@ function SectionCard({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {code && (
-            <button
-              onClick={() => copyCode(code)}
-              title="Click to copy"
-              className={`rounded-[--radius-pill] px-2 py-0.5 font-mono text-xs font-bold transition-colors ${
-                copied
-                  ? "bg-[color:var(--color-success-light)] text-[color:var(--color-success)]"
-                  : "bg-primary-bg text-primary hover:bg-primary/20"
-              }`}
-            >
-              {copied ? "Copied!" : code}
-            </button>
-          )}
           <button
             onClick={onToggle}
             className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)]"
@@ -316,6 +303,37 @@ function SectionCard({
           </button>
         </div>
       </div>
+
+      {/* Share-with-class block — always visible (no expand needed) so
+          the join code, the teacher's core activation lever, is the
+          dominant affordance. Bulk-email invites live under Manage. */}
+      {code && (
+        <div className="border-t border-border-light px-4 py-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+            Share with your class
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => copyCode(code)}
+              title="Click to copy"
+              aria-label={copied ? "Copied join code" : `Copy join code ${code}`}
+              className={`inline-flex items-center gap-2 rounded-[--radius-md] px-3 py-1.5 font-mono text-base font-bold tracking-[0.12em] transition-colors ${
+                copied
+                  ? "bg-[color:var(--color-success-light)] text-[color:var(--color-success)]"
+                  : "bg-primary-bg text-primary hover:bg-primary/20"
+              }`}
+            >
+              {code}
+              <span className="font-sans text-[11px] font-semibold tracking-normal">
+                {copied ? "Copied!" : "Copy"}
+              </span>
+            </button>
+            <p className="text-xs text-text-muted">
+              Students enter this code to join.
+            </p>
+          </div>
+        </div>
+      )}
 
       {expanded && (
         <div className="border-t border-border-light p-4">

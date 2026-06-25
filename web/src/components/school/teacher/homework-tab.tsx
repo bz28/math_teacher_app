@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { teacher, type TeacherAssignment, type TeacherUnit } from "@/lib/api";
 import { topUnits } from "@/lib/units";
-import { EmptyState } from "@/components/school/shared/empty-state";
 import { Select } from "@/components/ui";
 import { NewHomeworkModal } from "./_pieces/new-homework-modal";
 import {
@@ -29,7 +28,15 @@ const EMPTY_FILTERS: HwFilters = { status: "all", section: null, unit: null };
  * buckets (Needs Grading, Due This Week, Upcoming, Completed) with
  * inline dropdown filters for Status, Section, and Unit.
  */
-export function HomeworkTab({ courseId }: { courseId: string }) {
+export function HomeworkTab({
+  courseId,
+  onGoToMaterials,
+}: {
+  courseId: string;
+  /** Switches the parent course view to the Materials tab so a teacher
+   *  with no units can create one before generating homework. */
+  onGoToMaterials?: () => void;
+}) {
   const router = useRouter();
   const [homeworks, setHomeworks] = useState<TeacherAssignment[]>([]);
   const [units, setUnits] = useState<TeacherUnit[]>([]);
@@ -244,7 +251,29 @@ export function HomeworkTab({ courseId }: { courseId: string }) {
         {loading ? (
           <p className="text-sm text-text-muted">Loading…</p>
         ) : homeworks.length === 0 ? (
-          <EmptyState text="No homework yet. Click New homework to create one from your approved questions." />
+          <div className="mt-4 rounded-[--radius-lg] border border-dashed border-border-light bg-bg-subtle p-8 text-center text-sm text-text-muted">
+            <p>
+              No homework yet. First, create a unit and upload materials, then
+              generate homework from it.
+            </p>
+            {onGoToMaterials ? (
+              <button
+                type="button"
+                onClick={onGoToMaterials}
+                className="mt-3 inline-flex font-semibold text-primary hover:underline"
+              >
+                Go to Materials →
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowNew(true)}
+                className="mt-3 inline-flex font-semibold text-primary hover:underline"
+              >
+                New homework →
+              </button>
+            )}
+          </div>
         ) : totalBucketed === 0 ? (
           <div className="mt-4 rounded-[--radius-lg] border border-border-light bg-[color:var(--color-surface-alt-2)] p-8 text-center text-sm text-text-muted">
             No homeworks match your filters.{" "}
