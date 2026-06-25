@@ -10,7 +10,8 @@ export type TabKey =
   | "review"
   | "account"
   | "school-home"
-  | "grades";
+  | "grades"
+  | "practice";
 
 interface Tab {
   key: TabKey;
@@ -34,6 +35,7 @@ export const PERSONAL_TABS: Tab[] = [
 export const SCHOOL_TABS: Tab[] = [
   { key: "school-home", label: "Home", icon: "home-outline", iconActive: "home" },
   { key: "grades", label: "Grades", icon: "ribbon-outline", iconActive: "ribbon" },
+  { key: "practice", label: "Practice", icon: "barbell-outline", iconActive: "barbell" },
   { key: "account", label: "Account", icon: "person-outline", iconActive: "person" },
 ];
 

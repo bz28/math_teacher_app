@@ -18,6 +18,8 @@ import { HistoryListScreen } from "./src/components/HistoryListScreen";
 import { HomeworkScreen } from "./src/components/HomeworkScreen";
 import { IntegrityChatScreen } from "./src/components/IntegrityChatScreen";
 import { JoinClassScreen } from "./src/components/JoinClassScreen";
+import { PracticeListScreen } from "./src/components/PracticeListScreen";
+import { PracticeSetScreen } from "./src/components/PracticeSetScreen";
 import { WeakSpotsScreen } from "./src/components/WeakSpotsScreen";
 import { OnboardingScreen } from "./src/components/OnboardingScreen";
 import { PaywallScreen } from "./src/components/PaywallScreen";
@@ -37,12 +39,12 @@ import { useSessionStore } from "./src/stores/session";
 import { loadThemePref } from "./src/stores/themePref";
 import { ONBOARDING_KEY } from "./src/constants/storageKeys";
 
-type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "weak-spots" | "teacher-gate" | "school-home" | "grades" | "join-class" | "homework" | "extraction-confirm" | "integrity-chat";
+type Screen = "auth" | "onboarding" | "solve" | "account" | "session" | "session-review" | "history-list" | "weak-spots" | "teacher-gate" | "school-home" | "grades" | "join-class" | "homework" | "extraction-confirm" | "integrity-chat" | "practice" | "practice-set";
 
 // Two tab sets share the same screen<->tab maps (each screen maps to exactly
 // one tab key); only which screens form the bar differs by audience.
 const PERSONAL_TAB_SCREENS: Screen[] = ["solve", "history-list", "weak-spots", "account"];
-const SCHOOL_TAB_SCREENS: Screen[] = ["school-home", "grades", "account"];
+const SCHOOL_TAB_SCREENS: Screen[] = ["school-home", "grades", "practice", "account"];
 const SCREEN_TO_TAB: Record<string, TabKey> = {
   solve: "solve",
   "history-list": "history",
@@ -50,6 +52,7 @@ const SCREEN_TO_TAB: Record<string, TabKey> = {
   account: "account",
   "school-home": "school-home",
   grades: "grades",
+  practice: "practice",
 };
 const TAB_TO_SCREEN: Record<string, Screen> = {
   solve: "solve",
@@ -58,6 +61,7 @@ const TAB_TO_SCREEN: Record<string, Screen> = {
   account: "account",
   "school-home": "school-home",
   grades: "grades",
+  practice: "practice",
 };
 
 function AppRoot() {
@@ -66,6 +70,7 @@ function AppRoot() {
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
   const [activeHomeworkId, setActiveHomeworkId] = useState<string | null>(null);
   const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null);
+  const [activePracticeId, setActivePracticeId] = useState<string | null>(null);
   const [fromOnboarding, setFromOnboarding] = useState(false);
   // School-enrolled students get a classroom-first tab set (Home/Grades/Study/
   // Account); everyone else keeps the personal-learner tabs. Set at auth time.
@@ -230,6 +235,15 @@ function AppRoot() {
       );
     } else if (screen === "grades") {
       content = <GradesScreen />;
+    } else if (screen === "practice") {
+      content = (
+        <PracticeListScreen
+          onOpenPractice={(id) => {
+            setActivePracticeId(id);
+            setScreen("practice-set");
+          }}
+        />
+      );
     } else if (screen === "solve") {
       content = (
         <ErrorBoundary onReset={() => { setProblemQueue([]); setScreen("solve"); }}>
@@ -336,6 +350,18 @@ function AppRoot() {
           <IntegrityChatScreen
             submissionId={activeSubmissionId}
             onExit={() => setScreen("school-home")}
+          />
+        </ErrorBoundary>
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    );
+  } else if (screen === "practice-set" && activePracticeId) {
+    screenNode = (
+      <SafeAreaProvider>
+        <ErrorBoundary onReset={() => setScreen("practice")}>
+          <PracticeSetScreen
+            assignmentId={activePracticeId}
+            onBack={() => setScreen("practice")}
           />
         </ErrorBoundary>
         <StatusBar style="auto" />
