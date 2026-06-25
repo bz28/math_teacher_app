@@ -13,6 +13,7 @@
 - Don't auto-commit and don't auto-open PRs — unless the user invoked `/autopilot`, which authorizes commit + push + PR-open autonomy for the scoped task. Outside autopilot: before committing, summarize what/why and ask; before opening a PR, push the branch, summarize, let the user decide.
 - Don't push empty commits to trigger CI. CI runs automatically on PRs.
 - After opening a PR, monitor CI until all checks pass. If any check fails, update the user with: which check failed, why it failed, and what you're doing to fix it. Then fix the issue and push the fix. Repeat until all checks are green before telling the user the PR is ready.
+- **Every PR description includes a Test Plan with evidence — this is mandatory, not optional.** Document exactly how the change was verified: each automated check run (tsc/lint, CI, unit/pytest, harness) with its pass/fail result, plus a one-line note on manual verification. For any **user-facing / UI change, attach a screenshot of the changed surface in the PR** (before→after when you're altering something that already existed) — a UI PR without a screenshot is not ready to call done. If a surface genuinely can't be visually verified in this environment (e.g. mobile with no simulator, or a sub-second transient), **say so explicitly** in the test plan with what you verified instead (types/tests/cold-review) — never silently omit it. The same evidence belongs in the message you give the user when reporting the PR.
 - Small, cohesive commits (~150 lines when the change is cohesive; larger is fine for a single logical operation like a rename or bulk delete).
 - Conventional commit prefixes: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`.
 
@@ -26,7 +27,7 @@
 - Run `/review` on every PR before declaring it ready to merge. For larger or higher-stakes PRs, also spawn a fresh independent review agent without conversation context — a self-review done inside the same session is biased toward the work you just did. The two are complementary, not redundant: `/review` runs in-session (intent-aware, but biased toward the just-written code), while the cold agent has no conversation context (independent, but intent-blind). On any autopilot or higher-stakes PR, run **both** before merge — don't substitute the cold agent for the `/review` pass.
 - After every `/autopilot` run that pushes to a PR (open or update), immediately spawn a fresh independent review agent in the background — do not pause to ask. Same protocol as above: cold context, two-pass, confirmed/suspected labels. Skip only for non-PR-pushing autopilot runs or when the user explicitly opts out.
 - When reviewing, do two passes. First pass: jot every concern. Second pass: re-verify each by reading actual code; discard anything you can't confirm. Label survivors as **confirmed** (traced, real) or **suspected** (plausible, couldn't fully verify). Don't propose fixes until the user approves.
-- Shipping checklist. Before saying work is done, summarize: what was done, how, why, and how it was tested.
+- Shipping checklist. Before saying work is done, summarize: what was done, how, why, and how it was tested — and for any UI work, include the screenshot evidence (the same shot that's attached to the PR per the Workflow Test Plan rule).
 
 ## Code quality
 
