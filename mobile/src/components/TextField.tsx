@@ -31,7 +31,9 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
 ) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [focused, setFocused] = useState(false);
+  // Seed from autoFocus: RN's native autofocus doesn't reliably fire onFocus on
+  // mount, so an autoFocused field would otherwise stay grey until a refocus.
+  const [focused, setFocused] = useState(Boolean(props.autoFocus));
   const iconColor = error ? colors.error : focused ? colors.primary : colors.textMuted;
 
   return (

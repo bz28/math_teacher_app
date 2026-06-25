@@ -16,7 +16,7 @@ import { TextField } from "./TextField";
 import { joinSection } from "../services/api";
 import { errorMessage } from "../utils/errorMessage";
 import { normalizeJoinCode } from "../utils/joinCode";
-import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
+import { useColors, spacing, typography, type ColorPalette } from "../theme";
 
 interface Props {
   onBack: () => void;
