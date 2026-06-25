@@ -249,6 +249,19 @@ function LearnPageContent() {
         ))}
       </motion.div>
 
+      {/* Mode explainer — quiet helper line so the modes aren't jargon */}
+      <motion.p
+        key={mode}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className="-mt-6 text-sm text-text-muted"
+      >
+        {isLearn
+          ? "A guided, step-by-step walkthrough — we coach you through it."
+          : "A timed exam simulation — no hints, graded at the end."}
+      </motion.p>
+
       {/* Mock test config */}
       <AnimatePresence initial={false}>
       {!isLearn && (
