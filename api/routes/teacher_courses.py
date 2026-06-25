@@ -354,6 +354,68 @@ async def get_course(
     }
 
 
+@router.get("/courses/{course_id}/setup-status")
+async def get_course_setup_status(
+    course_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    """Booleans driving the first-run "Set up your class" checklist on
+    the course workspace. Each flag is an EXISTS probe — we never need
+    the actual rows, just whether the teacher has crossed each milestone:
+
+      has_section        ≥1 section in the course
+      has_student        ≥1 student enrolled in any of its sections
+      has_materials      ≥1 unit (course materials live under units)
+      has_homework       ≥1 homework assignment
+      has_published_grade ≥1 submission grade that's been published
+
+    Ownership is enforced first via get_teacher_course (404s for
+    not-yours), so the probes never leak another teacher's milestones.
+    """
+    await get_teacher_course(db, course_id, current_user.user_id)
+
+    async def _exists(stmt: Any) -> bool:
+        return bool((await db.execute(select(stmt.exists()))).scalar())
+
+    has_section = await _exists(
+        select(Section.id).where(Section.course_id == course_id),
+    )
+    has_student = await _exists(
+        select(SectionEnrollment.id).where(
+            SectionEnrollment.course_id == course_id,
+        ),
+    )
+    has_materials = await _exists(
+        select(Unit.id).where(Unit.course_id == course_id),
+    )
+    has_homework = await _exists(
+        select(Assignment.id).where(
+            Assignment.course_id == course_id,
+            Assignment.teacher_id == current_user.user_id,
+            Assignment.type == "homework",
+        ),
+    )
+    has_published_grade = await _exists(
+        select(SubmissionGrade.id)
+        .join(Submission, Submission.id == SubmissionGrade.submission_id)
+        .join(Assignment, Assignment.id == Submission.assignment_id)
+        .where(
+            Assignment.course_id == course_id,
+            Assignment.teacher_id == current_user.user_id,
+            SubmissionGrade.grade_published_at.is_not(None),
+        ),
+    )
+
+    return {
+        "has_section": has_section,
+        "has_student": has_student,
+        "has_materials": has_materials,
+        "has_homework": has_homework,
+        "has_published_grade": has_published_grade,
+    }
+
+
 @router.patch("/courses/{course_id}")
 async def update_course(
     course_id: uuid.UUID, body: UpdateCourseRequest,
