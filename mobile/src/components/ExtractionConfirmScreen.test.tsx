@@ -70,6 +70,20 @@ describe("ExtractionConfirmScreen", () => {
     expect(mockedApi.confirmExtraction).toHaveBeenCalledWith("sub-1", { "1:1": "x equals 3" });
   });
 
+  it("sends a final-answer correction keyed position:final", async () => {
+    mockedApi.getSubmission.mockResolvedValue(SUBMISSION as never);
+    mockedApi.confirmExtraction.mockResolvedValue({ status: "ok", already_confirmed: false } as never);
+    render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);
+
+    await waitForText("Did we read this right?");
+    fireEvent.changeText(screen.getByDisplayValue("2"), "5");
+    await flush();
+    fireEvent.press(screen.getByText("Looks right"));
+    await flush();
+
+    expect(mockedApi.confirmExtraction).toHaveBeenCalledWith("sub-1", { "1:final": "5" });
+  });
+
   it("acknowledges without a confirm UI when no integrity/grading pipeline runs", async () => {
     mockedApi.getSubmission.mockResolvedValue({
       ...SUBMISSION,
