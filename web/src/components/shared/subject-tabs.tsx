@@ -20,12 +20,15 @@ interface SubjectTabsProps {
  */
 export function SubjectTabs({ tabs, active, onSelect, className }: SubjectTabsProps) {
   return (
-    <div className={cn("flex gap-7 border-b border-border", className)}>
+    <div role="tablist" className={cn("flex gap-7 border-b border-border", className)}>
       {tabs.map((tab) => {
         const isActive = tab.key === active;
         return (
           <button
             key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
             onClick={() => onSelect(tab.key)}
             className={cn(
               "relative -mb-px pb-3 text-sm font-medium transition-colors",
