@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import ServiceStatusBanner from "@/components/service-status-banner";
+import { MotionConfig } from "framer-motion";
 import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
@@ -179,9 +180,14 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col font-sans">
         <ServiceStatusBanner />
-        <ToastProvider>
-          <AuthProvider>{children}</AuthProvider>
-        </ToastProvider>
+        {/* reducedMotion="user" makes every framer-motion animation in the app
+            honor prefers-reduced-motion automatically (transforms collapse to
+            none; opacity still fades) — one global guard instead of per-component. */}
+        <MotionConfig reducedMotion="user">
+          <ToastProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </ToastProvider>
+        </MotionConfig>
         {process.env.VERCEL && <Analytics />}
         {process.env.VERCEL && <SpeedInsights />}
         {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && (

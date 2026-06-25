@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -67,19 +68,43 @@ const variantStyles: Record<ToastVariant, string> = {
 /* ── Provider ── */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+
+  const schedule = useCallback((id: number) => {
+    const existing = timers.current.get(id);
+    if (existing) clearTimeout(existing);
+    timers.current.set(
+      id,
+      setTimeout(() => {
+        timers.current.delete(id);
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 4000),
+    );
+  }, []);
 
   const dismiss = useCallback((id: number) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+    const t = timers.current.get(id);
+    if (t) clearTimeout(t);
+    timers.current.delete(id);
+    setToasts((prev) => prev.filter((x) => x.id !== id));
   }, []);
 
   const push = useCallback(
     (variant: ToastVariant, message: string) => {
       const id = ++nextId;
       setToasts((prev) => [...prev, { id, message, variant }]);
-      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
+      schedule(id);
     },
-    [],
+    [schedule],
   );
+
+  // Pause auto-dismiss while the user is hovering/focused (reading); resume on
+  // leave so a long error message can't vanish mid-read.
+  const pause = useCallback(() => {
+    timers.current.forEach((t) => clearTimeout(t));
+    timers.current.clear();
+  }, []);
+  const resume = () => toasts.forEach((t) => schedule(t.id));
 
   const api: ToastAPI = {
     success: (m) => push("success", m),
@@ -92,12 +117,23 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={api}>
       {children}
 
-      {/* Toast container — fixed top-right */}
-      <div className="pointer-events-none fixed right-0 top-0 z-50 flex flex-col items-end gap-2 p-4">
+      {/* Toast container — fixed top-right. Pointer-events-none so it never
+          blocks the page; the toasts themselves capture hover/focus. */}
+      <div
+        role="region"
+        aria-label="Notifications"
+        className="pointer-events-none fixed right-0 top-0 z-50 flex flex-col items-end gap-2 p-4"
+      >
         <AnimatePresence mode="popLayout">
           {toasts.map((toast) => (
             <motion.div
               key={toast.id}
+              role={toast.variant === "error" ? "alert" : "status"}
+              aria-atomic="true"
+              onMouseEnter={pause}
+              onMouseLeave={resume}
+              onFocus={pause}
+              onBlur={resume}
               layout
               initial={{ opacity: 0, x: 80, scale: 0.95 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
@@ -109,6 +145,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <p className="text-sm font-medium">{toast.message}</p>
               <button
                 onClick={() => dismiss(toast.id)}
+                aria-label="Dismiss notification"
                 className="ml-2 flex-shrink-0 opacity-60 transition-opacity hover:opacity-100"
               >
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
