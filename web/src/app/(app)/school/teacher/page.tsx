@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { teacher, type TeacherCourse } from "@/lib/api";
 import { formatDueRelative } from "@/lib/utils";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
+import { Select } from "@/components/ui";
 
 // Subject chip color hooks. Flat tinted tag (no pill), 2px radius,
 // uppercase tracked label — matches the dashboard badge family.
@@ -264,15 +265,15 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
           </Field>
 
           <Field label="Subject">
-            <select
+            <Select
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              className="w-full rounded-[--radius-sm] border border-border bg-surface px-3 py-2 text-[15px] text-text-primary transition-colors focus:border-primary"
+              className="w-full"
             >
               <option value="math">Math</option>
               <option value="physics">Physics</option>
               <option value="chemistry">Chemistry</option>
-            </select>
+            </Select>
           </Field>
 
           <Field label="Grade level (optional)">

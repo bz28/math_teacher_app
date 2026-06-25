@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { teacher, type TeacherAssignment, type TeacherUnit } from "@/lib/api";
 import { topUnits, unitLabel as labelForUnit } from "@/lib/units";
 import { EmptyState } from "@/components/school/shared/empty-state";
+import { Select } from "@/components/ui";
 import { NewPracticeModal } from "./_pieces/new-practice-modal";
 
 /**
@@ -386,17 +387,16 @@ function FilterSelect({
   options: { value: string; label: string }[];
 }) {
   return (
-    <select
+    <Select
       aria-label={label}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="rounded-[--radius-md] border border-border-light bg-surface px-2.5 py-1.5 text-xs text-text-secondary focus:border-primary focus:outline-none"
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }

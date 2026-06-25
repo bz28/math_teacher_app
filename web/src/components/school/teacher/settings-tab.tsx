@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { teacher, type TeacherCourse } from "@/lib/api";
 import { Field } from "@/components/school/shared/field";
+import { Select } from "@/components/ui";
 
 export function SettingsTab({ course, onChanged }: { course: TeacherCourse; onChanged: () => void }) {
   const router = useRouter();
@@ -81,15 +82,15 @@ export function SettingsTab({ course, onChanged }: { course: TeacherCourse; onCh
           />
         </Field>
         <Field label="Subject">
-          <select
+          <Select
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            className="w-full rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+            className="w-full"
           >
             <option value="math">Math</option>
             <option value="physics">Physics</option>
             <option value="chemistry">Chemistry</option>
-          </select>
+          </Select>
         </Field>
         <Field label="Grade level">
           <input

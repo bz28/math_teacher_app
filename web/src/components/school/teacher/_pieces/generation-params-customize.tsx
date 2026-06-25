@@ -5,6 +5,7 @@ import {
   DEFAULT_GENERATION_PARAMS,
   type GenerationParams,
 } from "@/lib/api";
+import { Select } from "@/components/ui";
 
 // localStorage key for the Customize-section selections. Per-teacher
 // scoping happens implicitly because each teacher logs in on their
@@ -164,7 +165,7 @@ export function GenerationParamsCustomize({
                 >
                   {label}
                 </label>
-                <select
+                <Select
                   id={`gen-param-${key}`}
                   value={params[key]}
                   onChange={(e) =>
@@ -175,14 +176,14 @@ export function GenerationParamsCustomize({
                   }
                   disabled={disabled}
                   title={help}
-                  className="mt-1 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1.5 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
+                  className="mt-1 w-full"
                 >
                   {options.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             ))}
           </div>

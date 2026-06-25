@@ -12,6 +12,7 @@ import {
   STRONG_THRESHOLD,
   STRUGGLING_THRESHOLD,
 } from "@/components/school/shared/percent-badge";
+import { Select } from "@/components/ui";
 
 type Sort = "date_desc" | "date_asc" | "score_desc" | "score_asc";
 
@@ -105,17 +106,16 @@ export default function StudentGradesPage() {
           </p>
         </div>
         {!empty && (
-          <select
+          <Select
             value={sort}
             onChange={(e) => setSort(e.target.value as Sort)}
-            className="rounded-[--radius-sm] border border-border bg-input-bg px-3 py-2 text-sm text-text-primary outline-none focus:border-primary"
             aria-label="Sort grades"
           >
             <option value="date_desc">Newest first</option>
             <option value="date_asc">Oldest first</option>
             <option value="score_desc">Highest score</option>
             <option value="score_asc">Lowest score</option>
-          </select>
+          </Select>
         )}
       </div>
 
