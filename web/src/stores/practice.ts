@@ -312,7 +312,10 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     const result: PracticeResult = {
       problem: current.question,
       userAnswer: "(skipped)",
-      correctAnswer: "",
+      // Reveal the answer on the summary for skipped problems (the only
+      // "missed" result type in retry-until-correct practice). current.answer
+      // is populated by the time the MCQ is on screen; blank stays hidden.
+      correctAnswer: current.answer || "",
       isCorrect: false,
     };
 
