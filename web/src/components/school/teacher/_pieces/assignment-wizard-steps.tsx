@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { TeacherDocument } from "@/lib/api";
 import type { PendingUpload } from "@/hooks/use-document-uploads";
+import { Select } from "@/components/ui";
 import { UnitMultiSelect } from "./unit-multi-select";
 import { SectionMultiSelect } from "./section-multi-select";
 import { SourceMaterialPicker } from "./source-material-picker";
@@ -107,18 +108,18 @@ export function AssignmentDetailsStep({
         </div>
         <div>
           <label className="block text-sm font-bold text-text-primary">Late policy</label>
-          <select
+          <Select
             value={latePolicy}
             onChange={(e) => onLatePolicyChange(e.target.value)}
             disabled={disabled}
-            className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
+            className="mt-2 w-full"
           >
             {LATE_POLICY_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 

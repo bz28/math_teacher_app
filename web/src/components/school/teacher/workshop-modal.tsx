@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
+import { Select } from "@/components/ui";
 import {
   teacher,
   type BankChatMessage,
@@ -609,11 +610,10 @@ export function WorkshopModal({
             </span>
             <label className="flex items-center gap-1 text-xs font-semibold text-text-muted">
               📁
-              <select
+              <Select
                 value={liveItem.unit_id}
                 onChange={(e) => saveUnit(e.target.value)}
                 disabled={busy}
-                className="cursor-pointer rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-0.5 text-xs font-semibold text-text-primary hover:border-primary focus:border-primary focus:outline-none"
                 title="Move to a different unit"
               >
                 {topUnits(units).flatMap((top) => [
@@ -626,7 +626,7 @@ export function WorkshopModal({
                     </option>
                   )),
                 ])}
-              </select>
+              </Select>
             </label>
             {liveItem.source_doc_ids && liveItem.source_doc_ids.length > 0 && (
               <span

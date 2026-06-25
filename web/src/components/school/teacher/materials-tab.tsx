@@ -7,6 +7,7 @@ import { uploadDocument } from "@/lib/upload-document";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useToast } from "@/components/ui/toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select } from "@/components/ui";
 import {
   ChevronDownIcon,
   FolderIcon,
@@ -827,15 +828,14 @@ function Toolbar({
       </div>
       <label className="inline-flex items-center gap-1.5 text-xs font-medium text-text-muted">
         Sort
-        <select
+        <Select
           value={sort}
           onChange={(e) => onSortChange(e.target.value as SortMode)}
-          className="h-9 rounded-full border border-border-light bg-[color:var(--color-surface-alt-2)] px-3 text-sm font-medium text-text-primary transition-all duration-200 ease-out focus:border-primary focus:bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20"
         >
           <option value="name">Name (A–Z)</option>
           <option value="size">Size (largest)</option>
           <option value="added">Added (newest)</option>
-        </select>
+        </Select>
       </label>
     </div>
   );

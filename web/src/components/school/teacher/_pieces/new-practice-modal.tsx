@@ -7,6 +7,7 @@ import {
   type TeacherAssignment,
   type TeacherDocument,
 } from "@/lib/api";
+import { Select } from "@/components/ui";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useDocumentUploads } from "@/hooks/use-document-uploads";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
@@ -484,12 +485,12 @@ function SourceStep({
                 this practice from scratch.
               </p>
             ) : (
-              <select
+              <Select
                 value={selectedHwId}
                 onChange={(e) => onSelectedHwIdChange(e.target.value)}
                 disabled={disabled}
                 aria-label="Source homework"
-                className="mt-3 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
+                className="mt-3 w-full"
               >
                 {hws.map((h) => (
                   <option key={h.id} value={h.id}>
@@ -498,7 +499,7 @@ function SourceStep({
                     {h.status !== "published" ? " (draft)" : ""}
                   </option>
                 ))}
-              </select>
+              </Select>
             )}
           </>
         )}

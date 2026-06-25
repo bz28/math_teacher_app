@@ -5,6 +5,7 @@ import Link from "next/link";
 import { teacher, type SubmissionsInboxRow } from "@/lib/api";
 import { formatDueShort } from "@/lib/utils";
 import { EmptyState } from "@/components/school/shared/empty-state";
+import { Select } from "@/components/ui";
 import { ProgressBar } from "./_pieces/progress-bar";
 import { StatusPill } from "./_pieces/status-pill";
 
@@ -97,11 +98,10 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
             className="w-full rounded-[--radius-md] border border-border-light bg-surface py-2 pl-9 pr-3 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
         </div>
-        <select
+        <Select
           value={sectionId}
           onChange={(e) => setSectionId(e.target.value)}
           aria-label="Filter by section"
-          className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
         >
           <option value="all">All sections</option>
           {sections.map((s) => (
@@ -109,7 +109,7 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
               {s.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {filtered.length === 0 ? (
