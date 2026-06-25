@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -31,20 +31,28 @@ function PersonalReview() {
   const [subject, setLocalSubject] = useState<Subject>("math");
   const [items, setItems] = useState<WeakSpotItem[]>([]);
   const [loading, setLoading] = useState(true);
-  // Track which card's "Practice 5 similar" is busy so we can show a
-  // per-card loading state and lock out the rest while one is launching.
+  const [error, setError] = useState(false);
+  // Track which card's practice button is busy so we can show a per-card
+  // loading state and lock out the rest while one is launching.
   const [generatingFor, setGeneratingFor] = useState<string | null>(null);
+  // Monotonic request id: ignore any response that a newer fetch superseded
+  // (switching subject tabs fast would otherwise let a stale response win).
+  const reqIdRef = useRef(0);
 
   const fetchWeakSpots = useCallback(async (sub: Subject) => {
+    const reqId = ++reqIdRef.current;
     setLoading(true);
+    setError(false);
     try {
       const res = await weakSpotsApi.list(sub);
+      if (reqId !== reqIdRef.current) return;
       setItems(res.items);
     } catch {
-      // empty state handles it
+      if (reqId !== reqIdRef.current) return;
+      setError(true);
       setItems([]);
     } finally {
-      setLoading(false);
+      if (reqId === reqIdRef.current) setLoading(false);
     }
   }, []);
 
@@ -89,9 +97,11 @@ function PersonalReview() {
 
       <WeakSpotList
         loading={loading}
+        error={error}
         items={items}
         generatingFor={generatingFor}
         onPractice={handlePractice}
+        onRetry={() => fetchWeakSpots(subject)}
       />
     </div>
   );
@@ -139,11 +149,15 @@ function WeakSpotList({
   items,
   generatingFor,
   onPractice,
+  error,
+  onRetry,
 }: {
   loading: boolean;
   items: WeakSpotItem[];
   generatingFor: string | null;
   onPractice: (item: WeakSpotItem) => void;
+  error: boolean;
+  onRetry: () => void;
 }) {
   if (loading && items.length === 0) {
     return (
@@ -152,6 +166,20 @@ function WeakSpotList({
         <SkeletonCard />
         <SkeletonCard />
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <EmptyState
+        title="Couldn't load your review"
+        description="Something went wrong fetching your flagged problems."
+        action={
+          <Button variant="secondary" onClick={onRetry}>
+            Try again
+          </Button>
+        }
+      />
     );
   }
 
@@ -222,7 +250,7 @@ function WeakSpotCard({
         disabled={anyBusy && !busy}
         onClick={onPractice}
       >
-        Practice 5 similar
+        Practice a similar problem
       </Button>
     </Card>
   );
