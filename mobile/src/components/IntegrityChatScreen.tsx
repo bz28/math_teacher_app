@@ -23,6 +23,7 @@ import {
   type IntegrityState,
 } from "../services/api";
 import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
+import { useTurnTelemetry } from "../utils/turnTelemetry";
 
 const POLL_MS = 2500;
 
@@ -48,6 +49,7 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const turnStart = useRef<number>(Date.now());
+  const telemetry = useTurnTelemetry();
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isPreparing = (s: IntegrityState) => s.overall_status === "extracting";
@@ -82,9 +84,10 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
     setSending(true);
     try {
       const seconds = Math.round((Date.now() - turnStart.current) / 1000);
-      const next = await postIntegrityTurn(submissionId, message, seconds);
+      const next = await postIntegrityTurn(submissionId, message, seconds, telemetry.collect());
       setState(next);
       setInput("");
+      telemetry.reset();
       turnStart.current = Date.now();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
@@ -100,7 +103,7 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
     } finally {
       setSending(false);
     }
-  }, [input, sending, submissionId]);
+  }, [input, sending, submissionId, telemetry]);
 
   // ── Pre-chat states ───────────────────────────────────
   if (loadError && !state) {
@@ -220,7 +223,10 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
             <TextInput
               style={styles.input}
               value={input}
-              onChangeText={setInput}
+              onChangeText={(t) => {
+                setInput(t);
+                telemetry.onTextChange(t);
+              }}
               placeholder="Explain how you solved it…"
               placeholderTextColor={colors.textMuted}
               multiline

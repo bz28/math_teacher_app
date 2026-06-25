@@ -51,7 +51,12 @@ describe("IntegrityChatScreen", () => {
     fireEvent.press(screen.getByLabelText("Send"));
     await flush();
 
-    expect(mockedApi.postIntegrityTurn).toHaveBeenCalledWith("sub-1", "I added two and two", expect.any(Number));
+    expect(mockedApi.postIntegrityTurn).toHaveBeenCalledWith(
+      "sub-1",
+      "I added two and two",
+      expect.any(Number),
+      expect.objectContaining({ device_type: "mobile" }),
+    );
     expect(screen.getByText("Nice — why does that work?")).toBeTruthy();
   });
 });
