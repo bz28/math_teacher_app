@@ -7,7 +7,6 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -17,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { Eyebrow } from "./Eyebrow";
+import { TextField } from "./TextField";
 import { useFadeInUp } from "../hooks/useFadeInUp";
 import { forgotPassword, login, saveTokens } from "../services/api";
 import { isMfaChallenge } from "../utils/routing";
@@ -108,43 +108,37 @@ export function LoginForm({ onAuth, onTeacherGate, onSwitchToRegister }: LoginFo
         </View>
 
         <Animated.View style={[styles.form, formAnim]}>
-          <View style={styles.inputWrap}>
-            <Ionicons name="mail-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Email"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              placeholderTextColor={colors.textMuted}
-            />
-          </View>
+          <TextField
+            icon="mail-outline"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="Email"
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
 
-          <View style={styles.inputWrap}>
-            <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Password"
-              secureTextEntry={!showPassword}
-              placeholderTextColor={colors.textMuted}
-              returnKeyType="go"
-              onSubmitEditing={handleLogin}
-            />
-            <TouchableOpacity
-              style={styles.eyeButton}
-              onPress={() => setShowPassword(!showPassword)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons
-                name={showPassword ? "eye-off-outline" : "eye-outline"}
-                size={20}
-                color={colors.primary}
-              />
-            </TouchableOpacity>
-          </View>
+          <TextField
+            icon="lock-closed-outline"
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Password"
+            secureTextEntry={!showPassword}
+            returnKeyType="go"
+            onSubmitEditing={handleLogin}
+            rightSlot={
+              <TouchableOpacity
+                style={styles.eyeButton}
+                onPress={() => setShowPassword(!showPassword)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={20}
+                  color={colors.primary}
+                />
+              </TouchableOpacity>
+            }
+          />
 
           {error && (
             <View style={styles.errorWrap}>
@@ -229,26 +223,6 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   form: {
     gap: 14,
-  },
-  inputWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    backgroundColor: colors.inputBg,
-  },
-  inputIcon: {
-    marginLeft: 14,
-  },
-  input: {
-    flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 16,
-    ...typography.body,
-    lineHeight: 22,
-    color: colors.text,
-    includeFontPadding: false,
   },
   forgotButton: {
     alignSelf: "flex-end",
