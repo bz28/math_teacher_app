@@ -44,6 +44,8 @@ export class TurnTelemetryTracker {
     if (delta < 0) {
       this.edits++; // a deletion/correction
     } else if (delta >= PASTE_MIN_BYTES && this.pastes.length < MAX_EVENTS) {
+      // byte_count is approximated as a character-count delta — close enough
+      // for the teacher's "pasted a big block" signal; never the content.
       this.pastes.push({ at, byte_count: delta });
     }
     this.lastKeyAt = nowMs;
@@ -87,7 +89,10 @@ export function useTurnTelemetry() {
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next) => {
-      if (next === "background" || next === "inactive") {
+      // Only true backgrounding (the user left the app) counts — not iOS's
+      // transient "inactive" (control center, app-switcher peek, a call banner),
+      // which would over-report the "stepped away to look it up" signal.
+      if (next === "background") {
         if (backgroundedAt.current == null) backgroundedAt.current = Date.now();
       } else if (next === "active" && backgroundedAt.current != null) {
         const since = backgroundedAt.current;
