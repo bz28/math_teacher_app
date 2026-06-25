@@ -86,6 +86,14 @@ export function LearnSummary({ learnQueue, onToggleFlag, onPracticeFlagged, onRe
         <Button variant="secondary" onClick={() => { onReset(); router.push("/home"); }} className="w-full">
           Return Home
         </Button>
+        {flaggedCount > 0 && (
+          <button
+            onClick={() => router.push("/review")}
+            className="mt-1 text-center text-sm font-medium text-primary transition-colors hover:text-primary-light"
+          >
+            Review your weak spots &rarr;
+          </button>
+        )}
       </div>
     </div>
   );

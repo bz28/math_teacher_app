@@ -169,6 +169,14 @@ export function MockTestSummary({ mockTest, onToggleFlag, onStartLearnQueue, onR
         <Button variant="secondary" onClick={() => { onReset(); router.push("/home"); }} className="w-full">
           Return Home
         </Button>
+        {(correct < results.length || flaggedQuestions.length > 0) && (
+          <button
+            onClick={() => router.push("/review")}
+            className="mt-1 text-center text-sm font-medium text-primary transition-colors hover:text-primary-light"
+          >
+            Review your weak spots &rarr;
+          </button>
+        )}
       </div>
     </div>
   );
