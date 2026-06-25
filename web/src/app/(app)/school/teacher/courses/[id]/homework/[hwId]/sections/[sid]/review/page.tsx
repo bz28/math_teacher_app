@@ -11,11 +11,13 @@ import {
   RowDispositionPill,
   type IntegrityActivityNotableTurnLite,
 } from "@/components/school/teacher/_pieces/submissions-panel";
+import { Skeleton } from "@/components/ui";
 import {
   teacher,
   type AiGradeEntry,
   type GradeBreakdownEntry,
   type IntegrityDisposition,
+  type ItemAnalysisResponse,
   type SubmissionFile,
   type TeacherIntegrityDetail,
   type TeacherIntegrityTranscriptTurn,
@@ -96,6 +98,15 @@ export default function HomeworkSectionReviewPage({
   // SubmissionDetailPanel unmounts during the switch and local state
   // inside RubricSection would reset to collapsed every time.
   const [rubricOpen, setRubricOpen] = useState(false);
+  // Assignment-wide item analysis — per-problem score distribution
+  // across every graded submission on this HW (all sections). Fetched
+  // once on mount, independent of the roster/detail panels. Rendered as
+  // a collapsible panel at the top of the review content. `null` while
+  // loading; `error` carries a fetch failure so the panel can show it
+  // inline without disturbing grading.
+  const [itemAnalysisOpen, setItemAnalysisOpen] = useState(false);
+  const [itemAnalysis, setItemAnalysis] = useState<ItemAnalysisResponse | null>(null);
+  const [itemAnalysisError, setItemAnalysisError] = useState<string | null>(null);
   const [roster, setRoster] = useState<RosterEntry[] | null>(null);
   // Roster filter — narrows the left pane by verdict / status. The
   // most useful default is "needs me" (anything flagged or ungraded);
@@ -216,6 +227,28 @@ export default function HomeworkSectionReviewPage({
       cancelled = true;
     };
   }, [assignmentId, courseId, sectionId]);
+
+  // Item analysis is HW-wide and read-only, so it loads independently
+  // of the roster/detail panels — a failure here never blocks grading.
+  useEffect(() => {
+    let cancelled = false;
+    teacher
+      .itemAnalysis(assignmentId)
+      .then((res) => {
+        if (cancelled) return;
+        setItemAnalysis(res);
+        setItemAnalysisError(null);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setItemAnalysisError(
+          e instanceof Error ? e.message : "Failed to load item analysis",
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assignmentId]);
 
   const selectedEntry = useMemo(
     () =>
@@ -620,6 +653,15 @@ export default function HomeworkSectionReviewPage({
             Invite students from the Sections tab, then publish homework.
           </p>
         </div>
+      )}
+
+      {roster !== null && (
+        <ItemAnalysisPanel
+          data={itemAnalysis}
+          error={itemAnalysisError}
+          open={itemAnalysisOpen}
+          onToggle={setItemAnalysisOpen}
+        />
       )}
 
       {roster !== null && roster.length > 0 && (
@@ -1576,6 +1618,154 @@ function RubricSection({
         ))}
       </div>
     </details>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Class item analysis — a collapsible panel at the top of the review
+// content. Surfaces the per-problem score distribution across every
+// graded submission on this HW (all sections, not just the one being
+// reviewed). Problems render worst-first (the API sorts them ascending
+// by avg_percent), so the items most worth a reteach sit at the top.
+//
+// Collapsed by default — grading is the primary task; this is the
+// "where did the class struggle?" reference the teacher opens between
+// students. Hidden entirely until the fetch resolves; shows a skeleton
+// while loading, an inline error on failure, and a muted empty state
+// when nothing's been graded yet.
+// ────────────────────────────────────────────────────────────────────
+
+function ItemAnalysisPanel({
+  data,
+  error,
+  open,
+  onToggle,
+}: {
+  data: ItemAnalysisResponse | null;
+  error: string | null;
+  open: boolean;
+  onToggle: (open: boolean) => void;
+}) {
+  const gradedCount = data?.graded_count ?? 0;
+  const sublabel = error
+    ? "Couldn’t load item analysis"
+    : data === null
+      ? "Loading…"
+      : gradedCount === 0
+        ? "No graded submissions yet"
+        : `Across ${gradedCount} graded ${gradedCount === 1 ? "submission" : "submissions"}`;
+
+  return (
+    <details
+      open={open}
+      onToggle={(e) => onToggle((e.target as HTMLDetailsElement).open)}
+      className="mt-5 rounded-[--radius-xl] border border-border-light bg-surface shadow-sm"
+    >
+      <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-3">
+        <span className="flex items-baseline gap-2">
+          <span aria-hidden className="text-text-muted">
+            {open ? "▾" : "▸"}
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+            Class item analysis
+          </span>
+          <span className="text-[11px] text-text-muted">{sublabel}</span>
+        </span>
+      </summary>
+      <div className="border-t border-border-light px-5 py-4">
+        {error ? (
+          <p className="text-xs font-semibold text-[color:var(--color-error)]">
+            {error}
+          </p>
+        ) : data === null ? (
+          <div className="space-y-3">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-4/5" />
+          </div>
+        ) : gradedCount === 0 ? (
+          <p className="text-xs text-text-muted">
+            No graded submissions yet — item analysis appears once you grade.
+          </p>
+        ) : (
+          <ol className="space-y-3">
+            {data.items.map((item) => (
+              <ItemAnalysisRow key={item.problem_index} item={item} />
+            ))}
+          </ol>
+        )}
+      </div>
+    </details>
+  );
+}
+
+// One problem's row in the item-analysis panel: number + text on the
+// left, avg% on the right, then a full-width stacked distribution bar
+// (green=full, amber=partial, red=zero) with the raw counts below it.
+// The avg% is color-graded against fixed thresholds so the worst items
+// read as worst at a glance without needing to parse the bar.
+function ItemAnalysisRow({
+  item,
+}: {
+  item: ItemAnalysisResponse["items"][number];
+}) {
+  const total = item.full + item.partial + item.zero;
+  // Guard against a divide-by-zero if a graded HW somehow has a problem
+  // with no scored submissions — render an empty (zero-width) bar.
+  const pct = (n: number) => (total > 0 ? (n / total) * 100 : 0);
+  const avg = Math.round(item.avg_percent);
+  const avgClass =
+    avg >= 80
+      ? "text-success"
+      : avg >= 50
+        ? "text-[color:var(--color-warning-dark)]"
+        : "text-[color:var(--color-error)]";
+
+  return (
+    <li className="rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)]/40 px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+            Problem {item.problem_index + 1}
+          </span>
+          <div className="mt-0.5 text-sm leading-relaxed text-text-primary">
+            <MathText text={item.problem_text} />
+          </div>
+        </div>
+        <span className={`shrink-0 text-sm font-bold tabular-nums ${avgClass}`}>
+          {avg}% avg
+        </span>
+      </div>
+      <div
+        className="mt-2.5 flex h-2 w-full overflow-hidden rounded-[--radius-pill] bg-border-light"
+        role="img"
+        aria-label={`${item.full} full, ${item.partial} partial, ${item.zero} zero`}
+      >
+        {item.full > 0 && (
+          <div className="h-full bg-success" style={{ width: `${pct(item.full)}%` }} />
+        )}
+        {item.partial > 0 && (
+          <div
+            className="h-full bg-[color:var(--color-warning)]"
+            style={{ width: `${pct(item.partial)}%` }}
+          />
+        )}
+        {item.zero > 0 && (
+          <div className="h-full bg-error" style={{ width: `${pct(item.zero)}%` }} />
+        )}
+      </div>
+      <p className="mt-1.5 text-[11px] tabular-nums text-text-muted">
+        <span className="font-semibold text-success">{item.full} full</span>
+        <span className="mx-1 text-text-muted/60" aria-hidden>·</span>
+        <span className="font-semibold text-[color:var(--color-warning-dark)]">
+          {item.partial} partial
+        </span>
+        <span className="mx-1 text-text-muted/60" aria-hidden>·</span>
+        <span className="font-semibold text-[color:var(--color-error)]">
+          {item.zero} zero
+        </span>
+      </p>
+    </li>
   );
 }
 
