@@ -49,12 +49,7 @@ export function IntegrityInterview() {
       ref={ref}
       style={{
         position: "relative",
-        background: "radial-gradient(120% 95% at 50% 0%, #0C3325 0%, #08231A 58%, #061812 100%)",
-        borderRadius: 24,
-        padding: "clamp(28px, 5vw, 56px) clamp(20px, 4vw, 44px)",
-        boxShadow: "0 40px 90px -40px rgba(6,24,18,0.7)",
-        overflow: "hidden",
-        minHeight: 520,
+        minHeight: 470,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",

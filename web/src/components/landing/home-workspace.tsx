@@ -3,29 +3,28 @@ import { Eyebrow } from "./eyebrow";
 import { HomeworkFlow } from "./homework-flow";
 
 /**
- * Section #4 — inside the teacher workspace. An animated, click-through tour of
- * the real flow: generate from your own materials → review → refine with the AI
- * chat → publish. Replaces the old static UI mocks; the math + worked solution
- * are the product's real output. Light demo panel on the dark section for
- * contrast (mirrors the dark integrity demo on the light section above).
+ * Inside the workspace — an animated, click-through tour of the real flow:
+ * generate from your own materials → review → refine with the AI chat → publish.
+ * Light section so the white demo card reads as a document on warm paper
+ * (contrast beat after the dark integrity section above).
  */
 export function HomeWorkspace() {
   return (
-    <Section variant="invert" id="workspace">
+    <Section variant="default" id="workspace">
       <div className="mx-auto max-w-3xl text-center">
-        <Eyebrow variant="invert">Inside the workspace</Eyebrow>
-        <h2 className="mt-6 text-display-md text-[color:var(--color-invert-text)]">
+        <Eyebrow>Inside the workspace</Eyebrow>
+        <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
           Sunday-night prep takes{" "}
-          <span className="font-display-serif italic">five minutes.</span>
+          <span className="font-display-serif italic text-[color:var(--color-primary)]">five minutes.</span>
         </h2>
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-[color:var(--color-invert-text-muted)] md:text-xl">
+        <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
           Point Veradic at your own chapter. It writes the problems &mdash; with
           full worked solutions &mdash; and you fix anything in plain English.
           Assign it before you leave the building.
         </p>
       </div>
 
-      <div className="mt-14 md:mt-20">
+      <div className="mt-12 md:mt-16">
         <HomeworkFlow />
       </div>
     </Section>

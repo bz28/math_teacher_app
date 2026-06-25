@@ -1,35 +1,24 @@
 import { Navbar } from "@/components/landing/navbar";
 import { Hero } from "@/components/landing/hero";
-import { HomeProblem } from "@/components/landing/home-problem";
 import { HomeIntegrity } from "@/components/landing/home-integrity";
 import { HomeWorkspace } from "@/components/landing/home-workspace";
-import { HomeOutcomes } from "@/components/landing/home-outcomes";
 import { CtaBand } from "@/components/landing/cta-band";
 import { Footer } from "@/components/landing/footer";
 
+/**
+ * Lean, proof-forward landing: Hook → Integrity demo → Homework demo → Ask.
+ * The two animated demos *show* the value, so the old prose Problem and
+ * Outcomes sections (which asserted/re-narrated what the demos prove) were
+ * cut. Rhythm alternates light → dark → light → dark.
+ */
 export default function Home() {
   return (
     <>
       <Navbar />
       <main>
         <Hero />
-        <HomeProblem />
         <HomeIntegrity />
         <HomeWorkspace />
-        <HomeOutcomes />
-        {/* Districts-teaser dropped — district leaders land on
-            /for-districts directly via sales emails, never by
-            scrolling the homepage. The teaser stole real estate
-            from the teacher-focused message and the eyebrow
-            "FOR DISTRICT LEADERS" actively signalled to the
-            visiting teacher that this section wasn't for them. */}
-        {/* Final-CTA reframe to match the lead-with-self-serve hero.
-            Previously pitched 'Bring Veradic to your school. Book a
-            walkthrough' — single school-focused ask that orphaned every
-            solo teacher who'd scrolled the whole page. Now offers both
-            paths: 'Start free' as primary (matches navbar + hero),
-            'Book a 20-min demo' as secondary for buyers who want to
-            talk first. */}
         <CtaBand
           eyebrow="Ready when you are"
           headline="Start teaching with Veradic today."

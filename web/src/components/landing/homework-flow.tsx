@@ -111,7 +111,7 @@ export function HomeworkFlow() {
           {stage === 3 && <Pane key={`pub-${seq}`}><PublishStage /></Pane>}
         </AnimatePresence>
       </div>
-      <div style={{ textAlign: "center", fontSize: 11.5, color: "#8FB7A4" }}>
+      <div style={{ textAlign: "center", fontSize: 11.5, color: "#A89F8C" }}>
         {isPaused ? "Click a step to replay it" : "Click any step to explore it"}
       </div>
     </div>
@@ -123,10 +123,10 @@ function Stepper({ active, onJump }: { active: number; onJump: (i: number) => vo
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
       {STAGES.map((s, i) => (
         <div key={s} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button type="button" onClick={() => onJump(i)} style={{ background: "none", border: "none", cursor: "pointer", padding: "3px 5px", fontSize: 12.5, fontFamily: "inherit", fontWeight: i === active ? 700 : 500, color: i === active ? "#7FC4A0" : "#5F8C78", transition: "color 0.25s" }}>
+          <button type="button" onClick={() => onJump(i)} style={{ background: "none", border: "none", cursor: "pointer", padding: "3px 5px", fontSize: 12.5, fontFamily: "inherit", fontWeight: i === active ? 700 : 500, color: i === active ? "#0E5238" : "#A89F8C", transition: "color 0.25s" }}>
             {i + 1}. {s}
           </button>
-          {i < STAGES.length - 1 && <span style={{ color: "#2A5743", fontSize: 12 }}>→</span>}
+          {i < STAGES.length - 1 && <span style={{ color: "#D8D0BF", fontSize: 12 }}>→</span>}
         </div>
       ))}
     </div>
