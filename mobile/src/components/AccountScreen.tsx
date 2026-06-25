@@ -23,6 +23,7 @@ import { usePaywallStore } from "../stores/paywall";
 import { useTrialEligibility } from "../hooks/useTrialEligibility";
 import { ThemeToggle } from "./ThemeToggle";
 import { clearAuth, deleteAccount, getUserName } from "../services/api";
+import { exportMyData } from "../utils/exportData";
 import { useEntitlementStore } from "../stores/entitlements";
 import { LEGAL_URLS } from "../constants/legal";
 import { ONBOARDING_FLAGS_KEY, ONBOARDING_KEY } from "../constants/storageKeys";
@@ -79,6 +80,19 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportData = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      await exportMyData();
+    } catch {
+      Alert.alert("Export failed", "We couldn't prepare your data right now. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
   const [deleteLoading, setDeleteLoading] = useState(false);
   const shakeAnim = useRef(new RNAnimated.Value(0)).current;
 
@@ -241,6 +255,19 @@ export function AccountScreen({ onBack, onLogout, onAccountDeleted }: AccountScr
             <Text style={styles.aboutAiLabel}>About Veradic AI</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </AnimatedPressable>
+
+        {/* Export my data */}
+        <AnimatedPressable style={styles.aboutAiRow} onPress={handleExportData} disabled={exporting} scaleDown={0.98}>
+          <View style={styles.aboutAiLeft}>
+            <Ionicons name="download-outline" size={18} color={colors.primary} />
+            <Text style={styles.aboutAiLabel}>Download my data</Text>
+          </View>
+          {exporting ? (
+            <ActivityIndicator size="small" color={colors.textMuted} />
+          ) : (
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          )}
         </AnimatedPressable>
 
         {/* Legal links */}
