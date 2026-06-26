@@ -379,6 +379,7 @@ async def call_claude_json(
     max_tokens: int = 512,
     max_retries: int = MAX_RETRIES,
     thinking_budget: int | None = None,
+    temperature: float | None = None,
     submission_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
 ) -> dict[str, object]:
@@ -406,6 +407,10 @@ async def call_claude_json(
             scratchpad tokens. Forces tool_choice to "auto" (required by
             the API). Must be >= 1024 and < max_tokens. Thinking tokens
             are billed as output tokens.
+        temperature: If set, pins the sampling temperature (0.0 = greedy /
+            reproducible). Extended thinking forces temperature 1.0, so a
+            custom temperature requires thinking_budget=None — passing both
+            with temperature != 1.0 raises ValueError.
     """
     if not _circuit.allow_request():
         raise RuntimeError("Circuit breaker is open — Claude API temporarily unavailable")
@@ -418,6 +423,16 @@ async def call_claude_json(
     thinking_kwargs, effective_tool_choice = _build_thinking_kwargs(
         thinking_budget, max_tokens, tool_choice_default
     )
+    if temperature is not None:
+        # Extended thinking requires temperature 1.0; the API rejects any
+        # other value alongside a thinking block. Guard it here so a caller
+        # asking for temp-0 reproducibility can't silently get thinking's 1.0.
+        if thinking_budget is not None and temperature != 1.0:
+            raise ValueError(
+                "extended thinking forces temperature 1.0; pass thinking_budget="
+                "None to use a custom temperature"
+            )
+        thinking_kwargs["temperature"] = temperature
 
     for attempt in range(max_retries):
         start = time.monotonic()

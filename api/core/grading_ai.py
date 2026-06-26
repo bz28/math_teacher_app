@@ -283,6 +283,7 @@ async def grade_submission_with_ai(
     *,
     user_id: str | None = None,
     submission_id: str | None = None,
+    reproducible: bool = True,
 ) -> dict[str, Any]:
     """Grade a submission using the already-extracted student work.
 
@@ -294,6 +295,11 @@ async def grade_submission_with_ai(
         rubric: Teacher's rubric from Assignment.rubric (optional).
         user_id: For cost-tracking attribution.
         submission_id: For LLM-call log correlation across the pipeline.
+        reproducible: When True (default, and the production path), grade at
+            temperature 0 with NO extended thinking so the same submission
+            yields the same grade every run. When False, use the legacy
+            temperature-1 + extended-thinking config — kept only so the
+            grading-quality harness can A/B the two configs.
 
     Returns:
         {"grades": [{problem_position, student_answer, score_status,
@@ -304,12 +310,20 @@ async def grade_submission_with_ai(
     )
     user_message = _build_user_message(extraction, problems)
 
-    # Extended thinking lets the model reason through partial-credit
-    # calls, ambiguous extractions, and rubric judgments privately before
-    # committing to a grade. Budget must be < max_tokens (see
-    # llm_client._build_thinking_kwargs); 2048 thinking + 4096 response
-    # gives room for both. Pipeline runs in the background, so the 2-3x
-    # latency is not user-visible.
+    # Reproducible grading (default): temperature 0 yields a deterministic
+    # grade for a given submission, so a teacher who re-opens a review sees a
+    # stable verdict. Extended thinking forces temperature 1.0, so determinism
+    # requires dropping it. The legacy config (reproducible=False) keeps the
+    # 2048-token thinking budget + temp-1 sampling — it let the model reason
+    # through partial-credit calls privately, at the cost of run-to-run drift.
+    # The grading harness measures whether dropping it costs accuracy.
+    if reproducible:
+        thinking_budget: int | None = None
+        temperature: float | None = 0.0
+    else:
+        thinking_budget = 2048
+        temperature = None  # API defaults to 1.0 under extended thinking
+
     result = await call_claude_json(
         system,
         user_message,
@@ -317,7 +331,8 @@ async def grade_submission_with_ai(
         tool_schema=AI_GRADING_SCHEMA,
         model=MODEL_REASON,
         max_tokens=4096,
-        thinking_budget=2048,
+        thinking_budget=thinking_budget,
+        temperature=temperature,
         user_id=user_id,
         submission_id=submission_id,
         call_metadata={"phase": "ai_grading"},

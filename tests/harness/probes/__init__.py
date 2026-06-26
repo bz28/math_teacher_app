@@ -9,6 +9,7 @@ from collections.abc import Callable
 from tests.harness.probe import Probe
 from tests.harness.probes.generation import GenerationProbe
 from tests.harness.probes.geometry import GeometryProbe
+from tests.harness.probes.grading import GradingProbe
 from tests.harness.probes.latex import LatexProbe
 
 PROBES: dict[str, Callable[[int], Probe]] = {
@@ -19,4 +20,7 @@ PROBES: dict[str, Callable[[int], Probe]] = {
     # LaTeX-integrity guard — real generation over LaTeX-heavy topics, fails on
     # the control-char corruption signature.
     "latex": lambda count: LatexProbe(count=count),
+    # Grading-quality golden set: a fixed 12-case labeled suite, so (like
+    # generation) the per-case count is a property of the suite, not --count.
+    "grading": lambda count: GradingProbe(),
 }
