@@ -7,6 +7,29 @@ on:
     branches: [main]
 
 jobs:
+  prod-deps-smoke:
+    # Guards against a dev-only dependency leaking into the app's runtime import
+    # chain. The `backend` job installs `.[dev]`, so it can't catch this — but
+    # Railway installs only `[project.dependencies]`. Mirror prod: install
+    # WITHOUT [dev] and import the app entrypoint. (This is exactly how the
+    # PIL/pillow prod boot crash slipped through CI once.)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install production dependencies only (no [dev])
+        run: pip install .
+      - name: App imports with production deps only
+        env:
+          DATABASE_URL: postgresql+asyncpg://x:x@localhost:5432/x
+          JWT_SECRET: ci-test-secret
+          CLAUDE_API_KEY: sk-ant-ci-fake-key
+          APP_ENV: test
+          SENTRY_DSN: ""
+        run: python -c "import api.main; print('app imports cleanly with production deps only')"
+
   backend:
     runs-on: ubuntu-latest
     services:
