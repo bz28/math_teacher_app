@@ -60,30 +60,6 @@ def _mock_word_problem_decomposition():
     )
 
 
-def _mock_converse_correct(steps_completed: int = 0):
-    from api.core.tutor import ConverseResult
-    return ConverseResult(
-        input_type="answer", is_correct=True,
-        steps_completed=steps_completed, feedback="Correct!",
-    )
-
-
-def _mock_converse_wrong():
-    from api.core.tutor import ConverseResult
-    return ConverseResult(
-        input_type="answer", is_correct=False,
-        steps_completed=None, feedback="Not quite. Try again.",
-    )
-
-
-def _mock_converse_question():
-    from api.core.tutor import ConverseResult
-    return ConverseResult(
-        input_type="question", is_correct=False,
-        steps_completed=None, feedback="Think about isolating the variable.",
-    )
-
-
 def _mock_completed_chat():
     from api.core.tutor import StepChatResult
     return StepChatResult(feedback="We subtracted 6 first to isolate the variable term.")

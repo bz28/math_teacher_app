@@ -9,6 +9,7 @@ from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import (
@@ -27,7 +28,6 @@ from api.models.user import User
 router = APIRouter()
 
 
-_VALID_SUBJECTS = {"math", "physics", "chemistry"}
 _VALID_COURSE_STATUSES = {"active", "archived"}
 
 
@@ -39,8 +39,8 @@ def _validate_course_name(v: str) -> str:
 
 
 def _validate_subject(v: str) -> str:
-    if v not in _VALID_SUBJECTS:
-        raise ValueError(f"Subject must be one of: {', '.join(sorted(_VALID_SUBJECTS))}")
+    if v not in VALID_SUBJECTS:
+        raise ValueError(f"Subject must be one of: {', '.join(sorted(VALID_SUBJECTS))}")
     return v
 
 

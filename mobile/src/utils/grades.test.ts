@@ -1,12 +1,12 @@
 import { averageScore, scoreTone } from "./grades";
 
 describe("scoreTone", () => {
-  it("bands at 80 and 60 (inclusive lower bounds)", () => {
+  it("bands at 85 and 70 (inclusive lower bounds), mirroring web", () => {
     expect(scoreTone(100)).toBe("strong");
-    expect(scoreTone(80)).toBe("strong");
-    expect(scoreTone(79)).toBe("average");
-    expect(scoreTone(60)).toBe("average");
-    expect(scoreTone(59)).toBe("struggling");
+    expect(scoreTone(85)).toBe("strong");
+    expect(scoreTone(84)).toBe("average");
+    expect(scoreTone(70)).toBe("average");
+    expect(scoreTone(69)).toBe("struggling");
     expect(scoreTone(0)).toBe("struggling");
   });
 });

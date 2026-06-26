@@ -1,15 +1,19 @@
+// Shared contract — keep byte-identical with web/src/lib/utils.ts and
+// mobile/src/utils/dateFormatting.ts: "just now" / "Nm ago" / "Nh ago" / "Nd ago" (<7d), then "Mon D".
 export function formatRelativeDate(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diffMs = now - then;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "";
+  const diffMs = Date.now() - d.getTime();
   const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "Just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
   const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 30) return `${diffDay}d ago`;
-  return new Date(dateStr).toLocaleDateString();
+
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffDay < 7) return `${diffDay}d ago`;
+
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 // Cost formatter — tiered precision so a $400/mo school bill and a

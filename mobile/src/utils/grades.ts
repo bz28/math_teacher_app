@@ -1,11 +1,12 @@
 // Pure grade helpers (no RN imports) so they're unit-testable. Mirrors
-// the web gradebook's banding: strong >= 80, average 60-79, struggling < 60.
+// the web gradebook's banding (web/src/components/school/shared/percent-badge.tsx):
+// strong >= 85, average 70-84, struggling < 70.
 
 export type ScoreTone = "strong" | "average" | "struggling";
 
 export function scoreTone(score: number): ScoreTone {
-  if (score >= 80) return "strong";
-  if (score >= 60) return "average";
+  if (score >= 85) return "strong";
+  if (score >= 70) return "average";
   return "struggling";
 }
 
