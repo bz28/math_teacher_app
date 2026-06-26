@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   schoolStudent,
+  EntitlementError,
   type StudentHomeworkDetail,
   type StudentProblemFeedback,
   type StudentSubmission,
   type SubmissionFile,
 } from "@/lib/api";
+import { usePracticeStore } from "@/stores/practice";
+import { useSessionStore, type Subject } from "@/stores/learn";
 import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
@@ -272,6 +275,22 @@ export default function HomeworkPage() {
   }
 
   // mode.kind === "homework"
+  // Course subject coerced to the practice/learn engines' Subject union
+  // (course.subject is constrained to these three server-side; fall back
+  // to math defensively).
+  const subject: Subject =
+    hw.course_subject === "physics" || hw.course_subject === "chemistry"
+      ? hw.course_subject
+      : "math";
+  // Question text of every missed (partial/zero) problem, resolved from
+  // the grade breakdown back to the problem stem. Drops any entry whose
+  // text isn't recoverable (deleted ref / empty stem) so the "practice
+  // everything I missed" CTA never seeds the engine with a blank stem.
+  const missedProblemTexts = (hw.breakdown ?? [])
+    .filter((b) => b.score_status !== "full")
+    .map((b) => hw.problems.find((p) => p.bank_item_id === b.problem_id)?.question)
+    .filter((q): q is string => typeof q === "string" && q.trim().length > 0);
+
   return (
     <div className="mx-auto max-w-3xl">
       <Link
@@ -321,6 +340,8 @@ export default function HomeworkPage() {
           breakdown={hw.breakdown}
           missedOnly={missedOnly}
           onMissedOnlyChange={setMissedOnly}
+          missedProblemTexts={missedProblemTexts}
+          subject={subject}
         />
       )}
 
@@ -390,6 +411,20 @@ export default function HomeworkPage() {
                     {gradeEntry !== null && (
                       <PublishedGradePanel entry={gradeEntry} />
                     )}
+
+                    {/* Post-grade remediation — the highest-intent
+                        moment to route a missed problem into practice or
+                        a guided walkthrough. Only on missed problems
+                        (full credit needs no fix) with a recoverable
+                        stem (skip blanks / unreadable). */}
+                    {gradeEntry !== null &&
+                      gradeEntry.score_status !== "full" &&
+                      p.question.trim() !== "" && (
+                        <RemediationActions
+                          problemTexts={[p.question]}
+                          subject={subject}
+                        />
+                      )}
                   </div>
                 </div>
               </div>
@@ -471,11 +506,18 @@ function GradedSummaryCard({
   breakdown,
   missedOnly,
   onMissedOnlyChange,
+  missedProblemTexts,
+  subject,
 }: {
   finalScore: number | null;
   breakdown: StudentProblemFeedback[];
   missedOnly: boolean;
   onMissedOnlyChange: (next: boolean) => void;
+  /** Recoverable question texts of the missed problems — feeds the
+   *  "practice everything I missed" CTA. May be shorter than `missed`
+   *  if some stems weren't recoverable. */
+  missedProblemTexts: string[];
+  subject: Subject;
 }) {
   const total = breakdown.length;
   const full = breakdown.filter((b) => b.score_status === "full").length;
@@ -544,6 +586,19 @@ function GradedSummaryCard({
           </button>
         )}
       </div>
+
+      {/* One-tap remediation for the whole set of misses — the
+          post-grade moment is the highest-intent point to route the
+          student into practice. Hidden when no stem was recoverable. */}
+      {missed > 0 && missedProblemTexts.length > 0 && (
+        <RemediationActions
+          problemTexts={missedProblemTexts}
+          subject={subject}
+          variant="primary"
+          practiceLabel={`Practice everything I missed (${missedProblemTexts.length})`}
+          className="mt-4 border-t border-border-light pt-4"
+        />
+      )}
     </div>
   );
 }
@@ -576,6 +631,113 @@ function PublishedGradePanel({ entry }: { entry: StudentProblemFeedback }) {
           <MathText text={entry.feedback} />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Post-grade remediation CTAs — turn a missed problem (or the whole set
+ * of misses) into a practice batch or a guided step-by-step walkthrough.
+ * Seeds the practice/learn engines with the problem stem(s) and routes
+ * the student into the running session.
+ *
+ *   "Practice similar"     → generates look-alike problems, lands on
+ *                            /practice (preview → answer).
+ *   "Learn step-by-step"   → opens the guided solver, lands on
+ *                            /learn/session.
+ *
+ * Single stem uses startPracticeBatch; multiple uses startPracticeQueue
+ * (matches the existing weak-spots / history entry pattern). Subject is
+ * pushed into the session store first because both engines read it from
+ * there.
+ */
+function RemediationActions({
+  problemTexts,
+  subject,
+  variant = "compact",
+  practiceLabel = "Practice similar",
+  className = "",
+}: {
+  problemTexts: string[];
+  subject: Subject;
+  variant?: "compact" | "primary";
+  practiceLabel?: string;
+  className?: string;
+}) {
+  const router = useRouter();
+  const setSubject = useSessionStore((s) => s.setSubject);
+  const startLearnQueue = useSessionStore((s) => s.startLearnQueue);
+  const startPracticeBatch = usePracticeStore((s) => s.startPracticeBatch);
+  const startPracticeQueue = usePracticeStore((s) => s.startPracticeQueue);
+  const [pending, setPending] = useState<null | "practice" | "learn">(null);
+
+  if (problemTexts.length === 0) return null;
+
+  async function launch(
+    kind: "practice" | "learn",
+    start: () => Promise<void>,
+    dest: string,
+  ) {
+    if (pending) return;
+    setSubject(subject); // both engines read subject from the session store
+    setPending(kind);
+    try {
+      await start();
+      router.push(dest);
+      // Leave `pending` set — the route push unmounts this component, so
+      // the button stays in its "Starting…" state until navigation.
+    } catch (err) {
+      if (err instanceof EntitlementError) {
+        router.push("/pricing");
+        return;
+      }
+      // start() routes its own failures into the store's error phase;
+      // anything thrown here just resets the button so it's retryable.
+      setPending(null);
+    }
+  }
+
+  const onPractice = () =>
+    launch(
+      "practice",
+      () =>
+        problemTexts.length === 1
+          ? startPracticeBatch(problemTexts[0], subject)
+          : startPracticeQueue(problemTexts, subject),
+      "/practice",
+    );
+  const onLearn = () =>
+    launch(
+      "learn",
+      () => startLearnQueue(problemTexts),
+      `/learn/session?subject=${subject}`,
+    );
+
+  const base =
+    "inline-flex items-center justify-center gap-1.5 rounded-[--radius-md] border font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60";
+  const size = variant === "primary" ? "px-4 py-2 text-sm" : "px-3 py-1.5 text-xs";
+  const primaryBtn = "border-primary bg-primary text-white hover:bg-primary-dark";
+  const ghostBtn =
+    "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary";
+
+  return (
+    <div className={`flex flex-wrap gap-2 ${variant === "compact" ? "mt-3" : ""} ${className}`}>
+      <button
+        type="button"
+        onClick={onPractice}
+        disabled={pending !== null}
+        className={`${base} ${size} ${primaryBtn}`}
+      >
+        {pending === "practice" ? "Starting…" : practiceLabel}
+      </button>
+      <button
+        type="button"
+        onClick={onLearn}
+        disabled={pending !== null}
+        className={`${base} ${size} ${ghostBtn}`}
+      >
+        {pending === "learn" ? "Starting…" : "Learn step-by-step"}
+      </button>
     </div>
   );
 }

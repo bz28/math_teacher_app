@@ -405,6 +405,11 @@ class StudentHomeworkDetail(BaseModel):
     due_at: datetime | None
     course_id: str
     course_name: str
+    # Course subject ("math" | "physics" | "chemistry"). Threaded to the
+    # student view so the post-grade remediation CTAs (practice/learn a
+    # missed problem) can seed the practice/learn engines with the right
+    # subject — the problem rows don't carry it on their own.
+    course_subject: str
     problems: list[StudentHomeworkProblem]
     submitted: bool
     submission_id: str | None
@@ -1225,6 +1230,7 @@ async def homework_detail(
         due_at=assignment.due_at,
         course_id=str(course.id),
         course_name=course.name,
+        course_subject=course.subject,
         problems=problems,
         submitted=sub is not None,
         submission_id=str(sub.id) if sub is not None else None,

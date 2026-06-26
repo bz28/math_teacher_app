@@ -1852,6 +1852,10 @@ export interface StudentHomeworkDetail {
   due_at: string | null;
   course_id: string;
   course_name: string;
+  /** Course subject ("math" | "physics" | "chemistry"). Seeds the
+   *  post-grade remediation CTAs (practice/learn a missed problem) with
+   *  the right subject — problem rows don't carry it. */
+  course_subject: string;
   problems: StudentHomeworkProblem[];
   submitted: boolean;
   submission_id: string | null;

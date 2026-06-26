@@ -2616,6 +2616,10 @@
             "title": "Course Name",
             "type": "string"
           },
+          "course_subject": {
+            "title": "Course Subject",
+            "type": "string"
+          },
           "description": {
             "anyOf": [
               {
@@ -2713,6 +2717,7 @@
           "due_at",
           "course_id",
           "course_name",
+          "course_subject",
           "problems",
           "submitted",
           "submission_id"
