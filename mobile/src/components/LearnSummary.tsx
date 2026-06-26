@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   ScrollView,
   Text,
@@ -8,7 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { MathText } from "./MathText";
 import { useSessionStore } from "../stores/session";
-import { sessionStyles as styles } from "./sessionStyles";
+import { makeSessionStyles } from "./sessionStyles";
 import { useColors, spacing } from "../theme";
 
 interface LearnSummaryProps {
@@ -18,6 +19,7 @@ interface LearnSummaryProps {
 
 export function LearnSummary({ onBack, onHome }: LearnSummaryProps) {
   const colors = useColors();
+  const styles = useMemo(() => makeSessionStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const {
     learnQueue,

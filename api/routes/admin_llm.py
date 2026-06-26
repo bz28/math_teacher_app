@@ -35,6 +35,7 @@ async def llm_calls(
     user_id: str | None = Query(default=None),
     submission_id: str | None = Query(default=None),
     school_id: str | None = Query(default=None),
+    success: bool | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(require_admin),
@@ -134,12 +135,19 @@ async def llm_calls(
     )
     if function:
         calls_query = calls_query.where(LLMCall.function == function)
+    if success is not None:
+        # Powers the dashboard "Failures" tab: success=false scopes the
+        # paginated list (and total_count below) to failed calls so the
+        # filter + pagination happen server-side instead of on one page.
+        calls_query = calls_query.where(LLMCall.success.is_(success))
     calls_query = calls_query.order_by(LLMCall.created_at.desc()).offset(offset).limit(limit)
     calls = (await db.execute(calls_query)).all()
 
     total_query = select(func.count()).select_from(LLMCall).where(*base_filters)
     if function:
         total_query = total_query.where(LLMCall.function == function)
+    if success is not None:
+        total_query = total_query.where(LLMCall.success.is_(success))
     total_count = (await db.execute(total_query)).scalar() or 0
 
     # Failure analysis

@@ -65,14 +65,26 @@ const USER_SCHOOL_KEY = "user_school_id";
 
 let _authToken: string | null = null;
 let _refreshToken: string | null = null;
-let _refreshPromise: Promise<boolean> | null = null;
+let _refreshPromise: Promise<RefreshResult> | null = null;
 let _onSessionExpired: (() => void) | null = null;
 let _userName: string | null = null;
 let _userId: string | null = null;
 let _userRole: string | null = null;
 let _userSchoolId: string | null = null;
-/** Whether the last refresh failure was a definitive auth rejection (401) vs transient error */
-let _lastRefreshWasAuthRejection = false;
+
+// Structured outcome of a refresh attempt. The previous design used a
+// boolean return plus a module-level `_lastRefreshWasAuthRejection`
+// flag to communicate the second bit of information. That flag was
+// racy: it lived outside any single request's lifecycle, so when
+// multiple in-flight 401s converged on the shared refresh promise, a
+// later refresh could mutate the flag between an earlier caller's
+// "did it succeed?" check and its "should I clear tokens?" check —
+// occasionally clearing tokens after a transient failure (silent
+// logout) or leaving stale tokens after a real auth rejection.
+// Returning the outcome through the promise eliminates the shared
+// state: each caller awaits and reads its own answer. Mirrors
+// web/src/lib/api.ts and dashboard/src/lib/api.ts.
+type RefreshResult = "success" | "auth_rejected" | "transient_error";
 
 // When the dev backend is fronted by ngrok-free, every request without
 // this header gets the HTML "ERR_NGROK_6024 — you are about to visit"
@@ -197,7 +209,7 @@ export async function loadStoredAuth(): Promise<boolean> {
       await cacheMe(await resp.json());
       return true;
     }
-    if (resp.status === 401) return await _tryRefresh();
+    if (resp.status === 401) return (await _tryRefresh()) === "success";
     // Server error (5xx) — trust cached tokens rather than logging user out
     if (resp.status >= 500) return true;
     return false;
@@ -224,8 +236,8 @@ export async function clearAuth() {
   ]);
 }
 
-async function _tryRefresh(): Promise<boolean> {
-  if (!_refreshToken) return false;
+async function _tryRefresh(): Promise<RefreshResult> {
+  if (!_refreshToken) return "auth_rejected";
   // Deduplicate concurrent refresh attempts
   if (_refreshPromise) return _refreshPromise;
   _refreshPromise = _doRefresh();
@@ -236,29 +248,22 @@ async function _tryRefresh(): Promise<boolean> {
   }
 }
 
-async function _doRefresh(): Promise<boolean> {
+async function _doRefresh(): Promise<RefreshResult> {
   try {
     const resp = await fetchWithTimeout(`${API_BASE}/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: _refreshToken }),
     });
-    if (resp.status === 401) {
-      // Definitive rejection — token is revoked or invalid
-      _lastRefreshWasAuthRejection = true;
-      return false;
-    }
-    if (!resp.ok) {
-      // Server error — don't treat as auth failure, token may still be valid
-      _lastRefreshWasAuthRejection = false;
-      return false;
-    }
-    _lastRefreshWasAuthRejection = false;
+    // Definitive rejection — token is revoked or invalid
+    if (resp.status === 401) return "auth_rejected";
+    // Server error — don't treat as auth failure, token may still be valid
+    if (!resp.ok) return "transient_error";
     const data = await resp.json();
     await saveTokens(data.access_token, data.refresh_token);
-    return true;
+    return "success";
   } catch {
-    return false;
+    return "transient_error";
   }
 }
 
@@ -286,12 +291,12 @@ function extractError(data: Record<string, unknown> | null, status: number): str
 async function _fetchWithRefresh(url: string, init: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Response> {
   let resp = await fetchWithTimeout(url, init, timeoutMs);
   if (resp.status === 401 && _refreshToken) {
-    const refreshed = await _tryRefresh();
-    if (refreshed) {
+    const result = await _tryRefresh();
+    if (result === "success") {
       // Retry with new token
       const newInit = { ...init, headers: authHeaders() };
       resp = await fetchWithTimeout(url, newInit, timeoutMs);
-    } else if (_lastRefreshWasAuthRejection) {
+    } else if (result === "auth_rejected") {
       // Only clear auth on definitive 401 from refresh endpoint.
       // Network errors / 5xx leave tokens intact so a later retry can succeed.
       await clearAuth();

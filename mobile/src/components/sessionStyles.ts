@@ -1,7 +1,10 @@
 import { StyleSheet } from "react-native";
-import { colors, spacing, radii, typography, shadows } from "../theme";
+import { spacing, radii, typography, shadows, type ColorPalette } from "../theme";
 
-export const sessionStyles = StyleSheet.create({
+/** Shared styles for the Learn / Practice summary screens.
+ * Wrapped as a factory so callers pass the active color palette
+ * (light/dark) instead of capturing the static light import. */
+export const makeSessionStyles = (colors: ColorPalette) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   stickyHeader: { paddingHorizontal: spacing.xl, backgroundColor: colors.background },
   content: { padding: spacing.xl, paddingTop: spacing.sm },

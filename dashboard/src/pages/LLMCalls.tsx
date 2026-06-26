@@ -64,11 +64,14 @@ export default function LLMCalls() {
       user_id: userFilter,
       submission_id: submissionFilter,
       school_id: schoolFilter,
+      // Failures tab filters server-side so total_count + pagination
+      // reflect only failed calls (not just failures on the current page).
+      ...(tab === "failures" ? { success: "false" } : {}),
       limit: String(PAGE_SIZE),
       offset: String(offset),
     }).then((d) => { if (!cancelled) setData(d); });
     return () => { cancelled = true; };
-  }, [hours, fnFilter, userFilter, submissionFilter, schoolFilter, offset]);
+  }, [hours, fnFilter, userFilter, submissionFilter, schoolFilter, tab, offset]);
 
   // Reset offset whenever any non-pagination filter changes so a deep
   // link (?submission=…, ?user=…) or a scope flip never lands past the
@@ -79,7 +82,7 @@ export default function LLMCalls() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOffset(0);
-  }, [userFilter, submissionFilter, schoolFilter, fnFilter, hours]);
+  }, [userFilter, submissionFilter, schoolFilter, fnFilter, hours, tab]);
 
   // Local-state handlers — offset reset is handled by the effect
   // above, so we don't duplicate it here. handleHoursChange also
@@ -134,9 +137,9 @@ export default function LLMCalls() {
   const totalCalls = data.by_function.reduce((s, r) => s + r.count, 0);
   const totalCost = data.by_function.reduce((s, r) => s + r.total_cost, 0);
 
-  const callsToShow = tab === "failures"
-    ? data.calls.filter((c) => !c.success)
-    : data.calls;
+  // Failures are filtered server-side (success=false) so total_count and
+  // pagination stay correct; the list here is already scoped to the tab.
+  const callsToShow = data.calls;
 
   return (
     <div>

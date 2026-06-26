@@ -4,6 +4,7 @@ import asyncio
 import html
 import logging
 import secrets
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -206,7 +207,7 @@ async def create_school(
 
 @router.get("/schools/{school_id}")
 async def get_school(
-    school_id: str,
+    school_id: uuid.UUID,
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -285,7 +286,7 @@ async def get_school(
 
 @router.get("/schools/{school_id}/students")
 async def school_students(
-    school_id: str,
+    school_id: uuid.UUID,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(require_admin),
@@ -370,7 +371,7 @@ async def school_students(
 
 @router.patch("/schools/{school_id}")
 async def update_school(
-    school_id: str,
+    school_id: uuid.UUID,
     body: UpdateSchoolRequest,
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -390,7 +391,7 @@ async def update_school(
 
 @router.delete("/schools/{school_id}")
 async def delete_school(
-    school_id: str,
+    school_id: uuid.UUID,
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -429,7 +430,7 @@ async def delete_school(
 
 @router.post("/schools/{school_id}/invite")
 async def invite_teacher(
-    school_id: str,
+    school_id: uuid.UUID,
     body: InviteTeacherRequest,
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -497,8 +498,8 @@ async def invite_teacher(
 
 @router.delete("/schools/{school_id}/invites/{invite_id}")
 async def cancel_invite(
-    school_id: str,
-    invite_id: str,
+    school_id: uuid.UUID,
+    invite_id: uuid.UUID,
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:

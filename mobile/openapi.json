@@ -6222,6 +6222,22 @@
           },
           {
             "in": "query",
+            "name": "success",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Success"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -6668,6 +6684,7 @@
             "name": "school_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "School Id",
               "type": "string"
             }
@@ -6715,6 +6732,7 @@
             "name": "school_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "School Id",
               "type": "string"
             }
@@ -6762,6 +6780,7 @@
             "name": "school_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "School Id",
               "type": "string"
             }
@@ -6823,6 +6842,7 @@
             "name": "school_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "School Id",
               "type": "string"
             }
@@ -6884,6 +6904,7 @@
             "name": "school_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "School Id",
               "type": "string"
             }
@@ -6893,6 +6914,7 @@
             "name": "invite_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "Invite Id",
               "type": "string"
             }
@@ -6996,6 +7018,7 @@
             "name": "school_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "School Id",
               "type": "string"
             }
@@ -7300,6 +7323,7 @@
             "name": "teacher_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "Teacher Id",
               "type": "string"
             }
@@ -7372,6 +7396,7 @@
             "name": "user_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "User Id",
               "type": "string"
             }
@@ -7424,6 +7449,7 @@
             "name": "user_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "User Id",
               "type": "string"
             }
@@ -7475,6 +7501,7 @@
             "name": "user_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "User Id",
               "type": "string"
             }
@@ -7537,6 +7564,7 @@
             "name": "user_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "User Id",
               "type": "string"
             }
