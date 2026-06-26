@@ -16,7 +16,9 @@ export function renderBold(text: string): React.ReactNode[] {
   );
 }
 
-/** Format a date relative to now (e.g., "2h ago", "Mar 24"). Returns "" for invalid input. */
+/** Format a date relative to now (e.g., "2h ago", "Mar 24"). Returns "" for invalid input.
+ *  Shared contract — keep byte-identical with dashboard/src/lib/format.ts and
+ *  mobile/src/utils/dateFormatting.ts: "just now" / "Nm ago" / "Nh ago" / "Nd ago" (<7d), then "Mon D". */
 export function formatRelativeDate(date: string | Date): string {
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return "";
