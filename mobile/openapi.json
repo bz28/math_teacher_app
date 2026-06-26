@@ -2129,6 +2129,17 @@
         "title": "ProblemSummary",
         "type": "object"
       },
+      "PublishGradesRequest": {
+        "properties": {
+          "reviewed_only": {
+            "default": false,
+            "title": "Reviewed Only",
+            "type": "boolean"
+          }
+        },
+        "title": "PublishGradesRequest",
+        "type": "object"
+      },
       "RefreshRequest": {
         "properties": {
           "refresh_token": {
@@ -3651,6 +3662,18 @@
             },
             "title": "Problems",
             "type": "array"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
           },
           "student_email": {
             "title": "Student Email",
@@ -10558,7 +10581,7 @@
     },
     "/v1/teacher/assignments/{assignment_id}/publish-grades": {
       "post": {
-        "description": "Publish (or republish) all graded submissions on this HW.\n\nTwo categories are picked up:\n  \u2022 fresh \u2014 graded but never published\n  \u2022 dirty \u2014 already published, but the live draft differs from\n            the published snapshot (content diff, so a grade\n            flipped back to its original value is not dirty)\n\nEither way, the live `final_score / breakdown / teacher_notes`\nare snapshotted into the `published_*` columns and\n`grade_published_at` is stamped. Ungraded submissions are skipped.",
+        "description": "Publish (or republish) all graded submissions on this HW.\n\nTwo categories are picked up:\n  \u2022 fresh \u2014 graded but never published\n  \u2022 dirty \u2014 already published, but the live draft differs from\n            the published snapshot (content diff, so a grade\n            flipped back to its original value is not dirty)\n\nEither way, the live `final_score / breakdown / teacher_notes`\nare snapshotted into the `published_*` columns and\n`grade_published_at` is stamped. Ungraded submissions are skipped.\n\nWhen `reviewed_only` is set, the eligible set is further narrowed to\ngrades the teacher has vetted (reviewed_at IS NOT NULL), so the\nAI-suggested grades they never opened stay unpublished.",
         "operationId": "publish_grades_v1_teacher_assignments__assignment_id__publish_grades_post",
         "parameters": [
           {
@@ -10572,6 +10595,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PublishGradesRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -14110,6 +14150,57 @@
           }
         ],
         "summary": "Grade Submission",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/submissions/{submission_id}/mark-reviewed": {
+      "post": {
+        "description": "Record the teacher's explicit review of an AI-suggested grade.\n\nThe fast path already auto-stamps `reviewed_at` whenever the teacher\nedits any problem score (see grade_submission \u2014 editing *is*\nreviewing). This endpoint covers the no-edit case: the teacher looked\nat the AI's suggestion, agrees, and wants to vouch for it without\nchanging a score. Sets reviewed_by/reviewed_at on the existing grade.\n\nRequires a grade to exist (final_score set) \u2014 there's nothing to\n\"review\" on an ungraded or skipped-unreadable submission, so we 400;\nthe teacher grades those by hand instead.",
+        "operationId": "mark_submission_reviewed_v1_teacher_submissions__submission_id__mark_reviewed_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Mark Submission Reviewed V1 Teacher Submissions  Submission Id  Mark Reviewed Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Mark Submission Reviewed",
         "tags": [
           "teacher"
         ]

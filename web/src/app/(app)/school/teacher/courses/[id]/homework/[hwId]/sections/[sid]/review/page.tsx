@@ -145,6 +145,16 @@ export default function HomeworkSectionReviewPage({
   const [pendingOtherSections, setPendingOtherSections] = useState(0);
   const [dirtyOtherSections, setDirtyOtherSections] = useState(0);
   const [gradedOtherSections, setGradedOtherSections] = useState(0);
+  // Reviewed (teacher-vetted) portions of the other-section pending /
+  // dirty counters above. Needed so the publish dialog can disclose how
+  // many of the to-release grades the teacher has actually checked, and
+  // so a "Publish only reviewed" run can decrement the cross-section
+  // counters by the right amount without a refetch.
+  const [pendingReviewedOtherSections, setPendingReviewedOtherSections] = useState(0);
+  const [dirtyReviewedOtherSections, setDirtyReviewedOtherSections] = useState(0);
+  // Submission currently being marked reviewed via the explicit no-edit
+  // affordance. Single slot — only one student is open at a time.
+  const [markingReviewedId, setMarkingReviewedId] = useState<string | null>(null);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -183,19 +193,28 @@ export default function HomeworkSectionReviewPage({
         let otherPending = 0;
         let otherDirty = 0;
         let otherGraded = 0;
+        let otherPendingReviewed = 0;
+        let otherDirtyReviewed = 0;
         for (const r of subs.submissions) {
           if (r.is_preview) continue;
           if (r.section_id === sectionId) {
             submissionByStudent.set(r.student_id, r);
           } else if (r.final_score !== null) {
             otherGraded += 1;
-            if (r.grade_published_at === null) otherPending += 1;
-            else if (r.grade_dirty) otherDirty += 1;
+            if (r.grade_published_at === null) {
+              otherPending += 1;
+              if (r.reviewed_at) otherPendingReviewed += 1;
+            } else if (r.grade_dirty) {
+              otherDirty += 1;
+              if (r.reviewed_at) otherDirtyReviewed += 1;
+            }
           }
         }
         setPendingOtherSections(otherPending);
         setDirtyOtherSections(otherDirty);
         setGradedOtherSections(otherGraded);
+        setPendingReviewedOtherSections(otherPendingReviewed);
+        setDirtyReviewedOtherSections(otherDirtyReviewed);
         const merged: RosterEntry[] = s.students
           .map((st) => ({
             student_id: st.id,
@@ -348,7 +367,10 @@ export default function HomeworkSectionReviewPage({
   const applyGradeToRoster = useCallback(
     (
       submissionId: string,
-      patch: Pick<TeacherSubmissionRow, "final_score" | "breakdown" | "grade_dirty">,
+      patch: Pick<
+        TeacherSubmissionRow,
+        "final_score" | "breakdown" | "grade_dirty" | "reviewed_at"
+      >,
     ) => {
       setRoster((prev) =>
         prev
@@ -383,10 +405,14 @@ export default function HomeworkSectionReviewPage({
           final_score: res.final_score,
           breakdown,
           grade_dirty: res.grade_dirty,
+          // Editing a grade *is* reviewing it — carry the server's
+          // reviewed_at back so the roster's trust marker flips to
+          // "Reviewed by you" immediately (null on an un-grade).
+          reviewed_at: res.reviewed_at,
         });
         setDetail((d) =>
           d && d.submission_id === submissionId
-            ? { ...d, grade_dirty: res.grade_dirty }
+            ? { ...d, grade_dirty: res.grade_dirty, reviewed_at: res.reviewed_at }
             : d,
         );
       } catch (e) {
@@ -464,75 +490,158 @@ export default function HomeworkSectionReviewPage({
   //   graded  = union of the above plus already-clean-published
   // In-section counts are live via roster; other-section counts are
   // snapshotted at fetch time.
-  const { pendingInSection, dirtyInSection, gradedInSection } = useMemo(() => {
+  const {
+    pendingInSection,
+    dirtyInSection,
+    gradedInSection,
+    reviewedToPublishInSection,
+  } = useMemo(() => {
     let pending = 0;
     let dirty = 0;
     let graded = 0;
+    let reviewedToPublish = 0;
     for (const e of roster ?? []) {
-      if (!e.submission || e.submission.final_score === null) continue;
+      const s = e.submission;
+      if (!s || s.final_score === null) continue;
       graded += 1;
-      if (e.submission.grade_published_at === null) pending += 1;
-      else if (e.submission.grade_dirty) dirty += 1;
+      const isPending = s.grade_published_at === null;
+      const isDirty = !isPending && s.grade_dirty;
+      if (isPending) pending += 1;
+      else if (isDirty) dirty += 1;
+      // A grade is "to publish" if pending or dirty; count the vetted
+      // ones so the dialog can split reviewed vs unopened.
+      if ((isPending || isDirty) && s.reviewed_at) reviewedToPublish += 1;
     }
     return {
       pendingInSection: pending,
       dirtyInSection: dirty,
       gradedInSection: graded,
+      reviewedToPublishInSection: reviewedToPublish,
     };
   }, [roster]);
   const pendingTotal = pendingInSection + pendingOtherSections;
   const dirtyTotal = dirtyInSection + dirtyOtherSections;
   const gradedTotal = gradedInSection + gradedOtherSections;
+  // Reviewed vs unopened split of the full to-release set (HW-wide).
+  const toReleaseTotal = pendingTotal + dirtyTotal;
+  const reviewedToPublishTotal =
+    reviewedToPublishInSection +
+    pendingReviewedOtherSections +
+    dirtyReviewedOtherSections;
+  const unreviewedToPublishTotal = toReleaseTotal - reviewedToPublishTotal;
 
   // Publish every pending-or-dirty submission on the HW. Backend is
   // idempotent. On success we mirror the publish timestamp onto every
   // local roster entry that was in either bucket and flip grade_dirty
   // to false. Cross-section counters zero out; other sections refresh
   // on next open — acceptable for a one-shot action.
-  const handlePublish = useCallback(async () => {
-    setPublishing(true);
-    setPublishError(null);
-    try {
-      await teacher.publishGrades(assignmentId);
-      const nowIso = new Date().toISOString();
-      setRoster((prev) =>
-        prev
-          ? prev.map((e) => {
-              const s = e.submission;
-              if (!s || s.final_score === null) return e;
-              const wasPending = s.grade_published_at === null;
-              const wasDirty = !!s.grade_dirty;
-              if (!wasPending && !wasDirty) return e;
-              return {
-                ...e,
-                submission: {
-                  ...s,
-                  grade_published_at: nowIso,
-                  grade_dirty: false,
-                },
-              };
-            })
-          : prev,
+  //
+  // `reviewedOnly` narrows the action to grades the teacher has vetted
+  // (reviewed_at set) — the "publish what I've checked" path. The
+  // optimistic update is scoped the same way: only reviewed rows flip,
+  // and the cross-section counters drop by their reviewed portions
+  // rather than zeroing.
+  const handlePublish = useCallback(
+    async (reviewedOnly = false) => {
+      setPublishing(true);
+      setPublishError(null);
+      try {
+        await teacher.publishGrades(assignmentId, reviewedOnly);
+        const nowIso = new Date().toISOString();
+        setRoster((prev) =>
+          prev
+            ? prev.map((e) => {
+                const s = e.submission;
+                if (!s || s.final_score === null) return e;
+                const wasPending = s.grade_published_at === null;
+                const wasDirty = !!s.grade_dirty;
+                if (!wasPending && !wasDirty) return e;
+                // Reviewed-only run leaves unvetted grades unpublished.
+                if (reviewedOnly && !s.reviewed_at) return e;
+                return {
+                  ...e,
+                  submission: {
+                    ...s,
+                    grade_published_at: nowIso,
+                    grade_dirty: false,
+                  },
+                };
+              })
+            : prev,
+        );
+        if (reviewedOnly) {
+          setPendingOtherSections((n) => n - pendingReviewedOtherSections);
+          setDirtyOtherSections((n) => n - dirtyReviewedOtherSections);
+          setPendingReviewedOtherSections(0);
+          setDirtyReviewedOtherSections(0);
+        } else {
+          setPendingOtherSections(0);
+          setDirtyOtherSections(0);
+          setPendingReviewedOtherSections(0);
+          setDirtyReviewedOtherSections(0);
+        }
+        // If the open student's grade was part of the publish, clear
+        // the local dirty flag on detail too so the strip updates
+        // without a refetch.
+        setDetail((d) => {
+          if (!d) return d;
+          const wasToPublish = d.grade_published_at === null || d.grade_dirty;
+          if (!wasToPublish) return d;
+          if (reviewedOnly && !d.reviewed_at) return d;
+          return { ...d, grade_published_at: nowIso, grade_dirty: false };
+        });
+        setPublishConfirmOpen(false);
+      } catch (e) {
+        setPublishError(
+          e instanceof Error ? e.message : "Failed to publish grades",
+        );
+      } finally {
+        setPublishing(false);
+      }
+    },
+    [assignmentId, pendingReviewedOtherSections, dirtyReviewedOtherSections],
+  );
+
+  // Explicit "I looked, I agree" review for the no-edit case (editing a
+  // score already auto-stamps review server-side). Mirrors reviewed_at
+  // onto the roster row + open detail so the markers flip without a
+  // refetch. Errors surface on the saveError channel (scoped by id).
+  const handleMarkReviewed = useCallback(
+    async (submissionId: string) => {
+      setMarkingReviewedId(submissionId);
+      setSaveError((prev) =>
+        prev?.forSubmissionId === submissionId ? null : prev,
       );
-      setPendingOtherSections(0);
-      setDirtyOtherSections(0);
-      // If the open student's grade was part of the publish, clear
-      // the local dirty flag on detail too so the strip updates
-      // without a refetch.
-      setDetail((d) =>
-        d && (d.grade_published_at === null || d.grade_dirty)
-          ? { ...d, grade_published_at: nowIso, grade_dirty: false }
-          : d,
-      );
-      setPublishConfirmOpen(false);
-    } catch (e) {
-      setPublishError(
-        e instanceof Error ? e.message : "Failed to publish grades",
-      );
-    } finally {
-      setPublishing(false);
-    }
-  }, [assignmentId]);
+      try {
+        const res = await teacher.markReviewed(submissionId);
+        setRoster((prev) =>
+          prev
+            ? prev.map((e) =>
+                e.submission?.id === submissionId
+                  ? {
+                      ...e,
+                      submission: { ...e.submission, reviewed_at: res.reviewed_at },
+                    }
+                  : e,
+              )
+            : prev,
+        );
+        setDetail((d) =>
+          d && d.submission_id === submissionId
+            ? { ...d, reviewed_at: res.reviewed_at }
+            : d,
+        );
+      } catch (e) {
+        setSaveError({
+          forSubmissionId: submissionId,
+          message: e instanceof Error ? e.message : "Failed to mark reviewed",
+        });
+      } finally {
+        setMarkingReviewedId(null);
+      }
+    },
+    [],
+  );
 
   // Re-run AI grading with the assignment's current rubric. Overrides
   // any manual edits (this is the teacher's explicit ask) and leaves
@@ -736,6 +845,10 @@ export default function HomeworkSectionReviewPage({
                 }}
                 onGradeProblem={setProblemGrade}
                 onFeedbackChange={setProblemFeedback}
+                onMarkReviewed={() =>
+                  void handleMarkReviewed(selectedEntry.submission!.id)
+                }
+                marking={markingReviewedId === selectedEntry.submission.id}
                 regrading={regradingSubmissionId === selectedEntry.submission.id}
                 regradeError={
                   regradeError?.forSubmissionId === selectedEntry.submission.id
@@ -763,6 +876,8 @@ export default function HomeworkSectionReviewPage({
         pendingOtherSections={pendingOtherSections}
         dirtyInSection={dirtyInSection}
         dirtyOtherSections={dirtyOtherSections}
+        reviewedToPublish={reviewedToPublishTotal}
+        unreviewedToPublish={unreviewedToPublishTotal}
         publishing={publishing}
         error={publishError}
         onConfirm={handlePublish}
@@ -863,6 +978,8 @@ function PublishConfirmDialog({
   pendingOtherSections,
   dirtyInSection,
   dirtyOtherSections,
+  reviewedToPublish,
+  unreviewedToPublish,
   publishing,
   error,
   onConfirm,
@@ -873,9 +990,14 @@ function PublishConfirmDialog({
   pendingOtherSections: number;
   dirtyInSection: number;
   dirtyOtherSections: number;
+  /** How many of the to-release grades the teacher has vetted vs left
+   *  as unopened AI suggestions. Sum === total. Drives the trust
+   *  disclosure + whether "Publish only reviewed" is offered. */
+  reviewedToPublish: number;
+  unreviewedToPublish: number;
   publishing: boolean;
   error: string | null;
-  onConfirm: () => void;
+  onConfirm: (reviewedOnly?: boolean) => void;
 }) {
   const pendingTotal = pendingInSection + pendingOtherSections;
   const dirtyTotal = dirtyInSection + dirtyOtherSections;
@@ -889,12 +1011,29 @@ function PublishConfirmDialog({
       : dirtyTotal === 0
         ? "Students will see their scores immediately. Ungraded submissions aren\u2019t affected."
         : "Students will see the new and updated scores immediately. Ungraded submissions aren\u2019t affected.";
+  // Offer the safer path only when there's a meaningful split \u2014 some
+  // reviewed AND some unopened. If everything's reviewed there's
+  // nothing to hold back; if nothing's reviewed, "only reviewed" would
+  // publish zero, so we don't show it.
+  const offerReviewedOnly = reviewedToPublish > 0 && unreviewedToPublish > 0;
   return (
     <Modal open={open} onClose={onClose} dismissible={!publishing}>
       <h2 className="text-lg font-bold text-text-primary">
         {verb} {total} {total === 1 ? "grade" : "grades"}?
       </h2>
       <p className="mt-2 text-sm text-text-secondary">{body}</p>
+      {/* Trust disclosure \u2014 make the review state of the batch legible
+       *  so fast-accept is an informed choice, not a blind one. */}
+      {unreviewedToPublish > 0 && (
+        <p className="mt-3 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-3 py-2 text-xs text-[color:var(--color-warning-dark)]  dark:bg-[color:var(--color-warning)]/10 ">
+          <span className="font-semibold">{total}</span>{" "}
+          {total === 1 ? "grade" : "grades"} \u2014{" "}
+          <span className="font-semibold">{reviewedToPublish}</span>{" "}
+          you&rsquo;ve reviewed,{" "}
+          <span className="font-semibold">{unreviewedToPublish}</span>{" "}
+          AI-suggested you haven&rsquo;t opened.
+        </p>
+      )}
       {dirtyTotal > 0 && pendingTotal > 0 && (
         <p className="mt-3 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-3 py-2 text-xs text-[color:var(--color-warning-dark)]  dark:bg-[color:var(--color-warning)]/10 ">
           <span className="font-semibold">{dirtyTotal}</span>{" "}
@@ -913,7 +1052,7 @@ function PublishConfirmDialog({
           {error}
         </p>
       )}
-      <div className="mt-5 flex justify-end gap-2">
+      <div className="mt-5 flex flex-wrap justify-end gap-2">
         <button
           type="button"
           onClick={onClose}
@@ -922,13 +1061,27 @@ function PublishConfirmDialog({
         >
           Cancel
         </button>
+        {offerReviewedOnly && (
+          <button
+            type="button"
+            onClick={() => onConfirm(true)}
+            disabled={publishing}
+            className="rounded-[--radius-md] border border-primary/40 bg-primary-bg px-4 py-2 text-xs font-bold text-primary transition-colors hover:border-primary/70 hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Publish only reviewed ({reviewedToPublish})
+          </button>
+        )}
         <button
           type="button"
-          onClick={onConfirm}
+          onClick={() => onConfirm(false)}
           disabled={publishing}
           className="rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {publishing ? "Publishing\u2026" : `${verb} grades`}
+          {publishing
+            ? "Publishing\u2026"
+            : offerReviewedOnly
+              ? "Publish all"
+              : `${verb} grades`}
         </button>
       </div>
     </Modal>
@@ -1271,6 +1424,7 @@ function StudentRow({
 }) {
   const sub = entry.submission;
   const statusLabel = rowStatusLabel(entry);
+  const review = sub ? reviewMarker(sub) : null;
   const mutedName = sub === null;
   const overview = sub?.integrity_overview ?? null;
   const showsDispositionPill =
@@ -1325,6 +1479,21 @@ function StudentRow({
           </span>
         )}
       </div>
+      {/* Review-trust marker — separates a grade the teacher vouched for
+       * from an unopened AI suggestion. Its own line so it reads as a
+       * distinct dimension from the publish-state status above. */}
+      {review && (
+        <div
+          className={`flex min-w-0 items-center gap-1 text-[10px] font-semibold ${
+            review.tone === "reviewed"
+              ? "text-[color:var(--color-success)]"
+              : "text-text-muted"
+          }`}
+        >
+          <span aria-hidden>{review.tone === "reviewed" ? "✓" : "🤖"}</span>
+          <span className="truncate">{review.text}</span>
+        </div>
+      )}
       {/* Disposition + activity pills on their own row, right-aligned.
        * The 280px-wide side panel can fit them together in the common
        * case ("Review" + "Activity: N notable moments"); rare wide
@@ -1354,6 +1523,18 @@ function rowStatusLabel(entry: RosterEntry): {
   if (!sub) {
     return { text: "Not submitted", dotClass: "bg-gray-300" };
   }
+  // Unreadable photo never got an AI grade — call it out distinctly so
+  // the teacher knows this row needs a manual pass (or a resubmit),
+  // not just an unopened suggestion. Warning dot, reusing the same
+  // amber token the dirty/ungraded states use. Surfaces even after a
+  // manual grade exists isn't a concern: once graded, the published /
+  // graded branches above take over.
+  if (sub.ai_grading_status === "skipped_unreadable" && sub.final_score === null) {
+    return {
+      text: "Couldn't read · grade manually",
+      dotClass: "bg-[color:var(--color-warning)]",
+    };
+  }
   if (sub.grade_published_at) {
     if (sub.grade_dirty) {
       return { text: "Edited · not yet sent", dotClass: "bg-[color:var(--color-warning)]" };
@@ -1364,6 +1545,19 @@ function rowStatusLabel(entry: RosterEntry): {
     return { text: "Graded, not published", dotClass: "bg-[color:var(--color-warning)]" };
   }
   return { text: "Needs review", dotClass: "bg-gray-400" };
+}
+
+// Per-student review-trust marker for the roster: distinguishes a grade
+// the teacher has vouched for from one the AI suggested but the teacher
+// never opened. Returns null when there's nothing to review yet (no
+// grade — ungraded / skipped-unreadable, where the status label already
+// tells the story).
+function reviewMarker(
+  sub: TeacherSubmissionRow,
+): { text: string; tone: "reviewed" | "unreviewed" } | null {
+  if (sub.final_score === null) return null;
+  if (sub.reviewed_at) return { text: "Reviewed by you", tone: "reviewed" };
+  return { text: "AI-suggested · unopened", tone: "unreviewed" };
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -1386,6 +1580,8 @@ function SubmissionDetailPanel({
   onSelectNext,
   onGradeProblem,
   onFeedbackChange,
+  onMarkReviewed,
+  marking,
   regrading,
   regradeError,
   onRegradeRequest,
@@ -1401,6 +1597,8 @@ function SubmissionDetailPanel({
   onSelectNext: () => void;
   onGradeProblem: (problemId: string, status: GradeStatus, partialPercent?: number) => void;
   onFeedbackChange: (problemId: string, text: string) => void;
+  onMarkReviewed: () => void;
+  marking: boolean;
   regrading: boolean;
   regradeError: string | null;
   onRegradeRequest: () => void;
@@ -1420,6 +1618,15 @@ function SubmissionDetailPanel({
   const gradedCount = breakdownByProblem.size;
   const totalProblems = detail.problems.length;
   const published = !!row?.grade_published_at;
+  // Unreadable photo, not yet hand-graded — surface the callout that
+  // explains why there's no AI suggestion. Drops away once the teacher
+  // has put a grade on it (final_score set).
+  const skippedUnreadable =
+    detail.ai_grading_status === "skipped_unreadable" &&
+    detail.final_score === null;
+  // A grade exists but the teacher hasn't vouched for it — offer the
+  // explicit "Mark reviewed" affordance (the no-edit accept path).
+  const canMarkReviewed = detail.final_score !== null && !detail.reviewed_at;
 
   return (
     <div className="space-y-4">
@@ -1500,6 +1707,27 @@ function SubmissionDetailPanel({
           {detail.files && detail.files.length > 0 && (
             <StudentWorkThumbButton files={detail.files} />
           )}
+          {/* Explicit "I looked, I agree" review for the no-edit case
+              (editing any score auto-stamps review on its own). Only
+              shown while a grade exists but is still unvetted; flips to
+              a static "Reviewed by you" badge once stamped. */}
+          {canMarkReviewed && (
+            <button
+              type="button"
+              onClick={onMarkReviewed}
+              disabled={marking}
+              title="Vouch for the AI-suggested grade without changing it"
+              className="rounded-[--radius-md] border border-border-light bg-surface px-3.5 py-1.5 text-xs font-bold text-text-secondary transition-colors hover:border-primary/40 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {marking ? "Marking…" : "Mark reviewed"}
+            </button>
+          )}
+          {detail.reviewed_at && (
+            <span className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-[color:var(--color-success)]/30 bg-[color:var(--color-success)]/10 px-2.5 py-1 text-[11px] font-bold text-[color:var(--color-success)]">
+              <span aria-hidden>✓</span>
+              Reviewed by you
+            </span>
+          )}
           <button
             type="button"
             onClick={onSelectNext}
@@ -1530,6 +1758,35 @@ function SubmissionDetailPanel({
         error={regradeError}
         onRegrade={onRegradeRequest}
       />
+
+      {/* Unreadable callout — when the photo was too low-confidence to
+          auto-grade, the AI suggestion is silently absent and the
+          per-problem pickers below sit empty. Explain why, and put the
+          student's work one click away, so the empty state reads as
+          "grade this by hand" not "something's broken". Manual grading
+          stays fully enabled below. */}
+      {skippedUnreadable && (
+        <div className="rounded-[--radius-xl] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] p-4  dark:bg-[color:var(--color-warning)]/10">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="flex items-center gap-1.5 text-sm font-bold text-[color:var(--color-warning-dark)] ">
+                <span aria-hidden>⚠</span>
+                Couldn&rsquo;t read this submission
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-[color:var(--color-warning-dark)]/80 /80">
+                The AI couldn&rsquo;t read this submission clearly, so it
+                wasn&rsquo;t auto-graded. Open the student&rsquo;s work to grade
+                it by hand, or ask them to resubmit a clearer photo.
+              </p>
+            </div>
+            {detail.files && detail.files.length > 0 && (
+              <div className="shrink-0">
+                <StudentWorkThumbButton files={detail.files} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Per-problem grading — the main scan-unit. The student-work
           lightbox lives in the page header (one click away from any
