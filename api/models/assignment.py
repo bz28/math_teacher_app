@@ -217,3 +217,12 @@ class SubmissionGrade(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Non-score grading disposition. Null on the normal path (a real grade
+    # lives on breakdown/final_score). Set to "skipped_unreadable" when the
+    # extraction confidence was below the unreadable threshold and AI
+    # grading was deliberately skipped — there was no trustworthy work to
+    # grade, so we record the reason instead of fabricating a score. Mirrors
+    # the integrity pipeline's skipped_unreadable disposition. The teacher
+    # review surfaces it as "couldn't read this — needs manual grading"; the
+    # teacher can still grade by hand (breakdown/final_score stay null).
+    ai_grading_status: Mapped[str | None] = mapped_column(Text, nullable=True)

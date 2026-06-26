@@ -4,6 +4,7 @@ import asyncio
 import logging
 from typing import Any
 
+from api.core.constants import SOLUTION_FAILED_SENTINEL
 from api.core.document_vision import build_vision_content
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import GENERATE_QUESTIONS_SCHEMA
@@ -340,7 +341,7 @@ async def generate_solutions(
             return {
                 "question_text": q["text"],
                 "steps": [],
-                "final_answer": "(solution failed — please solve manually)",
+                "final_answer": SOLUTION_FAILED_SENTINEL,
             }
 
     # Solve in parallel (max 5 concurrent to avoid rate limits)

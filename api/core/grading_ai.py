@@ -32,6 +32,11 @@ from api.services.bank import load_problems_for_assignment
 
 logger = logging.getLogger(__name__)
 
+# Non-score grading disposition stamped on SubmissionGrade.ai_grading_status
+# when the extraction was too low-confidence to grade. Parallel to the
+# integrity pipeline's STATUS_SKIPPED_UNREADABLE.
+GRADING_STATUS_SKIPPED_UNREADABLE = "skipped_unreadable"
+
 _GRADING_SYSTEM = """\
 You are a world-class math professor grading a student's homework submission. \
 You have the student's extracted work — already converted to text and \
@@ -509,6 +514,10 @@ async def run_ai_grading_for_submission(
         grade.breakdown = breakdown
         grade.final_score = ai_score
         grade.graded_at = datetime.now(UTC)
+        # A real grade now exists — clear any stale "couldn't read it"
+        # marker (e.g. a teacher-forced regrade of a previously
+        # skipped-unreadable submission).
+        grade.ai_grading_status = None
         if force:
             # Regrade wipes the manual-review marker so the row once
             # again reflects "last touched by AI." If the grade was
@@ -517,3 +526,38 @@ async def run_ai_grading_for_submission(
             # republishes when ready.
             grade.reviewed_by = None
             grade.reviewed_at = None
+
+
+async def record_unreadable_grading_skip(
+    submission_id: uuid.UUID,
+    db: AsyncSession,
+) -> None:
+    """Stamp 'couldn't read the photo' instead of auto-grading.
+
+    Called from the shared background path when the extraction confidence
+    is below the unreadable threshold. There's no trustworthy work to grade,
+    so we DON'T fabricate a score — we record the reason on
+    `ai_grading_status` so the teacher review surfaces "couldn't read this —
+    needs manual grading", leaving breakdown/final_score null so the teacher
+    can still grade by hand. Mirrors the integrity pipeline's
+    skipped_unreadable disposition.
+
+    Idempotent + non-clobbering: upserts the grade row, but only sets the
+    status when the submission isn't already graded (final_score set) or
+    teacher-reviewed — so a manual grade entered before this runs wins.
+    """
+    await db.execute(
+        pg_insert(SubmissionGrade)
+        .values(
+            submission_id=submission_id,
+            ai_grading_status=GRADING_STATUS_SKIPPED_UNREADABLE,
+        )
+        .on_conflict_do_nothing(index_elements=["submission_id"])
+    )
+    grade = (await db.execute(
+        select(SubmissionGrade).where(
+            SubmissionGrade.submission_id == submission_id,
+        )
+    )).scalar_one()
+    if grade.final_score is None and grade.reviewed_by is None:
+        grade.ai_grading_status = GRADING_STATUS_SKIPPED_UNREADABLE

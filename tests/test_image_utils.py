@@ -1,11 +1,15 @@
 """Unit tests for image_utils — validators + Anthropic content-block builder."""
 
 import base64
+import io
 
 import pytest
+from PIL import Image
 
 from api.core.constants import MAX_IMAGE_BYTES, MAX_PDF_BYTES
 from api.core.image_utils import (
+    VISION_MAX_EDGE,
+    preprocess_image_for_vision,
     to_content_block,
     validate_and_decode_image,
     validate_and_decode_upload,
@@ -137,3 +141,74 @@ class TestToContentBlock:
     def test_unknown_media_type_raises(self) -> None:
         with pytest.raises(ValueError, match="Unsupported media type"):
             to_content_block("application/octet-stream", "AAAA")
+
+
+# ── preprocess_image_for_vision (EXIF orientation + downscale) ────────
+
+
+def _encode(img: Image.Image, fmt: str, **save: object) -> str:
+    buf = io.BytesIO()
+    img.save(buf, format=fmt, **save)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def _decode_size(b64: str) -> tuple[int, int]:
+    raw = base64.b64decode(b64)
+    with Image.open(io.BytesIO(raw)) as img:
+        return img.size
+
+
+class TestPreprocessImageForVision:
+    def test_exif_orientation_baked_in(self) -> None:
+        # A wide 24x12 JPEG tagged orientation=6 ("rotate 90° CW") should
+        # come back with its pixels physically rotated — dimensions swap
+        # to 12x24. This is the load-bearing assertion that
+        # exif_transpose actually ran.
+        img = Image.new("RGB", (24, 12), "white")
+        exif = img.getexif()
+        exif[0x0112] = 6  # Orientation tag → rotate 90° CW on display
+        tagged = _encode(img, "JPEG", exif=exif)
+
+        # Sanity: the raw tagged image still reads as 24x12 before transpose.
+        assert _decode_size(tagged) == (24, 12)
+
+        out = preprocess_image_for_vision(tagged, "image/jpeg")
+        assert _decode_size(out) == (12, 24)
+
+    def test_no_exif_is_unrotated(self) -> None:
+        # An image with no orientation tag keeps its dimensions.
+        img = Image.new("RGB", (40, 20), "white")
+        b64 = _encode(img, "JPEG")
+        out = preprocess_image_for_vision(b64, "image/jpeg")
+        assert _decode_size(out) == (40, 20)
+
+    def test_downscales_long_edge(self) -> None:
+        # An oversize image is shrunk so its long edge == VISION_MAX_EDGE,
+        # preserving aspect ratio.
+        img = Image.new("RGB", (VISION_MAX_EDGE * 2, VISION_MAX_EDGE), "white")
+        b64 = _encode(img, "PNG")
+        out = preprocess_image_for_vision(b64, "image/png")
+        w, h = _decode_size(out)
+        assert max(w, h) == VISION_MAX_EDGE
+        assert (w, h) == (VISION_MAX_EDGE, VISION_MAX_EDGE // 2)
+
+    def test_small_image_not_upscaled(self) -> None:
+        img = Image.new("RGB", (100, 50), "white")
+        b64 = _encode(img, "PNG")
+        out = preprocess_image_for_vision(b64, "image/png")
+        assert _decode_size(out) == (100, 50)
+
+    def test_pdf_passthrough_unchanged(self) -> None:
+        # Non-image media types must NOT be routed through Pillow — the
+        # document path stays byte-for-byte identical.
+        pdf_b64 = base64.b64encode(b"%PDF-1.4\nstuff").decode("ascii")
+        assert (
+            preprocess_image_for_vision(pdf_b64, "application/pdf") == pdf_b64
+        )
+
+    def test_undecodable_input_returned_untouched(self) -> None:
+        # A claimed image that isn't actually decodable falls back to the
+        # original base64 rather than raising — a quirky-but-valid image
+        # still reaches the model.
+        junk = base64.b64encode(b"not really a jpeg").decode("ascii")
+        assert preprocess_image_for_vision(junk, "image/jpeg") == junk

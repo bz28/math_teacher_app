@@ -1295,6 +1295,10 @@ async def list_submissions(
             "teacher_notes": grade.teacher_notes if grade else None,
             "final_score": grade.final_score if grade else None,
             "breakdown": grade.breakdown if grade else None,
+            # Non-score grading disposition. "skipped_unreadable" means
+            # the photo was too low-confidence to auto-grade — teacher
+            # grades manually. Null on the normal path.
+            "ai_grading_status": grade.ai_grading_status if grade else None,
             # Frozen rubric the AI grader applied for this submission.
             # Frontend compares against the assignment's live rubric to
             # decide whether to surface the regrade CTA.
@@ -1783,6 +1787,10 @@ class TeacherSubmissionDetail(BaseModel):
     # edited the grade since. The live breakdown/final_score above are
     # the draft; students still see the published_* snapshot.
     grade_dirty: bool
+    # Non-score grading disposition. "skipped_unreadable" means the photo
+    # was too low-confidence to auto-grade and the teacher must grade
+    # manually. Null on the normal path (a real grade lives on breakdown).
+    ai_grading_status: str | None = None
 
 
 @router.get("/submissions/{submission_id}")
@@ -1963,6 +1971,7 @@ async def get_submission_detail(
         teacher_notes=grade.teacher_notes if grade else None,
         grade_published_at=grade.grade_published_at if grade else None,
         grade_dirty=_is_grade_dirty(grade),
+        ai_grading_status=grade.ai_grading_status if grade else None,
     )
 
 

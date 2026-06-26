@@ -4433,6 +4433,8 @@ export interface components {
             ai_breakdown: {
                 [key: string]: unknown;
             }[] | null;
+            /** Ai Grading Status */
+            ai_grading_status?: string | null;
             /** Assignment Id */
             assignment_id: string;
             /** Assignment Title */
