@@ -5,27 +5,14 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
+# Import the models package so EVERY table registers on Base.metadata.
+# api.models.__init__ imports all model modules, so this can't drift out
+# of sync (which would make `alembic revision --autogenerate` emit
+# DROP TABLE for any model absent from target_metadata). Do NOT replace
+# this with a hand-maintained subset.
+import api.models  # noqa: F401
 from api.config import settings
 from api.database import Base
-
-# Import all models here so Alembic can detect them
-from api.models import (  # noqa: F401
-    app_stat,
-    assignment,
-    contact_lead,
-    course,
-    llm_call,
-    quality_score,
-    school,
-    section,
-    section_enrollment,
-    session,
-    teacher_invite,
-    unit,
-    user,
-    visibility,
-    work_submission,
-)
 
 config = context.config
 if config.config_file_name is not None:
