@@ -151,9 +151,11 @@ class IntegrityCheckProblem(Base):
     sample_position: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # status: pending / verdict_submitted / dismissed / skipped_unreadable
-    # / diagnosis_only. `diagnosis_only` rows carry a silent per-wrong-
-    # problem misconception note for the teacher but are NOT part of the
-    # chat agent's loop (no rubric, no chat verdict expected).
+    # / diagnosis_only / cap_reached. `diagnosis_only` rows carry a silent
+    # per-wrong-problem misconception note for the teacher but are NOT part
+    # of the chat agent's loop (no rubric, no chat verdict expected).
+    # `cap_reached` marks a pending problem the hard turn cap killed before
+    # a verdict landed — terminal-but-inconclusive, rubric stays null.
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     student_work_extraction: Mapped[dict[str, Any] | None] = mapped_column(
         JSON, nullable=True,
