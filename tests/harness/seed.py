@@ -11,10 +11,13 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from sqlalchemy import select
+
 from api.core.auth import create_access_token, create_refresh_token, hash_password
 from api.database import get_session_factory
 from api.models.assignment import Assignment, AssignmentSection
 from api.models.course import Course, CourseTeacher
+from api.models.question_bank import FORMAT_MCQ, QuestionBankItem
 from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
@@ -118,3 +121,175 @@ async def seed_world() -> Seed:
             admin_token=create_access_token(str(admin.id), "admin"),
             admin_refresh=admin_refresh,
         )
+
+
+@dataclass
+class RichSeed(Seed):
+    """A `Seed` plus a published PRACTICE assignment whose approved bank
+    items give the school student practice + learn surfaces real content
+    to render. `practice_assignment_id` is the id the school-student
+    practice/learn URLs key off."""
+
+    practice_assignment_id: str = ""
+
+
+# A self-contained right-triangle SVG so the seeded geometry problem +
+# one of its solution steps render a real figure (FigureDisplay embeds
+# this string after DOMPurify). Kept tiny + inline so seeding needs no
+# geometry renderer / LLM call.
+_TRIANGLE_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 140" '
+    'width="200" height="140" role="img">'
+    '<polygon points="30,110 170,110 30,20" fill="none" '
+    'stroke="#0f766e" stroke-width="2"/>'
+    '<rect x="30" y="92" width="18" height="18" fill="none" '
+    'stroke="#0f766e" stroke-width="1.5"/>'
+    '<text x="95" y="128" font-size="13" text-anchor="middle" '
+    'fill="#334155">b = 14</text>'
+    '<text x="14" y="68" font-size="13" text-anchor="middle" '
+    'fill="#334155">a = 9</text>'
+    '</svg>'
+)
+
+# Minimal 3-4 item practice bank. Each item is an approved MCQ with a
+# correct final_answer, 3 distractors, and teacher-style solution_steps
+# (the shape the LearnPanel reads: {title, description, figure_svg?}).
+_PRACTICE_ITEMS: list[dict[str, object]] = [
+    {
+        "title": "Right-triangle area",
+        "question": "A right triangle has legs of length $9$ and $14$. "
+                    "What is its area?",
+        "final_answer": "63",
+        "distractors": ["126", "23", "112"],
+        "figure_svg": _TRIANGLE_SVG,
+        "solution_steps": [
+            {"title": "Recall the formula",
+             "description": "The area of a triangle is "
+                            "$A = \\tfrac{1}{2}\\,b\\,h$."},
+            {"title": "Use the legs as base and height",
+             "description": "For a right triangle the two legs are "
+                            "perpendicular, so $b = 14$ and $h = 9$.",
+             "figure_svg": _TRIANGLE_SVG},
+            {"title": "Compute",
+             "description": "$A = \\tfrac{1}{2}\\times 14\\times 9 = 63$."},
+        ],
+    },
+    {
+        "title": "Solve a linear equation",
+        "question": "Solve for $x$: $3x + 5 = 20$.",
+        "final_answer": "5",
+        "distractors": ["15", "25/3", "-5"],
+        "figure_svg": None,
+        "solution_steps": [
+            {"title": "Isolate the term",
+             "description": "Subtract $5$ from both sides: $3x = 15$."},
+            {"title": "Divide",
+             "description": "Divide both sides by $3$: $x = 5$."},
+        ],
+    },
+    {
+        "title": "Pythagorean hypotenuse",
+        "question": "A right triangle has legs $6$ and $8$. "
+                    "How long is the hypotenuse?",
+        "final_answer": "10",
+        "distractors": ["14", "48", "\\sqrt{28}"],
+        "figure_svg": None,
+        "solution_steps": [
+            {"title": "Apply the theorem",
+             "description": "$c^2 = a^2 + b^2 = 6^2 + 8^2 = 100$."},
+            {"title": "Take the root",
+             "description": "$c = \\sqrt{100} = 10$."},
+        ],
+    },
+    {
+        "title": "Percent of a number",
+        "question": "What is $25\\%$ of $80$?",
+        "final_answer": "20",
+        "distractors": ["25", "55", "320"],
+        "figure_svg": None,
+        "solution_steps": [
+            {"title": "Convert the percent",
+             "description": "$25\\% = 0.25$."},
+            {"title": "Multiply",
+             "description": "$0.25 \\times 80 = 20$."},
+        ],
+    },
+]
+
+
+async def seed_world_rich() -> RichSeed:
+    """`seed_world()` plus a published practice set with real bank items.
+
+    Reuses the base world (school/teacher/student/course/section/HW +
+    tokens), then attaches a `type="practice"` assignment published to
+    the student's section and 4 approved `QuestionBankItem`s pointed at
+    it via `originating_assignment_id` — exactly the shape
+    `GET /school/student/practice/{id}` reads. This gives the school
+    practice + learn surfaces content to render for screenshots.
+    """
+    base = await seed_world()
+    course_id = uuid.UUID(base.course_id)
+    unit_id = uuid.UUID(base.unit_id)
+    teacher_id = uuid.UUID(base.teacher_id)
+    student_id = uuid.UUID(base.student_id)
+
+    async with get_session_factory()() as s:
+        # The base seed leaves the student school-less (an individual
+        # learner). The school-student surfaces (/school/student/*) only
+        # render when `user.school_id` is set — otherwise app-layout
+        # falls back to the individual-learner shell. Link the student to
+        # the course's school so the practice/dashboard routes resolve.
+        school_id = (await s.execute(
+            select(Course.school_id).where(Course.id == course_id)
+        )).scalar_one()
+        student = (await s.execute(
+            select(User).where(User.id == student_id)
+        )).scalar_one()
+        student.school_id = school_id
+
+        # The student's section in this course — the practice set is
+        # published to it so the enrollment gate in practice_detail passes.
+        section_id = (await s.execute(
+            select(SectionEnrollment.section_id).where(
+                SectionEnrollment.student_id == student_id,
+                SectionEnrollment.course_id == course_id,
+            ).limit(1)
+        )).scalar_one()
+
+        practice = Assignment(
+            course_id=course_id, unit_ids=[unit_id], teacher_id=teacher_id,
+            title="Geometry Practice", type="practice", status="published",
+            content={"problems": []},
+            # Mark it as cloned from the seeded HW so the "Cloned from …"
+            # provenance line renders on the practice detail page.
+            source_homework_id=uuid.UUID(base.assignment_id),
+        )
+        s.add(practice)
+        await s.flush()
+        s.add(AssignmentSection(
+            assignment_id=practice.id, section_id=section_id,
+            published_at=datetime.now(UTC),
+        ))
+
+        for spec in _PRACTICE_ITEMS:
+            s.add(QuestionBankItem(
+                course_id=course_id, unit_id=unit_id,
+                originating_assignment_id=practice.id,
+                title=str(spec["title"]),
+                question=str(spec["question"]),
+                final_answer=str(spec["final_answer"]),
+                distractors=spec["distractors"],
+                solution_steps=spec["solution_steps"],
+                figure_svg=spec["figure_svg"],
+                difficulty="medium",
+                format=FORMAT_MCQ,
+                status="approved",
+                created_by_id=teacher_id,
+            ))
+        await s.commit()
+        practice_id = str(practice.id)
+
+    return RichSeed(
+        **{k: getattr(base, k) for k in base.__dataclass_fields__},
+        practice_assignment_id=practice_id,
+    )
