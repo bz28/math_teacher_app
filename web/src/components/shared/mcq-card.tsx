@@ -1,8 +1,8 @@
 "use client";
 
-import DOMPurify from "dompurify";
 import { Button, Card } from "@/components/ui";
 import { MathText } from "@/components/shared/math-text";
+import { sanitizeSvg } from "@/lib/sanitize-svg";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -144,7 +144,7 @@ export function MCQCard({
                       <div
                         className="rounded bg-white p-2"
                         dangerouslySetInnerHTML={{
-                          __html: DOMPurify.sanitize(choice, { USE_PROFILES: { svg: true } }),
+                          __html: sanitizeSvg(choice),
                         }}
                       />
                     ) : (
