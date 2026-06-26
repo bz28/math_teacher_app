@@ -59,15 +59,20 @@ export function MockTestScreen({ onBack }: Props) {
     },
   });
 
-  if (!mockTest) return null;
-
-  const { questions, answers, flags, currentIndex } = mockTest;
-  const currentQuestion = questions[currentIndex];
+  // Hooks must run unconditionally every render, so this sits before the
+  // early return. Optional chaining / fallbacks keep it safe when mockTest
+  // is null (mirrors PracticeBatchView's ordering).
+  const currentIndex = mockTest?.currentIndex ?? 0;
 
   // Sync local answer when navigating
   useEffect(() => {
-    setLocalAnswer(answers[currentIndex] ?? "");
+    setLocalAnswer(mockTest?.answers[currentIndex] ?? "");
   }, [currentIndex]);
+
+  if (!mockTest) return null;
+
+  const { questions, answers, flags } = mockTest;
+  const currentQuestion = questions[currentIndex];
 
   const handleNavigate = (index: number) => {
     // Save current answer before navigating

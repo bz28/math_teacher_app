@@ -3,6 +3,7 @@ import {
   ScrollView,
   Text,
   View,
+  type TextStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -10,7 +11,7 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { CompletionReward, type CompletionRewardRef } from "./CompletionReward";
 import { MathText } from "./MathText";
 import { useSessionStore } from "../stores/session";
-import { sessionStyles as styles } from "./sessionStyles";
+import { makeSessionStyles } from "./sessionStyles";
 import { useColors, spacing } from "../theme";
 import { formatDuration } from "../utils/quiz";
 
@@ -21,6 +22,7 @@ interface PracticeSummaryProps {
 
 export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
   const colors = useColors();
+  const styles = useMemo(() => makeSessionStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const confettiRef = useRef<CompletionRewardRef>(null);
   const {
@@ -132,13 +134,13 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
               <MathText text={r.question} style={styles.resultProblem} />
               {r.isCorrect === true && (
                 <>
-                  <YourAnswerLine answer={r.userAnswer ?? ""} color={colors.textSecondary} />
+                  <YourAnswerLine answer={r.userAnswer ?? ""} color={colors.textSecondary} baseStyle={styles.resultAnswer} />
                   <Text style={[styles.resultAnswer, { color: colors.success }]}>Correct!</Text>
                 </>
               )}
               {r.isCorrect === false && (
                 <>
-                  <YourAnswerLine answer={r.userAnswer ?? ""} color={colors.error} />
+                  <YourAnswerLine answer={r.userAnswer ?? ""} color={colors.error} baseStyle={styles.resultAnswer} />
                   <Text style={styles.resultHint}>Flag this question and learn it to see the answer</Text>
                 </>
               )}
@@ -194,15 +196,23 @@ export function PracticeSummary({ onBack, onHome }: PracticeSummaryProps) {
 // same row. MathText is wrapped in a flex:1/minWidth:0 View so it shares
 // row space without overflowing (its WebView wrapper is width:100%, which
 // otherwise competes with the prefix label).
-function YourAnswerLine({ answer, color }: { answer: string; color: string }) {
+function YourAnswerLine({
+  answer,
+  color,
+  baseStyle,
+}: {
+  answer: string;
+  color: string;
+  baseStyle: TextStyle;
+}) {
   return (
     // flex-start so a multi-line answer (fraction, matrix) lines up its
     // first row with the static "Your answer:" prefix instead of centering
     // the prefix vertically against the tall block.
     <View style={{ flexDirection: "row", alignItems: "flex-start", marginTop: 2 }}>
-      <Text style={{ ...styles.resultAnswer, marginTop: 0, color }}>Your answer: </Text>
+      <Text style={{ ...baseStyle, marginTop: 0, color }}>Your answer: </Text>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <MathText text={answer} style={{ ...styles.resultAnswer, marginTop: 0, color }} />
+        <MathText text={answer} style={{ ...baseStyle, marginTop: 0, color }} />
       </View>
     </View>
   );

@@ -88,7 +88,8 @@ export function AuthScreen({ onAuth, onTeacherGate, defaultToRegister = false }:
     setLoading(true);
     try {
       const normalizedEmail = email.trim().toLowerCase();
-      await checkEmail(normalizedEmail);
+      const { available } = await checkEmail(normalizedEmail);
+      if (!available) throw new Error("This email is already registered");
       const gradeLevel = ageToGradeLevel(age);
       const code = normalizeJoinCode(joinCode);
       const resp = await register(normalizedEmail, password, name.trim(), gradeLevel, code || undefined);

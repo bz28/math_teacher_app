@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import logging
 import secrets
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -527,7 +528,7 @@ class UpdateSubscriptionRequest(BaseModel):
 
 @router.patch("/users/{user_id}/role")
 async def update_user_role(
-    user_id: str,
+    user_id: uuid.UUID,
     body: UpdateRoleRequest,
     request: Request,
     current_user: CurrentUser = Depends(require_admin),
@@ -570,7 +571,7 @@ async def update_user_role(
 
 @router.patch("/users/{user_id}/subscription")
 async def update_user_subscription(
-    user_id: str,
+    user_id: uuid.UUID,
     body: UpdateSubscriptionRequest,
     request: Request,
     current_user: CurrentUser = Depends(require_admin),
@@ -663,7 +664,7 @@ async def update_user_subscription(
 
 @router.delete("/users/{user_id}")
 async def delete_user(
-    user_id: str,
+    user_id: uuid.UUID,
     request: Request,
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -697,7 +698,7 @@ async def delete_user(
 
 @router.get("/users/{teacher_id}/students")
 async def teacher_students(
-    teacher_id: str,
+    teacher_id: uuid.UUID,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(require_admin),
@@ -833,7 +834,7 @@ async def teacher_students(
 
 @router.post("/users/{user_id}/reset-daily-limit")
 async def reset_daily_limit(
-    user_id: str,
+    user_id: uuid.UUID,
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:

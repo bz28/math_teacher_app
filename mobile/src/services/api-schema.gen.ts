@@ -5533,6 +5533,7 @@ export interface operations {
                 user_id?: string | null;
                 submission_id?: string | null;
                 school_id?: string | null;
+                success?: boolean | null;
                 limit?: number;
                 offset?: number;
             };
