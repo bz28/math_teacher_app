@@ -783,6 +783,28 @@ async def test_turn_hard_cap_force_finalizes(
     assert body["overall_status"] == "complete"
     assert body["disposition"] is None
 
+    # FIX 1: a pending problem killed by the cap must NOT be labeled
+    # verdict_submitted with a null rubric (that would claim a verdict
+    # that never happened). It carries the distinct cap_reached terminal
+    # status and keeps a null rubric.
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problems = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(
+                IntegrityCheckProblem.integrity_check_submission_id
+                == check.id
+            )
+        )).scalars().all()
+        capped = [p for p in problems if p.status == "cap_reached"]
+        assert capped, "expected at least one cap_reached problem"
+        for p in capped:
+            assert p.status != "verdict_submitted"
+            assert p.rubric is None
+
     # An 11th turn attempt is now rejected.
     r = await client.post(
         f"/v1/school/student/integrity/submissions/{submission_id}/turn",
@@ -2021,6 +2043,211 @@ async def test_finish_check_rejects_when_agent_asked_question_prior_iteration(
         assert any(
             "outstanding question" in t.content for t in tool_results
         )
+
+
+# ── FIX 2: disposition/rubric consistency gate ─────────────────────
+
+
+async def _verdict_then_finish_script(
+    problem_id: str,
+    rubric: dict[str, str],
+    disposition: str,
+    *,
+    retry_text: str = "Let me reconsider that.",
+) -> None:
+    """Set an agent script that submits one verdict (with `rubric`) then
+    calls finish_check with `disposition`, then falls back to plain text
+    if the finalize is rejected."""
+    set_agent_script([
+        [
+            make_tool_use(
+                "submit_problem_verdict",
+                {
+                    "problem_id": problem_id,
+                    "rubric": rubric,
+                    "reasoning": "scored from the chat.",
+                },
+                use_id="uv1",
+            ),
+        ],
+        [
+            make_tool_use(
+                "finish_check",
+                {
+                    "disposition": disposition,
+                    "summary": "Wrap-up.",
+                    "headline": "Student verdict headline here",
+                    "inline_variant_result": "not_applicable",
+                },
+                use_id="uf1",
+            ),
+        ],
+        [make_text(retry_text)],
+    ])
+
+
+async def _only_problem_id(submission_id: str) -> str:
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(
+                IntegrityCheckProblem.integrity_check_submission_id
+                == check.id
+            )
+        )).scalar_one()
+        return str(problem.id)
+
+
+async def test_finish_check_rejects_pass_with_both_core_low(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """FIX 2: disposition=pass is flatly contradicted when both core
+    rubric dimensions are 'low'. The gate rejects with a corrective
+    tool_result and the check stays open for the agent to reconcile."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    problem_id = await _only_problem_id(submission_id)
+
+    await _verdict_then_finish_script(
+        problem_id,
+        {"paraphrase_originality": "low", "causal_fluency": "low"},
+        "pass",
+    )
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "I just used the formula, not sure why."},
+    )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        # Finalize rejected — not complete, no disposition recorded.
+        assert check.status != "complete"
+        assert check.disposition is None
+
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(IntegrityConversationTurn.role == "tool_result")
+        )).scalars().all()
+        assert any(
+            "disposition=pass is inconsistent" in t.content
+            for t in tool_results
+        )
+
+
+async def test_finish_check_rejects_flag_with_both_core_high(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """FIX 2: flag_for_review is flatly contradicted when both core
+    rubric dimensions are 'high'. The gate rejects."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    problem_id = await _only_problem_id(submission_id)
+
+    await _verdict_then_finish_script(
+        problem_id,
+        {"paraphrase_originality": "high", "causal_fluency": "high"},
+        "flag_for_review",
+    )
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "I picked 2 and 12 because the rate doubles."},
+    )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.status != "complete"
+        assert check.disposition is None
+
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(IntegrityConversationTurn.role == "tool_result")
+        )).scalars().all()
+        assert any(
+            "disposition=flag_for_review is inconsistent" in t.content
+            for t in tool_results
+        )
+
+
+async def test_finish_check_accepts_consistent_verdict(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """FIX 2 (no false positive): a normal consistent verdict — pass on
+    a strong rubric — still passes the gate and completes the check.
+    Also covers the borderline band: paraphrase high + causal low (mixed)
+    is left to the model and accepted."""
+    # Consistent: pass on high/high.
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    problem_id = await _only_problem_id(submission_id)
+
+    await _verdict_then_finish_script(
+        problem_id,
+        {"paraphrase_originality": "high", "causal_fluency": "high"},
+        "pass",
+    )
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "I doubled it because the rate is per two units."},
+    )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.status == "complete"
+        assert check.disposition == "pass"
+
+
+async def test_finish_check_accepts_mixed_rubric_band(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """FIX 2 (band, not formula): paraphrase high + causal low with
+    disposition=needs_practice is a borderline combo the gate leaves to
+    the model — it must NOT be rejected."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    problem_id = await _only_problem_id(submission_id)
+
+    await _verdict_then_finish_script(
+        problem_id,
+        {"paraphrase_originality": "high", "causal_fluency": "low"},
+        "needs_practice",
+    )
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "I followed the steps but can't say why they work."},
+    )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.status == "complete"
+        assert check.disposition == "needs_practice"
 
 
 # ── Telemetry ──────────────────────────────────────────────────────

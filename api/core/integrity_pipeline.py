@@ -96,12 +96,18 @@ PROBLEM_STATUS_SKIPPED_UNREADABLE = "skipped_unreadable"
 # row(s) on the same submission; carries diagnosis_note + diagnosis_kind
 # but never gets a rubric and is excluded from the chat agent's briefing.
 PROBLEM_STATUS_DIAGNOSIS_ONLY = "diagnosis_only"
+# Pending problem that never got a verdict because the conversation hit
+# the hard turn cap first. Terminal-but-inconclusive: distinct from
+# verdict_submitted so a cap-killed problem never lies about having a
+# rubric (rubric stays null). See _force_finalize_turn_cap.
+PROBLEM_STATUS_CAP_REACHED = "cap_reached"
 
 PROBLEM_TERMINAL_STATUSES = frozenset({
     PROBLEM_STATUS_VERDICT_SUBMITTED,
     PROBLEM_STATUS_DISMISSED,
     PROBLEM_STATUS_SKIPPED_UNREADABLE,
     PROBLEM_STATUS_DIAGNOSIS_ONLY,
+    PROBLEM_STATUS_CAP_REACHED,
 })
 
 # Diagnosis kind values. procedural_slip / conceptual_gap are emitted
@@ -1777,6 +1783,52 @@ async def _apply_finish_check(
             + ids
         )
 
+    # Conservative disposition/rubric consistency gate. The structure
+    # checks above confirm the disposition is a valid value; this checks
+    # it isn't flatly contradicted by the rubric the agent already
+    # scored. We only reject the two UNAMBIGUOUS combos and leave every
+    # borderline case to the model's judgment so we don't wedge it:
+    #   - disposition=pass while every scored rubric has BOTH core
+    #     dimensions `low` (a "deeply understood" verdict on evidence
+    #     that says the opposite).
+    #   - disposition=flag_for_review while every scored rubric is `high`
+    #     on BOTH core dimensions (escalating a student who scored clean).
+    # Mixed rubrics (e.g. one low, one high) fall outside the band and
+    # pass through untouched. Reject is a corrective tool_result, same as
+    # the question guard above — the agent is mid-tool-loop and retries.
+    scored_rubrics = [p.rubric for p in problems if p.rubric is not None]
+    if scored_rubrics:
+        def _both_core(rubric: dict[str, Any], value: str) -> bool:
+            return (
+                rubric.get("paraphrase_originality") == value
+                and rubric.get("causal_fluency") == value
+            )
+
+        if disposition == DISPOSITION_PASS and all(
+            _both_core(r, "low") for r in scored_rubrics
+        ):
+            return (
+                "rejected: disposition=pass is inconsistent with your "
+                "rubric — both core dimensions (paraphrase_originality and "
+                "causal_fluency) are scored 'low'. 'pass' means the student "
+                "understood deeply. Reconcile: either re-score the rubric "
+                "if the student actually demonstrated understanding, or "
+                "pick a disposition that matches a low rubric "
+                "(needs_practice / tutor_pivot / flag_for_review)."
+            )
+        if disposition == DISPOSITION_FLAG_FOR_REVIEW and all(
+            _both_core(r, "high") for r in scored_rubrics
+        ):
+            return (
+                "rejected: disposition=flag_for_review is inconsistent with "
+                "your rubric — both core dimensions (paraphrase_originality "
+                "and causal_fluency) are scored 'high'. flag_for_review is "
+                "for shallow rubrics the student can't articulate. "
+                "Reconcile: either lower the rubric if the explanation was "
+                "actually thin, or pick 'pass' if the student understood "
+                "their own work."
+            )
+
     check.status = STATUS_COMPLETE
     check.disposition = disposition
     check.overall_summary = summary
@@ -1809,7 +1861,11 @@ async def _force_finalize_turn_cap(
     )).scalars().all()
     for p in problems:
         if p.status == PROBLEM_STATUS_PENDING:
-            p.status = PROBLEM_STATUS_VERDICT_SUBMITTED
+            # Distinct terminal status — NOT verdict_submitted. A pending
+            # problem killed by the cap has no rubric, so labeling it
+            # verdict_submitted would claim a verdict that never happened
+            # and poison any rubric-aware query. Leave rubric null.
+            p.status = PROBLEM_STATUS_CAP_REACHED
             p.ai_reasoning = (
                 "Conversation hit the turn cap before this problem was "
                 "verdicted."
@@ -2180,7 +2236,15 @@ def _build_agent_messages(
             continue
 
         if t.role == ROLE_STUDENT:
-            messages.append({"role": "user", "content": t.content})
+            # Trust boundary: student text is untrusted input, not a
+            # peer instruction. Wrap it in explicit delimiters so the
+            # system prompt's injection clause can refer to it. The
+            # delimiters exist ONLY in the LLM message build — the stored
+            # DB turn (t.content) is unchanged.
+            messages.append({
+                "role": "user",
+                "content": f"<student_message>{t.content}</student_message>",
+            })
             i += 1
             continue
 
