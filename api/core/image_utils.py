@@ -1,9 +1,17 @@
 """Shared image / file validation utilities."""
 
 import base64
+import io
 from typing import Any
 
+from PIL import Image, ImageOps
+
 from api.core.constants import MAX_IMAGE_BYTES, MAX_PDF_BYTES
+
+# Anthropic vision downscales anything past ~1568px on the long edge
+# anyway, so we cap there before sending: same legibility, roughly half
+# the vision-token cost. Matches the harness judge's _MAX_EDGE.
+VISION_MAX_EDGE = 1568
 
 
 def validate_and_decode_image(image_base64: str) -> tuple[bytes, str]:
@@ -69,6 +77,47 @@ def validate_and_decode_upload(data_base64: str) -> tuple[bytes, str]:
         )
 
     return raw, media_type
+
+
+def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
+    """Bake in EXIF orientation and downscale before a vision call.
+
+    Phone cameras record a portrait/landscape shot in the sensor's native
+    orientation and store the intended rotation as an EXIF *flag* rather
+    than rotating the pixels. Vision models read raw pixels and ignore the
+    flag, so an un-transposed phone photo arrives sideways. `exif_transpose`
+    rewrites the pixels to match the flag, then we cap the long edge at
+    `VISION_MAX_EDGE`.
+
+    Only `image/*` is transformed; PDFs and unknown media types are returned
+    unchanged (the document path must not be re-encoded as a flat image).
+    On any decode/transform error the input base64 is returned untouched so
+    a quirky-but-valid image still reaches the model.
+
+    Returns the re-encoded base64 string (same media_type / format).
+    """
+    if not media_type.startswith("image/"):
+        return data_base64
+    try:
+        raw = base64.b64decode(data_base64)
+        with Image.open(io.BytesIO(raw)) as opened:
+            img = ImageOps.exif_transpose(opened)
+            if max(img.size) > VISION_MAX_EDGE:
+                img.thumbnail(
+                    (VISION_MAX_EDGE, VISION_MAX_EDGE),
+                    Image.Resampling.LANCZOS,
+                )
+            fmt = "PNG" if media_type == "image/png" else "JPEG"
+            # JPEG can't hold an alpha channel / palette — flatten first so
+            # the save doesn't raise and silently fall through to the raw
+            # (still mis-oriented) image.
+            if fmt == "JPEG" and img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+            buf = io.BytesIO()
+            img.save(buf, format=fmt)
+            return base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        return data_base64
 
 
 def to_content_block(media_type: str, data_base64: str) -> dict[str, Any]:

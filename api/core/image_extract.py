@@ -2,7 +2,11 @@
 
 import logging
 
-from api.core.image_utils import validate_and_decode_image
+from api.core.image_utils import (
+    preprocess_image_for_vision,
+    to_content_block,
+    validate_and_decode_image,
+)
 from api.core.llm_client import LLMMode, call_claude_vision
 from api.core.llm_schemas import IMAGE_EXTRACT_SCHEMA
 from api.core.subjects import Subject, get_config
@@ -53,16 +57,12 @@ async def extract_problems_from_image(
     Returns dict with 'problems' (list[str]) and 'confidence' (str).
     """
     _, media_type = validate_and_decode_image(image_base64)
+    # EXIF-orient + downscale before Vision reads it (phone photos arrive
+    # sideways otherwise).
+    image_base64 = preprocess_image_for_vision(image_base64, media_type)
 
     user_content: list[dict[str, object]] = [
-        {
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": media_type,
-                "data": image_base64,
-            },
-        },
+        to_content_block(media_type, image_base64),
         {
             "type": "text",
             "text": _build_extract_prompt(subject),

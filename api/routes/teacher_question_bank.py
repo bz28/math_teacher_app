@@ -14,6 +14,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.constants import SOLUTION_FAILED_SENTINEL_PREFIX
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.image_utils import validate_and_decode_upload
 from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
@@ -583,10 +584,24 @@ async def approve_bank_item(
     # Approved items are the surface the integrity-check agent reads.
     # Empty final_answer there would surface as "no answer key" in the
     # briefing — the agent's correctness anchor depends on it.
-    if not (item.final_answer or "").strip():
+    final_answer = (item.final_answer or "").strip()
+    if not final_answer:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Final answer is required before approving",
+        )
+    # Automatic solving stores a "(solution failed …)" placeholder as the
+    # final_answer when decompose throws. It's truthy, so the emptiness
+    # check above lets it through — but it's not a real answer key. Reject
+    # it explicitly so it can never be approved + attached as a graded
+    # answer (would anchor check_answer_correctness + AI grading on junk).
+    if final_answer.startswith(SOLUTION_FAILED_SENTINEL_PREFIX):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "This problem's solution failed to generate — regenerate or "
+                "solve it manually before approving."
+            ),
         )
     item.status = "approved"
 

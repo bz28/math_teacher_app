@@ -1073,6 +1073,68 @@ async def test_grading_pipeline_consumes_overlaid_extraction(
     assert finals[0]["answer_plain"] == ""
 
 
+async def test_unreadable_extraction_skips_auto_grade(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A garbage read (confidence below UNREADABLE_THRESHOLD) must NOT be
+    auto-graded. The background runner records `ai_grading_status =
+    skipped_unreadable` and leaves final_score/breakdown null so the
+    teacher can still grade by hand — never fabricating a score from
+    junk. Pins the gate added alongside the integrity skipped_unreadable
+    concept."""
+    from unittest.mock import AsyncMock, patch
+
+    from api.core.grading_ai import GRADING_STATUS_SKIPPED_UNREADABLE
+    from api.models.assignment import SubmissionGrade
+    from api.routes.school_student_practice import (
+        _run_integrity_and_grading_background,
+    )
+
+    submission_id = await _submit_and_extract(client, world)
+    # Stage a low-confidence extraction + confirmed_at; disable integrity
+    # so only the grading arm runs (keeps the assertion focused on the
+    # grading gate).
+    extraction_json = (
+        '{"steps": [], "final_answers": [], "confidence": 0.05}'
+    )
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE submissions SET extraction = :ext, "
+                "extraction_confirmed_at = NOW() WHERE id = :id"
+            ),
+            {"id": submission_id, "ext": extraction_json},
+        )
+        await s.execute(
+            text(
+                "UPDATE assignments SET integrity_check_enabled = false, "
+                "ai_grading_enabled = true WHERE id = :id"
+            ),
+            {"id": world["assignment_id"]},
+        )
+        await s.commit()
+
+    with patch(
+        "api.core.grading_ai.run_ai_grading_for_submission",
+        new=AsyncMock(),
+    ) as mock_grade:
+        await _run_integrity_and_grading_background(uuid.UUID(submission_id))
+
+    # No auto-grade was produced.
+    mock_grade.assert_not_called()
+
+    # The needs-manual-grading state is recorded, with no fabricated score.
+    async with get_session_factory()() as s:
+        grade = (await s.execute(
+            select(SubmissionGrade).where(
+                SubmissionGrade.submission_id == uuid.UUID(submission_id)
+            )
+        )).scalar_one()
+        assert grade.ai_grading_status == GRADING_STATUS_SKIPPED_UNREADABLE
+        assert grade.final_score is None
+        assert grade.breakdown is None
+
+
 async def test_flag_does_not_disturb_extraction_edits(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:

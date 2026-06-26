@@ -160,7 +160,11 @@ async def _run_integrity_and_grading_background(
     lose integrity results. Never re-raises.
     """
     from api.core.extraction_edits import apply_extraction_edits
-    from api.core.grading_ai import run_ai_grading_for_submission
+    from api.core.grading_ai import (
+        record_unreadable_grading_skip,
+        run_ai_grading_for_submission,
+    )
+    from api.core.integrity_ai import UNREADABLE_THRESHOLD
 
     try:
         async with get_session_factory()() as db:
@@ -212,9 +216,26 @@ async def _run_integrity_and_grading_background(
 
             if run_grading:
                 try:
-                    await run_ai_grading_for_submission(
-                        submission_id, extraction, db, user_id=user_id,
-                    )
+                    # Gate AI grading on extraction confidence — same
+                    # threshold the integrity pipeline uses. A garbage
+                    # read (confidence ~0.05) has no trustworthy work to
+                    # grade, so we record a "needs manual grading" marker
+                    # instead of grading junk as fact. The teacher can
+                    # still grade by hand.
+                    confidence = extraction.get("confidence", 0.0)
+                    if confidence < UNREADABLE_THRESHOLD:
+                        logger.info(
+                            "extraction unreadable (confidence=%.2f) for "
+                            "submission %s; skipping auto-grade",
+                            confidence, submission_id,
+                        )
+                        await record_unreadable_grading_skip(
+                            submission_id, db,
+                        )
+                    else:
+                        await run_ai_grading_for_submission(
+                            submission_id, extraction, db, user_id=user_id,
+                        )
                     await db.commit()
                 except Exception:
                     logger.exception(

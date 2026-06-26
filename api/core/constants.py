@@ -49,3 +49,14 @@ MAX_SUBMISSION_FILES = 10
 # Logging / storage
 # ---------------------------------------------------------------------------
 MAX_STORED_TEXT_LENGTH = 10 * 1024  # truncate LLM call logs beyond this
+
+# ---------------------------------------------------------------------------
+# Question-bank solution generation
+# ---------------------------------------------------------------------------
+# Stored as a bank item's `final_answer` when automatic step decomposition
+# throws while solving a generated question. It is a placeholder, NOT a real
+# answer key — the approve gate rejects it so it can never be attached to a
+# homework as a graded answer. Match by the SENTINEL_PREFIX (em-dash / copy
+# may drift) rather than the exact string when gating.
+SOLUTION_FAILED_SENTINEL = "(solution failed — please solve manually)"
+SOLUTION_FAILED_SENTINEL_PREFIX = "(solution failed"

@@ -3563,6 +3563,17 @@
             ],
             "title": "Ai Breakdown"
           },
+          "ai_grading_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Grading Status"
+          },
           "assignment_id": {
             "title": "Assignment Id",
             "type": "string"
