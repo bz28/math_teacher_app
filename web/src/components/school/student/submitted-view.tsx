@@ -20,13 +20,13 @@ export function SubmittedView({ submission }: Props) {
   const files = submission.files ?? [];
   const [zoomedFile, setZoomedFile] = useState<SubmissionFile | null>(null);
   return (
-    <div className="mt-8 rounded-[--radius-md] border border-green-500 bg-green-50 p-6 dark:bg-green-500/10">
+    <div className="mt-8 rounded-[--radius-md] border border-success-border bg-success-light p-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-text-primary">✓ Submitted</h2>
         <div className="text-xs font-medium text-text-muted">
           {submittedAt.toLocaleString()}
           {submission.is_late && (
-            <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-700 dark:bg-amber-500/20">
+            <span className="ml-2 rounded-full bg-warning-bg px-2 py-0.5 font-bold text-warning-dark">
               LATE
             </span>
           )}

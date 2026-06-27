@@ -137,11 +137,11 @@ function HomeworkList({ courseId }: { courseId: string }) {
               </div>
             </div>
             {hw.status === "submitted" ? (
-              <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-600 dark:bg-green-500/10">
+              <span className="rounded-full bg-success-light px-2 py-0.5 text-xs font-semibold text-success">
                 Submitted ✓
               </span>
             ) : (
-              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-600 dark:bg-amber-500/10">
+              <span className="rounded-full bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-dark">
                 Not started
               </span>
             )}

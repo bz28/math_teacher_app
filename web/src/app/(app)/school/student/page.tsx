@@ -13,7 +13,7 @@ import { DashboardCard } from "@/components/school/student/dashboard-card";
 import { DashboardAssignmentRow } from "@/components/school/student/dashboard-assignment-row";
 import { StudentGradeRow } from "@/components/school/student/student-grade-row";
 import { SidebarJoinModal } from "@/components/school/student/sidebar-join-modal";
-import { Button } from "@/components/ui";
+import { Button, PageErrorState } from "@/components/ui";
 
 /**
  * Student Today dashboard. Top of the school-student portal — what
@@ -117,18 +117,7 @@ export default function SchoolStudentDashboard() {
   }, [user, tour, classes]);
 
   if (error) {
-    return (
-      <div className="mx-auto max-w-3xl py-12 text-center">
-        <p className="text-error">{error}</p>
-        <button
-          type="button"
-          onClick={load}
-          className="mt-4 rounded-[--radius-sm] border border-border px-4 py-2 text-sm font-semibold text-text-primary hover:bg-surface-hover"
-        >
-          Retry
-        </button>
-      </div>
-    );
+    return <PageErrorState message={error} onRetry={load} />;
   }
 
   if (data === null || classes === null) {
@@ -284,11 +273,16 @@ function Greeting({ firstName }: { firstName: string }) {
   const greeting = timeOfDayGreeting();
   return (
     <div className="mb-6">
-      <h1 className="text-3xl font-bold tracking-tight text-text-primary">
+      <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+        Today
+      </span>
+      <h1 className="mt-2 font-serif text-[40px] leading-[1.05] tracking-[-0.02em] text-text-primary">
         {greeting}
         {firstName ? `, ${firstName}` : ""}
       </h1>
-      <p className="mt-1 text-sm text-text-muted">{today}</p>
+      <p className="mt-2 font-serif italic text-[16px] leading-snug text-text-secondary">
+        {today}
+      </p>
     </div>
   );
 }
