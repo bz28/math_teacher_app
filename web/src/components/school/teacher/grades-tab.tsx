@@ -161,7 +161,10 @@ export function GradesTab({ courseId }: { courseId: string }) {
   if (data.students.length === 0) {
     return (
       <div className="mt-6">
-        <EmptyState text="No enrolled students yet. Once students join a section, their grades will show up here." />
+        <EmptyState
+          title="No enrolled students yet"
+          description="Once students join a section, their grades will show up here."
+        />
       </div>
     );
   }

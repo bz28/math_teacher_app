@@ -230,7 +230,10 @@ export function PracticeTab({ courseId }: { courseId: string }) {
         {loading ? (
           <p className="text-sm text-text-muted">Loading…</p>
         ) : practices.length === 0 ? (
-          <EmptyState text="No practice sets yet. Click New practice to create one — you can clone from a homework or start from scratch." />
+          <EmptyState
+            title="No practice sets yet"
+            description="Click New practice to create one — you can clone from a homework or start from scratch."
+          />
         ) : filtered.length === 0 ? (
           <div className="mt-4 rounded-[--radius-lg] border border-border-light bg-[color:var(--color-surface-alt-2)] p-8 text-center text-sm text-text-muted">
             No practice sets match your filters.{" "}
