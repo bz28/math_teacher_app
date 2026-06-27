@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   schoolStudent,
   type StudentDashboardResponse,
   type StudentClassSummary,
 } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth";
+import { TOUR_IDS, useTour } from "@/components/tour";
 import { DashboardCard } from "@/components/school/student/dashboard-card";
 import { DashboardAssignmentRow } from "@/components/school/student/dashboard-assignment-row";
 import { StudentGradeRow } from "@/components/school/student/student-grade-row";
@@ -79,6 +81,31 @@ export default function SchoolStudentDashboard() {
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [load, loadClasses]);
+
+  // ── First-run onboarding tour ──
+  // A school student lands here once they've joined a class (the join is
+  // what stamps school_id). This is their home base, so it's where the
+  // Field Guide tour auto-starts — a pure spotlight walk, no handoffs.
+  // Mirror the teacher auto-start guards: latch once, never restart a
+  // live tour, gate on persona + tours_seen. Skip preview shadows
+  // (a teacher "Try as Student") — their tours_seen is the teacher's.
+  const tour = useTour();
+  const user = useAuthStore((s) => s.user);
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (tour.isActive) return;
+    if (!user || user.role !== "student" || user.is_preview) return;
+    if (user.tours_seen.includes("student")) return;
+    // Defer to first paint so the spotlight targets are mounted; the
+    // welcome cover shows first, giving the dashboard fetch time to land
+    // before the user steps into the spotlights.
+    const raf = requestAnimationFrame(() => {
+      autoStartedRef.current = true;
+      tour.start("student");
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [user, tour]);
 
   if (error) {
     return (
@@ -163,7 +190,11 @@ export default function SchoolStudentDashboard() {
       </div>
 
       <div className="space-y-6">
-        <div className="dashboard-card-enter" style={{ animationDelay: "80ms" }}>
+        <div
+          data-tour-id={TOUR_IDS.studentHomework}
+          className="dashboard-card-enter"
+          style={{ animationDelay: "80ms" }}
+        >
           <DashboardCard title="Due this week" count={dueCount}>
             {overdue.length > 0 && (
               <div className="border-b border-error/30 bg-error-light/40 px-5 py-2">
@@ -177,11 +208,21 @@ export default function SchoolStudentDashboard() {
                 </div>
               </div>
             )}
-            {overdue.map((a) => (
-              <DashboardAssignmentRow key={`ov-${a.assignment_id}`} assignment={a} />
+            {overdue.map((a, i) => (
+              <DashboardAssignmentRow
+                key={`ov-${a.assignment_id}`}
+                assignment={a}
+                // Spotlight the very first row (overdue takes precedence)
+                // for the tour's "turn it in" step.
+                tourId={i === 0 ? TOUR_IDS.studentTurnIn : undefined}
+              />
             ))}
-            {due_this_week.map((a) => (
-              <DashboardAssignmentRow key={`due-${a.assignment_id}`} assignment={a} />
+            {due_this_week.map((a, i) => (
+              <DashboardAssignmentRow
+                key={`due-${a.assignment_id}`}
+                assignment={a}
+                tourId={overdue.length === 0 && i === 0 ? TOUR_IDS.studentTurnIn : undefined}
+              />
             ))}
             {dueCount === 0 && (
               <EmptyRow text="You're all caught up — nothing due this week." />
@@ -189,7 +230,11 @@ export default function SchoolStudentDashboard() {
           </DashboardCard>
         </div>
 
-        <div className="dashboard-card-enter" style={{ animationDelay: "160ms" }}>
+        <div
+          data-tour-id={TOUR_IDS.studentGetUnstuck}
+          className="dashboard-card-enter"
+          style={{ animationDelay: "160ms" }}
+        >
           <DashboardCard
             title="Recently graded"
             count={recently_graded.length || undefined}

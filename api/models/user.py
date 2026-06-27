@@ -88,7 +88,7 @@ class User(Base):
     )
 
     # Onboarding tours the user has already seen, keyed by persona
-    # ("teacher" | "school-student" | "personal-learner"). A persona's
+    # ("teacher" | "student" | "personal"). A persona's
     # first-run tour auto-mounts only while its key is absent; the menu
     # "Take the tour" re-entry never clears these. Stored as a JSON
     # array rather than a join table — the set is tiny and read on every

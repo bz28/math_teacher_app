@@ -7,6 +7,7 @@ import { useAuthStore } from "@/stores/auth";
 import { schoolStudent, type StudentClassSummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/shared/logo-mark";
+import { TOUR_IDS, useTour } from "@/components/tour";
 import { SidebarJoinModal } from "./sidebar-join-modal";
 
 /**
@@ -70,6 +71,7 @@ export function MobileSidebarDrawer({
 function SidebarContent({ onNavigate }: { onNavigate?: () => void } = {}) {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
+  const tour = useTour();
   const [classes, setClasses] = useState<StudentClassSummary[] | null>(null);
   const [showJoin, setShowJoin] = useState(false);
 
@@ -138,6 +140,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void } = {}) {
           </span>
           <button
             type="button"
+            data-tour-id={TOUR_IDS.studentJoin}
             onClick={() => setShowJoin(true)}
             title="Join a class"
             className="-mr-1 flex h-6 w-6 items-center justify-center rounded-[--radius-sm] text-text-muted transition-colors hover:text-text-primary"
@@ -188,8 +191,20 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void } = {}) {
         </div>
       </div>
 
-      {/* Bottom — account + logout */}
+      {/* Bottom — tour re-entry + account + logout */}
       <div className="border-t border-border-light px-3 py-3">
+        {/* Replay the Field Guide tour anytime — never touches data. */}
+        <button
+          type="button"
+          onClick={() => {
+            afterNav();
+            tour.start("student");
+          }}
+          className="flex w-full items-center gap-3 px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary"
+        >
+          <CompassIcon />
+          Take the tour
+        </button>
         <Link
           href="/account"
           onClick={afterNav}
@@ -303,6 +318,15 @@ function AccountIcon() {
     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
       <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+function CompassIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <polygon points="16.2 7.8 13.4 13.4 7.8 16.2 10.6 10.6 16.2 7.8" />
     </svg>
   );
 }

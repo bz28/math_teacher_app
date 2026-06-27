@@ -142,10 +142,11 @@ class UserResponse(BaseModel):
     tours_seen: list[str] = []
 
 
-# Personas with a first-run onboarding tour. The teacher tour ships
-# first; the school-student and personal-learner step-lists plug into
-# the same engine as follow-ups.
-TourPersona = Literal["teacher", "school-student", "personal-learner"]
+# Personas with a first-run onboarding tour. One key per audience —
+# "teacher" (courses dashboard), "student" (school-student dashboard),
+# and "personal" (the non-school learner's /home). Each maps to a
+# TourDefinition the frontend renders with the same engine.
+TourPersona = Literal["teacher", "student", "personal"]
 
 
 class MarkTourSeenRequest(BaseModel):

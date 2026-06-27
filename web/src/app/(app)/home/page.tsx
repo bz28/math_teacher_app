@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
@@ -8,6 +8,7 @@ import Link from "next/link";
 import { PageMasthead } from "@/components/shared/page-masthead";
 import { auth, student, type EnrolledCourse } from "@/lib/api";
 import { SUBJECT_CONFIG } from "@/lib/constants";
+import { TOUR_IDS, useTour } from "@/components/tour";
 
 const genericSubjects = [
   { id: "math", description: "Algebra, equations, and word problems — worked one step at a time." },
@@ -56,6 +57,27 @@ export default function HomePage() {
       router.replace("/school/student");
     }
   }, [user, router]);
+
+  // ── First-run onboarding tour (personal learner) ──
+  // /home is where a non-school learner (role "student", no school_id)
+  // lands, so it's where the Field Guide tour auto-starts. Same guards
+  // as the teacher/student auto-starts: latch once, never restart a live
+  // tour, gate on persona + tours_seen. School students are redirected
+  // away above and preview shadows carry someone else's tours_seen, so
+  // both are excluded from the personal tour.
+  const tour = useTour();
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (tour.isActive) return;
+    if (!user || user.role !== "student" || user.school_id || user.is_preview) return;
+    if (user.tours_seen.includes("personal")) return;
+    const raf = requestAnimationFrame(() => {
+      autoStartedRef.current = true;
+      tour.start("personal");
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [user, tour]);
 
   const loadEnrolledCourses = () => {
     auth
@@ -112,7 +134,7 @@ export default function HomePage() {
       />
 
       {/* ── Subjects / Courses ── */}
-      <section className="space-y-5">
+      <section data-tour-id={TOUR_IDS.personalStart} className="space-y-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
           {isSchoolStudent ? "Your classes" : "Choose a subject"}
         </p>
@@ -153,6 +175,9 @@ export default function HomePage() {
                 subtitle={s.description}
                 modes={["Learn", "Mock Test"]}
                 onClick={() => router.push(`/learn?subject=${s.id}`)}
+                // Spotlight the first card for the tour's "Learn / Mock
+                // Test" step — clicking it opens those modes on /learn.
+                tourId={i === 0 ? TOUR_IDS.personalModes : undefined}
               />
             ))}
           </div>
@@ -161,7 +186,10 @@ export default function HomePage() {
 
       {/* ── Join a class — quiet, secondary ── */}
       {user?.role !== "teacher" && (
-        <section className="rounded-[--radius-lg] border border-border bg-surface/60 p-5">
+        <section
+          data-tour-id={TOUR_IDS.personalJoin}
+          className="rounded-[--radius-lg] border border-border bg-surface/60 p-5"
+        >
           <form onSubmit={handleJoinSection} className="flex flex-wrap items-center gap-x-4 gap-y-3">
             <div className="flex-1 min-w-[180px]">
               <p className="text-sm font-semibold text-text-primary">Have a class code?</p>
@@ -228,6 +256,7 @@ function SubjectCard({
   subtitle,
   modes,
   onClick,
+  tourId,
 }: {
   index: number;
   accent: string;
@@ -235,9 +264,13 @@ function SubjectCard({
   subtitle: string;
   modes: string[];
   onClick: () => void;
+  /** Optional `data-tour-id` — stamped on the first card so the
+   *  onboarding tour can spotlight the subject launchpad. */
+  tourId?: string;
 }) {
   return (
     <motion.button
+      data-tour-id={tourId}
       onClick={onClick}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}

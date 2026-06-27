@@ -3971,7 +3971,7 @@ export interface components {
              * Persona
              * @enum {string}
              */
-            persona: "teacher" | "school-student" | "personal-learner";
+            persona: "teacher" | "student" | "personal";
         };
         /**
          * MfaChallengeResponse

@@ -101,9 +101,14 @@ function PreviewBanner() {
 function StudentLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
+  const tour = useTour();
   // School-linked students only start sessions from class-scoped flows;
   // the Learn tab would drop them into the personal free-form path.
   const showLearnTab = !user?.school_id;
+  // The personal-learner tour belongs only to non-school learners; a
+  // school student who wanders to a personal route (they carry school_id)
+  // has their own "student" tour in the school sidebar instead.
+  const isPersonalLearner = user?.role === "student" && !user?.school_id;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -157,6 +162,14 @@ function StudentLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-3">
+            {isPersonalLearner && (
+              <button
+                onClick={() => tour.start("personal")}
+                className="hidden rounded-[--radius-sm] px-3 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary sm:block"
+              >
+                Take the tour
+              </button>
+            )}
             <span className="hidden text-sm font-medium text-text-secondary sm:block">
               {user?.name}
             </span>
