@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, use, useCallback, useEffect, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
@@ -11,7 +11,7 @@ import {
   BANK_JOB_TOAST_AUTO_CLEAR_MS,
 } from "@/lib/constants";
 import { formatDueRelative } from "@/lib/utils";
-import { TOUR_ACTIONS, TOUR_IDS, useTourAction } from "@/components/tour";
+import { TOUR_ACTIONS, TOUR_IDS, useTour, useTourAction } from "@/components/tour";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
 import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
@@ -219,6 +219,12 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   // double-fire during that continuation, so the courses list is the
   // sole owner of the first-run start.
   const [sectionModalOpen, setSectionModalOpen] = useState(false);
+  const tour = useTour();
+  // During the first-run tour, creating a section must advance the tour the
+  // same way creating a course does (the course step's onCreated → next()).
+  // SectionsTab routes both create and cancel through the modal-open boolean,
+  // so this ref lets the close handler tell "just created" from "cancelled".
+  const sectionCreatedRef = useRef(false);
   // One-shot request from step two: expand the first section's roster so
   // the invite control mounts. SectionsTab consumes it once a section is
   // present and clears it via onExpandFirstRosterConsumed.
@@ -340,7 +346,29 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
             courseId={course.id}
             onChanged={reloadCourse}
             showNewSection={sectionModalOpen}
-            onShowNewSectionChange={setSectionModalOpen}
+            onShowNewSectionChange={(open) => {
+              if (!open) {
+                if (sectionCreatedRef.current) {
+                  // Create path: the tour already advanced via onSectionCreated;
+                  // just close, don't treat this close as a cancel.
+                  sectionCreatedRef.current = false;
+                  setSectionModalOpen(false);
+                  return;
+                }
+                if (tour.handoffActive) {
+                  // Cancel during the tour gate: return to the section
+                  // spotlight (re-prompt), mirroring the course step.
+                  tour.back();
+                  return;
+                }
+              }
+              setSectionModalOpen(open);
+            }}
+            onSectionCreated={() => {
+              sectionCreatedRef.current = true;
+              // Advance the tour on creation, like the course step does.
+              if (tour.isActive) tour.next();
+            }}
             expandFirstRoster={expandFirstRoster}
             onExpandFirstRosterConsumed={() => setExpandFirstRoster(false)}
           />

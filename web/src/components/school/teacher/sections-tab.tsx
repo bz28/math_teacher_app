@@ -13,6 +13,7 @@ export function SectionsTab({
   onChanged,
   showNewSection,
   onShowNewSectionChange,
+  onSectionCreated,
   expandFirstRoster,
   onExpandFirstRosterConsumed,
 }: {
@@ -22,6 +23,10 @@ export function SectionsTab({
    *  live handoff. Falls back to internal state when omitted. */
   showNewSection?: boolean;
   onShowNewSectionChange?: (open: boolean) => void;
+  /** Fired when a section is actually created (not just the modal closing).
+   *  The onboarding tour uses this to advance, the way the course step
+   *  advances on course creation. */
+  onSectionCreated?: () => void;
   /** Onboarding tour step two requests the first section's roster be
    *  expanded so the invite control (TOUR_IDS.teacherInvite) mounts
    *  before the spotlight measures it. One-shot: cleared via
@@ -114,6 +119,9 @@ export function SectionsTab({
           courseId={courseId}
           onClose={() => setShowNew(false)}
           onCreated={() => {
+            // Signal a real creation BEFORE closing, so the tour advances
+            // (and the close handler treats this as create, not cancel).
+            onSectionCreated?.();
             setShowNew(false);
             reload();
             onChanged();
