@@ -408,9 +408,14 @@ export function Spotlight({
   const finding = !hole && status === "searching";
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[45]">
-      {/* Interaction blocker — sits below real modals (z-50) so a live
-          handoff dialog stays usable, but blocks stray app clicks. */}
+    // Persona overviews sit at z-45 — below real modals (z-50) so a live
+    // handoff dialog stays usable. Compact feature walkthroughs have no
+    // handoff and intentionally coachmark controls INSIDE a modal (the
+    // New Homework dialog), so they ride ABOVE modals at z-60; the
+    // read-only blocker pausing the app underneath is the desired effect.
+    <div className={`pointer-events-none fixed inset-0 ${definition.compact ? "z-[60]" : "z-[45]"}`}>
+      {/* Interaction blocker — blocks stray app clicks while the coachmark
+          is up (persona overviews keep it below modals; see wrapper z). */}
       <div className="pointer-events-auto absolute inset-0" aria-hidden onClick={(e) => e.preventDefault()} />
 
       {/* Full scrim when there's no resolved target (no cut-out). */}
@@ -535,8 +540,14 @@ export function Spotlight({
               exit={{ opacity: 0, transition: { duration: 0.12 } }}
               transition={{ duration: reduce ? 0.12 : 0.18, ease: [0.16, 1, 0.3, 1] }}
             >
+              {step.intro && (
+                <p className="mt-3 flex items-center gap-1.5 font-serif text-[12.5px] italic text-[color:var(--color-primary)]">
+                  <span aria-hidden className="inline-block h-1 w-1 rounded-full bg-[color:var(--color-primary)]" />
+                  {step.intro}
+                </p>
+              )}
               {step.eyebrow && (
-                <p className="mt-3 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+                <p className={`font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-text-muted ${step.intro ? "mt-1.5" : "mt-3"}`}>
                   {step.eyebrow}
                 </p>
               )}

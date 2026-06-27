@@ -24,7 +24,7 @@ export function TourOverlay() {
 
   const body = (
     <AnimatePresence>
-      {phase === "welcome" && (
+      {phase === "welcome" && definition.cover && (
         <WelcomeCover key="cover" cover={definition.cover} onTakeTour={next} onSkip={end} />
       )}
 

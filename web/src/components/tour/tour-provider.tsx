@@ -114,7 +114,9 @@ export function TourProvider({
     setDefinition(def);
     setStepIndex(0);
     setHandoffActive(false);
-    setPhase("welcome");
+    // Compact feature walkthroughs have no welcome cover — open straight
+    // on the first spotlight. Persona overviews open on the cover.
+    setPhase(def.compact ? "steps" : "welcome");
   }, []);
 
   const end = useCallback(() => {
@@ -159,7 +161,9 @@ export function TourProvider({
       return;
     }
     if (stepIndex <= 0) {
-      setPhase("welcome");
+      // Compact walkthroughs have no welcome to fall back to — hold on
+      // the first step. Persona overviews return to the cover.
+      if (!definition.compact) setPhase("welcome");
     } else {
       setStepIndex((i) => i - 1);
     }

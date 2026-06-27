@@ -419,12 +419,25 @@ async def test_mark_tour_seen_records_and_is_idempotent(client: AsyncClient) -> 
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("persona", ["teacher", "student", "personal"])
+@pytest.mark.parametrize(
+    "persona",
+    [
+        "teacher",
+        "student",
+        "personal",
+        "hw-create",
+        "review-flow",
+        "integrity",
+        "insights",
+    ],
+)
 async def test_mark_tour_seen_accepts_every_persona(
     client: AsyncClient, persona: str
 ) -> None:
-    # All three onboarding personas — teacher, school student, and
-    # personal learner — must be markable so each tour stays once-only.
+    # Every onboarding key must be markable so each tour stays once-only:
+    # the three persona overviews (teacher, school student, personal
+    # learner) plus the four teacher feature walkthroughs (hw-create,
+    # review-flow, integrity, insights).
     reg = await client.post(REGISTER_URL, json=_user(f"tour_{persona}@test.com"))
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}

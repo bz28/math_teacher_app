@@ -142,11 +142,26 @@ class UserResponse(BaseModel):
     tours_seen: list[str] = []
 
 
-# Personas with a first-run onboarding tour. One key per audience —
-# "teacher" (courses dashboard), "student" (school-student dashboard),
-# and "personal" (the non-school learner's /home). Each maps to a
-# TourDefinition the frontend renders with the same engine.
-TourPersona = Literal["teacher", "student", "personal"]
+# Keys for a first-run onboarding tour the frontend marks "seen" once.
+# Two families share the same engine + persistence:
+#   • Persona overviews (login-time) — "teacher" (courses dashboard),
+#     "student" (school-student dashboard), "personal" (the non-school
+#     learner's /home).
+#   • Feature first-use walkthroughs (contextual coachmarks fired the
+#     first time a teacher actually uses a surface) — "hw-create"
+#     (New Homework modal), "review-flow" (submission review page),
+#     "integrity" (a flagged submission's understanding check), and
+#     "insights" (the Student Insights tab). Each maps to a
+#     TourDefinition the frontend renders with the same engine.
+TourPersona = Literal[
+    "teacher",
+    "student",
+    "personal",
+    "hw-create",
+    "review-flow",
+    "integrity",
+    "insights",
+]
 
 
 class MarkTourSeenRequest(BaseModel):

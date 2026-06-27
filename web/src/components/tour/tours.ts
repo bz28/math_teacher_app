@@ -11,7 +11,7 @@
  * Adding a persona is purely additive: author a `TourDefinition` and
  * register it in `TOURS`. The engine renders it unchanged.
  */
-import { TOUR_ACTIONS, TOUR_IDS, type TourDefinition, type TourPersona } from "./types";
+import { TOUR_ACTIONS, TOUR_IDS, type TourDefinition } from "./types";
 
 const TEACHER_TOUR: TourDefinition = {
   persona: "teacher",
@@ -227,14 +227,157 @@ const PERSONAL_TOUR: TourDefinition = {
   },
 };
 
-/** All tours, keyed by persona. Each plugs into the same engine — no
- *  engine changes required to add one. */
-export const TOURS: Partial<Record<TourPersona, TourDefinition>> = {
+// ────────────────────────────────────────────────────────────────────
+// Feature first-use walkthroughs.
+//
+// Unlike the persona overviews above, these are SHORT contextual
+// coachmarks (`compact: true` → no welcome cover, straight into 2-3
+// spotlights) that fire the first time a teacher actually uses a
+// feature. Every step is grounded to a real mounted control; the host
+// surface auto-starts the tour while the key is absent from
+// `tours_seen` and marks it seen on finish/skip.
+// ────────────────────────────────────────────────────────────────────
+
+/**
+ * hw-create — first open of the New Homework modal. Two beats grounded
+ * on always-mounted modal controls: the Generate/Upload mode toggle and
+ * the primary submit button. "Review before assigning" and "assign to a
+ * section" happen downstream (review queue → HW detail), so they live in
+ * the copy rather than spotlighting controls absent from the modal.
+ */
+const HW_CREATE_TOUR: TourDefinition = {
+  persona: "hw-create",
+  compact: true,
+  steps: [
+    {
+      id: "build",
+      target: TOUR_IDS.hwCreateMode,
+      intro: "First time creating homework",
+      eyebrow: "Build it",
+      title: "Two ways to start",
+      body: "Generate fresh problems from this unit's materials, or Upload a worksheet to digitize — either way you choose the source.",
+      placement: "bottom",
+    },
+    {
+      id: "review",
+      target: TOUR_IDS.hwCreateGenerate,
+      eyebrow: "Then review",
+      title: "You review before students do",
+      body: "We draft the problems and drop you in a review queue — edit any of them, then assign to a section and publish when it's right.",
+      placement: "top",
+    },
+  ],
+};
+
+/**
+ * review-flow — first open of a section's submission review page. Three
+ * beats along the trust path: the AI pre-grade, the reviewed checkpoint,
+ * and publishing. Anchored to the Problems card, the "Mark reviewed"
+ * button (present while a grade is unvetted), and the header Publish
+ * button.
+ */
+const REVIEW_FLOW_TOUR: TourDefinition = {
+  persona: "review-flow",
+  compact: true,
+  steps: [
+    {
+      id: "pre-grade",
+      target: TOUR_IDS.reviewGrade,
+      intro: "First time grading here",
+      eyebrow: "The AI's first pass",
+      title: "Every problem, pre-graded",
+      body: "The AI grades each problem and flags low-confidence calls. Adjust any score — editing one auto-vouches that you reviewed it.",
+      placement: "top",
+    },
+    {
+      id: "reviewed",
+      target: TOUR_IDS.reviewReviewed,
+      eyebrow: "Your checkpoint",
+      title: "Vouch with one click",
+      body: "Agree with the AI as-is? Mark reviewed signs off without changing a thing — so students only ever see grades you stand behind.",
+      placement: "bottom",
+    },
+    {
+      id: "publish",
+      target: TOUR_IDS.reviewPublish,
+      eyebrow: "Release it",
+      title: "Publish when you're ready",
+      body: "Publishing releases every graded submission in this homework to students at once. Nothing is visible to them until you do.",
+      placement: "bottom",
+    },
+  ],
+};
+
+/**
+ * integrity — first time a flagged submission's understanding check is
+ * shown. Two beats: what the check is, then the verdict. Only auto-fires
+ * once the AI has reached a disposition, so both anchors are mounted.
+ */
+const INTEGRITY_TOUR: TourDefinition = {
+  persona: "integrity",
+  compact: true,
+  steps: [
+    {
+      id: "check",
+      target: TOUR_IDS.integrityCheck,
+      intro: "This one was flagged",
+      eyebrow: "Understanding check",
+      title: "The AI quietly interviewed them",
+      body: "When work looks unlike a student's own, the AI asks them to explain it — a short conversation you can read in full.",
+      placement: "bottom",
+    },
+    {
+      id: "verdict",
+      target: TOUR_IDS.integrityVerdict,
+      eyebrow: "The verdict",
+      title: "A call, not a conviction",
+      body: "It summarizes whether the explanation matched the work. It's a signal to look closer — you stay the judge of what happens next.",
+      placement: "bottom",
+    },
+  ],
+};
+
+/**
+ * insights — first open of the Student Insights tab with real activity.
+ * Two beats: the per-student roster, then the framing that it's
+ * formative signal rather than a grade.
+ */
+const INSIGHTS_TOUR: TourDefinition = {
+  persona: "insights",
+  compact: true,
+  steps: [
+    {
+      id: "roster",
+      target: TOUR_IDS.insightsRoster,
+      intro: "Your class at a glance",
+      eyebrow: "The roster",
+      title: "Every student, one read",
+      body: "Each row rolls up a student's practice — effort, first-try rate, trend — with a status chip surfacing who needs a nudge.",
+      placement: "top",
+    },
+    {
+      id: "signal",
+      target: TOUR_IDS.insightsSignal,
+      eyebrow: "Read it right",
+      title: "Signal, not a grade",
+      body: "These are formative cues to steer your attention — not scores. Nothing here is shown to students or counted against them.",
+      placement: "bottom",
+    },
+  ],
+};
+
+/** All tours, keyed by persona overview or feature walkthrough. Each
+ *  plugs into the same engine — no engine changes required to add one. */
+export const TOURS: Record<string, TourDefinition> = {
   teacher: TEACHER_TOUR,
   student: STUDENT_TOUR,
   personal: PERSONAL_TOUR,
+  "hw-create": HW_CREATE_TOUR,
+  "review-flow": REVIEW_FLOW_TOUR,
+  integrity: INTEGRITY_TOUR,
+  insights: INSIGHTS_TOUR,
 };
 
-export function getTour(persona: TourPersona): TourDefinition | null {
-  return TOURS[persona] ?? null;
+export function getTour(key: string): TourDefinition | null {
+  return TOURS[key] ?? null;
 }
