@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
+import { TOUR_IDS, useTour } from "@/components/tour";
+import { useAuthStore } from "@/stores/auth";
 import {
   teacher,
   type SectionStudentInsightsResponse,
@@ -177,13 +179,43 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
   const noSections = sections !== null && sections.length === 0;
   const showSectionPivot = (sections?.length ?? 0) > 1;
 
+  // ── First-use feature walkthrough: insights ──
+  // Fires the first time the tab renders a real roster (students present
+  // with some activity, so both the roster and the "signal, not a grade"
+  // anchors are mounted). Same guards as the persona auto-starts.
+  const tour = useTour();
+  const user = useAuthStore((s) => s.user);
+  const tourStartedRef = useRef(false);
+  const rosterReady =
+    students !== null && students.length > 0 && !allQuiet;
+  useEffect(() => {
+    if (tourStartedRef.current) return;
+    if (tour.isActive) return;
+    if (!rosterReady) return;
+    if (!user || user.role !== "teacher" || user.is_preview) return;
+    if (user.tours_seen.includes("insights")) return;
+    if (
+      typeof window === "undefined" ||
+      !window.matchMedia("(min-width: 768px)").matches
+    )
+      return;
+    const raf = requestAnimationFrame(() => {
+      tourStartedRef.current = true;
+      tour.start("insights");
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [rosterReady, user, tour]);
+
   return (
     <section>
       <header className="max-w-2xl">
         <h2 className="font-serif text-[26px] leading-tight tracking-[-0.015em] text-text-primary">
           Student Insights
         </h2>
-        <p className="mt-1 font-serif italic text-[15px] leading-snug text-text-muted">
+        <p
+          data-tour-id={TOUR_IDS.insightsSignal}
+          className="mt-1 font-serif italic text-[15px] leading-snug text-text-muted"
+        >
           A formative read on each student&rsquo;s practice — who&rsquo;s
           thriving, who needs a nudge. Signal, not a grade.
         </p>
@@ -362,7 +394,10 @@ function Roster({
 }) {
   const reduce = useReducedMotion();
   return (
-    <ul className="mt-1 divide-y divide-border-light">
+    <ul
+      data-tour-id={TOUR_IDS.insightsRoster}
+      className="mt-1 divide-y divide-border-light"
+    >
       {students.map((s, i) => (
         <motion.li
           key={s.student_id}

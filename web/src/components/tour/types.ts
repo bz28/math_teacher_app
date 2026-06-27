@@ -1,14 +1,34 @@
 /**
  * Field Guide tour engine — shared types.
  *
- * A tour is pure data: a persona, a welcome cover, an ordered list of
- * spotlight steps, and finish copy. The engine (TourProvider +
- * TourOverlay) renders any TourDefinition, so adding the school-student
- * or personal-learner tour is just authoring another entry in
- * `tours.ts` — no engine changes.
+ * A tour is pure data: a key, an optional welcome cover, an ordered list
+ * of spotlight steps, and finish copy. The engine (TourProvider +
+ * TourOverlay) renders any TourDefinition, so adding a tour is just
+ * authoring another entry in `tours.ts` — no engine changes.
+ *
+ * Two families share the engine:
+ *   • Persona overviews (login-time): a big WelcomeCover then a guided
+ *     walk — "teacher" | "student" | "personal".
+ *   • Feature walkthroughs (`compact: true`): short, contextual
+ *     coachmarks fired the first time a teacher uses a surface. They
+ *     skip the WelcomeCover and go straight to 2-3 spotlight steps —
+ *     "hw-create" | "review-flow" | "integrity" | "insights".
  */
 
-export type TourPersona = "teacher" | "student" | "personal";
+/**
+ * The key a tour is registered + persisted under (`tours_seen`). Named
+ * `TourPersona` for continuity with the original persona-only engine,
+ * but it is the tour KEY — persona overview or feature walkthrough
+ * alike. Mirrors the backend `MarkTourSeenRequest` Literal.
+ */
+export type TourPersona =
+  | "teacher"
+  | "student"
+  | "personal"
+  | "hw-create"
+  | "review-flow"
+  | "integrity"
+  | "insights";
 
 /** Preferred side for the caption card relative to its target. "auto"
  *  lets the engine pick whichever side fits without covering the
@@ -49,6 +69,23 @@ export const TOUR_IDS = {
   personalStart: "personal-start",
   personalModes: "personal-modes",
   personalJoin: "personal-join",
+
+  // ── Feature walkthrough: hw-create (New Homework modal) ──
+  hwCreateMode: "hw-create-mode",
+  hwCreateGenerate: "hw-create-generate",
+
+  // ── Feature walkthrough: review-flow (submission review page) ──
+  reviewGrade: "review-grade",
+  reviewReviewed: "review-reviewed",
+  reviewPublish: "review-publish",
+
+  // ── Feature walkthrough: integrity (flagged submission banner) ──
+  integrityCheck: "integrity-check",
+  integrityVerdict: "integrity-verdict",
+
+  // ── Feature walkthrough: insights (Student Insights tab) ──
+  insightsRoster: "insights-roster",
+  insightsSignal: "insights-signal",
 } as const;
 
 /**
@@ -94,6 +131,10 @@ export interface TourStep {
    *  (e.g. a control that only exists once data is present), the card
    *  centers itself with no cut-out rather than breaking. */
   target: string;
+  /** Optional one-line framing shown above the eyebrow, used on the
+   *  first card of a compact feature walkthrough to set context (e.g.
+   *  "First time creating homework") since there's no welcome cover. */
+  intro?: string;
   eyebrow?: string;
   /** Serif action headline. */
   title: string;
@@ -125,8 +166,21 @@ export interface TourStep {
 }
 
 export interface TourDefinition {
+  /** Registration + persistence key (persona overview or feature
+   *  walkthrough). Kept named `persona` for engine continuity. */
   persona: TourPersona;
-  cover: TourCover;
+  /**
+   * When true this is a compact feature walkthrough: the engine SKIPS
+   * the WelcomeCover phase and starts directly at spotlight step 0.
+   * Such tours carry no `cover`/`finish` and may set a step `intro`.
+   */
+  compact?: boolean;
+  /** Editorial welcome cover (persona overviews only). Omitted by
+   *  compact feature walkthroughs, which open straight on a spotlight. */
+  cover?: TourCover;
   steps: TourStep[];
-  finish: { title: string; body: string };
+  /** Finish copy (persona overviews). Optional — currently unused by the
+   *  renderer (the last step's button just dismisses) and omitted by
+   *  compact walkthroughs. */
+  finish?: { title: string; body: string };
 }
