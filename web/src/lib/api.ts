@@ -1929,11 +1929,6 @@ export interface VariationPayload {
   difficulty: string;
 }
 
-export type NextVariationResponse =
-  | { status: "served"; variation: VariationPayload; consumption_id: string; anchor_bank_item_id: string; remaining: number }
-  | { status: "exhausted"; seen: number }
-  | { status: "empty" };
-
 export interface FlaggedConsumption {
   consumption_id: string;
   variation: VariationPayload;
@@ -2009,12 +2004,6 @@ export const schoolStudent = {
   linkedPracticeForHomework(homeworkId: string) {
     return apiFetch<StudentLinkedPracticeResponse>(
       `/school/student/homework/${homeworkId}/linked-practice`,
-    );
-  },
-  nextVariation(assignmentId: string, bankItemId: string, mode: "practice" | "learn") {
-    return apiFetch<NextVariationResponse>(
-      `/school/student/homework/${assignmentId}/problems/${bankItemId}/next-variation?mode=${mode}`,
-      { method: "POST" },
     );
   },
   completeConsumption(consumptionId: string) {
@@ -2117,12 +2106,6 @@ export const schoolStudent = {
   ) {
     return apiFetch<{ reply: string }>(
       `/school/student/bank-item/${bankItemId}/problem-chat`,
-      { method: "POST", body: JSON.stringify(body) },
-    );
-  },
-  learnThisProblem(body: { bank_item_id: string; assignment_id: string }) {
-    return apiFetch<Extract<NextVariationResponse, { status: "served" }>>(
-      `/school/student/bank-consumption/learn-this`,
       { method: "POST", body: JSON.stringify(body) },
     );
   },

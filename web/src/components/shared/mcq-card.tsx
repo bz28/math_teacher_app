@@ -51,9 +51,9 @@ interface Props {
  *
  * Used by:
  * - personal /practice page
- * - school PracticeLoopSurface
+ * - school student practice runner
  *
- * Both surfaces feed it from their own stores; the visual is identical.
+ * Both surfaces feed it from their own state; the visual is identical.
  */
 export function MCQCard({
   question,
