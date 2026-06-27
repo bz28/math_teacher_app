@@ -4168,6 +4168,8 @@ export interface components {
             course_id: string;
             /** Course Name */
             course_name: string;
+            /** Course Subject */
+            course_subject: string;
             /** Description */
             description: string | null;
             /** Due At */
