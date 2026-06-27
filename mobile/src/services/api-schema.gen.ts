@@ -2478,6 +2478,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/courses/{course_id}/sections/{section_id}/student-insights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Section Student Insights
+         * @description Per-student practice/learn rollup for every enrolled student in a
+         *     section — the Student Insights tab. One card per student (including
+         *     students with zero activity, so the teacher sees the whole roster),
+         *     each carrying coarse engagement counts plus a derived status + trend.
+         *
+         *     Read-only INSIGHT, same contract as the other practice reads: no
+         *     scores, no raw answers, no grades — just who's thriving and who's
+         *     falling behind, and why, in terms a teacher can explain.
+         *
+         *     Two queries, no N+1: the enrollment roster, and one grouped pull of
+         *     the section's PracticeActivity rows merged with the roster in Python.
+         */
+        get: operations["get_section_student_insights_v1_teacher_courses__course_id__sections__section_id__student_insights_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/courses/{course_id}/sections/{section_id}/students/{student_id}": {
         parameters: {
             query?: never;
@@ -4207,6 +4237,13 @@ export interface components {
              */
             student_response: string;
         };
+        /** SectionStudentInsightsResponse */
+        SectionStudentInsightsResponse: {
+            /** Section Id */
+            section_id: string;
+            /** Students */
+            students: components["schemas"]["StudentInsight"][];
+        };
         /** SessionHistoryItem */
         SessionHistoryItem: {
             /**
@@ -4408,6 +4445,36 @@ export interface components {
             title: string;
             /** Type */
             type: string;
+        };
+        /**
+         * StudentInsight
+         * @description One roster card for the Student Insights tab. Coarse engagement +
+         *     struggle signals only — no scores, no raw answers, no grades.
+         */
+        StudentInsight: {
+            /** First Try Rate */
+            first_try_rate: number | null;
+            /** Last Active */
+            last_active: string | null;
+            /** Learn Walkthroughs */
+            learn_walkthroughs: number;
+            /** Name */
+            name: string;
+            /** Practiced Count */
+            practiced_count: number;
+            /** Retry Count */
+            retry_count: number;
+            /** Revealed Count */
+            revealed_count: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "thriving" | "on_track" | "needs_nudge" | "struggling" | "no_activity";
+            /** Student Id */
+            student_id: string;
+            /** Trend */
+            trend: ("improving" | "slipping" | "steady") | null;
         };
         /**
          * StudentLinkedPracticeResponse
@@ -9683,6 +9750,38 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_section_student_insights_v1_teacher_courses__course_id__sections__section_id__student_insights_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionStudentInsightsResponse"];
                 };
             };
             /** @description Validation Error */
