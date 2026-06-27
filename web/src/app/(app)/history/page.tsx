@@ -16,6 +16,7 @@ import { SkeletonCard } from "@/components/ui/skeleton";
 import { CheckIcon } from "@/components/ui/icons";
 import { PageMasthead } from "@/components/shared/page-masthead";
 import { SubjectTabs } from "@/components/shared/subject-tabs";
+import { MathText } from "@/components/shared/math-text";
 import { formatRelativeDate, cn } from "@/lib/utils";
 
 export default function HistoryPage() {
@@ -273,15 +274,15 @@ function SessionList({
               )}
             </span>
             <div className="flex-1 min-w-0">
-              <p className="truncate font-serif text-[1.15rem] leading-snug text-text-primary">
+              <div className="line-clamp-2 font-serif text-[1.15rem] leading-snug text-text-primary [&_.katex]:text-[0.95em]">
                 {item.problem.includes("[") && (
                   <svg className="mr-1.5 inline h-3.5 w-3.5 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
                     <circle cx="12" cy="13" r="4" />
                   </svg>
                 )}
-                {item.problem}
-              </p>
+                <MathText text={item.problem} />
+              </div>
               <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">
                 {item.current_step}/{item.total_steps} steps &middot;{" "}
                 {formatRelativeDate(item.created_at)}
