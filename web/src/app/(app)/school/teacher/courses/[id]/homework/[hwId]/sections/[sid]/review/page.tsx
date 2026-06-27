@@ -77,7 +77,64 @@ type RosterEntry = {
   submission: TeacherSubmissionRow | null;
 };
 
-type RosterFilter = "all" | "needs_me" | "flagged";
+type RosterFilter = "all" | "needs_me" | "flagged" | "low_confidence";
+
+// AI grader confidence bands. The pipeline reports a calibrated 0-1
+// score per problem; we read it, never compute it. <0.6 is the
+// long-standing "alarm" threshold (amber low-confidence emphasis);
+// 0.6-0.85 is medium; >=0.85 is high. Surfacing all three — instead of
+// only the alarm — lets a teacher triage toward the calls the model was
+// least sure of, the safety rail a future bulk-accept feature needs.
+const CONFIDENCE_LOW = 0.6;
+const CONFIDENCE_HIGH = 0.85;
+
+function confidenceBand(c: number): "high" | "medium" | "low" {
+  if (c >= CONFIDENCE_HIGH) return "high";
+  if (c >= CONFIDENCE_LOW) return "medium";
+  return "low";
+}
+
+// Always-on AI confidence indicator for a single grade. Reads the
+// pipeline's calibrated value — never computes or mutates it. Null
+// (historical, pre-confidence rows) renders nothing so those stay
+// neutral. Low keeps the loud amber pill it always had; high/medium are
+// deliberately quiet (a hairline dot + muted label) so a teacher
+// grading 30 papers is only pulled toward the uncertain calls.
+function ConfidenceSignal({ confidence }: { confidence: number | null }) {
+  if (confidence === null) return null;
+  const band = confidenceBand(confidence);
+  const pct = Math.round(confidence * 100);
+
+  if (band === "low") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning)]/10"
+        title={`AI reported low confidence (${pct}%) — review this one carefully`}
+      >
+        <span aria-hidden>⚠</span>
+        Low confidence · {pct}%
+      </span>
+    );
+  }
+
+  const dotClass =
+    band === "high"
+      ? "bg-[color:var(--color-success)]"
+      : "bg-[color:var(--color-warning)]";
+  const label = band === "high" ? "High" : "Medium";
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted"
+      title={`AI grading confidence: ${label.toLowerCase()} (${pct}%)`}
+    >
+      <span
+        aria-hidden
+        className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass}`}
+      />
+      AI · {label} {pct}%
+    </span>
+  );
+}
 
 export default function HomeworkSectionReviewPage({
   params,
@@ -811,9 +868,7 @@ export default function HomeworkSectionReviewPage({
         <p className="mt-4 text-sm text-[color:var(--color-error)]">{error}</p>
       )}
 
-      {roster === null && !error && (
-        <p className="mt-6 text-sm text-text-muted">Loading…</p>
-      )}
+      {roster === null && !error && <ReviewLoadingSkeleton />}
 
       {roster !== null && roster.length === 0 && (
         <div className="mt-6 rounded-[--radius-xl] border border-border-light bg-[color:var(--color-surface-alt-2)] p-10 text-center">
@@ -857,7 +912,9 @@ export default function HomeworkSectionReviewPage({
                     ? "Nothing waiting on you here."
                     : rosterFilter === "flagged"
                       ? "No flagged submissions in this section."
-                      : "No students match this filter."}
+                      : rosterFilter === "low_confidence"
+                        ? "The AI was confident on every graded problem here."
+                        : "No students match this filter."}
                 </p>
               ) : (
                 applyRosterFilter(roster, rosterFilter).map((e) => (
@@ -883,7 +940,7 @@ export default function HomeworkSectionReviewPage({
               <NotSubmittedCard entry={selectedEntry} />
             )}
             {selectedEntry?.submission && detailLoading && (
-              <p className="text-sm text-text-muted">Loading student work…</p>
+              <DetailSkeleton />
             )}
             {selectedEntry?.submission && currentFetchError && (
               <p className="text-sm text-[color:var(--color-error)]">{currentFetchError}</p>
@@ -1359,12 +1416,28 @@ function needsTeacher(entry: RosterEntry): boolean {
   return true;
 }
 
+// Pure read-only predicate over already-loaded roster data: true when
+// any problem on the submission carries an AI grade the model flagged
+// as low confidence. `breakdown` preserves the AI's per-problem
+// confidence (a teacher click never rewrites it — see setProblemGrade),
+// so this needs no extra fetch. Historical rows without a confidence
+// value contribute nothing, matching the always-on signal's neutral
+// treatment of null.
+function hasLowConfidence(entry: RosterEntry): boolean {
+  const breakdown = entry.submission?.breakdown;
+  if (!breakdown) return false;
+  return breakdown.some(
+    (b) => b.confidence !== null && b.confidence < CONFIDENCE_LOW,
+  );
+}
+
 function applyRosterFilter(
   roster: RosterEntry[],
   filter: RosterFilter,
 ): RosterEntry[] {
   if (filter === "all") return roster;
   if (filter === "needs_me") return roster.filter(needsTeacher);
+  if (filter === "low_confidence") return roster.filter(hasLowConfidence);
   return roster.filter(isFlagged);
 }
 
@@ -1379,16 +1452,20 @@ function RosterFilterBar({
 }) {
   const flaggedCount = roster.filter(isFlagged).length;
   const needsMeCount = roster.filter(needsTeacher).length;
+  const lowConfidenceCount = roster.filter(hasLowConfidence).length;
 
   // Auto-revert to "all" when the active filter's count drops to 0 —
   // otherwise a teacher who clears the last flagged submission gets
   // stranded on a disabled-yet-active chip with an empty roster and
   // no obvious recovery. Live grading frequently transitions a row
   // out of `needs_me` (publish a grade), so this guard fires often.
+  // Low-confidence count is fixed by the AI's read and never moves on a
+  // teacher action, but we guard it the same way for consistency.
   useEffect(() => {
     if (value === "needs_me" && needsMeCount === 0) onChange("all");
     if (value === "flagged" && flaggedCount === 0) onChange("all");
-  }, [value, needsMeCount, flaggedCount, onChange]);
+    if (value === "low_confidence" && lowConfidenceCount === 0) onChange("all");
+  }, [value, needsMeCount, flaggedCount, lowConfidenceCount, onChange]);
 
   return (
     <div className="flex flex-wrap items-center gap-1 border-b border-border-light px-3 py-2">
@@ -1407,6 +1484,14 @@ function RosterFilterBar({
         disabled={flaggedCount === 0}
         onClick={() => onChange("flagged")}
       />
+      <RosterChip
+        label="Low confidence"
+        count={lowConfidenceCount}
+        active={value === "low_confidence"}
+        disabled={lowConfidenceCount === 0}
+        onClick={() => onChange("low_confidence")}
+        title="Problems the AI graded with low confidence (under 60%) — review the uncertain calls first"
+      />
     </div>
   );
 }
@@ -1417,18 +1502,21 @@ function RosterChip({
   active,
   disabled,
   onClick,
+  title,
 }: {
   label: string;
   count?: number;
   active: boolean;
   disabled?: boolean;
   onClick: () => void;
+  title?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      title={title}
       aria-pressed={active}
       className={`inline-flex items-center gap-1 rounded-[--radius-pill] border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
         active
@@ -1449,6 +1537,82 @@ function RosterChip({
         </span>
       )}
     </button>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Loading skeletons — mirror the settled layout so the page redraws in
+// place instead of blanking to bare text. The detail skeleton matters
+// most: it fires on every student switch, the most frequent transition
+// on this surface. Built from the shared `Skeleton` (animate-pulse,
+// honors reduced-motion via the global media query), matching the
+// ItemAnalysisPanel pattern already on this page.
+// ────────────────────────────────────────────────────────────────────
+
+function RosterRowSkeleton() {
+  return (
+    <div className="flex flex-col gap-1.5 border-b border-border-light px-4 py-2.5 last:border-b-0">
+      <div className="flex items-center justify-between gap-2">
+        <Skeleton className="h-3.5 w-2/5" />
+        <Skeleton className="h-3 w-7" />
+      </div>
+      <div className="flex items-center gap-1.5">
+        <Skeleton className="h-1.5 w-1.5 rounded-full" />
+        <Skeleton className="h-2.5 w-1/2" />
+      </div>
+    </div>
+  );
+}
+
+function DetailSkeleton() {
+  return (
+    <div className="space-y-4" role="status" aria-busy="true">
+      <span className="sr-only">Loading student work…</span>
+      <div className="space-y-3 rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm">
+        <Skeleton className="h-5 w-1/3" />
+        <Skeleton className="h-3.5 w-2/3" />
+      </div>
+      {[0, 1].map((i) => (
+        <div
+          key={i}
+          className="space-y-3 rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm"
+        >
+          <Skeleton className="h-4 w-1/4" />
+          <Skeleton className="h-3.5 w-full" />
+          <Skeleton className="h-3.5 w-5/6" />
+          <div className="flex gap-2 pt-1">
+            <Skeleton className="h-7 w-16" />
+            <Skeleton className="h-7 w-16" />
+            <Skeleton className="h-7 w-16" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReviewLoadingSkeleton() {
+  return (
+    <div
+      className="mt-5 grid gap-5 md:grid-cols-[280px_1fr]"
+      role="status"
+      aria-busy="true"
+    >
+      <span className="sr-only">Loading roster…</span>
+      <aside className="self-start rounded-[--radius-xl] border border-border-light bg-surface shadow-sm">
+        <div className="border-b border-border-light px-4 py-2.5">
+          <Skeleton className="h-3 w-3/4" />
+        </div>
+        <div>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <RosterRowSkeleton key={i} />
+          ))}
+        </div>
+      </aside>
+      <section className="min-w-0">
+        <DetailSkeleton />
+      </section>
+    </div>
   );
 }
 
@@ -2478,24 +2642,19 @@ function ProblemGradeRow({
       {/* AI grading hero — the AI's call is visible before the grade
           buttons, with reasoning inline instead of buried below. When
           no AI grade is present (pipeline failed / disabled), this
-          block simply doesn't render. Low-confidence calls (<0.6) get
-          an amber pill so the teacher knows where to focus attention;
-          historical rows without a confidence value stay neutral. */}
+          block simply doesn't render. Every AI grade now carries an
+          always-on confidence band (high/medium/low) so a 0.62 and a
+          0.98 no longer read identically — low (<0.6) keeps its amber
+          alarm emphasis, while high/medium stay quiet so the eye is
+          only pulled to uncertain calls. Historical rows without a
+          confidence value stay neutral. */}
       {aiGrade && aiGradeLabel && (
         <div className="mt-3 rounded-[--radius-md] border border-primary/25 bg-primary-bg px-3 py-2">
           <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs font-bold text-text-primary">
             <span className="text-primary" aria-hidden>🤖</span>
             <span className="text-primary">Suggestion:</span>
             <span>{aiGradeLabel}</span>
-            {aiGrade.confidence !== null && aiGrade.confidence < 0.6 && (
-              <span
-                className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)]  dark:bg-[color:var(--color-warning)]/10 "
-                title="AI reported low confidence — review this one carefully"
-              >
-                <span aria-hidden>⚠</span>
-                Low confidence · {Math.round(aiGrade.confidence * 100)}%
-              </span>
-            )}
+            <ConfidenceSignal confidence={aiGrade.confidence} />
           </p>
           {aiGrade.reasoning && (
             // Grader reasoning regularly references math ($-17$,
