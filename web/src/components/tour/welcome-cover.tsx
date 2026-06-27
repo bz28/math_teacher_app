@@ -82,12 +82,18 @@ export function WelcomeCover({
       };
 
   return (
-    <div
+    <motion.div
       className="fixed inset-0 z-[55] flex items-center justify-center px-6"
       role="dialog"
       aria-modal="true"
       aria-label="Welcome to the Veradic tour"
       onKeyDown={onKeyDown}
+      // Exit-animate the whole cover so it doesn't hard-cut to the
+      // spotlight: the cream veil + composition recede (blur + slight
+      // shrink) as the deep-green scrim washes in beneath it.
+      initial={false}
+      exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.99, filter: "blur(2px)" }}
+      transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
     >
       {/* App dimmed behind a soft blur + cream veil. */}
       <motion.div
@@ -169,6 +175,6 @@ export function WelcomeCover({
           {cover.footnote}
         </motion.p>
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

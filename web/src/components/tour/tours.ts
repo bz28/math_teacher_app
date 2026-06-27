@@ -19,7 +19,7 @@ const TEACHER_TOUR: TourDefinition = {
     eyebrow: "Welcome to Veradic",
     title: "Your classroom, *quietly* intelligent.",
     subtitle: "A short walk through the six things that get a class running — starting from scratch.",
-    footnote: "~30s · revisit anytime from the menu",
+    footnote: "~2 min · we'll create your first course together",
     cta: "Take the tour",
     skip: "Skip for now",
   },
@@ -27,10 +27,12 @@ const TEACHER_TOUR: TourDefinition = {
     {
       id: "course",
       target: TOUR_IDS.teacherNewCourse,
-      eyebrow: "Step one",
+      eyebrow: "Foundation",
       title: "Create your first course",
       body: "Start with a course — your subject or class period. We'll set it up together.",
-      placement: "bottom",
+      // The New-course button lives top-right; tuck the card beside it
+      // (short leader) rather than below, where it would overhang.
+      placement: "left",
       // Live handoff: opens the real New course dialog. Creating a course
       // navigates into its workspace, where the tour resumes at step two.
       handoff: {
@@ -47,11 +49,17 @@ const TEACHER_TOUR: TourDefinition = {
     {
       id: "section",
       target: TOUR_IDS.teacherNewSection,
-      eyebrow: "Step two",
+      eyebrow: "Roster",
       title: "Create a section",
       body: "A section is one class period. Add one to start inviting students.",
-      placement: "bottom",
+      // New-section button is top-right too — tuck the card beside it.
+      placement: "left",
       onEnter: TOUR_ACTIONS.gotoSections,
+      // Pre-warm step three: expand the first section's roster the moment
+      // this step advances, so the invite textarea (behind a slow chain
+      // of roster-expand → async section fetch → mount) already exists
+      // when step three opens — no late landing on empty space.
+      onLeave: TOUR_ACTIONS.expandFirstSection,
       // Live handoff: opens the real New section dialog, then resumes.
       handoff: {
         open: TOUR_ACTIONS.openNewSection,
@@ -62,39 +70,44 @@ const TEACHER_TOUR: TourDefinition = {
     {
       id: "invite",
       target: TOUR_IDS.teacherInvite,
-      eyebrow: "Step three",
+      eyebrow: "Invitations",
       title: "Invite your students",
       body: "Share a join code or email invites — students land straight in your class.",
       placement: "bottom",
-      // Expanding the first section's roster mounts the invite control
-      // this step targets. Falls back to the centered card when a
-      // first-run teacher skipped creating a section in step one.
+      // Primary pre-warm is step two's onLeave (fires on its Continue).
+      // Keep onEnter as a fallback for back-navigation INTO this step,
+      // where the prior step's onLeave doesn't run. Re-firing is a
+      // no-op — the roster expand is one-shot and idempotent.
       onEnter: TOUR_ACTIONS.expandFirstSection,
     },
     {
       id: "materials",
       target: TOUR_IDS.teacherMaterials,
-      eyebrow: "Step four",
+      eyebrow: "Your materials",
       title: "Add course materials",
       body: "Drop in your textbook pages — generated homework matches their style and level.",
-      placement: "bottom",
+      // Target is the New-Unit control (left edge of the actions row);
+      // pin the card's left edge to it so the cut-out reads as a tight
+      // pill, not a full-width banner.
+      placement: "bottom-start",
       onEnter: TOUR_ACTIONS.gotoMaterials,
     },
     {
       id: "homework",
       target: TOUR_IDS.teacherNewHomework,
-      eyebrow: "Step five",
+      eyebrow: "Homework",
       title: "Create homework",
       body: "Generate problems from your materials in seconds, then review before assigning.",
-      placement: "bottom",
+      // New-homework button is top-right — tuck the card beside it.
+      placement: "left",
       onEnter: TOUR_ACTIONS.gotoHomework,
     },
     {
       id: "grade",
       target: TOUR_IDS.teacherSubmissions,
-      eyebrow: "Step six",
-      title: "Grade & the integrity check",
-      body: "AI pre-grades each submission and can interview a student to confirm they understand their own work. You review and publish.",
+      eyebrow: "The grade",
+      title: "Where the real work pays off",
+      body: "AI pre-grades every submission and can quietly interview a student to confirm the work is their own. You stay the judge — review, adjust, and publish when it's right.",
       placement: "bottom",
       onEnter: TOUR_ACTIONS.gotoSubmissions,
     },

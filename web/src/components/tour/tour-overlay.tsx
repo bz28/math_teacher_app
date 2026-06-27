@@ -28,11 +28,12 @@ export function TourOverlay() {
         <WelcomeCover key="cover" cover={definition.cover} onTakeTour={next} onSkip={end} />
       )}
 
-      {phase === "steps" && !handoffActive && (
+      {phase === "steps" && (
         <Spotlight
           key="spotlight"
           definition={definition}
           stepIndex={stepIndex}
+          handoffActive={handoffActive}
           getTarget={getTarget}
           onNext={next}
           onBack={back}

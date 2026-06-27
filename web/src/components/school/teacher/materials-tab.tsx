@@ -427,9 +427,10 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
 
   return (
     <div>
-      <div data-tour-id={TOUR_IDS.teacherMaterials} className="flex items-center justify-end gap-2">
+      <div className="flex items-center justify-end gap-2">
         <button
           type="button"
+          data-tour-id={TOUR_IDS.teacherMaterials}
           onClick={() => setShowNewUnit({ parentId: null })}
           disabled={busy}
           title="Create an empty unit folder"

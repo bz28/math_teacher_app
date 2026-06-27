@@ -144,6 +144,8 @@ export function TourProvider({
     if (stepIndex >= definition.steps.length - 1) {
       end();
     } else {
+      // Pre-warm the next step's target before it opens (forward only).
+      if (step?.onLeave) runAction(step.onLeave);
       setStepIndex((i) => i + 1);
     }
   }, [phase, definition, stepIndex, handoffActive, runAction, end]);
