@@ -4,14 +4,29 @@ import { useEffect, useRef, useState } from "react";
 import { teacher, type TeacherSection, type TeacherSectionDetail } from "@/lib/api";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
+import { TOUR_IDS } from "@/components/tour";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function SectionsTab({ courseId, onChanged }: { courseId: string; onChanged: () => void }) {
+export function SectionsTab({
+  courseId,
+  onChanged,
+  showNewSection,
+  onShowNewSectionChange,
+}: {
+  courseId: string;
+  onChanged: () => void;
+  /** Controlled "new section" modal — supplied by the onboarding tour's
+   *  live handoff. Falls back to internal state when omitted. */
+  showNewSection?: boolean;
+  onShowNewSectionChange?: (open: boolean) => void;
+}) {
   const [sections, setSections] = useState<TeacherSection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showNew, setShowNew] = useState(false);
+  const [showNewLocal, setShowNewLocal] = useState(false);
+  const showNew = showNewSection ?? showNewLocal;
+  const setShowNew = onShowNewSectionChange ?? setShowNewLocal;
   const [openRoster, setOpenRoster] = useState<string | null>(null);
 
   const reload = async () => {
@@ -37,6 +52,7 @@ export function SectionsTab({ courseId, onChanged }: { courseId: string; onChang
         <h2 className="font-serif text-[24px] leading-tight tracking-[-0.01em] text-text-primary">Class sections</h2>
         <button
           type="button"
+          data-tour-id={TOUR_IDS.teacherNewSection}
           className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-semibold tracking-[0.01em] text-white transition-colors hover:bg-primary-dark"
           onClick={() => setShowNew(true)}
         >
@@ -611,6 +627,7 @@ function BulkInviteForm({
       </label>
       <textarea
         id={`bulk-invite-${sectionId}`}
+        data-tour-id={TOUR_IDS.teacherInvite}
         value={text}
         onChange={(e) => {
           setText(e.target.value);

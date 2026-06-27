@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { teacher, type TeacherDocument, type TeacherUnit } from "@/lib/api";
+import { TOUR_IDS } from "@/components/tour";
 import { subfoldersOf, topUnits } from "@/lib/units";
 import { uploadDocument } from "@/lib/upload-document";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
@@ -426,7 +427,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
 
   return (
     <div>
-      <div className="flex items-center justify-end gap-2">
+      <div data-tour-id={TOUR_IDS.teacherMaterials} className="flex items-center justify-end gap-2">
         <button
           type="button"
           onClick={() => setShowNewUnit({ parentId: null })}

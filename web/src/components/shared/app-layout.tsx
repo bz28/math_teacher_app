@@ -11,6 +11,7 @@ import { SchoolStudentLayout } from "@/components/school/student/school-student-
 import { TeacherUsagePill } from "@/components/shared/teacher-usage-pill";
 import { useToast } from "@/components/ui";
 import { FlagIcon } from "@/components/ui/icons";
+import { useTour } from "@/components/tour";
 
 // ── Student nav items ──
 
@@ -230,6 +231,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, logout, loadUser } = useAuthStore();
   const toast = useToast();
+  const tour = useTour();
   const [previewLoading, setPreviewLoading] = useState(false);
 
   return (
@@ -300,6 +302,15 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
           >
             <SwitchIcon />
             {previewLoading ? "Switching…" : "Try as Student"}
+          </button>
+
+          {/* Re-enter the Field Guide tour anytime — never touches data. */}
+          <button
+            onClick={() => tour.start("teacher")}
+            className="flex w-full items-center gap-3 px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary"
+          >
+            <CompassIcon />
+            Take the tour
           </button>
         </nav>
 
@@ -466,6 +477,15 @@ function SwitchIcon() {
       <path d="M20 7H4" />
       <path d="M8 21l-4-4 4-4" />
       <path d="M4 17h16" />
+    </svg>
+  );
+}
+
+function CompassIcon() {
+  return (
+    <svg className="h-5 w-5 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <polygon points="16.2 7.8 13.4 13.4 7.8 16.2 10.6 10.6 16.2 7.8" />
     </svg>
   );
 }

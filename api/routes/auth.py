@@ -70,6 +70,7 @@ from api.schemas.auth import (
     EntitlementsResponse,
     LoginRequest,
     LoginVerifyMfaRequest,
+    MarkTourSeenRequest,
     MfaChallengeResponse,
     MfaDisableRequest,
     RefreshRequest,
@@ -653,7 +654,25 @@ async def me(
         has_stripe_customer=bool(user.stripe_customer_id),
         is_preview=user.is_preview,
         mfa_enabled=user.mfa_enabled,
+        tours_seen=user.tours_seen,
     )
+
+
+@router.post("/me/tour-seen", status_code=status.HTTP_204_NO_CONTENT)
+async def mark_tour_seen(
+    body: MarkTourSeenRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Record that the current user has seen a persona's first-run tour.
+
+    Idempotent — re-marking an already-seen persona is a no-op, so the
+    menu "Take the tour" re-entry can finish the tour again without
+    error. Reassign (not .append) so the ORM flags the JSON column dirty.
+    """
+    if body.persona not in user.tours_seen:
+        user.tours_seen = [*user.tours_seen, body.persona]
+        await db.commit()
 
 
 @router.get("/my-data")
