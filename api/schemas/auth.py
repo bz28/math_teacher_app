@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -135,6 +136,20 @@ class UserResponse(BaseModel):
     # teachers don't have one), so the "Try as Student" flow works
     # for independent teachers too.
     is_preview: bool = False
+    # First-run onboarding tours the user has already seen, keyed by
+    # persona. The frontend auto-mounts a persona's tour only while its
+    # key is absent from this list.
+    tours_seen: list[str] = []
+
+
+# Personas with a first-run onboarding tour. The teacher tour ships
+# first; the school-student and personal-learner step-lists plug into
+# the same engine as follow-ups.
+TourPersona = Literal["teacher", "school-student", "personal-learner"]
+
+
+class MarkTourSeenRequest(BaseModel):
+    persona: TourPersona
 
 
 class DeleteAccountRequest(BaseModel):

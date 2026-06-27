@@ -385,3 +385,51 @@ async def test_student_signup_ignores_school_name(client: AsyncClient) -> None:
             select(User).where(User.email == "student_with_school@test.com")
         )).scalar_one()
         assert user.signup_school_name is None
+
+
+TOUR_SEEN_URL = "/v1/auth/me/tour-seen"
+
+
+@pytest.mark.asyncio
+async def test_tours_seen_defaults_empty(client: AsyncClient) -> None:
+    reg = await client.post(REGISTER_URL, json=_user("tour_default@test.com"))
+    token = reg.json()["access_token"]
+    resp = await client.get(ME_URL, headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+    assert resp.json()["tours_seen"] == []
+
+
+@pytest.mark.asyncio
+async def test_mark_tour_seen_records_and_is_idempotent(client: AsyncClient) -> None:
+    reg = await client.post(REGISTER_URL, json=_user("tour_mark@test.com"))
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.post(TOUR_SEEN_URL, json={"persona": "teacher"}, headers=headers)
+    assert resp.status_code == 204
+
+    me = await client.get(ME_URL, headers=headers)
+    assert me.json()["tours_seen"] == ["teacher"]
+
+    # Idempotent — re-marking the same persona doesn't duplicate or error.
+    resp2 = await client.post(TOUR_SEEN_URL, json={"persona": "teacher"}, headers=headers)
+    assert resp2.status_code == 204
+    me2 = await client.get(ME_URL, headers=headers)
+    assert me2.json()["tours_seen"] == ["teacher"]
+
+
+@pytest.mark.asyncio
+async def test_mark_tour_seen_rejects_unknown_persona(client: AsyncClient) -> None:
+    reg = await client.post(REGISTER_URL, json=_user("tour_bad@test.com"))
+    token = reg.json()["access_token"]
+    resp = await client.post(
+        TOUR_SEEN_URL, json={"persona": "astronaut"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_mark_tour_seen_requires_auth(client: AsyncClient) -> None:
+    resp = await client.post(TOUR_SEEN_URL, json={"persona": "teacher"})
+    assert resp.status_code == 401

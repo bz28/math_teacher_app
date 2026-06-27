@@ -58,6 +58,13 @@ interface AuthState {
 
   deleteAccount: (password: string) => Promise<void>;
 
+  /** Record that the current user has seen a persona's onboarding tour.
+   *  Optimistically updates the in-memory user so the tour won't
+   *  auto-remount this session, then persists via the API. A failed
+   *  POST is swallowed — onboarding state is non-critical and the next
+   *  /auth/me reconciles it. */
+  markTourSeen: (persona: string) => Promise<void>;
+
   clearError: () => void;
 }
 
@@ -169,6 +176,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await authApi.deleteAccount(password);
     clearTokens();
     set({ user: null, loading: false, error: null });
+  },
+
+  async markTourSeen(persona: string) {
+    const current = get().user;
+    if (current && !current.tours_seen.includes(persona)) {
+      set({ user: { ...current, tours_seen: [...current.tours_seen, persona] } });
+    }
+    try {
+      await authApi.markTourSeen(persona);
+    } catch {
+      // Non-critical — the optimistic update already prevents a
+      // re-mount this session, and the next /auth/me reconciles state.
+    }
   },
 
   clearError() {

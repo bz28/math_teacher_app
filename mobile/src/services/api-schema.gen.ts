@@ -806,6 +806,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/me/tour-seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Tour Seen
+         * @description Record that the current user has seen a persona's first-run tour.
+         *
+         *     Idempotent — re-marking an already-seen persona is a no-op, so the
+         *     menu "Take the tour" re-entry can finish the tour again without
+         *     error. Reassign (not .append) so the ORM flags the JSON column dirty.
+         */
+        post: operations["mark_tour_seen_v1_auth_me_tour_seen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/mfa/disable": {
         parameters: {
             query?: never;
@@ -3911,6 +3935,14 @@ export interface components {
             /** Mfa Pending Token */
             mfa_pending_token: string;
         };
+        /** MarkTourSeenRequest */
+        MarkTourSeenRequest: {
+            /**
+             * Persona
+             * @enum {string}
+             */
+            persona: "teacher" | "school-student" | "personal-learner";
+        };
         /**
          * MfaChallengeResponse
          * @description Returned from /auth/login when the account has MFA enabled.
@@ -5111,6 +5143,11 @@ export interface components {
              * @default free
              */
             subscription_tier: string;
+            /**
+             * Tours Seen
+             * @default []
+             */
+            tours_seen: string[];
         };
         /** ValidationError */
         ValidationError: {
@@ -6798,6 +6835,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+        };
+    };
+    mark_tour_seen_v1_auth_me_tour_seen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkTourSeenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

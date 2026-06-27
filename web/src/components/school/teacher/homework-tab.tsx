@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { teacher, type TeacherAssignment, type TeacherUnit } from "@/lib/api";
+import { TOUR_IDS } from "@/components/tour";
 import { topUnits } from "@/lib/units";
 import { Select } from "@/components/ui";
 import { NewHomeworkModal } from "./_pieces/new-homework-modal";
@@ -164,6 +165,7 @@ export function HomeworkTab({
         </div>
         <button
           type="button"
+          data-tour-id={TOUR_IDS.teacherNewHomework}
           className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-semibold tracking-[0.01em] text-white transition-colors hover:bg-primary-dark"
           onClick={() => setShowNew(true)}
         >

@@ -1790,6 +1790,24 @@
         "title": "LoginVerifyMfaRequest",
         "type": "object"
       },
+      "MarkTourSeenRequest": {
+        "properties": {
+          "persona": {
+            "enum": [
+              "teacher",
+              "school-student",
+              "personal-learner"
+            ],
+            "title": "Persona",
+            "type": "string"
+          }
+        },
+        "required": [
+          "persona"
+        ],
+        "title": "MarkTourSeenRequest",
+        "type": "object"
+      },
       "MfaChallengeResponse": {
         "description": "Returned from /auth/login when the account has MFA enabled.\n\nThe client should hide the password field and prompt for the\n6-digit code sent to the user's email, then POST to\n/auth/login/verify-mfa with the pending_token + code.",
         "properties": {
@@ -5094,6 +5112,14 @@
             "default": "free",
             "title": "Subscription Tier",
             "type": "string"
+          },
+          "tours_seen": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tours Seen",
+            "type": "array"
           }
         },
         "required": [
@@ -8257,6 +8283,46 @@
           }
         ],
         "summary": "Me",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/me/tour-seen": {
+      "post": {
+        "description": "Record that the current user has seen a persona's first-run tour.\n\nIdempotent \u2014 re-marking an already-seen persona is a no-op, so the\nmenu \"Take the tour\" re-entry can finish the tour again without\nerror. Reassign (not .append) so the ORM flags the JSON column dirty.",
+        "operationId": "mark_tour_seen_v1_auth_me_tour_seen_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkTourSeenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Mark Tour Seen",
         "tags": [
           "auth"
         ]

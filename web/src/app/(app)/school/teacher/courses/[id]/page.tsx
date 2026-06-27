@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, use, useCallback, useEffect, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
@@ -11,8 +11,9 @@ import {
   BANK_JOB_TOAST_AUTO_CLEAR_MS,
 } from "@/lib/constants";
 import { formatDueRelative } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth";
+import { TOUR_ACTIONS, TOUR_IDS, useTour, useTourAction } from "@/components/tour";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
-import { SetupChecklist } from "@/components/school/teacher/_pieces/setup-checklist";
 import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
 import { HomeworkTab } from "@/components/school/teacher/homework-tab";
@@ -68,11 +69,6 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   const [course, setCourse] = useState<TeacherCourse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Bumped on every course reload so the setup checklist refetches its
-  // milestone booleans when the teacher completes a step (adds a
-  // section, uploads materials, etc.) — those flows already call
-  // reloadCourse via onChanged.
-  const [setupVersion, setSetupVersion] = useState(0);
 
   // Tab state lives in the URL (?tab=materials) so refresh, back/
   // forward, and deep-linked URLs all land on the right tab. Unknown
@@ -198,7 +194,6 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
     try {
       setCourse(await teacher.course(id));
       setError(null);
-      setSetupVersion((v) => v + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load course");
     } finally {
@@ -210,6 +205,55 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
     reloadCourse();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // ── Onboarding tour wiring ──
+  // The Field Guide tour (components/tour) replaces the old setup
+  // checklist. The page registers the imperative handoffs each step
+  // needs (tab switches + the live New-section dialog) and owns the
+  // section modal so the tour can open it, then auto-mounts on a
+  // teacher's first visit while their "teacher" tour is unseen.
+  const tour = useTour();
+  const user = useAuthStore((s) => s.user);
+  const [sectionModalOpen, setSectionModalOpen] = useState(false);
+  // One-shot request from step two: expand the first section's roster so
+  // the invite control mounts. SectionsTab consumes it once a section is
+  // present and clears it via onExpandFirstRosterConsumed.
+  const [expandFirstRoster, setExpandFirstRoster] = useState(false);
+
+  useTourAction(TOUR_ACTIONS.gotoSections, () => {
+    setTab("sections");
+    setSectionModalOpen(false);
+  });
+  useTourAction(TOUR_ACTIONS.openNewSection, () => {
+    setTab("sections");
+    setSectionModalOpen(true);
+  });
+  useTourAction(TOUR_ACTIONS.closeNewSection, () => setSectionModalOpen(false));
+  useTourAction(TOUR_ACTIONS.expandFirstSection, () => {
+    setTab("sections");
+    setExpandFirstRoster(true);
+  });
+  useTourAction(TOUR_ACTIONS.gotoMaterials, () => setTab("materials"));
+  useTourAction(TOUR_ACTIONS.gotoHomework, () => setTab("homework"));
+  useTourAction(TOUR_ACTIONS.gotoSubmissions, () => setTab("submissions"));
+
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (loading || error || !course) return;
+    if (!user || user.role !== "teacher") return;
+    if (user.tours_seen.includes("teacher")) return;
+    // Mount after first paint, once the default-tab targets exist. Latch
+    // autoStartedRef only when start() actually fires — not before the
+    // rAF — so a spurious effect re-run that cancels this frame simply
+    // reschedules on the next run instead of permanently dropping the
+    // tour (the cleanup cancels the pending frame).
+    const raf = requestAnimationFrame(() => {
+      autoStartedRef.current = true;
+      tour.start("teacher");
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [loading, error, course, user, tour]);
 
   if (loading) {
     return (
@@ -265,11 +309,6 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
         <CourseStatusRow course={course} />
       </motion.div>
 
-      {/* First-run "Set up your class" checklist — sits above the tab
-          bar, hides itself once every step is done or the teacher
-          dismisses it. Purely additive; never blocks the workspace. */}
-      <SetupChecklist courseId={course.id} onNavigate={setTab} version={setupVersion} />
-
       {/* Editorial tab bar — underline-on-active matches the student
           top-bar and app-shell grammar. No tinted pill backgrounds. */}
       <div className="mt-8 flex gap-6 overflow-x-auto border-b border-border-light">
@@ -277,6 +316,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
           <button
             key={t.key}
             type="button"
+            data-tour-id={t.key === "submissions" ? TOUR_IDS.teacherSubmissions : undefined}
             onClick={() => setTab(t.key)}
             className={`relative shrink-0 py-3 text-sm font-medium transition-colors ${
               tab === t.key
@@ -309,7 +349,16 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
       </div>
 
       <div className="mt-6">
-        {tab === "sections" && <SectionsTab courseId={course.id} onChanged={reloadCourse} />}
+        {tab === "sections" && (
+          <SectionsTab
+            courseId={course.id}
+            onChanged={reloadCourse}
+            showNewSection={sectionModalOpen}
+            onShowNewSectionChange={setSectionModalOpen}
+            expandFirstRoster={expandFirstRoster}
+            onExpandFirstRosterConsumed={() => setExpandFirstRoster(false)}
+          />
+        )}
         {tab === "materials" && <MaterialsTab courseId={course.id} onChanged={reloadCourse} />}
         {tab === "homework" && (
           <HomeworkTab

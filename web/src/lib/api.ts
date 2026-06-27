@@ -49,6 +49,10 @@ export interface User {
   has_stripe_customer: boolean;
   is_preview: boolean;
   mfa_enabled: boolean;
+  /** First-run onboarding tours already seen, keyed by persona
+   *  ("teacher" | "school-student" | "personal-learner"). A persona's
+   *  tour auto-mounts only while its key is absent. */
+  tours_seen: string[];
 }
 
 export interface InviteData {
@@ -542,6 +546,16 @@ export const auth = {
 
   me() {
     return apiFetch<User>("/auth/me");
+  },
+
+  /** Mark a persona's first-run onboarding tour as seen. Idempotent on
+   *  the server — safe to call again when re-running the tour from the
+   *  menu. Returns 204 (no body). */
+  markTourSeen(persona: string) {
+    return apiFetch<void>("/auth/me/tour-seen", {
+      method: "POST",
+      body: JSON.stringify({ persona }),
+    });
   },
 
   entitlements() {

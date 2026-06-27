@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.database import Base
@@ -85,6 +85,17 @@ class User(Base):
     )
     mfa_code_attempts: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
+    )
+
+    # Onboarding tours the user has already seen, keyed by persona
+    # ("teacher" | "school-student" | "personal-learner"). A persona's
+    # first-run tour auto-mounts only while its key is absent; the menu
+    # "Take the tour" re-entry never clears these. Stored as a JSON
+    # array rather than a join table — the set is tiny and read on every
+    # /auth/me. Always reassign (don't .append) so the ORM flags the
+    # in-place mutation as dirty.
+    tours_seen: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default="[]"
     )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
