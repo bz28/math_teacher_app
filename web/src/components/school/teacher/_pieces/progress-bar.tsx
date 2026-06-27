@@ -26,7 +26,7 @@ export function ProgressBar({
     color === "green"
       ? "bg-green-500 dark:bg-green-400"
       : color === "amber"
-        ? "bg-[color:var(--color-warning-bg)]0 dark:bg-amber-400"
+        ? "bg-[color:var(--color-warning-bg)] dark:bg-amber-400"
         : "bg-blue-500 dark:bg-blue-400";
 
   return (
