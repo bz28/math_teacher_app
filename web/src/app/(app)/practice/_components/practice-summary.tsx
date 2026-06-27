@@ -6,6 +6,8 @@ import { motion } from "framer-motion";
 import { MathText } from "@/components/shared/math-text";
 import { Button, Card, AnimatedCounter } from "@/components/ui";
 import { DiagnosisTeaser } from "@/components/ui/diagnosis-teaser";
+import { CelebrationMedallion } from "@/components/shared/celebration-medallion";
+import { useCelebrationReveal } from "@/components/shared/celebration-reveal";
 import { cn } from "@/lib/utils";
 import type { PracticeBatch } from "@/stores/practice";
 
@@ -24,40 +26,62 @@ export function PracticeSummary({
 }: PracticeSummaryProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const { container, item } = useCelebrationReveal();
   const { results, flags, workSubmissions } = practiceBatch;
   const correct = results.filter((r) => r.isCorrect).length;
   const flagged = flags.filter(Boolean).length;
   const percentage = Math.round((correct / results.length) * 100);
-  const encouragement =
+
+  // Headline + reflection earn their tone from how the set actually went.
+  const headline =
     percentage === 100
-      ? "Perfect score!"
+      ? { lead: "A perfect ", emph: "round." }
       : percentage >= 80
-        ? "Great job!"
+        ? { lead: "Nicely ", emph: "done." }
         : percentage >= 50
-          ? "Good effort, keep practicing!"
-          : "Keep going, you'll get there!";
+          ? { lead: "Good ", emph: "work." }
+          : { lead: "Keep ", emph: "going." };
+  const reflection =
+    percentage === 100
+      ? `Every one correct — all ${results.length} landed.`
+      : percentage >= 80
+        ? `You solved ${correct} of ${results.length}. Strong round.`
+        : percentage >= 50
+          ? `${correct} of ${results.length} down — the misses are where the next gains are.`
+          : `${correct} of ${results.length} this round. Every attempt sharpens the next.`;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl font-extrabold text-text-primary">Results</h1>
-      </motion.div>
+      <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
+        <motion.div variants={item} className="space-y-3 text-center">
+          <CelebrationMedallion />
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+            Practice complete
+          </p>
+          <h1 className="font-serif text-[2.5rem] leading-[1.05] text-text-primary sm:text-[3rem]">
+            {headline.lead}
+            <span className="font-fraunces italic text-primary">{headline.emph}</span>
+          </h1>
+        </motion.div>
 
-      {/* Score card */}
-      <Card variant="elevated" className="text-center space-y-3">
-        <p className="text-4xl font-extrabold text-primary">
-          <AnimatedCounter to={correct} />/{results.length}
-        </p>
-        <div className="mx-auto h-2 w-48 overflow-hidden rounded-full bg-border-light">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
-            style={{ width: `${percentage}%` }}
-          />
-        </div>
-        <p className="text-sm font-medium text-text-secondary">
-          {encouragement}
-        </p>
-      </Card>
+        {/* Score card */}
+        <motion.div variants={item}>
+          <Card variant="elevated" className="text-center space-y-3">
+            <p className="font-serif text-5xl text-primary">
+              <AnimatedCounter to={correct} />/{results.length}
+            </p>
+            <div className="mx-auto h-2 w-48 overflow-hidden rounded-full bg-border-light">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+            <p className="mx-auto max-w-sm text-[15px] leading-relaxed text-text-secondary">
+              {reflection}
+            </p>
+          </Card>
+        </motion.div>
+      </motion.div>
 
       {/* Per-result breakdown */}
       <div className="space-y-2">

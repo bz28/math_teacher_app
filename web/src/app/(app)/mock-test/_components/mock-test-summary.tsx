@@ -6,6 +6,8 @@ import { motion } from "framer-motion";
 import { MathText } from "@/components/shared/math-text";
 import { Button, Card, AnimatedCounter } from "@/components/ui";
 import { DiagnosisTeaser } from "@/components/ui/diagnosis-teaser";
+import { CelebrationMedallion } from "@/components/shared/celebration-medallion";
+import { useCelebrationReveal } from "@/components/shared/celebration-reveal";
 import { cn, formatDuration } from "@/lib/utils";
 import { EntitlementError } from "@/lib/api";
 import type { MockTest } from "@/stores/mock-test";
@@ -20,6 +22,7 @@ interface MockTestSummaryProps {
 export function MockTestSummary({ mockTest, onToggleFlag, onStartLearnQueue, onReset }: MockTestSummaryProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const { container, item } = useCelebrationReveal();
   const results = mockTest.results!;
   const correct = results.filter((r) => r.isCorrect === true).length;
   const answered = results.filter((r) => r.userAnswer !== null).length;
@@ -32,37 +35,61 @@ export function MockTestSummary({ mockTest, onToggleFlag, onStartLearnQueue, onR
     .map((r, i) => ({ question: r.question, index: i }))
     .filter((_, i) => mockTest.flags[i]);
 
-  const getMessage = () => {
-    if (score >= 90) return "Excellent work!";
-    if (score >= 70) return "Good job!";
-    if (score >= 50) return "Keep practicing!";
-    return "Don't give up — review and try again!";
-  };
+  const headline =
+    score >= 90
+      ? { lead: "Excellent ", emph: "work." }
+      : score >= 70
+        ? { lead: "Solid ", emph: "finish." }
+        : score >= 50
+          ? { lead: "Good ", emph: "effort." }
+          : { lead: "Exam ", emph: "complete." };
+  const reflection =
+    score >= 90
+      ? "You sat the whole exam and came through strong."
+      : score >= 70
+        ? "You went the distance — a solid result to build on."
+        : score >= 50
+          ? "You finished the exam. The misses are your next chapter."
+          : "You made it to the end. Review the gaps and come back sharper.";
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      {/* Score card */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-        <Card variant="elevated" className="text-center space-y-3">
-          <p className="text-sm font-semibold text-text-muted">Exam Results</p>
-          <p className="text-4xl font-extrabold text-primary"><AnimatedCounter to={correct} />/{results.length}</p>
+      <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
+        {/* Masthead */}
+        <motion.div variants={item} className="space-y-3 text-center">
+          <CelebrationMedallion />
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+            Exam complete
+          </p>
+          <h1 className="font-serif text-[2.5rem] leading-[1.05] text-text-primary sm:text-[3rem]">
+            {headline.lead}
+            <span className="font-fraunces italic text-primary">{headline.emph}</span>
+          </h1>
+          <p className="mx-auto max-w-sm text-[15px] leading-relaxed text-text-secondary">
+            {reflection}
+          </p>
+        </motion.div>
 
-          <div className="mx-auto h-2 w-48 overflow-hidden rounded-full bg-border-light">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
-              style={{ width: `${score}%` }}
-            />
-          </div>
-          <p className="text-lg font-bold text-text-primary"><AnimatedCounter to={score} />%</p>
-          <p className="text-sm text-text-secondary">{getMessage()}</p>
+        {/* Score card */}
+        <motion.div variants={item}>
+          <Card variant="elevated" className="text-center space-y-3">
+            <p className="font-serif text-5xl text-primary"><AnimatedCounter to={correct} />/{results.length}</p>
 
-          {timeTaken != null && (
-            <p className="text-xs text-text-muted">
-              Completed in {formatDuration(timeTaken)}
-            </p>
-          )}
+            <div className="mx-auto h-2 w-48 overflow-hidden rounded-full bg-border-light">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-primary to-primary-light"
+                style={{ width: `${score}%` }}
+              />
+            </div>
+            <p className="text-lg font-bold text-text-primary"><AnimatedCounter to={score} />%</p>
 
-          <div className="flex justify-center gap-4 pt-2">
+            {timeTaken != null && (
+              <p className="text-xs text-text-muted">
+                Completed in {formatDuration(timeTaken)}
+              </p>
+            )}
+
+            <div className="flex justify-center gap-4 pt-2">
             <div className="flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full bg-success" />
               <span className="text-xs text-text-secondary"><AnimatedCounter to={correct} /> correct</span>
@@ -75,8 +102,9 @@ export function MockTestSummary({ mockTest, onToggleFlag, onStartLearnQueue, onR
               <span className="h-2.5 w-2.5 rounded-full bg-text-muted" />
               <span className="text-xs text-text-secondary"><AnimatedCounter to={unanswered} /> skipped</span>
             </div>
-          </div>
-        </Card>
+            </div>
+          </Card>
+        </motion.div>
       </motion.div>
 
       {/* Question breakdown */}

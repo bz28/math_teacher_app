@@ -86,8 +86,10 @@ export default function PracticePage() {
     return (
       <div className="mx-auto max-w-2xl space-y-6">
         <div>
-          <h1 className="text-2xl font-extrabold text-text-primary">Your practice problem</h1>
-          <p className="mt-1 text-sm text-text-muted">
+          <h1 className="font-serif text-[2.5rem] leading-[1.05] text-text-primary sm:text-[3rem]">
+            Your practice is <span className="font-fraunces italic text-primary">ready.</span>
+          </h1>
+          <p className="mt-2 text-sm text-text-muted">
             {practiceBatch.problems.length} question{practiceBatch.problems.length !== 1 ? "s" : ""} · Review before you begin
           </p>
         </div>

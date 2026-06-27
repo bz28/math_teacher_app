@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { DifficultyPicker, type Difficulty } from "@/components/shared/difficulty-picker";
 import { motion } from "framer-motion";
 import { Button, Card } from "@/components/ui";
-import { CheckIcon, ChatBubbleIcon, FlagIcon } from "@/components/ui/icons";
+import { ChatBubbleIcon, FlagIcon } from "@/components/ui/icons";
+import { CelebrationMedallion } from "@/components/shared/celebration-medallion";
+import { useCelebrationReveal } from "@/components/shared/celebration-reveal";
 import { cn } from "@/lib/utils";
 import type { LearnQueue, Subject } from "@/stores/learn";
 import { EntitlementError, type SessionResponse } from "@/lib/api";
@@ -34,23 +36,41 @@ export function LearnCompleted({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>("same");
+  const { container, item } = useCelebrationReveal();
+
+  // Reflect the moment back: a fresh single solve reads as a finished
+  // piece of work; mid-queue it's momentum toward the set.
+  const isLastInQueue =
+    learnQueue !== null && learnQueue.currentIndex >= learnQueue.problems.length - 1;
+  const eyebrow = learnQueue
+    ? `Problem ${learnQueue.currentIndex + 1} of ${learnQueue.problems.length}`
+    : "Solved";
+  const subline = learnQueue
+    ? isLastInQueue
+      ? "That's the last one. Let's see how it all came together."
+      : "One down — keep the momentum going."
+    : "You worked it all the way through. Ready to make it stick?";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-    >
-      <Card variant="elevated" className="space-y-4 text-center">
-        {/* Checkmark */}
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
-          <CheckIcon className="h-8 w-8 text-success" />
-        </div>
+    <motion.div variants={container} initial="hidden" animate="show">
+      <Card variant="elevated" className="space-y-5 text-center">
+        <motion.div variants={item}>
+          <CelebrationMedallion />
+        </motion.div>
 
-        <h2 className="text-xl font-extrabold text-text-primary">
-          Problem Solved!
-        </h2>
+        <motion.div variants={item} className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+            {eyebrow}
+          </p>
+          <h2 className="font-serif text-[2.25rem] leading-[1.05] text-text-primary sm:text-[2.5rem]">
+            Problem <span className="font-fraunces italic text-primary">solved.</span>
+          </h2>
+          <p className="mx-auto max-w-sm text-[15px] leading-relaxed text-text-secondary">
+            {subline}
+          </p>
+        </motion.div>
 
-        <div className="flex flex-col gap-2 pt-2">
+        <motion.div variants={item} className="flex flex-col gap-2 pt-1">
           {learnQueue ? (
             <>
               <button
@@ -132,7 +152,7 @@ export function LearnCompleted({
               </Button>
             </>
           )}
-        </div>
+        </motion.div>
       </Card>
     </motion.div>
   );
