@@ -50,8 +50,8 @@ export interface User {
   is_preview: boolean;
   mfa_enabled: boolean;
   /** First-run onboarding tours already seen, keyed by persona
-   *  ("teacher" | "school-student" | "personal-learner"). A persona's
-   *  tour auto-mounts only while its key is absent. */
+   *  ("teacher" | "student" | "personal"). A persona's tour
+   *  auto-mounts only while its key is absent. */
   tours_seen: string[];
 }
 

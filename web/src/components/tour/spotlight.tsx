@@ -609,7 +609,7 @@ function FindingCard({
         transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
         aria-hidden
       />
-      <p className="font-serif text-[15px] italic text-text-secondary">Finding your roster…</p>
+      <p className="font-serif text-[15px] italic text-text-secondary">Just a moment…</p>
       <button
         type="button"
         onClick={onSkip}

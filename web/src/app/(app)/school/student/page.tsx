@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   schoolStudent,
   type StudentDashboardResponse,
   type StudentClassSummary,
 } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth";
+import { TOUR_IDS, useTour } from "@/components/tour";
 import { DashboardCard } from "@/components/school/student/dashboard-card";
 import { DashboardAssignmentRow } from "@/components/school/student/dashboard-assignment-row";
 import { StudentGradeRow } from "@/components/school/student/student-grade-row";
@@ -79,6 +81,40 @@ export default function SchoolStudentDashboard() {
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [load, loadClasses]);
+
+  // ── First-run onboarding tour ──
+  // A school student lands here once they've joined a class (the join is
+  // what stamps school_id). This is their home base, so it's where the
+  // Field Guide tour auto-starts — a pure spotlight walk, no handoffs.
+  // Mirror the teacher auto-start guards: latch once, never restart a
+  // live tour, gate on persona + tours_seen. Skip preview shadows
+  // (a teacher "Try as Student") — their tours_seen is the teacher's.
+  const tour = useTour();
+  const user = useAuthStore((s) => s.user);
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (tour.isActive) return;
+    if (!user || user.role !== "student" || user.is_preview) return;
+    if (user.tours_seen.includes("student")) return;
+    // The spotlight is a desktop experience — its targets live in the
+    // md+ sidebar (width 0 on phones). Don't auto-start on mobile; the
+    // "Take the tour" re-entry still works at any width.
+    if (typeof window === "undefined" || !window.matchMedia("(min-width: 768px)").matches) return;
+    // Only auto-start once there's a real class context. A student with
+    // school_id but zero enrollments lands on the join-a-class view,
+    // where the homework / graded / turn-in targets don't exist — so the
+    // spotlight would chase nothing. Gate on at least one class.
+    if (!classes || classes.length === 0) return;
+    // Defer to first paint so the spotlight targets are mounted; the
+    // welcome cover shows first, giving the dashboard fetch time to land
+    // before the user steps into the spotlights.
+    const raf = requestAnimationFrame(() => {
+      autoStartedRef.current = true;
+      tour.start("student");
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [user, tour, classes]);
 
   if (error) {
     return (
@@ -163,8 +199,16 @@ export default function SchoolStudentDashboard() {
       </div>
 
       <div className="space-y-6">
-        <div className="dashboard-card-enter" style={{ animationDelay: "80ms" }}>
-          <DashboardCard title="Due this week" count={dueCount}>
+        <div
+          data-tour-id={TOUR_IDS.studentHomework}
+          className="dashboard-card-enter"
+          style={{ animationDelay: "80ms" }}
+        >
+          <DashboardCard
+            title="Due this week"
+            count={dueCount}
+            bodyTourId={TOUR_IDS.studentTurnIn}
+          >
             {overdue.length > 0 && (
               <div className="border-b border-error/30 bg-error-light/40 px-5 py-2">
                 <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-error">
@@ -189,7 +233,11 @@ export default function SchoolStudentDashboard() {
           </DashboardCard>
         </div>
 
-        <div className="dashboard-card-enter" style={{ animationDelay: "160ms" }}>
+        <div
+          data-tour-id={TOUR_IDS.studentGetUnstuck}
+          className="dashboard-card-enter"
+          style={{ animationDelay: "160ms" }}
+        >
           <DashboardCard
             title="Recently graded"
             count={recently_graded.length || undefined}

@@ -5,7 +5,7 @@ Revises: bx1000067
 Create Date: 2026-06-26 10:00:00.000000
 
 Persists which first-run onboarding tours a user has already seen,
-keyed by persona ("teacher" | "school-student" | "personal-learner").
+keyed by persona ("teacher" | "student" | "personal").
 A persona's tour auto-mounts only while its key is absent. Stored as a
 JSONB array — the set is tiny and read on every /auth/me, so a join
 table isn't worth it.

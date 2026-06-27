@@ -1795,8 +1795,8 @@
           "persona": {
             "enum": [
               "teacher",
-              "school-student",
-              "personal-learner"
+              "student",
+              "personal"
             ],
             "title": "Persona",
             "type": "string"

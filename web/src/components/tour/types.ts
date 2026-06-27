@@ -8,7 +8,7 @@
  * `tours.ts` — no engine changes.
  */
 
-export type TourPersona = "teacher" | "school-student" | "personal-learner";
+export type TourPersona = "teacher" | "student" | "personal";
 
 /** Preferred side for the caption card relative to its target. "auto"
  *  lets the engine pick whichever side fits without covering the
@@ -38,6 +38,17 @@ export const TOUR_IDS = {
   teacherMaterials: "teacher-materials",
   teacherNewHomework: "teacher-new-homework",
   teacherSubmissions: "teacher-submissions",
+
+  // ── School-student dashboard (/school/student) ──
+  studentJoin: "student-join",
+  studentHomework: "student-homework",
+  studentTurnIn: "student-turn-in",
+  studentGetUnstuck: "student-get-unstuck",
+
+  // ── Personal learner home (/home) ──
+  personalStart: "personal-start",
+  personalModes: "personal-modes",
+  personalJoin: "personal-join",
 } as const;
 
 /**
