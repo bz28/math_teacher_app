@@ -53,6 +53,12 @@ export function LearnRunner({
   // chat the student had after working through the steps.
   const recordedRef = useRef<Set<string>>(new Set());
 
+  // Always-current flush closure for the leave-handlers below. They're
+  // registered once on mount, so their own closure is stale; this ref is
+  // re-pointed every render so a flush records the CURRENT problem's
+  // walkthrough with its CURRENT chat count.
+  const flushRef = useRef<() => void>(() => {});
+
   // Per-problem walkthrough + chat state. Reset on problem change.
   const [stepIdx, setStepIdx] = useState(0);
   const [chatByStep, setChatByStep] = useState<Record<number, ChatMessage[]>>({});
@@ -177,6 +183,34 @@ export function LearnRunner({
     setQIndex((i) => i + 1);
     resetForProblem();
   }
+
+  // Keep the flush closure pointed at the latest problem + chat state.
+  // Only a *completed* walkthrough is loggable; recordCompletion's
+  // recordedRef dedupe keeps a flush from double-recording against the
+  // advance path (nextProblem) and vice-versa.
+  useEffect(() => {
+    flushRef.current = () => {
+      if (completed) recordCompletion();
+    };
+  });
+
+  // Close the recording gap: nextProblem logs a completed walkthrough on
+  // advance, but a student who finishes then leaves WITHOUT advancing —
+  // closes the tab, navigates away in the sidebar, hits browser-back,
+  // backgrounds the app — would never be counted. Flush on unmount and
+  // on visibilitychange→hidden (the latter catches mobile tab-close /
+  // backgrounding that beforeunload misses).
+  useEffect(() => {
+    const flush = () => flushRef.current();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      flush();
+    };
+  }, []);
 
   if (done) {
     return (
