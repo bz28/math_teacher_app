@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { teacher, type TeacherCourse } from "@/lib/api";
 import { formatDueRelative } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth";
+import { TOUR_ACTIONS, TOUR_IDS, useTour, useTourAction } from "@/components/tour";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
 import { Select } from "@/components/ui";
 
@@ -38,6 +41,35 @@ export default function SchoolTeacherDashboard() {
   useEffect(() => {
     reload();
   }, []);
+
+  // ── Onboarding tour wiring ──
+  // A brand-new teacher lands here with no courses, so the courses list
+  // is where the Field Guide tour begins. This page owns the first-run
+  // auto-start and the live New-course handoff (step one); the tour's
+  // provider lives in the app layout, so its state survives the
+  // navigation into the freshly-created course, where it resumes at the
+  // "Create a section" step (the course workspace no longer auto-starts).
+  const router = useRouter();
+  const tour = useTour();
+  const user = useAuthStore((s) => s.user);
+
+  useTourAction(TOUR_ACTIONS.openNewCourse, () => setShowNewCourse(true));
+  useTourAction(TOUR_ACTIONS.closeNewCourse, () => setShowNewCourse(false));
+
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    if (!user || user.role !== "teacher") return;
+    if (user.tours_seen.includes("teacher")) return;
+    // Mount after first paint so the New-course button (step one's
+    // target) exists. Latch only when start() actually fires, so a
+    // cancelled frame reschedules rather than dropping the tour.
+    const raf = requestAnimationFrame(() => {
+      autoStartedRef.current = true;
+      tour.start("teacher");
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [user, tour]);
 
   // Roll-ups across every course — the "what needs me right now" line
   // teachers want to see before they pick which course to open.
@@ -76,6 +108,7 @@ export default function SchoolTeacherDashboard() {
           </div>
           <button
             type="button"
+            data-tour-id={TOUR_IDS.teacherNewCourse}
             className="shrink-0 rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-semibold tracking-[0.01em] text-white transition-colors hover:bg-primary-dark"
             onClick={() => setShowNewCourse(true)}
           >
@@ -120,9 +153,18 @@ export default function SchoolTeacherDashboard() {
       {showNewCourse && (
         <NewCourseModal
           onClose={() => setShowNewCourse(false)}
-          onCreated={() => {
+          onCreated={(courseId) => {
             setShowNewCourse(false);
-            reload();
+            // During the first-run tour, creating a course advances past
+            // step one and carries the (layout-level) tour into the new
+            // course workspace, where it resumes at "Create a section".
+            // Outside the tour, just refresh the list in place.
+            if (tour.isActive) {
+              tour.next();
+              router.push(`/school/teacher/courses/${courseId}`);
+            } else {
+              reload();
+            }
           }}
         />
       )}
@@ -203,7 +245,7 @@ function CourseRow({ course }: { course: TeacherCourse }) {
   );
 }
 
-function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated: (courseId: string) => void }) {
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("math");
   const [gradeLevel, setGradeLevel] = useState<string>("");
@@ -226,13 +268,13 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
     setSubmitting(true);
     setError(null);
     try {
-      await teacher.createCourse({
+      const created = await teacher.createCourse({
         name: name.trim(),
         subject,
         grade_level: gradeLevel ? Number(gradeLevel) : undefined,
         description: description.trim() || undefined,
       });
-      onCreated();
+      onCreated(created.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create course");
       setSubmitting(false);

@@ -17,10 +17,18 @@ const MARGIN = 16; // min viewport margin
 type Rect = { top: number; left: number; width: number; height: number };
 type Side = "top" | "bottom" | "left" | "right" | "center";
 
+// How long to keep looking for a step's target before giving up and
+// centering the card. Generous enough to cover a cross-page handoff —
+// e.g. creating the first course navigates into its workspace, which
+// must fetch the course before the "New section" target mounts — not
+// just an in-page tab switch.
+const TARGET_RETRY_MS = 4000;
+
 /**
- * Locate the active step's target in the viewport. Retries for ~1.3s so
- * a target that mounts after a tab switch is still caught, then tracks
- * it through resize/scroll/layout shifts. Returns null when the control
+ * Locate the active step's target in the viewport. Retries for a few
+ * seconds so a target that mounts after a tab switch — or a full
+ * cross-page navigation + data fetch — is still caught, then tracks it
+ * through resize/scroll/layout shifts. Returns null when the control
  * genuinely isn't on screen (the card then centers, no cut-out).
  */
 function useTargetRect(
@@ -34,7 +42,7 @@ function useTargetRect(
   useEffect(() => {
     let cancelled = false;
     let raf = 0;
-    let tries = 0;
+    const deadline = Date.now() + TARGET_RETRY_MS;
     let scrolled = false;
     let ro: ResizeObserver | null = null;
     let cleanupMove: (() => void) | null = null;
@@ -69,7 +77,7 @@ function useTargetRect(
         return;
       }
       setRect(null);
-      if (tries++ < 45) raf = requestAnimationFrame(find);
+      if (Date.now() < deadline) raf = requestAnimationFrame(find);
     };
 
     find();

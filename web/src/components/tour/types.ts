@@ -22,6 +22,7 @@ export type TourPlacement = "auto" | "top" | "bottom" | "left" | "right";
  * step-list and the controls can't drift apart silently.
  */
 export const TOUR_IDS = {
+  teacherNewCourse: "teacher-new-course",
   teacherNewSection: "teacher-new-section",
   teacherInvite: "teacher-invite",
   teacherMaterials: "teacher-materials",
@@ -35,6 +36,10 @@ export const TOUR_IDS = {
  * them by name so the data-only step-list never imports page state.
  */
 export const TOUR_ACTIONS = {
+  // Live handoff into the real New-course dialog on the courses list —
+  // the from-zero tour's first step, owned by the courses-list page.
+  openNewCourse: "teacher.open-new-course",
+  closeNewCourse: "teacher.close-new-course",
   gotoSections: "teacher.goto-sections",
   openNewSection: "teacher.open-new-section",
   closeNewSection: "teacher.close-new-section",

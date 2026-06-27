@@ -1,10 +1,12 @@
 /**
  * Field Guide tour definitions, one per persona.
  *
- * The teacher tour ships first and replaces the old setup checklist —
- * its steps 1-4 walk the exact path a new teacher takes (section →
- * students → materials → homework), and step 5 explains grading + the
- * integrity check.
+ * The teacher tour ships first and replaces the old setup checklist. It
+ * is one linear from-zero journey for a brand-new teacher who has
+ * nothing: step 1 creates their first course (on the courses list), the
+ * tour carries across the navigation into that course, and steps 2-5
+ * walk the rest of the setup path (section → students → materials →
+ * homework) before step 6 explains grading + the integrity check.
  *
  * Adding a persona is purely additive: author a `TourDefinition` and
  * register it in `TOURS`. The engine renders it unchanged.
@@ -16,16 +18,31 @@ const TEACHER_TOUR: TourDefinition = {
   cover: {
     eyebrow: "Welcome to Veradic",
     title: "Your classroom, *quietly* intelligent.",
-    subtitle: "A short walk through the five things that get a class running.",
+    subtitle: "A short walk through the six things that get a class running — starting from scratch.",
     footnote: "~30s · revisit anytime from the menu",
     cta: "Take the tour",
     skip: "Skip for now",
   },
   steps: [
     {
+      id: "course",
+      target: TOUR_IDS.teacherNewCourse,
+      eyebrow: "Step one",
+      title: "Create your first course",
+      body: "Start with a course — your subject or class period. We'll set it up together.",
+      placement: "bottom",
+      // Live handoff: opens the real New course dialog. Creating a course
+      // navigates into its workspace, where the tour resumes at step two.
+      handoff: {
+        open: TOUR_ACTIONS.openNewCourse,
+        close: TOUR_ACTIONS.closeNewCourse,
+        hint: "This is the real dialog — name a course now, or continue the tour.",
+      },
+    },
+    {
       id: "section",
       target: TOUR_IDS.teacherNewSection,
-      eyebrow: "Step one",
+      eyebrow: "Step two",
       title: "Create a section",
       body: "A section is one class period. Add one to start inviting students.",
       placement: "bottom",
@@ -40,7 +57,7 @@ const TEACHER_TOUR: TourDefinition = {
     {
       id: "invite",
       target: TOUR_IDS.teacherInvite,
-      eyebrow: "Step two",
+      eyebrow: "Step three",
       title: "Invite your students",
       body: "Share a join code or email invites — students land straight in your class.",
       placement: "bottom",
@@ -52,7 +69,7 @@ const TEACHER_TOUR: TourDefinition = {
     {
       id: "materials",
       target: TOUR_IDS.teacherMaterials,
-      eyebrow: "Step three",
+      eyebrow: "Step four",
       title: "Add course materials",
       body: "Drop in your textbook pages — generated homework matches their style and level.",
       placement: "bottom",
@@ -61,7 +78,7 @@ const TEACHER_TOUR: TourDefinition = {
     {
       id: "homework",
       target: TOUR_IDS.teacherNewHomework,
-      eyebrow: "Step four",
+      eyebrow: "Step five",
       title: "Create homework",
       body: "Generate problems from your materials in seconds, then review before assigning.",
       placement: "bottom",
@@ -70,7 +87,7 @@ const TEACHER_TOUR: TourDefinition = {
     {
       id: "grade",
       target: TOUR_IDS.teacherSubmissions,
-      eyebrow: "Step five",
+      eyebrow: "Step six",
       title: "Grade & the integrity check",
       body: "AI pre-grades each submission and can interview a student to confirm they understand their own work. You review and publish.",
       placement: "bottom",
