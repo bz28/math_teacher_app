@@ -12,8 +12,18 @@ export type TourPersona = "teacher" | "school-student" | "personal-learner";
 
 /** Preferred side for the caption card relative to its target. "auto"
  *  lets the engine pick whichever side fits without covering the
- *  target. */
-export type TourPlacement = "auto" | "top" | "bottom" | "left" | "right";
+ *  target. The `bottom-start` / `bottom-end` variants pin the card's
+ *  left / right edge to the target's edge (instead of centering it
+ *  under the target) so a card beside an edge-hugging control stays a
+ *  tight pill rather than overhanging the viewport. */
+export type TourPlacement =
+  | "auto"
+  | "top"
+  | "bottom"
+  | "bottom-start"
+  | "bottom-end"
+  | "left"
+  | "right";
 
 /**
  * Stable `data-tour-id` values. Real on-screen controls carry these
@@ -82,6 +92,12 @@ export interface TourStep {
   /** Action run when the step becomes active — typically switching the
    *  workspace to the tab that hosts the target. */
   onEnter?: string;
+  /** Action run when the tour ADVANCES off this step (forward only).
+   *  Used to pre-warm the next step's target: e.g. step two fires the
+   *  roster expand on its Continue so step three's invite control is
+   *  already mounted when that step opens, instead of landing on empty
+   *  space and jumping in a second later. */
+  onLeave?: string;
   /**
    * Optional live handoff into real UI. Pressing Next opens the real
    * surface (`open`) and pauses the overlay so the user can use it;
