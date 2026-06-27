@@ -224,7 +224,7 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
 
       {showSectionPivot && sections && (
         <div
-          role="tablist"
+          role="group"
           aria-label="Choose a section"
           className="mt-5 flex flex-wrap items-center gap-1.5"
         >
@@ -232,8 +232,7 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
             <button
               key={s.id}
               type="button"
-              role="tab"
-              aria-selected={activeSection === s.id}
+              aria-pressed={activeSection === s.id}
               onClick={() => setActiveSection(s.id)}
               className={`rounded-[--radius-pill] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                 activeSection === s.id
