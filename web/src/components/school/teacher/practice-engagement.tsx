@@ -8,6 +8,7 @@ import {
   type StudentStruggleItem,
 } from "@/lib/api";
 import { formatRelativeDate } from "@/lib/utils";
+import { MeasuredKey } from "./_pieces/measured-key";
 
 /**
  * Per-student Practice & Learn engagement — the formative companion to
@@ -81,6 +82,7 @@ export function PracticeEngagement({
         <p className="mt-1 font-serif italic text-[15px] leading-snug text-text-muted">
           Practice is ungraded — this is how they&rsquo;re engaging, not a score.
         </p>
+        <MeasuredKey className="mt-3" />
       </header>
 
       {!hasPracticed ? (

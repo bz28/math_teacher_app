@@ -8,6 +8,7 @@ import {
   type PracticeInsightsResponse,
   type TeacherSection,
 } from "@/lib/api";
+import { MeasuredKey } from "./_pieces/measured-key";
 
 /**
  * Class struggle-insights — "Where the class is struggling." A re-teach
@@ -97,6 +98,7 @@ export function PracticeStrugglePanel({ courseId }: { courseId: string }) {
         <p className="mt-1 font-serif italic text-[15px] leading-snug text-text-muted">
           Formative signal from ungraded practice — a nudge on what to revisit, not a gradebook.
         </p>
+        <MeasuredKey className="mt-3" />
       </header>
 
       {showSectionPivot && sections && (
