@@ -2388,6 +2388,27 @@
         "title": "RespondRequest",
         "type": "object"
       },
+      "SectionStudentInsightsResponse": {
+        "properties": {
+          "section_id": {
+            "title": "Section Id",
+            "type": "string"
+          },
+          "students": {
+            "items": {
+              "$ref": "#/components/schemas/StudentInsight"
+            },
+            "title": "Students",
+            "type": "array"
+          }
+        },
+        "required": [
+          "section_id",
+          "students"
+        ],
+        "title": "SectionStudentInsightsResponse",
+        "type": "object"
+      },
       "SessionHistoryItem": {
         "properties": {
           "created_at": {
@@ -2959,6 +2980,99 @@
           "status"
         ],
         "title": "StudentHomeworkSummary",
+        "type": "object"
+      },
+      "StudentInsight": {
+        "description": "One roster card for the Student Insights tab. Coarse engagement +\nstruggle signals only \u2014 no scores, no raw answers, no grades.",
+        "properties": {
+          "first_try_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Try Rate"
+          },
+          "last_active": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Active"
+          },
+          "learn_walkthroughs": {
+            "title": "Learn Walkthroughs",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "practiced_count": {
+            "title": "Practiced Count",
+            "type": "integer"
+          },
+          "retry_count": {
+            "title": "Retry Count",
+            "type": "integer"
+          },
+          "revealed_count": {
+            "title": "Revealed Count",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "thriving",
+              "on_track",
+              "needs_nudge",
+              "struggling",
+              "no_activity"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "student_id": {
+            "title": "Student Id",
+            "type": "string"
+          },
+          "trend": {
+            "anyOf": [
+              {
+                "enum": [
+                  "improving",
+                  "slipping",
+                  "steady"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trend"
+          }
+        },
+        "required": [
+          "student_id",
+          "name",
+          "practiced_count",
+          "learn_walkthroughs",
+          "last_active",
+          "first_try_rate",
+          "retry_count",
+          "revealed_count",
+          "trend",
+          "status"
+        ],
+        "title": "StudentInsight",
         "type": "object"
       },
       "StudentLinkedPracticeResponse": {
@@ -12990,6 +13104,65 @@
           }
         ],
         "summary": "Get Section Practice Insights",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/courses/{course_id}/sections/{section_id}/student-insights": {
+      "get": {
+        "description": "Per-student practice/learn rollup for every enrolled student in a\nsection \u2014 the Student Insights tab. One card per student (including\nstudents with zero activity, so the teacher sees the whole roster),\neach carrying coarse engagement counts plus a derived status + trend.\n\nRead-only INSIGHT, same contract as the other practice reads: no\nscores, no raw answers, no grades \u2014 just who's thriving and who's\nfalling behind, and why, in terms a teacher can explain.\n\nTwo queries, no N+1: the enrollment roster, and one grouped pull of\nthe section's PracticeActivity rows merged with the roster in Python.",
+        "operationId": "get_section_student_insights_v1_teacher_courses__course_id__sections__section_id__student_insights_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "section_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Section Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SectionStudentInsightsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Section Student Insights",
         "tags": [
           "teacher"
         ]
