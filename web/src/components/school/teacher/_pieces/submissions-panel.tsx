@@ -222,7 +222,7 @@ const ROW_DISPOSITION_COPY: Partial<
   },
   tutor_pivot: {
     text: "Tutored",
-    style: "bg-[color:var(--color-warning-dark)] text-white dark:bg-[color:var(--color-warning-bg)]0",
+    style: "bg-[color:var(--color-warning-dark)] text-white dark:bg-[color:var(--color-warning-bg)]",
   },
 };
 
@@ -996,7 +996,7 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
                   </div>
                   <div className="flex items-center gap-2 text-xs text-text-muted">
                     {r.is_late && (
-                      <span className="rounded-full bg-[color:var(--color-warning-bg)] px-2 py-0.5 font-bold text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning-bg)]0/20">
+                      <span className="rounded-full bg-[color:var(--color-warning-bg)] px-2 py-0.5 font-bold text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning-bg)]/20">
                         LATE
                       </span>
                     )}
@@ -1020,7 +1020,7 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
               <div className="text-xs text-text-muted">
                 Submitted {new Date(detail.submitted_at).toLocaleString()}
                 {detail.is_late && (
-                  <span className="ml-2 rounded-full bg-[color:var(--color-warning-bg)] px-2 py-0.5 font-bold text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning-bg)]0/20">
+                  <span className="ml-2 rounded-full bg-[color:var(--color-warning-bg)] px-2 py-0.5 font-bold text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning-bg)]/20">
                     LATE
                   </span>
                 )}

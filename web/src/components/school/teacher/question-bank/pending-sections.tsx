@@ -186,7 +186,7 @@ function VariationGroupRow({
   const parentMissing = parentLoaded && !parent;
 
   return (
-    <div className="rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)]/40 p-3 transition-all hover:border-[color:var(--color-warning)]/30  dark:bg-[color:var(--color-warning-bg)]0/5">
+    <div className="rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)]/40 p-3 transition-all hover:border-[color:var(--color-warning)]/30  dark:bg-[color:var(--color-warning-bg)]/5">
       <div className="flex items-baseline justify-between gap-2 px-1 text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)] ">
         <span>↳ Practice problems for</span>
         <span className="text-[color:var(--color-warning-dark)] ">
@@ -198,7 +198,7 @@ function VariationGroupRow({
         <button
           type="button"
           onClick={onViewParent}
-          className="group mt-1.5 block w-full rounded-[--radius-sm] px-1 py-1 text-left transition-colors hover:bg-[color:var(--color-warning-bg)]/40 dark:hover:bg-[color:var(--color-warning-bg)]0/10"
+          className="group mt-1.5 block w-full rounded-[--radius-sm] px-1 py-1 text-left transition-colors hover:bg-[color:var(--color-warning-bg)]/40 dark:hover:bg-[color:var(--color-warning-bg)]/10"
           title="View the original problem"
         >
           <div className="line-clamp-1 text-sm font-bold text-text-primary group-hover:text-primary">
@@ -241,7 +241,7 @@ function VariationGroupRow({
         <button
           type="button"
           onClick={onReview}
-          className="rounded-[--radius-md] bg-[color:var(--color-warning-dark)] px-3 py-1 text-white hover:bg-[color:var(--color-warning)] dark:bg-[color:var(--color-warning-bg)]0 "
+          className="rounded-[--radius-md] bg-[color:var(--color-warning-dark)] px-3 py-1 text-white hover:bg-[color:var(--color-warning)] dark:bg-[color:var(--color-warning-bg)] "
         >
           Review practice →
         </button>

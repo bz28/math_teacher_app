@@ -67,6 +67,10 @@ export default function SchoolTeacherDashboard() {
     if (tour.isActive) return;
     if (!user || user.role !== "teacher") return;
     if (user.tours_seen.includes("teacher")) return;
+    // Desktop only — the spotlight tour's targets live in controls that
+    // collapse/hide on mobile (e.g. the New-course button in a narrow
+    // header), so a phone auto-start would spotlight unreachable elements.
+    if (typeof window === "undefined" || !window.matchMedia("(min-width: 768px)").matches) return;
     // Mount after first paint so the New-course button (step one's
     // target) exists. Latch only when start() actually fires, so a
     // cancelled frame reschedules rather than dropping the tour.
