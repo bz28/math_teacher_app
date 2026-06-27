@@ -13,6 +13,8 @@ export function SectionsTab({
   onChanged,
   showNewSection,
   onShowNewSectionChange,
+  expandFirstRoster,
+  onExpandFirstRosterConsumed,
 }: {
   courseId: string;
   onChanged: () => void;
@@ -20,6 +22,12 @@ export function SectionsTab({
    *  live handoff. Falls back to internal state when omitted. */
   showNewSection?: boolean;
   onShowNewSectionChange?: (open: boolean) => void;
+  /** Onboarding tour step two requests the first section's roster be
+   *  expanded so the invite control (TOUR_IDS.teacherInvite) mounts
+   *  before the spotlight measures it. One-shot: cleared via
+   *  onExpandFirstRosterConsumed once consumed. */
+  expandFirstRoster?: boolean;
+  onExpandFirstRosterConsumed?: () => void;
 }) {
   const [sections, setSections] = useState<TeacherSection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,6 +53,17 @@ export function SectionsTab({
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
+
+  // Honour the tour's one-shot request to open the first section's
+  // roster. Wait until sections have loaded (length > 0) before
+  // consuming, so a first-run teacher who just created a section in
+  // step one still resolves a real target. Don't override a roster the
+  // teacher already has open.
+  useEffect(() => {
+    if (!expandFirstRoster || sections.length === 0) return;
+    setOpenRoster((cur) => cur ?? sections[0].id);
+    onExpandFirstRosterConsumed?.();
+  }, [expandFirstRoster, sections, onExpandFirstRosterConsumed]);
 
   return (
     <div>

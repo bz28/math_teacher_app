@@ -38,6 +38,10 @@ export const TOUR_ACTIONS = {
   gotoSections: "teacher.goto-sections",
   openNewSection: "teacher.open-new-section",
   closeNewSection: "teacher.close-new-section",
+  // Switch to the Sections tab AND expand the first section's roster so
+  // the invite control (TOUR_IDS.teacherInvite, inside the roster) is
+  // mounted before step two spotlights it.
+  expandFirstSection: "teacher.expand-first-section",
   gotoMaterials: "teacher.goto-materials",
   gotoHomework: "teacher.goto-homework",
   gotoSubmissions: "teacher.goto-submissions",

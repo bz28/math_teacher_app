@@ -44,7 +44,10 @@ const TEACHER_TOUR: TourDefinition = {
       title: "Invite your students",
       body: "Share a join code or email invites — students land straight in your class.",
       placement: "bottom",
-      onEnter: TOUR_ACTIONS.gotoSections,
+      // Expanding the first section's roster mounts the invite control
+      // this step targets. Falls back to the centered card when a
+      // first-run teacher skipped creating a section in step one.
+      onEnter: TOUR_ACTIONS.expandFirstSection,
     },
     {
       id: "materials",

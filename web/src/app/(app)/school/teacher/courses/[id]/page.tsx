@@ -215,6 +215,10 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   const tour = useTour();
   const user = useAuthStore((s) => s.user);
   const [sectionModalOpen, setSectionModalOpen] = useState(false);
+  // One-shot request from step two: expand the first section's roster so
+  // the invite control mounts. SectionsTab consumes it once a section is
+  // present and clears it via onExpandFirstRosterConsumed.
+  const [expandFirstRoster, setExpandFirstRoster] = useState(false);
 
   useTourAction(TOUR_ACTIONS.gotoSections, () => {
     setTab("sections");
@@ -225,6 +229,10 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
     setSectionModalOpen(true);
   });
   useTourAction(TOUR_ACTIONS.closeNewSection, () => setSectionModalOpen(false));
+  useTourAction(TOUR_ACTIONS.expandFirstSection, () => {
+    setTab("sections");
+    setExpandFirstRoster(true);
+  });
   useTourAction(TOUR_ACTIONS.gotoMaterials, () => setTab("materials"));
   useTourAction(TOUR_ACTIONS.gotoHomework, () => setTab("homework"));
   useTourAction(TOUR_ACTIONS.gotoSubmissions, () => setTab("submissions"));
@@ -235,9 +243,15 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
     if (loading || error || !course) return;
     if (!user || user.role !== "teacher") return;
     if (user.tours_seen.includes("teacher")) return;
-    autoStartedRef.current = true;
-    // Mount after first paint, once the default-tab targets exist.
-    const raf = requestAnimationFrame(() => tour.start("teacher"));
+    // Mount after first paint, once the default-tab targets exist. Latch
+    // autoStartedRef only when start() actually fires — not before the
+    // rAF — so a spurious effect re-run that cancels this frame simply
+    // reschedules on the next run instead of permanently dropping the
+    // tour (the cleanup cancels the pending frame).
+    const raf = requestAnimationFrame(() => {
+      autoStartedRef.current = true;
+      tour.start("teacher");
+    });
     return () => cancelAnimationFrame(raf);
   }, [loading, error, course, user, tour]);
 
@@ -341,6 +355,8 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
             onChanged={reloadCourse}
             showNewSection={sectionModalOpen}
             onShowNewSectionChange={setSectionModalOpen}
+            expandFirstRoster={expandFirstRoster}
+            onExpandFirstRosterConsumed={() => setExpandFirstRoster(false)}
           />
         )}
         {tab === "materials" && <MaterialsTab courseId={course.id} onChanged={reloadCourse} />}
