@@ -1,0 +1,232 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import {
+  teacher,
+  type PracticeInsightItem,
+  type PracticeInsightsResponse,
+  type TeacherSection,
+} from "@/lib/api";
+import { MeasuredKey } from "./_pieces/measured-key";
+
+/**
+ * Class struggle-insights — "Where the class is struggling." A re-teach
+ * priority list drawn from UNGRADED practice: per concept, how many of
+ * the students who practiced it ended up retrying or revealing the
+ * solution. Anonymous and aggregate — it names what to revisit, never
+ * who got what wrong.
+ *
+ * Lives on the course Practice tab. The insights read is per-section
+ * (GET /teacher/.../practice-insights), so a course with multiple
+ * sections gets a quiet section pivot; a single-section course skips it.
+ */
+export function PracticeStrugglePanel({ courseId }: { courseId: string }) {
+  const reduce = useReducedMotion();
+  const [sections, setSections] = useState<TeacherSection[] | null>(null);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [insights, setInsights] = useState<PracticeInsightsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load the section list once — drives the pivot and gives us a
+  // section_id to scope the (per-section) insights read.
+  useEffect(() => {
+    let cancelled = false;
+    teacher
+      .sections(courseId)
+      .then((res) => {
+        if (cancelled) return;
+        setSections(res.sections);
+        setActiveSection(res.sections[0]?.id ?? null);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load sections");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  // (Re)load insights whenever the active section changes. The fetch
+  // runs inside a nested async fn (not the effect body) so the initial
+  // setLoading isn't a synchronous-setState-in-effect.
+  useEffect(() => {
+    if (!activeSection) return;
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const res = await teacher.practiceInsights(courseId, activeSection);
+        if (!cancelled) setInsights(res);
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load insights");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId, activeSection]);
+
+  // The re-teach list = items the class actually struggled on, worst
+  // first (the read already sorts this way). Items practiced cleanly
+  // are intentionally dropped — this is a "what to revisit" list, not
+  // a full item inventory.
+  const struggleItems = useMemo(
+    () => (insights?.items ?? []).filter((i) => i.students_struggled > 0),
+    [insights],
+  );
+
+  // A course with no sections at all has nothing to scope — say nothing.
+  if (sections !== null && sections.length === 0) return null;
+
+  const showSectionPivot = (sections?.length ?? 0) > 1;
+
+  return (
+    <section className="mt-14 border-t border-border-light pt-8">
+      <header className="max-w-2xl">
+        <h2 className="font-serif text-[26px] leading-tight tracking-[-0.015em] text-text-primary">
+          Where the class is struggling
+        </h2>
+        <p className="mt-1 font-serif italic text-[15px] leading-snug text-text-muted">
+          Formative signal from ungraded practice — a nudge on what to revisit, not a gradebook.
+        </p>
+        <MeasuredKey className="mt-3" />
+      </header>
+
+      {showSectionPivot && sections && (
+        <div
+          role="tablist"
+          aria-label="Choose a section"
+          className="mt-5 flex flex-wrap items-center gap-1.5"
+        >
+          {sections.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              role="tab"
+              aria-selected={activeSection === s.id}
+              onClick={() => setActiveSection(s.id)}
+              className={`rounded-[--radius-pill] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                activeSection === s.id
+                  ? "border-primary bg-primary text-white"
+                  : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary"
+              }`}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {error ? (
+        <p className="mt-5 text-sm text-[color:var(--color-error)]">{error}</p>
+      ) : loading || insights === null ? (
+        <p className="mt-5 text-sm text-text-muted">Loading…</p>
+      ) : insights.students_active === 0 ? (
+        <EmptyState />
+      ) : struggleItems.length === 0 ? (
+        <CleanState activeCount={insights.students_active} />
+      ) : (
+        <div className="mt-6">
+          <p className="font-mono text-[11px] text-text-muted">
+            {insights.students_active}{" "}
+            {insights.students_active === 1 ? "student" : "students"} active in practice
+          </p>
+          <ol className="mt-3 divide-y divide-border-light border-t border-border-light">
+            {struggleItems.map((item, i) => (
+              <StruggleRow
+                key={item.bank_item_id}
+                item={item}
+                rank={i + 1}
+                reduce={!!reduce}
+              />
+            ))}
+          </ol>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+
+function StruggleRow({
+  item,
+  rank,
+  reduce,
+}: {
+  item: PracticeInsightItem;
+  rank: number;
+  reduce: boolean;
+}) {
+  // Proportion of the students who practiced this item that ended up
+  // struggling on it. Guard the denominator — students_struggled is
+  // counted independently of students_practiced server-side, so in a
+  // rare race it could exceed it; clamp to keep the bar ≤ 100%.
+  const denom = Math.max(item.students_practiced, item.students_struggled, 1);
+  const ratio = item.students_struggled / denom;
+  return (
+    <li className="py-3.5">
+      <div className="flex items-baseline justify-between gap-4">
+        <div className="flex min-w-0 items-baseline gap-2.5">
+          <span className="shrink-0 font-mono text-[11px] text-text-muted tabular-nums">
+            {String(rank).padStart(2, "0")}
+          </span>
+          <span className="min-w-0 truncate text-sm font-medium text-text-primary">
+            {item.concept}
+          </span>
+        </div>
+        <span className="shrink-0 text-[12px] text-text-secondary tabular-nums">
+          <span className="font-semibold text-text-primary">
+            {item.students_struggled}
+          </span>{" "}
+          of {item.students_practiced} struggled
+        </span>
+      </div>
+
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[color:var(--color-surface-alt-2)]">
+        <motion.div
+          className="h-full rounded-full"
+          style={{ backgroundColor: "rgb(14, 82, 56)" }}
+          initial={reduce ? false : { width: 0 }}
+          animate={{ width: `${ratio * 100}%` }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        />
+      </div>
+    </li>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="mt-5 rounded-[--radius-lg] border border-dashed border-border-light bg-bg-subtle px-6 py-8 text-center">
+      <p className="text-sm text-text-secondary">
+        No practice activity in this section yet.
+      </p>
+      <p className="mt-1 text-xs text-text-muted">
+        Once students work through a practice set, the concepts they revisit most will surface here.
+      </p>
+    </div>
+  );
+}
+
+function CleanState({ activeCount }: { activeCount: number }) {
+  return (
+    <div className="mt-5 rounded-[--radius-lg] border border-border-light bg-surface px-6 py-8 text-center">
+      <p className="text-sm text-text-secondary">
+        Nothing to re-teach right now.
+      </p>
+      <p className="mt-1 text-xs text-text-muted">
+        {activeCount} {activeCount === 1 ? "student is" : "students are"} practicing and moving through it cleanly — no struggle signal yet.
+      </p>
+    </div>
+  );
+}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { teacher, type StudentGradesResponse } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 import { PercentBadge } from "@/components/school/shared/percent-badge";
+import { PracticeEngagement } from "@/components/school/teacher/practice-engagement";
 
 /**
  * Grades → Student detail page.
@@ -112,6 +113,14 @@ export default function StudentGradesPage({
           </div>
         </section>
       )}
+
+      {/* Ungraded practice/learn engagement — sits below the graded
+          record as a deliberately formative, non-score readout. */}
+      <PracticeEngagement
+        courseId={courseId}
+        sectionId={sectionId}
+        studentId={studentId}
+      />
     </div>
   );
 }
