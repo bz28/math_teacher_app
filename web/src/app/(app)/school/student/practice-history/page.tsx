@@ -14,14 +14,63 @@ import { formatRelativeDate } from "@/lib/utils";
  * "Your practice" — the student's own formative-practice history.
  *
  * Editorial, warm, reassuring: a serif headline, four headline stats,
- * then recent activity grouped by practice set with a per-set outcome
- * breakdown. This is a record-of-effort surface, never a grade view —
- * the copy leans into "your effort shows up here," not "your score."
+ * then recent activity organized BY CLASS — the student's mental model
+ * is "my classes," so each class gets its own section (name → that
+ * class's effort line → a clear entry to practice → its recent sets).
+ * This is a record-of-effort surface, never a grade view — the copy
+ * leans into "your effort shows up here," not "your score."
  *
  * Reads GET /school/student/practice/activity (totals + per-set rollup,
- * newest set first). Refetches on tab focus so a session finished in
- * another tab surfaces on return, mirroring the grades/dashboard pages.
+ * newest set first). Every set already carries course_id + course_name,
+ * so the by-class regroup is a pure frontend fold — no backend change.
+ * Classes are ordered by most-recent activity (sets arrive newest-first,
+ * so the first class encountered is the freshest). Refetches on tab
+ * focus so a session finished in another tab surfaces on return,
+ * mirroring the grades/dashboard pages.
  */
+
+/** One class's practice activity — its sets plus rolled-up effort. */
+interface ClassGroup {
+  course_id: string;
+  course_name: string;
+  problems_practiced: number;
+  first_try_count: number;
+  learn_walkthroughs: number;
+  /** ISO timestamp of the most recent activity across the class's sets. */
+  last_active: string;
+  sets: PracticeActivitySetSummary[];
+}
+
+/**
+ * Fold the flat, newest-first set list into per-class groups, preserving
+ * recency order. Because sets arrive newest-first, the first set seen for
+ * a class fixes both the class's position and its last_active.
+ */
+function groupByClass(sets: PracticeActivitySetSummary[]): ClassGroup[] {
+  const order: ClassGroup[] = [];
+  const byId = new Map<string, ClassGroup>();
+  for (const set of sets) {
+    let group = byId.get(set.course_id);
+    if (!group) {
+      group = {
+        course_id: set.course_id,
+        course_name: set.course_name,
+        problems_practiced: 0,
+        first_try_count: 0,
+        learn_walkthroughs: 0,
+        last_active: set.last_active,
+        sets: [],
+      };
+      byId.set(set.course_id, group);
+      order.push(group);
+    }
+    group.sets.push(set);
+    group.problems_practiced += set.problems_practiced;
+    group.first_try_count += set.first_try_count;
+    group.learn_walkthroughs += set.learn_walkthroughs;
+  }
+  return order;
+}
 export default function PracticeHistoryPage() {
   const [data, setData] = useState<StudentPracticeActivityResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -140,14 +189,14 @@ export default function PracticeHistoryPage() {
             />
           </motion.div>
 
-          {/* Recent activity, grouped by set */}
+          {/* Recent activity, organized by class */}
           <motion.div variants={item} className="mt-10">
-            <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.18em] text-text-muted">
-              Recent practice sets
+            <h2 className="mb-4 text-[11px] font-bold uppercase tracking-[0.18em] text-text-muted">
+              By class
             </h2>
-            <div className="space-y-3">
-              {data.sets.map((set) => (
-                <SetCard key={set.practice_assignment_id} set={set} />
+            <div className="space-y-8">
+              {groupByClass(data.sets).map((group) => (
+                <ClassSection key={group.course_id} group={group} />
               ))}
             </div>
           </motion.div>
@@ -183,6 +232,70 @@ function Stat({
   );
 }
 
+/**
+ * One class's section: a serif class-name header with a direct entry
+ * into that class's Practice tab, a compact rolled-up effort line, then
+ * the class's recent practice sets. The class name is the spine — the
+ * per-set card no longer repeats it, since it lives under this header.
+ */
+function ClassSection({ group }: { group: ClassGroup }) {
+  const firstTryPct =
+    group.problems_practiced > 0
+      ? Math.round((group.first_try_count / group.problems_practiced) * 100)
+      : null;
+
+  return (
+    <section>
+      <div className="border-t border-border-light pt-4">
+        <div className="flex items-baseline justify-between gap-4">
+          <h3 className="min-w-0 truncate font-serif text-2xl leading-tight text-text-primary">
+            {group.course_name}
+          </h3>
+          <Link
+            href={`/school/student/courses/${group.course_id}?tab=practice`}
+            className="group shrink-0 whitespace-nowrap text-xs font-semibold text-primary transition-colors hover:text-primary-dark"
+          >
+            Practice{" "}
+            <span className="inline-block transition-transform group-hover:translate-x-0.5">
+              →
+            </span>
+          </Link>
+        </div>
+
+        {/* Class-level effort rollup — a quiet line, not big tiles. */}
+        <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-text-secondary">
+          {group.problems_practiced > 0 && (
+            <Metric
+              value={group.problems_practiced}
+              label={group.problems_practiced === 1 ? "problem" : "problems"}
+            />
+          )}
+          {firstTryPct !== null && (
+            <Metric value={`${firstTryPct}%`} label="first try" accent />
+          )}
+          {group.learn_walkthroughs > 0 && (
+            <Metric
+              value={group.learn_walkthroughs}
+              label={
+                group.learn_walkthroughs === 1 ? "walkthrough" : "walkthroughs"
+              }
+            />
+          )}
+          <span className="ml-auto whitespace-nowrap text-[11px] font-medium text-text-muted">
+            {formatRelativeDate(group.last_active)}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {group.sets.map((set) => (
+          <SetCard key={set.practice_assignment_id} set={set} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function SetCard({ set }: { set: PracticeActivitySetSummary }) {
   const firstTryPct =
     set.problems_practiced > 0
@@ -195,13 +308,8 @@ function SetCard({ set }: { set: PracticeActivitySetSummary }) {
       className="group block rounded-[--radius-xl] border border-border-light bg-surface p-5 transition-colors hover:border-primary"
     >
       <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="truncate text-base font-semibold text-text-primary group-hover:text-primary">
-            {set.title}
-          </div>
-          <div className="mt-0.5 truncate text-xs text-text-muted">
-            {set.course_name}
-          </div>
+        <div className="min-w-0 truncate text-base font-semibold text-text-primary group-hover:text-primary">
+          {set.title}
         </div>
         <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-text-muted">
           {formatRelativeDate(set.last_active)}
