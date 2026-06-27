@@ -24,7 +24,8 @@ import { LearnRunner } from "./_components/learn-runner";
  * locally) and Learn (paced worked steps with a tutor chat) — and each
  * ends with a celebration that pivots into the other.
  *
- * Nothing here is reported to the teacher.
+ * Answers stay private: the teacher sees that the student is practicing
+ * (formative engagement) — never which answers they picked.
  */
 
 type View = "preview" | "practice" | "learn";
@@ -92,6 +93,7 @@ export default function PracticeDetailPage() {
         {view === "practice" && mcqProblems.length > 0 && (
           <PracticeRunner
             key="practice"
+            assignmentId={assignmentId}
             problems={mcqProblems}
             canLearn={learnProblems.length > 0}
             onLearn={() => setView("learn")}
@@ -102,6 +104,7 @@ export default function PracticeDetailPage() {
         {view === "learn" && learnProblems.length > 0 && (
           <LearnRunner
             key="learn"
+            assignmentId={assignmentId}
             problems={learnProblems}
             canPractice={mcqProblems.length > 0}
             onPractice={() => setView("practice")}
@@ -142,8 +145,8 @@ function Preview({
           {detail.title}
         </h1>
         <p className="mt-2 text-sm text-text-secondary">
-          {count} {count === 1 ? "problem" : "problems"} · Nothing here is sent
-          to your teacher
+          {count} {count === 1 ? "problem" : "problems"} · Ungraded — your
+          teacher can see that you&rsquo;re practicing, not your answers
         </p>
         {detail.source_homework_title && (
           <p className="mt-1 text-xs text-text-muted">

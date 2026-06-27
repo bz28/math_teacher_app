@@ -2007,6 +2007,43 @@ export interface StudentGradesResponse {
   grades: DashboardGrade[];
 }
 
+// ── Practice activity (mirror api/routes/school_student_practice.py) ──
+
+/** One finished problem from a practice/learn session, posted to the
+ *  activity log. Practice rows carry outcome first_try|retry|revealed;
+ *  learn rows carry "completed" (or null) plus a tutor message count. */
+export interface PracticeActivityRow {
+  bank_item_id: string;
+  mode: "practice" | "learn";
+  outcome?: "first_try" | "retry" | "revealed" | "completed" | null;
+  tutor_message_count?: number;
+}
+
+/** Per-set rollup on the student's own "Your practice" view. */
+export interface PracticeActivitySetSummary {
+  practice_assignment_id: string;
+  title: string;
+  course_id: string;
+  course_name: string;
+  problems_practiced: number;
+  first_try_count: number;
+  learn_walkthroughs: number;
+  /** ISO timestamp of the most recent activity in this set. */
+  last_active: string;
+}
+
+/** The authenticated student's own practice/learn history — headline
+ *  totals plus recent activity grouped by practice set. */
+export interface StudentPracticeActivityResponse {
+  problems_practiced: number;
+  /** 0..1 fraction, or null when nothing has been practiced yet. */
+  first_try_rate: number | null;
+  learn_walkthroughs: number;
+  /** ISO timestamp, or null when there's no activity. */
+  last_active: string | null;
+  sets: PracticeActivitySetSummary[];
+}
+
 export const schoolStudent = {
   listClasses() {
     return apiFetch<StudentClassSummary[]>("/school/student/classes");
@@ -2142,6 +2179,25 @@ export const schoolStudent = {
     return apiFetch<{ reply: string }>(
       `/school/student/bank-item/${bankItemId}/problem-chat`,
       { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+  // ── Practice activity log ──
+  /** Append a finished session's per-problem outcomes for a practice
+   *  set. Append-only; the server inserts one row per supplied problem.
+   *  Fire-and-forget at the call site — practice is formative, so a
+   *  failed write must never block the student. */
+  recordActivity(assignmentId: string, rows: PracticeActivityRow[]) {
+    return apiFetch<{ recorded: number }>(
+      `/school/student/practice/${assignmentId}/activity`,
+      { method: "POST", body: JSON.stringify(rows) },
+    );
+  },
+  /** The student's own practice/learn history — totals plus recent
+   *  activity grouped by set. Optionally scoped to one course. */
+  practiceActivity(courseId?: string) {
+    const q = courseId ? `?course_id=${encodeURIComponent(courseId)}` : "";
+    return apiFetch<StudentPracticeActivityResponse>(
+      `/school/student/practice/activity${q}`,
     );
   },
 };

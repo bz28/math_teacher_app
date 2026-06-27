@@ -17,6 +17,9 @@ import {
 import { ProblemChat } from "@/components/shared/problem-chat";
 
 interface Props {
+  /** The practice set this walkthrough belongs to — used to record a
+   *  completed problem's walkthrough to the activity log. */
+  assignmentId: string;
   problems: StudentPracticeProblem[];
   /** Whether the set has MCQ problems — gates the "Practice this set"
    *  pivot so we never cross into an empty mode. */
@@ -34,9 +37,21 @@ interface Props {
  * student opts into (per-step or whole-problem), reusing the shared
  * step-chat / problem-chat endpoints scoped to this bank item.
  */
-export function LearnRunner({ problems, canPractice, onPractice, onExit }: Props) {
+export function LearnRunner({
+  assignmentId,
+  problems,
+  canPractice,
+  onPractice,
+  onExit,
+}: Props) {
   const [qIndex, setQIndex] = useState(0);
   const [done, setDone] = useState(false);
+
+  // Records a finished walkthrough exactly once per problem. We log on
+  // leaving the problem (it's only reachable post-completion) so the
+  // tutor_message_count reflects the whole conversation, including any
+  // chat the student had after working through the steps.
+  const recordedRef = useRef<Set<string>>(new Set());
 
   // Per-problem walkthrough + chat state. Reset on problem change.
   const [stepIdx, setStepIdx] = useState(0);
@@ -130,7 +145,31 @@ export function LearnRunner({ problems, canPractice, onPractice, onExit }: Props
     }
   }
 
+  // Fire-and-forget: log this completed walkthrough with its tutor chat
+  // volume (per-step questions + the whole-problem chat, both sides).
+  // Practice is formative, so a failed write is swallowed.
+  function recordCompletion() {
+    const id = problem.bank_item_id;
+    if (recordedRef.current.has(id)) return;
+    recordedRef.current.add(id);
+    const stepMsgs = Object.values(chatByStep).reduce(
+      (n, msgs) => n + msgs.length,
+      0,
+    );
+    schoolStudent
+      .recordActivity(assignmentId, [
+        {
+          bank_item_id: id,
+          mode: "learn",
+          outcome: "completed",
+          tutor_message_count: stepMsgs + problemChat.length,
+        },
+      ])
+      .catch(() => {});
+  }
+
   function nextProblem() {
+    recordCompletion();
     if (isLastProblem) {
       setDone(true);
       return;
