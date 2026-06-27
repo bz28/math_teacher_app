@@ -64,7 +64,11 @@ const TEACHER_TOUR: TourDefinition = {
       handoff: {
         open: TOUR_ACTIONS.openNewSection,
         close: TOUR_ACTIONS.closeNewSection,
-        hint: "This is the real dialog — name a section now, or continue the tour.",
+        hint: "This is the real dialog — name a section now to continue, or skip the tour.",
+        // Create-or-skip gate, same as the course step: the invite step
+        // (step three) needs a real section to point at, so creating a
+        // section is what advances the tour. Cancelling returns here.
+        gate: true,
       },
     },
     {
