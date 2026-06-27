@@ -12,6 +12,14 @@ export function isSolved(o: Outcome): boolean {
   return o !== "revealed";
 }
 
+/** Map a runner Outcome onto the activity-log wire value. The runner's
+ *  "first" is the API's "first_try"; "retry"/"revealed" pass through. */
+export function toActivityOutcome(
+  o: Outcome,
+): "first_try" | "retry" | "revealed" {
+  return o === "first" ? "first_try" : o;
+}
+
 /** Deterministic FNV-1a-seeded Fisher–Yates shuffle. Same seed → same
  *  order, so the choices don't reshuffle on every render, but distinct
  *  problems get distinct orders so "the answer is always A" can't be

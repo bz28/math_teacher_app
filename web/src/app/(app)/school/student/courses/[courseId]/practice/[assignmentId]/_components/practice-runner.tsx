@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import type { StudentPracticeProblem } from "@/lib/api";
+import { schoolStudent, type StudentPracticeProblem } from "@/lib/api";
 import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
 import { MCQCard } from "@/components/shared/mcq-card";
@@ -15,10 +15,14 @@ import {
   buildChoices,
   encouragementFor,
   isSolved,
+  toActivityOutcome,
   type Outcome,
 } from "./practice-shared";
 
 interface Props {
+  /** The practice set this runner belongs to — used to record the
+   *  finished session's per-problem outcomes to the activity log. */
+  assignmentId: string;
   problems: StudentPracticeProblem[];
   /** Whether a Learn walkthrough exists for this set — gates the
    *  "Learn this set" pivot so we never cross into an empty mode. */
@@ -30,15 +34,51 @@ interface Props {
 }
 
 /**
- * One-problem-at-a-time practice runner. Ungraded and stateless —
- * nothing leaves the browser. Answer mode is retry-once-then-reveal:
+ * One-problem-at-a-time practice runner. Ungraded: the only thing that
+ * leaves the browser is the coarse per-problem outcome (first try /
+ * retry / revealed) recorded to the activity log on completion — never
+ * the student's actual picks. Answer mode is retry-once-then-reveal:
  * a wrong first pick lets the student try once more; a second miss
  * reveals the answer and advances. Ends in a celebration summary.
  */
-export function PracticeRunner({ problems, canLearn, onLearn, onExit }: Props) {
+export function PracticeRunner({
+  assignmentId,
+  problems,
+  canLearn,
+  onLearn,
+  onExit,
+}: Props) {
   const [index, setIndex] = useState(0);
   const [outcomes, setOutcomes] = useState<Outcome[]>([]);
   const [done, setDone] = useState(false);
+
+  // Fire-and-forget activity recording. When the session reaches its
+  // summary (`done`), POST one row per answered problem — the honest
+  // engagement signal the teacher sees (that they practiced, never which
+  // answers they picked). Posts once per completed run; `postedRef`
+  // resets on "Practice again" so a genuine second run records again.
+  // Practice is formative, so a failed write is swallowed.
+  const postedRef = useRef(false);
+  useEffect(() => {
+    if (!done || postedRef.current) return;
+    postedRef.current = true;
+    const rows = problems
+      .map((p, i) => {
+        const o = outcomes[i];
+        return o
+          ? {
+              bank_item_id: p.bank_item_id,
+              mode: "practice" as const,
+              outcome: toActivityOutcome(o),
+              tutor_message_count: 0,
+            }
+          : null;
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+    if (rows.length > 0) {
+      schoolStudent.recordActivity(assignmentId, rows).catch(() => {});
+    }
+  }, [done, problems, outcomes, assignmentId]);
 
   // Per-problem answering state. Reset on advance.
   const [picked, setPicked] = useState<string | null>(null);
@@ -95,6 +135,7 @@ export function PracticeRunner({ problems, canLearn, onLearn, onExit }: Props) {
           setTriedWrong(false);
           setResult(null);
           setDone(false);
+          postedRef.current = false; // a fresh run records its own session
         }}
       />
     );
@@ -258,8 +299,8 @@ function PracticeSummary({
           />
         </div>
         <p className="mt-3 text-xs font-medium text-text-muted">
-          {firstTry} first-try{firstTry === 1 ? "" : "s"} · Ungraded · nothing
-          was sent to your teacher
+          {firstTry} first-try{firstTry === 1 ? "" : "s"} · Ungraded — your
+          teacher can see that you practiced, not your answers
         </p>
       </Card>
 
