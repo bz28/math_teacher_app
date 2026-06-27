@@ -8,7 +8,6 @@ import {
   type PracticeInsightsResponse,
   type TeacherSection,
 } from "@/lib/api";
-import { MeasuredKey } from "./_pieces/measured-key";
 
 /**
  * Class struggle-insights — "Where the class is struggling." A re-teach
@@ -17,9 +16,13 @@ import { MeasuredKey } from "./_pieces/measured-key";
  * solution. Anonymous and aggregate — it names what to revisit, never
  * who got what wrong.
  *
- * Lives on the course Practice tab. The insights read is per-section
+ * Lives as the class-level band atop the Student Insights tab, above the
+ * per-student roster — the aggregate "where to re-teach" read before the
+ * per-student drilldown. The insights read is per-section
  * (GET /teacher/.../practice-insights), so a course with multiple
  * sections gets a quiet section pivot; a single-section course skips it.
+ * The "How this is measured" key lives once on the tab header (which
+ * already defines "Struggled"), so this band carries no key of its own.
  */
 export function PracticeStrugglePanel({ courseId }: { courseId: string }) {
   const reduce = useReducedMotion();
@@ -90,15 +93,14 @@ export function PracticeStrugglePanel({ courseId }: { courseId: string }) {
   const showSectionPivot = (sections?.length ?? 0) > 1;
 
   return (
-    <section className="mt-14 border-t border-border-light pt-8">
+    <section className="mt-10">
       <header className="max-w-2xl">
-        <h2 className="font-serif text-[26px] leading-tight tracking-[-0.015em] text-text-primary">
+        <h3 className="font-serif text-[20px] leading-tight tracking-[-0.01em] text-text-primary">
           Where the class is struggling
-        </h2>
-        <p className="mt-1 font-serif italic text-[15px] leading-snug text-text-muted">
+        </h3>
+        <p className="mt-1 font-serif italic text-[14px] leading-snug text-text-muted">
           Formative signal from ungraded practice — a nudge on what to revisit, not a gradebook.
         </p>
-        <MeasuredKey className="mt-3" />
       </header>
 
       {showSectionPivot && sections && (
