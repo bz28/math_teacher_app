@@ -17,6 +17,7 @@ import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
 import { HomeworkTab } from "@/components/school/teacher/homework-tab";
 import { PracticeTab } from "@/components/school/teacher/practice-tab";
+import { StudentInsightsTab } from "@/components/school/teacher/student-insights-tab";
 import { SubmissionsTab } from "@/components/school/teacher/submissions-tab";
 import { GradesTab } from "@/components/school/teacher/grades-tab";
 import { SettingsTab } from "@/components/school/teacher/settings-tab";
@@ -26,6 +27,7 @@ type TabKey =
   | "materials"
   | "homework"
   | "practice"
+  | "insights"
   | "submissions"
   | "grades"
   | "settings";
@@ -37,6 +39,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "materials", label: "Materials" },
   { key: "homework", label: "Homework" },
   { key: "practice", label: "Practice" },
+  { key: "insights", label: "Student Insights" },
   { key: "submissions", label: "Submissions" },
   { key: "grades", label: "Grades" },
 ];
@@ -350,6 +353,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
           />
         )}
         {tab === "practice" && <PracticeTab courseId={course.id} />}
+        {tab === "insights" && <StudentInsightsTab courseId={course.id} />}
         {tab === "submissions" && <SubmissionsTab courseId={course.id} />}
         {tab === "grades" && <GradesTab courseId={course.id} />}
         {tab === "settings" && <SettingsTab course={course} onChanged={reloadCourse} />}

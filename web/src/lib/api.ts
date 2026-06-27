@@ -1087,6 +1087,36 @@ export interface PracticeInsightItem {
   struggle_events: number;
 }
 
+export type StudentInsightStatus =
+  | "no_activity"
+  | "needs_nudge"
+  | "struggling"
+  | "thriving"
+  | "on_track";
+
+export type StudentInsightTrend = "improving" | "slipping" | "steady";
+
+/** One roster card for the Student Insights tab — coarse engagement +
+ *  struggle signals only, no scores or grades. Mirrors the backend
+ *  StudentInsight model in api/routes/teacher_practice_activity.py. */
+export interface StudentInsight {
+  student_id: string;
+  name: string;
+  practiced_count: number;
+  learn_walkthroughs: number;
+  last_active: string | null;
+  first_try_rate: number | null;
+  retry_count: number;
+  revealed_count: number;
+  trend: StudentInsightTrend | null;
+  status: StudentInsightStatus;
+}
+
+export interface SectionStudentInsightsResponse {
+  section_id: string;
+  students: StudentInsight[];
+}
+
 export const teacher = {
   courses() {
     return apiFetch<{ courses: TeacherCourse[] }>("/teacher/courses");
@@ -1357,6 +1387,14 @@ export const teacher = {
   practiceInsights(courseId: string, sectionId: string) {
     return apiFetch<PracticeInsightsResponse>(
       `/teacher/courses/${courseId}/sections/${sectionId}/practice-insights`,
+    );
+  },
+  /** Per-student practice/learn rollup for every enrolled student in a
+   *  section — the Student Insights tab roster. One card per student
+   *  (including zero-activity), each with a derived status + trend. */
+  sectionStudentInsights(courseId: string, sectionId: string) {
+    return apiFetch<SectionStudentInsightsResponse>(
+      `/teacher/courses/${courseId}/sections/${sectionId}/student-insights`,
     );
   },
   /** Replace the per-problem breakdown (and/or teacher notes) for a
