@@ -366,8 +366,12 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
             }}
             onSectionCreated={() => {
               sectionCreatedRef.current = true;
-              // Advance the tour on creation, like the course step does.
-              if (tour.isActive) tour.next();
+              // Advance only when the tour is parked on THIS step's handoff
+              // (the open New-section dialog) — not merely tour-active. Guard
+              // on handoffActive so creating a second section later (e.g. on
+              // the invite step, where the New-section button is also visible)
+              // doesn't spuriously skip the tour ahead.
+              if (tour.handoffActive) tour.next();
             }}
             expandFirstRoster={expandFirstRoster}
             onExpandFirstRosterConsumed={() => setExpandFirstRoster(false)}
