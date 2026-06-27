@@ -1949,6 +1949,10 @@ export interface paths {
          *     Either way, the live `final_score / breakdown / teacher_notes`
          *     are snapshotted into the `published_*` columns and
          *     `grade_published_at` is stamped. Ungraded submissions are skipped.
+         *
+         *     When `reviewed_only` is set, the eligible set is further narrowed to
+         *     grades the teacher has vetted (reviewed_at IS NOT NULL), so the
+         *     AI-suggested grades they never opened stay unpublished.
          */
         post: operations["publish_grades_v1_teacher_assignments__assignment_id__publish_grades_post"];
         delete?: never;
@@ -2917,6 +2921,36 @@ export interface paths {
         head?: never;
         /** Grade Submission */
         patch: operations["grade_submission_v1_teacher_submissions__submission_id__grade_patch"];
+        trace?: never;
+    };
+    "/v1/teacher/submissions/{submission_id}/mark-reviewed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Submission Reviewed
+         * @description Record the teacher's explicit review of an AI-suggested grade.
+         *
+         *     The fast path already auto-stamps `reviewed_at` whenever the teacher
+         *     edits any problem score (see grade_submission — editing *is*
+         *     reviewing). This endpoint covers the no-edit case: the teacher looked
+         *     at the AI's suggestion, agrees, and wants to vouch for it without
+         *     changing a score. Sets reviewed_by/reviewed_at on the existing grade.
+         *
+         *     Requires a grade to exist (final_score set) — there's nothing to
+         *     "review" on an ungraded or skipped-unreadable submission, so we 400;
+         *     the teacher grades those by hand instead.
+         */
+        post: operations["mark_submission_reviewed_v1_teacher_submissions__submission_id__mark_reviewed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/teacher/submissions/{submission_id}/regrade": {
@@ -3934,6 +3968,14 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** PublishGradesRequest */
+        PublishGradesRequest: {
+            /**
+             * Reviewed Only
+             * @default false
+             */
+            reviewed_only: boolean;
+        };
         /** RefreshRequest */
         RefreshRequest: {
             /** Refresh Token */
@@ -4457,6 +4499,8 @@ export interface components {
             is_late: boolean;
             /** Problems */
             problems: components["schemas"]["TeacherSubmissionDetailProblem"][];
+            /** Reviewed At */
+            reviewed_at?: string | null;
             /** Student Email */
             student_email: string;
             /** Student Id */
@@ -8182,7 +8226,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PublishGradesRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -10252,6 +10300,39 @@ export interface operations {
                 "application/json": components["schemas"]["GradeRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_submission_reviewed_v1_teacher_submissions__submission_id__mark_reviewed_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

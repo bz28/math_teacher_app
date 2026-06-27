@@ -1287,10 +1287,24 @@ export const teacher = {
       final_score: number | null;
       grade_published_at: string | null;
       grade_dirty: boolean;
+      /** Editing a grade *is* reviewing it — the backend auto-stamps
+       *  reviewed_at on any score write. Null only on an un-grade
+       *  (empty breakdown), which clears the review stamp. */
+      reviewed_at: string | null;
     }>(`/teacher/submissions/${submissionId}/grade`, {
       method: "PATCH",
       body: JSON.stringify(data),
     });
+  },
+  /** Record the teacher's explicit review of an AI-suggested grade
+   *  without changing any score (the no-edit "I looked, I agree" case;
+   *  editing a score auto-stamps review on its own). Requires an
+   *  existing grade — 400s on an ungraded / skipped-unreadable row. */
+  markReviewed(submissionId: string) {
+    return apiFetch<{ status: string; reviewed_at: string }>(
+      `/teacher/submissions/${submissionId}/mark-reviewed`,
+      { method: "POST" },
+    );
   },
   /** Re-run AI grading against the assignment's current rubric.
    *  Override semantics — replaces the live breakdown even if the
@@ -1314,11 +1328,13 @@ export const teacher = {
   /** Publish every graded submission on this HW to students at once.
    *  Idempotent — already-published grades are skipped, and ungraded
    *  submissions are ignored (teacher can grade + publish more later).
-   *  Returns the count actually published. */
-  publishGrades(assignmentId: string) {
+   *  When `reviewedOnly` is set, only grades the teacher has vetted
+   *  (reviewed_at not null) are released — the safer "publish what I've
+   *  checked" path. Returns the count actually published. */
+  publishGrades(assignmentId: string, reviewedOnly = false) {
     return apiFetch<{ status: string; published_count: number }>(
       `/teacher/assignments/${assignmentId}/publish-grades`,
-      { method: "POST" },
+      { method: "POST", body: JSON.stringify({ reviewed_only: reviewedOnly }) },
     );
   },
   // Visibility
@@ -1531,7 +1547,15 @@ export interface TeacherSubmissionRow {
   /** True if the grade has been published AND edited since. Students
    *  still see the published snapshot — teacher must republish. */
   grade_dirty: boolean;
+  /** When the teacher vetted this grade — set either by editing any
+   *  problem score (editing == reviewing) or an explicit "Mark
+   *  reviewed" click. Null = the AI-suggested grade is still unopened.
+   *  Drives the roster review marker + the publish trust disclosure. */
   reviewed_at: string | null;
+  /** Non-score grading disposition. "skipped_unreadable" = the photo
+   *  was too low-confidence to auto-grade, so nothing was pre-filled —
+   *  the teacher grades it manually. Null on the normal path. */
+  ai_grading_status: string | null;
   integrity_overview: IntegrityOverview | null;
   /** Student explicitly said "Reader got something wrong" on the
    *  post-submit confirm screen. Non-null = no AI grading or
@@ -1588,6 +1612,13 @@ export interface TeacherSubmissionDetail {
   /** True if the grade has been published AND edited since. Students
    *  still see the published snapshot — teacher must republish. */
   grade_dirty: boolean;
+  /** Non-score grading disposition. "skipped_unreadable" = the photo
+   *  was too low-confidence to auto-grade; the teacher grades it
+   *  manually. Null on the normal path. */
+  ai_grading_status: string | null;
+  /** When the teacher vetted this grade (edit or explicit "Mark
+   *  reviewed"). Null = AI-suggested, still unopened. */
+  reviewed_at: string | null;
 }
 
 export interface AiGradeEntry {

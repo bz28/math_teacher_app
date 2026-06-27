@@ -1555,7 +1555,53 @@ async def grade_submission(
         "final_score": grade.final_score,
         "grade_published_at": grade.grade_published_at.isoformat() if grade.grade_published_at else None,
         "grade_dirty": _is_grade_dirty(grade),
+        # Editing a grade *is* reviewing it — surfaced so the frontend can
+        # flip the row's review marker without a refetch. Null only on an
+        # un-grade (empty breakdown), which clears the review stamp above.
+        "reviewed_at": grade.reviewed_at.isoformat() if grade.reviewed_at else None,
     }
+
+
+@router.post("/submissions/{submission_id}/mark-reviewed")
+async def mark_submission_reviewed(
+    submission_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Record the teacher's explicit review of an AI-suggested grade.
+
+    The fast path already auto-stamps `reviewed_at` whenever the teacher
+    edits any problem score (see grade_submission — editing *is*
+    reviewing). This endpoint covers the no-edit case: the teacher looked
+    at the AI's suggestion, agrees, and wants to vouch for it without
+    changing a score. Sets reviewed_by/reviewed_at on the existing grade.
+
+    Requires a grade to exist (final_score set) — there's nothing to
+    "review" on an ungraded or skipped-unreadable submission, so we 400;
+    the teacher grades those by hand instead.
+    """
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
+
+    await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
+
+    grade = (await db.execute(
+        select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
+    )).scalar_one_or_none()
+    if grade is None or grade.final_score is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No grade to review yet",
+        )
+
+    now = datetime.now(UTC)
+    grade.reviewed_by = current_user.user_id
+    grade.reviewed_at = now
+    await db.commit()
+    return {"status": "ok", "reviewed_at": now.isoformat()}
 
 
 @router.post("/submissions/{submission_id}/regrade")
@@ -1656,9 +1702,19 @@ async def regrade_submission(
     }
 
 
+class PublishGradesRequest(BaseModel):
+    # When True, only grades the teacher has explicitly vetted
+    # (reviewed_at IS NOT NULL — set by editing any score or clicking
+    # "Mark reviewed") are released. The "publish only what I've
+    # checked" path the review-page dialog offers alongside "Publish
+    # all". Default False preserves the publish-everything behaviour.
+    reviewed_only: bool = False
+
+
 @router.post("/assignments/{assignment_id}/publish-grades")
 async def publish_grades(
     assignment_id: uuid.UUID,
+    body: PublishGradesRequest | None = None,
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -1673,7 +1729,12 @@ async def publish_grades(
     Either way, the live `final_score / breakdown / teacher_notes`
     are snapshotted into the `published_*` columns and
     `grade_published_at` is stamped. Ungraded submissions are skipped.
+
+    When `reviewed_only` is set, the eligible set is further narrowed to
+    grades the teacher has vetted (reviewed_at IS NOT NULL), so the
+    AI-suggested grades they never opened stay unpublished.
     """
+    reviewed_only = bool(body and body.reviewed_only)
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
     # Grades are only visible to students once the HW itself is
     # published. Publishing grades on a draft HW would orphan them
@@ -1684,7 +1745,7 @@ async def publish_grades(
             detail="Cannot publish grades on a draft homework",
         )
 
-    grades = (await db.execute(
+    stmt = (
         select(SubmissionGrade)
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
         .join(User, User.id == Submission.student_id)
@@ -1705,7 +1766,10 @@ async def publish_grades(
                 ),
             ),
         )
-    )).scalars().all()
+    )
+    if reviewed_only:
+        stmt = stmt.where(SubmissionGrade.reviewed_at.is_not(None))
+    grades = (await db.execute(stmt)).scalars().all()
 
     now = datetime.now(UTC)
     for g in grades:
@@ -1791,6 +1855,12 @@ class TeacherSubmissionDetail(BaseModel):
     # was too low-confidence to auto-grade and the teacher must grade
     # manually. Null on the normal path (a real grade lives on breakdown).
     ai_grading_status: str | None = None
+    # When the teacher has vetted this grade — either by editing any
+    # problem score (editing == reviewing, auto-stamped in grade_submission)
+    # or by an explicit "Mark reviewed" click. Null = the AI-suggested
+    # grade is still unopened. Drives the review-state marker + the
+    # publish dialog's trust disclosure.
+    reviewed_at: datetime | None = None
 
 
 @router.get("/submissions/{submission_id}")
@@ -1972,6 +2042,7 @@ async def get_submission_detail(
         grade_published_at=grade.grade_published_at if grade else None,
         grade_dirty=_is_grade_dirty(grade),
         ai_grading_status=grade.ai_grading_status if grade else None,
+        reviewed_at=grade.reviewed_at if grade else None,
     )
 
 
