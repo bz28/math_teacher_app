@@ -1018,6 +1018,61 @@ export interface StudentGradesResponse {
   missing_hws: StudentGradeMissingHw[];
 }
 
+/**
+ * One student's ungraded practice/learn engagement, for the teacher's
+ * student-detail page. Insight only — no scores, no raw answers. Mirrors
+ * GET /teacher/.../students/{id}/practice-activity.
+ */
+export interface StudentPracticeActivityResponse {
+  student: {
+    id: string;
+    name: string;
+    section_id: string;
+    section_name: string;
+  };
+  practiced_count: number;
+  learn_walkthroughs: number;
+  last_active: string | null;
+  outcome_breakdown: {
+    first_try: number;
+    retry: number;
+    revealed: number;
+    learn_completed: number;
+  };
+  /** Bank items the student most often retried/revealed, worst-first. */
+  struggle_items: StudentStruggleItem[];
+}
+
+export interface StudentStruggleItem {
+  bank_item_id: string;
+  /** Bank-item title — the concept label. */
+  concept: string;
+  retry_count: number;
+  revealed_count: number;
+  struggle_count: number;
+}
+
+/**
+ * Class-level struggle aggregate for one section — a re-teach priority
+ * list. Anonymous: names the concept to revisit, not the student.
+ * Mirrors GET /teacher/.../practice-insights.
+ */
+export interface PracticeInsightsResponse {
+  section_id: string;
+  /** Distinct students who have any practice/learn activity. */
+  students_active: number;
+  /** Per bank item, sorted most-struggled first. */
+  items: PracticeInsightItem[];
+}
+
+export interface PracticeInsightItem {
+  bank_item_id: string;
+  concept: string;
+  students_practiced: number;
+  students_struggled: number;
+  struggle_events: number;
+}
+
 export const teacher = {
   courses() {
     return apiFetch<{ courses: TeacherCourse[] }>("/teacher/courses");
@@ -1273,6 +1328,21 @@ export const teacher = {
   studentGrades(courseId: string, sectionId: string, studentId: string) {
     return apiFetch<StudentGradesResponse>(
       `/teacher/courses/${courseId}/sections/${sectionId}/students/${studentId}/grades`,
+    );
+  },
+  /** One student's ungraded practice/learn engagement (insight, not a
+   *  grade): practiced count, last-active, outcome mix, walkthroughs,
+   *  and the concepts they worked hardest on. */
+  studentPracticeActivity(courseId: string, sectionId: string, studentId: string) {
+    return apiFetch<StudentPracticeActivityResponse>(
+      `/teacher/courses/${courseId}/sections/${sectionId}/students/${studentId}/practice-activity`,
+    );
+  },
+  /** Class-level struggle aggregate for one section — the re-teach
+   *  priority list drawn from ungraded practice. */
+  practiceInsights(courseId: string, sectionId: string) {
+    return apiFetch<PracticeInsightsResponse>(
+      `/teacher/courses/${courseId}/sections/${sectionId}/practice-insights`,
     );
   },
   /** Replace the per-problem breakdown (and/or teacher notes) for a
