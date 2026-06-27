@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Button, Card } from "@/components/ui";
 import { CheckIcon } from "@/components/ui/icons";
+import { CelebrationMedallion } from "@/components/shared/celebration-medallion";
+import { useCelebrationReveal } from "@/components/shared/celebration-reveal";
 import { cn } from "@/lib/utils";
 import { MathText } from "@/components/shared/math-text";
 import { EntitlementError } from "@/lib/api";
@@ -22,18 +24,35 @@ export function LearnSummary({ learnQueue, onToggleFlag, onPracticeFlagged, onRe
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>("same");
+  const { container, item } = useCelebrationReveal();
   const flaggedCount = learnQueue.flags.filter(Boolean).length;
+  const reviewedCount = learnQueue.problems.length;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl font-extrabold text-text-primary">Learning Complete</h1>
-      </motion.div>
+      <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
+        <motion.div variants={item} className="space-y-3 text-center">
+          <CelebrationMedallion />
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+            Session complete
+          </p>
+          <h1 className="font-serif text-[2.5rem] leading-[1.05] text-text-primary sm:text-[3rem]">
+            Learning <span className="font-fraunces italic text-primary">complete.</span>
+          </h1>
+          <p className="mx-auto max-w-sm text-[15px] leading-relaxed text-text-secondary">
+            You worked through {reviewedCount} problem{reviewedCount > 1 ? "s" : ""}, start to finish.
+          </p>
+        </motion.div>
 
-      <Card variant="elevated" className="text-center">
-        <p className="text-sm text-text-muted">Problems Reviewed</p>
-        <p className="text-4xl font-extrabold text-primary">{learnQueue.problems.length}</p>
-      </Card>
+        <motion.div variants={item}>
+          <Card variant="elevated" className="text-center">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+              Problems reviewed
+            </p>
+            <p className="mt-1 font-serif text-5xl text-primary">{reviewedCount}</p>
+          </Card>
+        </motion.div>
+      </motion.div>
 
       <div className="space-y-2">
         {learnQueue.problems.map((problem, i) => (

@@ -32,10 +32,14 @@ export function MockTestPreview({ mockTest, isTimed, onBegin, onCancel }: MockTe
           )}
         </div>
         <div>
-          <h1 className="text-2xl font-extrabold text-text-primary">
-            {allSolved ? "Your exam is ready" : "Preparing your exam…"}
+          <h1 className="font-serif text-[2.25rem] leading-[1.1] text-text-primary sm:text-[2.5rem]">
+            {allSolved ? (
+              <>Your exam is <span className="font-fraunces italic text-primary">ready.</span></>
+            ) : (
+              <>Preparing your <span className="font-fraunces italic text-primary">exam…</span></>
+            )}
           </h1>
-          <p className="mt-2 text-sm text-text-muted">
+          <p className="mt-3 text-sm text-text-muted">
             {mockTest.questions.length} question{mockTest.questions.length !== 1 ? "s" : ""} ·{" "}
             {mockTest.timeLimitSeconds ? `${Math.round(mockTest.timeLimitSeconds / 60)} min` : "Untimed"}
           </p>
@@ -74,8 +78,10 @@ export function MockTestPreview({ mockTest, isTimed, onBegin, onCancel }: MockTe
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl font-extrabold text-text-primary">Your exam is ready</h1>
-        <p className="mt-1 text-sm text-text-muted">
+        <h1 className="font-serif text-[2.5rem] leading-[1.05] text-text-primary sm:text-[3rem]">
+          Your exam is <span className="font-fraunces italic text-primary">ready.</span>
+        </h1>
+        <p className="mt-2 text-sm text-text-muted">
           {mockTest.questions.length} question{mockTest.questions.length !== 1 ? "s" : ""} · Review before you begin
         </p>
       </motion.div>
