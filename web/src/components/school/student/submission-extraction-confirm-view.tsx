@@ -489,7 +489,7 @@ export function SubmissionExtractionConfirmView({
       </p>
 
       {blankPageCount > 0 && (
-        <div className="mt-4 rounded-[--radius-sm] border border-amber-500 bg-amber-50 p-3 text-sm text-amber-700 dark:bg-amber-500/10">
+        <div className="mt-4 rounded-[--radius-sm] border border-warning-dark/20 bg-warning-bg p-3 text-sm text-warning-dark">
           We couldn&apos;t read problems on{" "}
           {blankPageCount === 1 ? "1 of your pages" : `${blankPageCount} of your pages`}
           . Make sure each photo is clear and your work is visible.
@@ -604,7 +604,7 @@ export function SubmissionExtractionConfirmView({
           type="button"
           onClick={handleFlag}
           disabled={submitting}
-          className="min-h-[44px] w-full rounded-[--radius-sm] border border-border px-4 py-3 text-sm font-medium text-text-secondary hover:border-amber-500 hover:text-amber-600 disabled:opacity-50 sm:w-auto sm:py-2"
+          className="min-h-[44px] w-full rounded-[--radius-sm] border border-border px-4 py-3 text-sm font-medium text-text-secondary hover:border-warning hover:text-warning-dark disabled:opacity-50 sm:w-auto sm:py-2"
         >
           {submitting ? "Saving…" : "This reading is completely wrong"}
         </button>

@@ -12,7 +12,7 @@ import {
   STRONG_THRESHOLD,
   STRUGGLING_THRESHOLD,
 } from "@/components/school/shared/percent-badge";
-import { Select } from "@/components/ui";
+import { PageErrorState, Select } from "@/components/ui";
 
 type Sort = "date_desc" | "date_asc" | "score_desc" | "score_asc";
 
@@ -60,18 +60,7 @@ export default function StudentGradesPage() {
   }, [data]);
 
   if (error) {
-    return (
-      <div className="mx-auto max-w-3xl py-12 text-center">
-        <p className="text-error">{error}</p>
-        <button
-          type="button"
-          onClick={load}
-          className="mt-4 rounded-[--radius-sm] border border-border px-4 py-2 text-sm font-semibold text-text-primary hover:bg-surface-hover"
-        >
-          Retry
-        </button>
-      </div>
-    );
+    return <PageErrorState message={error} onRetry={load} />;
   }
 
   if (data === null) {
@@ -95,11 +84,14 @@ export default function StudentGradesPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-6 flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-text-primary">
+        <div className="min-w-0">
+          <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+            Student
+          </span>
+          <h1 className="mt-2 font-serif text-[40px] leading-[1.05] tracking-[-0.02em] text-text-primary">
             My Grades
           </h1>
-          <p className="mt-1 text-sm text-text-muted">
+          <p className="mt-2 font-serif italic text-[16px] leading-snug text-text-secondary">
             {empty
               ? "Your grades will appear here once your teacher publishes them."
               : `${sorted.length} graded ${sorted.length === 1 ? "assignment" : "assignments"}`}
