@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, use, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
@@ -11,8 +11,7 @@ import {
   BANK_JOB_TOAST_AUTO_CLEAR_MS,
 } from "@/lib/constants";
 import { formatDueRelative } from "@/lib/utils";
-import { useAuthStore } from "@/stores/auth";
-import { TOUR_ACTIONS, TOUR_IDS, useTour, useTourAction } from "@/components/tour";
+import { TOUR_ACTIONS, TOUR_IDS, useTourAction } from "@/components/tour";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
 import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
@@ -208,12 +207,14 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
 
   // ── Onboarding tour wiring ──
   // The Field Guide tour (components/tour) replaces the old setup
-  // checklist. The page registers the imperative handoffs each step
+  // checklist. This page registers the imperative handoffs each step
   // needs (tab switches + the live New-section dialog) and owns the
-  // section modal so the tour can open it, then auto-mounts on a
-  // teacher's first visit while their "teacher" tour is unseen.
-  const tour = useTour();
-  const user = useAuthStore((s) => s.user);
+  // section modal so the tour can open it. It does NOT auto-start: the
+  // from-zero tour begins on the courses list (a brand-new teacher has
+  // no course) and carries across the navigation into this workspace,
+  // resuming at "Create a section". Auto-starting here too would
+  // double-fire during that continuation, so the courses list is the
+  // sole owner of the first-run start.
   const [sectionModalOpen, setSectionModalOpen] = useState(false);
   // One-shot request from step two: expand the first section's roster so
   // the invite control mounts. SectionsTab consumes it once a section is
@@ -236,24 +237,6 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   useTourAction(TOUR_ACTIONS.gotoMaterials, () => setTab("materials"));
   useTourAction(TOUR_ACTIONS.gotoHomework, () => setTab("homework"));
   useTourAction(TOUR_ACTIONS.gotoSubmissions, () => setTab("submissions"));
-
-  const autoStartedRef = useRef(false);
-  useEffect(() => {
-    if (autoStartedRef.current) return;
-    if (loading || error || !course) return;
-    if (!user || user.role !== "teacher") return;
-    if (user.tours_seen.includes("teacher")) return;
-    // Mount after first paint, once the default-tab targets exist. Latch
-    // autoStartedRef only when start() actually fires — not before the
-    // rAF — so a spurious effect re-run that cancels this frame simply
-    // reschedules on the next run instead of permanently dropping the
-    // tour (the cleanup cancels the pending frame).
-    const raf = requestAnimationFrame(() => {
-      autoStartedRef.current = true;
-      tour.start("teacher");
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [loading, error, course, user, tour]);
 
   if (loading) {
     return (

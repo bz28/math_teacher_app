@@ -22,6 +22,7 @@ export type TourPlacement = "auto" | "top" | "bottom" | "left" | "right";
  * step-list and the controls can't drift apart silently.
  */
 export const TOUR_IDS = {
+  teacherNewCourse: "teacher-new-course",
   teacherNewSection: "teacher-new-section",
   teacherInvite: "teacher-invite",
   teacherMaterials: "teacher-materials",
@@ -35,6 +36,10 @@ export const TOUR_IDS = {
  * them by name so the data-only step-list never imports page state.
  */
 export const TOUR_ACTIONS = {
+  // Live handoff into the real New-course dialog on the courses list —
+  // the from-zero tour's first step, owned by the courses-list page.
+  openNewCourse: "teacher.open-new-course",
+  closeNewCourse: "teacher.close-new-course",
   gotoSections: "teacher.goto-sections",
   openNewSection: "teacher.open-new-section",
   closeNewSection: "teacher.close-new-section",
@@ -81,8 +86,15 @@ export interface TourStep {
    * Optional live handoff into real UI. Pressing Next opens the real
    * surface (`open`) and pauses the overlay so the user can use it;
    * pressing Continue runs `close` and resumes to the next step.
+   *
+   * `gate: true` makes the handoff a create-or-skip gate: there is no
+   * plain "Continue" that advances the tour. The only way forward is
+   * completing the real action (the host page advances on success);
+   * cancelling the surface returns to this step, and Skip exits. Used
+   * by step one, whose later steps live on a different page — advancing
+   * without creating a course would strand them on the courses list.
    */
-  handoff?: { open: string; close: string; hint: string };
+  handoff?: { open: string; close: string; hint: string; gate?: boolean };
 }
 
 export interface TourDefinition {
