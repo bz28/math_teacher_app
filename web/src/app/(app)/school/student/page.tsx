@@ -97,6 +97,15 @@ export default function SchoolStudentDashboard() {
     if (tour.isActive) return;
     if (!user || user.role !== "student" || user.is_preview) return;
     if (user.tours_seen.includes("student")) return;
+    // The spotlight is a desktop experience — its targets live in the
+    // md+ sidebar (width 0 on phones). Don't auto-start on mobile; the
+    // "Take the tour" re-entry still works at any width.
+    if (typeof window === "undefined" || !window.matchMedia("(min-width: 768px)").matches) return;
+    // Only auto-start once there's a real class context. A student with
+    // school_id but zero enrollments lands on the join-a-class view,
+    // where the homework / graded / turn-in targets don't exist — so the
+    // spotlight would chase nothing. Gate on at least one class.
+    if (!classes || classes.length === 0) return;
     // Defer to first paint so the spotlight targets are mounted; the
     // welcome cover shows first, giving the dashboard fetch time to land
     // before the user steps into the spotlights.
@@ -105,7 +114,7 @@ export default function SchoolStudentDashboard() {
       tour.start("student");
     });
     return () => cancelAnimationFrame(raf);
-  }, [user, tour]);
+  }, [user, tour, classes]);
 
   if (error) {
     return (
@@ -195,7 +204,11 @@ export default function SchoolStudentDashboard() {
           className="dashboard-card-enter"
           style={{ animationDelay: "80ms" }}
         >
-          <DashboardCard title="Due this week" count={dueCount}>
+          <DashboardCard
+            title="Due this week"
+            count={dueCount}
+            bodyTourId={TOUR_IDS.studentTurnIn}
+          >
             {overdue.length > 0 && (
               <div className="border-b border-error/30 bg-error-light/40 px-5 py-2">
                 <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-error">
@@ -208,21 +221,11 @@ export default function SchoolStudentDashboard() {
                 </div>
               </div>
             )}
-            {overdue.map((a, i) => (
-              <DashboardAssignmentRow
-                key={`ov-${a.assignment_id}`}
-                assignment={a}
-                // Spotlight the very first row (overdue takes precedence)
-                // for the tour's "turn it in" step.
-                tourId={i === 0 ? TOUR_IDS.studentTurnIn : undefined}
-              />
+            {overdue.map((a) => (
+              <DashboardAssignmentRow key={`ov-${a.assignment_id}`} assignment={a} />
             ))}
-            {due_this_week.map((a, i) => (
-              <DashboardAssignmentRow
-                key={`due-${a.assignment_id}`}
-                assignment={a}
-                tourId={overdue.length === 0 && i === 0 ? TOUR_IDS.studentTurnIn : undefined}
-              />
+            {due_this_week.map((a) => (
+              <DashboardAssignmentRow key={`due-${a.assignment_id}`} assignment={a} />
             ))}
             {dueCount === 0 && (
               <EmptyRow text="You're all caught up — nothing due this week." />

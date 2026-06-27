@@ -8,11 +8,16 @@ export function DashboardCard({
   title,
   count,
   children,
+  bodyTourId,
 }: {
   title: string;
   /** Shown next to the title as a muted number. Hidden when undefined. */
   count?: number;
   children: React.ReactNode;
+  /** Optional `data-tour-id` stamped on the card body (the list region).
+   *  Lets a tour spotlight a stable container that exists even when the
+   *  list is empty — unlike a per-row target, which doesn't mount. */
+  bodyTourId?: string;
 }) {
   return (
     <section className="overflow-hidden rounded-[--radius-xl] border border-border-light bg-surface">
@@ -26,7 +31,7 @@ export function DashboardCard({
           </span>
         )}
       </header>
-      <div>{children}</div>
+      <div data-tour-id={bodyTourId}>{children}</div>
     </section>
   );
 }

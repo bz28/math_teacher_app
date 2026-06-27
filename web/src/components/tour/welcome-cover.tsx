@@ -5,11 +5,14 @@ import { motion, useReducedMotion } from "framer-motion";
 import type { TourCover } from "./types";
 
 /** Split a headline into tokens, flagging the single *asterisk-wrapped*
- *  word so it can render in Fraunces italic. */
-function parseTitle(title: string): { text: string; italic: boolean }[] {
+ *  word so it can render in Fraunces italic. Trailing punctuation after
+ *  the closing `*` (e.g. `*reimagined*.`) is kept OUTSIDE the italic as
+ *  `suffix`, so the asterisks never render literally. */
+function parseTitle(title: string): { text: string; italic: boolean; suffix: string }[] {
   return title.split(/\s+/).map((word) => {
-    const italic = word.startsWith("*") && word.endsWith("*");
-    return { text: italic ? word.slice(1, -1) : word, italic };
+    const m = /^\*(.+?)\*([^\w*]*)$/.exec(word);
+    if (m) return { text: m[1], italic: true, suffix: m[2] };
+    return { text: word, italic: false, suffix: "" };
   });
 }
 
@@ -123,9 +126,12 @@ export function WelcomeCover({
           {words.map((w, i) => (
             <motion.span key={i} variants={wordVariants} className="inline-block">
               {w.italic ? (
-                <span className="font-display-serif italic text-[color:var(--color-primary)]">
-                  {w.text}
-                </span>
+                <>
+                  <span className="font-display-serif italic text-[color:var(--color-primary)]">
+                    {w.text}
+                  </span>
+                  {w.suffix}
+                </>
               ) : (
                 w.text
               )}

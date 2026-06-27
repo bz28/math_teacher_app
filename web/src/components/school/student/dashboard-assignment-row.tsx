@@ -11,16 +11,11 @@ import { UrgencyPill } from "./urgency-pill";
  */
 export function DashboardAssignmentRow({
   assignment,
-  tourId,
 }: {
   assignment: DashboardAssignment;
-  /** Optional `data-tour-id` — stamped on the first row so the
-   *  onboarding tour can spotlight "turn in work". */
-  tourId?: string;
 }) {
   return (
     <Link
-      data-tour-id={tourId}
       href={`/school/student/courses/${assignment.course_id}/homework/${assignment.assignment_id}`}
       className="group flex items-center gap-3 border-b border-border-light/60 px-5 py-3 transition-colors last:border-b-0 hover:bg-surface-hover"
     >

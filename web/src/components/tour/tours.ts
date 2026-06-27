@@ -158,7 +158,7 @@ const STUDENT_TOUR: TourDefinition = {
       target: TOUR_IDS.studentTurnIn,
       eyebrow: "Hand it in",
       title: "Open it to turn it in",
-      body: "Tap any assignment to work through it step by step and submit when you're ready. Your teacher sees it the moment you do.",
+      body: "When your teacher posts homework it shows up here — tap any assignment to work through it step by step and submit when you're ready. Your teacher sees it the moment you do.",
       placement: "bottom",
     },
     {

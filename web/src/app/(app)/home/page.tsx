@@ -72,6 +72,9 @@ export default function HomePage() {
     if (tour.isActive) return;
     if (!user || user.role !== "student" || user.school_id || user.is_preview) return;
     if (user.tours_seen.includes("personal")) return;
+    // The spotlight is a desktop experience — don't auto-start on phones;
+    // the manual re-entry still works at any width.
+    if (typeof window === "undefined" || !window.matchMedia("(min-width: 768px)").matches) return;
     const raf = requestAnimationFrame(() => {
       autoStartedRef.current = true;
       tour.start("personal");
