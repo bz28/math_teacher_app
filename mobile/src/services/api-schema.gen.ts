@@ -1535,6 +1535,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/school/student/practice/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get My Practice Activity
+         * @description The authenticated student's own practice/learn history. Totals
+         *     plus recent activity grouped by practice set. Optionally scoped to
+         *     one course. Read-only; scoped to the caller's own student_id so a
+         *     student can never see another student's history.
+         */
+        get: operations["get_my_practice_activity_v1_school_student_practice_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/school/student/practice/{assignment_id}": {
         parameters: {
             query?: never;
@@ -1555,6 +1578,33 @@ export interface paths {
         get: operations["practice_detail_v1_school_student_practice__assignment_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/school/student/practice/{assignment_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Practice Activity
+         * @description Append a finished session's per-problem outcomes for a practice
+         *     set. Append-only — each call inserts one row per supplied problem.
+         *
+         *     Auth reuses the practice surface's own gate: the assignment must be
+         *     a published practice the student is enrolled in (404/403 otherwise),
+         *     and every `bank_item_id` must be an approved item of THIS practice
+         *     set (a row pointing elsewhere is rejected 404). `section_id` is
+         *     derived from the student's enrollment, never trusted from the body.
+         */
+        post: operations["record_practice_activity_v1_school_student_practice__assignment_id__activity_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2381,6 +2431,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/courses/{course_id}/sections/{section_id}/practice-insights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Section Practice Insights
+         * @description Class-level struggle aggregate for one section: per bank item, how
+         *     many distinct students struggled (retried/revealed) vs how many
+         *     practiced it. Aggregate/anonymous — names the concept to re-teach,
+         *     not the student.
+         */
+        get: operations["get_section_practice_insights_v1_teacher_courses__course_id__sections__section_id__practice_insights_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/courses/{course_id}/sections/{section_id}/students/{student_id}": {
         parameters: {
             query?: never;
@@ -2417,6 +2490,29 @@ export interface paths {
          *     old section's class average — which is the historical truth.
          */
         get: operations["get_student_grades_v1_teacher_courses__course_id__sections__section_id__students__student_id__grades_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teacher/courses/{course_id}/sections/{section_id}/students/{student_id}/practice-activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Student Practice Activity
+         * @description One student's practice/learn engagement for the teacher. Practiced
+         *     count, last active, outcome breakdown, and the bank items/concepts
+         *     the student most often retried or revealed (their struggle signal).
+         *     No raw answers, no grade — insight only.
+         */
+        get: operations["get_student_practice_activity_v1_teacher_courses__course_id__sections__section_id__students__student_id__practice_activity_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3096,6 +3192,29 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ActivityRowIn
+         * @description One problem's outcome from a finished practice/learn session.
+         */
+        ActivityRowIn: {
+            /**
+             * Bank Item Id
+             * Format: uuid
+             */
+            bank_item_id: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "practice" | "learn";
+            /** Outcome */
+            outcome?: string | null;
+            /**
+             * Tutor Message Count
+             * @default 0
+             */
+            tutor_message_count: number;
+        };
         /** AssignSectionsRequest */
         AssignSectionsRequest: {
             /** Section Ids */
@@ -3870,6 +3989,28 @@ export interface components {
             /** Portal Url */
             portal_url: string;
         };
+        /** PracticeActivitySetSummary */
+        PracticeActivitySetSummary: {
+            /** Course Id */
+            course_id: string;
+            /** Course Name */
+            course_name: string;
+            /** First Try Count */
+            first_try_count: number;
+            /**
+             * Last Active
+             * Format: date-time
+             */
+            last_active: string;
+            /** Learn Walkthroughs */
+            learn_walkthroughs: number;
+            /** Practice Assignment Id */
+            practice_assignment_id: string;
+            /** Problems Practiced */
+            problems_practiced: number;
+            /** Title */
+            title: string;
+        };
         /** PracticeCheckRequest */
         PracticeCheckRequest: {
             /** Correct Answer */
@@ -3975,6 +4116,11 @@ export interface components {
              * @default false
              */
             reviewed_only: boolean;
+        };
+        /** RecordActivityResponse */
+        RecordActivityResponse: {
+            /** Recorded */
+            recorded: number;
         };
         /** RefreshRequest */
         RefreshRequest: {
@@ -4241,6 +4387,22 @@ export interface components {
         StudentLinkedPracticeResponse: {
             /** Practice Assignment Id */
             practice_assignment_id: string | null;
+        };
+        /**
+         * StudentPracticeActivityResponse
+         * @description Shaped for the student's own "Your practice" view.
+         */
+        StudentPracticeActivityResponse: {
+            /** First Try Rate */
+            first_try_rate: number | null;
+            /** Last Active */
+            last_active: string | null;
+            /** Learn Walkthroughs */
+            learn_walkthroughs: number;
+            /** Problems Practiced */
+            problems_practiced: number;
+            /** Sets */
+            sets: components["schemas"]["PracticeActivitySetSummary"][];
         };
         /** StudentPracticeDetail */
         StudentPracticeDetail: {
@@ -7586,6 +7748,37 @@ export interface operations {
             };
         };
     };
+    get_my_practice_activity_v1_school_student_practice_activity_get: {
+        parameters: {
+            query?: {
+                course_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentPracticeActivityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     practice_detail_v1_school_student_practice__assignment_id__get: {
         parameters: {
             query?: never;
@@ -7604,6 +7797,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StudentPracticeDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_practice_activity_v1_school_student_practice__assignment_id__activity_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivityRowIn"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordActivityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9366,6 +9594,40 @@ export interface operations {
             };
         };
     };
+    get_section_practice_insights_v1_teacher_courses__course_id__sections__section_id__practice_insights_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     remove_student_v1_teacher_courses__course_id__sections__section_id__students__student_id__delete: {
         parameters: {
             query?: never;
@@ -9402,6 +9664,41 @@ export interface operations {
         };
     };
     get_student_grades_v1_teacher_courses__course_id__sections__section_id__students__student_id__grades_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                section_id: string;
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_student_practice_activity_v1_teacher_courses__course_id__sections__section_id__students__student_id__practice_activity_get: {
         parameters: {
             query?: never;
             header?: never;

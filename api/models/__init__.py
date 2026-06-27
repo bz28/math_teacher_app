@@ -16,6 +16,7 @@ from api.models import (  # noqa: F401
     lead_meeting,
     lead_note,
     llm_call,
+    practice_activity,
     quality_score,
     question_bank,
     school,

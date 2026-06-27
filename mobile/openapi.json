@@ -1,6 +1,48 @@
 {
   "components": {
     "schemas": {
+      "ActivityRowIn": {
+        "description": "One problem's outcome from a finished practice/learn session.",
+        "properties": {
+          "bank_item_id": {
+            "format": "uuid",
+            "title": "Bank Item Id",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "practice",
+              "learn"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "tutor_message_count": {
+            "default": 0,
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Tutor Message Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bank_item_id",
+          "mode"
+        ],
+        "title": "ActivityRowIn",
+        "type": "object"
+      },
       "AssignSectionsRequest": {
         "properties": {
           "section_ids": {
@@ -1893,6 +1935,55 @@
         "title": "PortalResponse",
         "type": "object"
       },
+      "PracticeActivitySetSummary": {
+        "properties": {
+          "course_id": {
+            "title": "Course Id",
+            "type": "string"
+          },
+          "course_name": {
+            "title": "Course Name",
+            "type": "string"
+          },
+          "first_try_count": {
+            "title": "First Try Count",
+            "type": "integer"
+          },
+          "last_active": {
+            "format": "date-time",
+            "title": "Last Active",
+            "type": "string"
+          },
+          "learn_walkthroughs": {
+            "title": "Learn Walkthroughs",
+            "type": "integer"
+          },
+          "practice_assignment_id": {
+            "title": "Practice Assignment Id",
+            "type": "string"
+          },
+          "problems_practiced": {
+            "title": "Problems Practiced",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "practice_assignment_id",
+          "title",
+          "course_id",
+          "course_name",
+          "problems_practiced",
+          "first_try_count",
+          "learn_walkthroughs",
+          "last_active"
+        ],
+        "title": "PracticeActivitySetSummary",
+        "type": "object"
+      },
       "PracticeCheckRequest": {
         "properties": {
           "correct_answer": {
@@ -2138,6 +2229,19 @@
           }
         },
         "title": "PublishGradesRequest",
+        "type": "object"
+      },
+      "RecordActivityResponse": {
+        "properties": {
+          "recorded": {
+            "title": "Recorded",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "recorded"
+        ],
+        "title": "RecordActivityResponse",
         "type": "object"
       },
       "RefreshRequest": {
@@ -2858,6 +2962,58 @@
           "practice_assignment_id"
         ],
         "title": "StudentLinkedPracticeResponse",
+        "type": "object"
+      },
+      "StudentPracticeActivityResponse": {
+        "description": "Shaped for the student's own \"Your practice\" view.",
+        "properties": {
+          "first_try_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Try Rate"
+          },
+          "last_active": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Active"
+          },
+          "learn_walkthroughs": {
+            "title": "Learn Walkthroughs",
+            "type": "integer"
+          },
+          "problems_practiced": {
+            "title": "Problems Practiced",
+            "type": "integer"
+          },
+          "sets": {
+            "items": {
+              "$ref": "#/components/schemas/PracticeActivitySetSummary"
+            },
+            "title": "Sets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "problems_practiced",
+          "first_try_rate",
+          "learn_walkthroughs",
+          "last_active",
+          "sets"
+        ],
+        "title": "StudentPracticeActivityResponse",
         "type": "object"
       },
       "StudentPracticeDetail": {
@@ -9543,6 +9699,62 @@
         ]
       }
     },
+    "/v1/school/student/practice/activity": {
+      "get": {
+        "description": "The authenticated student's own practice/learn history. Totals\nplus recent activity grouped by practice set. Optionally scoped to\none course. Read-only; scoped to the caller's own student_id so a\nstudent can never see another student's history.",
+        "operationId": "get_my_practice_activity_v1_school_student_practice_activity_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "course_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Course Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentPracticeActivityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get My Practice Activity",
+        "tags": [
+          "school-student"
+        ]
+      }
+    },
     "/v1/school/student/practice/{assignment_id}": {
       "get": {
         "description": "Return the full detail for a published practice assignment.\nProblems are the approved bank items whose originating_assignment_id\npoints at this practice \u2014 the current clone + approve flow attaches\nitems via originating_assignment_id rather than content. Ordered by\ncreated_at; clone jobs run concurrently so positions reflect the\norder each job's AI output persisted, NOT strictly the source HW's\nproblem order. Close enough for v1; revisit when clustering lands.",
@@ -9587,6 +9799,69 @@
           }
         ],
         "summary": "Practice Detail",
+        "tags": [
+          "school-student"
+        ]
+      }
+    },
+    "/v1/school/student/practice/{assignment_id}/activity": {
+      "post": {
+        "description": "Append a finished session's per-problem outcomes for a practice\nset. Append-only \u2014 each call inserts one row per supplied problem.\n\nAuth reuses the practice surface's own gate: the assignment must be\na published practice the student is enrolled in (404/403 otherwise),\nand every `bank_item_id` must be an approved item of THIS practice\nset (a row pointing elsewhere is rejected 404). `section_id` is\nderived from the student's enrollment, never trusted from the body.",
+        "operationId": "record_practice_activity_v1_school_student_practice__assignment_id__activity_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assignment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assignment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/ActivityRowIn"
+                },
+                "title": "Rows",
+                "type": "array"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordActivityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Record Practice Activity",
         "tags": [
           "school-student"
         ]
@@ -12593,6 +12868,67 @@
         ]
       }
     },
+    "/v1/teacher/courses/{course_id}/sections/{section_id}/practice-insights": {
+      "get": {
+        "description": "Class-level struggle aggregate for one section: per bank item, how\nmany distinct students struggled (retried/revealed) vs how many\npracticed it. Aggregate/anonymous \u2014 names the concept to re-teach,\nnot the student.",
+        "operationId": "get_section_practice_insights_v1_teacher_courses__course_id__sections__section_id__practice_insights_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "section_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Section Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Section Practice Insights V1 Teacher Courses  Course Id  Sections  Section Id  Practice Insights Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Section Practice Insights",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
     "/v1/teacher/courses/{course_id}/sections/{section_id}/students/{student_id}": {
       "delete": {
         "operationId": "remove_student_v1_teacher_courses__course_id__sections__section_id__students__student_id__delete",
@@ -12731,6 +13067,77 @@
           }
         ],
         "summary": "Get Student Grades",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/courses/{course_id}/sections/{section_id}/students/{student_id}/practice-activity": {
+      "get": {
+        "description": "One student's practice/learn engagement for the teacher. Practiced\ncount, last active, outcome breakdown, and the bank items/concepts\nthe student most often retried or revealed (their struggle signal).\nNo raw answers, no grade \u2014 insight only.",
+        "operationId": "get_student_practice_activity_v1_teacher_courses__course_id__sections__section_id__students__student_id__practice_activity_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "section_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Section Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "student_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Student Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Student Practice Activity V1 Teacher Courses  Course Id  Sections  Section Id  Students  Student Id  Practice Activity Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Student Practice Activity",
         "tags": [
           "teacher"
         ]

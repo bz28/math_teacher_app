@@ -228,7 +228,7 @@ async def _truncate_world_tables() -> None:
     the schema."""
     async with get_session_factory()() as s:
         await s.execute(text(
-            "TRUNCATE TABLE bank_consumption, assignment_sections, assignments, "
+            "TRUNCATE TABLE practice_activity, bank_consumption, assignment_sections, assignments, "
             "section_enrollments, sections, question_bank_items, units, courses, "
             "users RESTART IDENTITY CASCADE"
         ))
