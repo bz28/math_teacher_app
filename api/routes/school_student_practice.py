@@ -33,7 +33,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,6 +49,14 @@ from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course
+from api.models.practice_activity import (
+    MODE_LEARN,
+    MODE_PRACTICE,
+    OUTCOME_COMPLETED,
+    OUTCOME_FIRST_TRY,
+    PRACTICE_OUTCOMES,
+    PracticeActivity,
+)
 from api.models.question_bank import FORMAT_MCQ, BankConsumption, QuestionBankItem
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
@@ -1262,6 +1270,106 @@ async def homework_detail(
     )
 
 
+# ── Student practice history (read) ──
+#
+# Registered BEFORE the dynamic /practice/{assignment_id} route below so
+# the literal "activity" segment isn't swallowed as an assignment_id.
+
+class PracticeActivitySetSummary(BaseModel):
+    practice_assignment_id: str
+    title: str
+    course_id: str
+    course_name: str
+    problems_practiced: int
+    first_try_count: int
+    learn_walkthroughs: int
+    last_active: datetime
+
+
+class StudentPracticeActivityResponse(BaseModel):
+    """Shaped for the student's own "Your practice" view."""
+
+    problems_practiced: int
+    first_try_rate: float | None
+    learn_walkthroughs: int
+    last_active: datetime | None
+    sets: list[PracticeActivitySetSummary]
+
+
+@router.get("/practice/activity")
+async def get_my_practice_activity(
+    course_id: uuid.UUID | None = None,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> StudentPracticeActivityResponse:
+    """The authenticated student's own practice/learn history. Totals
+    plus recent activity grouped by practice set. Optionally scoped to
+    one course. Read-only; scoped to the caller's own student_id so a
+    student can never see another student's history."""
+    q = (
+        select(
+            PracticeActivity,
+            Assignment.title,
+            Assignment.course_id,
+            Course.name.label("course_name"),
+        )
+        .join(Assignment, Assignment.id == PracticeActivity.practice_assignment_id)
+        .join(Course, Course.id == Assignment.course_id)
+        .where(PracticeActivity.student_id == user.id)
+        .order_by(PracticeActivity.created_at.desc())
+    )
+    if course_id is not None:
+        q = q.where(Assignment.course_id == course_id)
+    rows = (await db.execute(q)).all()
+
+    problems_practiced = 0
+    first_try_count = 0
+    learn_walkthroughs = 0
+    last_active: datetime | None = None
+
+    # Group by practice set, preserving recency order (rows arrive
+    # newest-first) so the first time we see a set fixes its position.
+    sets: dict[uuid.UUID, dict[str, Any]] = {}
+    for act, title, c_id, course_name in rows:
+        if last_active is None:
+            last_active = act.created_at
+        bucket = sets.get(act.practice_assignment_id)
+        if bucket is None:
+            bucket = {
+                "practice_assignment_id": str(act.practice_assignment_id),
+                "title": title,
+                "course_id": str(c_id),
+                "course_name": course_name,
+                "problems_practiced": 0,
+                "first_try_count": 0,
+                "learn_walkthroughs": 0,
+                "last_active": act.created_at,
+            }
+            sets[act.practice_assignment_id] = bucket
+
+        if act.mode == MODE_PRACTICE:
+            problems_practiced += 1
+            bucket["problems_practiced"] += 1
+            if act.outcome == OUTCOME_FIRST_TRY:
+                first_try_count += 1
+                bucket["first_try_count"] += 1
+        elif act.mode == MODE_LEARN:
+            learn_walkthroughs += 1
+            bucket["learn_walkthroughs"] += 1
+
+    first_try_rate = (
+        round(first_try_count / problems_practiced, 3)
+        if problems_practiced else None
+    )
+    return StudentPracticeActivityResponse(
+        problems_practiced=problems_practiced,
+        first_try_rate=first_try_rate,
+        learn_walkthroughs=learn_walkthroughs,
+        last_active=last_active,
+        sets=[PracticeActivitySetSummary(**b) for b in sets.values()],
+    )
+
+
 @router.get("/practice/{assignment_id}")
 async def practice_detail(
     assignment_id: uuid.UUID,
@@ -2202,3 +2310,119 @@ async def learn_this_problem(
         anchor_bank_item_id=str(anchor_id),
         remaining=remaining,
     )
+
+
+# ── Practice/Learn activity log ──
+#
+# The runner posts a finished session's per-problem rows here so the
+# outcomes survive (today they're computed then discarded). This is the
+# write side; the student/teacher reads consume the same table.
+
+# A single session can't realistically exceed this many problems; the
+# cap just bounds a crafted payload.
+_MAX_ACTIVITY_ROWS = 200
+
+
+class ActivityRowIn(BaseModel):
+    """One problem's outcome from a finished practice/learn session."""
+
+    bank_item_id: uuid.UUID
+    mode: Literal["practice", "learn"]
+    # practice → first_try | retry | revealed; learn → completed (or
+    # null). Validated against mode below.
+    outcome: str | None = None
+    tutor_message_count: int = Field(default=0, ge=0, le=10_000)
+
+    @model_validator(mode="after")
+    def _check_outcome(self) -> ActivityRowIn:
+        if self.mode == MODE_PRACTICE:
+            if self.outcome not in PRACTICE_OUTCOMES:
+                raise ValueError(
+                    f"practice outcome must be one of {PRACTICE_OUTCOMES}",
+                )
+        elif self.mode == MODE_LEARN:
+            # Learn rows are "completed" or unset — there's no
+            # correctness signal for a walkthrough.
+            if self.outcome not in (OUTCOME_COMPLETED, None):
+                raise ValueError("learn outcome must be 'completed' or null")
+        return self
+
+
+class RecordActivityResponse(BaseModel):
+    recorded: int
+
+
+@router.post("/practice/{assignment_id}/activity")
+async def record_practice_activity(
+    assignment_id: uuid.UUID,
+    rows: list[ActivityRowIn],
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> RecordActivityResponse:
+    """Append a finished session's per-problem outcomes for a practice
+    set. Append-only — each call inserts one row per supplied problem.
+
+    Auth reuses the practice surface's own gate: the assignment must be
+    a published practice the student is enrolled in (404/403 otherwise),
+    and every `bank_item_id` must be an approved item of THIS practice
+    set (a row pointing elsewhere is rejected 404). `section_id` is
+    derived from the student's enrollment, never trusted from the body.
+    """
+    if not rows:
+        return RecordActivityResponse(recorded=0)
+    if len(rows) > _MAX_ACTIVITY_ROWS:
+        raise HTTPException(status_code=400, detail="Too many activity rows")
+
+    # Gate: published practice + enrolled. Raises 404/403 on failure.
+    await _load_assignment_for_student(
+        db, assignment_id, user.id, expected_type="practice",
+    )
+
+    # Derive the section from enrollment — the section this student is
+    # enrolled in that this practice was pushed to. Guaranteed to exist
+    # because the loader above already confirmed enrollment.
+    section_id = (await db.execute(
+        select(SectionEnrollment.section_id)
+        .join(
+            AssignmentSection,
+            AssignmentSection.section_id == SectionEnrollment.section_id,
+        )
+        .where(
+            AssignmentSection.assignment_id == assignment_id,
+            SectionEnrollment.student_id == user.id,
+        )
+        .limit(1)
+    )).scalar_one()
+
+    # The set of approved bank items that belong to this practice set.
+    # Items attach via originating_assignment_id (not content) in the
+    # clone+approve flow, mirroring practice_detail.
+    valid_item_ids = set((await db.execute(
+        select(QuestionBankItem.id).where(
+            QuestionBankItem.originating_assignment_id == assignment_id,
+            QuestionBankItem.status == "approved",
+        )
+    )).scalars().all())
+
+    for row in rows:
+        if row.bank_item_id not in valid_item_ids:
+            # Opaque 404 — don't reveal whether the id exists elsewhere.
+            raise HTTPException(
+                status_code=404,
+                detail="Problem is not part of this practice set",
+            )
+
+    db.add_all([
+        PracticeActivity(
+            student_id=user.id,
+            section_id=section_id,
+            practice_assignment_id=assignment_id,
+            bank_item_id=row.bank_item_id,
+            mode=row.mode,
+            outcome=row.outcome,
+            tutor_message_count=row.tutor_message_count,
+        )
+        for row in rows
+    ])
+    await db.commit()
+    return RecordActivityResponse(recorded=len(rows))
