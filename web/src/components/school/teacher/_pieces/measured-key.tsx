@@ -27,10 +27,42 @@ const ENTRIES: { term: string; def: string }[] = [
   },
 ];
 
-export function MeasuredKey({ className = "" }: { className?: string }) {
+/**
+ * Status + trend definitions, surfaced only on the Student Insights tab
+ * (pass `showStatus`). They live here next to the outcome words so every
+ * formative term is defined in one place, reinforcing "insight, not a
+ * grade" wherever the key appears.
+ */
+const STATUS_ENTRIES: { term: string; def: string }[] = [
+  { term: "Thriving", def: "Engaged volume and a high first-try rate." },
+  { term: "On track", def: "Practicing steadily — the healthy middle." },
+  {
+    term: "Needs a nudge",
+    def: "Engaged but thin or quiet — too little, or nothing recent, to judge.",
+  },
+  {
+    term: "Struggling",
+    def: "Enough practice, but a low first-try rate or leaning on revealing the answer.",
+  },
+  { term: "No activity", def: "Hasn't practiced or finished a Learn yet." },
+  {
+    term: "Trend",
+    def: "Recent first-try success vs earlier — improving, slipping, or steady.",
+  },
+];
+
+export function MeasuredKey({
+  className = "",
+  showStatus = false,
+}: {
+  className?: string;
+  /** Append the status + trend definitions (Student Insights tab). */
+  showStatus?: boolean;
+}) {
   const reduce = useReducedMotion();
   const [open, setOpen] = useState(false);
   const panelId = useId();
+  const entries = showStatus ? [...ENTRIES, ...STATUS_ENTRIES] : ENTRIES;
 
   return (
     <div className={className}>
@@ -68,7 +100,7 @@ export function MeasuredKey({ className = "" }: { className?: string }) {
             className="overflow-hidden"
           >
             <dl className="mt-3 max-w-xl space-y-2 rounded-[--radius-md] border border-border-light bg-bg-subtle px-4 py-3.5">
-              {ENTRIES.map((e) => (
+              {entries.map((e) => (
                 <div key={e.term} className="text-[12px] leading-snug">
                   <dt className="inline font-semibold text-text-secondary">
                     {e.term}
