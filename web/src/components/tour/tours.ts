@@ -36,7 +36,12 @@ const TEACHER_TOUR: TourDefinition = {
       handoff: {
         open: TOUR_ACTIONS.openNewCourse,
         close: TOUR_ACTIONS.closeNewCourse,
-        hint: "This is the real dialog — name a course now, or continue the tour.",
+        hint: "This is the real New course dialog — create your first course to continue, or skip the tour.",
+        // Create-or-skip gate: steps two onward live inside the new
+        // course's workspace, so there is no plain advance from the
+        // courses list. Creating a course navigates in and resumes at
+        // step two; cancelling the dialog returns here; Skip exits.
+        gate: true,
       },
     },
     {

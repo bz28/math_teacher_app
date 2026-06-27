@@ -59,6 +59,12 @@ export default function SchoolTeacherDashboard() {
   const autoStartedRef = useRef(false);
   useEffect(() => {
     if (autoStartedRef.current) return;
+    // Don't restart a tour that's already running. A remount while the
+    // tour is live — e.g. step one navigates into the new course, then
+    // the teacher hits browser Back to this page — must resume in place,
+    // not reset to the welcome and wipe progress. tours_seen still lacks
+    // "teacher" mid-tour, so this active-guard is what holds the line.
+    if (tour.isActive) return;
     if (!user || user.role !== "teacher") return;
     if (user.tours_seen.includes("teacher")) return;
     // Mount after first paint so the New-course button (step one's
@@ -152,7 +158,15 @@ export default function SchoolTeacherDashboard() {
 
       {showNewCourse && (
         <NewCourseModal
-          onClose={() => setShowNewCourse(false)}
+          onClose={() => {
+            // During the first-run gate the dialog is the only forward
+            // path. Cancelling it returns to step one's spotlight (a
+            // re-prompt) — it must not advance, and must not leave a
+            // dangling resume bar. tour.back() while handed off runs the
+            // close action and drops back to the spotlight, same step.
+            if (tour.handoffActive) tour.back();
+            else setShowNewCourse(false);
+          }}
           onCreated={(courseId) => {
             setShowNewCourse(false);
             // During the first-run tour, creating a course advances past

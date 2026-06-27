@@ -55,20 +55,38 @@ export function TourOverlay() {
             className="pointer-events-auto flex items-center gap-4 rounded-[--radius-pill] border border-border bg-[color:var(--color-card)] py-2.5 pl-5 pr-2.5 shadow-lg"
           >
             <p className="text-[13px] text-text-secondary">{step.handoff.hint}</p>
-            <button
-              type="button"
-              onClick={back}
-              className="rounded-[--radius-pill] px-3 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary"
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              onClick={next}
-              className="rounded-[--radius-pill] bg-primary px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
-            >
-              Continue
-            </button>
+            {step.handoff.gate ? (
+              // Create-or-skip gate (step one): no "Continue" — advancing
+              // here would play later steps on the courses list, where
+              // their targets don't exist. The only way forward is
+              // creating a course (the host page advances on success);
+              // cancelling the dialog returns to the spotlight. The lone
+              // resume-bar control is the escape hatch out of the tour.
+              <button
+                type="button"
+                onClick={end}
+                className="rounded-[--radius-pill] px-3 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary"
+              >
+                Skip tour
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={back}
+                  className="rounded-[--radius-pill] px-3 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={next}
+                  className="rounded-[--radius-pill] bg-primary px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
+                >
+                  Continue
+                </button>
+              </>
+            )}
           </div>
         </motion.div>
       )}
