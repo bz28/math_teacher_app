@@ -1988,14 +1988,52 @@ class ChatResponse(BaseModel):
     reply: str
 
 
+async def _student_can_access_practice_item(
+    db: AsyncSession,
+    item: QuestionBankItem,
+    student_id: uuid.UUID,
+) -> bool:
+    """True when `item` is an approved problem of a published practice
+    assignment the student is enrolled in. This is the auth path for the
+    ungraded, stateless practice runner, which (unlike the HW variation
+    loop) never mints a BankConsumption row to prove ownership — the
+    student's enrollment in the practice's sections is what grants access.
+    Mirrors practice_detail's visibility rule."""
+    if item.status != "approved" or item.originating_assignment_id is None:
+        return False
+    enrolled = (await db.execute(
+        select(SectionEnrollment.id)
+        .join(AssignmentSection, AssignmentSection.section_id == SectionEnrollment.section_id)
+        .join(Assignment, Assignment.id == AssignmentSection.assignment_id)
+        .where(
+            AssignmentSection.assignment_id == item.originating_assignment_id,
+            Assignment.type == "practice",
+            Assignment.status == "published",
+            SectionEnrollment.student_id == student_id,
+        )
+        .limit(1)
+    )).scalar_one_or_none()
+    return enrolled is not None
+
+
 async def _load_variation_for_chat(
     db: AsyncSession,
     bank_item_id: uuid.UUID,
     student_id: uuid.UUID,
 ) -> tuple[QuestionBankItem, str]:
-    """Authorize and load a variation the student has been served for
-    chat. Returns the bank item plus the course subject for prompt
-    tone. 404 for outsider students."""
+    """Authorize and load a bank item the student may chat about.
+    Returns the item plus the course subject for prompt tone. Two access
+    paths, either of which authorizes:
+      1. The student owns a BankConsumption row for it (HW variation loop).
+      2. It's an approved problem of a practice assignment they're
+         enrolled in (the ungraded practice runner).
+    404 for everyone else."""
+    item = (await db.execute(
+        select(QuestionBankItem).where(QuestionBankItem.id == bank_item_id)
+    )).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Variation not available")
+
     owns = (await db.execute(
         select(BankConsumption.id)
         .where(
@@ -2004,13 +2042,9 @@ async def _load_variation_for_chat(
         )
         .limit(1)
     )).scalar_one_or_none()
-    if owns is None:
-        raise HTTPException(status_code=404, detail="Variation not available")
-
-    item = (await db.execute(
-        select(QuestionBankItem).where(QuestionBankItem.id == bank_item_id)
-    )).scalar_one_or_none()
-    if item is None:
+    if owns is None and not await _student_can_access_practice_item(
+        db, item, student_id,
+    ):
         raise HTTPException(status_code=404, detail="Variation not available")
 
     course = (await db.execute(

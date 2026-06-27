@@ -12,7 +12,9 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select, text
 
@@ -242,5 +244,78 @@ async def test_linked_practice_404_on_missing_homework(
     r = await client.get(
         f"/v1/school/student/homework/{fake}/linked-practice",
         headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 404
+
+
+# ── Tutor chat from the practice runner ──
+#
+# The practice runner is ungraded and stateless: it never mints a
+# BankConsumption row. Authorization for the shared step-chat /
+# problem-chat endpoints therefore flows through practice-assignment
+# enrollment (item.originating_assignment_id → published practice the
+# student is in), not consumption ownership.
+
+
+@pytest.fixture
+def _mock_tutor_llm() -> Any:
+    with patch(
+        "api.core.tutor.call_claude_json",
+        new_callable=AsyncMock,
+        return_value={"feedback": "Here's the idea."},
+    ):
+        yield
+
+
+async def test_practice_step_chat_authorized_by_enrollment(
+    client: AsyncClient, world: dict[str, Any], _mock_tutor_llm: Any,
+) -> None:
+    """An enrolled student can chat about a practice problem with NO
+    consumption row — proves the practice access path works."""
+    p = await _publish_linked_practice(world)
+    r = await client.post(
+        f"/v1/school/student/bank-item/{p['variation_id']}/step-chat",
+        headers=_auth(world["student_token"]),
+        json={"step_index": 0, "question": "why factor?", "prior_messages": []},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["reply"] == "Here's the idea."
+
+
+async def test_practice_problem_chat_authorized_by_enrollment(
+    client: AsyncClient, world: dict[str, Any], _mock_tutor_llm: Any,
+) -> None:
+    p = await _publish_linked_practice(world)
+    r = await client.post(
+        f"/v1/school/student/bank-item/{p['variation_id']}/problem-chat",
+        headers=_auth(world["student_token"]),
+        json={"question": "what's the general trick?", "prior_messages": []},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["reply"] == "Here's the idea."
+
+
+async def test_practice_step_chat_404_for_outsider(
+    client: AsyncClient, world: dict[str, Any], _mock_tutor_llm: Any,
+) -> None:
+    p = await _publish_linked_practice(world)
+    r = await client.post(
+        f"/v1/school/student/bank-item/{p['variation_id']}/step-chat",
+        headers=_auth(world["outsider_token"]),
+        json={"step_index": 0, "question": "hi", "prior_messages": []},
+    )
+    assert r.status_code == 404
+
+
+async def test_practice_step_chat_404_when_practice_is_draft(
+    client: AsyncClient, world: dict[str, Any], _mock_tutor_llm: Any,
+) -> None:
+    """A draft practice grants no chat access — unpublished teacher work
+    must stay sealed even though the student is enrolled in the section."""
+    p = await _publish_linked_practice(world, status_value="draft")
+    r = await client.post(
+        f"/v1/school/student/bank-item/{p['variation_id']}/problem-chat",
+        headers=_auth(world["student_token"]),
+        json={"question": "hi", "prior_messages": []},
     )
     assert r.status_code == 404
