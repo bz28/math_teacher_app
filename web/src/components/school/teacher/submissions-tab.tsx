@@ -75,7 +75,10 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
   if (rows.length === 0) {
     return (
       <div className="mt-6">
-        <EmptyState text="Nothing submitted yet. Publish a homework and student work will land here for grading." />
+        <EmptyState
+          title="Nothing submitted yet"
+          description="Publish a homework and student work will land here for grading."
+        />
       </div>
     );
   }

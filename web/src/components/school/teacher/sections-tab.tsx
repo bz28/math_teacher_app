@@ -82,7 +82,10 @@ export function SectionsTab({
       {error && <p className="mt-3 text-xs text-[color:var(--color-error)]">{error}</p>}
 
       {!loading && sections.length === 0 ? (
-        <EmptyState text="No sections yet. Add a class period to get started." />
+        <EmptyState
+          title="No sections yet"
+          description="Add a class period to get started."
+        />
       ) : (
         <div className="mt-4 space-y-3">
           {sections.map((s) => (
