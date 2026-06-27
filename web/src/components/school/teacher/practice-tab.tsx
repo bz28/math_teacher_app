@@ -7,7 +7,6 @@ import { topUnits, unitLabel as labelForUnit } from "@/lib/units";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { Select } from "@/components/ui";
 import { NewPracticeModal } from "./_pieces/new-practice-modal";
-import { PracticeStrugglePanel } from "./practice-struggle-panel";
 
 /**
  * Practice tab — ungraded practice sets for a course. Parallel to
@@ -263,11 +262,6 @@ export function PracticeTab({ courseId }: { courseId: string }) {
           </div>
         )}
       </div>
-
-      {/* Class struggle-insights — formative signal from ungraded
-          practice, scoped per section. Lives at the foot of the tab so
-          the authoring list stays the primary focus above it. */}
-      <PracticeStrugglePanel courseId={courseId} />
 
       {showNew && (
         <NewPracticeModal

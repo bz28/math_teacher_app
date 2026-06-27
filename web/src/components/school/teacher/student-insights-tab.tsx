@@ -15,17 +15,27 @@ import {
 } from "@/lib/api";
 import { formatRelativeDate } from "@/lib/utils";
 import { MeasuredKey } from "./_pieces/measured-key";
+import { PracticeStrugglePanel } from "./practice-struggle-panel";
 
 /**
- * Student Insights — a roster of formative engagement signal, one row
- * per enrolled student. Coarse practice/learn rollups (problems
- * practiced, walkthroughs, last-active, first-try rate) plus a derived
- * status + trend. Insight, NOT a grade: no scores, no raw answers.
+ * Student Insights — the single "how's my class doing" surface. Two
+ * editorial bands under one header:
  *
- * The read is per-section (GET /teacher/.../student-insights), so a
- * course with multiple sections gets a quiet section pivot; a single
+ *   1. "Where the class is struggling" — a course-wide, aggregate
+ *      re-teach list drawn from ungraded practice (PracticeStrugglePanel).
+ *      The class-level read first, before the per-student drilldown.
+ *   2. "Each student" — a roster of formative engagement signal, one row
+ *      per enrolled student. Coarse practice/learn rollups (problems
+ *      practiced, walkthroughs, last-active, first-try rate) plus a
+ *      derived status + trend. Insight, NOT a grade: no scores, no raw
+ *      answers.
+ *
+ * The roster read is per-section (GET /teacher/.../student-insights), so
+ * a course with multiple sections gets a quiet section pivot; a single
  * section skips it. Clicking a row opens that student's per-student
  * practice-engagement detail under /grades/[sectionId]/students/[id].
+ * The "How this is measured" key lives once on the page header (with
+ * status defs) and defines every formative term both bands use.
  */
 
 type SortKey = "attention" | "last_active" | "name";
@@ -208,6 +218,7 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
 
   return (
     <section>
+      {/* Page header — frames the whole insights surface (class + student). */}
       <header className="max-w-2xl">
         <h2 className="font-serif text-[26px] leading-tight tracking-[-0.015em] text-text-primary">
           Student Insights
@@ -216,90 +227,108 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
           data-tour-id={TOUR_IDS.insightsSignal}
           className="mt-1 font-serif italic text-[15px] leading-snug text-text-muted"
         >
-          A formative read on each student&rsquo;s practice — who&rsquo;s
-          thriving, who needs a nudge. Signal, not a grade.
+          How your class is doing — where to re-teach, and how each student is
+          engaging. Signal, not a grade.
         </p>
         <MeasuredKey className="mt-3" showStatus />
       </header>
 
-      {showSectionPivot && sections && (
-        <div
-          role="group"
-          aria-label="Choose a section"
-          className="mt-5 flex flex-wrap items-center gap-1.5"
-        >
-          {sections.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              aria-pressed={activeSection === s.id}
-              onClick={() => setActiveSection(s.id)}
-              className={`rounded-[--radius-pill] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-                activeSection === s.id
-                  ? "border-primary bg-primary text-white"
-                  : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary"
-              }`}
-            >
-              {s.name}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Class-level band — course-wide aggregate "where to re-teach".
+          Renders once, above the per-student roster, and manages its own
+          section scoping; it self-hides when the course has no sections. */}
+      <PracticeStrugglePanel courseId={courseId} />
 
-      {error ? (
-        <p className="mt-6 text-sm text-[color:var(--color-error)]">{error}</p>
-      ) : noSections ? (
-        <RosterEmpty
-          title="No sections yet"
-          body="Create a section and enroll students to see their practice insights here."
-        />
-      ) : loading || students === null ? (
-        <p className="mt-6 text-sm text-text-muted">Loading…</p>
-      ) : students.length === 0 ? (
-        <RosterEmpty
-          title="No students enrolled"
-          body="Once students join this section, each will appear here with their practice signal."
-        />
-      ) : allQuiet ? (
-        <RosterEmpty
-          title="No practice yet"
-          body="Insights appear once students start practicing. Every enrolled student will show up here with their engagement and trend."
-        />
-      ) : (
-        <>
-          <Controls
-            sort={sort}
-            onSort={setSort}
-            filter={filter}
-            onFilter={setFilter}
-            total={students.length}
-            needAttention={needAttention}
+      {/* Per-student roster band — section-scoped drilldown. */}
+      <div className="mt-14 border-t border-border-light pt-8">
+        <header className="max-w-2xl">
+          <h3 className="font-serif text-[20px] leading-tight tracking-[-0.01em] text-text-primary">
+            Each student
+          </h3>
+          <p className="mt-1 font-serif italic text-[14px] leading-snug text-text-muted">
+            A per-student read on practice — who&rsquo;s thriving, who needs a
+            nudge.
+          </p>
+        </header>
+
+        {showSectionPivot && sections && (
+          <div
+            role="group"
+            aria-label="Choose a section"
+            className="mt-5 flex flex-wrap items-center gap-1.5"
+          >
+            {sections.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                aria-pressed={activeSection === s.id}
+                onClick={() => setActiveSection(s.id)}
+                className={`rounded-[--radius-pill] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                  activeSection === s.id
+                    ? "border-primary bg-primary text-white"
+                    : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary"
+                }`}
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {error ? (
+          <p className="mt-6 text-sm text-[color:var(--color-error)]">{error}</p>
+        ) : noSections ? (
+          <RosterEmpty
+            title="No sections yet"
+            body="Create a section and enroll students to see their practice insights here."
           />
-          {visible.length === 0 ? (
-            <div className="mt-5 rounded-[--radius-lg] border border-border-light bg-surface px-6 py-8 text-center">
-              <p className="text-sm text-text-secondary">
-                No one needs attention right now.
-              </p>
-              <p className="mt-1 text-xs text-text-muted">
-                Nobody is struggling or going quiet.{" "}
-                <button
-                  type="button"
-                  onClick={() => setFilter("all")}
-                  className="font-medium text-primary hover:underline"
-                >
-                  Show everyone
-                </button>
-              </p>
-            </div>
-          ) : (
-            <Roster
-              courseId={courseId}
-              sectionId={activeSection!}
-              students={visible}
+        ) : loading || students === null ? (
+          <p className="mt-6 text-sm text-text-muted">Loading…</p>
+        ) : students.length === 0 ? (
+          <RosterEmpty
+            title="No students enrolled"
+            body="Once students join this section, each will appear here with their practice signal."
+          />
+        ) : allQuiet ? (
+          <RosterEmpty
+            title="No practice yet"
+            body="Insights appear once students start practicing. Every enrolled student will show up here with their engagement and trend."
+          />
+        ) : (
+          <>
+            <Controls
+              sort={sort}
+              onSort={setSort}
+              filter={filter}
+              onFilter={setFilter}
+              total={students.length}
+              needAttention={needAttention}
             />
-          )}
-        </>
-      )}
+            {visible.length === 0 ? (
+              <div className="mt-5 rounded-[--radius-lg] border border-border-light bg-surface px-6 py-8 text-center">
+                <p className="text-sm text-text-secondary">
+                  No one needs attention right now.
+                </p>
+                <p className="mt-1 text-xs text-text-muted">
+                  Nobody is struggling or going quiet.{" "}
+                  <button
+                    type="button"
+                    onClick={() => setFilter("all")}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    Show everyone
+                  </button>
+                </p>
+              </div>
+            ) : (
+              <Roster
+                courseId={courseId}
+                sectionId={activeSection!}
+                students={visible}
+              />
+            )}
+          </>
+        )}
+      </div>
     </section>
   );
 }
