@@ -160,7 +160,11 @@ function parse(input: string): Segment[] {
     } else if (m.startsWith("<svg")) {
       segments.push({ type: "svg", content: m });
     } else if (m.startsWith("**") && m.endsWith("**")) {
-      segments.push({ type: "bold", content: restoreDollarText(m.slice(2, -2)) });
+      // Bold content is RE-PARSED by a nested <MathText> (render switch),
+      // so it must stay in source form: restore the sentinel to `\$`, not a
+      // bare `$`, or the inner parse would read "**\$5 or \$10**" as math
+      // again — reintroducing the very currency-as-math bug this fixes.
+      segments.push({ type: "bold", content: restoreDollarMath(m.slice(2, -2)) });
     }
 
     lastIndex = idx + m.length;
