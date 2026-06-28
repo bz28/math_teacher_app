@@ -1544,9 +1544,9 @@ function RosterChip({
 // Loading skeletons — mirror the settled layout so the page redraws in
 // place instead of blanking to bare text. The detail skeleton matters
 // most: it fires on every student switch, the most frequent transition
-// on this surface. Built from the shared `Skeleton` (animate-pulse,
-// honors reduced-motion via the global media query), matching the
-// ItemAnalysisPanel pattern already on this page.
+// on this surface. Built from the shared `Skeleton` (a low-amplitude
+// animate-pulse), matching the ItemAnalysisPanel pattern already on this
+// page.
 // ────────────────────────────────────────────────────────────────────
 
 function RosterRowSkeleton() {
