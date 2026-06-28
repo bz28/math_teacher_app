@@ -8,7 +8,7 @@ import { session as sessionApi } from "@/lib/api";
 import { Button, Badge } from "@/components/ui";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
-import { SkeletonStep } from "@/components/ui/skeleton";
+import { GeneratingState } from "@/components/shared/generating-state";
 import { useConfetti } from "@/components/ui/confetti";
 import { MCQCard } from "@/components/shared/mcq-card";
 import { ProgressBar } from "@/components/shared/progress-bar";
@@ -74,10 +74,14 @@ export default function PracticePage() {
 
   if (phase === "loading" || !practiceBatch) {
     return (
-      <div className="mx-auto max-w-2xl space-y-4">
-        <SkeletonStep />
-        <SkeletonStep />
-      </div>
+      <GeneratingState
+        message={
+          <>
+            Building your <span className="font-display-serif italic text-primary">practice…</span>
+          </>
+        }
+        subtext="Tailoring a fresh set of problems to what you're working on. This takes a few seconds."
+      />
     );
   }
 
