@@ -18,9 +18,14 @@ export interface SubjectConfig {
   gradient: string;
 }
 
+// Subject accents mirror the per-subject theme in globals.css
+// ([data-subject="…"]): math = the deep-green brand primary (NOT the
+// AI-startup purple this drifted to), physics = blue, chemistry = teal-
+// green. Keeping the two systems in lockstep so a subject reads the same
+// on the launchpad cards as it does inside its themed pages.
 export const SUBJECT_CONFIG: Record<string, SubjectConfig> = {
-  math: { name: "Mathematics", icon: "📐", color: "text-[#7C3AED]", bg: "bg-[#7C3AED]/10", gradient: "from-[#7C3AED] to-[#A78BFA]" },
-  chemistry: { name: "Chemistry", icon: "🧪", color: "text-[#00B894]", bg: "bg-[#00B894]/10", gradient: "from-[#00B894] to-[#55EFC4]" },
+  math: { name: "Mathematics", icon: "📐", color: "text-[#0E5238]", bg: "bg-[#0E5238]/10", gradient: "from-[#0E5238] to-[#2F8F66]" },
+  chemistry: { name: "Chemistry", icon: "🧪", color: "text-[#00876A]", bg: "bg-[#00876A]/10", gradient: "from-[#00876A] to-[#2FB39A]" },
   physics: { name: "Physics", icon: "🚀", color: "text-[#0984E3]", bg: "bg-[#0984E3]/10", gradient: "from-[#0984E3] to-[#74B9FF]" },
 };
 
