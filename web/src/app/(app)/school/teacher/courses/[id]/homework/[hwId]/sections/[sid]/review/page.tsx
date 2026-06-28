@@ -50,6 +50,17 @@ function isTypingTarget(el: Element | null): boolean {
   return (el as HTMLElement).isContentEditable === true;
 }
 
+// Any open modal on this page renders a `[role="dialog"]` (the shared
+// Modal — publish/regrade confirms — plus the verdict-legend, integrity
+// conversation, and image lightbox). They're all conditionally rendered,
+// so a match means a dialog is genuinely open. While one is, the grading
+// shortcuts must NOT fire — otherwise 1/2/3 would grade the problem
+// *behind* the dialog and Enter/→ would switch students underneath a
+// publish/regrade confirm. The dialog owns the keyboard until it closes.
+function isDialogOpen(): boolean {
+  return document.querySelector('[role="dialog"]') !== null;
+}
+
 // `isActionableTarget` distinguishes a focused button/link (which
 // handles its own Enter/Space activation) from a focused problem row
 // (an inert tabIndex=-1 div). We only treat Enter as "next student"
@@ -1933,9 +1944,12 @@ function SubmissionDetailPanel({
   // focus/handlers; the effect re-subscribes when that identity changes.
   const handleGradingKey = useCallback(
     (e: KeyboardEvent) => {
-      // While the cheatsheet is open it owns the keyboard (it has its
-      // own Escape-to-close); don't also grade underneath it.
-      if (cheatsheetOpen) return;
+      // While the cheatsheet — or ANY other modal (publish/regrade
+      // confirm, verdict legend, integrity conversation, image lightbox)
+      // — is open, that dialog owns the keyboard. Don't grade or navigate
+      // the submission underneath it. The cheatsheet flag is explicit;
+      // isDialogOpen() catches every other [role="dialog"].
+      if (cheatsheetOpen || isDialogOpen()) return;
 
       // "?" toggles the shortcut cheatsheet — but only when not typing
       // (a "?" inside feedback must reach the textarea).
