@@ -6,29 +6,20 @@
  * TourOverlay) renders any TourDefinition, so adding a tour is just
  * authoring another entry in `tours.ts` — no engine changes.
  *
- * Two families share the engine:
- *   • Persona overviews (login-time): a big WelcomeCover then a guided
- *     walk — "teacher" | "student" | "personal".
- *   • Feature walkthroughs (`compact: true`): short, contextual
- *     coachmarks fired the first time a teacher uses a surface. They
- *     skip the WelcomeCover and go straight to 2-3 spotlight steps —
- *     "hw-create" | "review-flow" | "integrity" | "insights".
+ * One family uses the engine today: persona overviews (login-time) —
+ * a big WelcomeCover then a guided walk: "teacher" | "student" |
+ * "personal". The teacher overview is one comprehensive from-zero tour
+ * that walks every workspace tab; the old per-feature first-use
+ * coachmarks were retired (they fired once, invisibly, and confused
+ * teachers). The `compact` flag the engine still honors is unused.
  */
 
 /**
  * The key a tour is registered + persisted under (`tours_seen`). Named
- * `TourPersona` for continuity with the original persona-only engine,
- * but it is the tour KEY — persona overview or feature walkthrough
- * alike. Mirrors the backend `MarkTourSeenRequest` Literal.
+ * `TourPersona` for continuity with the original persona-only engine.
+ * Mirrors the backend `MarkTourSeenRequest` Literal.
  */
-export type TourPersona =
-  | "teacher"
-  | "student"
-  | "personal"
-  | "hw-create"
-  | "review-flow"
-  | "integrity"
-  | "insights";
+export type TourPersona = "teacher" | "student" | "personal";
 
 /** Preferred side for the caption card relative to its target. "auto"
  *  lets the engine pick whichever side fits without covering the
@@ -57,7 +48,10 @@ export const TOUR_IDS = {
   teacherInvite: "teacher-invite",
   teacherMaterials: "teacher-materials",
   teacherNewHomework: "teacher-new-homework",
+  teacherPractice: "teacher-practice",
+  teacherInsights: "teacher-insights",
   teacherSubmissions: "teacher-submissions",
+  teacherGrades: "teacher-grades",
 
   // ── School-student dashboard (/school/student) ──
   studentJoin: "student-join",
@@ -69,23 +63,6 @@ export const TOUR_IDS = {
   personalStart: "personal-start",
   personalModes: "personal-modes",
   personalJoin: "personal-join",
-
-  // ── Feature walkthrough: hw-create (New Homework modal) ──
-  hwCreateMode: "hw-create-mode",
-  hwCreateGenerate: "hw-create-generate",
-
-  // ── Feature walkthrough: review-flow (submission review page) ──
-  reviewGrade: "review-grade",
-  reviewReviewed: "review-reviewed",
-  reviewPublish: "review-publish",
-
-  // ── Feature walkthrough: integrity (flagged submission banner) ──
-  integrityCheck: "integrity-check",
-  integrityVerdict: "integrity-verdict",
-
-  // ── Feature walkthrough: insights (Student Insights tab) ──
-  insightsRoster: "insights-roster",
-  insightsSignal: "insights-signal",
 } as const;
 
 /**
@@ -107,7 +84,10 @@ export const TOUR_ACTIONS = {
   expandFirstSection: "teacher.expand-first-section",
   gotoMaterials: "teacher.goto-materials",
   gotoHomework: "teacher.goto-homework",
+  gotoPractice: "teacher.goto-practice",
+  gotoInsights: "teacher.goto-insights",
   gotoSubmissions: "teacher.goto-submissions",
+  gotoGrades: "teacher.goto-grades",
 } as const;
 
 export interface TourCover {

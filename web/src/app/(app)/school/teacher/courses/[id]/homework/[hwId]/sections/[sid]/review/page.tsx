@@ -12,8 +12,6 @@ import {
   type IntegrityActivityNotableTurnLite,
 } from "@/components/school/teacher/_pieces/submissions-panel";
 import { Skeleton } from "@/components/ui";
-import { TOUR_IDS, useTour, type TourPersona } from "@/components/tour";
-import { useAuthStore } from "@/stores/auth";
 import {
   teacher,
   type AiGradeEntry,
@@ -779,66 +777,6 @@ export default function HomeworkSectionReviewPage({
     return null;
   }, [roster, selectedEntry]);
 
-  // ── First-use feature walkthroughs ──
-  // This page hosts two contextual coachmarks, both fired once via the
-  // shared tour engine. review-flow is the foundational grading walk
-  // (AI pre-grade → reviewed checkpoint → publish); integrity explains a
-  // flagged submission's understanding check. One auto-start per mount:
-  // review-flow takes precedence (it orients every submission), so a
-  // flagged-first visit gets the grading walk and integrity fires on a
-  // later flagged view. All the usual guards: latch once, never restart
-  // a live tour, teacher-only, skip preview shadows, desktop md+ (the
-  // review grid is a desktop surface), and gate each on its anchors
-  // being mounted so no spotlight chases an absent control.
-  const tour = useTour();
-  const user = useAuthStore((s) => s.user);
-  const tourStartedRef = useRef(false);
-  useEffect(() => {
-    if (tourStartedRef.current) return;
-    if (tour.isActive) return;
-    if (!user || user.role !== "teacher" || user.is_preview) return;
-    if (
-      typeof window === "undefined" ||
-      !window.matchMedia("(min-width: 768px)").matches
-    )
-      return;
-    // review-flow needs a graded, not-yet-vetted submission shown so all
-    // three anchors exist (Problems card, Mark reviewed, Publish).
-    const reviewReady =
-      detailIsCurrent &&
-      !!detail &&
-      !!selectedEntry?.submission &&
-      detail.final_score !== null &&
-      !detail.reviewed_at;
-    // integrity only once the AI reached a verdict on the shown
-    // submission (banner + verdict cluster both mounted).
-    const integrityReady =
-      !!integrity &&
-      integrity.submission_id === selectedSubmissionId &&
-      !!integrity.disposition;
-    let key: TourPersona | null = null;
-    if (!user.tours_seen.includes("review-flow") && reviewReady) {
-      key = "review-flow";
-    } else if (!user.tours_seen.includes("integrity") && integrityReady) {
-      key = "integrity";
-    }
-    if (!key) return;
-    const start = key;
-    const raf = requestAnimationFrame(() => {
-      tourStartedRef.current = true;
-      tour.start(start);
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [
-    user,
-    tour,
-    detail,
-    detailIsCurrent,
-    selectedEntry,
-    integrity,
-    selectedSubmissionId,
-  ]);
-
   return (
     <div className="mx-auto max-w-7xl px-4 pb-10">
       <div className="pt-3">
@@ -1076,7 +1014,6 @@ function PublishButton({
   return (
     <button
       type="button"
-      data-tour-id={TOUR_IDS.reviewPublish}
       onClick={onOpen}
       className="inline-flex items-center gap-1.5 rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-primary-dark"
     >
@@ -1941,7 +1878,6 @@ function SubmissionDetailPanel({
           {canMarkReviewed && (
             <button
               type="button"
-              data-tour-id={TOUR_IDS.reviewReviewed}
               onClick={onMarkReviewed}
               disabled={marking}
               title="Vouch for the AI-suggested grade without changing it"
@@ -2019,10 +1955,7 @@ function SubmissionDetailPanel({
       {/* Per-problem grading — the main scan-unit. The student-work
           lightbox lives in the page header (one click away from any
           problem). */}
-      <div
-        data-tour-id={TOUR_IDS.reviewGrade}
-        className="rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm"
-      >
+      <div className="rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           Problems · {totalProblems}
         </p>
@@ -3119,16 +3052,12 @@ function IntegrityBanner({
     <>
       <div className="space-y-2">
         <div
-          data-tour-id={TOUR_IDS.integrityCheck}
           className={`rounded-[--radius-xl] border ${style.border} ${style.bg} p-3`}
           role="status"
           aria-live="polite"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div
-              data-tour-id={TOUR_IDS.integrityVerdict}
-              className="flex min-w-0 flex-1 items-start gap-3"
-            >
+            <div className="flex min-w-0 flex-1 items-start gap-3">
               <span
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-bold ${style.iconBg}`}
                 aria-hidden
