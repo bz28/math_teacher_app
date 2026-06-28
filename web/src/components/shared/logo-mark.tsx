@@ -4,7 +4,11 @@ export function LogoMark({ size = 28 }: { size?: number }) {
 
   return (
     <div
-      className="flex items-center justify-center rounded-[6px] bg-gradient-to-br from-primary to-primary-light"
+      // Fixed brand green — NOT the `primary` token, which the per-subject
+      // theme ([data-subject="…"]) reassigns. The brand mark stays the same
+      // deep green on every subject and in dark mode; identity shouldn't
+      // shift with the page you're on.
+      className="flex items-center justify-center rounded-[6px] bg-gradient-to-br from-[#0E5238] to-[#2F8F66]"
       style={{ width: size, height: size, padding }}
     >
       <svg
