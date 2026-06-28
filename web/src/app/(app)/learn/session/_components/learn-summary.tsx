@@ -37,7 +37,7 @@ export function LearnSummary({ learnQueue, onToggleFlag, onPracticeFlagged, onRe
             Session complete
           </p>
           <h1 className="font-serif text-[2.5rem] leading-[1.05] text-text-primary sm:text-[3rem]">
-            Learning <span className="font-fraunces italic text-primary">complete.</span>
+            Learning <span className="font-display-serif italic text-primary">complete.</span>
           </h1>
           <p className="mx-auto max-w-sm text-[15px] leading-relaxed text-text-secondary">
             You worked through {reviewedCount} problem{reviewedCount > 1 ? "s" : ""}, start to finish.

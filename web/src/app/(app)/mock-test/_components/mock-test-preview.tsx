@@ -34,9 +34,9 @@ export function MockTestPreview({ mockTest, isTimed, onBegin, onCancel }: MockTe
         <div>
           <h1 className="font-serif text-[2.25rem] leading-[1.1] text-text-primary sm:text-[2.5rem]">
             {allSolved ? (
-              <>Your exam is <span className="font-fraunces italic text-primary">ready.</span></>
+              <>Your exam is <span className="font-display-serif italic text-primary">ready.</span></>
             ) : (
-              <>Preparing your <span className="font-fraunces italic text-primary">exam…</span></>
+              <>Preparing your <span className="font-display-serif italic text-primary">exam…</span></>
             )}
           </h1>
           <p className="mt-3 text-sm text-text-muted">
@@ -79,7 +79,7 @@ export function MockTestPreview({ mockTest, isTimed, onBegin, onCancel }: MockTe
     <div className="mx-auto max-w-2xl space-y-6">
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="font-serif text-[2.5rem] leading-[1.05] text-text-primary sm:text-[3rem]">
-          Your exam is <span className="font-fraunces italic text-primary">ready.</span>
+          Your exam is <span className="font-display-serif italic text-primary">ready.</span>
         </h1>
         <p className="mt-2 text-sm text-text-muted">
           {mockTest.questions.length} question{mockTest.questions.length !== 1 ? "s" : ""} · Review before you begin

@@ -87,7 +87,7 @@ export default function PracticePage() {
       <div className="mx-auto max-w-2xl space-y-6">
         <div>
           <h1 className="font-serif text-[2.5rem] leading-[1.05] text-text-primary sm:text-[3rem]">
-            Your practice is <span className="font-fraunces italic text-primary">ready.</span>
+            Your practice is <span className="font-display-serif italic text-primary">ready.</span>
           </h1>
           <p className="mt-2 text-sm text-text-muted">
             {practiceBatch.problems.length} question{practiceBatch.problems.length !== 1 ? "s" : ""} · Review before you begin

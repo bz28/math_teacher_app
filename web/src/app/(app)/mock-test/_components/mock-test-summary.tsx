@@ -63,7 +63,7 @@ export function MockTestSummary({ mockTest, onToggleFlag, onStartLearnQueue, onR
           </p>
           <h1 className="font-serif text-[2.5rem] leading-[1.05] text-text-primary sm:text-[3rem]">
             {headline.lead}
-            <span className="font-fraunces italic text-primary">{headline.emph}</span>
+            <span className="font-display-serif italic text-primary">{headline.emph}</span>
           </h1>
           <p className="mx-auto max-w-sm text-[15px] leading-relaxed text-text-secondary">
             {reflection}
