@@ -10,6 +10,7 @@ import { Button, Card, Badge } from "@/components/ui";
 import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
+import { GeneratingState } from "@/components/shared/generating-state";
 import { useConfetti } from "@/components/ui/confetti";
 import { AttachWork } from "@/components/ui/attach-work";
 import { FlagIcon } from "@/components/ui/icons";
@@ -94,9 +95,14 @@ export default function MockTestPage() {
 
   if (phase === "loading") {
     return (
-      <div className="mx-auto max-w-3xl space-y-4">
-        <SkeletonStep />
-      </div>
+      <GeneratingState
+        message={
+          <>
+            Composing your <span className="font-display-serif italic text-primary">exam…</span>
+          </>
+        }
+        subtext="Assembling a fresh set of questions across the topics you chose. This takes a few seconds."
+      />
     );
   }
 

@@ -8,6 +8,7 @@ import { cropImage } from "@/lib/crop-image";
 import { EditProblemTextarea } from "./edit-problem-textarea";
 import { MathText } from "./math-text";
 import { RectangleSelector, type Rectangle } from "./rectangle-selector";
+import { GeneratingState } from "./generating-state";
 
 interface ImageUploadProps {
   subject: string;
@@ -230,12 +231,16 @@ export function ImageUpload({
   // Extracting phase
   if (phase === "extracting") {
     return (
-      <div className="flex flex-col items-center gap-3 rounded-[--radius-lg] border-2 border-dashed border-primary bg-primary-bg p-8 text-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-3 border-primary border-t-transparent" />
-        <p className="text-sm font-semibold text-primary">
-          Extracting problems from image...
-        </p>
-        <p className="text-xs text-text-muted">This usually takes a few seconds</p>
+      <div className="rounded-[--radius-lg] border-2 border-dashed border-primary bg-primary-bg/40">
+        <GeneratingState
+          message={
+            <>
+              Reading your <span className="font-display-serif italic text-primary">work…</span>
+            </>
+          }
+          subtext="Lifting each problem off the page. This takes a few seconds."
+          className="py-12 sm:py-12"
+        />
       </div>
     );
   }

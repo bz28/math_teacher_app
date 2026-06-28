@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { Button, Card } from "@/components/ui";
 import { MathText } from "@/components/shared/math-text";
+import { GeneratingState } from "@/components/shared/generating-state";
 import type { MockTest } from "@/stores/mock-test";
 
 interface MockTestPreviewProps {
@@ -16,52 +17,51 @@ export function MockTestPreview({ mockTest, isTimed, onBegin, onCancel }: MockTe
   const allSolved = mockTest.questions.every((q) => q.answer !== "");
 
   if (isTimed) {
-    // Timed: intermission screen, no question texts shown (no peeking), user clicks Begin when ready
+    // Timed: intermission screen, no question texts shown (no peeking), user clicks Begin when ready.
+    // While answer choices are still being prepared, show the branded composing state.
+    if (!allSolved) {
+      return (
+        <div className="mx-auto flex max-w-md flex-col items-center gap-6 text-center">
+          <GeneratingState
+            message={
+              <>
+                Composing your <span className="font-display-serif italic text-primary">exam…</span>
+              </>
+            }
+            subtext={`Setting out ${mockTest.questions.length} question${mockTest.questions.length !== 1 ? "s" : ""} and their answer choices. This takes a few seconds.`}
+          />
+          <button
+            onClick={onCancel}
+            className="text-sm font-medium text-text-muted hover:text-primary transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="mx-auto flex max-w-md flex-col items-center gap-6 py-20 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary-bg">
-          {allSolved ? (
-            <svg className="h-8 w-8 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          ) : (
-            <svg className="h-8 w-8 animate-spin text-primary" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          )}
+          <svg className="h-8 w-8 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
         </div>
         <div>
           <h1 className="font-serif text-[2.25rem] leading-[1.1] text-text-primary sm:text-[2.5rem]">
-            {allSolved ? (
-              <>Your exam is <span className="font-display-serif italic text-primary">ready.</span></>
-            ) : (
-              <>Preparing your <span className="font-display-serif italic text-primary">exam…</span></>
-            )}
+            Your exam is <span className="font-display-serif italic text-primary">ready.</span>
           </h1>
           <p className="mt-3 text-sm text-text-muted">
             {mockTest.questions.length} question{mockTest.questions.length !== 1 ? "s" : ""} ·{" "}
             {mockTest.timeLimitSeconds ? `${Math.round(mockTest.timeLimitSeconds / 60)} min` : "Untimed"}
           </p>
-          {allSolved && (
-            <p className="mt-1 text-xs text-text-muted">Timer starts when you click Begin</p>
-          )}
+          <p className="mt-1 text-xs text-text-muted">Timer starts when you click Begin</p>
         </div>
         <div className="flex flex-col gap-3 w-full">
           <Button
             onClick={onBegin}
-            disabled={!allSolved}
             className="w-full py-3 text-base"
           >
-            {allSolved ? "Begin Exam" : (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Preparing answers…
-              </span>
-            )}
+            Begin Exam
           </Button>
           <button
             onClick={onCancel}
