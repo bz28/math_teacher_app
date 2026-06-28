@@ -425,10 +425,6 @@ async def test_mark_tour_seen_records_and_is_idempotent(client: AsyncClient) -> 
         "teacher",
         "student",
         "personal",
-        "hw-create",
-        "review-flow",
-        "integrity",
-        "insights",
     ],
 )
 async def test_mark_tour_seen_accepts_every_persona(
@@ -436,8 +432,8 @@ async def test_mark_tour_seen_accepts_every_persona(
 ) -> None:
     # Every onboarding key must be markable so each tour stays once-only:
     # the three persona overviews (teacher, school student, personal
-    # learner) plus the four teacher feature walkthroughs (hw-create,
-    # review-flow, integrity, insights).
+    # learner). The teacher overview now walks every workspace tab, so
+    # the old per-feature walkthrough keys were retired.
     reg = await client.post(REGISTER_URL, json=_user(f"tour_{persona}@test.com"))
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}

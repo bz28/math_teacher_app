@@ -1796,11 +1796,7 @@
             "enum": [
               "teacher",
               "student",
-              "personal",
-              "hw-create",
-              "review-flow",
-              "integrity",
-              "insights"
+              "personal"
             ],
             "title": "Persona",
             "type": "string"
