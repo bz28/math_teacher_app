@@ -285,7 +285,7 @@ function SubjectCard({
         className="absolute left-0 top-5 bottom-5 w-[3px] rounded-full"
         style={{ backgroundColor: accent }}
       />
-      <span className="font-fraunces text-sm italic text-text-muted">
+      <span className="font-display-serif text-sm italic text-text-muted">
         {String(index).padStart(2, "0")}
       </span>
       <h3 className="font-serif text-[1.6rem] leading-tight text-text-primary">{title}</h3>

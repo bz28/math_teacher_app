@@ -63,7 +63,7 @@ export function LearnCompleted({
             {eyebrow}
           </p>
           <h2 className="font-serif text-[2.25rem] leading-[1.05] text-text-primary sm:text-[2.5rem]">
-            Problem <span className="font-fraunces italic text-primary">solved.</span>
+            Problem <span className="font-display-serif italic text-primary">solved.</span>
           </h2>
           <p className="mx-auto max-w-sm text-[15px] leading-relaxed text-text-secondary">
             {subline}
