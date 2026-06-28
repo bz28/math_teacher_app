@@ -12,7 +12,17 @@ import {
 } from "@/lib/image-resize";
 import { fileToBase64, formatFileSize } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import { FileTextIcon, ImageIcon, UploadIcon, XIcon } from "@/components/ui/icons";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import {
+  AlertTriangleIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  FileTextIcon,
+  ImageIcon,
+  LockIcon,
+  UploadIcon,
+  XIcon,
+} from "@/components/ui/icons";
 
 interface Props {
   assignmentId: string;
@@ -72,6 +82,7 @@ export function SubmissionPanel({
   // flag off only when nothing is in flight.
   const inFlightRef = useRef(0);
 
+  const reduceMotion = useReducedMotion();
   const isLate = dueAt ? new Date(dueAt) < new Date() : false;
   const validCount = stagedFiles.filter((f) => !f.error && f.base64).length;
   const canSubmit = validCount > 0 && !submitting && !preparing;
@@ -228,21 +239,32 @@ export function SubmissionPanel({
   const atCap = stagedFiles.length >= MAX_FILES;
 
   return (
-    <div className="mt-8 rounded-[--radius-md] border-2 border-dashed border-primary bg-primary-bg/20 p-6">
-      <h2 className="text-lg font-bold text-text-primary">Submit your homework</h2>
-      <p className="mt-1 text-sm text-text-secondary">
-        Upload photos or a PDF of your completed work. Up to {MAX_FILES} files —
-        if your work spans pages, snap each one in order. Your teacher will see
-        exactly what you turn in.
-      </p>
+    <div className="mt-8 overflow-hidden rounded-[--radius-lg] border border-border bg-surface shadow-[0_1px_2px_rgba(20,19,15,0.04)]">
+      <div className="border-b border-border-light bg-primary-bg/30 px-6 py-5">
+        <p className="eyebrow text-primary/80">Turn in your work</p>
+        <h2 className="mt-1.5 font-serif text-[1.75rem] leading-tight text-text-primary">
+          Submit your homework
+        </h2>
+        <p className="mt-2 max-w-prose text-sm leading-relaxed text-text-secondary">
+          Add clear photos or a PDF of your completed work — up to {MAX_FILES}{" "}
+          files. If your work runs over a few pages, snap each one in order. Your
+          teacher sees exactly what you turn in, so a steady, well-lit shot goes
+          a long way.
+        </p>
+      </div>
 
+      <div className="px-6 py-5">
       {isLate && (
-        <div className="mt-4 rounded-[--radius-sm] border border-warning-dark/20 bg-warning-bg p-3 text-sm text-warning-dark">
-          ⚠ This homework is past due. You can still submit, but it will be marked late.
+        <div className="mb-5 flex items-start gap-2.5 rounded-[--radius-sm] border border-warning/25 bg-warning-bg/60 p-3 text-sm text-warning-dark">
+          <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={2} />
+          <span>
+            This homework is past due. You can still turn it in, and it will be
+            marked late so your teacher knows.
+          </span>
         </div>
       )}
 
-      <div className="mt-6 space-y-3">
+      <div className="space-y-3">
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -318,26 +340,26 @@ export function SubmissionPanel({
                     <p className="mt-0.5 text-xs text-error">{f.error}</p>
                   )}
                 </div>
-                {/* ↑ / ↓ reorder: page order matters because the
+                {/* Up / down reorder: page order matters because the
                     extraction sees pages as a sequential document. */}
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col">
                   <button
                     type="button"
                     onClick={() => moveStaged(f.id, -1)}
                     disabled={i === 0 || submitting}
                     aria-label={`Move ${f.filename} up`}
-                    className="inline-flex h-5 w-11 items-center justify-center rounded text-text-muted hover:bg-bg-subtle hover:text-text-primary disabled:opacity-30"
+                    className="inline-flex h-[22px] w-11 items-center justify-center rounded-t-[--radius-sm] text-text-muted transition-colors hover:bg-bg-subtle hover:text-primary disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-text-muted"
                   >
-                    ▲
+                    <ChevronUpIcon className="h-4 w-4" strokeWidth={2.25} />
                   </button>
                   <button
                     type="button"
                     onClick={() => moveStaged(f.id, 1)}
                     disabled={i === stagedFiles.length - 1 || submitting}
                     aria-label={`Move ${f.filename} down`}
-                    className="inline-flex h-5 w-11 items-center justify-center rounded text-text-muted hover:bg-bg-subtle hover:text-text-primary disabled:opacity-30"
+                    className="inline-flex h-[22px] w-11 items-center justify-center rounded-b-[--radius-sm] text-text-muted transition-colors hover:bg-bg-subtle hover:text-primary disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-text-muted"
                   >
-                    ▼
+                    <ChevronDownIcon className="h-4 w-4" strokeWidth={2.25} />
                   </button>
                 </div>
                 <button
@@ -354,49 +376,86 @@ export function SubmissionPanel({
           </ul>
         )}
         {stagedFiles.length > 0 && (
-          <p className="text-xs text-text-muted">
-            {stagedFiles.length} of {MAX_FILES}
-          </p>
+          <div className="flex items-center justify-between pt-0.5">
+            <p className="text-xs font-medium text-text-muted">
+              {stagedFiles.length} of {MAX_FILES}
+            </p>
+            {validCount > 1 && (
+              <p className="text-xs text-text-muted">
+                Drag isn&apos;t needed — use the arrows to set page order.
+              </p>
+            )}
+          </div>
         )}
       </div>
 
       {error && (
-        <p className="mt-3 text-sm text-error">{error}</p>
+        <p className="mt-4 text-sm text-error">{error}</p>
       )}
 
-      <div className="mt-6 flex items-center justify-end gap-3">
+      <AnimatePresence mode="wait" initial={false}>
         {confirming ? (
-          <>
-            <span className="text-sm text-text-secondary">
-              Submit homework? You can&apos;t edit after this.
-            </span>
-            <button
-              onClick={() => setConfirming(false)}
-              disabled={submitting}
-              className="rounded-[--radius-sm] border border-border px-4 py-2 text-sm font-medium text-text-secondary hover:border-primary disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={doSubmit}
-              disabled={submitting}
-              className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
-            >
-              {submitting ? "Submitting…" : "Yes, submit"}
-            </button>
-          </>
-        ) : (
-          <button
-            onClick={() => setConfirming(true)}
-            disabled={!canSubmit}
-            className={cn(
-              "rounded-[--radius-sm] px-5 py-2 text-sm font-bold text-white disabled:opacity-50",
-              isLate ? "bg-warning hover:bg-warning-dark" : "bg-primary hover:bg-primary/90",
-            )}
+          <motion.div
+            key="confirm"
+            initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
+            transition={{ type: "spring", stiffness: 320, damping: 30 }}
+            className="mt-6 rounded-[--radius-md] border border-primary/25 bg-primary-bg/30 p-5"
           >
-            Submit homework{isLate ? " (late)" : ""}
-          </button>
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <LockIcon className="h-[18px] w-[18px]" strokeWidth={2} />
+              </span>
+              <div className="min-w-0">
+                <p className="font-serif text-lg leading-snug text-text-primary">
+                  Ready to turn it in?
+                </p>
+                <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
+                  Your teacher will see exactly{" "}
+                  <span className="font-semibold text-text-primary">
+                    {validCount} {validCount === 1 ? "page" : "pages"}
+                  </span>{" "}
+                  of work — nothing else. Once you turn it in you won&apos;t be
+                  able to change it, so take one last look if you&apos;d like.
+                  You&apos;ve got this.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                onClick={() => setConfirming(false)}
+                disabled={submitting}
+                className="order-2 inline-flex min-h-[44px] items-center justify-center rounded-[--radius-sm] border border-border px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:border-primary hover:text-text-primary disabled:opacity-50 sm:order-1"
+              >
+                Not yet — let me look again
+              </button>
+              <button
+                onClick={doSubmit}
+                disabled={submitting}
+                className="order-1 inline-flex min-h-[44px] items-center justify-center rounded-[--radius-sm] bg-primary px-5 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark disabled:opacity-50 sm:order-2"
+              >
+                {submitting ? "Turning it in…" : "Turn it in"}
+              </button>
+            </div>
+          </motion.div>
+        ) : (
+          <div key="cta" className="mt-6 flex justify-end">
+            <button
+              onClick={() => setConfirming(true)}
+              disabled={!canSubmit}
+              className={cn(
+                "inline-flex min-h-[44px] items-center justify-center rounded-[--radius-sm] px-6 py-2 text-sm font-bold text-white shadow-sm transition-colors disabled:opacity-50",
+                isLate
+                  ? "bg-warning hover:bg-warning-dark"
+                  : "bg-primary hover:bg-primary-dark",
+              )}
+            >
+              Review &amp; turn in{isLate ? " (late)" : ""}
+            </button>
+          </div>
         )}
+      </AnimatePresence>
       </div>
     </div>
   );

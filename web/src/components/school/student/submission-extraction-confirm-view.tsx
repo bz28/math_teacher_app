@@ -10,7 +10,14 @@ import {
   type SubmissionFile,
 } from "@/lib/api";
 import { MathText } from "@/components/shared/math-text";
-import { FileTextIcon } from "@/components/ui/icons";
+import {
+  AlertTriangleIcon,
+  CheckIcon,
+  ChevronRightIcon,
+  FileTextIcon,
+  PencilIcon,
+  XIcon,
+} from "@/components/ui/icons";
 import { Modal } from "@/components/ui/modal";
 import { useDeviceType } from "./use-device-type";
 
@@ -295,15 +302,15 @@ function EditableRow({
           onClick={startEdit}
           aria-label={`Edit ${ariaLabel}`}
           title="Looks wrong? Tap to fix."
-          className="shrink-0 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[--radius-sm] border border-border-light text-xs text-text-muted hover:border-primary hover:text-primary sm:min-h-[32px] sm:min-w-[32px]"
+          className="shrink-0 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[--radius-sm] border border-border-light text-text-muted transition-colors hover:border-primary hover:text-primary sm:min-h-[32px] sm:min-w-[32px]"
         >
-          <span aria-hidden>✎</span>
+          <PencilIcon className="h-4 w-4" />
         </button>
       </div>
       {isEdited && (
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
           <span className="inline-flex items-center gap-1 rounded-full bg-primary-bg px-2 py-0.5 font-semibold text-primary">
-            <span aria-hidden>✎</span> edited
+            <PencilIcon className="h-3 w-3" /> Edited
           </span>
           <button
             type="button"
@@ -478,21 +485,29 @@ export function SubmissionExtractionConfirmView({
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
-      <h1 className="text-2xl font-bold text-text-primary">
+      <p className="eyebrow text-primary/80">Check the reading</p>
+      <h1 className="mt-1.5 font-serif text-[2rem] leading-tight text-text-primary">
         Does this match what you wrote?
       </h1>
-      <p className="mt-2 text-sm text-text-secondary">
-        Walk through each problem. Tap <span aria-hidden>✎</span> on any
-        step to fix mistakes — your teacher will grade what you confirm
-        here. All your pages stay visible on the side so you can match
-        each problem against the right page of your work.
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary">
+        Here&apos;s what we read from your photos. Walk through each problem and
+        tap the{" "}
+        <PencilIcon className="inline h-3.5 w-3.5 align-text-bottom text-text-muted" />{" "}
+        on any line to fix a misread — your teacher grades exactly what you
+        confirm here. Your pages stay on the side so you can match each problem
+        to the right one.
       </p>
 
       {blankPageCount > 0 && (
-        <div className="mt-4 rounded-[--radius-sm] border border-warning-dark/20 bg-warning-bg p-3 text-sm text-warning-dark">
-          We couldn&apos;t read problems on{" "}
-          {blankPageCount === 1 ? "1 of your pages" : `${blankPageCount} of your pages`}
-          . Make sure each photo is clear and your work is visible.
+        <div className="mt-4 flex items-start gap-2.5 rounded-[--radius-sm] border border-warning/25 bg-warning-bg/60 p-3 text-sm text-warning-dark">
+          <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={2} />
+          <span>
+            We couldn&apos;t read problems on{" "}
+            {blankPageCount === 1
+              ? "1 of your pages"
+              : `${blankPageCount} of your pages`}
+            . Make sure each photo is clear and your work is visible.
+          </span>
         </div>
       )}
 
@@ -551,20 +566,20 @@ export function SubmissionExtractionConfirmView({
                 type="button"
                 onClick={() => goTo(activeIndex - 1)}
                 disabled={activeIndex === 0 || submitting}
-                className="inline-flex min-h-[44px] items-center rounded-[--radius-sm] border border-border px-3 text-sm text-text-secondary hover:border-primary disabled:opacity-30"
+                className="inline-flex min-h-[44px] items-center gap-1 rounded-[--radius-sm] border border-border px-3 text-sm text-text-secondary transition-colors hover:border-primary hover:text-text-primary disabled:opacity-30"
               >
-                ← Previous
+                <ChevronRightIcon className="h-4 w-4 rotate-180" /> Previous
               </button>
-              <span className="text-xs text-text-muted">
+              <span className="text-xs font-medium text-text-muted">
                 Problem {activeIndex + 1} of {totalProblems}
               </span>
               <button
                 type="button"
                 onClick={() => goTo(activeIndex + 1)}
                 disabled={isLast || submitting}
-                className="inline-flex min-h-[44px] items-center rounded-[--radius-sm] border border-border px-3 text-sm text-text-secondary hover:border-primary disabled:opacity-30"
+                className="inline-flex min-h-[44px] items-center gap-1 rounded-[--radius-sm] border border-border px-3 text-sm text-text-secondary transition-colors hover:border-primary hover:text-text-primary disabled:opacity-30"
               >
-                Next →
+                Next <ChevronRightIcon className="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -617,18 +632,24 @@ export function SubmissionExtractionConfirmView({
             type="button"
             onClick={() => goTo(activeIndex + 1)}
             disabled={submitting}
-            className="min-h-[44px] w-full rounded-[--radius-sm] bg-primary px-5 py-3 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50 sm:w-auto sm:py-2"
+            className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-[--radius-sm] bg-primary px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark disabled:opacity-50 sm:w-auto sm:py-2"
           >
-            Looks good →
+            Looks good <ChevronRightIcon className="h-4 w-4" strokeWidth={2.5} />
           </button>
         ) : (
           <button
             type="button"
             onClick={handleContinue}
             disabled={submitting}
-            className="min-h-[44px] w-full rounded-[--radius-sm] bg-primary px-5 py-3 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50 sm:w-auto sm:py-2"
+            className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-[--radius-sm] bg-primary px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark disabled:opacity-50 sm:w-auto sm:py-2"
           >
-            {submitting ? "Saving…" : "Confirm — this is my work"}
+            {submitting ? (
+              "Saving…"
+            ) : (
+              <>
+                <CheckIcon className="h-4 w-4" strokeWidth={2.75} /> Confirm — this is my work
+              </>
+            )}
           </button>
         )}
       </div>
@@ -769,7 +790,11 @@ function ProblemPagination({
                     : "bg-bg-subtle text-text-muted"
               }`}
             >
-              {wasVisited && !isActive ? "✓" : i + 1}
+              {wasVisited && !isActive ? (
+                <CheckIcon className="h-3.5 w-3.5" strokeWidth={3} />
+              ) : (
+                i + 1
+              )}
             </button>
           );
         })}
@@ -976,9 +1001,9 @@ function FileZoomModal({
           type="button"
           onClick={onClose}
           aria-label="Close preview"
-          className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+          className="inline-flex items-center gap-1.5 rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-bg-subtle hover:text-text-primary"
         >
-          Close ✕
+          <XIcon className="h-3.5 w-3.5" /> Close
         </button>
       </div>
       <div className="overflow-auto">
@@ -995,7 +1020,7 @@ function FileZoomModal({
               rel="noopener noreferrer"
               className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"
             >
-              Open PDF in new tab ↗
+              Open PDF in new tab
             </a>
           </>
         ) : (

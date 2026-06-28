@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import type { StudentSubmission, SubmissionFile } from "@/lib/api";
-import { FileTextIcon } from "@/components/ui/icons";
+import { CheckIcon, FileTextIcon, XIcon } from "@/components/ui/icons";
 import { Modal } from "@/components/ui/modal";
 
 interface Props {
@@ -19,33 +20,58 @@ export function SubmittedView({ submission }: Props) {
   const submittedAt = new Date(submission.submitted_at);
   const files = submission.files ?? [];
   const [zoomedFile, setZoomedFile] = useState<SubmissionFile | null>(null);
+  const reduceMotion = useReducedMotion();
+  const pageCount = files.length;
   return (
-    <div className="mt-8 rounded-[--radius-md] border border-success-border bg-success-light p-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-text-primary">✓ Submitted</h2>
-        <div className="text-xs font-medium text-text-muted">
-          {submittedAt.toLocaleString()}
+    <motion.div
+      initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: "spring", stiffness: 260, damping: 26 }}
+      className="mt-8 overflow-hidden rounded-[--radius-lg] border border-success-border bg-success-light shadow-[0_1px_2px_rgba(20,19,15,0.04)]"
+    >
+      {/* Payoff beat — the moment the work is safely in. */}
+      <div className="px-6 pt-7 pb-6 text-center">
+        <motion.span
+          initial={reduceMotion ? false : { scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: reduceMotion ? 0 : 0.12, type: "spring", stiffness: 380, damping: 18 }}
+          className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-success text-white shadow-sm"
+        >
+          <CheckIcon className="h-6 w-6" strokeWidth={3} />
+        </motion.span>
+        <p className="eyebrow mt-4 text-success">Turned in</p>
+        <h2 className="mt-1.5 font-serif text-[1.9rem] leading-tight text-text-primary">
+          That&apos;s in your teacher&apos;s hands now.
+        </h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-text-secondary">
+          Nice work — {pageCount === 1 ? "your page" : `all ${pageCount} pages`} went
+          through. Your teacher will grade it soon, and you&apos;ll find your
+          result waiting in{" "}
+          <span className="font-semibold text-text-primary">Grades</span>.
+        </p>
+        <div className="mt-3 flex items-center justify-center gap-2 text-xs font-medium text-text-muted">
+          <span>Submitted {submittedAt.toLocaleString()}</span>
           {submission.is_late && (
-            <span className="ml-2 rounded-full bg-warning-bg px-2 py-0.5 font-bold text-warning-dark">
-              LATE
+            <span className="rounded-full bg-warning-bg px-2 py-0.5 font-semibold text-warning-dark">
+              Marked late
             </span>
           )}
         </div>
       </div>
 
-      <div className="mt-5">
+      <div className="border-t border-success-border/60 bg-surface/40 px-6 py-5">
         <div className="text-sm font-semibold text-text-primary">
-          Your work{" "}
+          What your teacher sees{" "}
           <span className="font-normal text-text-muted">
             ({files.length} {files.length === 1 ? "page" : "pages"})
           </span>
         </div>
         {files.length === 0 ? (
-          <p className="mt-2 italic text-sm text-text-muted">
+          <p className="mt-2 text-sm italic text-text-muted">
             No files on this submission.
           </p>
         ) : (
-          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
             {files.map((f, i) => (
               <SubmissionThumb
                 key={i}
@@ -61,7 +87,7 @@ export function SubmittedView({ submission }: Props) {
       {zoomedFile && (
         <ZoomModal file={zoomedFile} onClose={() => setZoomedFile(null)} />
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -133,9 +159,9 @@ function ZoomModal({
           type="button"
           onClick={onClose}
           aria-label="Close preview"
-          className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-bg-subtle hover:text-text-primary"
+          className="inline-flex items-center gap-1.5 rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-bg-subtle hover:text-text-primary"
         >
-          Close ✕
+          <XIcon className="h-3.5 w-3.5" /> Close
         </button>
       </div>
       <div className="overflow-auto">
@@ -152,7 +178,7 @@ function ZoomModal({
               rel="noopener noreferrer"
               className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"
             >
-              Open PDF in new tab ↗
+              Open PDF in new tab
             </a>
           </>
         ) : (
