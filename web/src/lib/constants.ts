@@ -25,8 +25,8 @@ export interface SubjectConfig {
 // on the launchpad cards as it does inside its themed pages.
 export const SUBJECT_CONFIG: Record<string, SubjectConfig> = {
   math: { name: "Mathematics", icon: "📐", color: "text-[#0E5238]", bg: "bg-[#0E5238]/10", gradient: "from-[#0E5238] to-[#2F8F66]" },
-  chemistry: { name: "Chemistry", icon: "🧪", color: "text-[#00876A]", bg: "bg-[#00876A]/10", gradient: "from-[#00876A] to-[#2FB39A]" },
   physics: { name: "Physics", icon: "🚀", color: "text-[#0984E3]", bg: "bg-[#0984E3]/10", gradient: "from-[#0984E3] to-[#74B9FF]" },
+  chemistry: { name: "Chemistry", icon: "🧪", color: "text-[#00876A]", bg: "bg-[#00876A]/10", gradient: "from-[#00876A] to-[#2FB39A]" },
 };
 
 // ── Teacher portal timings + limits ──
