@@ -62,7 +62,9 @@ export function ImageUpload({
       try {
         const res = await imageApi.extract(base64, subject);
         if (res.problems.length === 0) {
-          setError("No problems found. Try selecting areas manually.");
+          // A SUCCESSFUL call that genuinely found nothing — manual area
+          // selection is a sensible next step (maybe the layout confused it).
+          setError("No problems found in the photo. Try selecting the problem areas manually.");
           setManualMode(true);
           setPhase("select");
           return;
@@ -77,9 +79,14 @@ export function ImageUpload({
         setPhase("upload");
         setImageBase64(null);
       } catch {
-        setError("Extraction failed. Try selecting areas manually.");
-        setManualMode(true);
-        setPhase("select");
+        // A THROWN error means the extraction SERVICE failed (API down,
+        // out of credits, rate-limited, network) — NOT "we looked and found
+        // nothing". Manual rectangle selection hits the same dead service,
+        // so don't push the user there. Tell the truth and let them retry;
+        // keep the image so "Try again" re-runs without re-uploading.
+        setError("Couldn't reach the extraction service. Please try again in a moment.");
+        setManualMode(false);
+        setPhase("upload");
       }
     },
     [subject, setPhase, onExtractComplete],
@@ -121,6 +128,11 @@ export function ImageUpload({
       const allProblems: string[] = [];
       const allCropImages: (string | undefined)[] = [];
       let worstConfidence: string = "high";
+      // Track API failures separately: allSettled swallows rejections, so
+      // without this a service error (out of credits / rate-limit / network)
+      // would look identical to "found nothing" and we'd tell the teacher to
+      // draw bigger boxes — chasing a problem that isn't there.
+      let anyRejected = false;
 
       // Process in batches of 3
       for (let i = 0; i < rectangles.length; i += 3) {
@@ -142,14 +154,24 @@ export function ImageUpload({
             if (r.value.confidence === "low") worstConfidence = "low";
             else if (r.value.confidence === "medium" && worstConfidence !== "low")
               worstConfidence = "medium";
+          } else {
+            anyRejected = true;
           }
         }
       }
 
       if (allProblems.length === 0) {
-        setError("No problems found in the selected areas. Try drawing larger rectangles.");
-        setPhase("upload");
-        setImageBase64(null);
+        if (anyRejected) {
+          // The service failed, not "nothing found" — keep the image so
+          // the user can retry rather than re-draw boxes pointlessly.
+          setError("Couldn't reach the extraction service. Please try again in a moment.");
+          setManualMode(false);
+          setPhase("upload");
+        } else {
+          setError("No problems found in the selected areas. Try drawing larger rectangles.");
+          setPhase("upload");
+          setImageBase64(null);
+        }
         return;
       }
 
@@ -304,7 +326,20 @@ export function ImageUpload({
       </div>
 
       {error && (
-        <p className="mt-2 text-sm text-error">{error}</p>
+        <div className="mt-2 flex items-center gap-3">
+          <p className="text-sm text-error">{error}</p>
+          {imageBase64 && (
+            // Service-error path keeps the image — re-run extraction on it
+            // without making the user re-upload.
+            <button
+              type="button"
+              onClick={() => autoExtract(imageBase64)}
+              className="shrink-0 rounded-[--radius-sm] border border-primary/40 px-3 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary-bg"
+            >
+              Try again
+            </button>
+          )}
+        </div>
       )}
 
       {/* Extraction results modal */}
