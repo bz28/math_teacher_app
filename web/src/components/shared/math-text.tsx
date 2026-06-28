@@ -97,11 +97,26 @@ function isBareLatexEnvironment(input: string): boolean {
   return /\\end\{[a-zA-Z*]+\}\s*$/.test(trimmed);
 }
 
+// A LaTeX-escaped dollar (`\$`) means a LITERAL dollar sign, not a math
+// delimiter — word problems write currency as "\$0.50". The segment
+// matcher keys off bare `$`, so before matching we swap every `\$` for a
+// private-use sentinel it can't see, then restore it per segment: as a
+// plain `$` in prose, as `\$` inside math (where KaTeX renders the
+// literal). Without this, "paid \$0.50 … at \$2.00" parses the span
+// between the two dollars as math — the classic currency-as-math bug.
+// (A sentinel, not a regex lookbehind: lookbehind throws on Safari
+// <16.4 and would break ALL math rendering there.)
+const DOLLAR_SENTINEL = "\uE000";
+const restoreDollarText = (s: string) => s.replaceAll(DOLLAR_SENTINEL, "$");
+const restoreDollarMath = (s: string) => s.replaceAll(DOLLAR_SENTINEL, "\\$");
+
 function parse(input: string): Segment[] {
   // Clean up before parsing
   let text = input.replace(/<br\s*\/?>/gi, "\n");
   // Strip arrow characters that Claude sometimes inserts inside SVG
   text = text.replace(/→\s*/g, "").replace(/←\s*/g, "");
+  // Protect escaped (literal) dollars from the math-delimiter matcher.
+  text = text.replace(/\\\$/g, DOLLAR_SENTINEL);
 
   // Fast path: the whole string is a bare LaTeX environment. Treat as
   // display math so matrices / cases / aligned blocks render instead of
@@ -109,7 +124,7 @@ function parse(input: string): Segment[] {
   if (isBareLatexEnvironment(text)) {
     return [{
       type: "math-display",
-      content: restoreBrokenLatexCommands(text.trim()),
+      content: restoreDollarMath(restoreBrokenLatexCommands(text.trim())),
     }];
   }
 
@@ -121,7 +136,7 @@ function parse(input: string): Segment[] {
   for (const match of text.matchAll(pattern)) {
     const idx = match.index!;
     if (idx > lastIndex) {
-      segments.push({ type: "text", content: text.slice(lastIndex, idx) });
+      segments.push({ type: "text", content: restoreDollarText(text.slice(lastIndex, idx)) });
     }
 
     const m = match[0];
@@ -130,29 +145,33 @@ function parse(input: string): Segment[] {
         const data = JSON.parse(m.slice(2, -2)) as DiagramData;
         segments.push({ type: "diagram", data });
       } catch {
-        segments.push({ type: "text", content: m });
+        segments.push({ type: "text", content: restoreDollarText(m) });
       }
     } else if (m.startsWith("$$") && m.endsWith("$$")) {
       segments.push({
         type: "math-display",
-        content: restoreBrokenLatexCommands(m.slice(2, -2).trim()),
+        content: restoreDollarMath(restoreBrokenLatexCommands(m.slice(2, -2).trim())),
       });
     } else if (m.startsWith("$") && m.endsWith("$")) {
       segments.push({
         type: "math-inline",
-        content: restoreBrokenLatexCommands(m.slice(1, -1).trim()),
+        content: restoreDollarMath(restoreBrokenLatexCommands(m.slice(1, -1).trim())),
       });
     } else if (m.startsWith("<svg")) {
       segments.push({ type: "svg", content: m });
     } else if (m.startsWith("**") && m.endsWith("**")) {
-      segments.push({ type: "bold", content: m.slice(2, -2) });
+      // Bold content is RE-PARSED by a nested <MathText> (render switch),
+      // so it must stay in source form: restore the sentinel to `\$`, not a
+      // bare `$`, or the inner parse would read "**\$5 or \$10**" as math
+      // again — reintroducing the very currency-as-math bug this fixes.
+      segments.push({ type: "bold", content: restoreDollarMath(m.slice(2, -2)) });
     }
 
     lastIndex = idx + m.length;
   }
 
   if (lastIndex < text.length) {
-    segments.push({ type: "text", content: text.slice(lastIndex) });
+    segments.push({ type: "text", content: restoreDollarText(text.slice(lastIndex)) });
   }
 
   return segments;
