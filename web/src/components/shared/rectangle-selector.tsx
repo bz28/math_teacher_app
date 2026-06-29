@@ -20,6 +20,11 @@ interface RectangleSelectorProps {
   maxRectangles?: number;
   /** Hint text shown next to the rectangle count (e.g. "1 scan remaining") */
   limitHint?: string;
+  /** "crop" = one problem (the common case); "multi" = several problems in
+   *  one photo. Drives the copy/CTA only — the cap is set by maxRectangles. */
+  variant?: "crop" | "multi";
+  /** When provided, shows a one-tap link to switch between crop/multi. */
+  onSwitchVariant?: () => void;
 }
 
 const MIN_SIZE = 30;
@@ -39,7 +44,10 @@ export function RectangleSelector({
   onCancel,
   maxRectangles = 10,
   limitHint,
+  variant = "multi",
+  onSwitchVariant,
 }: RectangleSelectorProps) {
+  const isCrop = variant === "crop";
   const imgRef = useRef<HTMLImageElement>(null);
   const [rectangles, setRectangles] = useState<Rectangle[]>([]);
   const [mode, setMode] = useState<InteractionMode>({ type: "idle" });
@@ -232,11 +240,16 @@ export function RectangleSelector({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-text-primary">
-          Select problems in your image
+          {isCrop ? "Crop to your problem" : "Select problems in your image"}
         </p>
         <span className="text-[10px] text-text-muted">
-          {rectangles.length}/{maxRectangles} selected
-          {limitHint && ` · ${maxRectangles - rectangles.length} left (${limitHint})`}
+          {isCrop
+            ? rectangles.length > 0
+              ? "Adjust the box, then crop"
+              : "Drag a box around it"
+            : `${rectangles.length}/${maxRectangles} selected`}
+          {!isCrop && limitHint &&
+            ` · ${maxRectangles - rectangles.length} left (${limitHint})`}
         </span>
       </div>
 
@@ -305,10 +318,12 @@ export function RectangleSelector({
                   <line x1="15" y1="3" x2="15" y2="21" />
                 </svg>
                 <p className="text-sm font-semibold text-text-primary">
-                  Drag to select each problem
+                  {isCrop ? "Crop to your problem" : "Drag to select each problem"}
                 </p>
                 <p className="mt-1 text-xs text-text-muted">
-                  Draw a rectangle around each problem you want to solve
+                  {isCrop
+                    ? "Drag a box around the problem you want to solve"
+                    : "Draw a rectangle around each problem you want to solve"}
                 </p>
               </div>
             </motion.div>
@@ -407,9 +422,21 @@ export function RectangleSelector({
           disabled={rectangles.length === 0}
           className="ml-auto"
         >
-          Extract ({rectangles.length})
+          {isCrop ? "Crop & solve" : `Extract (${rectangles.length})`}
         </Button>
       </div>
+
+      {onSwitchVariant && (
+        <button
+          type="button"
+          onClick={onSwitchVariant}
+          className="w-full pt-0.5 text-center text-[11px] font-medium text-text-muted transition-colors hover:text-primary"
+        >
+          {isCrop
+            ? "Got several problems in one photo? Select areas →"
+            : "← Just one problem? Crop to it instead"}
+        </button>
+      )}
     </div>
   );
 }
