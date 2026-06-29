@@ -78,7 +78,7 @@
       "mode": "integrity_answer_equivalence",
       "model": "claude-haiku-4-5-20251001",
       "prompt": "You are a math grader checking equivalence of final answers. Return one entry pe || For each problem below, decide whether the student's answer is mathematically equivalent to the answer key. Equivale",
-      "recorded_at": 1782754942.908724
+      "recorded_at": 1782760489.938336
     },
     "response": {
       "results": [
