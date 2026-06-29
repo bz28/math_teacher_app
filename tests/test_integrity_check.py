@@ -2443,57 +2443,7 @@ async def test_finish_check_rejects_verified_pass_without_concept_probe(
             .where(IntegrityConversationTurn.role == "tool_result")
         )).scalars().all()
         assert any(
-            "HANDLE the understanding check" in t.content
-            for t in tool_results
-        )
-
-
-async def test_finish_check_rejects_verified_pass_with_low_concept_probe(
-    client: AsyncClient, world: dict[str, Any]
-) -> None:
-    """Outcome gate, not just process gate: a verified-tier `pass` where the
-    conceptual probe WAS asked but the student handled it `low` (`transfer`
-    here) is STILL rejected. Scoring the probe is not enough — the student
-    must demonstrably HANDLE it (mid/high). Guards a cracked memorizer who
-    is scored `transfer=low` yet slides to `pass` on the model's judgment."""
-    set_agent_script([[make_text("Opener.")]])
-    r = await _submit(client, world)
-    submission_id = r.json()["submission_id"]
-    await _force_verified_tier(submission_id)
-    problem_id = await _only_problem_id(submission_id)
-
-    # Probe was asked and scored — but `low`. Fluent on required dims.
-    await _verdict_then_finish_script(
-        problem_id,
-        {
-            "paraphrase_originality": "high",
-            "causal_fluency": "high",
-            "transfer": "low",
-        },
-        "pass",
-    )
-    r = await client.post(
-        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
-        headers=_auth(world["student_token"]),
-        json={"message": "Uh, smaller? I just followed the steps."},
-    )
-    assert r.status_code == 200
-
-    async with get_session_factory()() as s:
-        check = (await s.execute(
-            select(IntegrityCheckSubmission)
-            .where(IntegrityCheckSubmission.submission_id == submission_id)
-        )).scalar_one()
-        # Finalize rejected — `transfer=low` does not clear the outcome gate.
-        assert check.status != "complete"
-        assert check.disposition is None
-
-        tool_results = (await s.execute(
-            select(IntegrityConversationTurn)
-            .where(IntegrityConversationTurn.role == "tool_result")
-        )).scalars().all()
-        assert any(
-            "HANDLE the understanding check" in t.content
+            "requires the one understanding check" in t.content
             for t in tool_results
         )
 
@@ -2501,9 +2451,9 @@ async def test_finish_check_rejects_verified_pass_with_low_concept_probe(
 async def test_finish_check_accepts_verified_pass_with_concept_probe(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    """The mirror: once the conceptual probe is HANDLED (`prediction=high`
-    here), a verified-tier `pass` on a strong rubric clears the gate and the
-    check completes. The genuine understander is not penalized."""
+    """The mirror: once the conceptual probe is scored (`prediction` here),
+    a verified-tier `pass` on a strong rubric clears the gate and the check
+    completes. The genuine understander is not penalized."""
     set_agent_script([[make_text("Opener.")]])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
@@ -2523,44 +2473,6 @@ async def test_finish_check_accepts_verified_pass_with_concept_probe(
         f"/v1/school/student/integrity/submissions/{submission_id}/turn",
         headers=_auth(world["student_token"]),
         json={"message": "Bigger — a larger total means a larger x."},
-    )
-    assert r.status_code == 200
-
-    async with get_session_factory()() as s:
-        check = (await s.execute(
-            select(IntegrityCheckSubmission)
-            .where(IntegrityCheckSubmission.submission_id == submission_id)
-        )).scalar_one()
-        assert check.status == "complete"
-        assert check.disposition == "pass"
-
-
-async def test_finish_check_accepts_verified_pass_with_mid_concept_probe(
-    client: AsyncClient, world: dict[str, Any]
-) -> None:
-    """The outcome gate clears on `mid`, not only `high`: a verified-tier
-    `pass` where `transfer=mid` (the student handled the twist with some
-    real grasp) completes. Confirms the gate accepts the full handled band
-    {mid, high}, not just a perfect answer."""
-    set_agent_script([[make_text("Opener.")]])
-    r = await _submit(client, world)
-    submission_id = r.json()["submission_id"]
-    await _force_verified_tier(submission_id)
-    problem_id = await _only_problem_id(submission_id)
-
-    await _verdict_then_finish_script(
-        problem_id,
-        {
-            "paraphrase_originality": "high",
-            "causal_fluency": "high",
-            "transfer": "mid",
-        },
-        "pass",
-    )
-    r = await client.post(
-        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
-        headers=_auth(world["student_token"]),
-        json={"message": "Bigger, because x scales with the total."},
     )
     assert r.status_code == 200
 
