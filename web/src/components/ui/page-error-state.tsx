@@ -10,6 +10,11 @@ interface PageErrorStateProps {
   onRetry: () => void;
   /** Headline above the message. Defaults to a calm, reassuring line. */
   title?: string;
+  /** Action-button label. Defaults to "Try again" — override when the
+   *  recovery action isn't literally a retry (e.g. "Back to Learn" on a
+   *  generation surface that sends the student back to start over), so
+   *  the button never promises something it doesn't do. */
+  retryLabel?: string;
 }
 
 function AlertIcon() {
@@ -42,6 +47,7 @@ export function PageErrorState({
   message,
   onRetry,
   title = "We hit a snag",
+  retryLabel = "Try again",
 }: PageErrorStateProps) {
   const reduce = useReducedMotion();
   return (
@@ -61,7 +67,7 @@ export function PageErrorState({
         {message}
       </p>
       <Button variant="secondary" size="sm" onClick={onRetry} className="mt-6">
-        Try again
+        {retryLabel}
       </Button>
     </div>
   );

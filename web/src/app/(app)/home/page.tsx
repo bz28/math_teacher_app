@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
 import Link from "next/link";
 import { PageMasthead } from "@/components/shared/page-masthead";
+import { PageErrorState } from "@/components/ui";
 import { auth, student, type EnrolledCourse } from "@/lib/api";
 import { SUBJECT_CONFIG } from "@/lib/constants";
 import { TOUR_IDS, useTour } from "@/components/tour";
@@ -29,6 +30,11 @@ export default function HomePage() {
   const router = useRouter();
   const [enrolledCourses, setEnrolledCourses] = useState<EnrolledCourse[]>([]);
   const [loadingCourses, setLoadingCourses] = useState(true);
+  // Distinguishes a real fetch failure from a genuinely-empty enrollment:
+  // an empty list is a personal learner (show subject cards), but a
+  // failure must surface a retry — not silently downgrade a class-linked
+  // student to the generic marketing cards.
+  const [coursesError, setCoursesError] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState("");
@@ -85,8 +91,11 @@ export default function HomePage() {
   const loadEnrolledCourses = () => {
     auth
       .enrolledCourses()
-      .then((d) => setEnrolledCourses(d.courses))
-      .catch((err: unknown) => console.warn("Failed to load enrolled courses:", err))
+      .then((d) => {
+        setEnrolledCourses(d.courses);
+        setCoursesError(false);
+      })
+      .catch(() => setCoursesError(true))
       .finally(() => setLoadingCourses(false));
   };
 
@@ -138,9 +147,14 @@ export default function HomePage() {
 
       {/* ── Subjects / Courses ── */}
       <section data-tour-id={TOUR_IDS.personalStart} className="space-y-5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
-          {isSchoolStudent ? "Your classes" : "Choose a subject"}
-        </p>
+        {/* Eyebrow hidden on error — "Choose a subject" would contradict
+            the retry surface and could imply the class-linked student has
+            no classes when the load merely failed. */}
+        {!coursesError && (
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+            {isSchoolStudent ? "Your classes" : "Choose a subject"}
+          </p>
+        )}
 
         {loadingCourses ? (
           <div className="grid gap-4 sm:grid-cols-3">
@@ -151,6 +165,15 @@ export default function HomePage() {
               />
             ))}
           </div>
+        ) : coursesError ? (
+          <PageErrorState
+            title="We couldn't load your classes"
+            message="Your classes didn't load just now. This is usually a quick blip — try again."
+            onRetry={() => {
+              setLoadingCourses(true);
+              loadEnrolledCourses();
+            }}
+          />
         ) : isSchoolStudent ? (
           <div className="grid gap-4 sm:grid-cols-2">
             {enrolledCourses.map((course, i) => (

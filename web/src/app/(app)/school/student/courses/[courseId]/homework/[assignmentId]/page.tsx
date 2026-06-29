@@ -15,6 +15,7 @@ import { usePracticeStore } from "@/stores/practice";
 import { useSessionStore, type Subject } from "@/stores/learn";
 import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
+import { PageErrorState } from "@/components/ui";
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
 import { SubmittedView } from "@/components/school/student/submitted-view";
 import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
@@ -150,7 +151,7 @@ export default function HomeworkPage() {
         }
       }
     } catch {
-      setError("Couldn't load this homework. Please try again.");
+      setError("We couldn't load this homework right now.");
     }
   }
 
@@ -166,15 +167,14 @@ export default function HomeworkPage() {
 
   if (error) {
     return (
-      <div className="mx-auto max-w-2xl py-12 text-center">
-        <p className="text-error">{error}</p>
-        <button
-          onClick={() => setError(null)}
-          className="mt-4 rounded-[--radius-sm] border border-border px-4 py-2 text-sm hover:border-primary"
-        >
-          Dismiss
-        </button>
-      </div>
+      <PageErrorState
+        message={error}
+        onRetry={() => {
+          if (!assignmentId) return;
+          setError(null);
+          loadAll(assignmentId);
+        }}
+      />
     );
   }
 
