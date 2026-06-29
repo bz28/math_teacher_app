@@ -38,6 +38,9 @@ export function TourOverlay() {
     const changed: { el: HTMLElement; prevAria: string | null; prevInert: boolean }[] = [];
     for (const child of Array.from(document.body.children)) {
       if (child === host || !(child instanceof HTMLElement)) continue;
+      // Keep the toast region live so a notification raised mid-tour is still
+      // announced + dismissable (it's a direct body child, pointer-events-none).
+      if (child.hasAttribute("data-toast-root")) continue;
       changed.push({ el: child, prevAria: child.getAttribute("aria-hidden"), prevInert: child.inert });
       child.setAttribute("aria-hidden", "true");
       child.inert = true;
