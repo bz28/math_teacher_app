@@ -76,8 +76,9 @@ export function IntegrityInterview() {
               <span style={{ color: "#8FB7A4", fontSize: 14 }}>Veradic is scoring this submission…</span>
             </motion.div>
           ) : (
-            <motion.div key={`card-${run}`} initial={{ opacity: 0, y: 16, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: reduce ? 0 : 0.5, ease: EASE }} style={{ width: "100%" }}>
+            <motion.div key={`card-${run}`} initial={{ opacity: 0, y: 16, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: reduce ? 0 : 0.5, ease: EASE }} style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
               <VerdictCard onReplay={reduce ? undefined : replay} />
+              <ProcessEvidence reduce={reduce} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -237,6 +238,137 @@ function VerdictCard({ onReplay }: { onReplay?: () => void }) {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Corroborating process signals — the teacher's-eye view that resolves *beside*
+ * the conversation verdict. These are the real, shipped `activity_summary`
+ * telemetry (tab-outs + pastes) the teacher reviews alongside a flag. Honest
+ * framing is load-bearing here: this is CONTEXT the teacher sees, it does NOT
+ * drive the AI's pass/flag decision (that comes purely from the conversation).
+ * Numbers count up on reveal; reduced-motion jumps to the resolved values.
+ */
+function ProcessEvidence({ reduce }: { reduce: boolean | null }) {
+  const META = { fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#8FB7A4" };
+  return (
+    <motion.div
+      initial={reduce ? false : { opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.55, ease: EASE, delay: reduce ? 0 : 0.5 }}
+      style={{
+        width: "100%",
+        maxWidth: 600,
+        margin: "0 auto",
+        background: "linear-gradient(180deg, #0E2C21 0%, #0B2419 100%)",
+        border: "1px solid #1E4636",
+        borderRadius: 18,
+        overflow: "hidden",
+        boxShadow: "0 26px 64px -30px rgba(0,0,0,0.7)",
+      }}
+    >
+      <div style={{ padding: "16px 22px 14px", borderBottom: "1px solid #173A2C" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <EyeGlyph />
+          <span style={META}>Corroborating signals her teacher sees</span>
+        </div>
+        <p style={{ margin: "9px 0 0", fontFamily: SERIF, fontStyle: "italic", fontSize: 19, lineHeight: 1.3, color: "#E9E5D8" }}>
+          And while she worked&hellip;
+        </p>
+      </div>
+
+      <div style={{ display: "flex", borderBottom: "1px solid #173A2C" }}>
+        <SignalTile
+          icon={<TabOutGlyph />}
+          value={<CountUp to={4} reduce={reduce} suffix="×" />}
+          label="tabbed away"
+          detail="2m 10s across the session"
+          border
+        />
+        <SignalTile
+          icon={<PasteGlyph />}
+          value={<CountUp to={180} reduce={reduce} />}
+          label="characters pasted"
+          detail="one paste, all at once"
+        />
+      </div>
+
+      <p style={{ margin: 0, padding: "13px 22px", fontSize: 12, lineHeight: 1.5, color: "#7FA593" }}>
+        Context the teacher reviews alongside the conversation. It doesn&rsquo;t
+        drive the flag &mdash; that came from Maya not being able to explain her
+        own method.
+      </p>
+    </motion.div>
+  );
+}
+
+function SignalTile({ icon, value, label, detail, border }: { icon: React.ReactNode; value: React.ReactNode; label: string; detail: string; border?: boolean }) {
+  return (
+    <div style={{ flex: 1, padding: "18px 22px", borderRight: border ? "1px solid #173A2C" : undefined, display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 9, background: "#143427", border: "1px solid #21503C", color: "#7FC4A0", flexShrink: 0 }}>{icon}</span>
+        <span style={{ fontSize: 30, fontWeight: 700, color: "#F4F1E8", lineHeight: 1, letterSpacing: "-0.01em", fontVariantNumeric: "tabular-nums" }}>{value}</span>
+      </div>
+      <span style={{ fontSize: 13.5, fontWeight: 600, color: "#CFE3D8", marginTop: 6 }}>{label}</span>
+      <span style={{ fontSize: 12, color: "#6E9684" }}>{detail}</span>
+    </div>
+  );
+}
+
+/** Eases a count from 0 → `to` once on mount; honors reduced motion. */
+function CountUp({ to, reduce, suffix = "" }: { to: number; reduce: boolean | null; suffix?: string }) {
+  // Initial state already resolves to `to` under reduced motion, so the effect
+  // only needs to drive the count-up animation — no synchronous setState.
+  const [n, setN] = useState(reduce ? to : 0);
+  useEffect(() => {
+    if (reduce) return;
+    let raf = 0;
+    const delay = 720;
+    const dur = 900;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min(1, Math.max(0, (now - start - delay) / dur));
+      const eased = 1 - Math.pow(1 - t, 3);
+      setN(Math.round(eased * to));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [to, reduce]);
+  return (
+    <>
+      {n}
+      {suffix}
+    </>
+  );
+}
+
+function EyeGlyph() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+      <path d="M1 8s2.6-4.5 7-4.5S15 8 15 8s-2.6 4.5-7 4.5S1 8 1 8Z" stroke="#7FC4A0" strokeWidth="1.3" strokeLinejoin="round" />
+      <circle cx="8" cy="8" r="1.9" fill="#7FC4A0" />
+    </svg>
+  );
+}
+
+function TabOutGlyph() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 18 18" fill="none">
+      <rect x="1.5" y="3.5" width="11" height="9" rx="1.6" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M1.5 6.3h11" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M11 11.5l5-5m0 0h-3.4m3.4 0v3.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function PasteGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
+      <rect x="3.5" y="2.5" width="11" height="13" rx="1.8" stroke="currentColor" strokeWidth="1.3" />
+      <rect x="6.5" y="1.2" width="5" height="3" rx="1" fill="currentColor" />
+      <path d="M6.3 8.2h5.4M6.3 11h3.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
   );
 }
 

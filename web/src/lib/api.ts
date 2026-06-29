@@ -912,17 +912,49 @@ export interface TeacherRubric {
   notes?: string;
 }
 
+/** One line in a problem's itemized grade receipt — the AI's
+ *  justification for a single point change. `points_off` is the percent
+ *  the AI deducted for this error (0 for a credit/full-marks line);
+ *  `reason` is the human-readable explanation; `step_ref` is a 1-based
+ *  index into the problem's `student_steps` the error anchors to (null
+ *  when it isn't tied to a specific step). The receipt's score reconciles
+ *  to `100 − Σ points_off`, which equals the entry's `percent`. */
+export interface GradeDeduction {
+  points_off: number;
+  reason: string;
+  step_ref: number | null;
+}
+
+/** One reusable grading setup the teacher already authored on another
+ *  assignment. Powers the "Copy grading setup from another homework"
+ *  picker on the grading-setup card — reuses existing
+ *  `Assignment.rubric` data, no new storage. The endpoint only returns
+ *  assignments whose rubric is non-empty. */
+export interface RubricSource {
+  id: string;
+  title: string;
+  course_name: string;
+  type: string;
+  rubric: TeacherRubric;
+  created_at: string;
+}
+
 /** Per-problem grade row. Shape matches the SubmissionGrade.breakdown
  *  JSON persisted by the grade endpoint — `score_status` drives the
  *  Full/Partial/Zero pill; `percent` is the committed numeric value.
  *  `confidence` is set by the AI grader (null when grade was entered by
- *  the teacher manually, or on historical rows before the field existed). */
+ *  the teacher manually, or on historical rows before the field existed).
+ *  `deductions` is the AI's itemized ledger that justifies `percent` — it
+ *  is the AI's justification for the AI's number, so it is dropped the
+ *  moment a teacher overrides the score (the ledger no longer reconciles).
+ *  Absent/null on historical rows and on teacher-authored grades. */
 export interface GradeBreakdownEntry {
   problem_id: string;
   score_status: "full" | "partial" | "zero";
   percent: number;
   confidence: number | null;
   feedback: string | null;
+  deductions?: GradeDeduction[] | null;
 }
 
 /** One row per (published HW × section) pair in the Submissions tab
@@ -1281,6 +1313,12 @@ export const teacher = {
   },
   allAssignments() {
     return apiFetch<{ assignments: TeacherAssignment[] }>("/teacher/assignments");
+  },
+  /** Assignments that already have a non-empty grading rubric, for the
+   *  "Copy grading setup from another homework" picker. Lean projection
+   *  (id/title/course/rubric) — no content or stats. */
+  rubricSources() {
+    return apiFetch<{ sources: RubricSource[] }>("/teacher/rubric-sources");
   },
   assignment(assignmentId: string) {
     return apiFetch<TeacherAssignment & {

@@ -114,6 +114,39 @@ export function PracticeSkeleton() {
   );
 }
 
+/**
+ * Content-shaped skeleton for list screens (dashboard, grades, practice,
+ * homework). Renders row-shaped bones that match the real `.row` cards so the
+ * load → content swap doesn't jump. `showCard` adds a leading detail-card bone
+ * (used by HomeworkScreen, which opens with a problem card, not a list).
+ */
+export function ListSkeleton({ rows = 4, showCard = false }: { rows?: number; showCard?: boolean }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const opacity = usePulse();
+
+  return (
+    <View style={styles.listContainer}>
+      {showCard && (
+        <View style={styles.listCard}>
+          <Bone width={60} height={10} opacity={opacity} />
+          <Bone width="80%" height={16} opacity={opacity} style={{ marginTop: spacing.sm }} />
+          <Bone width="55%" height={14} opacity={opacity} style={{ marginTop: spacing.xs }} />
+        </View>
+      )}
+      {Array.from({ length: rows }).map((_, i) => (
+        <View key={i} style={styles.listRow}>
+          <View style={styles.listRowMain}>
+            <Bone width="68%" height={14} opacity={opacity} />
+            <Bone width="42%" height={11} opacity={opacity} />
+          </View>
+          <Bone width={36} height={16} opacity={opacity} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: {
     flex: 1,
@@ -156,4 +189,29 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.md,
   },
+  listContainer: {
+    paddingHorizontal: spacing.xl,
+    gap: spacing.sm,
+  },
+  listCard: {
+    backgroundColor: colors.card,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  listRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: radii.md,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+  },
+  listRowMain: { flex: 1, gap: 8 },
 });

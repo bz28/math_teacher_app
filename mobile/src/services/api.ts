@@ -446,10 +446,22 @@ export interface Extraction {
   confidence: number;
 }
 
+/** One file the student turned in. `data` is raw base64 (no data: prefix);
+ *  `media_type` is image/jpeg, image/png, or application/pdf. */
+export interface SubmissionFile {
+  data: string;
+  media_type: string;
+  filename?: string | null;
+}
+
 export interface SubmissionState {
   submission_id: string;
   submitted_at: string;
   is_late: boolean;
+  /** Everything the student submitted, in upload order. Lets the confirm
+   *  + submitted screens show the source pages to compare against. Null
+   *  only on rows that pre-date the multi-file column. */
+  files: SubmissionFile[] | null;
   extraction: Extraction | null;
   extraction_confirmed_at: string | null;
   extraction_flagged_at: string | null;
