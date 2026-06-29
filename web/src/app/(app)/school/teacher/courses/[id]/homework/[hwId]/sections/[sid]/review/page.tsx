@@ -1916,16 +1916,21 @@ function SubmissionDetailPanel({
   // doesn't clobber a deliberate value) and otherwise default to 50,
   // exactly like the Partial button's pickPartial.
   const gradeFocused = useCallback(
-    (status: GradeStatus) => {
+    (status: GradeStatus, explicitPercent?: number) => {
       const p = detail.problems[focusedIndex];
       if (!p) return;
       let pct: number | undefined;
       if (status === "partial") {
-        const existing = breakdownByProblem.get(p.bank_item_id);
-        pct =
-          existing?.score_status === "partial"
-            ? Math.round(existing.percent)
-            : 50;
+        if (explicitPercent !== undefined) {
+          // A keyboard quarter-grade (75 / 50 / 25) — use it directly.
+          pct = explicitPercent;
+        } else {
+          const existing = breakdownByProblem.get(p.bank_item_id);
+          pct =
+            existing?.score_status === "partial"
+              ? Math.round(existing.percent)
+              : 50;
+        }
       }
       onGradeProblem(p.bank_item_id, status, pct);
       moveFocus(nextUngradedAfter(focusedIndex));
@@ -1975,15 +1980,26 @@ function SubmissionDetailPanel({
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       switch (e.key) {
+        // Quarter-scale grading: 1=100, 2=75, 3=50, 4=25, 5=0. The common
+        // partial grades sit on dedicated keys, so the teacher rarely needs
+        // the % field — each press grades the focused problem and advances.
         case "1":
           e.preventDefault();
           gradeFocused("full");
           break;
         case "2":
           e.preventDefault();
-          gradeFocused("partial");
+          gradeFocused("partial", 75);
           break;
         case "3":
+          e.preventDefault();
+          gradeFocused("partial", 50);
+          break;
+        case "4":
+          e.preventDefault();
+          gradeFocused("partial", 25);
+          break;
+        case "5":
           e.preventDefault();
           gradeFocused("zero");
           break;
@@ -3293,9 +3309,11 @@ const SHORTCUT_GROUPS: { heading: string; rows: { keys: string[]; label: string 
   {
     heading: "Grade the focused problem",
     rows: [
-      { keys: ["1"], label: "Full credit" },
-      { keys: ["2"], label: "Partial credit (50%)" },
-      { keys: ["3"], label: "No credit" },
+      { keys: ["1"], label: "Full credit — 100%" },
+      { keys: ["2"], label: "Partial — 75%" },
+      { keys: ["3"], label: "Partial — 50%" },
+      { keys: ["4"], label: "Partial — 25%" },
+      { keys: ["5"], label: "No credit — 0%" },
     ],
   },
   {
