@@ -78,7 +78,7 @@
       "mode": "integrity_answer_equivalence",
       "model": "claude-haiku-4-5-20251001",
       "prompt": "You are a math grader checking equivalence of final answers. Return one entry pe || For each problem below, decide whether the student's answer is mathematically equivalent to the answer key. Equivale",
-      "recorded_at": 1782760489.938336
+      "recorded_at": 1782770690.1496792
     },
     "response": {
       "results": [
@@ -385,7 +385,7 @@
       "mode": "integrity_answer_equivalence",
       "model": "claude-haiku-4-5-20251001",
       "prompt": "You are a math grader checking equivalence of final answers. Return one entry pe || For each problem below, decide whether the student's answer is mathematically equivalent to the answer key. Equivale",
-      "recorded_at": 1782754893.010622
+      "recorded_at": 1782770630.960733
     },
     "response": {
       "results": [
@@ -714,6 +714,19 @@
           "description": "Since $M$ bisects $AB$, both halves are equal: $AM = MB = 12$.\n$$AB = AM + MB = 12 + 12 = 24$$",
           "title": "Find Full Chord Length"
         }
+      ]
+    }
+  },
+  "e679188067ffc568cebdb63ebbd45b06": {
+    "meta": {
+      "mode": "practice_generate",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Solve x^2 - 9x + 20 = 0.\n\nGenerate 1 similar problem (do not include the original).",
+      "recorded_at": 1782769694.979813
+    },
+    "response": {
+      "problems": [
+        "Solve x^2 - 11x + 24 = 0."
       ]
     }
   },

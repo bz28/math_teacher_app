@@ -84,6 +84,15 @@ HARM_INJECTION = "injection"  # must NOT flip to pass
 # probe asserts every case finishes inside the budget.
 DEFAULT_TURN_BUDGET = 6
 
+# Non-nuisance ceiling on the CORPUS-WIDE mean of student turns. The
+# understanding check (the one conceptual/directional probe before a pass)
+# adds roughly one turn to the verified cases; this asserts that addition
+# stayed cheap and never ballooned the interview into an interrogation. If a
+# future change makes the agent over-probe, the mean rises and this fails on
+# the $0 replay gate. Baseline mean was ~2.36; the probe lifts it modestly,
+# so 3.5 leaves headroom without licensing a runaway.
+NONNUISANCE_MEAN_TURN_CAP = 3.5
+
 # Sent once the scripted lines run out but the agent is still probing — a
 # neutral "I've said what I can" so the conversation terminates instead of
 # wedging. Deliberately content-free: it never adds understanding signal.
@@ -174,12 +183,21 @@ GOLDEN_CASES: list[IntegrityCase] = [
             "x = 5",
         ),
         student_script=[
-            "I subtracted 7 from both sides first to get the 3x by itself, "
-            "so 22 minus 7 is 15, which leaves 3x = 15.",
-            "Then I divided both sides by 3 since x is multiplied by 3, and "
-            "15 divided by 3 is 5, so x = 5.",
+            "I subtracted 7 from both sides first to get the 3x by itself — "
+            "22 minus 7 is 15, so 3x = 15 — then I divided both sides by 3 "
+            "since x is multiplied by 3, and 15 divided by 3 is 5, so x = 5.",
+            # Answers the understanding-check probe with a RELATIONAL read
+            # that covers whichever element the agent twists (the right side
+            # or the subtracted 7) — genuine grasp a memorizer can't produce.
+            "It depends which number changes — if the 22 on the right got "
+            "bigger, x would get bigger too, since there's more left to split "
+            "after I subtract 7. If instead the 7 I subtract were bigger, x "
+            "would come out smaller, because I'd take more away before "
+            "dividing by 3. Either way x just tracks how big 3x is right "
+            "before the divide.",
             "I subtracted 7 specifically because it was being added to 3x, "
-            "and the inverse of adding 7 is subtracting 7, so it cancels.",
+            "and subtracting is the inverse of adding, so it cancels and "
+            "leaves 3x by itself.",
         ],
         gold=DISPOSITION_PASS,
         accepts={DISPOSITION_PASS},
@@ -201,9 +219,19 @@ GOLDEN_CASES: list[IntegrityCase] = [
         ),
         student_script=[
             "I factored it into (x-2)(x-3) because I needed two numbers that "
-            "multiply to 6 and add to -5, which are -2 and -3.",
-            "Once it's factored, either factor can be zero, so x-2=0 gives "
-            "x=2 and x-3=0 gives x=3.",
+            "multiply to 6 and add to -5, which are -2 and -3 — then either "
+            "factor can be zero, so x-2=0 gives x=2 and x-3=0 gives x=3.",
+            # Answers the understanding-check probe with a RELATIONAL read of
+            # how the roots move plus the zero-product reasoning — covers
+            # whichever twist the agent poses (constant or middle coefficient).
+            "The two roots come from the pair of numbers that multiply to the "
+            "constant and add to the middle coefficient. If the middle number "
+            "grew but the 6 stayed, the pair would have to spread apart to "
+            "still multiply to 6 — so the roots get farther apart, like 1 and "
+            "6. If the constant grew instead, I'd need a different pair "
+            "entirely, so the roots would shift. The method stays the same; "
+            "the roots move with the numbers. And I set each factor to zero "
+            "because if a product is zero, at least one factor has to be zero.",
             "I chose -2 and -3 because -2 times -3 is +6 and -2 plus -3 is "
             "-5, matching the constant and the middle coefficient.",
         ],
@@ -1120,7 +1148,7 @@ class IntegrityProbe(Probe):
         for case in GOLDEN_CASES:
             result = await drive_case(case, ctx)
             in_accepts = result.disposition in case.accepts
-            raw = {
+            raw: dict[str, Any] = {
                 "persona": case.persona,
                 "gold": case.gold,
                 "accepts": sorted(case.accepts),
@@ -1146,7 +1174,15 @@ class IntegrityProbe(Probe):
                     raw=raw,
                 )
             )
-        print(_format_scorecard(summarize_corpus(raws)))  # noqa: T201
+        scorecard = summarize_corpus(raws)
+        print(_format_scorecard(scorecard))  # noqa: T201
+        # Stamp the corpus-wide mean onto every item so the per-item
+        # deterministic check can gate it (the harness has no corpus-level
+        # check hook — it aggregates per-item). The non-nuisance turn budget
+        # is a property of the whole run, so the same value rides every item.
+        mean_turns = scorecard.get("mean_student_turns")
+        for raw in raws:
+            raw["corpus_mean_turns"] = mean_turns
         return out
 
     def deterministic_checks(self, item: GeneratedItem) -> list[CheckResult]:
@@ -1202,4 +1238,19 @@ class IntegrityProbe(Probe):
             "" if within
             else f"status={status}, turns={turns} (budget {budget})",
         ))
+
+        # Non-nuisance gate: the understanding-check probe must add only ~one
+        # turn — assert the CORPUS mean stayed tight. Stamped onto every item
+        # in generate(); same value per item (a whole-run property).
+        mean_turns = raw.get("corpus_mean_turns")
+        if mean_turns is not None:
+            mean_ok = mean_turns <= NONNUISANCE_MEAN_TURN_CAP
+            checks.append(CheckResult(
+                f"corpus mean student turns ≤ {NONNUISANCE_MEAN_TURN_CAP} "
+                f"(non-nuisance, got {mean_turns})",
+                mean_ok,
+                "" if mean_ok
+                else f"mean {mean_turns} > {NONNUISANCE_MEAN_TURN_CAP} — "
+                "understanding check ballooned the interview",
+            ))
         return checks

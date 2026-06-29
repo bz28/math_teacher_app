@@ -16,7 +16,7 @@ from typing import Any
 from unittest.mock import patch
 
 from httpx import AsyncClient
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 
 from api.database import get_session_factory
 from api.models.integrity_check import (
@@ -2380,6 +2380,109 @@ async def test_finish_check_accepts_mixed_rubric_band(
         )).scalar_one()
         assert check.status == "complete"
         assert check.disposition == "needs_practice"
+
+
+# ── Understanding-check gate (verified-tier pass requires a concept probe) ──
+
+
+async def _force_verified_tier(submission_id: str) -> None:
+    """Pin the check to the verified tier so the understanding-check gate
+    (which only guards a `pass` on a correct-on-paper answer) engages."""
+    from api.core.integrity_pipeline import (
+        SELECTION_REASON_VERIFIED_HARDEST_CORRECT,
+    )
+
+    async with get_session_factory()() as s:
+        await s.execute(
+            update(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+            .values(
+                probe_selection_reason=SELECTION_REASON_VERIFIED_HARDEST_CORRECT,
+            )
+        )
+        await s.commit()
+
+
+async def test_finish_check_rejects_verified_pass_without_concept_probe(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A fluent walkthrough that maxes both required dims is NOT enough to
+    pass on the verified tier: without `transfer` or `prediction` scored,
+    the gate rejects `pass` so the agent runs the one conceptual probe
+    first. Guards the smooth-memorizer false-pass."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    await _force_verified_tier(submission_id)
+    problem_id = await _only_problem_id(submission_id)
+
+    # High/high on the REQUIRED dims, but no conceptual probe scored.
+    await _verdict_then_finish_script(
+        problem_id,
+        {"paraphrase_originality": "high", "causal_fluency": "high"},
+        "pass",
+    )
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "You factor it and set each one to zero."},
+    )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        # Finalize rejected — check stays open, no disposition recorded.
+        assert check.status != "complete"
+        assert check.disposition is None
+
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(IntegrityConversationTurn.role == "tool_result")
+        )).scalars().all()
+        assert any(
+            "requires the one understanding check" in t.content
+            for t in tool_results
+        )
+
+
+async def test_finish_check_accepts_verified_pass_with_concept_probe(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The mirror: once the conceptual probe is scored (`prediction` here),
+    a verified-tier `pass` on a strong rubric clears the gate and the check
+    completes. The genuine understander is not penalized."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    await _force_verified_tier(submission_id)
+    problem_id = await _only_problem_id(submission_id)
+
+    await _verdict_then_finish_script(
+        problem_id,
+        {
+            "paraphrase_originality": "high",
+            "causal_fluency": "high",
+            "prediction": "high",
+        },
+        "pass",
+    )
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "Bigger — a larger total means a larger x."},
+    )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.status == "complete"
+        assert check.disposition == "pass"
 
 
 # ── Telemetry ──────────────────────────────────────────────────────

@@ -1831,6 +1831,48 @@ async def _apply_finish_check(
                 "their own work."
             )
 
+    # Understanding-check gate (verified tier only). A correct-on-paper
+    # answer narrated fluently maxes both required dimensions without
+    # proving the student grasps the relationship — a coached memorizer
+    # recites the steps of THIS exact problem perfectly. So on the verified
+    # tier we never let `pass` finalize on the open walkthrough alone: at
+    # least one scored rubric must carry a CONCEPTUAL probe result —
+    # `transfer` (a "what if X were different?" twist) or `prediction` (a
+    # "which direction before calculating?" check) scored low/mid/high, not
+    # `not_probed`/absent. This forces the one quick directional/why probe
+    # the system prompt requires before a pass, the probe that separates a
+    # genuine understander (answers in seconds) from a rehearsed reciter.
+    # Struggling-tier dispositions (needs_practice/tutor_pivot/flag) are
+    # untouched — the check is specifically the guard on a clean `pass`.
+    if (
+        disposition == DISPOSITION_PASS
+        and _tier_from_reason(check.probe_selection_reason) == "verified"
+        and scored_rubrics
+    ):
+        concept_scores = {"low", "mid", "high"}
+
+        def _probed_concept(rubric: dict[str, Any]) -> bool:
+            return (
+                rubric.get("transfer") in concept_scores
+                or rubric.get("prediction") in concept_scores
+            )
+
+        if not any(_probed_concept(r) for r in scored_rubrics):
+            return (
+                "rejected: disposition=pass on a correct-answer (verified) "
+                "check requires the one understanding check first. A fluent "
+                "walkthrough of the problem they got right is not enough — "
+                "ask ONE quick conceptual/directional/why probe (e.g. 'if the "
+                "3 were a 5, would your answer get bigger or smaller, and "
+                "why?' — NOT a recompute), hear the reply, and score it as "
+                "`transfer` or `prediction` (low/mid/high). If they nail it, "
+                "pass. If a fluent opener is followed by the wrong direction "
+                "or 'I just followed the steps', that's the rehearsed-recital "
+                "tell — pick needs_practice (some real grasp) or "
+                "flag_for_review (none). Don't finalize pass until the "
+                "conceptual probe is scored."
+            )
+
     check.status = STATUS_COMPLETE
     check.disposition = disposition
     check.overall_summary = summary
