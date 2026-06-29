@@ -61,6 +61,10 @@ export function SolveScreen({
   const [error, setError] = useState<string | null>(null);
   const [quotaConfirm, setQuotaConfirm] = useState(false);
   const [mode, setMode] = useState<Mode>("learn");
+  // Manual region selector defaults to single-problem crop (mirroring web);
+  // a one-tap link switches to multi-area selection. Reset to "crop" each
+  // time the user (re-)enters the selector.
+  const [selectMode, setSelectMode] = useState<"crop" | "multi">("crop");
 
   // Mock test config
   const [examType, setExamType] = useState<"use_as_exam" | "generate_similar">("use_as_exam");
@@ -156,6 +160,12 @@ export function SolveScreen({
     }
     dismissExtraction();
     fetchEntitlements();
+  };
+
+  // Enter the manual region selector fresh in single-problem crop mode.
+  const enterManualSelect = () => {
+    setSelectMode("crop");
+    startManualSelect();
   };
 
   const handleAddToQueue = () => {
@@ -272,19 +282,28 @@ export function SolveScreen({
         error={error}
         hasManualSelect={!!imageDimensions}
         onExtractAll={extractFullImage}
-        onManualSelect={startManualSelect}
+        onManualSelect={enterManualSelect}
         onBack={cancelPreview}
       />
     );
   }
   if (extractionPhase === "selecting" && imageUri && imageDimensions) {
+    const multiMax = Math.max(0, Math.min(10, maxQueueSize - problemQueue.length, scansLeft));
     return (
       <RectangleSelector
         imageUri={imageUri}
         imageDimensions={imageDimensions}
         onConfirm={(rects) => confirmRectangles(rects.map((r) => ({ x: r.x, y: r.y, width: r.width, height: r.height })))}
         onCancel={cancelSelection}
-        maxRectangles={Math.max(0, Math.min(10, maxQueueSize - problemQueue.length, scansLeft))}
+        variant={selectMode}
+        // Crop = one box; still respect a 0-scan quota via min(1, multiMax).
+        maxRectangles={selectMode === "crop" ? Math.min(1, multiMax) : multiMax}
+        onSwitchVariant={
+          // Only offer the multi-area path when there's room for >1 problem.
+          selectMode === "crop" && multiMax <= 1
+            ? undefined
+            : () => setSelectMode((m) => (m === "crop" ? "multi" : "crop"))
+        }
       />
     );
   }
@@ -591,7 +610,7 @@ export function SolveScreen({
         onConfirm={handleConfirmExtraction}
         onDismiss={dismissExtraction}
         onRetry={retryExtraction}
-        onManualSelect={imageUri && imageDimensions ? startManualSelect : undefined}
+        onManualSelect={imageUri && imageDimensions ? enterManualSelect : undefined}
       />
 
     </SafeAreaView>

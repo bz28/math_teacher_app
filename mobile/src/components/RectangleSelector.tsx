@@ -30,6 +30,12 @@ interface RectangleSelectorProps {
   onConfirm: (rectangles: Rectangle[]) => void;
   onCancel: () => void;
   maxRectangles?: number;
+  /** "crop" = one problem (the common case); "multi" = several problems in
+   *  one photo. Drives the copy/CTA only — the cap is set by maxRectangles.
+   *  Mirrors the web RectangleSelector variant. */
+  variant?: "crop" | "multi";
+  /** When provided, shows a one-tap link to switch between crop/multi. */
+  onSwitchVariant?: () => void;
 }
 
 const MIN_SIZE = 30;
@@ -51,12 +57,26 @@ export function RectangleSelector({
   onConfirm,
   onCancel,
   maxRectangles = 10,
+  variant = "multi",
+  onSwitchVariant,
 }: RectangleSelectorProps) {
+  const isCrop = variant === "crop";
   const colors = useColors();
   const gradients = useGradients();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const [rectangles, setRectangles] = useState<Rectangle[]>([]);
+
+  // When the cap shrinks — switching multi→crop (max 1) or a scan quota
+  // dropping — trim boxes beyond it, keeping the first. Mirrors web's
+  // "store info from previous renders" pattern (no cascading re-render).
+  const [prevMax, setPrevMax] = useState(maxRectangles);
+  if (maxRectangles !== prevMax) {
+    setPrevMax(maxRectangles);
+    if (rectangles.length > maxRectangles) {
+      setRectangles(rectangles.slice(0, maxRectangles));
+    }
+  }
   const [interaction, setInteraction] = useState<InteractionMode | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
@@ -356,13 +376,17 @@ export function RectangleSelector({
           <Ionicons name="chevron-back" size={22} color={colors.textOnPrimary} />
         </AnimatedPressable>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Select Problems</Text>
+          <Text style={styles.headerTitle}>{isCrop ? "Crop to Your Problem" : "Select Problems"}</Text>
           <Text style={styles.headerSubtitle}>
-            {rectangles.length === 0
-              ? "Draw around each problem"
-              : remaining > 0
-                ? `${rectangles.length} selected · ${remaining} more available`
-                : `${rectangles.length} selected (max)`}
+            {isCrop
+              ? rectangles.length === 0
+                ? "Drag a box around your problem"
+                : "Adjust the box, then crop"
+              : rectangles.length === 0
+                ? "Draw around each problem"
+                : remaining > 0
+                  ? `${rectangles.length} selected · ${remaining} more available`
+                  : `${rectangles.length} selected (max)`}
           </Text>
         </View>
         <View style={styles.headerBackBtn} />
@@ -459,10 +483,12 @@ export function RectangleSelector({
               pointerEvents="none"
             >
               <View style={styles.onboardingCard}>
-                <Ionicons name="finger-print-outline" size={28} color={colors.primary} />
-                <Text style={styles.onboardingTitle}>Draw to select</Text>
+                <Ionicons name={isCrop ? "crop-outline" : "finger-print-outline"} size={28} color={colors.primary} />
+                <Text style={styles.onboardingTitle}>{isCrop ? "Crop to your problem" : "Draw to select"}</Text>
                 <Text style={styles.onboardingDesc}>
-                  Drag your finger to draw a rectangle{"\n"}around each problem you want to extract
+                  {isCrop
+                    ? "Drag your finger to draw a box\naround the problem you want to solve"
+                    : "Drag your finger to draw a rectangle\naround each problem you want to extract"}
                 </Text>
               </View>
             </Animated.View>
@@ -507,13 +533,27 @@ export function RectangleSelector({
             onConfirm(rectangles);
           }}
           label={
-            rectangles.length === 0
-              ? "Select problems to extract"
-              : `Extract ${rectangles.length} Problem${rectangles.length !== 1 ? "s" : ""}`
+            isCrop
+              ? rectangles.length === 0
+                ? "Draw a box to crop"
+                : "Crop & Solve"
+              : rectangles.length === 0
+                ? "Select problems to extract"
+                : `Extract ${rectangles.length} Problem${rectangles.length !== 1 ? "s" : ""}`
           }
           disabled={rectangles.length === 0}
           style={styles.extractButton}
         />
+
+        {onSwitchVariant && (
+          <AnimatedPressable onPress={onSwitchVariant} style={styles.switchVariantBtn} scaleDown={0.97}>
+            <Text style={styles.switchVariantText}>
+              {isCrop
+                ? "Got several problems in one photo? Select areas"
+                : "Just one problem? Crop to it instead"}
+            </Text>
+          </AnimatedPressable>
+        )}
       </View>
     </View>
   );
@@ -710,5 +750,16 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   extractButton: {
     borderRadius: radii.md,
+  },
+  switchVariantBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing.md,
+    marginTop: spacing.xs,
+  },
+  switchVariantText: {
+    ...typography.label,
+    color: colors.textMuted,
+    fontSize: 13,
   },
 });
