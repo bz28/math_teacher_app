@@ -21,6 +21,7 @@ import { StudentInsightsTab } from "@/components/school/teacher/student-insights
 import { SubmissionsTab } from "@/components/school/teacher/submissions-tab";
 import { GradesTab } from "@/components/school/teacher/grades-tab";
 import { SettingsTab } from "@/components/school/teacher/settings-tab";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type TabKey =
   | "sections"
@@ -251,11 +252,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   useTourAction(TOUR_ACTIONS.gotoGrades, () => setTab("grades"));
 
   if (loading) {
-    return (
-      <div className="mx-auto max-w-6xl font-serif italic text-[16px] text-text-secondary">
-        Loading…
-      </div>
-    );
+    return <CourseWorkspaceSkeleton />;
   }
   if (error || !course) {
     return (
@@ -402,6 +399,44 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
         {tab === "submissions" && <SubmissionsTab courseId={course.id} />}
         {tab === "grades" && <GradesTab courseId={course.id} />}
         {tab === "settings" && <SettingsTab course={course} onChanged={reloadCourse} />}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Initial-load placeholder for the course workspace. Mirrors the real
+ * silhouette — eyebrow back-link, the 40px serif title, the status pill
+ * row, the underlined tab bar, then a content slab — so the first paint
+ * settles into the workspace instead of blanking to "Loading…".
+ */
+function CourseWorkspaceSkeleton() {
+  return (
+    <div className="mx-auto max-w-6xl" aria-busy="true" aria-live="polite">
+      <Skeleton className="h-3 w-24 rounded-[--radius-sm]" />
+      <div className="mt-3 flex items-baseline justify-between gap-4">
+        <Skeleton className="h-9 w-72" />
+        <Skeleton className="h-9 w-9 rounded-[--radius-sm]" />
+      </div>
+      {/* Status pill row */}
+      <div className="mt-4 flex flex-wrap gap-2">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-6 w-28 rounded-[--radius-pill]" />
+        ))}
+      </div>
+      {/* Tab bar */}
+      <div className="mt-8 flex gap-6 border-b border-border-light pb-3">
+        {["w-16", "w-20", "w-[72px]", "w-[68px]", "w-[88px]", "w-[76px]"].map(
+          (w, i) => (
+            <Skeleton key={i} className={`h-4 rounded-[--radius-sm] ${w}`} />
+          ),
+        )}
+      </div>
+      {/* Content slab */}
+      <div className="mt-6 space-y-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-16 w-full rounded-[--radius-lg]" />
+        ))}
       </div>
     </div>
   );

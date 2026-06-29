@@ -31,6 +31,7 @@ import {
 import { GenerateQuestionsModal } from "@/components/school/teacher/question-bank/generate-questions-modal";
 import { GradingSetupCard } from "@/components/school/teacher/_pieces/grading-setup-card";
 import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface AssignmentProblem {
   bank_item_id: string;
@@ -800,8 +801,23 @@ export default function HomeworkDetailPage({
 
       {/* Loading / editing-problems states short-circuit the page */}
       {(loading || !hw) ? (
-        <div className="mt-6 rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-sm">
-          <p className="text-sm text-text-muted">Loading…</p>
+        <div
+          className="mt-6 space-y-3 rounded-[--radius-xl] border border-border-light bg-surface p-8 shadow-sm"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          {/* Mirror the problem-list silhouette so the editor settles in
+              place rather than blanking to "Loading…". */}
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="space-y-2 border-b border-border-light pb-4 last:border-0 last:pb-0"
+            >
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+            </div>
+          ))}
         </div>
       ) : editingProblems ? (
         <div className="mt-6 rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-sm">

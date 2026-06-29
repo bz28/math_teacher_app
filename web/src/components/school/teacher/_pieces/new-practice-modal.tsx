@@ -8,6 +8,7 @@ import {
   type TeacherDocument,
 } from "@/lib/api";
 import { Select } from "@/components/ui";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useDocumentUploads } from "@/hooks/use-document-uploads";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
@@ -478,7 +479,7 @@ function SourceStep({
         {sourceMode === "clone" && (
           <>
             {!hwsLoaded ? (
-              <p className="mt-3 text-[11px] text-text-muted">Loading…</p>
+              <Skeleton className="mt-3 h-9 w-full rounded-[--radius-md]" />
             ) : noClonableHw ? (
               <p className="mt-3 text-[11px] text-text-muted">
                 No homework with problems yet. Create one first, or start

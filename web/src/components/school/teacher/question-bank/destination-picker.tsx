@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { teacher, type TeacherAssignment } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
 import { UnitMultiSelect } from "../_pieces/unit-multi-select";
 
 // Popover that lists draft homeworks and lets the teacher pick one,
@@ -100,7 +101,11 @@ export function DestinationPicker({
       </div>
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
       {drafts === null ? (
-        <p className="mt-2 text-xs text-text-muted">Loading…</p>
+        <div className="mt-2 space-y-1.5" aria-busy="true" aria-live="polite">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-7 w-full rounded-[--radius-sm]" />
+          ))}
+        </div>
       ) : drafts.length === 0 && !creating ? (
         <p className="mt-2 text-xs text-text-muted italic">No draft homeworks yet.</p>
       ) : (

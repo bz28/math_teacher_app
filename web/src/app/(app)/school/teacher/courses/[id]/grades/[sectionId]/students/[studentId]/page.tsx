@@ -6,6 +6,7 @@ import { teacher, type StudentGradesResponse } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 import { PercentBadge } from "@/components/school/shared/percent-badge";
 import { PracticeEngagement } from "@/components/school/teacher/practice-engagement";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /**
  * Grades → Student detail page.
@@ -63,7 +64,7 @@ export default function StudentGradesPage({
     return (
       <div className="mx-auto max-w-4xl px-6 py-8">
         <BackLink href={backHref} />
-        <p className="mt-6 text-sm text-text-muted">Loading…</p>
+        <StudentGradesSkeleton />
       </div>
     );
   }
@@ -135,6 +136,51 @@ function BackLink({ href }: { href: string }) {
     >
       ← Back to Grades
     </Link>
+  );
+}
+
+/**
+ * Initial-load placeholder for the student grades page. Mirrors the real
+ * silhouette — name + section header, the four-stat summary grid, then a
+ * published-homework eyebrow over a few score rows — so the page settles
+ * in place rather than blanking to "Loading…".
+ */
+function StudentGradesSkeleton() {
+  return (
+    <div aria-busy="true" aria-live="polite">
+      <header className="mt-3 space-y-2">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-4 w-40" />
+      </header>
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            className="rounded-[--radius-md] border border-border-light bg-surface p-4"
+          >
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="mt-2 h-7 w-12" />
+          </div>
+        ))}
+      </div>
+      <section className="mt-10">
+        <Skeleton className="h-3 w-40" />
+        <div className="mt-3 space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between rounded-[--radius-md] border border-border-light bg-surface p-4"
+            >
+              <div className="min-w-0 flex-1 space-y-2">
+                <Skeleton className="h-4 w-2/5" />
+                <Skeleton className="h-3 w-1/4" />
+              </div>
+              <Skeleton className="h-6 w-12 rounded-[--radius-pill]" />
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }
 

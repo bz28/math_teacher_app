@@ -13,6 +13,7 @@ import {
   type TeacherSection,
 } from "@/lib/api";
 import { formatRelativeDate } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MeasuredKey } from "./_pieces/measured-key";
 import { PracticeStrugglePanel } from "./practice-struggle-panel";
 
@@ -254,7 +255,7 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
             body="Create a section and enroll students to see their practice insights here."
           />
         ) : loading || students === null ? (
-          <p className="mt-6 text-sm text-text-muted">Loading…</p>
+          <RosterSkeleton />
         ) : students.length === 0 ? (
           <RosterEmpty
             title="No students enrolled"
@@ -380,6 +381,40 @@ function SegChip({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Initial-load placeholder for the per-student roster. Mirrors the real
+ * silhouette — a filter/sort bar above a divided list of student rows
+ * (name + status pill on the left, a trailing signal on the right) — so
+ * the roster settles in place rather than blanking to "Loading…".
+ */
+function RosterSkeleton() {
+  return (
+    <div className="mt-6" aria-busy="true" aria-live="polite">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-light pb-3">
+        <div className="flex items-center gap-1.5">
+          <Skeleton className="h-7 w-24 rounded-[--radius-pill]" />
+          <Skeleton className="h-7 w-20 rounded-[--radius-pill]" />
+        </div>
+        <Skeleton className="h-7 w-28 rounded-[--radius-pill]" />
+      </div>
+      <ul className="mt-1 divide-y divide-border-light">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <li key={i} className="flex items-center gap-4 py-3.5 sm:gap-5">
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div className="flex items-center gap-2.5">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-4 w-16 rounded-[--radius-pill]" />
+              </div>
+              <Skeleton className="h-3 w-1/3" />
+            </div>
+            <Skeleton className="h-4 w-12" />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

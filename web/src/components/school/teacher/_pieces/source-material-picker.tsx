@@ -14,6 +14,7 @@ import {
   UploadIcon,
   XIcon,
 } from "@/components/ui/icons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { fileKind } from "../materials/types";
 import { FilePreviewModal } from "../materials/file-preview-modal";
 
@@ -298,7 +299,18 @@ export function SourceMaterialPicker({
       </div>
 
       {!docsLoaded ? (
-        <p className="mt-2 text-[11px] text-text-muted">Loading…</p>
+        <div
+          className="mt-2 space-y-1.5 rounded-[--radius-md] border border-border-light bg-bg-base p-2"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2 px-1 py-1">
+              <Skeleton className="h-4 w-4 rounded-[--radius-sm]" />
+              <Skeleton className="h-3 flex-1" />
+            </div>
+          ))}
+        </div>
       ) : !hasContent ? (
         <EmptyState onUpload={triggerPicker} disabled={disabled} />
       ) : (

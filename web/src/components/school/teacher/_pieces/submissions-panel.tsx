@@ -20,6 +20,7 @@ import {
 import { ExtractionView } from "@/components/school/shared/extraction-view";
 import { FileTextIcon } from "@/components/ui/icons";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 // ── Disposition badge ──
@@ -484,7 +485,12 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
         )}
       </button>
 
-      {open && loading && <p className="text-xs text-text-muted">Loading…</p>}
+      {open && loading && (
+        <div className="space-y-1.5" aria-busy="true" aria-live="polite">
+          <Skeleton className="h-3 w-3/4" />
+          <Skeleton className="h-3 w-1/2" />
+        </div>
+      )}
       {open && error && <p className="text-xs text-error">{error}</p>}
 
       {open && data && (
@@ -966,7 +972,20 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
           {error && <p className="text-sm text-error">{error}</p>}
 
           {!openId && rows === null && !error && (
-            <p className="text-sm text-text-muted">Loading…</p>
+            <ul className="space-y-2" aria-busy="true" aria-live="polite">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <li
+                  key={i}
+                  className="flex items-center justify-between rounded-[--radius-sm] border border-border bg-surface p-4"
+                >
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-3 w-28" />
+                  </div>
+                  <Skeleton className="h-4 w-16" />
+                </li>
+              ))}
+            </ul>
           )}
 
           {!openId && rows && rows.length === 0 && (
@@ -1012,7 +1031,14 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
           )}
 
           {openId && detailLoading && (
-            <p className="text-sm text-text-muted">Loading…</p>
+            <div className="space-y-6" aria-busy="true" aria-live="polite">
+              <Skeleton className="h-3 w-48" />
+              <Skeleton className="h-56 w-full rounded-[--radius-md]" />
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-2/3" />
+              </div>
+            </div>
           )}
 
           {openId && detail && (
