@@ -773,6 +773,24 @@ async def call_claude_vision(
         thinking_budget, max_tokens, tool_choice_default
     )
 
+    # Build a readable text summary of the input BEFORE the call, so it's
+    # available to log on the FAILURE paths too (binary blocks replaced
+    # with a placeholder). Previously this was built only after success,
+    # so a failed Vision call logged input_text=None → the admin dashboard
+    # showed "(not captured)" for exactly the failures we most need to see.
+    input_parts: list[str] = []
+    for block in user_content:
+        if isinstance(block, dict):
+            if block.get("type") == "text":
+                input_parts.append(str(block["text"]))
+            elif block.get("type") == "image":
+                input_parts.append("[image]")
+            elif block.get("type") == "document":
+                input_parts.append("[document]")
+        else:
+            input_parts.append(str(block))
+    input_summary = "\n".join(input_parts) if input_parts else None
+
     start = time.monotonic()
     try:
         response = await client.messages.create(
@@ -796,21 +814,6 @@ async def call_claude_vision(
             )
         result, resp_text = _extract_tool_result(response, tool_schema)
 
-        # Build a text summary of the input for logging (binary blocks
-        # replaced with a placeholder so logs stay readable).
-        input_parts: list[str] = []
-        for block in user_content:
-            if isinstance(block, dict):
-                if block.get("type") == "text":
-                    input_parts.append(str(block["text"]))
-                elif block.get("type") == "image":
-                    input_parts.append("[image]")
-                elif block.get("type") == "document":
-                    input_parts.append("[document]")
-            else:
-                input_parts.append(str(block))
-        input_summary = "\n".join(input_parts) if input_parts else None
-
         await _log_and_persist(
             use_model, mode,
             response.usage.input_tokens, response.usage.output_tokens,
@@ -828,6 +831,7 @@ async def call_claude_vision(
         await _log_and_persist(
             use_model, mode, 0, 0, latency_ms,
             session_id=session_id, user_id=user_id, success=False,
+            input_text=input_summary, output_text=str(e),
             submission_id=submission_id, call_metadata=call_metadata,
         )
         raise RuntimeError(f"Claude Vision API error: {e}") from e
@@ -843,5 +847,7 @@ async def call_claude_vision(
         await _log_and_persist(
             use_model, mode, 0, 0, latency_ms,
             session_id=session_id, user_id=user_id, success=False,
+            input_text=input_summary, output_text=str(e),
+            submission_id=submission_id, call_metadata=call_metadata,
         )
         raise RuntimeError(f"Failed to parse Claude Vision response: {e}") from e
