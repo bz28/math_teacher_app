@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import uuid
 from typing import Any, Literal, NamedTuple
 
@@ -2157,6 +2158,32 @@ async def _load_problems_for_prompt(
     return out
 
 
+# Matches any angle-bracket form of the <student_message> fence the
+# system prompt relies on to mark untrusted student text — opening or
+# closing, case-insensitive, tolerant of interior whitespace and a
+# missing trailing `>` (e.g. `</student_message>`, `< /STUDENT_MESSAGE >`,
+# `</student_message`). A student who types one of these verbatim could
+# otherwise "close" the fence early and have the rest of their message
+# read as agent-level instructions. We neutralize the brackets so the
+# token can never be parsed as the real delimiter.
+_STUDENT_FENCE_RE = re.compile(
+    r"<\s*/?\s*student_message\s*>?",
+    re.IGNORECASE,
+)
+
+
+def _neutralize_student_fence(content: str) -> str:
+    """Strip the angle brackets off any literal `<student_message>`-style
+    fence a student typed, so only the builder's own delimiters survive.
+
+    Replaces e.g. `</student_message>` with `(student_message)` — the
+    student's apparent text is preserved for the agent to read, but the
+    characters that form the trust-boundary delimiter are gone, so the
+    student can't break out of the fence the system prompt depends on.
+    """
+    return _STUDENT_FENCE_RE.sub("(student_message)", content)
+
+
 def _build_agent_messages(
     briefing: str,
     turns: list[IntegrityConversationTurn],
@@ -2241,9 +2268,15 @@ def _build_agent_messages(
             # system prompt's injection clause can refer to it. The
             # delimiters exist ONLY in the LLM message build — the stored
             # DB turn (t.content) is unchanged.
+            #
+            # First neutralize any `</student_message>`-style fence the
+            # student typed verbatim — otherwise they could close the
+            # delimiter early and inject agent-level instructions after
+            # it. Only the builder's own delimiters may appear.
+            safe_content = _neutralize_student_fence(t.content)
             messages.append({
                 "role": "user",
-                "content": f"<student_message>{t.content}</student_message>",
+                "content": f"<student_message>{safe_content}</student_message>",
             })
             i += 1
             continue
