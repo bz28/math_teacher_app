@@ -60,9 +60,15 @@ export function useImageExtraction(
       : await requestGalleryAccess();
     if (!granted) return;
 
+    // allowsEditing opens the OS crop UI right after capture/pick, so a
+    // student can crop straight to the single problem they're solving — the
+    // common case — without the manual region-selector. (iOS constrains the
+    // crop to a square; that's fine for a single problem and far simpler than
+    // a custom cropper. "Select areas manually" stays as the multi-problem
+    // path.)
     const result = source === "camera"
-      ? await ImagePicker.launchCameraAsync({ base64: false, quality: 0.7, allowsEditing: false })
-      : await ImagePicker.launchImageLibraryAsync({ base64: false, quality: 0.7, allowsEditing: false });
+      ? await ImagePicker.launchCameraAsync({ base64: false, quality: 0.7, allowsEditing: true })
+      : await ImagePicker.launchImageLibraryAsync({ base64: false, quality: 0.7, allowsEditing: true });
 
     if (result.canceled || !result.assets?.length) return;
 
