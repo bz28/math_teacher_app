@@ -122,7 +122,7 @@ export function NewHomeworkModal({
   ) => void;
 }) {
   const { busy, error, setError, run } = useAsyncAction();
-  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
+  const { showUpgrade, UpgradeModal, isUpgradeOpen } = useUpgradePrompt();
   const reduceMotion = useReducedMotion();
 
   const [step, setStep] = useState<Step>(1);
@@ -463,7 +463,10 @@ export function NewHomeworkModal({
   // Backdrop / Escape are suppressed together while a create or upload is
   // mid-flight so a stray dismiss can't orphan an in-flight request.
   const dismissible = !busy && !uploads.hasInflightUploads;
-  const panelRef = useDialogDismiss({ onClose, dismissible });
+  // Suppress this wizard's Escape-to-close while the upgrade prompt is
+  // stacked on top, so Escape dismisses only the prompt — not the whole
+  // wizard (which would discard the teacher's entered title/units/files).
+  const panelRef = useDialogDismiss({ onClose, dismissible: dismissible && !isUpgradeOpen });
 
   // Why the forward / finish button is disabled, surfaced inline next to
   // it (the old modal left the dim button reasonless). Only the

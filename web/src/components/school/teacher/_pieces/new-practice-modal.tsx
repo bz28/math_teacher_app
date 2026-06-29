@@ -69,7 +69,7 @@ export function NewPracticeModal({
     seeded ? "scratch" : "clone",
   );
   const { busy, error, setError, run } = useAsyncAction();
-  const { showUpgrade, UpgradeModal } = useUpgradePrompt();
+  const { showUpgrade, UpgradeModal, isUpgradeOpen } = useUpgradePrompt();
 
   // ── Step 1 state (clone-mode only) ──
   const [hws, setHws] = useState<TeacherAssignment[]>([]);
@@ -262,7 +262,9 @@ export function NewPracticeModal({
   // Backdrop / Escape suppressed together while a request or upload is
   // mid-flight so a stray dismiss can't orphan an in-flight create.
   const dismissible = !busy && !uploads.hasInflightUploads;
-  const panelRef = useDialogDismiss({ onClose, dismissible });
+  // Suppress Escape-to-close while the upgrade prompt is stacked on top,
+  // so Escape dismisses only the prompt — not the whole wizard.
+  const panelRef = useDialogDismiss({ onClose, dismissible: dismissible && !isUpgradeOpen });
 
   // Why the step-1 clone action is disabled, surfaced inline beside it.
   // Steps 2–3 validate on click (so their buttons aren't pre-disabled),
