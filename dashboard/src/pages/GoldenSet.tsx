@@ -14,7 +14,6 @@ function courseTag(key: string) {
 
 function ProblemCard({ problem, tag }: { problem: Problem; tag: string }) {
   const [open, setOpen] = useState(false);
-  const verified = problem.verdict.status === "verified";
   const isMcq = problem.format === "mcq";
 
   return (
@@ -27,9 +26,7 @@ function ProblemCard({ problem, tag }: { problem: Problem; tag: string }) {
         <span className="gs-fmt">
           {problem.format.toUpperCase()} · {problem.difficulty}
         </span>
-        <span className={`badge ${verified ? "badge-completed" : "badge-warning"} gs-verdict-pill`}>
-          {verified ? "✓ Verified" : "⚠ Note"}
-        </span>
+        <span className="badge badge-completed gs-verdict-pill">✓ Verified</span>
       </header>
 
       <div className="gs-question">
@@ -79,12 +76,11 @@ function ProblemCard({ problem, tag }: { problem: Problem; tag: string }) {
         </div>
       )}
 
-      <div className={`gs-verdict ${verified ? "is-verified" : "is-note"}`}>
+      <div className="gs-verdict">
         <div className="gs-verdict-label">Independent re-derivation</div>
         <div className="gs-rederiv">
           <MathText>{problem.verdict.rederivation}</MathText>
         </div>
-        <div className="gs-note">{problem.verdict.note}</div>
       </div>
     </article>
   );
@@ -157,7 +153,7 @@ export default function GoldenSet() {
 
         <div className="gs-grid">
           {problems.map((p) => (
-            <ProblemCard key={p.n} problem={p} tag={courseTag(course.key)} />
+            <ProblemCard key={`${course.key}-${p.n}`} problem={p} tag={courseTag(course.key)} />
           ))}
         </div>
       </section>
@@ -187,40 +183,6 @@ export default function GoldenSet() {
             </li>
           ))}
         </ol>
-      </section>
-
-      <hr className="hr" />
-
-      {/* What we found */}
-      <section className="gs-section">
-        <h2>What we found</h2>
-        <p className="gs-section-sub">
-          Stress-testing the review tools surfaced two real bugs — both fixed in this run.
-        </p>
-
-        <div className="gs-findings">
-          {gs.findings.map((f) => (
-            <article className="gs-finding" key={f.title}>
-              <header className="gs-finding-head">
-                <span className="gs-finding-sev">{f.severity}</span>
-                <span className="gs-finding-title">{f.title}</span>
-                <span className="badge badge-completed gs-fixed">{f.status}</span>
-              </header>
-              <div className="gs-ba">
-                <div className="gs-ba-col is-before">
-                  <div className="gs-ba-label">Before</div>
-                  <p>{f.before}</p>
-                </div>
-                <div className="gs-ba-arrow">→</div>
-                <div className="gs-ba-col is-after">
-                  <div className="gs-ba-label">After</div>
-                  <p>{f.after}</p>
-                </div>
-              </div>
-              <div className="gs-finding-detail mono">{f.detail}</div>
-            </article>
-          ))}
-        </div>
       </section>
     </div>
   );

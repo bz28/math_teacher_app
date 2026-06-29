@@ -10,7 +10,12 @@ type Seg = { type: "text" | "inline" | "display"; value: string };
 
 function tokenize(text: string): Seg[] {
   const segs: Seg[] = [];
-  const re = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$/g;
+  // Delimiters are UNescaped `$` / `$$`. Math content may legitimately contain
+  // an escaped `\$` (currency, e.g. "rate $\$0.08$") or LaTeX commands like
+  // `\frac` — so consume `\\.` (a backslash + its char) as one unit and never
+  // split on an escaped dollar. Without this the escaped `$` is read as a
+  // closing delimiter and the segment renders as garbage.
+  const re = /(?<!\\)\$\$((?:\\.|[^$])+?)\$\$|(?<!\\)\$((?:\\.|[^$\n])+?)\$/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
@@ -28,7 +33,7 @@ function renderMath(latex: string, display: boolean): string {
     return katex.renderToString(latex, {
       throwOnError: false,
       displayMode: display,
-      output: "html",
+      // default output (htmlAndMathml) keeps the MathML layer for screen readers
     });
   } catch {
     return latex;
