@@ -2,6 +2,8 @@
 
 import json
 import logging
+import secrets
+import uuid
 from datetime import UTC, datetime
 
 import stripe
@@ -37,7 +39,10 @@ def _verify_webhook_secret(authorization: str | None) -> None:
             logger.debug("Webhook secret not configured, skipping verification (dev mode)")
             return
         raise ValueError("Webhook secret not configured")
-    if authorization != f"Bearer {secret}":
+    # Constant-time comparison — a plain `!=` short-circuits on the first
+    # differing byte, leaking the secret's length/prefix via timing.
+    expected = f"Bearer {secret}"
+    if authorization is None or not secrets.compare_digest(authorization, expected):
         logger.warning("Webhook authorization failed")
         raise ValueError("Invalid webhook authorization")
 
@@ -77,8 +82,18 @@ async def revenuecat_webhook(
         logger.warning("Event missing app_user_id: %s", event_type)
         return {"status": "ok"}
 
+    # app_user_id is attacker/3rd-party-controlled; User.id is a UUID column, so
+    # a malformed value would raise inside the DB layer (uncaught 500). Parse it
+    # first and skip gracefully — RevenueCat retries only on 5xx, so 200 here
+    # avoids a redelivery loop for a permanently-bad id.
+    try:
+        user_uuid = uuid.UUID(str(app_user_id))
+    except ValueError:
+        logger.warning("Event has non-UUID app_user_id: %s", app_user_id)
+        return {"status": "ok"}
+
     # Look up user
-    result = await db.execute(select(User).where(User.id == app_user_id))
+    result = await db.execute(select(User).where(User.id == user_uuid))
     user = result.scalar_one_or_none()
     if user is None:
         logger.warning("User not found for webhook: user_id=%s", app_user_id)
