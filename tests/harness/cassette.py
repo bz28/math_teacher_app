@@ -33,9 +33,25 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
+
+# Canonical-UUID token: a DB-driven probe (e.g. integrity) creates fresh
+# rows each run, so a random row PK like the integrity `problem_id` leaks
+# into the agent's prompt/transcript and would change the cassette key on
+# every run — defeating $0 replay. We redact any standard 8-4-4-4-12 UUID
+# in the hashed key payload to a fixed token so the key is stable across
+# runs. Distinct calls still hash distinctly: turns differ by their text
+# (growing transcript) and cases differ by their question text, not by the
+# UUID alone, so redaction can't collapse two real calls onto one key. A
+# payload with no UUID (grading/geometry/etc.) is unchanged byte-for-byte,
+# so existing committed cassette keys are unaffected.
+_UUID_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+)
 
 # Sentinel for "no cassette on disk" — distinct from a recorded `None`.
 MISS: Any = object()
@@ -92,6 +108,9 @@ class Cassette:
         payload = json.dumps(
             {"fn": fn_name, **identity}, sort_keys=True, default=str,
         )
+        # Redact random row UUIDs so a DB-driven probe replays at $0 (see
+        # _UUID_RE). No-op on payloads without a UUID.
+        payload = _UUID_RE.sub("<uuid>", payload)
         return hashlib.sha256(payload.encode()).hexdigest()[:32]
 
     def _file(self, fn_name: str) -> Path:

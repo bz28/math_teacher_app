@@ -648,6 +648,37 @@ def _summarize_last_user_message(
     return None
 
 
+def _serialize_content_blocks(blocks: list[Any]) -> list[dict[str, Any]]:
+    """Reduce Anthropic response content blocks to JSON-native dicts.
+
+    `call_claude_conversation` returns these dicts (not the SDK block
+    objects) so the record/replay cassette can store + reload them
+    losslessly — the SDK's pydantic blocks don't survive the cassette's
+    `json.dumps(default=str)` round-trip. The shape mirrors exactly what
+    the integrity agent loop reads off each block via getattr:
+    `type` / `text` for text blocks, `type` / `id` / `name` / `input`
+    for tool_use blocks. Any other block kind (e.g. a thinking block)
+    is preserved by `type` alone; the agent loop ignores it.
+    """
+    out: list[dict[str, Any]] = []
+    for b in blocks:
+        btype = getattr(b, "type", None)
+        if btype == "text":
+            out.append({"type": "text", "text": getattr(b, "text", "") or ""})
+        elif btype == "tool_use":
+            raw_input = getattr(b, "input", {})
+            out.append({
+                "type": "tool_use",
+                "id": getattr(b, "id", "") or "",
+                "name": getattr(b, "name", "") or "",
+                "input": raw_input if isinstance(raw_input, dict) else {},
+            })
+        else:
+            out.append({"type": btype})
+    return out
+
+
+@_cassetted(default_model=MODEL_REASON)
 async def call_claude_conversation(
     system_prompt: str,
     messages: list[dict[str, Any]],
@@ -658,14 +689,29 @@ async def call_claude_conversation(
     user_id: str | None = None,
     model: str | None = None,
     max_tokens: int = 400,
+    temperature: float | None = None,
     submission_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
-) -> list[Any]:
+) -> list[dict[str, Any]]:
     """Run one conversational turn with multiple tools available and
     `tool_choice="auto"` — the model picks between replying in text,
-    calling a tool, or both. Returns the raw `response.content` list
-    of content blocks so the caller can inspect text + tool_use and
-    decide how to proceed.
+    calling a tool, or both. Returns the assistant's content blocks as
+    JSON-native dicts (text → `{type, text}`, tool_use →
+    `{type, id, name, input}`) so the caller can inspect text + tool_use
+    and decide how to proceed.
+
+    The dict (not SDK-object) return is what lets the test harness
+    record + replay this multi-turn agent at $0: each turn's cassette
+    key is a hash of this call's identity (system_prompt + the full
+    `messages` transcript + tool_schemas + model + max_tokens +
+    temperature), so a branching conversation replays turn-by-turn
+    because every turn sends a distinct, growing transcript. See the
+    `@_cassetted` decorator + `tests/harness/cassette.py`.
+
+    `temperature` (if set) pins the sampling temperature — 0.0 makes the
+    agent's verdict reproducible across runs. This path passes no
+    `thinking` kwarg (extended thinking would force temperature 1.0), so
+    a custom temperature is always safe here — no guard needed.
 
     Unlike `call_claude_json`, this helper does NOT force any
     particular tool. Callers handle tool_use blocks themselves and
@@ -692,6 +738,9 @@ async def call_claude_conversation(
         }
         for s in tool_schemas
     ]
+    temp_kwargs: dict[str, Any] = (
+        {} if temperature is None else {"temperature": temperature}
+    )
 
     start = time.monotonic()
     try:
@@ -703,6 +752,7 @@ async def call_claude_conversation(
             tools=tools,
             tool_choice={"type": "auto"},
             timeout=90.0,
+            **temp_kwargs,
         )
         latency_ms = round((time.monotonic() - start) * 1000, 2)
 
@@ -724,7 +774,7 @@ async def call_claude_conversation(
             submission_id=submission_id, call_metadata=call_metadata,
         )
         _circuit.record_success()
-        return list(response.content)
+        return _serialize_content_blocks(list(response.content))
 
     except (anthropic.APITimeoutError, anthropic.APIError) as e:
         latency_ms = round((time.monotonic() - start) * 1000, 2)
