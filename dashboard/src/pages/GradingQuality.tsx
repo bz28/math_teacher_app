@@ -115,9 +115,10 @@ function VerdictHero({ summary }: { summary: GradingQualityData["summary"] }) {
   );
 }
 
-/** AI's call (rows) → teacher's final call (columns). The top-right
- *  triangle is where teachers raised grades (AI too harsh); the bottom-
- *  left is where they lowered them. The diagonal is agreement. */
+/** AI's call (rows, full→zero top to bottom) → teacher's final call
+ *  (columns, full→zero left to right). The top-right triangle is where
+ *  teachers LOWERED grades (AI too generous); the bottom-left is where
+ *  they RAISED them (AI too harsh). The diagonal is agreement. */
 function StatusMatrix({ cells }: { cells: GradingQualityData["status_matrix"] }) {
   const lookup = useMemo(() => {
     const m: Record<string, number> = {};
