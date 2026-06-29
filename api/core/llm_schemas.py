@@ -894,10 +894,64 @@ AI_GRADING_SCHEMA: ToolSchema = {
                                 "the system prompt for voice rules and examples."
                             ),
                         },
+                        "deductions": {
+                            "type": "array",
+                            "description": (
+                                "Itemized point-deduction ledger that RECONCILES to "
+                                "`percent`: 100 minus the sum of every entry's "
+                                "`points_off` must equal `percent`. For FULL credit "
+                                "emit an empty list `[]` (nothing was taken off). For "
+                                "PARTIAL, list one entry per distinct thing that lost "
+                                "points so the entries sum to (100 - percent). For "
+                                "ZERO, the entries sum to ~100 (a single 'no valid "
+                                "work' / 'final answer wrong' item is fine). Each "
+                                "entry cites the rubric criterion that drove it and, "
+                                "where the deduction is about a specific written step, "
+                                "the step it refers to."
+                            ),
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "points_off": {
+                                        "type": "integer",
+                                        "description": (
+                                            "Points removed for this issue, on the "
+                                            "0-100 percent scale. Positive integer. "
+                                            "All entries' points_off sum to "
+                                            "(100 - percent)."
+                                        ),
+                                    },
+                                    "reason": {
+                                        "type": "string",
+                                        "description": (
+                                            "Concise, teacher-facing reason for this "
+                                            "deduction, naming the rubric criterion "
+                                            "(e.g. 'Arithmetic slip dividing 15/3 — "
+                                            "Partial credit: small execution error'). "
+                                            "One short phrase, not a paragraph."
+                                        ),
+                                    },
+                                    "step_ref": {
+                                        "type": ["integer", "null"],
+                                        "description": (
+                                            "The `step_num` of the student's extracted "
+                                            "work this deduction is about, for the "
+                                            "review UI to highlight that step. Null "
+                                            "when the deduction isn't tied to one "
+                                            "specific step (e.g. 'no work shown', "
+                                            "'final answer wrong')."
+                                        ),
+                                    },
+                                },
+                                "required": ["points_off", "reason", "step_ref"],
+                                "additionalProperties": False,
+                            },
+                        },
                     },
                     "required": [
                         "problem_position", "student_answer", "score_status",
                         "percent", "confidence", "reasoning", "student_feedback",
+                        "deductions",
                     ],
                     "additionalProperties": False,
                 },
