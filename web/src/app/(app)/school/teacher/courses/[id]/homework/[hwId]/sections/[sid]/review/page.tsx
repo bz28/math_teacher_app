@@ -601,6 +601,18 @@ function HomeworkSectionReview({
         status === "full" ? 100 : status === "zero" ? 0 : (partialPercent ?? 50);
       const prior = detail.breakdown ?? [];
       const existing = prior.find((b) => b.problem_id === problemId);
+      // The AI's itemized ledger justifies the AI's number. Carry it
+      // forward only when this write leaves the score untouched — i.e.
+      // confirming the AI grade (same status + percent). The moment the
+      // teacher overrides to a different grade, drop the ledger: it no
+      // longer reconciles to the new number, and showing it would imply
+      // the AI justified the teacher's call. The immutable ai_breakdown
+      // keeps the AI's record regardless. The backend re-checks this same
+      // reconciliation as a safety net.
+      const keepDeductions =
+        existing?.deductions != null &&
+        existing.score_status === status &&
+        Math.round(existing.percent) === Math.round(percent);
       const nextEntry: GradeBreakdownEntry = {
         problem_id: problemId,
         score_status: status,
@@ -613,6 +625,7 @@ function HomeworkSectionReview({
         // a grade that already matches the published snapshot.
         confidence: existing?.confidence ?? null,
         feedback: existing?.feedback ?? null,
+        deductions: keepDeductions ? existing!.deductions : null,
       };
       const nextBreakdown = existing
         ? prior.map((b) => (b.problem_id === problemId ? nextEntry : b))
