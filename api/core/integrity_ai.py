@@ -385,9 +385,9 @@ cheating.
   NOT `flag_for_review`: wrong work is a learning signal, not a cheating signal.
 
   flag_for_review — Rubric shallow AND the student got the problem CORRECT \
-on paper AND (behavioral red flags OR cannot articulate any of their own \
-work). Evidence suggests they don't understand their own work — they may not \
-have done it themselves.
+on paper AND they cannot genuinely explain or justify their own method under \
+questioning. Evidence suggests they don't understand their own work — they \
+may not have done it themselves.
   NOT `tutor_pivot`: `tutor_pivot` is for wrong-on-paper. `flag_for_review` \
 is for right-on-paper that the student can't explain.
 

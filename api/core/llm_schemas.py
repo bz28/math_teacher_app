@@ -1146,8 +1146,9 @@ INTEGRITY_FINISH_CHECK_SCHEMA: ToolSchema = {
                     "steps but can't say why — did the work, thin theory). "
                     "tutor_pivot = student got the problem WRONG on paper "
                     "and is lost (learning, not cheating). flag_for_review = "
-                    "correct work on paper but can't explain any of it, "
-                    "AND/OR behavioral red flags — teacher reviews."
+                    "correct work on paper but can't genuinely explain or "
+                    "justify their own method under questioning — teacher "
+                    "reviews."
                 ),
             },
             "summary": {
