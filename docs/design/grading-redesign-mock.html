@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en" data-subject="math">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grading review — redesign mock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,500;1,9..144,600&family=Caveat:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* ── Tokens lifted from web/src/app/globals.css (math / light) ── */
+  :root{
+    --primary:#0E5238; --primary-light:#2F8F66; --primary-bg:#E6F0EA; --primary-dark:#0A3D2A;
+    --success:#4A6B3A; --success-light:#E8EAD9; --success-border:#C4CCA8;
+    --error:#8A2317; --error-light:#F0D7D1; --error-border:#D9B5AE;
+    --warning:#A66B15; --warning-dark:#8C5610; --warning-bg:#F5E8C7;
+    --info:#3D5A78; --info-light:#DDE6EF; --info-border:#B5C2D1;
+    --text:#14130F; --text-secondary:#5C554C; --text-muted:#7D7669;
+    --bg:#F7F5F0; --card:#FCFAF4; --surface:#FCFAF4; --surface-alt:#F7F5F0; --surface-alt-2:#EFECE4;
+    --border:rgba(20,19,15,0.18); --border-light:rgba(20,19,15,0.10);
+    --shadow-sm:0 1px 2px rgba(20,19,15,0.04);
+    --shadow-md:0 4px 12px rgba(20,19,15,0.06);
+    --shadow-lg:0 8px 24px rgba(20,19,15,0.10);
+    --r-sm:4px; --r-md:6px; --r-lg:10px; --r-xl:14px; --r-pill:100px;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'Inter',system-ui,sans-serif;
+    font-variant-numeric:tabular-nums; font-feature-settings:"tnum";
+  }
+  .serif{font-family:'Instrument Serif',Georgia,serif; letter-spacing:-0.01em;}
+  .mono{font-family:'Geist Mono','SF Mono',monospace;}
+  .eyebrow{font-size:11px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-secondary);}
+  .micro{font-size:10px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:var(--text-secondary);}
+
+  .wrap{max-width:1280px;margin:0 auto;padding:14px 24px 48px;}
+
+  /* header */
+  .back{font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);text-decoration:none;}
+  .h1{font-family:'Instrument Serif',Georgia,serif;font-size:34px;line-height:1.1;letter-spacing:-0.015em;color:var(--text);margin:10px 0 0;}
+  .headrow{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-top:8px;}
+  .publish{background:var(--primary);color:#fff;border:none;border-radius:var(--r-md);padding:9px 16px;font-size:12px;font-weight:700;box-shadow:var(--shadow-sm);cursor:pointer;}
+  .subhead{margin-top:6px;font-size:12.5px;color:var(--text-secondary);}
+  .subhead b{color:var(--text);font-weight:700;}
+
+  /* 3-col layout: roster | grade column | pinned photo */
+  .grid{display:grid;grid-template-columns:248px minmax(0,1fr) 372px;gap:20px;margin-top:18px;align-items:start;position:relative;}
+
+  /* ── Roster ── */
+  .roster{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-xl);box-shadow:var(--shadow-sm);overflow:hidden;}
+  .roster-h{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--border-light);}
+  .legend{font-size:10px;font-weight:600;color:var(--text-muted);border:1px solid var(--border-light);border-radius:var(--r-pill);padding:2px 8px;}
+  .group-h{display:flex;align-items:center;gap:7px;padding:9px 14px 5px;}
+  .group-h .lbl{font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;}
+  .group-h.eyes .lbl{color:var(--warning-dark);}
+  .group-h.calm .lbl{color:var(--text-muted);}
+  .group-h .ct{margin-left:auto;font-size:10px;font-weight:700;color:var(--text-muted);}
+  .group-rule{height:1px;background:var(--border-light);margin:5px 14px 0;}
+
+  .srow{display:block;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--border-light);padding:9px 14px 10px;cursor:pointer;}
+  .srow:hover{background:var(--surface-alt-2);}
+  .srow.sel{background:var(--primary-bg);box-shadow:inset 3px 0 0 0 var(--primary);}
+  .srow-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;}
+  .srow-name{font-size:13.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .srow-score{font-size:12px;font-weight:700;}
+  .srow-score.pub{color:var(--success);}
+  .srow-score.un{color:var(--text-secondary);}
+  .srow-meta{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:11px;color:var(--text-muted);}
+  .dot{width:6px;height:6px;border-radius:50%;flex:none;}
+  .chip{display:inline-flex;align-items:center;gap:4px;margin-top:6px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:var(--r-pill);}
+  .chip.low{background:var(--warning-bg);color:var(--warning-dark);border:1px solid rgba(166,107,21,.3);}
+  .chip.flag{background:var(--error-light);color:var(--error);border:1px solid var(--error-border);}
+  .chip.med{background:var(--surface-alt-2);color:var(--text-secondary);}
+  .review-mk{display:flex;align-items:center;gap:5px;margin-top:5px;font-size:10px;font-weight:600;}
+  .review-mk.ok{color:var(--success);}
+  .review-mk.no{color:var(--text-muted);}
+
+  /* ── Grade column ── */
+  .col{min-width:0;display:flex;flex-direction:column;gap:14px;}
+
+  .strip{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-md);padding:10px 14px;box-shadow:var(--shadow-sm);}
+  .strip .nm{font-size:13.5px;font-weight:700;color:var(--text);}
+  .strip .em{font-size:12px;color:var(--text-muted);margin-left:8px;}
+  .strip .sub{font-size:11px;color:var(--text-muted);margin-top:2px;}
+  .strip .sub .ai{color:var(--text);font-weight:600;}
+  .strip-actions{display:flex;align-items:center;gap:10px;flex:none;}
+  .pinbtn{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--primary);background:var(--primary-bg);border:1px solid rgba(14,82,56,.3);border-radius:var(--r-md);padding:6px 11px;cursor:pointer;}
+  .nextbtn{font-size:12px;font-weight:700;color:var(--primary);background:var(--primary-bg);border:1px solid rgba(14,82,56,.3);border-radius:var(--r-md);padding:7px 13px;cursor:pointer;}
+
+  /* integrity banner */
+  .integrity{display:flex;align-items:flex-start;gap:11px;border:1px solid var(--success-border);background:var(--success-light);border-radius:var(--r-xl);padding:12px 13px;}
+  .integrity .ico{width:24px;height:24px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;background:#fff;color:var(--success);}
+  .integrity .t{font-size:13px;font-weight:700;color:var(--text);}
+  .integrity .d{font-size:11.5px;line-height:1.5;color:var(--text-secondary);margin-top:3px;}
+  .integrity .view{margin-left:auto;flex:none;font-size:11px;font-weight:600;color:var(--text-secondary);border:1px solid var(--border-light);background:var(--surface);border-radius:var(--r-md);padding:6px 10px;cursor:pointer;}
+
+  /* problems card */
+  .pcard{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-xl);padding:16px;box-shadow:var(--shadow-sm);}
+  .pcard-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;}
+  .pcard-h .kbd-hint{font-size:10px;color:var(--text-muted);}
+  .kbd{display:inline-flex;min-width:18px;justify-content:center;align-items:center;border:1px solid var(--border-light);background:var(--surface-alt-2);border-radius:var(--r-sm);padding:1px 5px;font-family:'Geist Mono',monospace;font-size:10px;font-weight:700;color:var(--text-secondary);box-shadow:var(--shadow-sm);}
+
+  .triage-note{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--text-secondary);margin-bottom:12px;padding:8px 11px;background:var(--surface-alt-2);border-radius:var(--r-md);}
+  .triage-note b{color:var(--text);font-weight:700;}
+
+  /* collapsed confident row */
+  .prow{border:1px solid var(--border-light);border-radius:var(--r-md);background:rgba(252,250,244,.5);margin-bottom:9px;}
+  .collapsed{display:flex;align-items:center;gap:12px;padding:11px 13px;cursor:pointer;}
+  .collapsed:hover{background:var(--surface-alt-2);}
+  .collapsed.confirmed{background:rgba(74,107,58,.06);border-color:var(--success-border);}
+  .qno{font-size:11px;font-weight:700;color:var(--text-muted);flex:none;width:26px;}
+  .qtxt{font-size:12.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
+  .ai-tag{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:.04em;color:var(--text-muted);flex:none;}
+  .ai-tag .v{padding:1px 7px;border-radius:var(--r-pill);font-weight:800;}
+  .v.full{background:#22a06b;color:#fff;}
+  .v.zero{background:var(--error-light);color:var(--error);border:1px solid var(--error-border);}
+  .v.partial{background:var(--warning);color:#fff;}
+  .conf-dot{width:6px;height:6px;border-radius:50%;background:var(--success);display:inline-block;}
+  .confirm-cta{flex:none;display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;border-radius:var(--r-md);padding:5px 10px;cursor:pointer;}
+  .confirm-cta.todo{color:var(--primary);background:var(--primary-bg);border:1px solid rgba(14,82,56,.35);}
+  .confirm-cta.done{color:var(--success);background:rgba(74,107,58,.1);border:1px solid rgba(74,107,58,.3);cursor:default;}
+
+  /* expanded uncertain row */
+  .expanded{border:1px solid rgba(166,107,21,.45);border-radius:var(--r-md);background:var(--surface);box-shadow:inset 3px 0 0 0 var(--warning),0 1px 2px rgba(20,19,15,.04);padding:15px;margin-bottom:9px;}
+  .exp-head{display:flex;align-items:baseline;gap:9px;}
+  .exp-q{font-size:13.5px;color:var(--text);font-weight:500;}
+  .uncertain-flag{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--warning-dark);background:var(--warning-bg);border:1px solid rgba(166,107,21,.3);border-radius:var(--r-pill);padding:2px 8px;margin-left:auto;flex:none;}
+  .ans-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;}
+  .ans-grid .lab{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--text-secondary);}
+  .ans-box{margin-top:4px;background:var(--surface-alt);border:1px solid var(--border-light);border-radius:var(--r-sm);padding:6px 9px;font-size:13px;}
+  .ans-box.miss{color:var(--error);font-weight:600;}
+  .ans-box.key{color:var(--text);}
+
+  /* ── Itemized receipt (deduction ledger) ── */
+  .receipt{margin-top:13px;border:1px solid var(--border-light);border-radius:var(--r-md);background:var(--surface-alt);overflow:hidden;}
+  .receipt-h{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-bottom:1px dashed var(--border);}
+  .receipt-h .ttl{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text-secondary);}
+  .receipt-h .ai{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;}
+  .ledger{padding:4px 0;}
+  .lrow{display:flex;align-items:center;gap:10px;padding:6px 12px;font-size:12.5px;}
+  .lrow .mk{flex:none;width:16px;height:16px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;}
+  .lrow .mk.ok{background:var(--success-light);color:var(--success);border:1px solid var(--success-border);}
+  .lrow .desc{flex:1;color:var(--text);}
+  .lrow .desc .step-ref{font-weight:600;}
+  .lrow .amt{flex:none;font-family:'Geist Mono',monospace;font-weight:600;font-size:12px;}
+  .lrow.credit .amt{color:var(--success);}
+  .lrow.debit .amt{color:var(--error);}
+  /* anchored deduction lines */
+  .lrow.anchor{background:rgba(166,107,21,.07);border-radius:var(--r-sm);margin:1px 6px;padding:7px 8px;}
+  .lrow.anchor .mk{background:var(--warning-bg);color:var(--warning-dark);border:1px solid rgba(166,107,21,.45);}
+  .lrow.anchor.b .mk{background:var(--info-light);color:var(--info);border:1px solid var(--info-border);}
+  .lrow.anchor.b{background:rgba(61,90,120,.06);}
+  .anchor-link{font-size:10px;font-weight:700;color:var(--warning-dark);display:inline-flex;align-items:center;gap:3px;}
+  .anchor-link.b{color:var(--info);}
+  .receipt-total{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-top:1px dashed var(--border);background:var(--surface);}
+  .receipt-total .lbl{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-secondary);}
+  .receipt-total .sum{display:flex;align-items:baseline;gap:8px;}
+  .receipt-total .calc{font-family:'Geist Mono',monospace;font-size:11px;color:var(--text-muted);}
+  .receipt-total .pct{font-family:'Geist Mono',monospace;font-size:18px;font-weight:700;color:var(--warning-dark);}
+
+  .conf-band{display:inline-flex;align-items:center;gap:6px;margin-top:11px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--warning-dark);background:var(--warning-bg);border:1px solid rgba(166,107,21,.3);border-radius:var(--r-pill);padding:3px 9px;}
+
+  /* grade buttons */
+  .gbtns{display:flex;align-items:center;gap:8px;margin-top:13px;flex-wrap:wrap;}
+  .gbtn{font-size:12px;font-weight:700;border-radius:var(--r-md);padding:7px 15px;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);position:relative;}
+  .gbtn .k{font-family:'Geist Mono',monospace;font-size:9px;opacity:.6;margin-left:5px;}
+  .gbtn.aipick{border-color:rgba(14,82,56,.4);background:var(--primary-bg);color:var(--text);}
+  .gbtn.active.green{background:#22a06b;border-color:#22a06b;color:#fff;}
+  .gbtn.active.amber{background:var(--warning);border-color:var(--warning);color:#fff;}
+  .gbtn.active.red{background:var(--error-light);border-color:var(--error);color:var(--error);}
+  .partial-in{display:inline-flex;align-items:center;gap:2px;border:1px solid rgba(166,107,21,.3);background:var(--warning-bg);color:var(--warning-dark);border-radius:var(--r-md);padding:6px 9px;font-size:12px;font-weight:700;font-family:'Geist Mono',monospace;}
+  .fb{margin-top:13px;}
+  .fb .lab{font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--text-secondary);}
+  .fb .lab span{font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);}
+  .fb textarea,.fb .ta{width:100%;margin-top:5px;border:1px solid var(--border-light);background:var(--surface);border-radius:var(--r-sm);padding:8px 10px;font-size:12px;line-height:1.5;color:var(--text);font-family:inherit;resize:vertical;min-height:54px;}
+
+  /* ── Pinned photo panel ── */
+  .photo{position:sticky;top:14px;background:var(--surface);border:1px solid var(--border-light);border-radius:var(--r-xl);box-shadow:var(--shadow-md);overflow:hidden;}
+  .photo-h{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 13px;border-bottom:1px solid var(--border-light);}
+  .photo-h .ttl{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text-secondary);}
+  .photo-h .tools{display:flex;gap:6px;}
+  .ptool{font-size:11px;font-weight:600;color:var(--text-muted);border:1px solid var(--border-light);background:var(--surface);border-radius:var(--r-sm);padding:3px 8px;cursor:pointer;}
+  .ptool.on{color:var(--primary);background:var(--primary-bg);border-color:rgba(14,82,56,.3);}
+  .paper{position:relative;height:560px;overflow:hidden;background:
+      repeating-linear-gradient(to bottom,transparent,transparent 33px,rgba(61,90,120,.14) 33px,rgba(61,90,120,.14) 34px),
+      linear-gradient(#fdfcf7,#fbf9f2);
+    border-left:34px solid #fbeae6; box-shadow:inset 1px 0 0 rgba(216,80,60,.35);}
+  .paper .pg-tag{position:absolute;top:8px;right:12px;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);}
+  .hw{position:absolute;left:14px;right:14px;font-family:'Caveat',cursive;color:#243b6b;font-size:25px;line-height:34px;}
+  .hw .ln{height:34px;white-space:nowrap;}
+  .hw .sub{color:#6b7280;font-size:21px;}
+  /* highlight overlays (anchored) */
+  .hl{position:absolute;border-radius:5px;}
+  .hl.amber{background:rgba(166,107,21,.16);border:1.5px solid rgba(166,107,21,.6);box-shadow:0 0 0 3px rgba(166,107,21,.08);}
+  .hl.info{background:rgba(61,90,120,.14);border:1.5px solid rgba(61,90,120,.55);box-shadow:0 0 0 3px rgba(61,90,120,.07);}
+  .hl .badge{position:absolute;top:-9px;left:-9px;width:18px;height:18px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-family:'Inter';font-size:10px;font-weight:800;color:#fff;}
+  .hl.amber .badge{background:var(--warning);}
+  .hl.info .badge{background:var(--info);}
+  .hl .tip{position:absolute;font-family:'Inter';font-size:9.5px;font-weight:700;white-space:nowrap;padding:2px 7px;border-radius:var(--r-pill);}
+  .hl.amber .tip{right:-6px;top:-12px;background:var(--warning-dark);color:#fff;}
+  .hl.info .tip{right:-6px;bottom:-12px;background:var(--info);color:#fff;}
+
+  /* SVG connector overlay */
+  #connector{position:absolute;inset:0;pointer-events:none;z-index:5;overflow:visible;}
+
+  .footnote{margin-top:24px;font-size:11px;color:var(--text-muted);text-align:center;font-style:italic;}
+  .footnote .serif{font-style:italic;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="#">← Back to submissions</a>
+  <div class="headrow">
+    <div>
+      <h1 class="h1">Linear Equations · Period 3</h1>
+      <p class="subhead">Reviewing <b>6 of 6</b> submitted · <b>1</b> needs your eyes · the AI is confident on the rest. <span class="serif" style="font-style:italic;color:var(--text-secondary)">You stay the judge — confirm every grade.</span></p>
+    </div>
+    <button class="publish">Publish 5 grades →</button>
+  </div>
+
+  <div class="grid" id="detailgrid">
+    <!-- ───────────── Roster (uncertain-first) ───────────── -->
+    <aside class="roster">
+      <div class="roster-h">
+        <span class="micro">Students · 6/6 in</span>
+        <span class="legend">Verdict key</span>
+      </div>
+
+      <div class="group-h eyes"><span class="lbl">⚠ Needs your eyes</span><span class="ct">1</span></div>
+      <div class="group-rule"></div>
+      <button class="srow sel">
+        <div class="srow-top"><span class="srow-name">Maya Chen</span><span class="srow-score un">73%</span></div>
+        <div class="srow-meta"><span class="dot" style="background:var(--warning)"></span><span>AI graded · not published</span></div>
+        <span class="chip low">⚠ Low confidence · Q3</span>
+        <div class="review-mk no">🤖 AI-suggested · reviewing now</div>
+      </button>
+
+      <div class="group-h calm" style="margin-top:6px"><span class="lbl">AI confident</span><span class="ct">5</span></div>
+      <div class="group-rule"></div>
+      <button class="srow">
+        <div class="srow-top"><span class="srow-name">Liam Walsh</span><span class="srow-score un">98%</span></div>
+        <div class="srow-meta"><span class="dot" style="background:var(--warning)"></span><span>AI graded · not published</span></div>
+        <div class="review-mk no">🤖 AI-suggested · unopened</div>
+      </button>
+      <button class="srow">
+        <div class="srow-top"><span class="srow-name">Noah Kim</span><span class="srow-score un">89%</span></div>
+        <div class="srow-meta"><span class="dot" style="background:var(--warning)"></span><span>AI graded · not published</span></div>
+        <div class="review-mk no">🤖 AI-suggested · unopened</div>
+      </button>
+      <button class="srow">
+        <div class="srow-top"><span class="srow-name">Sofia Reyes</span><span class="srow-score pub">100%</span></div>
+        <div class="srow-meta"><span class="dot" style="background:#22a06b"></span><span>Published</span></div>
+        <div class="review-mk ok">✓ Reviewed by you</div>
+      </button>
+      <button class="srow">
+        <div class="srow-top"><span class="srow-name">Daniel Brooks</span><span class="srow-score un">84%</span></div>
+        <div class="srow-meta"><span class="dot" style="background:var(--warning)"></span><span>AI graded · not published</span></div>
+        <div class="review-mk no">🤖 AI-suggested · unopened</div>
+      </button>
+      <button class="srow">
+        <div class="srow-top"><span class="srow-name">Aisha Patel</span><span class="srow-score un">95%</span></div>
+        <div class="srow-meta"><span class="dot" style="background:var(--warning)"></span><span>AI graded · not published</span></div>
+        <div class="review-mk no">🤖 AI-suggested · unopened</div>
+      </button>
+    </aside>
+
+    <!-- ───────────── Grade column ───────────── -->
+    <section class="col">
+      <div class="strip">
+        <div>
+          <div><span class="nm">Maya Chen</span><span class="em">maya.chen@school.edu</span></div>
+          <div class="sub">Submitted Mar 4, 9:12 AM · <span class="ai">AI graded · not yet published</span></div>
+        </div>
+        <div class="strip-actions">
+          <button class="pinbtn">📌 Photo pinned</button>
+          <button class="nextbtn">Next student →</button>
+        </div>
+      </div>
+
+      <div class="integrity">
+        <span class="ico">✓</span>
+        <div>
+          <div class="t">Looks like her own work</div>
+          <div class="d">Her spoken explanations matched the written steps, including the slip in step 3 — consistent with a real attempt, not copied.</div>
+        </div>
+        <button class="view">View conversation →</button>
+      </div>
+
+      <div class="pcard">
+        <div class="pcard-h">
+          <span class="micro">Problems · 4</span>
+          <span class="kbd-hint"><span class="kbd">?</span> shortcuts · <span class="kbd">1</span>–<span class="kbd">5</span> grade · <span class="kbd">↵</span> next</span>
+        </div>
+
+        <div class="triage-note">
+          <span>🤖</span><span><b>3 of 4</b> the AI is confident about — collapsed for a one-glance confirm. <b>1</b> stayed open because the AI was unsure. <b>Nothing is auto-accepted</b> — each row needs your key.</span>
+        </div>
+
+        <!-- Q1 collapsed, confident, NOT yet confirmed -->
+        <div class="prow">
+          <div class="collapsed">
+            <span class="qno">1</span>
+            <span class="qtxt">Solve for x:  2x + 3 = 11</span>
+            <span class="ai-tag">🤖 AI <span class="v full">Full</span> <span class="conf-dot"></span> 98%</span>
+            <button class="confirm-cta todo">Confirm <span class="kbd">1</span></button>
+          </div>
+        </div>
+
+        <!-- Q2 collapsed, confident, CONFIRMED -->
+        <div class="prow">
+          <div class="collapsed confirmed">
+            <span class="qno">2</span>
+            <span class="qtxt">Simplify:  3(x − 4) + 5</span>
+            <span class="ai-tag">🤖 AI <span class="v full">Full</span> <span class="conf-dot"></span> 96%</span>
+            <span class="confirm-cta done">✓ Confirmed</span>
+          </div>
+        </div>
+
+        <!-- Q3 EXPANDED — uncertain, partial credit, receipt + anchored -->
+        <div class="expanded" id="q3">
+          <div class="exp-head">
+            <span class="qno" style="width:auto">3.</span>
+            <span class="exp-q">Solve for x:&nbsp; 2(x − 3) = 4x + 8</span>
+            <span class="uncertain-flag">⚠ AI unsure — your call</span>
+          </div>
+
+          <div class="ans-grid">
+            <div>
+              <div class="lab">Student answer</div>
+              <div class="ans-box" style="color:var(--error);font-weight:600">x = −6</div>
+            </div>
+            <div>
+              <div class="lab">Answer key</div>
+              <div class="ans-box key">x = −7</div>
+            </div>
+          </div>
+
+          <!-- Itemized receipt -->
+          <div class="receipt">
+            <div class="receipt-h">
+              <span class="ttl">Why 73% — itemized</span>
+              <span class="ai ai-tag">🤖 AI breakdown <span class="conf-dot" style="background:var(--warning)"></span> <span style="color:var(--warning-dark)">62% confidence</span></span>
+            </div>
+            <div class="ledger">
+              <div class="lrow credit">
+                <span class="mk ok">✓</span>
+                <span class="desc">Setup — expanded <span class="mono" style="font-size:11.5px">2(x−3)=2x−6</span> correctly</span>
+                <span class="amt">full</span>
+              </div>
+              <div class="lrow credit">
+                <span class="mk ok">✓</span>
+                <span class="desc">Method — collected variable terms on one side</span>
+                <span class="amt">full</span>
+              </div>
+              <div class="lrow debit anchor a" id="ledA">
+                <span class="mk">3</span>
+                <span class="desc">Sign error <span class="step-ref">— moved <span class="mono" style="font-size:11.5px">+8</span> across <span class="mono">=</span> without flipping its sign</span> <a class="anchor-link">↳ step 3 in work</a></span>
+                <span class="amt">−20%</span>
+              </div>
+              <div class="lrow debit anchor b" id="ledB">
+                <span class="mk">5</span>
+                <span class="desc">Arithmetic <span class="step-ref">— <span class="mono" style="font-size:11.5px">−14 ÷ 2 = −7</span>, wrote <span class="mono">−6</span></span> <a class="anchor-link b">↳ step 5 in work</a></span>
+                <span class="amt">−7%</span>
+              </div>
+            </div>
+            <div class="receipt-total">
+              <span class="lbl">Score</span>
+              <span class="sum">
+                <span class="calc">100 − 20 − 7</span>
+                <span class="pct">73%</span>
+              </span>
+            </div>
+          </div>
+
+          <span class="conf-band">⚠ Low confidence · 62% — review this one carefully</span>
+
+          <div class="gbtns">
+            <button class="gbtn green">Full <span class="k">1</span></button>
+            <button class="gbtn amber active">Partial <span class="k">2–4</span></button>
+            <span class="partial-in">73<span>%</span></span>
+            <button class="gbtn red">No credit <span class="k">5</span></button>
+            <span style="margin-left:auto;font-size:10px;font-weight:700;color:var(--primary);display:inline-flex;align-items:center;gap:5px">🤖 AI suggested Partial 73%</span>
+          </div>
+
+          <div class="fb">
+            <div class="lab">Feedback <span>· shown to student when published</span></div>
+            <div class="ta">Right idea and your setup was clean. Watch the sign when you move a term across the equals sign (step 3) — +8 should become −8. That flips the rest. Re-check 14 ÷ 2 at the end too.</div>
+          </div>
+        </div>
+
+        <!-- Q4 collapsed, confident, No credit -->
+        <div class="prow">
+          <div class="collapsed">
+            <span class="qno">4</span>
+            <span class="qtxt">Solve for x:  5x − 7 = 3x + 2  (student left blank)</span>
+            <span class="ai-tag">🤖 AI <span class="v zero">No credit</span> <span class="conf-dot"></span> 91%</span>
+            <button class="confirm-cta todo">Confirm <span class="kbd">5</span></button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────── Pinned photo panel ───────────── -->
+    <aside>
+      <div class="photo" id="photoPanel">
+        <div class="photo-h">
+          <span class="ttl">Maya's work · Q3</span>
+          <div class="tools">
+            <button class="ptool on">📌 Pinned</button>
+            <button class="ptool">⤢ Full</button>
+          </div>
+        </div>
+        <div class="paper">
+          <span class="pg-tag">pg 1 / 2</span>
+          <div class="hw" style="top:18px">
+            <div class="ln">2(x − 3) = 4x + 8</div>
+            <div class="ln sub" style="font-size:18px;color:#8a8f99">＃3 on the sheet</div>
+            <div class="ln">2x − 6 = 4x + 8</div>
+            <div class="ln" id="hwStep3" style="position:relative">2x − 4x = 8 + 6</div>
+            <div class="ln">−2x = 14</div>
+            <div class="ln" id="hwStep5" style="position:relative">x = −6</div>
+            <div class="ln" style="font-size:21px;color:#16794f">x = −6  ✓?</div>
+          </div>
+          <!-- anchored highlight: step 3 (sign error) -->
+          <div class="hl amber" id="hlA" style="left:8px;top:124px;width:200px;height:36px;">
+            <span class="badge">3</span>
+            <span class="tip">sign error · −20%</span>
+          </div>
+          <!-- anchored highlight: step 5 (arithmetic) -->
+          <div class="hl info" id="hlB" style="left:8px;top:226px;width:120px;height:36px;">
+            <span class="badge">5</span>
+            <span class="tip">arithmetic · −7%</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- connector overlay drawn at load between ledger lines and photo highlights -->
+    <svg id="connector"></svg>
+  </div>
+
+  <p class="footnote">Design proposal — <span class="serif">reimagined AI-grading review</span>. Split-view work · uncertainty-first triage · itemized receipt · anchored feedback. Not production code.</p>
+</div>
+
+<script>
+  // Draw the "anchored feedback" connectors: a gentle curve from each
+  // receipt deduction line to the matching highlight box on the photo.
+  function drawConnectors(){
+    const svg = document.getElementById('connector');
+    const grid = document.getElementById('detailgrid');
+    if(!svg||!grid) return;
+    const gb = grid.getBoundingClientRect();
+    svg.setAttribute('width', gb.width);
+    svg.setAttribute('height', gb.height);
+    svg.style.width = gb.width+'px'; svg.style.height = gb.height+'px';
+    svg.innerHTML='';
+    const pairs = [
+      {from:'ledA', to:'hlA', color:'rgba(166,107,21,.55)'},
+      {from:'ledB', to:'hlB', color:'rgba(61,90,120,.5)'},
+    ];
+    for(const p of pairs){
+      const a = document.getElementById(p.from);
+      const b = document.getElementById(p.to);
+      if(!a||!b) continue;
+      const ar = a.getBoundingClientRect();
+      const br = b.getBoundingClientRect();
+      // start at right edge of ledger row, end at left edge of highlight
+      const x1 = ar.right - gb.left;
+      const y1 = ar.top - gb.top + ar.height/2;
+      const x2 = br.left - gb.left;
+      const y2 = br.top - gb.top + br.height/2;
+      const mx = (x1+x2)/2;
+      const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('d', `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`);
+      path.setAttribute('fill','none');
+      path.setAttribute('stroke', p.color);
+      path.setAttribute('stroke-width','1.5');
+      path.setAttribute('stroke-dasharray','4 3');
+      svg.appendChild(path);
+      // endpoint dots
+      for(const [x,y] of [[x1,y1],[x2,y2]]){
+        const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        c.setAttribute('cx',x); c.setAttribute('cy',y); c.setAttribute('r','2.5');
+        c.setAttribute('fill',p.color);
+        svg.appendChild(c);
+      }
+    }
+  }
+  window.addEventListener('load',()=>{ drawConnectors(); setTimeout(drawConnectors,400); });
+</script>
+</body>
+</html>
