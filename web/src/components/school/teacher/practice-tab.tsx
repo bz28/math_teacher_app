@@ -7,6 +7,7 @@ import { TOUR_IDS } from "@/components/tour";
 import { topUnits, unitLabel as labelForUnit } from "@/lib/units";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { Select } from "@/components/ui";
+import { Skeleton } from "@/components/ui/skeleton";
 import { NewPracticeModal } from "./_pieces/new-practice-modal";
 
 /**
@@ -229,7 +230,7 @@ export function PracticeTab({ courseId }: { courseId: string }) {
 
       <div className="mt-6">
         {loading ? (
-          <p className="text-sm text-text-muted">Loading…</p>
+          <PracticeListSkeleton />
         ) : practices.length === 0 ? (
           <EmptyState
             title="No practice sets yet"
@@ -286,6 +287,30 @@ export function PracticeTab({ courseId }: { courseId: string }) {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Initial-load placeholder for the practice list. Mirrors the real
+ * silhouette — a stack of practice-set cards — so the list settles in
+ * place rather than blanking to "Loading…".
+ */
+function PracticeListSkeleton() {
+  return (
+    <div className="mt-4 space-y-2" aria-busy="true" aria-live="polite">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center justify-between rounded-[--radius-lg] border border-border-light bg-surface p-4 shadow-sm"
+        >
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-4 w-2/5" />
+            <Skeleton className="h-3 w-1/4" />
+          </div>
+          <Skeleton className="h-6 w-20 rounded-[--radius-pill]" />
+        </div>
+      ))}
     </div>
   );
 }

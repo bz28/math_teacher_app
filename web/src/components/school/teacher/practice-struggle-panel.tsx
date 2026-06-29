@@ -8,6 +8,7 @@ import {
   type PracticeInsightsResponse,
   type TeacherSection,
 } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /**
  * Class struggle-insights — "Where the class is struggling." A re-teach
@@ -131,7 +132,7 @@ export function PracticeStrugglePanel({ courseId }: { courseId: string }) {
       {error ? (
         <p className="mt-5 text-sm text-[color:var(--color-error)]">{error}</p>
       ) : loading || insights === null ? (
-        <p className="mt-5 text-sm text-text-muted">Loading…</p>
+        <StruggleSkeleton />
       ) : insights.students_active === 0 ? (
         <EmptyState />
       ) : struggleItems.length === 0 ? (
@@ -204,6 +205,34 @@ function StruggleRow({
         />
       </div>
     </li>
+  );
+}
+
+/**
+ * Initial-load placeholder for the class struggle band. Mirrors the real
+ * silhouette — an active-count line over a divided list of ranked concept
+ * rows, each with its proportion bar — so the panel settles in place
+ * rather than blanking to "Loading…".
+ */
+function StruggleSkeleton() {
+  return (
+    <div className="mt-6" aria-busy="true" aria-live="polite">
+      <Skeleton className="h-3 w-44 rounded-[--radius-sm]" />
+      <ol className="mt-3 divide-y divide-border-light border-t border-border-light">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <li key={i} className="py-3.5">
+            <div className="flex items-baseline justify-between gap-4">
+              <div className="flex min-w-0 items-baseline gap-2.5">
+                <Skeleton className="h-3 w-5" />
+                <Skeleton className="h-4 w-48" />
+              </div>
+              <Skeleton className="h-3 w-28" />
+            </div>
+            <Skeleton className="mt-2 h-1.5 w-full rounded-full" />
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
 

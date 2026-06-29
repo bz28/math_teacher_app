@@ -6,6 +6,7 @@ import { teacher, type TeacherAssignment, type TeacherUnit } from "@/lib/api";
 import { TOUR_IDS } from "@/components/tour";
 import { topUnits } from "@/lib/units";
 import { Select } from "@/components/ui";
+import { Skeleton } from "@/components/ui/skeleton";
 import { NewHomeworkModal } from "./_pieces/new-homework-modal";
 import {
   HomeworkTimeline,
@@ -251,7 +252,7 @@ export function HomeworkTab({
       {/* Content — full width, no UnitRail sidebar */}
       <div className="mt-6">
         {loading ? (
-          <p className="text-sm text-text-muted">Loading…</p>
+          <AssignmentListSkeleton />
         ) : homeworks.length === 0 ? (
           <div className="mt-4 rounded-[--radius-lg] border border-dashed border-border-light bg-bg-subtle p-8 text-center text-sm text-text-muted">
             <p>
@@ -317,6 +318,38 @@ export function HomeworkTab({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Initial-load placeholder for the homework timeline. Mirrors the real
+ * silhouette — a couple of bucket eyebrows each over a stack of
+ * assignment-row cards — so the list settles in place rather than
+ * blanking to "Loading…".
+ */
+function AssignmentListSkeleton() {
+  return (
+    <div className="mt-4 space-y-8" aria-busy="true" aria-live="polite">
+      {[2, 3].map((rows, b) => (
+        <div key={b}>
+          <Skeleton className="h-3 w-32 rounded-[--radius-sm]" />
+          <div className="mt-3 space-y-2">
+            {Array.from({ length: rows }).map((_, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between rounded-[--radius-lg] border border-border-light bg-surface p-4 shadow-sm"
+              >
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Skeleton className="h-4 w-2/5" />
+                  <Skeleton className="h-3 w-1/4" />
+                </div>
+                <Skeleton className="h-6 w-20 rounded-[--radius-pill]" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
