@@ -9,6 +9,7 @@ import {
   type StudentPracticeActivityResponse,
 } from "@/lib/api";
 import { formatRelativeDate } from "@/lib/utils";
+import { PageErrorState } from "@/components/ui";
 
 /**
  * "Your practice" — the student's own formative-practice history.
@@ -83,7 +84,7 @@ export default function PracticeHistoryPage() {
         setData(res);
         setError(null);
       })
-      .catch(() => setError("Couldn't load your practice. Please try again."));
+      .catch(() => setError("We couldn't load your practice just now."));
   }, []);
 
   useEffect(() => {
@@ -100,16 +101,11 @@ export default function PracticeHistoryPage() {
 
   if (error) {
     return (
-      <div className="mx-auto max-w-3xl py-12 text-center">
-        <p className="text-error">{error}</p>
-        <button
-          type="button"
-          onClick={load}
-          className="mt-4 rounded-[--radius-sm] border border-border px-4 py-2 text-sm font-semibold text-text-primary hover:bg-surface-hover"
-        >
-          Retry
-        </button>
-      </div>
+      <PageErrorState
+        title="Couldn't load your practice"
+        message={error}
+        onRetry={load}
+      />
     );
   }
 
