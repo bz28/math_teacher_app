@@ -142,30 +142,43 @@ export function ImageUpload({
       // draw bigger boxes — chasing a problem that isn't there.
       let anyRejected = false;
 
-      // Process in batches of 3
-      for (let i = 0; i < rectangles.length; i += 3) {
-        const batch = rectangles.slice(i, i + 3);
-        const crops = await Promise.all(
-          batch.map((rect) => cropImage(imageBase64, rect)),
-        );
-        const results = await Promise.allSettled(
-          crops.map((cropped) => imageApi.extract(cropped, subject)),
-        );
+      // Process in batches of 3. The extract calls are allSettled (a service
+      // error is captured via anyRejected), but cropImage itself can throw
+      // (null canvas context, or an image-decode failure) — unguarded, that
+      // throws out of this callback and leaves phase="extracting" stuck
+      // forever with no error. Wrap so a crop failure surfaces honestly.
+      try {
+        for (let i = 0; i < rectangles.length; i += 3) {
+          const batch = rectangles.slice(i, i + 3);
+          const crops = await Promise.all(
+            batch.map((rect) => cropImage(imageBase64, rect)),
+          );
+          const results = await Promise.allSettled(
+            crops.map((cropped) => imageApi.extract(cropped, subject)),
+          );
 
-        for (let j = 0; j < results.length; j++) {
-          const r = results[j];
-          if (r.status === "fulfilled") {
-            for (const p of r.value.problems) {
-              allProblems.push(p);
-              allCropImages.push(crops[j]);
+          for (let j = 0; j < results.length; j++) {
+            const r = results[j];
+            if (r.status === "fulfilled") {
+              for (const p of r.value.problems) {
+                allProblems.push(p);
+                allCropImages.push(crops[j]);
+              }
+              if (r.value.confidence === "low") worstConfidence = "low";
+              else if (r.value.confidence === "medium" && worstConfidence !== "low")
+                worstConfidence = "medium";
+            } else {
+              anyRejected = true;
             }
-            if (r.value.confidence === "low") worstConfidence = "low";
-            else if (r.value.confidence === "medium" && worstConfidence !== "low")
-              worstConfidence = "medium";
-          } else {
-            anyRejected = true;
           }
         }
+      } catch {
+        // A crop failed — don't strand the user on a frozen "extracting".
+        // Keep the image so they can retry.
+        setError("Couldn't process that image. Please try again.");
+        setManualMode(false);
+        setPhase("upload");
+        return;
       }
 
       if (allProblems.length === 0) {
