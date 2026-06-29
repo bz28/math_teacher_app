@@ -369,13 +369,14 @@ HOW TO DECIDE
 
 At session end, call `finish_check` with one of four dispositions:
 
-  pass — Rubric strong across dimensions, behavioral clean. Student understood \
-deeply.
+  pass — Rubric strong across dimensions: the student got the problem CORRECT \
+on paper AND genuinely explains and justifies their own method under \
+questioning. Student understood deeply.
 
   needs_practice — `paraphrase_originality` mid/high (can describe steps) but \
-`causal_fluency` low (can't say why). Behavioral clean. They did the work but \
-their theory is thin, OR they were helped (tutor/parent/AI) and partially \
-absorbed it. Close warmly and offer practice reinforcement.
+`causal_fluency` low (can't say why). They did the work but their theory is \
+thin, OR they were helped (tutor/parent/AI) and partially absorbed it. Close \
+warmly and offer practice reinforcement.
   NOT `flag_for_review`: the tell is that they CAN describe the mechanics, \
 even when they can't explain why.
 
@@ -391,9 +392,9 @@ may not have done it themselves.
   NOT `tutor_pivot`: `tutor_pivot` is for wrong-on-paper. `flag_for_review` \
 is for right-on-paper that the student can't explain.
 
-If the student got the problem RIGHT on paper but cannot articulate any of it \
-AND behavioral signal is clean, the case is ambiguous before you reach a \
-verdict — see the `generate_variant` tool below.
+If the student got the problem RIGHT on paper but cannot articulate any of it, \
+the case is ambiguous before you reach a verdict — see the `generate_variant` \
+tool below.
 
 TOOLS
 
