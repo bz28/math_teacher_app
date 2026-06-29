@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react-native";
+import { render, screen, fireEvent, act } from "@testing-library/react-native";
 import { IntegrityChatScreen } from "./IntegrityChatScreen";
 import { flush, waitForText } from "../test-utils";
 import * as api from "../services/api";
@@ -117,6 +117,58 @@ describe("IntegrityChatScreen", () => {
     fireEvent.changeText(screen.getByPlaceholderText("Explain how you solved it…"), "hi");
     await flush();
 
-    expect(screen.getByText("Add a little more — at least 5 characters.")).toBeTruthy();
+    expect(screen.getByText(/Add a little more — at least 5 characters\./)).toBeTruthy();
+  });
+
+  it("sends the truthful 'I'm stuck' message, bypassing the min-char gate", async () => {
+    mockedApi.getIntegrityState.mockResolvedValue(STATE as never);
+    mockedApi.postIntegrityTurn.mockResolvedValue({
+      ...STATE,
+      overall_status: "in_progress",
+      transcript: [
+        ...STATE.transcript,
+        { ordinal: 1, role: "student", content: "I'm stuck — not sure how to explain this.", created_at: "x", is_variant_probe: false },
+        { ordinal: 2, role: "agent", content: "That's okay — let's start small.", created_at: "x", is_variant_probe: false },
+      ],
+    } as never);
+    render(<IntegrityChatScreen submissionId="sub-1" onExit={jest.fn()} />);
+
+    await waitForText("How did you get your answer?");
+    // Tap the chip with the composer EMPTY — the truthful "I can't explain"
+    // must send without hitting the 5-char minimum.
+    fireEvent.press(screen.getByLabelText("I'm stuck — not sure how to explain this"));
+    await flush();
+
+    expect(mockedApi.postIntegrityTurn).toHaveBeenCalledWith(
+      "sub-1",
+      "I'm stuck — not sure how to explain this.",
+      expect.any(Number),
+      expect.objectContaining({ device_type: "mobile" }),
+    );
+    expect(await waitForText("That's okay — let's start small.")).toBeTruthy();
+  });
+
+  it("times out the 'Preparing…' wait and offers a retry instead of spinning forever", async () => {
+    jest.useFakeTimers();
+    try {
+      // Pipeline never leaves "extracting" — the stall the safety net guards.
+      mockedApi.getIntegrityState.mockResolvedValue({
+        ...STATE,
+        overall_status: "extracting",
+        problems: [],
+        transcript: [],
+      } as never);
+      render(<IntegrityChatScreen submissionId="sub-1" onExit={jest.fn()} />);
+
+      // Advance past the 90s give-up window; each re-poll resolves as we go.
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(95_000);
+      });
+
+      expect(screen.getByText("This is taking longer than usual")).toBeTruthy();
+      expect(screen.getByText("Try again")).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
