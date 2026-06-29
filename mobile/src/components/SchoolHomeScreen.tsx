@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AppState, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { Eyebrow } from "./Eyebrow";
+import { ListSkeleton } from "./SkeletonLoader";
 import {
   getSchoolDashboard,
   type SchoolAssignment,
@@ -51,6 +52,15 @@ export function SchoolHomeScreen({ onJoinClass, onOpenAssignment }: Props) {
     load();
   }, [load]);
 
+  // Refetch when the app returns to the foreground so a student who left the
+  // dashboard open doesn't come back to stale due dates / grades.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next === "active") load(true);
+    });
+    return () => sub.remove();
+  }, [load]);
+
   const isEmpty =
     data != null &&
     data.due_this_week.length === 0 &&
@@ -79,7 +89,7 @@ export function SchoolHomeScreen({ onJoinClass, onOpenAssignment }: Props) {
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color={colors.primary} style={styles.centered} />
+        <ListSkeleton rows={4} />
       ) : error ? (
         <View style={styles.centered}>
           <Ionicons name="cloud-offline-outline" size={40} color={colors.textMuted} />

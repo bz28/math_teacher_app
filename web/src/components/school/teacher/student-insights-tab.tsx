@@ -460,6 +460,13 @@ function StudentRow({
   const href = `/school/teacher/courses/${courseId}/grades/${sectionId}/students/${student.student_id}`;
   const meta = STATUS_META[student.status];
   const inactive = student.status === "no_activity";
+  // Surface the concept(s) only where it's actionable — for students the
+  // teacher is being pointed at (struggling / needs a nudge). Thriving /
+  // on-track / no-activity rows stay clean.
+  const struggles =
+    ATTENTION_STATUSES.has(student.status) && student.top_struggles.length > 0
+      ? student.top_struggles
+      : null;
 
   return (
     <Link
@@ -507,6 +514,14 @@ function StudentRow({
             </>
           )}
         </p>
+        {struggles && (
+          <p className="truncate text-[11px] leading-snug">
+            <span className="text-text-muted">Stuck on </span>
+            <span className="font-medium text-text-secondary">
+              {struggles.join(", ")}
+            </span>
+          </p>
+        )}
       </div>
 
       {/* First-try rate */}

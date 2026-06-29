@@ -8,6 +8,7 @@ import Overview from "./pages/Overview";
 import LLMCalls from "./pages/LLMCalls";
 import HarnessRuns from "./pages/HarnessRuns";
 import Quality from "./pages/Quality";
+import GradingQuality from "./pages/GradingQuality";
 import Users from "./pages/Users";
 import LeadDetail from "./pages/LeadDetail";
 import Leads from "./pages/Leads";
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="/llm-calls" element={<LLMCalls />} />
           <Route path="/harness-runs" element={<HarnessRuns />} />
           <Route path="/quality" element={<Quality />} />
+          <Route path="/grading-quality" element={<GradingQuality />} />
           <Route
             path="/submissions/:submissionId/trace"
             element={<SubmissionTrace />}

@@ -48,6 +48,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/grading-quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Grading Quality */
+        get: operations["grading_quality_v1_admin_grading_quality_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/harness-runs": {
         parameters: {
             query?: never;
@@ -3067,6 +3084,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/rubric-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Rubric Sources
+         * @description Teacher's assignments that already have a non-empty grading rubric,
+         *     for the "Copy grading setup from another homework" picker. Returns a
+         *     lean projection (id, title, course name, type, rubric) — no content /
+         *     answer-key hydration, no per-assignment stats — since the picker only
+         *     needs to label each option and load its rubric on pick. Reuses the
+         *     existing `Assignment.rubric` data; no new storage.
+         */
+        get: operations["list_rubric_sources_v1_teacher_rubric_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/submissions/{submission_id}": {
         parameters: {
             query?: never;
@@ -3309,6 +3351,8 @@ export interface components {
         };
         /** BreakdownEntry */
         BreakdownEntry: {
+            /** Deductions */
+            deductions?: components["schemas"]["Deduction"][] | null;
             /** Feedback */
             feedback?: string | null;
             /** Percent */
@@ -3599,6 +3643,21 @@ export interface components {
             section_name: string;
             /** Title */
             title: string;
+        };
+        /**
+         * Deduction
+         * @description One line in a problem's itemized grade receipt — the AI's
+         *     justification for a single point change. Threaded through the teacher
+         *     save so the receipt survives an edit that *doesn't* touch the score
+         *     (e.g. confirming the AI grade, or editing only the feedback).
+         */
+        Deduction: {
+            /** Points Off */
+            points_off: number;
+            /** Reason */
+            reason: string;
+            /** Step Ref */
+            step_ref?: number | null;
         };
         /** DeleteAccountRequest */
         DeleteAccountRequest: {
@@ -4506,6 +4565,8 @@ export interface components {
             status: "thriving" | "on_track" | "needs_nudge" | "struggling" | "no_activity";
             /** Student Id */
             student_id: string;
+            /** Top Struggles */
+            top_struggles: string[];
             /** Trend */
             trend: ("improving" | "slipping" | "steady") | null;
         };
@@ -5360,6 +5421,40 @@ export interface operations {
                 school_id?: string | null;
                 limit?: number;
                 offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grading_quality_v1_admin_grading_quality_get: {
+        parameters: {
+            query?: {
+                hours?: number;
+                subject?: string | null;
             };
             header?: never;
             path?: never;
@@ -10772,6 +10867,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_rubric_sources_v1_teacher_rubric_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

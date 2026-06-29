@@ -51,6 +51,64 @@ router = APIRouter()
 # not an exhaustive dump.
 _TOP_STRUGGLE_ITEMS = 20
 
+# How many struggle concepts the roster rollup surfaces inline per
+# student — just the 1-2 they wrestled with most, so a row reads
+# "Struggling · quadratics, factoring" not an exhaustive dump.
+_TOP_STRUGGLES_INLINE = 2
+
+
+def _accumulate_struggle(
+    struggle_by_item: dict[uuid.UUID, dict[str, int]],
+    bank_item_id: uuid.UUID,
+    outcome: str | None,
+) -> None:
+    """Tally one struggle event (retry/revealed) onto a per-item map.
+    Shared by every read that builds a struggle signal so the bucket
+    shape stays identical."""
+    s = struggle_by_item.setdefault(bank_item_id, {"retry": 0, "revealed": 0})
+    if outcome == OUTCOME_RETRY:
+        s["retry"] += 1
+    else:
+        s["revealed"] += 1
+
+
+async def _resolve_titles(
+    db: AsyncSession, item_ids: Any,
+) -> dict[uuid.UUID, str]:
+    """Resolve bank-item titles (the concept labels) in one query for a
+    collection of item ids. Empty in → empty out (no DB hit)."""
+    ids = set(item_ids)
+    if not ids:
+        return {}
+    return {
+        r.id: r.title for r in (await db.execute(
+            select(QuestionBankItem.id, QuestionBankItem.title)
+            .where(QuestionBankItem.id.in_(ids))
+        )).all()
+    }
+
+
+def _rank_struggle_items(
+    struggle_by_item: dict[uuid.UUID, dict[str, int]],
+    titles: dict[uuid.UUID, str],
+) -> list[dict[str, Any]]:
+    """Title-attach + sort a struggle map, most-struggled first, capped
+    at _TOP_STRUGGLE_ITEMS. Pure — the caller resolves titles, so this
+    works both per-student (detail) and folded into the roster loop
+    (rollup) without an N+1."""
+    items: list[dict[str, Any]] = [
+        {
+            "bank_item_id": str(item_id),
+            "concept": titles.get(item_id, "—"),
+            "retry_count": counts["retry"],
+            "revealed_count": counts["revealed"],
+            "struggle_count": counts["retry"] + counts["revealed"],
+        }
+        for item_id, counts in struggle_by_item.items()
+    ]
+    items.sort(key=lambda x: x["struggle_count"], reverse=True)
+    return items[:_TOP_STRUGGLE_ITEMS]
+
 
 @router.get("/courses/{course_id}/sections/{section_id}/students/{student_id}/practice-activity")
 async def get_student_practice_activity(
@@ -123,13 +181,9 @@ async def get_student_practice_activity(
             if act.outcome in breakdown:
                 breakdown[act.outcome] += 1
             if act.outcome in STRUGGLE_OUTCOMES:
-                s = struggle_by_item.setdefault(
-                    act.bank_item_id, {"retry": 0, "revealed": 0},
+                _accumulate_struggle(
+                    struggle_by_item, act.bank_item_id, act.outcome,
                 )
-                if act.outcome == OUTCOME_RETRY:
-                    s["retry"] += 1
-                else:
-                    s["revealed"] += 1
         elif act.mode == MODE_LEARN:
             breakdown["learn_completed"] += 1
 
@@ -158,24 +212,8 @@ async def _attach_titles(
     capped at _TOP_STRUGGLE_ITEMS."""
     if not struggle_by_item:
         return []
-    titles = {
-        r.id: r.title for r in (await db.execute(
-            select(QuestionBankItem.id, QuestionBankItem.title)
-            .where(QuestionBankItem.id.in_(struggle_by_item.keys()))
-        )).all()
-    }
-    items = [
-        {
-            "bank_item_id": str(item_id),
-            "concept": titles.get(item_id, "—"),
-            "retry_count": counts["retry"],
-            "revealed_count": counts["revealed"],
-            "struggle_count": counts["retry"] + counts["revealed"],
-        }
-        for item_id, counts in struggle_by_item.items()
-    ]
-    items.sort(key=lambda x: x["struggle_count"], reverse=True)
-    return items[:_TOP_STRUGGLE_ITEMS]
+    titles = await _resolve_titles(db, struggle_by_item.keys())
+    return _rank_struggle_items(struggle_by_item, titles)
 
 
 @router.get("/courses/{course_id}/sections/{section_id}/practice-insights")
@@ -398,6 +436,11 @@ class StudentInsight(BaseModel):
     revealed_count: int
     trend: StudentTrend | None
     status: StudentStatus
+    # The 1-2 concepts this student wrestled with most (by retry/reveal
+    # frequency). Empty when there isn't enough practice signal to judge
+    # (< _MIN_PRACTICE_FOR_SIGNAL) or they had no struggles — so the
+    # roster only surfaces it where it's actionable.
+    top_struggles: list[str]
 
 
 class SectionStudentInsightsResponse(BaseModel):
@@ -475,6 +518,7 @@ async def get_section_student_insights(
             PracticeActivity.student_id,
             PracticeActivity.mode,
             PracticeActivity.outcome,
+            PracticeActivity.bank_item_id,
             PracticeActivity.created_at,
         )
         .where(PracticeActivity.section_id == section_id)
@@ -495,11 +539,15 @@ async def get_section_student_insights(
                 "learn_walkthroughs": 0,
                 "last_active": None,
                 "first_try_flags": [],  # chronological, practice rows only
+                # Per bank item: this student's retry/reveal tally — the
+                # same shape the detail endpoint builds, so the inline
+                # top-struggle concepts reuse _rank_struggle_items.
+                "struggle_by_item": {},
             }
             agg[student_id] = b
         return b
 
-    for sid, mode, outcome, created_at in rows:
+    for sid, mode, outcome, bank_item_id, created_at in rows:
         b = _bucket(sid)
         # last_active spans every activity (practice and learn).
         if b["last_active"] is None or created_at > b["last_active"]:
@@ -515,8 +563,18 @@ async def get_section_student_insights(
                     b["retry_count"] += 1
                 elif outcome == OUTCOME_REVEALED:
                     b["revealed_count"] += 1
+            if outcome in STRUGGLE_OUTCOMES:
+                _accumulate_struggle(b["struggle_by_item"], bank_item_id, outcome)
         elif mode == MODE_LEARN:
             b["learn_walkthroughs"] += 1
+
+    # Resolve every struggled-on concept title in ONE query across the
+    # whole roster, then rank per student in Python — keeps the rollup at
+    # three queries total (roster, activity, titles), no per-student N+1.
+    all_struggle_ids: set[uuid.UUID] = set()
+    for bucket in agg.values():
+        all_struggle_ids |= bucket["struggle_by_item"].keys()
+    titles = await _resolve_titles(db, all_struggle_ids)
 
     now = datetime.now(UTC)
     students: list[StudentInsight] = []
@@ -535,6 +593,7 @@ async def get_section_student_insights(
                 revealed_count=0,
                 trend=None,
                 status="no_activity",
+                top_struggles=[],
             ))
             continue
 
@@ -542,6 +601,18 @@ async def get_section_student_insights(
         first_try_rate = (
             round(acc["first_try_count"] / practiced, 3) if practiced else None
         )
+        # Engagement-floor gate: only surface struggle concepts once
+        # there's enough practice to trust the signal — below the floor a
+        # "struggle" is noise off a couple unlucky problems.
+        top_struggles: list[str] = []
+        if practiced >= _MIN_PRACTICE_FOR_SIGNAL and acc["struggle_by_item"]:
+            top_struggles = [
+                item["concept"]
+                for item in _rank_struggle_items(acc["struggle_by_item"], titles)[
+                    :_TOP_STRUGGLES_INLINE
+                ]
+                if item["concept"] != "—"
+            ]
         students.append(StudentInsight(
             student_id=str(student_id),
             name=name,
@@ -560,6 +631,7 @@ async def get_section_student_insights(
                 last_active=acc["last_active"],
                 now=now,
             ),
+            top_struggles=top_struggles,
         ))
 
     return SectionStudentInsightsResponse(
