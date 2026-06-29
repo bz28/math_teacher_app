@@ -9,6 +9,8 @@ import {
   ActivityDigest,
   ActivityPill,
   ActivityTurnMarker,
+  integrityNeedsResolution,
+  ResolveIntegrityControl,
   RowDispositionPill,
   type IntegrityActivityNotableTurnLite,
 } from "@/components/school/teacher/_pieces/submissions-panel";
@@ -19,6 +21,7 @@ import {
   type GradeBreakdownEntry,
   type GradeDeduction,
   type IntegrityDisposition,
+  type IntegrityResolutionOutcome,
   type ItemAnalysisResponse,
   type SubmissionFile,
   type TeacherIntegrityDetail,
@@ -569,6 +572,43 @@ function HomeworkSectionReview({
     [],
   );
 
+  // A teacher marked the integrity check reviewed. Mirror the new
+  // resolution onto the roster row's overview so the flagged filter +
+  // "needs your eyes" subhead update instantly, then refetch the detail
+  // so the resolved-by name + timestamp on the banner are authoritative.
+  const handleIntegrityResolved = useCallback(
+    (submissionId: string, resolution: IntegrityResolutionOutcome) => {
+      setRoster((prev) =>
+        prev
+          ? prev.map((e) =>
+              e.submission?.id === submissionId &&
+              e.submission.integrity_overview
+                ? {
+                    ...e,
+                    submission: {
+                      ...e.submission,
+                      integrity_overview: {
+                        ...e.submission.integrity_overview,
+                        resolution,
+                      },
+                    },
+                  }
+                : e,
+            )
+          : prev,
+      );
+      teacher
+        .integrityDetail(submissionId)
+        .then((d) =>
+          setIntegrity((prev) =>
+            prev?.submission_id === submissionId ? d : prev,
+          ),
+        )
+        .catch(() => {});
+    },
+    [],
+  );
+
   // Persist the current breakdown. Full-replacement semantics: we
   // send every graded entry on every call, the backend writes the
   // row, recomputes `final_score`, and returns the authoritative
@@ -1094,6 +1134,7 @@ function HomeworkSectionReview({
                 }}
                 onGradeProblem={setProblemGrade}
                 onFeedbackChange={setProblemFeedback}
+                onIntegrityResolved={handleIntegrityResolved}
                 onMarkReviewed={() =>
                   void handleMarkReviewed(selectedEntry.submission!.id)
                 }
@@ -1541,6 +1582,9 @@ function isFlagged(entry: RosterEntry): boolean {
   if (sub.extraction_flagged_at) return true;
   const overview = sub.integrity_overview;
   if (!overview) return false;
+  // A teacher who marked the check reviewed has handled it — drop it
+  // from the flagged filter (matches the backend flagged aggregate).
+  if (overview.resolution !== "unresolved") return false;
   // `IntegrityOverview` exposes only `complete | in_progress`, so the
   // `skipped_unreadable` granular state isn't directly visible from
   // the row. The full `TeacherIntegrityDetail` (loaded only for the
@@ -2078,6 +2122,7 @@ function SubmissionDetailPanel({
   onSelectNext,
   onGradeProblem,
   onFeedbackChange,
+  onIntegrityResolved,
   onMarkReviewed,
   marking,
   regrading,
@@ -2095,6 +2140,10 @@ function SubmissionDetailPanel({
   onSelectNext: () => void;
   onGradeProblem: (problemId: string, status: GradeStatus, partialPercent?: number) => void;
   onFeedbackChange: (problemId: string, text: string) => void;
+  onIntegrityResolved: (
+    submissionId: string,
+    resolution: IntegrityResolutionOutcome,
+  ) => void;
   onMarkReviewed: () => void;
   marking: boolean;
   regrading: boolean;
@@ -2664,6 +2713,7 @@ function SubmissionDetailPanel({
       <IntegrityBanner
         integrity={integrity}
         overviewFallback={row?.integrity_overview ?? null}
+        onResolved={onIntegrityResolved}
       />
 
       {/* Rubric drift banner — only renders when the assignment's live
@@ -4402,9 +4452,14 @@ function KeyboardShortcutsModal({ onClose }: { onClose: () => void }) {
 function IntegrityBanner({
   integrity,
   overviewFallback,
+  onResolved,
 }: {
   integrity: TeacherIntegrityDetail | null;
   overviewFallback: TeacherSubmissionRow["integrity_overview"] | null;
+  onResolved: (
+    submissionId: string,
+    resolution: IntegrityResolutionOutcome,
+  ) => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -4439,7 +4494,14 @@ function IntegrityBanner({
     }
   })();
   if (!key) return null;
-  const style = INTEGRITY_STYLE[key];
+  // A teacher who marked the check reviewed has handled it — drop the
+  // loud verdict color to a neutral tint (keep the icon/label) so a
+  // resolved flag no longer reads as an open alarm.
+  const resolved =
+    !!integrity && integrity.resolution !== "unresolved";
+  const style = resolved
+    ? { ...INTEGRITY_STYLE[key], ...NEUTRAL_STYLE }
+    : INTEGRITY_STYLE[key];
   // Prefer the agent-emitted headline (chat-grounded verdict title) over
   // the generic per-disposition fallback. AI-emitted is only present
   // when the agent ran a finish_check; non-AI states (extracting,
@@ -4491,6 +4553,25 @@ function IntegrityBanner({
                     {overviewFallback.problem_count} sampled problems graded.
                   </p>
                 )}
+                {/* "Mark reviewed" — only on checks that need attention
+                    (or already resolved). Clearing one drops it from the
+                    roster flagged filter. Needs full detail (resolution
+                    + resolved-by); hidden during the overview-only gap. */}
+                {integrity &&
+                  (integrityNeedsResolution(integrity) ||
+                    integrity.resolution !== "unresolved") && (
+                    <div className="mt-2.5">
+                      <ResolveIntegrityControl
+                        submissionId={integrity.submission_id}
+                        resolution={integrity.resolution}
+                        resolvedByName={integrity.resolved_by_name}
+                        resolvedAt={integrity.resolved_at}
+                        onResolved={(r) =>
+                          onResolved(integrity.submission_id, r)
+                        }
+                      />
+                    </div>
+                  )}
               </div>
             </div>
             {hasMeaningfulTranscript && (

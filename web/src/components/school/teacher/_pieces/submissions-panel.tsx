@@ -9,6 +9,8 @@ import {
   type IntegrityDiagnosisKind,
   type IntegrityDisposition,
   type IntegrityOverview,
+  type IntegrityResolution,
+  type IntegrityResolutionOutcome,
   type IntegrityRubric,
   type SubmissionFile,
   type TeacherIntegrityDetail,
@@ -230,9 +232,27 @@ const ROW_DISPOSITION_COPY: Partial<
 const ROW_INCONCLUSIVE_STYLE =
   "bg-gray-500 text-white dark:bg-gray-600";
 
+// De-emphasized pill for a check a teacher has already resolved. A
+// handled flag should read as quiet history, not an open alarm — so we
+// drop the loud filled fill for a muted outline and surface the
+// outcome the teacher chose, so the row still says *what* was decided
+// (cleared / concern / contacted) without shouting. "unresolved" never
+// reaches the resolved branch.
+const ROW_RESOLVED_COPY: Record<IntegrityResolutionOutcome, string> = {
+  cleared: "Cleared",
+  confirmed_concern: "Concern noted",
+  contacted: "Contacted",
+};
+
+const ROW_RESOLVED_STYLE =
+  "border border-border-light bg-transparent font-semibold text-text-muted";
+
 /** Queue-row disposition pill. Shows only on actionable verdicts
  *  (flag / tutored / inconclusive). Pass / needs_practice / in-
- *  progress render null, keeping clean rows visually quiet. */
+ *  progress render null, keeping clean rows visually quiet. Once a
+ *  teacher resolves the check, the loud verdict pill collapses to a
+ *  muted "reviewed" outline carrying the chosen outcome — handled
+ *  history, no longer an alarm. */
 export function RowDispositionPill({
   overview,
   className,
@@ -242,6 +262,23 @@ export function RowDispositionPill({
 }) {
   if (!overview) return null;
   if (overview.overall_status !== "complete") return null;
+  // Resolved → quiet outline pill with the outcome, regardless of the
+  // underlying AI disposition. Mirrors the IntegrityBanner dropping to
+  // NEUTRAL_STYLE and the roster flagged filter dropping the row.
+  if (overview.resolution !== "unresolved") {
+    return (
+      <span
+        className={cn(
+          "rounded-full px-2 py-0.5 text-[11px]",
+          ROW_RESOLVED_STYLE,
+          className,
+        )}
+        title="Integrity check reviewed by a teacher"
+      >
+        ✓ {ROW_RESOLVED_COPY[overview.resolution]}
+      </span>
+    );
+  }
   if (!overview.disposition) {
     return (
       <span
@@ -524,6 +561,20 @@ function IntegritySection({ submissionId }: { submissionId: string }) {
             </p>
           )}
 
+          {/* Teacher resolution — only on checks that need attention (or
+              already resolved). Clearing one drops it from the roster's
+              flagged filter; refetch so the chip reflects it. */}
+          {(integrityNeedsResolution(data) ||
+            data.resolution !== "unresolved") && (
+            <ResolveIntegrityControl
+              submissionId={submissionId}
+              resolution={data.resolution}
+              resolvedByName={data.resolved_by_name}
+              resolvedAt={data.resolved_at}
+              onResolved={() => void load()}
+            />
+          )}
+
           <ActivityDigest summary={data.activity_summary} />
 
           {data.problems
@@ -589,6 +640,157 @@ function OverallHeaderBadge({
     >
       {cfg.icon} {cfg.label}
     </span>
+  );
+}
+
+// ── Teacher resolution control ──
+// The "I handled this" action layered on top of the AI verdict. Lets a
+// teacher resolve a flagged integrity check so it clears from the
+// roster's needs-attention aggregate. Shared by the review-page
+// IntegrityBanner and the submissions-panel IntegritySection — both
+// pass the current resolution state + a callback to refetch/mirror once
+// it lands. The AI's disposition is never touched.
+
+const RESOLUTION_OUTCOMES: {
+  value: IntegrityResolutionOutcome;
+  label: string;
+  icon: string;
+}[] = [
+  { value: "cleared", label: "Cleared — no concern", icon: "✓" },
+  { value: "confirmed_concern", label: "Confirmed concern", icon: "⚑" },
+  { value: "contacted", label: "Contacted student", icon: "✉" },
+];
+
+const RESOLUTION_LABEL: Record<IntegrityResolutionOutcome, string> = {
+  cleared: "Cleared",
+  confirmed_concern: "Confirmed concern",
+  contacted: "Contacted student",
+};
+
+/** True for a terminal check the roster surfaces as needing the
+ *  teacher's eyes — the states the "Mark reviewed" action can clear.
+ *  Mirrors the review-page `isFlagged` + the backend flagged aggregate
+ *  (flag_for_review / tutor_pivot / unreadable / inconclusive). */
+export function integrityNeedsResolution(d: TeacherIntegrityDetail): boolean {
+  if (d.overall_status === "skipped_unreadable") return true;
+  if (d.overall_status === "complete" && !d.disposition) return true;
+  return d.disposition === "flag_for_review" || d.disposition === "tutor_pivot";
+}
+
+function formatResolvedAt(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+export function ResolveIntegrityControl({
+  submissionId,
+  resolution,
+  resolvedByName,
+  resolvedAt,
+  onResolved,
+}: {
+  submissionId: string;
+  resolution: IntegrityResolution;
+  resolvedByName: string | null;
+  resolvedAt: string | null;
+  onResolved: (resolution: IntegrityResolutionOutcome) => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  const [submitting, setSubmitting] =
+    useState<IntegrityResolutionOutcome | null>(null);
+  const [error, setError] = useState(false);
+
+  async function resolve(outcome: IntegrityResolutionOutcome) {
+    setSubmitting(outcome);
+    setError(false);
+    try {
+      await teacher.resolveIntegrity(submissionId, outcome);
+      setPicking(false);
+      onResolved(outcome);
+    } catch {
+      setError(true);
+    } finally {
+      setSubmitting(null);
+    }
+  }
+
+  // Resolved state — a quiet chip, deliberately de-emphasized so a
+  // handled check no longer reads as a loud alarm. "Change" reopens the
+  // picker (re-resolving just overwrites the outcome).
+  if (resolution !== "unresolved" && !picking) {
+    const label = RESOLUTION_LABEL[resolution];
+    return (
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-text-muted">
+        <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--color-border-light)] px-2 py-[3px] font-semibold text-text-secondary">
+          ✓ Reviewed{resolvedByName ? ` by ${resolvedByName}` : ""} · {label}
+        </span>
+        {resolvedAt && <span>{formatResolvedAt(resolvedAt)}</span>}
+        <button
+          type="button"
+          onClick={() => setPicking(true)}
+          className="font-medium text-text-secondary underline-offset-2 hover:text-primary hover:underline"
+        >
+          Change
+        </button>
+      </div>
+    );
+  }
+
+  // Collapsed "Mark reviewed" button — expands to the outcome picker.
+  if (!picking) {
+    return (
+      <button
+        type="button"
+        onClick={() => setPicking(true)}
+        className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
+      >
+        Mark reviewed
+      </button>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted">
+        Mark reviewed as
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {RESOLUTION_OUTCOMES.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            disabled={submitting !== null}
+            onClick={() => void resolve(o.value)}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors",
+              resolution === o.value
+                ? "border-primary/50 bg-primary-bg text-primary"
+                : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary",
+              submitting !== null && "opacity-60",
+            )}
+          >
+            <span aria-hidden>{o.icon}</span>
+            {submitting === o.value ? "Saving…" : o.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          disabled={submitting !== null}
+          onClick={() => {
+            setPicking(false);
+            setError(false);
+          }}
+          className="rounded-full px-2 py-1 text-xs font-medium text-text-muted hover:text-text-secondary"
+        >
+          Cancel
+        </button>
+      </div>
+      {error && (
+        <p className="text-[11px] text-error">Couldn&apos;t save. Try again.</p>
+      )}
+    </div>
   );
 }
 
