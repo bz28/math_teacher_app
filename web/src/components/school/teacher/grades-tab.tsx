@@ -11,6 +11,7 @@ import {
   STRUGGLING_THRESHOLD,
 } from "@/components/school/shared/percent-badge";
 import { SearchIcon } from "@/components/ui/icons";
+import { GradesItemAnalysis } from "./_pieces/grades-item-analysis";
 
 /**
  * Grades tab — the read-only final-record view.
@@ -184,6 +185,7 @@ export function GradesTab({ courseId }: { courseId: string }) {
   }
 
   return (
+    <>
     <div className="mt-2 space-y-4">
       {/* Class-summary strip — vibe check before the table. Distribution
           bar uses the same thresholds as PercentBadge so what counts
@@ -327,6 +329,14 @@ export function GradesTab({ courseId }: { courseId: string }) {
         </div>
       )}
     </div>
+
+    {/* Per-assignment item analysis — "where the class struggled on THIS
+        graded HW", below the roster so the audit view stays first.
+        Loads its own data (graded assignments → item analysis) and is a
+        no-op band until something's been graded. Complements the
+        practice-wide struggle panel on the Insights tab. */}
+    <GradesItemAnalysis courseId={courseId} />
+    </>
   );
 }
 

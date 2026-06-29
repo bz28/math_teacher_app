@@ -206,12 +206,19 @@ async def extract_student_work(
     # 4096 gives comfortable headroom for the densest real submissions
     # (well under Claude's output cap) without letting the prompt run
     # away. Bump further if we ever see `max_tokens` again in logs.
+    # temperature=0 pins the read so the SAME photo extracts the SAME
+    # work + final answers on every run. The grading call downstream is
+    # already temp-0 (grading_ai.grade_submission_with_ai); pinning the
+    # extraction too makes the grade reproducible END-TO-END — without
+    # it a re-read of the identical paper could transcribe a step or
+    # final answer differently and drift the resulting grade.
     result = await call_claude_vision(
         content,
         LLMMode.INTEGRITY_EXTRACT,
         tool_schema=INTEGRITY_EXTRACT_SCHEMA,
         model=MODEL_REASON,
         max_tokens=4096,
+        temperature=0.0,
         user_id=user_id,
         submission_id=str(submission_id),
         call_metadata={"phase": "vision_extract"},

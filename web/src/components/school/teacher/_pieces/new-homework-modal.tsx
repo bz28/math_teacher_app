@@ -1,50 +1,59 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   teacher,
   EntitlementError,
   DEFAULT_GENERATION_PARAMS,
   type GenerationParams,
   type TeacherDocument,
+  type TeacherRubric,
   type TeacherUnit,
 } from "@/lib/api";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { topUnits } from "@/lib/units";
-import { fileToBase64, formatFileSize } from "@/lib/utils";
+import { formatDue, fileToBase64, formatFileSize } from "@/lib/utils";
 import { ImageResizeError, resizeImageForUpload } from "@/lib/image-resize";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useDocumentUploads } from "@/hooks/use-document-uploads";
 import { FileTextIcon, ImageIcon, UploadIcon, XIcon } from "@/components/ui/icons";
-import { SelectableChip } from "./selectable-chip";
-import { SourceMaterialPicker } from "./source-material-picker";
+import {
+  AssignmentDetailsStep,
+  AssignmentProblemsStep,
+  LATE_POLICY_OPTIONS,
+} from "./assignment-wizard-steps";
+import { GradingSetupCard } from "./grading-setup-card";
 import {
   GenerationParamsCustomize,
   persistGenerationParams,
 } from "./generation-params-customize";
 
 /**
- * Single-screen creation modal for a draft homework.
+ * One-sitting create-homework wizard.
  *
- * Mode toggle at the top swaps the form between two creation paths:
- *   - Generate: AI invents `count` problems for the unit, optionally
- *     scoped by a focus hint and reference materials. Kicks off a bank
- *     gen job and routes to the review queue.
- *   - Upload: teacher drops photos or a PDF of an existing worksheet;
- *     Vision extracts the problems verbatim, optionally scoped by a
- *     natural-language hint ("Q1-13 odd"). Same bank-job pipeline,
- *     same review queue — items just land with source="imported".
+ * Replaces the old "make a draft, then reopen the detail page to set
+ * due date / late policy / sections / rubric / publish" two-trip flow.
+ * The teacher now sets EVERYTHING up front across four steps:
  *
- * Title + Unit are shared by both modes. Due date, late policy, and
- * section assignment are intentionally absent; they aren't read by
- * generation and are editable on the HW detail page where the
- * teacher lands next, so asking here is double work.
+ *   1 — Details   title, units, due date, late policy, sections
+ *                 (shared AssignmentDetailsStep)
+ *   2 — Problems  Generate from materials OR Upload a worksheet
+ *                 (shared AssignmentProblemsStep + the upload pane)
+ *   3 — Grading   the AI rubric (shared GradingSetupCard)
+ *   4 — Review    summary + finish: "Create & generate" / "Create &
+ *                 extract", with "Save as draft" as an escape on every
+ *                 step.
  *
- * Footer text-link "Create empty draft" is the escape hatch: stub HW,
- * straight to detail page, no AI involvement either way.
+ * On finish we create the draft, assign the picked sections, persist
+ * the rubric, then kick the generate/upload job and route the teacher
+ * to the homework page — where the generated problems land in the
+ * review queue. Publishing stays a deliberate one-click on that page
+ * AFTER the teacher has reviewed the AI's problems (we never publish
+ * un-reviewed AI output); everything else publish needs — due date,
+ * sections, late policy, rubric — is already set here, so it's a
+ * single click instead of a configuration trip.
  */
-
-const QUANTITY_CHIPS = [5, 10, 15, 20] as const;
 
 // Backend caps mirrored client-side so we can reject oversized files
 // before encoding+POSTing 25MB of base64. Magic-byte detection still
@@ -55,6 +64,14 @@ const MAX_FILES = 10;
 const ACCEPT = "image/jpeg,image/png,application/pdf";
 
 type Mode = "generate" | "upload";
+type Step = 1 | 2 | 3 | 4;
+
+const STEPS: { n: Step; label: string }[] = [
+  { n: 1, label: "Details" },
+  { n: 2, label: "Problems" },
+  { n: 3, label: "Grading" },
+  { n: 4, label: "Review" },
+];
 
 interface StagedFile {
   id: string;
@@ -70,6 +87,20 @@ interface StagedFile {
   error?: string;
 }
 
+/** Collapse a partial rubric into a normalized dict, dropping empty /
+ *  whitespace-only values. Mirrors normalizeRubric on the HW detail
+ *  page so what the teacher authors here stores identically. */
+function normalizeRubric(r: TeacherRubric | null): TeacherRubric {
+  const out: TeacherRubric = {};
+  if (!r) return out;
+  const s = (v: string | undefined) => (v && v.trim() ? v.trim() : undefined);
+  if (s(r.full_credit)) out.full_credit = s(r.full_credit);
+  if (s(r.partial_credit)) out.partial_credit = s(r.partial_credit);
+  if (s(r.common_mistakes)) out.common_mistakes = s(r.common_mistakes);
+  if (s(r.notes)) out.notes = s(r.notes);
+  return out;
+}
+
 export function NewHomeworkModal({
   courseId,
   defaultUnitIds = [],
@@ -78,7 +109,7 @@ export function NewHomeworkModal({
 }: {
   courseId: string;
   /** Pre-select this unit (e.g. the unit currently filtered in the
-   *  HW list). Single-select — only the first id is honored. */
+   *  HW list). */
   defaultUnitIds?: string[];
   onClose: () => void;
   /** Fired with the newly-created HW id after a successful create.
@@ -89,59 +120,62 @@ export function NewHomeworkModal({
     opts: { startedGeneration: boolean },
   ) => void;
 }) {
-  const { busy, error, run } = useAsyncAction();
+  const { busy, error, setError, run } = useAsyncAction();
   const { showUpgrade, UpgradeModal } = useUpgradePrompt();
+  const reduceMotion = useReducedMotion();
 
+  const [step, setStep] = useState<Step>(1);
   const [mode, setMode] = useState<Mode>("generate");
 
+  // ── Step 1 — Details ──
   const [title, setTitle] = useState("");
-  const [unitId, setUnitId] = useState<string | null>(
-    defaultUnitIds[0] ?? null,
-  );
+  const [unitIds, setUnitIds] = useState<string[]>(defaultUnitIds);
+  const [dueAt, setDueAt] = useState<string>("");
+  const [latePolicy, setLatePolicy] = useState<string>("none");
+  const [sectionIds, setSectionIds] = useState<string[]>([]);
+
+  // ── Step 2 (generate) ──
   const [count, setCount] = useState<number>(10);
-  // Empty by default because the matching preset chip already shows
-  // the value — we only put text in the input when the teacher picks
-  // a non-preset.
-  const [countDraft, setCountDraft] = useState("");
   const [topicHint, setTopicHint] = useState("");
   // Customize-section selections for generation. Same shape + storage
   // as the in-HW Generate-more modal; selection persists across both
   // entry points so AP teachers don't reselect.
   const [params, setParams] = useState<GenerationParams>(DEFAULT_GENERATION_PARAMS);
+  const [docs, setDocs] = useState<TeacherDocument[]>([]);
+  const [docsLoaded, setDocsLoaded] = useState(false);
+  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
 
-  // Upload-mode state. Files stay staged across mode switches so a
-  // teacher who clicks Generate by accident doesn't lose their photos.
+  // ── Step 2 (upload) ──
+  // Files stay staged across mode switches so a teacher who clicks
+  // Generate by accident doesn't lose their photos.
   const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
   const [scopeHint, setScopeHint] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [units, setUnits] = useState<TeacherUnit[] | null>(null);
-  // Inline unit-create (shown when the course has no units yet) so a
-  // first-time teacher doesn't have to bail out to the Materials tab.
-  const [newUnitName, setNewUnitName] = useState("");
-  const [creatingUnit, setCreatingUnit] = useState(false);
-  const [unitError, setUnitError] = useState<string | null>(null);
-  const [docs, setDocs] = useState<TeacherDocument[]>([]);
-  const [docsLoaded, setDocsLoaded] = useState(false);
-  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
+  // ── Step 3 — Grading ──
+  const [rubric, setRubric] = useState<TeacherRubric | null>(null);
 
-  // Inline document uploads. Owned at the modal so the pending rows
-  // survive the picker remounting when the unit switches. Uploads
-  // land in the currently-picked unit; the picker only renders
-  // after a unit is picked, so unitId is non-null whenever Upload
-  // is reachable. Upload-during-unit-switch race is closed by
-  // disabling the unit chips while `hasInflightUploads` is true.
+  // Units, loaded for the Review-step summary (names) + the unit guard.
+  // The Details step's UnitMultiSelect loads its own copy; this is a
+  // cheap parallel read so we can show "Quadratics, Linear" instead of
+  // "2 units" on the final review.
+  const [units, setUnits] = useState<TeacherUnit[]>([]);
+
+  // Inline document uploads for the generate step's source-material
+  // picker. Owned at the modal so the pending rows survive the picker
+  // remounting when the step switches. Uploads land in the first picked
+  // unit (Details requires ≥1 before Problems is reachable).
   const uploads = useDocumentUploads({
     courseId,
-    getUnitId: () => unitId ?? "",
+    getUnitId: () => unitIds[0] ?? "",
     setDocs,
     setSelectedDocs,
   });
 
   // Load units + docs eagerly on mount. Both are tiny lists scoped to
-  // the course; pre-loading avoids a flash of empty UI when the
-  // teacher picks a unit and expects materials to appear instantly.
+  // the course; pre-loading avoids a flash of empty UI when the teacher
+  // reaches the generate picker or the review summary.
   useEffect(() => {
     let cancelled = false;
     teacher
@@ -150,13 +184,13 @@ export function NewHomeworkModal({
         if (!cancelled) setUnits(r.units);
       })
       .catch(() => {
-        if (!cancelled) setUnits([]);
+        // Non-fatal — the Details step loads units independently; this
+        // copy only powers the review summary's unit names.
       });
     teacher
       .documents(courseId)
       .then((r) => {
-        if (cancelled) return;
-        setDocs(r.documents);
+        if (!cancelled) setDocs(r.documents);
       })
       .catch(() => {
         // Non-fatal — docs are optional context for generation.
@@ -169,74 +203,77 @@ export function NewHomeworkModal({
     };
   }, [courseId]);
 
-  const onPickUnit = (id: string) => {
-    if (id === unitId) return;
-    setUnitId(id);
-    // Switching unit invalidates any selected reference files —
-    // forwarding files from another unit to the AI generator would
-    // ignore the unit the teacher just picked. Cheaper than a confirm
-    // dialog and matches the picker's filter-mode default view.
-    setSelectedDocs(new Set());
+  const detailsValid = title.trim().length > 0 && unitIds.length > 0;
+  const validStagedCount = stagedFiles.filter((f) => !f.error && f.base64).length;
+
+  // ── Rubric accumulation (mirrors the detail page, but buffered in
+  //    memory until the draft exists rather than auto-saved). ──
+  const onChangeRubric = (patch: Partial<TeacherRubric>) => {
+    setRubric((prev) => {
+      const merged = normalizeRubric({ ...(prev ?? {}), ...patch });
+      return Object.keys(merged).length === 0 ? null : merged;
+    });
   };
 
-  // Create a unit inline and select it — same API the Materials tab
-  // uses (teacher.createUnit). Refresh the list so the new unit shows
-  // as a selectable chip; the teacher continues without leaving here.
-  const onCreateUnit = async () => {
-    const name = newUnitName.trim();
-    if (!name || creatingUnit) return;
-    setCreatingUnit(true);
-    setUnitError(null);
-    try {
-      const created = await teacher.createUnit(courseId, { name });
-      const refreshed = await teacher.units(courseId);
-      setUnits(refreshed.units);
-      setUnitId(created.id);
-      setSelectedDocs(new Set());
-      setNewUnitName("");
-    } catch (e) {
-      setUnitError(e instanceof Error ? e.message : "Could not create unit");
-    } finally {
-      setCreatingUnit(false);
-    }
+  const onToggleDoc = (id: string) =>
+    setSelectedDocs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  // ── Flow control ──
+
+  const goTo = (next: Step) => {
+    setError(null);
+    setStep(next);
   };
 
-  const clamp = (v: number) => Math.min(50, Math.max(1, Math.round(v)));
-
-  const handleCountChange = (raw: string) => {
-    setCountDraft(raw);
-    const v = parseInt(raw, 10);
-    if (!Number.isNaN(v)) setCount(clamp(v));
-  };
-
-  const handleCountBlur = () => {
-    const v = parseInt(countDraft, 10);
-    if (Number.isNaN(v)) {
-      // Empty/invalid — fall back to the current count, but leave
-      // the input blank when that count is one of the chips (the
-      // chip is already showing it).
-      setCountDraft(
-        (QUANTITY_CHIPS as readonly number[]).includes(count) ? "" : String(count),
+  const onContinueFromDetails = () => {
+    if (!detailsValid) {
+      setError(
+        !title.trim() ? "Title is required" : "Pick at least one unit",
       );
       return;
     }
-    setCountDraft(String(clamp(v)));
+    goTo(2);
   };
 
+  // ── Create paths ──
+
+  // Create the draft with the full configuration the wizard collected:
+  // title, units, due date, late policy, then the picked sections and
+  // the authored rubric. Sections + rubric are best-effort PATCHes
+  // (both stay fully editable on the detail page), so a hiccup on
+  // either doesn't strand the teacher with no homework at all.
   const createDraft = async (): Promise<string> => {
-    // Both submit buttons are `disabled` until title + unitId are
-    // present (see button props below), so unitId is non-null here.
-    if (!unitId) throw new Error("Pick a unit");
     const created = await teacher.createAssignment(courseId, {
       title: title.trim(),
       type: "homework",
-      unit_ids: [unitId],
-      late_policy: "none",
+      unit_ids: unitIds,
+      late_policy: latePolicy,
+      ...(dueAt ? { due_at: new Date(dueAt).toISOString() } : {}),
     });
+    if (sectionIds.length > 0) {
+      try {
+        await teacher.assignToSections(created.id, sectionIds);
+      } catch {
+        // Non-fatal — teacher adds sections on the detail page.
+      }
+    }
+    const normalized = normalizeRubric(rubric);
+    if (Object.keys(normalized).length > 0) {
+      try {
+        await teacher.updateAssignment(created.id, { rubric: normalized });
+      } catch {
+        // Non-fatal — rubric stays editable on the detail page.
+      }
+    }
     return created.id;
   };
 
-  const onCreateEmpty = () =>
+  const onSaveDraft = () =>
     run(async () => {
       const id = await createDraft();
       onCreated(id, { startedGeneration: false });
@@ -246,27 +283,26 @@ export function NewHomeworkModal({
     run(async () => {
       const id = await createDraft();
       // Fire-and-forget: the job runs server-side regardless of the
-      // client. The teacher routes straight to the review queue —
-      // its skeleton state covers the wait, items appear as they land.
+      // client. The teacher routes straight to the review queue — its
+      // skeleton state covers the wait, items appear as they land.
       let startedGeneration = true;
       try {
         const job = await teacher.generateBank(courseId, {
           count,
           assignment_id: id,
-          unit_id: unitId!,
+          unit_id: unitIds[0],
           document_ids: Array.from(selectedDocs),
           constraint: topicHint.trim() || null,
-          // Writes to localStorage as a side-effect; returns null
-          // when no customizations are active.
+          // Writes to localStorage as a side-effect; returns null when
+          // no customizations are active.
           params: persistGenerationParams(params),
         });
         sessionStorage.setItem(`hw-gen-${id}`, JSON.stringify([job.id]));
       } catch (e) {
         if (e instanceof EntitlementError && e.isLimit) {
           // Cap hit: roll back the draft we just created so the
-          // teacher's course doesn't get littered with empty drafts
-          // they have to manually delete. Best-effort — if delete
-          // also fails the orphan is at least visible on next load.
+          // teacher's course doesn't get littered with empty drafts.
+          // Best-effort — orphan visible on next load if delete fails.
           try {
             await teacher.deleteAssignment(id);
           } catch {
@@ -280,7 +316,27 @@ export function NewHomeworkModal({
       onCreated(id, { startedGeneration });
     });
 
-  // ── Upload mode ──
+  const onUpload = () =>
+    run(async () => {
+      const valid = stagedFiles.filter((f) => !f.error && f.base64);
+      if (valid.length === 0) throw new Error("Add at least one file");
+      const id = await createDraft();
+      let startedGeneration = true;
+      try {
+        const job = await teacher.uploadWorksheet(courseId, {
+          images: valid.map((f) => f.base64),
+          assignment_id: id,
+          unit_id: unitIds[0],
+          constraint: scopeHint.trim() || null,
+        });
+        sessionStorage.setItem(`hw-gen-${id}`, JSON.stringify([job.id]));
+      } catch {
+        startedGeneration = false;
+      }
+      onCreated(id, { startedGeneration });
+    });
+
+  // ── Upload-mode staging ──
 
   const ACCEPTED_TYPES = new Set([
     "image/jpeg",
@@ -310,8 +366,6 @@ export function NewHomeworkModal({
     const isPdf = file.type === "application/pdf";
 
     // PDFs go through untouched — resizeImageForUpload is image-only.
-    // Cap the raw file size up front to avoid a 50MB base64 round-trip
-    // for an obviously-too-big upload.
     if (isPdf) {
       if (file.size > MAX_PDF_BYTES) {
         return errorRow(file, "Too large (max 25MB)");
@@ -332,20 +386,13 @@ export function NewHomeworkModal({
     }
 
     // Images: resize before staging so a phone photo lands well under
-    // the 5 MB server cap. resizeImageForUpload returns the original
-    // File untouched if it's already small enough; otherwise a smaller
-    // JPEG Blob. Encoding the result of that gives us the same bytes
-    // the server will validate.
+    // the 5 MB server cap.
     try {
       const blob = await resizeImageForUpload(file);
-      // Defense in depth — resize should produce ≤5MB, but a future
-      // change to the util shouldn't silently bypass the server cap.
       if (blob.size > MAX_IMAGE_BYTES) {
         return errorRow(file, "Too large (max 5MB)");
       }
       const base64 = await fileToBase64(blob as File);
-      // Resize re-encodes as JPEG; preview the actual bytes the server
-      // will see (not the original file's media type).
       const mediaType: StagedFile["mediaType"] =
         blob === file ? (file.type as StagedFile["mediaType"]) : "image/jpeg";
       return {
@@ -357,9 +404,6 @@ export function NewHomeworkModal({
         previewUrl: `data:${mediaType};base64,${base64}`,
       };
     } catch (err) {
-      // resize-only error — surface the friendly message. Anything
-      // else bubbles (it's an unexpected programmer error, not a
-      // user-actionable case).
       if (err instanceof ImageResizeError) {
         return errorRow(file, err.message);
       }
@@ -370,7 +414,6 @@ export function NewHomeworkModal({
   const handleFiles = async (files: FileList | File[]) => {
     const list = Array.from(files);
     if (list.length === 0) return;
-    // Cap total files at MAX_FILES — silently drop the overflow.
     const remaining = Math.max(0, MAX_FILES - stagedFiles.length);
     const next = list.slice(0, remaining);
     const staged = await Promise.all(next.map(stageOne));
@@ -380,26 +423,6 @@ export function NewHomeworkModal({
   const removeStagedFile = (id: string) => {
     setStagedFiles((prev) => prev.filter((f) => f.id !== id));
   };
-
-  const onUpload = () =>
-    run(async () => {
-      const valid = stagedFiles.filter((f) => !f.error && f.base64);
-      if (valid.length === 0) throw new Error("Add at least one file");
-      const id = await createDraft();
-      let startedGeneration = true;
-      try {
-        const job = await teacher.uploadWorksheet(courseId, {
-          images: valid.map((f) => f.base64),
-          assignment_id: id,
-          unit_id: unitId!,
-          constraint: scopeHint.trim() || null,
-        });
-        sessionStorage.setItem(`hw-gen-${id}`, JSON.stringify([job.id]));
-      } catch {
-        startedGeneration = false;
-      }
-      onCreated(id, { startedGeneration });
-    });
 
   const onDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -418,280 +441,314 @@ export function NewHomeworkModal({
     }
   };
 
-  const tops = units ? topUnits(units) : [];
-  const validStagedCount = stagedFiles.filter((f) => !f.error && f.base64).length;
-  const canGenerate = !busy && title.trim().length > 0 && unitId !== null;
-  const canExtract = canGenerate && validStagedCount > 0;
+  // ── Motion ──
+  const variants = reduceMotion
+    ? {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+      }
+    : {
+        initial: { opacity: 0, x: 16 },
+        animate: { opacity: 1, x: 0 },
+        exit: { opacity: 0, x: -16 },
+      };
+
+  const current = STEPS.find((s) => s.n === step)!;
+  const unitNames = topUnits(units)
+    .filter((u) => unitIds.includes(u.id))
+    .map((u) => u.name);
 
   return (
     <>
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={() => {
-        // Block backdrop close while a create or upload is in flight —
-        // unmounting mid-request orphans whatever the server already
-        // persisted (failed-upload rows are inert so don't block).
-        if (!busy && !uploads.hasInflightUploads) onClose();
-      }}
-    >
       <div
-        className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[--radius-xl] bg-surface shadow-xl"
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        onClick={() => {
+          // Block backdrop close while a create or upload is in flight.
+          if (!busy && !uploads.hasInflightUploads) onClose();
+        }}
       >
-        <div className="flex items-center justify-between border-b border-border-light px-6 py-3">
-          <h2 className="text-base font-bold text-text-primary">
-            New Homework
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={busy || uploads.hasInflightUploads}
-            aria-label="Close"
-            className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary disabled:opacity-50"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
-          <ModeTabs mode={mode} onChange={setMode} disabled={busy} />
-
-          <div>
-            <label
-              htmlFor="hw-title"
-              className="block text-sm font-bold text-text-primary"
+        <div
+          className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[--radius-xl] border border-border-light bg-surface shadow-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header — editorial: serif title + a quiet step counter. */}
+          <div className="flex items-center justify-between gap-3 border-b border-border-light px-6 py-3.5">
+            <div className="flex items-baseline gap-3">
+              <h2 className="font-serif text-lg leading-none tracking-[-0.01em] text-text-primary">
+                New homework
+              </h2>
+              <span className="rounded-[--radius-pill] bg-bg-subtle px-2 py-0.5 text-[11px] font-semibold text-text-muted">
+                Step {step} of {STEPS.length} · {current.label}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy || uploads.hasInflightUploads}
+              aria-label="Close"
+              className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary disabled:opacity-50"
             >
-              Title
-            </label>
-            <input
-              id="hw-title"
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              autoFocus
-              maxLength={300}
-              placeholder="e.g. Quadratics HW #1"
-              disabled={busy}
-              className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
-            />
+              ✕
+            </button>
           </div>
 
-          <div>
-            <label className="block text-sm font-bold text-text-primary">
-              Unit
-            </label>
-            {units === null ? (
-              <p className="mt-2 text-xs text-text-muted">Loading units…</p>
-            ) : tops.length === 0 ? (
-              <div className="mt-2">
-                <p className="text-xs text-text-muted">
-                  Homework is built from a unit. Name your first one to get
-                  started — you can upload materials to it later.
-                </p>
-                <form
-                  className="mt-2 flex items-center gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void onCreateUnit();
-                  }}
-                >
-                  <input
-                    type="text"
-                    value={newUnitName}
-                    onChange={(e) => setNewUnitName(e.target.value)}
-                    maxLength={200}
-                    placeholder="e.g. Quadratics"
-                    aria-label="New unit name"
-                    disabled={busy || creatingUnit}
-                    className="flex-1 rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:opacity-50"
+          {/* Stepper progress indicator */}
+          <div className="border-b border-border-light bg-bg-subtle/40 px-6 py-3">
+            <WizardStepper step={step} onJump={(n) => goTo(n)} />
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-5">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={step}
+                variants={variants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={{ duration: reduceMotion ? 0.12 : 0.22, ease: "easeOut" }}
+              >
+                {step === 1 && (
+                  <AssignmentDetailsStep
+                    title={title}
+                    onTitleChange={setTitle}
+                    courseId={courseId}
+                    unitIds={unitIds}
+                    onUnitIdsChange={setUnitIds}
+                    dueAt={dueAt}
+                    onDueAtChange={setDueAt}
+                    latePolicy={latePolicy}
+                    onLatePolicyChange={setLatePolicy}
+                    sectionIds={sectionIds}
+                    onSectionIdsChange={setSectionIds}
+                    disabled={busy}
+                    titlePlaceholder="e.g. Quadratics HW #1"
+                    sectionsHint="Leave empty to assign to every section in this course."
                   />
-                  <button
-                    type="submit"
-                    disabled={busy || creatingUnit || !newUnitName.trim()}
-                    className="rounded-[--radius-md] bg-primary px-3 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
-                  >
-                    {creatingUnit ? "Creating…" : "Create"}
-                  </button>
-                </form>
-                {unitError && (
-                  <p className="mt-1.5 text-xs text-red-600">{unitError}</p>
                 )}
-              </div>
-            ) : (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {tops.map((u) => (
-                  <SelectableChip
-                    key={u.id}
-                    label={u.name}
-                    selected={unitId === u.id}
-                    // Block unit switches while uploads are in flight.
-                    // Otherwise an in-flight upload's auto-select can land
-                    // AFTER our switch's selectedDocs clear, leaving a
-                    // freshly-uploaded doc id selected under a different
-                    // unit and silently forwarded on submit.
-                    disabled={busy || uploads.hasInflightUploads}
-                    onToggle={() => onPickUnit(u.id)}
+
+                {step === 2 && (
+                  <div className="space-y-5">
+                    <ModeTabs mode={mode} onChange={setMode} disabled={busy} />
+                    {mode === "generate" ? (
+                      <AssignmentProblemsStep
+                        count={count}
+                        onCountChange={setCount}
+                        topicHint={topicHint}
+                        onTopicHintChange={setTopicHint}
+                        courseId={courseId}
+                        unitIds={unitIds}
+                        docs={docs}
+                        docsLoaded={docsLoaded}
+                        selectedDocs={selectedDocs}
+                        onToggleDoc={onToggleDoc}
+                        pending={uploads.pending}
+                        onFilesSelected={uploads.handleFiles}
+                        onRetryPending={uploads.retryPending}
+                        onDismissPending={uploads.dismissPending}
+                        disabled={busy}
+                        helperText="The AI writes fresh problems from your unit and any materials you point it at. They land in a review queue for your approval."
+                        extraControls={
+                          <GenerationParamsCustomize
+                            params={params}
+                            onChange={setParams}
+                            disabled={busy}
+                          />
+                        }
+                      />
+                    ) : (
+                      <UploadSection
+                        fileInputRef={fileInputRef}
+                        dragActive={dragActive}
+                        stagedFiles={stagedFiles}
+                        scopeHint={scopeHint}
+                        onScopeHintChange={setScopeHint}
+                        onDragOver={onDragOver}
+                        onDragLeave={onDragLeave}
+                        onDrop={onDrop}
+                        onFilesSelected={(files) => void handleFiles(files)}
+                        onRemoveStaged={removeStagedFile}
+                        disabled={busy}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {step === 3 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-text-muted">
+                      How the AI grades student work on this homework. We&apos;ve
+                      filled in sensible defaults — edit to match how you grade.
+                    </p>
+                    {/* GradingSetupCard owns its own card chrome; -mt
+                        pulls it tight under the helper line. */}
+                    <div className="-mt-2">
+                      <GradingSetupCard
+                        rubric={rubric}
+                        saveState="idle"
+                        saveError={null}
+                        onChange={onChangeRubric}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {step === 4 && (
+                  <ReviewStep
+                    title={title}
+                    unitNames={unitNames}
+                    unitCount={unitIds.length}
+                    dueAt={dueAt}
+                    latePolicy={latePolicy}
+                    sectionCount={sectionIds.length}
+                    mode={mode}
+                    count={count}
+                    fileCount={validStagedCount}
+                    hasRubric={Object.keys(normalizeRubric(rubric)).length > 0}
                   />
-                ))}
-              </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
+
+            {error && <p className="mt-4 text-xs text-[color:var(--color-error)]">{error}</p>}
+          </div>
+
+          {/* Footer — Back + Save-as-draft escape on the left, the
+              forward / finish action on the right. */}
+          <div className="flex items-center justify-between gap-3 border-t border-border-light px-6 py-3">
+            <div className="flex items-center gap-1">
+              {step > 1 && (
+                <button
+                  type="button"
+                  onClick={() => goTo((step - 1) as Step)}
+                  disabled={busy}
+                  className="-mx-1 inline-flex min-h-[44px] items-center px-2 text-xs font-semibold text-text-muted hover:text-text-primary disabled:opacity-50"
+                >
+                  ← Back
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onSaveDraft}
+                disabled={busy || !detailsValid}
+                title={
+                  detailsValid
+                    ? "Create the draft and finish setup later"
+                    : "Add a title and a unit first"
+                }
+                className="-mx-1 inline-flex min-h-[44px] items-center px-2 text-xs font-semibold text-text-muted hover:text-text-primary disabled:opacity-50"
+              >
+                Save as draft
+              </button>
+            </div>
+
+            {step < 4 ? (
+              <button
+                type="button"
+                onClick={() =>
+                  step === 1 ? onContinueFromDetails() : goTo((step + 1) as Step)
+                }
+                disabled={busy || (step === 1 && !detailsValid)}
+                className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+              >
+                Continue →
+              </button>
+            ) : mode === "generate" ? (
+              <button
+                type="button"
+                onClick={onGenerate}
+                disabled={busy || !detailsValid}
+                className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+              >
+                {busy ? "Creating…" : "Create & generate →"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onUpload}
+                disabled={busy || !detailsValid || validStagedCount === 0}
+                title={
+                  validStagedCount === 0
+                    ? "Add at least one worksheet page first"
+                    : undefined
+                }
+                className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+              >
+                {busy ? "Creating…" : "Create & extract →"}
+              </button>
             )}
           </div>
-
-          {mode === "generate" && (
-            <>
-              <div>
-                <label className="block text-sm font-bold text-text-primary">
-                  How many problems?
-                </label>
-                <div className="mt-2 flex items-center gap-2">
-                  {QUANTITY_CHIPS.map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => {
-                        setCount(n);
-                        // Clear the input so a preset chip and the custom
-                        // field don't both display the same number.
-                        setCountDraft("");
-                      }}
-                      disabled={busy}
-                      aria-pressed={count === n}
-                      className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                        count === n
-                          ? "bg-primary text-white"
-                          : "bg-bg-subtle text-text-primary hover:bg-bg-base"
-                      } disabled:opacity-50`}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                  <span className="text-[11px] text-text-muted">or</span>
-                  <input
-                    type="number"
-                    value={countDraft}
-                    min={1}
-                    max={50}
-                    placeholder="custom"
-                    aria-label="Custom problem count"
-                    onChange={(e) => handleCountChange(e.target.value)}
-                    onBlur={handleCountBlur}
-                    disabled={busy}
-                    className="w-20 rounded-[--radius-md] border border-border-light bg-bg-base px-2 py-1 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:opacity-50"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="hw-focus"
-                  className="block text-sm font-bold text-text-primary"
-                >
-                  Focus{" "}
-                  <span className="font-normal text-text-muted">· optional</span>
-                </label>
-                <p className="mt-1 text-[11px] text-text-muted">
-                  Tell the AI what to emphasize.
-                </p>
-                <input
-                  id="hw-focus"
-                  type="text"
-                  value={topicHint}
-                  onChange={(e) => setTopicHint(e.target.value)}
-                  placeholder="e.g. word problems, real-world contexts, no calculators"
-                  disabled={busy}
-                  className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
-                />
-              </div>
-
-              <GenerationParamsCustomize
-                params={params}
-                onChange={setParams}
-                disabled={busy}
-              />
-
-              {unitId && (
-                <SourceMaterialPicker
-                  courseId={courseId}
-                  docs={docs}
-                  docsLoaded={docsLoaded}
-                  selectedDocs={selectedDocs}
-                  unitIds={[unitId]}
-                  units={units}
-                  onToggleDoc={(id) =>
-                    setSelectedDocs((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(id)) next.delete(id);
-                      else next.add(id);
-                      return next;
-                    })
-                  }
-                  pending={uploads.pending}
-                  onFilesSelected={uploads.handleFiles}
-                  onRetryPending={uploads.retryPending}
-                  onDismissPending={uploads.dismissPending}
-                  disabled={busy}
-                  filterToSelectedUnits
-                />
-              )}
-            </>
-          )}
-
-          {mode === "upload" && (
-            <UploadSection
-              fileInputRef={fileInputRef}
-              dragActive={dragActive}
-              stagedFiles={stagedFiles}
-              scopeHint={scopeHint}
-              onScopeHintChange={setScopeHint}
-              onDragOver={onDragOver}
-              onDragLeave={onDragLeave}
-              onDrop={onDrop}
-              onFilesSelected={(files) => void handleFiles(files)}
-              onRemoveStaged={removeStagedFile}
-              disabled={busy}
-            />
-          )}
-
-          {error && <p className="text-xs text-red-600">{error}</p>}
-        </div>
-
-        <div className="flex items-center justify-between gap-3 border-t border-border-light px-6 py-3">
-          <button
-            type="button"
-            onClick={onCreateEmpty}
-            disabled={busy || !title.trim() || !unitId}
-            className="-mx-2 inline-flex min-h-[44px] items-center px-2 text-xs font-semibold text-text-muted hover:text-text-primary disabled:opacity-50"
-          >
-            Create empty draft
-          </button>
-          {mode === "generate" ? (
-            <button
-              type="button"
-              onClick={onGenerate}
-              disabled={!canGenerate}
-              className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
-            >
-              {busy ? "Creating…" : "Generate problems →"}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onUpload}
-              disabled={!canExtract}
-              className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
-            >
-              {busy ? "Creating…" : "Extract problems →"}
-            </button>
-          )}
         </div>
       </div>
-    </div>
-    {UpgradeModal}
+      {UpgradeModal}
     </>
   );
 }
 
-// ── Subcomponents ──
+// ── Stepper ──
+
+function WizardStepper({
+  step,
+  onJump,
+}: {
+  step: Step;
+  onJump: (n: Step) => void;
+}) {
+  return (
+    <ol className="flex items-center">
+      {STEPS.map((s, i) => {
+        const state =
+          s.n < step ? "done" : s.n === step ? "current" : "upcoming";
+        // Only completed steps are clickable — forward jumps must pass
+        // the Details validation gate.
+        const clickable = s.n < step;
+        return (
+          <li key={s.n} className="flex flex-1 items-center last:flex-none">
+            <button
+              type="button"
+              onClick={() => clickable && onJump(s.n)}
+              disabled={!clickable}
+              aria-current={state === "current" ? "step" : undefined}
+              className={`group flex items-center gap-2 ${
+                clickable ? "cursor-pointer" : "cursor-default"
+              }`}
+            >
+              <span
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition-colors ${
+                  state === "current"
+                    ? "bg-primary text-white"
+                    : state === "done"
+                      ? "border border-primary/40 bg-primary/10 text-primary group-hover:bg-primary/20"
+                      : "border border-border-light bg-surface text-text-muted"
+                }`}
+              >
+                {state === "done" ? "✓" : s.n}
+              </span>
+              <span
+                className={`hidden text-[11px] font-semibold uppercase tracking-[0.12em] sm:inline ${
+                  state === "upcoming" ? "text-text-muted" : "text-text-primary"
+                }`}
+              >
+                {s.label}
+              </span>
+            </button>
+            {i < STEPS.length - 1 && (
+              <span
+                aria-hidden
+                className={`mx-2 h-px flex-1 ${
+                  s.n < step ? "bg-primary/40" : "bg-border-light"
+                }`}
+              />
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// ── Generate / Upload mode toggle ──
 
 function ModeTabs({
   mode,
@@ -706,8 +763,6 @@ function ModeTabs({
     { key: "generate", label: "Generate" },
     { key: "upload", label: "Upload" },
   ];
-  // Arrow-key navigation between pills — keeps the toggle accessible
-  // for keyboard users while staying out of the way for mouse/touch.
   const onKeyDown = (e: React.KeyboardEvent, idx: number) => {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
     e.preventDefault();
@@ -716,11 +771,7 @@ function ModeTabs({
     onChange(tabs[next].key);
   };
   return (
-    <div
-      role="tablist"
-      aria-label="Homework creation mode"
-      className="flex gap-1.5"
-    >
+    <div role="tablist" aria-label="Homework problem source" className="flex gap-1.5">
       {tabs.map((t, i) => {
         const selected = mode === t.key;
         return (
@@ -746,6 +797,115 @@ function ModeTabs({
     </div>
   );
 }
+
+// ── Review step ──
+
+function ReviewStep({
+  title,
+  unitNames,
+  unitCount,
+  dueAt,
+  latePolicy,
+  sectionCount,
+  mode,
+  count,
+  fileCount,
+  hasRubric,
+}: {
+  title: string;
+  unitNames: string[];
+  unitCount: number;
+  dueAt: string;
+  latePolicy: string;
+  sectionCount: number;
+  mode: Mode;
+  count: number;
+  fileCount: number;
+  hasRubric: boolean;
+}) {
+  const lateLabel =
+    LATE_POLICY_OPTIONS.find((o) => o.value === latePolicy)?.label ?? latePolicy;
+  const unitsText =
+    unitNames.length > 0
+      ? unitNames.join(", ")
+      : `${unitCount} unit${unitCount === 1 ? "" : "s"}`;
+  const problemsText =
+    mode === "generate"
+      ? `Generate ${count} problem${count === 1 ? "" : "s"} with AI`
+      : fileCount > 0
+        ? `Extract from ${fileCount} uploaded page${fileCount === 1 ? "" : "s"}`
+        : "No pages added yet";
+
+  return (
+    <div className="space-y-5">
+      <p className="text-xs text-text-muted">
+        One last look. Creating sets the due date, sections, late policy and
+        grading rubric in one go — then the AI&apos;s problems land in a review
+        queue, where you approve them and publish.
+      </p>
+
+      <dl className="overflow-hidden rounded-[--radius-md] border border-border-light">
+        <SummaryRow label="Title" value={title.trim() || "Untitled"} />
+        <SummaryRow label="Units" value={unitsText} />
+        <SummaryRow
+          label="Due"
+          value={dueAt ? formatDue(new Date(dueAt).toISOString()) : "No due date"}
+          muted={!dueAt}
+        />
+        <SummaryRow label="Late policy" value={lateLabel} />
+        <SummaryRow
+          label="Sections"
+          value={
+            sectionCount === 0
+              ? "All sections in this course"
+              : `${sectionCount} section${sectionCount === 1 ? "" : "s"}`
+          }
+          muted={sectionCount === 0}
+        />
+        <SummaryRow label="Problems" value={problemsText} muted={mode === "upload" && fileCount === 0} />
+        <SummaryRow
+          label="Grading"
+          value={hasRubric ? "Custom rubric" : "Default rubric"}
+          muted={!hasRubric}
+          last
+        />
+      </dl>
+    </div>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+  muted,
+  last,
+}: {
+  label: string;
+  value: string;
+  muted?: boolean;
+  last?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-baseline gap-4 px-4 py-2.5 ${
+        last ? "" : "border-b border-border-light"
+      }`}
+    >
+      <dt className="w-28 shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+        {label}
+      </dt>
+      <dd
+        className={`min-w-0 flex-1 text-sm ${
+          muted ? "italic text-text-muted" : "text-text-primary"
+        }`}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+// ── Upload pane (worksheet photos / PDF → Vision extraction) ──
 
 function UploadSection({
   fileInputRef,
@@ -780,6 +940,10 @@ function UploadSection({
         <label className="block text-sm font-bold text-text-primary">
           Upload pages
         </label>
+        <p className="mt-1 text-[11px] text-text-muted">
+          Snap or drop a worksheet — the AI transcribes the problems verbatim
+          into the review queue.
+        </p>
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -807,14 +971,10 @@ function UploadSection({
           type="file"
           accept={ACCEPT}
           multiple
-          // Mobile: the OS picker offers a camera shortcut when this
-          // hint is set, letting teachers snap a textbook page directly.
-          // Desktop ignores the hint and shows the regular file dialog.
           capture="environment"
           className="hidden"
           onChange={(e) => {
             if (e.target.files?.length) onFilesSelected(e.target.files);
-            // Reset so re-picking the same file fires onChange again.
             e.target.value = "";
           }}
         />
