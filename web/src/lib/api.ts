@@ -1485,19 +1485,20 @@ export const teacher = {
       final_score: number | null;
       grade_published_at: string | null;
       grade_dirty: boolean;
-      /** Editing a grade *is* reviewing it — the backend auto-stamps
-       *  reviewed_at on any score write. Null only on an un-grade
-       *  (empty breakdown), which clears the review stamp. */
+      /** Current review state — a grade save NEVER stamps it (that's
+       *  mark-reviewed's job). Stays whatever it was; null after an
+       *  un-grade (empty breakdown), which clears the stamp. */
       reviewed_at: string | null;
     }>(`/teacher/submissions/${submissionId}/grade`, {
       method: "PATCH",
       body: JSON.stringify(data),
     });
   },
-  /** Record the teacher's explicit review of an AI-suggested grade
-   *  without changing any score (the no-edit "I looked, I agree" case;
-   *  editing a score auto-stamps review on its own). Requires an
-   *  existing grade — 400s on an ungraded / skipped-unreadable row. */
+  /** Stamp the submission reviewed. The sole writer of reviewed_at — a
+   *  grade save never marks review. The review page calls this only once
+   *  the teacher has addressed every problem (each confident grade
+   *  confirmed or each uncertain one graded). Requires an existing grade
+   *  — 400s on an ungraded / skipped-unreadable row. */
   markReviewed(submissionId: string) {
     return apiFetch<{ status: string; reviewed_at: string }>(
       `/teacher/submissions/${submissionId}/mark-reviewed`,
