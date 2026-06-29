@@ -2803,6 +2803,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/needs-attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Needs Attention
+         * @description Cross-course triage queue — every submission that needs the
+         *     teacher right now, one row per submission, prioritized.
+         *
+         *     Reuses the exact predicates the courses dashboard and Submissions
+         *     inbox use (_to_review_case / _flagged_case), so the queue can never
+         *     disagree with the per-course pills. Owner-gated: only submissions on
+         *     published homework the teacher owns, non-preview students, dropped
+         *     after un-enrollment via the SectionEnrollment guard.
+         *
+         *     No grades, answers, or scores leak — each row is pure routing
+         *     metadata: who, which HW/section/course, when it was due, and why it
+         *     needs the teacher (`reason`). The frontend deep-links each row into
+         *     the review surface for that exact (HW × section), focusing the
+         *     student via a query param.
+         */
+        get: operations["needs_attention_v1_teacher_needs_attention_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/preview-student": {
         parameters: {
             query?: never;
@@ -10310,6 +10343,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    needs_attention_v1_teacher_needs_attention_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

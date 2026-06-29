@@ -9,6 +9,7 @@ import { formatDueRelative } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { TOUR_ACTIONS, TOUR_IDS, useTour, useTourAction } from "@/components/tour";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
+import { NeedsYouQueue } from "@/components/school/teacher/_pieces/needs-you-queue";
 import { Select } from "@/components/ui";
 
 // Subject chip color hooks. Flat tinted tag (no pill), 2px radius,
@@ -147,16 +148,29 @@ export default function SchoolTeacherDashboard() {
         </div>
       )}
 
+      {/* The single actionable list — every submission waiting on the
+          teacher across all courses, most-urgent-first. Sits above the
+          courses list so the Monday-morning answer to "what needs me?"
+          is the first thing here, not a per-course hunt. Only shown once
+          the teacher actually has courses; a brand-new teacher gets the
+          onboarding empty state above instead. */}
+      {courses.length > 0 && <NeedsYouQueue />}
+
       {courses.length > 0 && (
       <motion.div
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.08, duration: 0.2 }}
-        className="mt-8 border-t border-border-light"
+        className="mt-10"
       >
-        {courses.map((course) => (
-          <CourseRow key={course.id} course={course} />
-        ))}
+        <h2 className="font-serif text-[24px] leading-tight tracking-[-0.01em] text-text-primary">
+          Your courses
+        </h2>
+        <div className="mt-3 border-t border-border-light">
+          {courses.map((course) => (
+            <CourseRow key={course.id} course={course} />
+          ))}
+        </div>
       </motion.div>
       )}
 

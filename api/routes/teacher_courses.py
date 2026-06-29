@@ -134,6 +134,33 @@ def _to_review_case() -> Any:
     )
 
 
+def _dirty_case() -> Any:
+    """The published-but-edited-since portion of _to_review_case —
+    a grade the student can see, but the teacher has changed the draft
+    of (score / notes / breakdown) without republishing. Content-based
+    so reverting to the original value clears it."""
+    return case(
+        (
+            and_(
+                SubmissionGrade.grade_published_at.is_not(None),
+                or_(
+                    SubmissionGrade.final_score.is_distinct_from(
+                        SubmissionGrade.published_final_score,
+                    ),
+                    SubmissionGrade.teacher_notes.is_distinct_from(
+                        SubmissionGrade.published_teacher_notes,
+                    ),
+                    SubmissionGrade.breakdown.cast(JSONB).is_distinct_from(
+                        SubmissionGrade.published_breakdown.cast(JSONB),
+                    ),
+                ),
+            ),
+            1,
+        ),
+        else_=0,
+    )
+
+
 def _flagged_case() -> Any:
     """Counts submissions needing teacher attention from the integrity
     pipeline — flagged disposition, unreadable extraction, inconclusive
@@ -334,6 +361,125 @@ async def list_courses(
         "next_due_at": r.next_due_at.isoformat() if r.next_due_at else None,
         "created_at": r.Course.created_at.isoformat(),
     } for r in rows]}
+
+
+# Priority order for the "Needs you today" triage queue. Lower = more
+# urgent. Flagged (integrity) jumps the line, then ungraded work past
+# its due date, then ungraded work, then grades the teacher edited but
+# hasn't republished. Mirrors the dashboard pill vocabulary.
+_TRIAGE_PRIORITY = {"flagged": 0, "overdue": 1, "ungraded": 2, "dirty": 3}
+
+
+@router.get("/needs-attention")
+async def needs_attention(
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Cross-course triage queue — every submission that needs the
+    teacher right now, one row per submission, prioritized.
+
+    Reuses the exact predicates the courses dashboard and Submissions
+    inbox use (_to_review_case / _flagged_case), so the queue can never
+    disagree with the per-course pills. Owner-gated: only submissions on
+    published homework the teacher owns, non-preview students, dropped
+    after un-enrollment via the SectionEnrollment guard.
+
+    No grades, answers, or scores leak — each row is pure routing
+    metadata: who, which HW/section/course, when it was due, and why it
+    needs the teacher (`reason`). The frontend deep-links each row into
+    the review surface for that exact (HW × section), focusing the
+    student via a query param.
+    """
+    flagged_case = _flagged_case()
+    dirty_case = _dirty_case()
+    # Overdue is decided in SQL so timezone handling stays in the DB.
+    overdue_case = case(
+        (and_(Assignment.due_at.is_not(None), Assignment.due_at < func.now()), True),
+        else_=False,
+    )
+
+    rows = (await db.execute(
+        select(
+            Submission.id.label("submission_id"),
+            Submission.student_id.label("student_id"),
+            User.name.label("student_name"),
+            User.email.label("student_email"),
+            Course.id.label("course_id"),
+            Course.name.label("course_name"),
+            Course.subject.label("subject"),
+            Assignment.id.label("assignment_id"),
+            Assignment.title.label("assignment_title"),
+            Assignment.due_at.label("due_at"),
+            Section.id.label("section_id"),
+            Section.name.label("section_name"),
+            flagged_case.label("flagged"),
+            dirty_case.label("dirty"),
+            SubmissionGrade.grade_published_at.label("grade_published_at"),
+            overdue_case.label("is_overdue"),
+        )
+        .select_from(Submission)
+        .join(Assignment, Assignment.id == Submission.assignment_id)
+        .join(Course, Course.id == Assignment.course_id)
+        .join(Section, Section.id == Submission.section_id)
+        .join(User, User.id == Submission.student_id)
+        .join(
+            SectionEnrollment,
+            and_(
+                SectionEnrollment.student_id == Submission.student_id,
+                SectionEnrollment.section_id == Submission.section_id,
+            ),
+        )
+        .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .outerjoin(
+            IntegrityCheckSubmission,
+            IntegrityCheckSubmission.submission_id == Submission.id,
+        )
+        .where(
+            Assignment.teacher_id == current_user.user_id,
+            Assignment.type == "homework",
+            Assignment.status == "published",
+            User.is_preview.is_(False),
+            or_(flagged_case == 1, _to_review_case() == 1),
+        )
+    )).all()
+
+    items: list[dict[str, Any]] = []
+    for r in rows:
+        # First matching bucket wins — flagged integrity always trumps
+        # grading state. `reason` is the single chip the row shows.
+        if r.flagged:
+            reason = "flagged"
+        elif r.grade_published_at is None:
+            reason = "overdue" if r.is_overdue else "ungraded"
+        elif r.dirty:
+            reason = "dirty"
+        else:
+            # Belt-and-suspenders: the WHERE clause already excludes
+            # clean-published rows, but never emit one if it slips through.
+            continue
+        items.append({
+            "submission_id": str(r.submission_id),
+            "student_id": str(r.student_id),
+            "student_name": r.student_name or r.student_email,
+            "course_id": str(r.course_id),
+            "course_name": r.course_name,
+            "subject": r.subject,
+            "assignment_id": str(r.assignment_id),
+            "assignment_title": r.assignment_title,
+            "section_id": str(r.section_id),
+            "section_name": r.section_name,
+            "due_at": r.due_at.isoformat() if r.due_at else None,
+            "reason": reason,
+        })
+
+    # Priority bucket, then most-overdue/soonest-due first (nulls last),
+    # then student name for a stable, scannable order.
+    items.sort(key=lambda it: (
+        _TRIAGE_PRIORITY[it["reason"]],
+        it["due_at"] or "9999",
+        it["student_name"].lower(),
+    ))
+    return {"items": items, "total": len(items)}
 
 
 @router.get("/courses/{course_id}")

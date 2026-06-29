@@ -14053,6 +14053,35 @@
         ]
       }
     },
+    "/v1/teacher/needs-attention": {
+      "get": {
+        "description": "Cross-course triage queue \u2014 every submission that needs the\nteacher right now, one row per submission, prioritized.\n\nReuses the exact predicates the courses dashboard and Submissions\ninbox use (_to_review_case / _flagged_case), so the queue can never\ndisagree with the per-course pills. Owner-gated: only submissions on\npublished homework the teacher owns, non-preview students, dropped\nafter un-enrollment via the SectionEnrollment guard.\n\nNo grades, answers, or scores leak \u2014 each row is pure routing\nmetadata: who, which HW/section/course, when it was due, and why it\nneeds the teacher (`reason`). The frontend deep-links each row into\nthe review surface for that exact (HW \u00d7 section), focusing the\nstudent via a query param.",
+        "operationId": "needs_attention_v1_teacher_needs_attention_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Needs Attention V1 Teacher Needs Attention Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Needs Attention",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
     "/v1/teacher/preview-student": {
       "post": {
         "description": "Find or create a shadow student for this teacher, sync\nenrollments, and return a JWT pair for the shadow account.",

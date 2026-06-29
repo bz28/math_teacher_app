@@ -949,6 +949,33 @@ export interface SubmissionsInboxRow {
   published: number;
 }
 
+/** Why a submission is in the teacher's "Needs you today" triage queue.
+ *  Priority order, most urgent first:
+ *    flagged  — integrity flagged it (needs a human verdict)
+ *    overdue  — past due and still not graded/released
+ *    ungraded — submitted, not yet graded/released
+ *    dirty    — published, but the teacher edited the grade since */
+export type NeedsAttentionReason = "flagged" | "overdue" | "ungraded" | "dirty";
+
+/** One row in the cross-course "Needs you today" queue. Pure routing
+ *  metadata — no grades, scores, or answers. Deep-links into the review
+ *  surface for (course_id × assignment_id × section_id), focusing the
+ *  student. */
+export interface NeedsAttentionItem {
+  submission_id: string;
+  student_id: string;
+  student_name: string;
+  course_id: string;
+  course_name: string;
+  subject: string;
+  assignment_id: string;
+  assignment_title: string;
+  section_id: string;
+  section_name: string;
+  due_at: string | null;
+  reason: NeedsAttentionReason;
+}
+
 /** One row per (student × section enrollment) in the Grades tab roster.
  *  Counts are scoped to assigned+past-due HWs; avg excludes missing. */
 export interface GradesRosterRow {
@@ -1324,6 +1351,14 @@ export const teacher = {
   submissionsInbox(courseId: string) {
     return apiFetch<{ rows: SubmissionsInboxRow[] }>(
       `/teacher/courses/${courseId}/submissions-inbox`,
+    );
+  },
+  /** Cross-course "Needs you today" triage queue — one row per
+   *  submission needing the teacher, prioritized (flagged → overdue →
+   *  ungraded → dirty). Routing metadata only; no grades leak. */
+  needsAttention() {
+    return apiFetch<{ items: NeedsAttentionItem[]; total: number }>(
+      "/teacher/needs-attention",
     );
   },
   /** Grades tab roster — one row per (student × section). Only
