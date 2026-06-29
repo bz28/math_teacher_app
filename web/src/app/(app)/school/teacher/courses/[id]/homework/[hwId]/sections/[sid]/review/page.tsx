@@ -495,32 +495,67 @@ export default function HomeworkSectionReviewPage({
   // A can't bleed onto student B's grade summary card. Also mirrors
   // the server's dirty flag back onto the detail slot so the strip
   // reflects it without a separate refetch.
+  // Per-submission save serialization. Each grade save sends the FULL
+  // breakdown snapshot with last-write-wins semantics, so two overlapping
+  // requests can finish out of order — an earlier (smaller) snapshot landing
+  // after a later (larger) one silently drops a grade on the server. Rapid
+  // keyboard grading (1,1,3,1,5 straight down) is exactly what triggers it.
+  // Fix: at most one save in flight per submission; while one runs, newer
+  // grades just update `latest`, and the drain loop saves only that latest
+  // snapshot when the in-flight save returns. Ordered + coalesced → no race.
+  const saveStateRef = useRef<
+    Map<string, { inFlight: boolean; latest: GradeBreakdownEntry[] | null }>
+  >(new Map());
+
   const persistBreakdown = useCallback(
     async (submissionId: string, breakdown: GradeBreakdownEntry[]) => {
+      const map = saveStateRef.current;
+      let s = map.get(submissionId);
+      if (!s) {
+        s = { inFlight: false, latest: null };
+        map.set(submissionId, s);
+      }
+      // Always remember the most recent snapshot to be saved.
+      s.latest = breakdown;
+      // A save is already running — it will pick up `latest` when it drains.
+      if (s.inFlight) return;
+
       setSaveError((prev) =>
         prev?.forSubmissionId === submissionId ? null : prev,
       );
+      s.inFlight = true;
       try {
-        const res = await teacher.gradeSubmission(submissionId, { breakdown });
-        applyGradeToRoster(submissionId, {
-          final_score: res.final_score,
-          breakdown,
-          grade_dirty: res.grade_dirty,
-          // Editing a grade *is* reviewing it — carry the server's
-          // reviewed_at back so the roster's trust marker flips to
-          // "Reviewed by you" immediately (null on an un-grade).
-          reviewed_at: res.reviewed_at,
-        });
-        setDetail((d) =>
-          d && d.submission_id === submissionId
-            ? { ...d, grade_dirty: res.grade_dirty, reviewed_at: res.reviewed_at }
-            : d,
-        );
+        while (s.latest) {
+          const toSave = s.latest;
+          s.latest = null;
+          const res = await teacher.gradeSubmission(submissionId, {
+            breakdown: toSave,
+          });
+          applyGradeToRoster(submissionId, {
+            final_score: res.final_score,
+            breakdown: toSave,
+            grade_dirty: res.grade_dirty,
+            // Editing a grade *is* reviewing it — carry the server's
+            // reviewed_at back so the roster's trust marker flips to
+            // "Reviewed by you" immediately (null on an un-grade).
+            reviewed_at: res.reviewed_at,
+          });
+          setDetail((d) =>
+            d && d.submission_id === submissionId
+              ? { ...d, grade_dirty: res.grade_dirty, reviewed_at: res.reviewed_at }
+              : d,
+          );
+        }
       } catch (e) {
         setSaveError({
           forSubmissionId: submissionId,
           message: e instanceof Error ? e.message : "Failed to save grade",
         });
+        // Drop any queued snapshot — the optimistic UI still shows the grade
+        // and the teacher can re-click to retry; avoids a hot retry loop.
+        s.latest = null;
+      } finally {
+        s.inFlight = false;
       }
     },
     [applyGradeToRoster],
