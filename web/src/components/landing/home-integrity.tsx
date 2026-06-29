@@ -33,8 +33,8 @@ export function HomeIntegrity() {
         </div>
 
         <p className="mx-auto mt-10 max-w-2xl text-center text-sm leading-relaxed text-[#6E9684]">
-          You see the grade, the flag, and the full conversation &mdash; and you
-          decide. Veradic drafts; you publish.
+          You see the grade, the flag, the full conversation, and how the work
+          was produced &mdash; and you decide. Veradic drafts; you publish.
         </p>
       </div>
     </section>
