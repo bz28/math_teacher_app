@@ -1515,8 +1515,13 @@ def _normalize_breakdown(entries: list[BreakdownEntry]) -> list[dict[str, Any]]:
         # if it justifies the new grade.
         deductions: list[dict[str, Any]] | None = None
         if e.deductions is not None:
+            # Use the grader's single-source reconcile tolerance so a ledger
+            # the grader legitimately kept isn't dropped here on a feedback-only
+            # or same-grade re-save (the two checks must agree).
+            from api.core.grading_ai import _LEDGER_TOLERANCE
+
             total_off = sum(d.points_off for d in e.deductions)
-            if abs((100.0 - total_off) - percent) <= 0.5:
+            if abs((100.0 - total_off) - percent) <= _LEDGER_TOLERANCE:
                 deductions = [
                     {
                         "points_off": d.points_off,

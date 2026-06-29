@@ -3727,6 +3727,14 @@ function GradeReceipt({
         </div>
       );
     }
+    // Partial with no itemized debits (shouldn't normally occur — the grader
+    // synthesizes a reconciling entry) — show the score plainly rather than
+    // an empty itemized box.
+    return (
+      <div className="mt-3 inline-flex items-center gap-2 rounded-[--radius-md] border border-[color:var(--color-warning-dark)]/30 bg-[color:var(--color-warning-bg)]/60 px-3 py-2 text-xs font-bold text-[color:var(--color-warning-dark)]">
+        Partial · {score}%
+      </div>
+    );
   }
 
   // Tone per anchored debit — cycles amber/info in document order, the
