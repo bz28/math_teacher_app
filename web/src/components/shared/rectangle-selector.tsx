@@ -50,6 +50,19 @@ export function RectangleSelector({
   const isCrop = variant === "crop";
   const imgRef = useRef<HTMLImageElement>(null);
   const [rectangles, setRectangles] = useState<Rectangle[]>([]);
+
+  // When the cap shrinks — switching multi→crop (max 1), or a scan quota
+  // dropping — trim any boxes beyond it, keeping the first. Without this,
+  // toggling to crop with several boxes drawn would still submit all of them.
+  // Adjusted during render (React's "store info from previous renders"
+  // pattern) rather than in an effect, to avoid a cascading re-render.
+  const [prevMax, setPrevMax] = useState(maxRectangles);
+  if (maxRectangles !== prevMax) {
+    setPrevMax(maxRectangles);
+    if (rectangles.length > maxRectangles) {
+      setRectangles(rectangles.slice(0, maxRectangles));
+    }
+  }
   const [mode, setMode] = useState<InteractionMode>({ type: "idle" });
   const [currentPos, setCurrentPos] = useState<{ x: number; y: number } | null>(null);
   const [imgNatural, setImgNatural] = useState({ w: 0, h: 0 });
@@ -253,7 +266,11 @@ export function RectangleSelector({
         </span>
       </div>
 
-      {rectangles.length >= maxRectangles && maxRectangles > 0 && (
+      {/* "Limit reached" only applies to multi-area selection. In crop mode
+          the cap is 1 by design, so drawing the one expected box is the happy
+          path — not a quota warning. (A genuine 0-scan quota still surfaces via
+          the maxRectangles === 0 block below.) */}
+      {!isCrop && rectangles.length >= maxRectangles && maxRectangles > 0 && (
         <div className="rounded-[--radius-md] border border-warning-dark/20 bg-warning-bg px-3 py-2 text-center">
           <p className="text-xs font-semibold text-warning-dark">
             {limitHint

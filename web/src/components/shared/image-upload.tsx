@@ -252,7 +252,9 @@ export function ImageUpload({
           setManualMode(false);
         }}
         variant={selectMode}
-        maxRectangles={selectMode === "crop" ? 1 : multiMax}
+        // Crop = one box — but still respect a 0-scan quota (min(1, multiMax)),
+        // so an out-of-scans user gets the no-scans state, not a free crop.
+        maxRectangles={selectMode === "crop" ? Math.min(1, multiMax) : multiMax}
         onSwitchVariant={
           // Only offer the multi-area path when there's room for >1 problem.
           selectMode === "crop" && multiMax <= 1
