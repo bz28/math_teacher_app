@@ -322,6 +322,9 @@ function HomeworkSectionReview({
   // Submission currently being marked reviewed via the explicit no-edit
   // affordance. Single slot — only one student is open at a time.
   const [markingReviewedId, setMarkingReviewedId] = useState<string | null>(null);
+  // Whether the pinned work rail (wide layout) shows the photo inline.
+  // A session preference — lifted here so it persists across students.
+  const [photoPinned, setPhotoPinned] = useState(true);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -534,6 +537,11 @@ function HomeworkSectionReview({
 
   const submittedCount = roster?.filter((e) => e.submission).length ?? 0;
   const totalRoster = roster?.length ?? 0;
+  // Submitters the triage roster surfaces as "needs your eyes" — flagged
+  // or low-confidence. Drives the header's editorial subhead.
+  const needsEyesCount =
+    roster?.filter((e) => e.submission && (isFlagged(e) || hasLowConfidence(e)))
+      .length ?? 0;
 
   // Mirror the server's recomputed grade back onto the roster row so
   // the left-list status/score updates the moment a save returns.
@@ -956,9 +964,32 @@ function HomeworkSectionReview({
       </div>
 
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
-        <h1 className="font-serif text-[34px] leading-tight tracking-[-0.015em] text-text-primary">
-          {pageTitle}
-        </h1>
+        <div className="min-w-0">
+          <h1 className="font-serif text-[34px] leading-tight tracking-[-0.015em] text-text-primary">
+            {pageTitle}
+          </h1>
+          {roster !== null && submittedCount > 0 && (
+            <p className="mt-1.5 text-[12.5px] text-text-secondary">
+              Reviewing{" "}
+              <b className="font-bold text-text-primary">
+                {submittedCount} of {totalRoster}
+              </b>{" "}
+              submitted ·{" "}
+              {needsEyesCount > 0 ? (
+                <>
+                  <b className="font-bold text-text-primary">{needsEyesCount}</b>{" "}
+                  {needsEyesCount === 1 ? "needs" : "need"} your eyes · the AI is
+                  confident on the rest.
+                </>
+              ) : (
+                <>the AI is confident on every submission.</>
+              )}{" "}
+              <span className="font-serif italic text-text-secondary">
+                You stay the judge — confirm every grade.
+              </span>
+            </p>
+          )}
+        </div>
         {roster !== null && (
           <PublishButton
             pendingTotal={pendingTotal}
@@ -996,8 +1027,12 @@ function HomeworkSectionReview({
       )}
 
       {roster !== null && roster.length > 0 && (
-        <div className="mt-5 grid gap-5 md:grid-cols-[280px_1fr]">
-          {/* Student list */}
+        // 3-column split: roster | grade column | pinned photo. The photo
+        // rail is the 3rd track only on the wide layout (>=1100px); below
+        // that it's display:none and the strip thumbnail in the grade
+        // column takes over, so roster + grade never get crushed.
+        <div className="mt-5 grid items-start gap-5 md:grid-cols-[280px_minmax(0,1fr)] min-[1100px]:grid-cols-[248px_minmax(0,1fr)_372px]">
+          {/* Student list — uncertainty-first triage groups */}
           <aside className="self-start rounded-[--radius-xl] border border-border-light bg-surface shadow-sm">
             <div className="flex items-center justify-between gap-2 border-b border-border-light px-4 py-2.5">
               <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
@@ -1010,31 +1045,17 @@ function HomeworkSectionReview({
               value={rosterFilter}
               onChange={setRosterFilter}
             />
-            <div className="max-h-[70vh] overflow-y-auto">
-              {applyRosterFilter(roster, rosterFilter).length === 0 ? (
-                <p className="px-4 py-6 text-center text-xs text-text-muted">
-                  {rosterFilter === "needs_me"
-                    ? "Nothing waiting on you here."
-                    : rosterFilter === "flagged"
-                      ? "No flagged submissions in this section."
-                      : rosterFilter === "low_confidence"
-                        ? "The AI was confident on every graded problem here."
-                        : "No students match this filter."}
-                </p>
-              ) : (
-                applyRosterFilter(roster, rosterFilter).map((e) => (
-                  <StudentRow
-                    key={e.student_id}
-                    entry={e}
-                    selected={e.student_id === selectedStudentId}
-                    onSelect={() => setSelectedStudentId(e.student_id)}
-                  />
-                ))
-              )}
+            <div className="max-h-[78vh] overflow-y-auto">
+              <TriageRoster
+                roster={applyRosterFilter(roster, rosterFilter)}
+                filter={rosterFilter}
+                selectedStudentId={selectedStudentId}
+                onSelect={setSelectedStudentId}
+              />
             </div>
           </aside>
 
-          {/* Detail */}
+          {/* Detail / grade column */}
           <section className="min-w-0">
             {!selectedEntry && (
               <div className="rounded-[--radius-xl] border border-border-light bg-[color:var(--color-surface-alt-2)] p-10 text-center text-sm text-text-muted">
@@ -1085,6 +1106,24 @@ function HomeworkSectionReview({
               />
             )}
           </section>
+
+          {/* Pinned student-work rail — wide layout only. Reads the
+              current detail's files; unpins below 1100px (the strip
+              thumbnail handles it there). */}
+          <aside className="hidden min-[1100px]:block">
+            <PinnedWorkRail
+              files={
+                detailIsCurrent && detail && selectedEntry?.submission
+                  ? detail.files
+                  : null
+              }
+              studentName={
+                detailIsCurrent && detail ? detail.student_name : null
+              }
+              pinned={photoPinned}
+              onTogglePinned={() => setPhotoPinned((v) => !v)}
+            />
+          </aside>
         </div>
       )}
 
@@ -1741,6 +1780,130 @@ function NotSubmittedCard({ entry }: { entry: RosterEntry }) {
 }
 
 // ────────────────────────────────────────────────────────────────────
+// Triage roster — groups the (already-filtered) roster into "Needs your
+// eyes" (integrity-flagged OR low-confidence) above "AI confident", with
+// non-submitters last. Within "Needs your eyes" the order is uncertainty-
+// first: flagged before low-confidence, then lowest score first, so the
+// calls most worth the teacher's attention float to the very top.
+// ────────────────────────────────────────────────────────────────────
+
+function TriageRoster({
+  roster,
+  filter,
+  selectedStudentId,
+  onSelect,
+}: {
+  roster: RosterEntry[];
+  filter: RosterFilter;
+  selectedStudentId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const needsEyes: RosterEntry[] = [];
+  const confident: RosterEntry[] = [];
+  const notSubmitted: RosterEntry[] = [];
+  for (const e of roster) {
+    if (!e.submission) notSubmitted.push(e);
+    else if (isFlagged(e) || hasLowConfidence(e)) needsEyes.push(e);
+    else confident.push(e);
+  }
+  // Uncertainty-first: flagged (0) before low-confidence (1), then by
+  // ascending score (a null score — ungraded — sorts to the very top).
+  const prio = (e: RosterEntry) => (isFlagged(e) ? 0 : 1);
+  needsEyes.sort((a, b) => {
+    const p = prio(a) - prio(b);
+    if (p !== 0) return p;
+    const sa = a.submission?.final_score ?? -1;
+    const sb = b.submission?.final_score ?? -1;
+    return sa - sb;
+  });
+
+  if (roster.length === 0) {
+    return (
+      <p className="px-4 py-6 text-center text-xs text-text-muted">
+        {filter === "needs_me"
+          ? "Nothing waiting on you here."
+          : filter === "flagged"
+            ? "No flagged submissions in this section."
+            : filter === "low_confidence"
+              ? "The AI was confident on every graded problem here."
+              : "No students match this filter."}
+      </p>
+    );
+  }
+
+  const renderRows = (entries: RosterEntry[]) =>
+    entries.map((e) => (
+      <StudentRow
+        key={e.student_id}
+        entry={e}
+        selected={e.student_id === selectedStudentId}
+        onSelect={() => onSelect(e.student_id)}
+      />
+    ));
+
+  return (
+    <>
+      {needsEyes.length > 0 && (
+        <RosterGroupHeader
+          label="Needs your eyes"
+          count={needsEyes.length}
+          tone="eyes"
+        />
+      )}
+      {renderRows(needsEyes)}
+      {confident.length > 0 && (
+        <RosterGroupHeader
+          label="AI confident"
+          count={confident.length}
+          tone="calm"
+        />
+      )}
+      {renderRows(confident)}
+      {notSubmitted.length > 0 && (
+        <RosterGroupHeader
+          label="Not submitted"
+          count={notSubmitted.length}
+          tone="calm"
+        />
+      )}
+      {renderRows(notSubmitted)}
+    </>
+  );
+}
+
+function RosterGroupHeader({
+  label,
+  count,
+  tone,
+}: {
+  label: string;
+  count: number;
+  tone: "eyes" | "calm";
+}) {
+  return (
+    <div className="flex items-center gap-1.5 border-b border-border-light bg-[color:var(--color-surface-alt-2)]/40 px-4 pb-1.5 pt-2.5">
+      {tone === "eyes" && (
+        <span aria-hidden className="text-[color:var(--color-warning-dark)]">
+          ⚠
+        </span>
+      )}
+      <span
+        className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
+          tone === "eyes"
+            ? "text-[color:var(--color-warning-dark)]"
+            : "text-text-muted"
+        }`}
+      >
+        {label}
+      </span>
+      <span className="ml-auto text-[10px] font-bold text-text-muted tabular-nums">
+        {count}
+      </span>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
 // Student list row — the clickable link to a specific submission.
 // ────────────────────────────────────────────────────────────────────
 
@@ -2371,8 +2534,13 @@ function SubmissionDetailPanel({
               student →" navigation, since teachers click Next
               student rapidly and we don't want the View work button
               absorbing accidental hits. */}
+          {/* Hidden on the wide layout, where the pinned work rail keeps
+              the photo glanceable; shown below 1100px where the rail
+              unpins. */}
           {detail.files && detail.files.length > 0 && (
-            <StudentWorkThumbButton files={detail.files} />
+            <span className="min-[1100px]:hidden">
+              <StudentWorkThumbButton files={detail.files} />
+            </span>
           )}
           {/* Explicit "I looked, I agree" review for the no-edit case
               (editing any score auto-stamps review on its own). Only
@@ -3997,6 +4165,12 @@ const SHORTCUT_GROUPS: { heading: string; rows: { keys: string[]; label: string 
     ],
   },
   {
+    heading: "Confident (collapsed) rows",
+    rows: [
+      { keys: ["1", "5"], label: "The AI's own key confirms in place + advances" },
+    ],
+  },
+  {
     heading: "Move",
     rows: [
       { keys: ["J", "↓"], label: "Next problem" },
@@ -4386,18 +4560,73 @@ function TranscriptTurn({
   );
 }
 
+// Shared "Full" zoom — every submitted page stacked vertically in a
+// modal. Used by both the header-strip thumbnail (narrow layout) and the
+// pinned work rail's "⤢ Full" toggle (wide layout), so the zoom view is
+// identical wherever the teacher opens it from.
+function WorkLightbox({
+  files,
+  open,
+  onClose,
+}: {
+  files: SubmissionFile[];
+  open: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Modal open={open} onClose={onClose} className="max-w-4xl bg-surface p-3">
+      <div className="flex items-center justify-between pb-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+          Student&apos;s work
+          {files.length > 1 ? ` · ${files.length} pages` : ""}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary"
+          aria-label="Close"
+        >
+          Close ✕
+        </button>
+      </div>
+      <div className="mx-auto flex max-h-[80vh] flex-col gap-3 overflow-y-auto">
+        {files.map((f, i) => {
+          const src = `data:${f.media_type};base64,${f.data}`;
+          if (f.media_type === "application/pdf") {
+            return (
+              <embed
+                key={i}
+                src={src}
+                type="application/pdf"
+                className="h-[70vh] w-full rounded-[--radius-md] border border-border-light bg-white"
+              />
+            );
+          }
+          return (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={i}
+              src={src}
+              alt={`Student handwritten submission, page ${i + 1}`}
+              className="rounded-[--radius-md] border border-border-light object-contain"
+            />
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
 /**
  * Student's submitted pages (images + PDFs): compact thumbnail +
  * page count that opens every file in a modal. The work is a
  * reference the teacher consults WHILE grading, so it lives in the
  * page header strip — one click away from any scroll position —
- * rather than as its own scan-path block.
+ * rather than as its own scan-path block. On the wide (3-column)
+ * layout the PinnedWorkRail makes the work glanceable and this strip
+ * affordance hides; below ~1100px the rail unpins and this takes over.
  */
 function StudentWorkThumbButton({ files }: { files: SubmissionFile[] }) {
-  // Header-strip affordance — small thumb (first page) + page count,
-  // expands on click to a vertical scroll-stack of every submitted
-  // file. The vertical stack is intentional: while grading, teachers
-  // want to scan all pages at once, not click prev/next.
   const [open, setOpen] = useState(false);
   const first = files[0];
   if (!first) return null;
@@ -4425,46 +4654,114 @@ function StudentWorkThumbButton({ files }: { files: SubmissionFile[] }) {
           View work{files.length > 1 ? ` · ${files.length} pages` : ""} ↗
         </span>
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} className="max-w-4xl bg-surface p-3">
-        <div className="flex items-center justify-between pb-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-            Student&apos;s work
-            {files.length > 1 ? ` · ${files.length} pages` : ""}
-          </p>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary"
-            aria-label="Close"
-          >
-            Close ✕
-          </button>
-        </div>
-        <div className="mx-auto flex max-h-[80vh] flex-col gap-3 overflow-y-auto">
-          {files.map((f, i) => {
-            const src = `data:${f.media_type};base64,${f.data}`;
-            if (f.media_type === "application/pdf") {
-              return (
-                <embed
-                  key={i}
-                  src={src}
-                  type="application/pdf"
-                  className="h-[70vh] w-full rounded-[--radius-md] border border-border-light bg-white"
-                />
-              );
-            }
-            return (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={i}
-                src={src}
-                alt={`Student handwritten submission, page ${i + 1}`}
-                className="rounded-[--radius-md] border border-border-light object-contain"
-              />
-            );
-          })}
-        </div>
-      </Modal>
+      <WorkLightbox files={files} open={open} onClose={() => setOpen(false)} />
     </>
+  );
+}
+
+/**
+ * Pinned student-work rail (wide layout, 3rd column). Promotes the
+ * student's submitted pages out of the modal so they're glanceable while
+ * grading — the split view. A sticky panel that keeps the first page in
+ * view as the teacher scrolls the grade column; "⤢ Full" opens the same
+ * lightbox for a zoom, and "📌 Pinned" collapses the inline photo to
+ * reclaim vertical space (a session preference lifted to the page so it
+ * persists across students). Hidden below ~1100px, where the header-strip
+ * thumbnail takes over so the roster + grade column never get crushed.
+ */
+function PinnedWorkRail({
+  files,
+  studentName,
+  pinned,
+  onTogglePinned,
+}: {
+  files: SubmissionFile[] | null;
+  studentName: string | null;
+  pinned: boolean;
+  onTogglePinned: () => void;
+}) {
+  const [full, setFull] = useState(false);
+  const firstName = studentName ? studentName.split(" ")[0] : null;
+  const hasFiles = !!files && files.length > 0;
+  return (
+    <div className="sticky top-3 overflow-hidden rounded-[--radius-xl] border border-border-light bg-surface shadow-md">
+      <div className="flex items-center justify-between gap-2 border-b border-border-light px-3 py-2.5">
+        <span className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--color-text-secondary)]">
+          {firstName ? `${firstName}'s work` : "Student's work"}
+          {hasFiles && files!.length > 1 ? ` · ${files!.length} pages` : ""}
+        </span>
+        {hasFiles && (
+          <div className="flex shrink-0 gap-1.5">
+            <button
+              type="button"
+              onClick={onTogglePinned}
+              aria-pressed={pinned}
+              className={`rounded-[--radius-sm] border px-2 py-1 text-[11px] font-semibold transition-colors ${
+                pinned
+                  ? "border-primary/30 bg-primary-bg text-primary"
+                  : "border-border-light bg-surface text-text-muted hover:text-text-primary"
+              }`}
+            >
+              📌 {pinned ? "Pinned" : "Pin"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFull(true)}
+              className="rounded-[--radius-sm] border border-border-light bg-surface px-2 py-1 text-[11px] font-semibold text-text-muted transition-colors hover:border-primary/40 hover:text-primary"
+            >
+              ⤢ Full
+            </button>
+          </div>
+        )}
+      </div>
+      {!hasFiles ? (
+        <div className="px-3 py-10 text-center text-[11px] text-text-muted">
+          No photo on this submission.
+        </div>
+      ) : pinned ? (
+        <div className="max-h-[calc(100vh-7rem)] overflow-y-auto bg-[color:var(--color-surface-alt-2)]/40 p-2">
+          <div className="flex flex-col gap-2">
+            {files!.map((f, i) => {
+              const src = `data:${f.media_type};base64,${f.data}`;
+              if (f.media_type === "application/pdf") {
+                return (
+                  <embed
+                    key={i}
+                    src={src}
+                    type="application/pdf"
+                    className="h-[420px] w-full rounded-[--radius-sm] border border-border-light bg-white"
+                  />
+                );
+              }
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setFull(true)}
+                  className="block w-full overflow-hidden rounded-[--radius-sm] border border-border-light"
+                  aria-label={`Open page ${i + 1} full size`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={src}
+                    alt={`Student handwritten submission, page ${i + 1}`}
+                    className="w-full object-contain"
+                  />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onTogglePinned}
+          className="w-full px-3 py-4 text-center text-[11px] font-semibold text-text-muted hover:text-primary"
+        >
+          Photo collapsed — click to pin it back
+        </button>
+      )}
+      <WorkLightbox files={files ?? []} open={full} onClose={() => setFull(false)} />
+    </div>
   );
 }
