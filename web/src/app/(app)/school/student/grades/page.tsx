@@ -33,7 +33,7 @@ export default function StudentGradesPage() {
         setData(res);
         setError(null);
       })
-      .catch(() => setError("Couldn't load your grades. Please try again."));
+      .catch(() => setError("We couldn't load your grades just now."));
   }, []);
 
   useEffect(() => {
@@ -60,7 +60,13 @@ export default function StudentGradesPage() {
   }, [data]);
 
   if (error) {
-    return <PageErrorState message={error} onRetry={load} />;
+    return (
+      <PageErrorState
+        title="Couldn't load your grades"
+        message={error}
+        onRetry={load}
+      />
+    );
   }
 
   if (data === null) {

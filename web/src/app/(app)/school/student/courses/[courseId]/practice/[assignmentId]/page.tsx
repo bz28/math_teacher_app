@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -10,6 +10,7 @@ import {
   type StudentPracticeProblem,
 } from "@/lib/api";
 import { MathText } from "@/components/shared/math-text";
+import { PageErrorState } from "@/components/ui";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { isLearnable, isMCQ } from "./_components/practice-shared";
 import { PracticeRunner } from "./_components/practice-runner";
@@ -39,13 +40,22 @@ export default function PracticeDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("preview");
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!assignmentId) return;
     schoolStudent
       .practiceDetail(assignmentId)
-      .then(setDetail)
-      .catch(() => setError("Couldn't load this practice set. Please try again."));
+      .then((d) => {
+        setDetail(d);
+        setError(null);
+      })
+      .catch(() =>
+        setError("We couldn't load this practice set just now."),
+      );
   }, [assignmentId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const problems = useMemo(() => detail?.problems ?? [], [detail]);
   const mcqProblems = useMemo(() => problems.filter(isMCQ), [problems]);
@@ -55,8 +65,12 @@ export default function PracticeDetailPage() {
 
   if (error) {
     return (
-      <div className="mx-auto max-w-2xl py-12 text-center">
-        <p className="text-error">{error}</p>
+      <div className="mx-auto max-w-2xl">
+        <PageErrorState
+          title="Couldn't load this set"
+          message={error}
+          onRetry={load}
+        />
       </div>
     );
   }
