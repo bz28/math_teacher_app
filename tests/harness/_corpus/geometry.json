@@ -10,12 +10,12 @@
   },
   {
     "name": "Near-Degenerate Sliver Triangle",
-    "constraint": "Generate a triangle question using ASA with angles 2\u00b0 and 3\u00b0 and included side 10; label all three sides and all three angles; ask for the missing side lengths.",
+    "constraint": "Generate a triangle with sides 100, 99.5, and 1. Label all sides and all three angles (two angles will be near 0\u00b0, one near 180\u00b0). Add a right-angle mark on the largest angle.",
     "expected_shapes": [
       "triangle"
     ],
     "adversarial": true,
-    "rationale": "A triangle with angles 2\u00b0, 3\u00b0, 175\u00b0 is an extreme sliver. This stresses stroke scaling, label overlap/clipping on the two nearly-collinear sides, and whether the right-angle mark is incorrectly injected."
+    "rationale": "Probes sliver/near-degenerate rendering: extreme aspect ratio will stress label overlap, stroke scaling, and the right-angle mark placement on an angle that is explicitly NOT 90\u00b0 (inconsistent spec)."
   },
   {
     "name": "Inconsistent SSS + False Right-Angle Mark",
@@ -25,5 +25,42 @@
     ],
     "adversarial": true,
     "rationale": "5+5 < 12 breaks the triangle inequality, and the right-angle mark contradicts any realizable geometry. Tests whether the system detects the inconsistency, refuses gracefully, or silently renders nonsense."
+  },
+  {
+    "name": "Circle with Central Angle and Chord",
+    "constraint": "Generate a circle with radius 7. Place two named points P and Q on the circumference at 40\u00b0 and 160\u00b0. Draw the chord PQ, label it, draw radii OP and OQ, and mark the central angle POQ.",
+    "expected_shapes": [
+      "circle"
+    ],
+    "adversarial": false,
+    "rationale": "Covers the core circle capability surface: named circumference points, chord, labeled radius/diameter, and central angle in a single diagram."
+  },
+  {
+    "name": "SAS Triangle with Circumscribed Circle",
+    "constraint": "Generate a triangle defined by SAS: sides 6 and 8 with included angle 55\u00b0. Add a circumscribed circle with the three tangent intersection points marked.",
+    "expected_shapes": [
+      "triangle",
+      "circle"
+    ],
+    "adversarial": false,
+    "rationale": "Tests the combination of SAS specification with an optional circumscribed circle overlay, validating that the circle's geometry is derived correctly from the triangle's computed vertices."
+  },
+  {
+    "name": "Overdetermined Inconsistent Triangle (SSS vs. False Right-Angle)",
+    "constraint": "Generate a triangle with sides 5, 12, and 14 (not a right triangle) but with a right-angle mark explicitly placed at the vertex between sides 5 and 12.",
+    "expected_shapes": [
+      "triangle"
+    ],
+    "adversarial": true,
+    "rationale": "Directly triggers the known sensitive area of over-determined/inconsistent specs: the side lengths contradict the right-angle mark. Tests whether the renderer flags, ignores, or crashes on the conflict."
+  },
+  {
+    "name": "Extremely Long Vertex and Side Labels",
+    "constraint": "Generate a regular pentagon (n=5) where each vertex label is a 24-character string (e.g., 'VertexAlpha_TopLeft_001') and each side is labeled with a decimal value like 1234567.89. Check all labels are visible and unclipped.",
+    "expected_shapes": [
+      "polygon"
+    ],
+    "adversarial": true,
+    "rationale": "Stresses text clipping and layout: very long vertex names combined with large numeric side labels on a compact polygon are likely to overflow bounding boxes or collide."
   }
 ]
