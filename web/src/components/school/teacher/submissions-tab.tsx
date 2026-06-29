@@ -8,6 +8,8 @@ import { teacher, type SubmissionsInboxRow } from "@/lib/api";
 import { formatDueShort } from "@/lib/utils";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { Select } from "@/components/ui";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SearchIcon } from "@/components/ui/icons";
 import { ProgressBar } from "./_pieces/progress-bar";
 import { StatusPill } from "./_pieces/status-pill";
 
@@ -101,7 +103,7 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
   }
 
   if (rows === null) {
-    return <p className="mt-6 text-sm text-text-muted">Loading inbox…</p>;
+    return <InboxSkeleton />;
   }
 
   if (rows.length === 0) {
@@ -119,16 +121,15 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
     <div className="mt-2">
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px]">
-          <span
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
-            aria-hidden="true"
-          >
-            🔍
-          </span>
+          <SearchIcon
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
+            aria-hidden
+          />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search homework"
             placeholder="Search homework"
             className="w-full rounded-[--radius-md] border border-border-light bg-surface py-2 pl-9 pr-3 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
@@ -163,9 +164,7 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
       />
 
       {filtered.length === 0 ? (
-        <p className="mt-8 text-center text-xs text-text-muted">
-          No homework matches those filters.
-        </p>
+        <EmptyState title="No homework matches those filters" />
       ) : (
         <div className="mt-5 space-y-2">
           {filtered.map((r) => (
@@ -331,6 +330,37 @@ function BatchActionBar({
 }
 
 // ────────────────────────────────────────────────────────────────────
+
+/**
+ * Initial-load placeholder for the grading inbox. Mirrors the real
+ * silhouette — a search/filter bar over a stack of inbox-row cards —
+ * so the list settles in place rather than blanking to "Loading…".
+ */
+function InboxSkeleton() {
+  return (
+    <div className="mt-2" aria-busy="true" aria-live="polite">
+      <div className="flex flex-wrap items-center gap-3">
+        <Skeleton className="h-10 flex-1 min-w-[220px] rounded-[--radius-md]" />
+        <Skeleton className="h-10 w-32 rounded-[--radius-md]" />
+      </div>
+      <div className="mt-5 space-y-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            className="flex items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3"
+          >
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-4 w-2/5" />
+              <Skeleton className="h-3 w-1/4" />
+              <Skeleton className="h-1.5 w-3/5 rounded-full" />
+            </div>
+            <Skeleton className="h-8 w-24 rounded-[--radius-md]" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function InboxRow({
   row,

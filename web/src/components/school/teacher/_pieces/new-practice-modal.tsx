@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useDocumentUploads } from "@/hooks/use-document-uploads";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
+import { useDialogDismiss } from "@/hooks/use-dialog-dismiss";
 import {
   AssignmentDetailsStep,
   AssignmentProblemsStep,
@@ -258,17 +259,34 @@ export function NewPracticeModal({
         : "Problems";
   const totalSteps = sourceMode === "clone" ? 1 : 3;
 
+  // Backdrop / Escape suppressed together while a request or upload is
+  // mid-flight so a stray dismiss can't orphan an in-flight create.
+  const dismissible = !busy && !uploads.hasInflightUploads;
+  const panelRef = useDialogDismiss({ onClose, dismissible });
+
+  // Why the step-1 clone action is disabled, surfaced inline beside it.
+  // Steps 2–3 validate on click (so their buttons aren't pre-disabled),
+  // and a still-loading list isn't worth a line.
+  const blockReason =
+    !busy && step === 1 && sourceMode === "clone" && hwsLoaded && !selectedHwId
+      ? "Pick a homework to clone"
+      : null;
+
   return (
     <>
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[color:var(--color-overlay)] p-4 backdrop-blur-sm"
       onClick={() => {
         // Same close-guard as the HW modal — block while an upload is
         // in flight (failed rows are inert so they don't block).
-        if (!busy && !uploads.hasInflightUploads) onClose();
+        if (dismissible) onClose();
       }}
     >
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="New practice"
         className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[--radius-xl] bg-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -355,10 +373,33 @@ export function NewPracticeModal({
             />
           )}
 
-          {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-border-light px-6 py-3">
+        {/* Pinned message row — keeps the submit error (which used to
+            render at the bottom of the scrollable body, below the fold)
+            and the why-disabled reason in view above the actions. */}
+        {(error || blockReason) && (
+          <div
+            id="practice-wizard-msg"
+            className="border-t border-border-light px-6 pt-3 text-xs"
+            role={error ? "alert" : undefined}
+          >
+            <span
+              className={
+                error
+                  ? "font-semibold text-[color:var(--color-error)]"
+                  : "text-text-muted"
+              }
+            >
+              {error ?? blockReason}
+            </span>
+          </div>
+        )}
+        <div
+          className={`flex items-center justify-between gap-3 px-6 py-3 ${
+            error || blockReason ? "" : "border-t border-border-light"
+          }`}
+        >
           {step === 1 ? (
             <>
               {/* Step counter only when there's more than one step.
@@ -378,7 +419,8 @@ export function NewPracticeModal({
                   busy ||
                   (sourceMode === "clone" && (!hwsLoaded || !selectedHwId))
                 }
-                className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+                aria-describedby={blockReason ? "practice-wizard-msg" : undefined}
+                className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted disabled:opacity-100"
               >
                 {busy
                   ? "Creating…"
@@ -410,7 +452,7 @@ export function NewPracticeModal({
                 type="button"
                 onClick={onStep2Continue}
                 disabled={busy}
-                className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+                className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted disabled:opacity-100"
               >
                 Continue →
               </button>
@@ -441,7 +483,7 @@ export function NewPracticeModal({
                   type="button"
                   onClick={onCreateAndGenerate}
                   disabled={busy}
-                  className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+                  className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted disabled:opacity-100"
                 >
                   {busy ? "Creating…" : "Create & generate"}
                 </button>

@@ -12,6 +12,7 @@ import {
   type TeacherUnit,
 } from "@/lib/api";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
+import { useDialogDismiss } from "@/hooks/use-dialog-dismiss";
 import { topUnits } from "@/lib/units";
 import { formatDue, fileToBase64, formatFileSize } from "@/lib/utils";
 import { ImageResizeError, resizeImageForUpload } from "@/lib/image-resize";
@@ -459,16 +460,40 @@ export function NewHomeworkModal({
     .filter((u) => unitIds.includes(u.id))
     .map((u) => u.name);
 
+  // Backdrop / Escape are suppressed together while a create or upload is
+  // mid-flight so a stray dismiss can't orphan an in-flight request.
+  const dismissible = !busy && !uploads.hasInflightUploads;
+  const panelRef = useDialogDismiss({ onClose, dismissible });
+
+  // Why the forward / finish button is disabled, surfaced inline next to
+  // it (the old modal left the dim button reasonless). Only the
+  // missing-prerequisite case earns a line — `busy` is self-evident.
+  const blockReason = busy
+    ? null
+    : step === 1 && !detailsValid
+      ? !title.trim() && unitIds.length === 0
+        ? "Add a title and pick a unit to continue"
+        : !title.trim()
+          ? "Add a title to continue"
+          : "Pick a unit to continue"
+      : step === 4 && mode === "upload" && validStagedCount === 0
+        ? "Add at least one worksheet page to extract"
+        : null;
+
   return (
     <>
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-[color:var(--color-overlay)] p-4 backdrop-blur-sm"
         onClick={() => {
           // Block backdrop close while a create or upload is in flight.
-          if (!busy && !uploads.hasInflightUploads) onClose();
+          if (dismissible) onClose();
         }}
       >
         <div
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="New homework"
           className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[--radius-xl] border border-border-light bg-surface shadow-xl"
           onClick={(e) => e.stopPropagation()}
         >
@@ -610,13 +635,35 @@ export function NewHomeworkModal({
                 )}
               </motion.div>
             </AnimatePresence>
-
-            {error && <p className="mt-4 text-xs text-[color:var(--color-error)]">{error}</p>}
           </div>
 
           {/* Footer — Back + Save-as-draft escape on the left, the
-              forward / finish action on the right. */}
-          <div className="flex items-center justify-between gap-3 border-t border-border-light px-6 py-3">
+              forward / finish action on the right. A pinned message row
+              sits above the actions so the submit error (which used to
+              render at the bottom of the scrollable body, below the
+              fold) and the why-disabled reason are always in view. */}
+          {(error || blockReason) && (
+            <div
+              id="hw-wizard-msg"
+              className="border-t border-border-light px-6 pt-3 text-xs"
+              role={error ? "alert" : undefined}
+            >
+              <span
+                className={
+                  error
+                    ? "font-semibold text-[color:var(--color-error)]"
+                    : "text-text-muted"
+                }
+              >
+                {error ?? blockReason}
+              </span>
+            </div>
+          )}
+          <div
+            className={`flex items-center justify-between gap-3 px-6 py-3 ${
+              error || blockReason ? "" : "border-t border-border-light"
+            }`}
+          >
             <div className="flex items-center gap-1">
               {step > 1 && (
                 <button
@@ -650,7 +697,8 @@ export function NewHomeworkModal({
                   step === 1 ? onContinueFromDetails() : goTo((step + 1) as Step)
                 }
                 disabled={busy || (step === 1 && !detailsValid)}
-                className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+                aria-describedby={blockReason ? "hw-wizard-msg" : undefined}
+                className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted disabled:opacity-100"
               >
                 Continue →
               </button>
@@ -659,7 +707,8 @@ export function NewHomeworkModal({
                 type="button"
                 onClick={onGenerate}
                 disabled={busy || !detailsValid}
-                className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+                aria-describedby={blockReason ? "hw-wizard-msg" : undefined}
+                className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted disabled:opacity-100"
               >
                 {busy ? "Creating…" : "Create & generate →"}
               </button>
@@ -673,7 +722,8 @@ export function NewHomeworkModal({
                     ? "Add at least one worksheet page first"
                     : undefined
                 }
-                className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+                aria-describedby={blockReason ? "hw-wizard-msg" : undefined}
+                className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted disabled:opacity-100"
               >
                 {busy ? "Creating…" : "Create & extract →"}
               </button>
@@ -963,7 +1013,7 @@ function UploadSection({
             Drop photos or a PDF, or click to browse
           </span>
           <span className="text-[11px] text-text-muted">
-            up to {MAX_FILES} files · JPEG, PNG, PDF
+            Up to {MAX_FILES} files · JPEG/PNG up to 5MB · PDF up to 25MB
           </span>
         </button>
         <input
@@ -1012,7 +1062,7 @@ function UploadSection({
                   {f.mediaType === "application/pdf" ? " · PDF" : ""}
                 </p>
                 {f.error && (
-                  <p className="mt-0.5 text-[11px] text-red-600">{f.error}</p>
+                  <p className="mt-0.5 text-[11px] text-[color:var(--color-error)]">{f.error}</p>
                 )}
               </div>
               <button

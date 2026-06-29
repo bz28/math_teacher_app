@@ -34,7 +34,7 @@ export function SelectableChip({
   className?: string;
 }) {
   const base =
-    "inline-flex items-center gap-1 rounded-[--radius-pill] px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50";
+    "inline-flex items-center gap-1 rounded-[--radius-pill] px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
 
   let tone: string;
   if (variant === "dashed") {

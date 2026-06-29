@@ -11,6 +11,7 @@ import {
   STRUGGLING_THRESHOLD,
 } from "@/components/school/shared/percent-badge";
 import { SearchIcon } from "@/components/ui/icons";
+import { Skeleton } from "@/components/ui/skeleton";
 import { GradesItemAnalysis } from "./_pieces/grades-item-analysis";
 
 /**
@@ -156,7 +157,7 @@ export function GradesTab({ courseId }: { courseId: string }) {
   }
 
   if (data === null) {
-    return <p className="mt-6 text-sm text-text-muted">Loading grades…</p>;
+    return <GradesSkeleton />;
   }
 
   if (data.students.length === 0) {
@@ -284,9 +285,7 @@ export function GradesTab({ courseId }: { courseId: string }) {
 
       {/* Roster table */}
       {filtered.length === 0 ? (
-        <p className="mt-8 text-center text-xs text-text-muted">
-          No students match those filters.
-        </p>
+        <EmptyState title="No students match those filters" />
       ) : (
         <div className="overflow-hidden rounded-[--radius-md] border border-border-light bg-surface">
           <table className="w-full text-sm">
@@ -342,6 +341,44 @@ export function GradesTab({ courseId }: { courseId: string }) {
 
 // ────────────────────────────────────────────────────────────────────
 
+/**
+ * Initial-load placeholder for the gradebook. Mirrors the real
+ * silhouette — summary strip, search + filter chips, and a roster
+ * table — so the page settles in place rather than blanking to
+ * "Loading…".
+ */
+function GradesSkeleton() {
+  return (
+    <div className="mt-2 space-y-4" aria-busy="true" aria-live="polite">
+      <div className="space-y-2.5">
+        <Skeleton className="h-5 w-24" />
+        <Skeleton className="h-1.5 w-full rounded-full" />
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Skeleton className="h-10 flex-1 min-w-[220px] rounded-[--radius-md]" />
+        <Skeleton className="h-10 w-28 rounded-[--radius-md]" />
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {["w-12", "w-32", "w-28"].map((w, i) => (
+          <Skeleton key={i} className={`h-7 rounded-[--radius-pill] ${w}`} />
+        ))}
+      </div>
+      <div className="overflow-hidden rounded-[--radius-md] border border-border-light bg-surface">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className="flex items-center justify-between gap-3 border-t border-border-light px-4 py-3 first:border-t-0"
+          >
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-5 w-12 rounded-[--radius-pill]" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ClassSummary({ summary }: { summary: SummaryStats }) {
   const { total, withAvg, strong, ok, struggling } = summary;
   // Always render even at total === 0 — keeps the layout from
@@ -382,14 +419,14 @@ function ClassSummary({ summary }: { summary: SummaryStats }) {
           >
             {strong > 0 && (
               <div
-                className="bg-green-500"
+                className="bg-[color:var(--color-success)]"
                 style={{ width: `${(strong / withAvg) * 100}%` }}
                 title={`${strong} student${strong === 1 ? "" : "s"} at ≥${STRONG_THRESHOLD}%`}
               />
             )}
             {ok > 0 && (
               <div
-                className="bg-amber-400"
+                className="bg-[color:var(--color-warning)]"
                 style={{ width: `${(ok / withAvg) * 100}%` }}
                 title={`${ok} student${ok === 1 ? "" : "s"} ${STRUGGLING_THRESHOLD}-${STRONG_THRESHOLD - 1}%`}
               />
@@ -403,8 +440,8 @@ function ClassSummary({ summary }: { summary: SummaryStats }) {
             )}
           </div>
           <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-text-muted">
-            <DistributionLegend dot="bg-green-500" label={`≥${STRONG_THRESHOLD}%`} count={strong} />
-            <DistributionLegend dot="bg-amber-400" label={`${STRUGGLING_THRESHOLD}-${STRONG_THRESHOLD - 1}%`} count={ok} />
+            <DistributionLegend dot="bg-[color:var(--color-success)]" label={`≥${STRONG_THRESHOLD}%`} count={strong} />
+            <DistributionLegend dot="bg-[color:var(--color-warning)]" label={`${STRUGGLING_THRESHOLD}-${STRONG_THRESHOLD - 1}%`} count={ok} />
             <DistributionLegend dot="bg-[color:var(--color-error)]" label={`<${STRUGGLING_THRESHOLD}%`} count={struggling} />
           </div>
         </div>

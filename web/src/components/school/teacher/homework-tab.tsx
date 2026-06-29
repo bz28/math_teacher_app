@@ -7,6 +7,8 @@ import { TOUR_IDS } from "@/components/tour";
 import { topUnits } from "@/lib/units";
 import { Select } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SearchIcon } from "@/components/ui/icons";
+import { EmptyState } from "@/components/school/shared/empty-state";
 import { NewHomeworkModal } from "./_pieces/new-homework-modal";
 import {
   HomeworkTimeline,
@@ -179,16 +181,15 @@ export function HomeworkTab({
       {/* Search bar */}
       <div className="mt-4">
         <div className="relative">
-          <span
-            className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-text-muted"
+          <SearchIcon
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
             aria-hidden
-          >
-            🔍
-          </span>
+          />
           <input
             type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search homework"
             placeholder={`Search ${homeworks.length} ${
               homeworks.length === 1 ? "homework" : "homeworks"
             }…`}
@@ -254,40 +255,42 @@ export function HomeworkTab({
         {loading ? (
           <AssignmentListSkeleton />
         ) : homeworks.length === 0 ? (
-          <div className="mt-4 rounded-[--radius-lg] border border-dashed border-border-light bg-bg-subtle p-8 text-center text-sm text-text-muted">
-            <p>
-              No homework yet. First, create a unit and upload materials, then
-              generate homework from it.
-            </p>
-            {onGoToMaterials ? (
-              <button
-                type="button"
-                onClick={onGoToMaterials}
-                className="mt-3 inline-flex font-semibold text-primary hover:underline"
-              >
-                Go to Materials →
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowNew(true)}
-                className="mt-3 inline-flex font-semibold text-primary hover:underline"
-              >
-                New homework →
-              </button>
-            )}
-          </div>
+          <EmptyState
+            title="No homework yet"
+            description="First, create a unit and upload materials, then generate homework from it."
+            action={
+              onGoToMaterials ? (
+                <button
+                  type="button"
+                  onClick={onGoToMaterials}
+                  className="text-sm font-semibold text-primary hover:underline"
+                >
+                  Go to Materials →
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowNew(true)}
+                  className="text-sm font-semibold text-primary hover:underline"
+                >
+                  New homework →
+                </button>
+              )
+            }
+          />
         ) : totalBucketed === 0 ? (
-          <div className="mt-4 rounded-[--radius-lg] border border-border-light bg-[color:var(--color-surface-alt-2)] p-8 text-center text-sm text-text-muted">
-            No homeworks match your filters.{" "}
-            <button
-              type="button"
-              onClick={clearAll}
-              className="font-medium text-primary hover:underline"
-            >
-              Clear filters
-            </button>
-          </div>
+          <EmptyState
+            title="No homeworks match your filters"
+            action={
+              <button
+                type="button"
+                onClick={clearAll}
+                className="text-sm font-semibold text-primary hover:underline"
+              >
+                Clear filters
+              </button>
+            }
+          />
         ) : (
           <HomeworkTimeline
             buckets={buckets}

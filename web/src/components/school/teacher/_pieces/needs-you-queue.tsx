@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { teacher, type NeedsAttentionItem, type NeedsAttentionReason } from "@/lib/api";
 import { Skeleton } from "@/components/ui";
 import { StatusPill } from "./status-pill";
+import { SubjectChip } from "./subject-chip";
 
 // How many rows show before the "Show N more" disclosure. A triage
 // queue should surface the most urgent work without becoming a wall —
@@ -24,12 +25,6 @@ const REASON_CHIP: Record<
   overdue: { tone: "amber", label: "Overdue", icon: "‼" },
   ungraded: { tone: "amber", label: "Ungraded" },
   dirty: { tone: "info", label: "Republish", icon: "↻" },
-};
-
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "Math",
-  physics: "Physics",
-  chemistry: "Chemistry",
 };
 
 /** A due-date hint that's honest about overdue work. `formatDueRelative`
@@ -178,7 +173,6 @@ function QueueList({
 
 function QueueRow({ item, first }: { item: NeedsAttentionItem; first: boolean }) {
   const chip = REASON_CHIP[item.reason];
-  const subject = SUBJECT_LABEL[item.subject] ?? item.subject;
   const due = dueHint(item.due_at);
 
   return (
@@ -206,9 +200,7 @@ function QueueRow({ item, first }: { item: NeedsAttentionItem; first: boolean })
       </div>
 
       <div className="hidden shrink-0 sm:block">
-        <span className="rounded-[2px] bg-[color:var(--color-surface-alt-2)] px-1.5 py-[2px] text-[10px] font-semibold uppercase tracking-[0.08em] text-text-muted">
-          {subject}
-        </span>
+        <SubjectChip subject={item.subject} />
       </div>
 
       <div className="w-[112px] shrink-0 text-right">

@@ -63,9 +63,9 @@ export function HomeworkCard({
       onClick={onOpen}
       className={`block w-full rounded-[--radius-lg] border bg-surface p-4 text-left transition-all hover:-translate-y-px hover:shadow-sm ${
         bucket === "needsGrading"
-          ? "border-red-200 hover:border-red-300 dark:border-red-500/30 dark:hover:border-red-500/50"
+          ? "border-[color:var(--color-error-border)] hover:border-[color:var(--color-error)]"
           : bucket === "dueThisWeek"
-            ? "border-blue-200 hover:border-blue-300 dark:border-blue-500/30 dark:hover:border-blue-500/50"
+            ? "border-[color:var(--color-info-border)] hover:border-[color:var(--color-info)]"
             : "border-border-light hover:border-primary/40"
       }`}
     >

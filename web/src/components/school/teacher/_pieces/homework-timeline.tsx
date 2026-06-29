@@ -21,14 +21,14 @@ const SECTION_CONFIG: {
   {
     key: "needsGrading",
     label: "NEEDS GRADING",
-    headerClass: "text-red-600 dark:text-red-400",
-    countClass: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300",
+    headerClass: "text-[color:var(--color-error)]",
+    countClass: "bg-[color:var(--color-error-light)] text-[color:var(--color-error)]",
   },
   {
     key: "dueThisWeek",
     label: "DUE THIS WEEK",
-    headerClass: "text-blue-600 dark:text-blue-400",
-    countClass: "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300",
+    headerClass: "text-[color:var(--color-info)]",
+    countClass: "bg-[color:var(--color-info-light)] text-[color:var(--color-info)]",
   },
   {
     key: "upcoming",

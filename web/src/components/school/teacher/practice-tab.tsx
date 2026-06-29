@@ -8,6 +8,7 @@ import { topUnits, unitLabel as labelForUnit } from "@/lib/units";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { Select } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SearchIcon } from "@/components/ui/icons";
 import { NewPracticeModal } from "./_pieces/new-practice-modal";
 
 /**
@@ -160,16 +161,15 @@ export function PracticeTab({ courseId }: { courseId: string }) {
 
       <div className="mt-4">
         <div className="relative">
-          <span
-            className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-text-muted"
+          <SearchIcon
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
             aria-hidden
-          >
-            🔍
-          </span>
+          />
           <input
             type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search practice sets"
             placeholder={`Search ${practices.length} practice ${
               practices.length === 1 ? "set" : "sets"
             }…`}
@@ -237,16 +237,18 @@ export function PracticeTab({ courseId }: { courseId: string }) {
             description="Click New practice to create one — you can clone from a homework or start from scratch."
           />
         ) : filtered.length === 0 ? (
-          <div className="mt-4 rounded-[--radius-lg] border border-border-light bg-[color:var(--color-surface-alt-2)] p-8 text-center text-sm text-text-muted">
-            No practice sets match your filters.{" "}
-            <button
-              type="button"
-              onClick={clearAll}
-              className="font-medium text-primary hover:underline"
-            >
-              Clear filters
-            </button>
-          </div>
+          <EmptyState
+            title="No practice sets match your filters"
+            action={
+              <button
+                type="button"
+                onClick={clearAll}
+                className="text-sm font-semibold text-primary hover:underline"
+              >
+                Clear filters
+              </button>
+            }
+          />
         ) : (
           <div className="grid gap-3">
             {filtered.map((p) => (

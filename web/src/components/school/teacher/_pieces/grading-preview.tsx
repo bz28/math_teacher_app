@@ -35,7 +35,7 @@ export function GradingPreview({
       <div className="mt-3 space-y-3 text-xs leading-relaxed text-text-primary">
         <PreviewLine
           icon="✓"
-          iconClassName="text-green-700 "
+          iconClassName="text-[color:var(--color-success)]"
           heading="Full credit when"
           body={fullCredit}
         />
@@ -48,7 +48,7 @@ export function GradingPreview({
         {cm && (
           <PreviewLine
             icon="⚠"
-            iconClassName="text-red-700 dark:text-red-400"
+            iconClassName="text-[color:var(--color-error)]"
             heading="Watch for"
             body={cm}
             muted
