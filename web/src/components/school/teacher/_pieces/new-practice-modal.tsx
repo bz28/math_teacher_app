@@ -40,11 +40,17 @@ type Step = 1 | 2 | 3;
 export function NewPracticeModal({
   courseId,
   defaultUnitIds = [],
+  seed,
   onClose,
   onCreated,
 }: {
   courseId: string;
   defaultUnitIds?: string[];
+  /** Pre-seed the scratch flow with a concept to re-teach. When present
+   *  the modal skips the clone/source step and opens on Details with the
+   *  title and generation focus pre-filled — the entry point used by the
+   *  "Re-teach" action on the class struggle list. */
+  seed?: { title?: string; focus?: string };
   onClose: () => void;
   /** Fired after a successful create. `startedGeneration=true` routes
    *  the teacher into the review queue (skeleton state covers the
@@ -54,8 +60,13 @@ export function NewPracticeModal({
     opts: { startedGeneration: boolean },
   ) => void;
 }) {
-  const [step, setStep] = useState<Step>(1);
-  const [sourceMode, setSourceMode] = useState<SourceMode>("clone");
+  // A seeded open (Re-teach) jumps straight into the scratch Details step
+  // with the concept pre-filled — there's nothing to clone for a re-teach.
+  const seeded = Boolean(seed);
+  const [step, setStep] = useState<Step>(seeded ? 2 : 1);
+  const [sourceMode, setSourceMode] = useState<SourceMode>(
+    seeded ? "scratch" : "clone",
+  );
   const { busy, error, setError, run } = useAsyncAction();
   const { showUpgrade, UpgradeModal } = useUpgradePrompt();
 
@@ -65,7 +76,7 @@ export function NewPracticeModal({
   const [selectedHwId, setSelectedHwId] = useState<string>("");
 
   // ── Step 2 state (scratch mode) ──
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(seed?.title ?? "");
   const [unitIds, setUnitIds] = useState<string[]>(defaultUnitIds);
   const [dueAt, setDueAt] = useState<string>("");
   const [latePolicy, setLatePolicy] = useState<string>("none");
@@ -73,7 +84,7 @@ export function NewPracticeModal({
 
   // ── Step 3 state (scratch mode) ──
   const [count, setCount] = useState<number>(10);
-  const [topicHint, setTopicHint] = useState("");
+  const [topicHint, setTopicHint] = useState(seed?.focus ?? "");
   const [docs, setDocs] = useState<TeacherDocument[]>([]);
   const [docsLoaded, setDocsLoaded] = useState(false);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
