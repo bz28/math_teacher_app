@@ -3159,13 +3159,15 @@ export interface paths {
         put?: never;
         /**
          * Mark Submission Reviewed
-         * @description Record the teacher's explicit review of an AI-suggested grade.
+         * @description Stamp `reviewed_at` once the teacher has addressed every problem.
          *
-         *     The fast path already auto-stamps `reviewed_at` whenever the teacher
-         *     edits any problem score (see grade_submission — editing *is*
-         *     reviewing). This endpoint covers the no-edit case: the teacher looked
-         *     at the AI's suggestion, agrees, and wants to vouch for it without
-         *     changing a score. Sets reviewed_by/reviewed_at on the existing grade.
+         *     This is the SOLE writer of the review stamp. A grade save (PATCH
+         *     /grade) records a grade but never marks the submission reviewed —
+         *     "reviewed" means every problem has been addressed (each confident
+         *     grade confirmed or each uncertain one graded). The frontend tracks
+         *     that per-submission "all addressed" state and calls this endpoint at
+         *     the moment it completes (a bulk "Confirm all" or the last grade), so
+         *     a partially-graded submission can never read as reviewed.
          *
          *     Requires a grade to exist (final_score set) — there's nothing to
          *     "review" on an ungraded or skipped-unreadable submission, so we 400;
