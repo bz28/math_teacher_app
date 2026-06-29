@@ -47,6 +47,11 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
   const [loadError, setLoadError] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  // Optimistic echo of the student's just-sent message — shown immediately so
+  // the chat reads student → thinking → reply (matching web), then cleared
+  // once the server transcript (which includes it) comes back.
+  const [pending, setPending] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const turnStart = useRef<number>(Date.now());
   const telemetry = useTurnTelemetry();
@@ -82,28 +87,40 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
     const message = input.trim();
     if (message.length < MIN_INTEGRITY_MESSAGE_CHARS || sending) return;
     setSending(true);
+    setSendError(null);
+    // Clear the composer + echo the message optimistically.
+    setPending(message);
+    setInput("");
     try {
       const seconds = Math.round((Date.now() - turnStart.current) / 1000);
       const next = await postIntegrityTurn(submissionId, message, seconds, telemetry.collect());
       setState(next);
-      setInput("");
+      setPending(null);
       telemetry.reset();
       turnStart.current = Date.now();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // Surface the failure and give the student their words back so a flaky
+      // network doesn't silently swallow what they typed.
+      setPending(null);
+      setInput(message);
+      setSendError("Couldn't send that — try again.");
       // The turn can 409 if the check finalized server-side (completed or
       // hit the turn cap). Refetch so the UI reflects that — e.g. flips to
       // "complete" and hides the composer — instead of silently failing.
       try {
         setState(await getIntegrityState(submissionId));
       } catch {
-        /* keep current state; the error haptic already signaled the failure */
+        /* keep current state; the error message already signaled the failure */
       }
     } finally {
       setSending(false);
     }
   }, [input, sending, submissionId, telemetry]);
+
+  const trimmedLen = input.trim().length;
+  const belowThreshold = trimmedLen > 0 && trimmedLen < MIN_INTEGRITY_MESSAGE_CHARS;
 
   // ── Pre-chat states ───────────────────────────────────
   if (loadError && !state) {
@@ -200,6 +217,14 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
             </View>
           ))}
 
+          {pending && (
+            <View style={[styles.bubbleRow, styles.rowStudent]}>
+              <View style={styles.bubbleStudent}>
+                <Text style={styles.bubbleStudentText}>{pending}</Text>
+              </View>
+            </View>
+          )}
+
           {sending && (
             <View style={[styles.bubbleRow, styles.rowAgent]}>
               <View style={styles.bubbleAgent}>
@@ -220,33 +245,43 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
 
         {!complete && (
           <View style={styles.inputBar}>
-            <TextInput
-              style={styles.input}
-              value={input}
-              onChangeText={(t) => {
-                setInput(t);
-                telemetry.onTextChange(t);
-              }}
-              placeholder="Explain how you solved it…"
-              placeholderTextColor={colors.textMuted}
-              multiline
-              editable={!sending}
-            />
-            <AnimatedPressable
-              style={[
-                styles.sendButton,
-                (input.trim().length < MIN_INTEGRITY_MESSAGE_CHARS || sending) && styles.sendDisabled,
-              ]}
-              onPress={send}
-              disabled={input.trim().length < MIN_INTEGRITY_MESSAGE_CHARS || sending}
-              accessibilityLabel="Send"
-            >
-              {sending ? (
-                <ActivityIndicator size="small" color={colors.textOnPrimary} />
-              ) : (
-                <Ionicons name="arrow-up" size={20} color={colors.textOnPrimary} />
-              )}
-            </AnimatedPressable>
+            <View style={styles.inputRow}>
+              <TextInput
+                style={styles.input}
+                value={input}
+                onChangeText={(t) => {
+                  setInput(t);
+                  if (sendError) setSendError(null);
+                  telemetry.onTextChange(t);
+                }}
+                placeholder="Explain how you solved it…"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                editable={!sending}
+              />
+              <AnimatedPressable
+                style={[
+                  styles.sendButton,
+                  (trimmedLen < MIN_INTEGRITY_MESSAGE_CHARS || sending) && styles.sendDisabled,
+                ]}
+                onPress={send}
+                disabled={trimmedLen < MIN_INTEGRITY_MESSAGE_CHARS || sending}
+                accessibilityLabel="Send"
+              >
+                {sending ? (
+                  <ActivityIndicator size="small" color={colors.textOnPrimary} />
+                ) : (
+                  <Ionicons name="arrow-up" size={20} color={colors.textOnPrimary} />
+                )}
+              </AnimatedPressable>
+            </View>
+            {sendError ? (
+              <Text style={styles.sendErrorText}>{sendError}</Text>
+            ) : belowThreshold ? (
+              <Text style={styles.thresholdHint}>
+                Add a little more — at least {MIN_INTEGRITY_MESSAGE_CHARS} characters.
+              </Text>
+            ) : null}
           </View>
         )}
       </KeyboardAvoidingView>
@@ -332,15 +367,16 @@ const makeStyles = (colors: ColorPalette) =>
     completeText: { ...typography.body, fontSize: 14, color: colors.text, flex: 1 },
 
     inputBar: {
-      flexDirection: "row",
-      alignItems: "flex-end",
-      gap: spacing.sm,
+      gap: spacing.xs,
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.sm,
       paddingBottom: spacing.md,
       borderTopWidth: 1,
       borderTopColor: colors.border,
     },
+    inputRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing.sm },
+    sendErrorText: { ...typography.caption, color: colors.error, fontSize: 12, paddingHorizontal: spacing.xs },
+    thresholdHint: { ...typography.caption, color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.xs },
     input: {
       flex: 1,
       maxHeight: 120,

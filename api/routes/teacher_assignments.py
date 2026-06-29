@@ -26,6 +26,7 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
 from api.middleware.rate_limit import limiter
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
+from api.models.course import Course
 from api.models.integrity_check import (
     IntegrityCheckProblem,
     IntegrityCheckSubmission,
@@ -678,6 +679,44 @@ async def list_all_assignments(
     return {"assignments": await _serialize_assignment_list(db, list(assignments))}
 
 
+@router.get("/rubric-sources")
+async def list_rubric_sources(
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Teacher's assignments that already have a non-empty grading rubric,
+    for the "Copy grading setup from another homework" picker. Returns a
+    lean projection (id, title, course name, type, rubric) — no content /
+    answer-key hydration, no per-assignment stats — since the picker only
+    needs to label each option and load its rubric on pick. Reuses the
+    existing `Assignment.rubric` data; no new storage."""
+    rows = (await db.execute(
+        select(Assignment, Course.name)
+        .join(Course, Course.id == Assignment.course_id)
+        .where(Assignment.teacher_id == current_user.user_id)
+        .where(Assignment.rubric.isnot(None))
+        .order_by(Assignment.created_at.desc())
+    )).all()
+
+    return {
+        "sources": [
+            {
+                "id": str(a.id),
+                "title": a.title,
+                "course_name": course_name,
+                "type": a.type,
+                "rubric": a.rubric,
+                "created_at": a.created_at.isoformat(),
+            }
+            # Guard against rows where rubric is a stored-but-empty dict
+            # ({}): they carry no reusable text, so exclude them from the
+            # picker rather than offering a blank "copy" that does nothing.
+            for a, course_name in rows
+            if isinstance(a.rubric, dict) and a.rubric
+        ]
+    }
+
+
 @router.get("/assignments/{assignment_id}")
 async def get_assignment(
     assignment_id: uuid.UUID,
@@ -960,11 +999,29 @@ async def assign_to_sections(
 GRADE_STATUSES = ("full", "partial", "zero")
 
 
+class Deduction(BaseModel):
+    """One line in a problem's itemized grade receipt — the AI's
+    justification for a single point change. Threaded through the teacher
+    save so the receipt survives an edit that *doesn't* touch the score
+    (e.g. confirming the AI grade, or editing only the feedback)."""
+
+    points_off: float
+    reason: str
+    step_ref: int | None = None
+
+
 class BreakdownEntry(BaseModel):
     problem_id: str  # bank item id
     score_status: str  # full | partial | zero
     percent: float | None = None  # 0..100. Auto for full/zero; required for partial.
     feedback: str | None = None
+    # The AI's itemized ledger that justifies `percent`. The client sends
+    # it back only while the grade still matches the AI's call — the moment
+    # a teacher overrides the score, the client drops it (the AI's
+    # justification no longer reconciles to the teacher's number). The
+    # immutable `ai_breakdown` snapshot is the AI's permanent record and is
+    # never touched here. `None` = no ledger to persist.
+    deductions: list[Deduction] | None = None
 
     @field_validator("score_status")
     @classmethod
@@ -1465,7 +1522,17 @@ def _is_grade_dirty(grade: SubmissionGrade | None) -> bool:
 def _normalize_breakdown(entries: list[BreakdownEntry]) -> list[dict[str, Any]]:
     """Coerce full/zero percents and validate partial has an explicit
     percent. De-dupe by problem_id (last write wins) so a client
-    retry with a replaced entry doesn't create phantom duplicates."""
+    retry with a replaced entry doesn't create phantom duplicates.
+
+    `deductions` (the AI's itemized receipt) is threaded through so the
+    ledger survives a teacher save that leaves the score intact —
+    confirming the AI grade, or editing only the feedback. The client is
+    responsible for dropping the ledger when it overrides the score (the
+    ledger is the AI's justification for the AI's number, not the
+    teacher's); we defend that contract here, too, by dropping any ledger
+    whose `100 − Σ points_off` no longer reconciles to the saved percent.
+    That way a stale ledger can never be persisted alongside a number it
+    doesn't explain. The immutable `ai_breakdown` is untouched."""
     seen: dict[str, dict[str, Any]] = {}
     for e in entries:
         if e.score_status == "full":
@@ -1479,11 +1546,35 @@ def _normalize_breakdown(entries: list[BreakdownEntry]) -> list[dict[str, Any]]:
                     detail="Partial credit requires a percent strictly between 0 and 100",
                 )
             percent = float(e.percent)
+        # Keep the ledger only when it still reconciles to the saved
+        # score. Full credit must be an empty/credit-only ledger; any
+        # itemized partial/zero ledger must sum to the deducted amount
+        # (within a rounding epsilon). A mismatch means the teacher moved
+        # the number — drop the AI's justification rather than show it as
+        # if it justifies the new grade.
+        deductions: list[dict[str, Any]] | None = None
+        if e.deductions is not None:
+            # Use the grader's single-source reconcile tolerance so a ledger
+            # the grader legitimately kept isn't dropped here on a feedback-only
+            # or same-grade re-save (the two checks must agree).
+            from api.core.grading_ai import _LEDGER_TOLERANCE
+
+            total_off = sum(d.points_off for d in e.deductions)
+            if abs((100.0 - total_off) - percent) <= _LEDGER_TOLERANCE:
+                deductions = [
+                    {
+                        "points_off": d.points_off,
+                        "reason": d.reason,
+                        "step_ref": d.step_ref,
+                    }
+                    for d in e.deductions
+                ]
         seen[e.problem_id] = {
             "problem_id": e.problem_id,
             "score_status": e.score_status,
             "percent": percent,
             "feedback": e.feedback,
+            "deductions": deductions,
         }
     return list(seen.values())
 

@@ -62,6 +62,20 @@
       },
       "BreakdownEntry": {
         "properties": {
+          "deductions": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Deduction"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deductions"
+          },
           "feedback": {
             "anyOf": [
               {
@@ -858,6 +872,36 @@
           "published_at"
         ],
         "title": "DashboardGrade",
+        "type": "object"
+      },
+      "Deduction": {
+        "description": "One line in a problem's itemized grade receipt \u2014 the AI's\njustification for a single point change. Threaded through the teacher\nsave so the receipt survives an edit that *doesn't* touch the score\n(e.g. confirming the AI grade, or editing only the feedback).",
+        "properties": {
+          "points_off": {
+            "title": "Points Off",
+            "type": "number"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "step_ref": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step Ref"
+          }
+        },
+        "required": [
+          "points_off",
+          "reason"
+        ],
+        "title": "Deduction",
         "type": "object"
       },
       "DeleteAccountRequest": {
@@ -5678,6 +5722,74 @@
           }
         ],
         "summary": "Student Access Log",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/grading-quality": {
+      "get": {
+        "operationId": "grading_quality_v1_admin_grading_quality_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "hours",
+            "required": false,
+            "schema": {
+              "default": 2160,
+              "maximum": 87600,
+              "minimum": 1,
+              "title": "Hours",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subject"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Grading Quality V1 Admin Grading Quality Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Grading Quality",
         "tags": [
           "admin"
         ]
@@ -14733,6 +14845,35 @@
           }
         ],
         "summary": "Revert Bank Item",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/rubric-sources": {
+      "get": {
+        "description": "Teacher's assignments that already have a non-empty grading rubric,\nfor the \"Copy grading setup from another homework\" picker. Returns a\nlean projection (id, title, course name, type, rubric) \u2014 no content /\nanswer-key hydration, no per-assignment stats \u2014 since the picker only\nneeds to label each option and load its rubric on pick. Reuses the\nexisting `Assignment.rubric` data; no new storage.",
+        "operationId": "list_rubric_sources_v1_teacher_rubric_sources_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Rubric Sources V1 Teacher Rubric Sources Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Rubric Sources",
         "tags": [
           "teacher"
         ]

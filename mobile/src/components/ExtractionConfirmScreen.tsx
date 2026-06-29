@@ -1,15 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { AnimatedPressable } from "./AnimatedPressable";
 import { Button } from "./Button";
 import { Eyebrow } from "./Eyebrow";
+import { ImageZoomModal } from "./ImageZoomModal";
 import { MathText } from "./MathText";
 import {
   confirmExtraction,
   flagExtraction,
   getSubmission,
+  type SubmissionFile,
   type SubmissionState,
 } from "../services/api";
 import { confidenceBand, groupExtraction } from "../utils/extraction";
@@ -41,6 +54,7 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
   // Sparse OCR corrections, keyed "{position}:{step_num}" / "{position}:final".
   // Only touched fields land here; sent to confirm-extraction.
   const [edits, setEdits] = useState<Record<string, string>>({});
+  const [zoomFile, setZoomFile] = useState<SubmissionFile | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const needsExtraction = (s: SubmissionState) => s.integrity_check_enabled || s.ai_grading_enabled;
@@ -155,14 +169,60 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
   // Extraction ready → confirm or flag.
   const band = confidenceBand(state.extraction.confidence);
   const groups = groupExtraction(state.extraction);
+  const sourceFiles = state.files ?? [];
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <Eyebrow style={styles.eyebrow}>Check your work</Eyebrow>
         <Text style={styles.title}>Did we read this right?</Text>
         <Text style={styles.subtitle}>
           Here's what we pulled from your photos. Fix anything we misread, then confirm so we grade it accurately.
         </Text>
+
+        {sourceFiles.length > 0 && (
+          <View style={styles.sourceBlock}>
+            <Text style={styles.sourceLabel}>Your work · tap to enlarge</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.sourceRow}
+              keyboardShouldPersistTaps="handled"
+            >
+              {sourceFiles.map((f, i) => {
+                const isPdf = f.media_type === "application/pdf";
+                return (
+                  <AnimatedPressable
+                    key={i}
+                    style={styles.sourceThumbWrap}
+                    onPress={() => setZoomFile(f)}
+                    accessibilityLabel={`View page ${i + 1}`}
+                  >
+                    {isPdf ? (
+                      <View style={[styles.sourceThumb, styles.sourcePdf]}>
+                        <Ionicons name="document-text-outline" size={24} color={colors.textSecondary} />
+                        <Text style={styles.sourcePdfText}>PDF</Text>
+                      </View>
+                    ) : (
+                      <Image
+                        source={{ uri: `data:${f.media_type};base64,${f.data}` }}
+                        style={styles.sourceThumb}
+                      />
+                    )}
+                  </AnimatedPressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
         {band !== "high" && (
           <View style={styles.confidenceBadge}>
             <Ionicons name="alert-circle-outline" size={14} color={colors.warningDark} />
@@ -244,6 +304,8 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
           If it's wrong, your teacher will grade your original photos by hand instead.
         </Text>
       </ScrollView>
+      </KeyboardAvoidingView>
+      <ImageZoomModal file={zoomFile} onClose={() => setZoomFile(null)} />
     </SafeAreaView>
   );
 }
@@ -266,8 +328,23 @@ function Centered({
 
 const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  flex: { flex: 1 },
   scrollContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.md },
   eyebrow: {},
+  sourceBlock: { gap: spacing.sm },
+  sourceLabel: { ...typography.eyebrow, fontSize: 10, color: colors.textMuted },
+  sourceRow: { gap: spacing.sm, paddingVertical: spacing.xs },
+  sourceThumbWrap: {},
+  sourceThumb: {
+    width: 84,
+    height: 112,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  sourcePdf: { alignItems: "center", justifyContent: "center", gap: spacing.xs },
+  sourcePdfText: { ...typography.caption, color: colors.textMuted, fontSize: 10 },
   title: { ...typography.displaySerifItalic, fontSize: 26, lineHeight: 32, color: colors.text },
   subtitle: { ...typography.body, color: colors.textSecondary, fontSize: 14, lineHeight: 21 },
   confidenceBadge: {

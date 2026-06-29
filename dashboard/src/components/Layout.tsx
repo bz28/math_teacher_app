@@ -21,7 +21,8 @@ const DIAGNOSTIC_NAV: NavItem[] = [
   { to: "/audit-logs", label: "Audit logs" },
   { to: "/llm-calls", label: "LLM calls" },
   { to: "/harness-runs", label: "Harness runs" },
-  { to: "/quality", label: "Quality" },
+  { to: "/quality", label: "Solution quality" },
+  { to: "/grading-quality", label: "Grading quality" },
 ];
 
 const INTERNAL_NAV: NavItem[] = [

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -7,12 +7,23 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { Button } from "./Button";
 import { Eyebrow } from "./Eyebrow";
 import { FigureSvg } from "./FigureSvg";
+import { ImageZoomModal } from "./ImageZoomModal";
+import { ListSkeleton } from "./SkeletonLoader";
 import { MathText } from "./MathText";
-import { captureWorkImage } from "../hooks/useCameraCapture";
-import { getHomework, submitHomework, type HomeworkDetail, type HomeworkProblem } from "../services/api";
+import { captureWorkImage, pickWorkImageFromLibrary, pickWorkPdf } from "../hooks/useCameraCapture";
+import {
+  getHomework,
+  getSubmission,
+  submitHomework,
+  type HomeworkDetail,
+  type HomeworkProblem,
+  type SubmissionFile,
+} from "../services/api";
 import { errorMessage } from "../utils/errorMessage";
 import { scoreColor } from "../utils/scoreColor";
 import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
+
+const MAX_FILES = 10;
 
 interface Props {
   assignmentId: string;
@@ -21,47 +32,112 @@ interface Props {
   onSubmitted: () => void;
 }
 
+/** A staged page the student hasn't turned in yet. */
+interface StagedFile {
+  id: string;
+  /** Raw base64 (no data: prefix) — what the submit endpoint expects. */
+  base64: string;
+  kind: "image" | "pdf";
+  name?: string;
+}
+
+const newId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
 export function HomeworkScreen({ assignmentId, onBack, onSubmitted }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [hw, setHw] = useState<HomeworkDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
-  const [photos, setPhotos] = useState<string[]>([]);
+  const [files, setFiles] = useState<StagedFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  // The pages already turned in (for the submitted-state gallery).
+  const [submittedFiles, setSubmittedFiles] = useState<SubmissionFile[]>([]);
+  const [zoomFile, setZoomFile] = useState<SubmissionFile | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
-      setHw(await getHomework(assignmentId));
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [assignmentId]);
+  const load = useCallback(
+    async (isRefresh = false) => {
+      if (!isRefresh) setLoading(true);
+      setError(false);
+      try {
+        const detail = await getHomework(assignmentId);
+        setHw(detail);
+        if (detail.submitted) {
+          // Best-effort: the gallery is a payoff, not load-critical — if it
+          // fails the status block still renders.
+          try {
+            const sub = await getSubmission(assignmentId);
+            setSubmittedFiles(sub.files ?? []);
+          } catch {
+            /* leave gallery empty */
+          }
+        }
+      } catch {
+        setError(true);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [assignmentId],
+  );
 
   useEffect(() => {
     load();
   }, [load]);
 
+  const isLate = hw?.due_at ? new Date(hw.due_at).getTime() < Date.now() : false;
+  const atCap = files.length >= MAX_FILES;
+
+  const stage = (base64: string, kind: StagedFile["kind"], name?: string) => {
+    setSubmitError(null);
+    setFiles((f) => [...f, { id: newId(), base64, kind, name }]);
+  };
+
   const addPhoto = async () => {
     const base64 = await captureWorkImage();
-    if (base64) setPhotos((p) => [...p, base64]);
+    if (base64) stage(base64, "image");
+  };
+  const addFromLibrary = async () => {
+    const base64 = await pickWorkImageFromLibrary();
+    if (base64) stage(base64, "image");
+  };
+  const addPdf = async () => {
+    try {
+      const pdf = await pickWorkPdf();
+      if (pdf) stage(pdf.base64, "pdf", pdf.filename);
+    } catch {
+      setSubmitError("Couldn't read that PDF — try again.");
+    }
+  };
+
+  const chooseAdd = () => {
+    if (atCap || submitting) return;
+    Alert.alert("Add your work", "Photos or a PDF — up to 10 pages.", [
+      { text: "Take a photo", onPress: addPhoto },
+      { text: "Choose from library", onPress: addFromLibrary },
+      { text: "Attach a PDF", onPress: addPdf },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   const submit = async () => {
-    if (photos.length === 0 || submitting) return;
+    if (files.length === 0 || submitting) return;
     setSubmitError(null);
     setSubmitting(true);
     try {
-      await submitHomework(assignmentId, photos);
+      await submitHomework(
+        assignmentId,
+        files.map((f) => f.base64),
+      );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onSubmitted();
     } catch (e) {
       setSubmitError(errorMessage(e));
+      setConfirming(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSubmitting(false);
@@ -76,17 +152,31 @@ export function HomeworkScreen({ assignmentId, onBack, onSubmitted }: Props) {
       </AnimatedPressable>
 
       {loading ? (
-        <ActivityIndicator size="large" color={colors.primary} style={styles.centered} />
+        <ListSkeleton rows={3} showCard />
       ) : error || !hw ? (
         <View style={styles.centered}>
           <Ionicons name="cloud-offline-outline" size={40} color={colors.textMuted} />
           <Text style={styles.emptyText}>Couldn't load this assignment</Text>
-          <AnimatedPressable onPress={load}>
+          <AnimatedPressable onPress={() => load()}>
             <Text style={styles.retryText}>Try again</Text>
           </AnimatedPressable>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                load(true);
+              }}
+              tintColor={colors.primary}
+            />
+          }
+        >
           <Eyebrow style={styles.eyebrow}>{hw.course_name}</Eyebrow>
           <Text style={styles.title}>{hw.title}</Text>
           {hw.due_at && <Text style={styles.due}>{formatDue(hw.due_at)}</Text>}
@@ -97,22 +187,48 @@ export function HomeworkScreen({ assignmentId, onBack, onSubmitted }: Props) {
           ))}
 
           {hw.submitted ? (
-            <SubmittedStatus hw={hw} styles={styles} colors={colors} />
+            <SubmittedStatus
+              hw={hw}
+              files={submittedFiles}
+              onZoom={setZoomFile}
+              styles={styles}
+              colors={colors}
+            />
           ) : (
             <View style={styles.submitBlock}>
-              <Text style={styles.submitLabel}>Submit your work</Text>
+              <Text style={styles.submitLabel}>Turn in your work</Text>
               <Text style={styles.submitHint}>
-                Take a clear photo of your handwritten work for each page.
+                Add clear photos or a PDF of your completed work — up to {MAX_FILES} pages.
               </Text>
-              {photos.length > 0 && (
+
+              {isLate && (
+                <View style={styles.lateBanner}>
+                  <Ionicons name="alert-circle-outline" size={16} color={colors.warningDark} />
+                  <Text style={styles.lateText}>
+                    This is past due. You can still turn it in — it'll be marked late so your
+                    teacher knows.
+                  </Text>
+                </View>
+              )}
+
+              {files.length > 0 && (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbRow}>
-                  {photos.map((b64, i) => (
-                    <View key={i} style={styles.thumbWrap}>
-                      <Image source={{ uri: `data:image/jpeg;base64,${b64}` }} style={styles.thumb} />
+                  {files.map((f) => (
+                    <View key={f.id} style={styles.thumbWrap}>
+                      {f.kind === "pdf" ? (
+                        <View style={[styles.thumb, styles.pdfThumb]}>
+                          <Ionicons name="document-text-outline" size={26} color={colors.textSecondary} />
+                          <Text style={styles.pdfThumbLabel} numberOfLines={1}>
+                            {f.name ?? "PDF"}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Image source={{ uri: `data:image/jpeg;base64,${f.base64}` }} style={styles.thumb} />
+                      )}
                       <AnimatedPressable
                         style={styles.thumbRemove}
-                        onPress={() => setPhotos((p) => p.filter((_, j) => j !== i))}
-                        accessibilityLabel="Remove photo"
+                        onPress={() => setFiles((p) => p.filter((x) => x.id !== f.id))}
+                        accessibilityLabel="Remove page"
                       >
                         <Ionicons name="close" size={12} color={colors.textOnPrimary} />
                       </AnimatedPressable>
@@ -120,29 +236,60 @@ export function HomeworkScreen({ assignmentId, onBack, onSubmitted }: Props) {
                   ))}
                 </ScrollView>
               )}
-              <Button
-                label={photos.length === 0 ? "Take a photo" : "Add another page"}
-                variant="secondary"
-                onPress={addPhoto}
-                disabled={submitting}
-              />
+
+              {!atCap && (
+                <Button
+                  label={files.length === 0 ? "Add your work" : "Add another page"}
+                  variant="secondary"
+                  onPress={chooseAdd}
+                  disabled={submitting}
+                />
+              )}
+              {atCap && <Text style={styles.capHint}>That's the max of {MAX_FILES} pages.</Text>}
+
               {submitError && (
                 <View style={styles.errorRow}>
                   <Ionicons name="alert-circle" size={16} color={colors.error} />
                   <Text style={styles.errorText}>{submitError}</Text>
                 </View>
               )}
-              {photos.length > 0 && (
-                <Button
-                  label={`Submit ${photos.length} ${photos.length === 1 ? "page" : "pages"}`}
-                  onPress={submit}
-                  loading={submitting}
-                />
-              )}
+
+              {files.length > 0 &&
+                (confirming ? (
+                  <View style={styles.confirmCard}>
+                    <View style={styles.confirmHeader}>
+                      <Ionicons name="lock-closed-outline" size={18} color={colors.primary} />
+                      <Text style={styles.confirmTitle}>Ready to turn it in?</Text>
+                    </View>
+                    <Text style={styles.confirmBody}>
+                      Your teacher will see exactly {files.length}{" "}
+                      {files.length === 1 ? "page" : "pages"} — nothing else. Once you turn it
+                      in you won't be able to change it, so take one last look if you'd like.
+                    </Text>
+                    <Button
+                      label={isLate ? "Turn it in (late)" : "Turn it in"}
+                      onPress={submit}
+                      loading={submitting}
+                    />
+                    <Button
+                      label="Not yet — let me look again"
+                      variant="ghost"
+                      onPress={() => setConfirming(false)}
+                      disabled={submitting}
+                    />
+                  </View>
+                ) : (
+                  <Button
+                    label={`Review & turn in ${files.length} ${files.length === 1 ? "page" : "pages"}`}
+                    onPress={() => setConfirming(true)}
+                  />
+                ))}
             </View>
           )}
         </ScrollView>
       )}
+
+      <ImageZoomModal file={zoomFile} onClose={() => setZoomFile(null)} />
     </SafeAreaView>
   );
 }
@@ -177,10 +324,14 @@ function ProblemBlock({
 
 function SubmittedStatus({
   hw,
+  files,
+  onZoom,
   styles,
   colors,
 }: {
   hw: HomeworkDetail;
+  files: SubmissionFile[];
+  onZoom: (f: SubmissionFile) => void;
   styles: ReturnType<typeof makeStyles>;
   colors: ColorPalette;
 }) {
@@ -208,6 +359,40 @@ function SubmittedStatus({
         <View style={styles.statusRow}>
           <Ionicons name="hourglass-outline" size={20} color={colors.textSecondary} />
           <Text style={styles.statusTitle}>Submitted — in review</Text>
+        </View>
+      )}
+
+      {files.length > 0 && (
+        <View style={styles.gallery}>
+          <Text style={styles.galleryLabel}>
+            What your teacher sees · {files.length} {files.length === 1 ? "page" : "pages"}
+          </Text>
+          <View style={styles.galleryGrid}>
+            {files.map((f, i) => {
+              const isPdf = f.media_type === "application/pdf";
+              return (
+                <AnimatedPressable
+                  key={i}
+                  style={styles.galleryTile}
+                  onPress={() => onZoom(f)}
+                  accessibilityLabel={`View page ${i + 1}`}
+                >
+                  {isPdf ? (
+                    <View style={[styles.galleryImage, styles.galleryPdf]}>
+                      <Ionicons name="document-text-outline" size={28} color={colors.textSecondary} />
+                      <Text style={styles.galleryPdfText}>PDF</Text>
+                    </View>
+                  ) : (
+                    <Image
+                      source={{ uri: `data:${f.media_type};base64,${f.data}` }}
+                      style={styles.galleryImage}
+                    />
+                  )}
+                  <Text style={styles.galleryCaption}>Page {i + 1}</Text>
+                </AnimatedPressable>
+              );
+            })}
+          </View>
         </View>
       )}
     </View>
@@ -258,9 +443,28 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   submitBlock: { gap: spacing.md, marginTop: spacing.lg },
   submitLabel: { ...typography.heading, fontSize: 18, color: colors.text },
   submitHint: { ...typography.body, color: colors.textSecondary, fontSize: 14 },
+  lateBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    backgroundColor: colors.warningBg,
+    borderRadius: radii.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  lateText: { ...typography.caption, color: colors.warningDark, fontSize: 13, flex: 1, lineHeight: 18 },
   thumbRow: { flexGrow: 0 },
   thumbWrap: { marginRight: spacing.sm },
   thumb: { width: 72, height: 96, borderRadius: radii.sm, backgroundColor: colors.surfaceAlt },
+  pdfThumb: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    paddingHorizontal: spacing.xs,
+  },
+  pdfThumbLabel: { ...typography.caption, color: colors.textSecondary, fontSize: 10 },
   thumbRemove: {
     position: "absolute",
     top: -6,
@@ -272,6 +476,20 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  capHint: { ...typography.caption, color: colors.textMuted, fontSize: 12 },
+
+  confirmCard: {
+    backgroundColor: colors.primaryBg,
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
+    marginTop: spacing.xs,
+  },
+  confirmHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  confirmTitle: { ...typography.heading, fontSize: 17, color: colors.text },
+  confirmBody: { ...typography.body, color: colors.textSecondary, fontSize: 14, lineHeight: 21 },
 
   statusBlock: {
     backgroundColor: colors.surfaceAlt2,
@@ -287,6 +505,22 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   breakdownLabel: { ...typography.label, fontSize: 12, color: colors.textSecondary },
   breakdownPct: { ...typography.bodyBold, fontSize: 14, color: colors.text },
   breakdownFeedback: { ...typography.caption, color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
+
+  gallery: { gap: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.borderLight },
+  galleryLabel: { ...typography.label, fontSize: 12, color: colors.textSecondary },
+  galleryGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  galleryTile: { width: 96, gap: 2 },
+  galleryImage: {
+    width: 96,
+    height: 124,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  galleryPdf: { alignItems: "center", justifyContent: "center", gap: spacing.xs },
+  galleryPdfText: { ...typography.caption, color: colors.textMuted, fontSize: 10 },
+  galleryCaption: { ...typography.caption, color: colors.textMuted, fontSize: 11, textAlign: "center" },
 
   errorRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   errorText: { color: colors.error, fontSize: 14, flex: 1 },

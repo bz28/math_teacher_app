@@ -17,6 +17,7 @@ import {
   teacher,
   type AiGradeEntry,
   type GradeBreakdownEntry,
+  type GradeDeduction,
   type IntegrityDisposition,
   type ItemAnalysisResponse,
   type SubmissionFile,
@@ -131,10 +132,55 @@ type RosterFilter = "all" | "needs_me" | "flagged" | "low_confidence";
 const CONFIDENCE_LOW = 0.6;
 const CONFIDENCE_HIGH = 0.85;
 
+// Shared empty set for the "this state belongs to a different submission"
+// derivation — avoids allocating a new Set on every render while a
+// student's confirm/expand selections are scoped to their submission id.
+const EMPTY_ID_SET: ReadonlySet<string> = new Set<string>();
+
 function confidenceBand(c: number): "high" | "medium" | "low" {
   if (c >= CONFIDENCE_HIGH) return "high";
   if (c >= CONFIDENCE_LOW) return "medium";
   return "low";
+}
+
+// A problem the AI is confident about — high band (>=0.85) on a present
+// AI grade. These COLLAPSE to a one-line confirm row in the triage detail
+// pane; everything else (medium / low / no AI grade) stays fully
+// expanded. A teacher override re-expands the row (handled at the call
+// site via the override check) so the teacher is never editing inside a
+// collapsed summary.
+function isConfidentAi(ai: AiGradeEntry | null): boolean {
+  return ai !== null && ai.confidence !== null && ai.confidence >= CONFIDENCE_HIGH;
+}
+
+// The grading key that re-affirms the AI's suggestion in place. Quarter
+// scale: 1=full, 5=zero, partial→nearest quarter key (2=75, 3=50, 4=25).
+// Pressing this key on a collapsed confident row CONFIRMS it; pressing
+// any other grade key is an override that expands + re-grades.
+function aiConfirmKey(ai: AiGradeEntry | null): "1" | "2" | "3" | "4" | "5" | null {
+  if (!ai) return null;
+  if (ai.score_status === "full") return "1";
+  if (ai.score_status === "zero") return "5";
+  if (ai.percent >= 62.5) return "2";
+  if (ai.percent >= 37.5) return "3";
+  return "4";
+}
+
+// Has the teacher moved a problem off the AI's call? Compares the live
+// grade entry to the AI suggestion (status, and percent for partials).
+// Used both to draw the "revert" breadcrumb and to force a confident
+// row back open — a teacher mid-edit must never be editing inside a
+// collapsed one-liner.
+function teacherOverrodeAi(
+  entry: GradeBreakdownEntry | null,
+  ai: AiGradeEntry | null,
+): boolean {
+  if (!ai || !entry) return false;
+  if (entry.score_status !== ai.score_status) return true;
+  return (
+    entry.score_status === "partial" &&
+    Math.round(entry.percent) !== Math.round(ai.percent)
+  );
 }
 
 // Always-on AI confidence indicator for a single grade. Reads the
@@ -276,6 +322,9 @@ function HomeworkSectionReview({
   // Submission currently being marked reviewed via the explicit no-edit
   // affordance. Single slot — only one student is open at a time.
   const [markingReviewedId, setMarkingReviewedId] = useState<string | null>(null);
+  // Whether the pinned work rail (wide layout) shows the photo inline.
+  // A session preference — lifted here so it persists across students.
+  const [photoPinned, setPhotoPinned] = useState(true);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -488,6 +537,11 @@ function HomeworkSectionReview({
 
   const submittedCount = roster?.filter((e) => e.submission).length ?? 0;
   const totalRoster = roster?.length ?? 0;
+  // Submitters the triage roster surfaces as "needs your eyes" — flagged
+  // or low-confidence. Drives the header's editorial subhead.
+  const needsEyesCount =
+    roster?.filter((e) => e.submission && (isFlagged(e) || hasLowConfidence(e)))
+      .length ?? 0;
 
   // Mirror the server's recomputed grade back onto the roster row so
   // the left-list status/score updates the moment a save returns.
@@ -601,6 +655,18 @@ function HomeworkSectionReview({
         status === "full" ? 100 : status === "zero" ? 0 : (partialPercent ?? 50);
       const prior = detail.breakdown ?? [];
       const existing = prior.find((b) => b.problem_id === problemId);
+      // The AI's itemized ledger justifies the AI's number. Carry it
+      // forward only when this write leaves the score untouched — i.e.
+      // confirming the AI grade (same status + percent). The moment the
+      // teacher overrides to a different grade, drop the ledger: it no
+      // longer reconciles to the new number, and showing it would imply
+      // the AI justified the teacher's call. The immutable ai_breakdown
+      // keeps the AI's record regardless. The backend re-checks this same
+      // reconciliation as a safety net.
+      const keepDeductions =
+        existing?.deductions != null &&
+        existing.score_status === status &&
+        Math.round(existing.percent) === Math.round(percent);
       const nextEntry: GradeBreakdownEntry = {
         problem_id: problemId,
         score_status: status,
@@ -613,6 +679,7 @@ function HomeworkSectionReview({
         // a grade that already matches the published snapshot.
         confidence: existing?.confidence ?? null,
         feedback: existing?.feedback ?? null,
+        deductions: keepDeductions ? existing!.deductions : null,
       };
       const nextBreakdown = existing
         ? prior.map((b) => (b.problem_id === problemId ? nextEntry : b))
@@ -897,9 +964,32 @@ function HomeworkSectionReview({
       </div>
 
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
-        <h1 className="font-serif text-[34px] leading-tight tracking-[-0.015em] text-text-primary">
-          {pageTitle}
-        </h1>
+        <div className="min-w-0">
+          <h1 className="font-serif text-[34px] leading-tight tracking-[-0.015em] text-text-primary">
+            {pageTitle}
+          </h1>
+          {roster !== null && submittedCount > 0 && (
+            <p className="mt-1.5 text-[12.5px] text-text-secondary">
+              Reviewing{" "}
+              <b className="font-bold text-text-primary">
+                {submittedCount} of {totalRoster}
+              </b>{" "}
+              submitted ·{" "}
+              {needsEyesCount > 0 ? (
+                <>
+                  <b className="font-bold text-text-primary">{needsEyesCount}</b>{" "}
+                  {needsEyesCount === 1 ? "needs" : "need"} your eyes · the AI is
+                  confident on the rest.
+                </>
+              ) : (
+                <>the AI is confident on every submission.</>
+              )}{" "}
+              <span className="font-serif italic text-text-secondary">
+                You stay the judge — confirm every grade.
+              </span>
+            </p>
+          )}
+        </div>
         {roster !== null && (
           <PublishButton
             pendingTotal={pendingTotal}
@@ -937,8 +1027,15 @@ function HomeworkSectionReview({
       )}
 
       {roster !== null && roster.length > 0 && (
-        <div className="mt-5 grid gap-5 md:grid-cols-[280px_1fr]">
-          {/* Student list */}
+        // 3-column split: roster | grade column | pinned photo. The photo
+        // rail is the 3rd track only on the wide (xl, >=1280px) layout;
+        // below that it's display:none and the strip thumbnail in the grade
+        // column takes over, so roster + grade never get crushed. xl (a
+        // named breakpoint) is used over an arbitrary min-[1100px] because
+        // arbitrary min-[] variants don't sort with the breakpoint scale —
+        // md:grid-cols would cascade after and override it.
+        <div className="mt-5 grid items-start gap-5 md:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[248px_minmax(0,1fr)_372px]">
+          {/* Student list — uncertainty-first triage groups */}
           <aside className="self-start rounded-[--radius-xl] border border-border-light bg-surface shadow-sm">
             <div className="flex items-center justify-between gap-2 border-b border-border-light px-4 py-2.5">
               <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
@@ -951,31 +1048,17 @@ function HomeworkSectionReview({
               value={rosterFilter}
               onChange={setRosterFilter}
             />
-            <div className="max-h-[70vh] overflow-y-auto">
-              {applyRosterFilter(roster, rosterFilter).length === 0 ? (
-                <p className="px-4 py-6 text-center text-xs text-text-muted">
-                  {rosterFilter === "needs_me"
-                    ? "Nothing waiting on you here."
-                    : rosterFilter === "flagged"
-                      ? "No flagged submissions in this section."
-                      : rosterFilter === "low_confidence"
-                        ? "The AI was confident on every graded problem here."
-                        : "No students match this filter."}
-                </p>
-              ) : (
-                applyRosterFilter(roster, rosterFilter).map((e) => (
-                  <StudentRow
-                    key={e.student_id}
-                    entry={e}
-                    selected={e.student_id === selectedStudentId}
-                    onSelect={() => setSelectedStudentId(e.student_id)}
-                  />
-                ))
-              )}
+            <div className="max-h-[78vh] overflow-y-auto">
+              <TriageRoster
+                roster={applyRosterFilter(roster, rosterFilter)}
+                filter={rosterFilter}
+                selectedStudentId={selectedStudentId}
+                onSelect={setSelectedStudentId}
+              />
             </div>
           </aside>
 
-          {/* Detail */}
+          {/* Detail / grade column */}
           <section className="min-w-0">
             {!selectedEntry && (
               <div className="rounded-[--radius-xl] border border-border-light bg-[color:var(--color-surface-alt-2)] p-10 text-center text-sm text-text-muted">
@@ -1026,6 +1109,24 @@ function HomeworkSectionReview({
               />
             )}
           </section>
+
+          {/* Pinned student-work rail — wide (xl) layout only. Reads the
+              current detail's files; unpins below xl (the strip thumbnail
+              in the grade column handles it there). */}
+          <aside className="hidden xl:block">
+            <PinnedWorkRail
+              files={
+                detailIsCurrent && detail && selectedEntry?.submission
+                  ? detail.files
+                  : null
+              }
+              studentName={
+                detailIsCurrent && detail ? detail.student_name : null
+              }
+              pinned={photoPinned}
+              onTogglePinned={() => setPhotoPinned((v) => !v)}
+            />
+          </aside>
         </div>
       )}
 
@@ -1682,6 +1783,130 @@ function NotSubmittedCard({ entry }: { entry: RosterEntry }) {
 }
 
 // ────────────────────────────────────────────────────────────────────
+// Triage roster — groups the (already-filtered) roster into "Needs your
+// eyes" (integrity-flagged OR low-confidence) above "AI confident", with
+// non-submitters last. Within "Needs your eyes" the order is uncertainty-
+// first: flagged before low-confidence, then lowest score first, so the
+// calls most worth the teacher's attention float to the very top.
+// ────────────────────────────────────────────────────────────────────
+
+function TriageRoster({
+  roster,
+  filter,
+  selectedStudentId,
+  onSelect,
+}: {
+  roster: RosterEntry[];
+  filter: RosterFilter;
+  selectedStudentId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const needsEyes: RosterEntry[] = [];
+  const confident: RosterEntry[] = [];
+  const notSubmitted: RosterEntry[] = [];
+  for (const e of roster) {
+    if (!e.submission) notSubmitted.push(e);
+    else if (isFlagged(e) || hasLowConfidence(e)) needsEyes.push(e);
+    else confident.push(e);
+  }
+  // Uncertainty-first: flagged (0) before low-confidence (1), then by
+  // ascending score (a null score — ungraded — sorts to the very top).
+  const prio = (e: RosterEntry) => (isFlagged(e) ? 0 : 1);
+  needsEyes.sort((a, b) => {
+    const p = prio(a) - prio(b);
+    if (p !== 0) return p;
+    const sa = a.submission?.final_score ?? -1;
+    const sb = b.submission?.final_score ?? -1;
+    return sa - sb;
+  });
+
+  if (roster.length === 0) {
+    return (
+      <p className="px-4 py-6 text-center text-xs text-text-muted">
+        {filter === "needs_me"
+          ? "Nothing waiting on you here."
+          : filter === "flagged"
+            ? "No flagged submissions in this section."
+            : filter === "low_confidence"
+              ? "The AI was confident on every graded problem here."
+              : "No students match this filter."}
+      </p>
+    );
+  }
+
+  const renderRows = (entries: RosterEntry[]) =>
+    entries.map((e) => (
+      <StudentRow
+        key={e.student_id}
+        entry={e}
+        selected={e.student_id === selectedStudentId}
+        onSelect={() => onSelect(e.student_id)}
+      />
+    ));
+
+  return (
+    <>
+      {needsEyes.length > 0 && (
+        <RosterGroupHeader
+          label="Needs your eyes"
+          count={needsEyes.length}
+          tone="eyes"
+        />
+      )}
+      {renderRows(needsEyes)}
+      {confident.length > 0 && (
+        <RosterGroupHeader
+          label="AI confident"
+          count={confident.length}
+          tone="calm"
+        />
+      )}
+      {renderRows(confident)}
+      {notSubmitted.length > 0 && (
+        <RosterGroupHeader
+          label="Not submitted"
+          count={notSubmitted.length}
+          tone="calm"
+        />
+      )}
+      {renderRows(notSubmitted)}
+    </>
+  );
+}
+
+function RosterGroupHeader({
+  label,
+  count,
+  tone,
+}: {
+  label: string;
+  count: number;
+  tone: "eyes" | "calm";
+}) {
+  return (
+    <div className="flex items-center gap-1.5 border-b border-border-light bg-[color:var(--color-surface-alt-2)]/40 px-4 pb-1.5 pt-2.5">
+      {tone === "eyes" && (
+        <span aria-hidden className="text-[color:var(--color-warning-dark)]">
+          ⚠
+        </span>
+      )}
+      <span
+        className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
+          tone === "eyes"
+            ? "text-[color:var(--color-warning-dark)]"
+            : "text-text-muted"
+        }`}
+      >
+        {label}
+      </span>
+      <span className="ml-auto text-[10px] font-bold text-text-muted tabular-nums">
+        {count}
+      </span>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
 // Student list row — the clickable link to a specific submission.
 // ────────────────────────────────────────────────────────────────────
 
@@ -1900,6 +2125,95 @@ function SubmissionDetailPanel({
   // explicit "Mark reviewed" affordance (the no-edit accept path).
   const canMarkReviewed = detail.final_score !== null && !detail.reviewed_at;
 
+  // ── Triage: collapse the confident grades, keep the uncertain open ──
+  //
+  // Per-problem metadata that drives the collapsed/expanded split. A
+  // problem the AI is confident about (high band, not overridden)
+  // COLLAPSES to a one-line confirm row; uncertain ones stay fully
+  // expanded with the answer/key, work, receipt, and grade buttons.
+  // Nothing is auto-confirmed — `confirmedIds` is a purely local
+  // checklist the teacher fills by pressing the AI's key (or the Confirm
+  // chip). The real, server-side trust signal stays `reviewed_at`, which
+  // confirming stamps via onMarkReviewed — same honest semantics the
+  // publish trust-disclosure already reads.
+  const [confirmState, setConfirmState] = useState<{ sid: string; ids: Set<string> }>(
+    () => ({ sid: detail.submission_id, ids: new Set() }),
+  );
+  const confirmedIds =
+    confirmState.sid === detail.submission_id ? confirmState.ids : EMPTY_ID_SET;
+  // Manual "open this confident row to inspect it" toggles — also keyed
+  // by submission so they reset on student switch (derivation, not an
+  // effect, matching the focus model below).
+  const [expandState, setExpandState] = useState<{ sid: string; ids: Set<string> }>(
+    () => ({ sid: detail.submission_id, ids: new Set() }),
+  );
+  const manuallyExpandedIds =
+    expandState.sid === detail.submission_id ? expandState.ids : EMPTY_ID_SET;
+
+  const problemMeta = useMemo(
+    () =>
+      detail.problems.map((p) => {
+        const ai = aiByPosition.get(p.position) ?? null;
+        const entry = breakdownByProblem.get(p.bank_item_id) ?? null;
+        const overridden = teacherOverrodeAi(entry, ai);
+        // Confident = high-band AI grade that the teacher hasn't moved.
+        const confident = isConfidentAi(ai) && !overridden && entry !== null;
+        const collapsed = confident && !manuallyExpandedIds.has(p.bank_item_id);
+        return {
+          id: p.bank_item_id,
+          ai,
+          confident,
+          collapsed,
+          confirmed: confirmedIds.has(p.bank_item_id),
+          confirmKey: aiConfirmKey(ai),
+        };
+      }),
+    [
+      detail.problems,
+      aiByPosition,
+      breakdownByProblem,
+      manuallyExpandedIds,
+      confirmedIds,
+    ],
+  );
+  const confidentCount = problemMeta.filter((m) => m.confident).length;
+  const uncertainCount = totalProblems - confidentCount;
+  // Confident rows still collapsed AND not yet confirmed — the target of
+  // the bulk "Confirm all" action and its count.
+  const pendingConfirmIds = problemMeta
+    .filter((m) => m.collapsed && !m.confirmed)
+    .map((m) => m.id);
+
+  const confirmProblems = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+      setConfirmState((s) => {
+        const base =
+          s.sid === detail.submission_id ? new Set(s.ids) : new Set<string>();
+        for (const id of ids) base.add(id);
+        return { sid: detail.submission_id, ids: base };
+      });
+      // Confirming is the teacher vouching for the AI's grade. The grade
+      // itself is already persisted (the AI wrote breakdown + final_score),
+      // so confirming only stamps the submission reviewed — never re-saves
+      // or mutates a grade. onMarkReviewed is a no-op once already stamped.
+      if (!detail.reviewed_at) onMarkReviewed();
+    },
+    [detail.submission_id, detail.reviewed_at, onMarkReviewed],
+  );
+  const toggleExpand = useCallback(
+    (id: string) => {
+      setExpandState((s) => {
+        const base =
+          s.sid === detail.submission_id ? new Set(s.ids) : new Set<string>();
+        if (base.has(id)) base.delete(id);
+        else base.add(id);
+        return { sid: detail.submission_id, ids: base };
+      });
+    },
+    [detail.submission_id],
+  );
+
   // ── Keyboard grading ──────────────────────────────────────────────
   //
   // The single biggest speed multiplier for grinding through a stack of
@@ -2009,6 +2323,34 @@ function SubmissionDetailPanel({
     ],
   );
 
+  // Confirm the focused collapsed row in place, then advance — the
+  // keyboard twin of the Confirm chip. Re-affirms the AI's grade (no
+  // mutation; just stamps the local checklist + reviewed_at) so a teacher
+  // can rip "1,1,5" straight down a stack of confident grades.
+  const confirmFocused = useCallback(() => {
+    const p = detail.problems[focusedIndex];
+    if (!p) return;
+    confirmProblems([p.bank_item_id]);
+    moveFocus(nextUngradedAfter(focusedIndex));
+  }, [detail.problems, focusedIndex, confirmProblems, moveFocus, nextUngradedAfter]);
+
+  // Dispatch a grade key (1–5). On a COLLAPSED confident row, the key
+  // that matches the AI's suggestion confirms in place; any other grade
+  // key is a deliberate override that re-grades (which re-expands the row
+  // via the override check) and advances. Expanded rows always grade
+  // directly — the existing behaviour.
+  const pressGradeKey = useCallback(
+    (key: "1" | "2" | "3" | "4" | "5", status: GradeStatus, pct?: number) => {
+      const meta = problemMeta[focusedIndex];
+      if (meta?.collapsed && meta.confirmKey === key) {
+        confirmFocused();
+      } else {
+        gradeFocused(status, pct);
+      }
+    },
+    [problemMeta, focusedIndex, confirmFocused, gradeFocused],
+  );
+
   // The document-level grading listener. Memoized over the current
   // focus/handlers; the effect re-subscribes when that identity changes.
   const handleGradingKey = useCallback(
@@ -2049,23 +2391,23 @@ function SubmissionDetailPanel({
         // the % field — each press grades the focused problem and advances.
         case "1":
           e.preventDefault();
-          gradeFocused("full");
+          pressGradeKey("1", "full");
           break;
         case "2":
           e.preventDefault();
-          gradeFocused("partial", 75);
+          pressGradeKey("2", "partial", 75);
           break;
         case "3":
           e.preventDefault();
-          gradeFocused("partial", 50);
+          pressGradeKey("3", "partial", 50);
           break;
         case "4":
           e.preventDefault();
-          gradeFocused("partial", 25);
+          pressGradeKey("4", "partial", 25);
           break;
         case "5":
           e.preventDefault();
-          gradeFocused("zero");
+          pressGradeKey("5", "zero");
           break;
         case "j":
         case "J":
@@ -2101,7 +2443,7 @@ function SubmissionDetailPanel({
     },
     [
       cheatsheetOpen,
-      gradeFocused,
+      pressGradeKey,
       moveFocus,
       focusedIndex,
       nextStudent,
@@ -2195,8 +2537,13 @@ function SubmissionDetailPanel({
               student →" navigation, since teachers click Next
               student rapidly and we don't want the View work button
               absorbing accidental hits. */}
+          {/* Hidden on the wide (xl) layout, where the pinned work rail
+              keeps the photo glanceable; shown below xl where the rail
+              unpins. */}
           {detail.files && detail.files.length > 0 && (
-            <StudentWorkThumbButton files={detail.files} />
+            <span className="xl:hidden">
+              <StudentWorkThumbButton files={detail.files} />
+            </span>
           )}
           {/* Explicit "I looked, I agree" review for the no-edit case
               (editing any score auto-stamps review on its own). Only
@@ -2311,30 +2658,80 @@ function SubmissionDetailPanel({
             onToggle={onToggleRubric}
           />
         </div>
+
+        {/* Triage note — explains the collapse, and makes the "nothing is
+            auto-accepted" contract explicit. Only shown when the AI was
+            confident on at least one problem (so there's something to
+            collapse). */}
+        {confidentCount > 0 && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-[--radius-md] bg-[color:var(--color-surface-alt-2)] px-3 py-2 text-[11px] text-text-secondary">
+            <span className="flex items-start gap-2">
+              <span aria-hidden>🤖</span>
+              <span>
+                <b className="font-bold text-text-primary">
+                  {confidentCount} of {totalProblems}
+                </b>{" "}
+                the AI is confident about — collapsed for a one-glance
+                confirm.{" "}
+                {uncertainCount > 0 && (
+                  <>
+                    <b className="font-bold text-text-primary">
+                      {uncertainCount}
+                    </b>{" "}
+                    stayed open because the AI was unsure.{" "}
+                  </>
+                )}
+                <b className="font-bold text-text-primary">
+                  Nothing is auto-accepted
+                </b>{" "}
+                — each row needs your key.
+              </span>
+            </span>
+            {pendingConfirmIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => confirmProblems(pendingConfirmIds)}
+                className="shrink-0 rounded-[--radius-md] border border-primary/35 bg-primary-bg px-3 py-1.5 text-[11px] font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10"
+              >
+                ✓ Confirm all {pendingConfirmIds.length} confident{" "}
+                {pendingConfirmIds.length === 1 ? "grade" : "grades"}
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="mt-3 space-y-3">
-          {detail.problems.map((p, i) => (
-            <ProblemGradeRow
-              // Compose the key with submission_id so the row remounts
-              // per student. Without this, React reuses the same
-              // ProblemGradeRow instance across students that share
-              // bank items, and local UI state (e.g. the question
-              // expand toggle) leaks from one student into the next.
-              key={`${detail.submission_id}-${p.bank_item_id}`}
-              problem={p}
-              entry={breakdownByProblem.get(p.bank_item_id) ?? null}
-              aiGrade={aiByPosition.get(p.position) ?? null}
-              focused={i === focusedIndex}
-              rowRef={(el) => {
-                rowRefs.current[i] = el;
-              }}
-              onChange={(status, partialPercent) =>
-                onGradeProblem(p.bank_item_id, status, partialPercent)
-              }
-              onFeedbackChange={(text) =>
-                onFeedbackChange(p.bank_item_id, text)
-              }
-            />
-          ))}
+          {detail.problems.map((p, i) => {
+            const meta = problemMeta[i];
+            return (
+              <ProblemGradeRow
+                // Compose the key with submission_id so the row remounts
+                // per student. Without this, React reuses the same
+                // ProblemGradeRow instance across students that share
+                // bank items, and local UI state (e.g. the question
+                // expand toggle) leaks from one student into the next.
+                key={`${detail.submission_id}-${p.bank_item_id}`}
+                problem={p}
+                entry={breakdownByProblem.get(p.bank_item_id) ?? null}
+                aiGrade={aiByPosition.get(p.position) ?? null}
+                focused={i === focusedIndex}
+                collapsed={meta?.collapsed ?? false}
+                confirmed={meta?.confirmed ?? false}
+                confirmKey={meta?.confirmKey ?? null}
+                onConfirm={() => confirmProblems([p.bank_item_id])}
+                onToggleExpand={() => toggleExpand(p.bank_item_id)}
+                rowRef={(el) => {
+                  rowRefs.current[i] = el;
+                }}
+                onChange={(status, partialPercent) =>
+                  onGradeProblem(p.bank_item_id, status, partialPercent)
+                }
+                onFeedbackChange={(text) =>
+                  onFeedbackChange(p.bank_item_id, text)
+                }
+              />
+            );
+          })}
         </div>
       </div>
 
@@ -2552,26 +2949,71 @@ function ItemAnalysisRow({
 // not a diff — but verification against the original is one tap away.
 // ────────────────────────────────────────────────────────────────────
 
+// Anchor highlight for a student-work step that a receipt deduction
+// points at — a color-matched tint + numbered badge so the eye links the
+// "−20% sign error" ledger line to the exact step it happened on. Two
+// tones (amber / info) cycle across a problem's deductions so multiple
+// anchors stay visually distinct, matching the receipt's badge colors.
+type StepAnchor = { tone: "amber" | "info" };
+const ANCHOR_TONES = ["amber", "info"] as const;
+const ANCHOR_STYLE: Record<
+  "amber" | "info",
+  { wrap: string; badge: string; idRef: (id: string) => string }
+> = {
+  amber: {
+    wrap: "border-[color:var(--color-warning)]/45 bg-[color:var(--color-warning-bg)]/60",
+    badge: "bg-[color:var(--color-warning)] text-white",
+    idRef: (id) => `${id}-amber`,
+  },
+  info: {
+    wrap: "border-[color:var(--color-info)]/45 bg-[color:var(--color-info-light)]/60",
+    badge: "bg-[color:var(--color-info)] text-white",
+    idRef: (id) => `${id}-info`,
+  },
+};
+
 function StudentStepRow({
   step,
   index,
+  anchor,
+  anchorId,
 }: {
   step: TeacherSubmissionStep;
   index: number;
+  /** Set when a receipt deduction anchors to this step (1-based
+   *  step_ref === index + 1). Tints the row + shows the badge. */
+  anchor?: StepAnchor;
+  /** DOM id for the receipt's "↳ step N" link to scroll to. */
+  anchorId?: string;
 }) {
   const [showOriginal, setShowOriginal] = useState(false);
   const originalLatex = step.original_latex ?? "";
   const originalPlain = step.original_plain_english ?? "";
   const hasOriginal =
     !!step.edited && (originalLatex.length > 0 || originalPlain.length > 0);
+  const a = anchor ? ANCHOR_STYLE[anchor.tone] : null;
   return (
-    <div className="flex gap-2">
-      <span
-        aria-hidden
-        className="shrink-0 pt-0.5 text-xs font-semibold text-text-muted tabular-nums"
-      >
-        {index + 1}.
-      </span>
+    <div
+      id={anchorId}
+      className={`flex gap-2 scroll-mt-4 ${
+        a ? `-mx-1.5 rounded-[--radius-sm] border px-1.5 py-1 ${a.wrap}` : ""
+      }`}
+    >
+      {a ? (
+        <span
+          aria-hidden
+          className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] text-[10px] font-extrabold tabular-nums ${a.badge}`}
+        >
+          {index + 1}
+        </span>
+      ) : (
+        <span
+          aria-hidden
+          className="shrink-0 pt-0.5 text-xs font-semibold text-text-muted tabular-nums"
+        >
+          {index + 1}.
+        </span>
+      )}
       <div className="min-w-0 flex-1">
         {step.latex ? (
           <MathText text={`$$${step.latex}$$`} />
@@ -2625,6 +3067,11 @@ function ProblemGradeRow({
   entry,
   aiGrade,
   focused,
+  collapsed,
+  confirmed,
+  confirmKey,
+  onConfirm,
+  onToggleExpand,
   rowRef,
   onChange,
   onFeedbackChange,
@@ -2635,6 +3082,18 @@ function ProblemGradeRow({
   /** This row is the keyboard-focused problem — draws the left accent
    *  bar + ring and receives real DOM focus via `rowRef`. */
   focused: boolean;
+  /** The AI was confident — render the one-line confirm summary instead
+   *  of the full grading body. The teacher can expand to inspect. */
+  collapsed: boolean;
+  /** The teacher has confirmed the AI's grade on this row (local
+   *  checklist — the server trust signal is the submission's
+   *  reviewed_at, stamped by onConfirm). */
+  confirmed: boolean;
+  /** The grading key that re-affirms the AI suggestion (shown on the
+   *  Confirm chip). Null when there's no AI grade. */
+  confirmKey: "1" | "2" | "3" | "4" | "5" | null;
+  onConfirm: () => void;
+  onToggleExpand: () => void;
   /** Registers the row's root element with the parent so keyboard nav
    *  can move actual focus (the model is focus-real, not aria-only). */
   rowRef: (el: HTMLDivElement | null) => void;
@@ -2798,6 +3257,117 @@ function ProblemGradeRow({
         : "No credit"
     : null;
 
+  // Receipt deductions that anchor to a specific student-work step. Each
+  // gets a tone (amber/info, cycling) shared by the ledger line and the
+  // tinted step in the work list, so the eye links "−20% sign error" to
+  // the exact step it happened on. `anchorBaseId` namespaces the step
+  // DOM ids the receipt's "↳ step N" links scroll to.
+  const deductions = entry?.deductions ?? null;
+  const anchorBaseId = `work-${problem.bank_item_id}`;
+  const stepAnchors = new Map<number, StepAnchor>();
+  (deductions ?? [])
+    .filter((d) => d.points_off > 0 && d.step_ref != null)
+    .forEach((d, i) => {
+      if (d.step_ref != null && !stepAnchors.has(d.step_ref)) {
+        stepAnchors.set(d.step_ref, {
+          tone: ANCHOR_TONES[i % ANCHOR_TONES.length],
+        });
+      }
+    });
+  const scrollToStep = (stepRef: number) => {
+    if (typeof document === "undefined") return;
+    const el = document.getElementById(`${anchorBaseId}-step-${stepRef}`);
+    if (!el) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+  };
+
+  // ── Collapsed confident row ───────────────────────────────────────
+  // A one-line summary the teacher confirms with a single key/click.
+  // Same rowRef + focus model as the expanded row so keyboard nav, the
+  // focus ring, and screen-reader tracking are identical.
+  if (collapsed && aiGrade) {
+    const confPct =
+      aiGrade.confidence != null ? Math.round(aiGrade.confidence * 100) : null;
+    const verdict =
+      aiGrade.score_status === "full"
+        ? { cls: "bg-[#22a06b] text-white", label: "Full" }
+        : aiGrade.score_status === "zero"
+          ? {
+              cls: "border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] text-[color:var(--color-error)]",
+              label: "No credit",
+            }
+          : {
+              cls: "bg-[color:var(--color-warning)] text-white",
+              label: `Partial ${Math.round(aiGrade.percent)}%`,
+            };
+    return (
+      <div
+        ref={rowRef}
+        tabIndex={-1}
+        aria-current={focused ? "true" : undefined}
+        className={`flex items-center gap-3 rounded-[--radius-md] border px-3.5 py-2.5 outline-none transition-[box-shadow,border-color] ${
+          focused
+            ? "border-primary/40 shadow-[inset_3px_0_0_0_var(--color-primary)] ring-1 ring-primary/20"
+            : confirmed
+              ? "border-[color:var(--color-success-border)] bg-[color:var(--color-success)]/[0.06]"
+              : "border-border-light bg-surface/40 hover:bg-[color:var(--color-surface-alt-2)]"
+        }`}
+      >
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-[--radius-sm]"
+          aria-label={`Expand problem ${problem.position} to inspect`}
+          aria-expanded={false}
+        >
+          <span className="w-5 shrink-0 text-xs font-bold tabular-nums text-text-muted">
+            {problem.position}
+          </span>
+          <span className="block min-w-0 flex-1 truncate text-[13px] text-text-primary">
+            <MathText text={problem.question} />
+          </span>
+          <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold tracking-[0.04em] text-text-muted">
+            <span aria-hidden>🤖</span>
+            <span>AI</span>
+            <span
+              className={`rounded-[--radius-pill] px-1.5 py-0.5 text-[10px] font-extrabold ${verdict.cls}`}
+            >
+              {verdict.label}
+            </span>
+            {confPct != null && (
+              <>
+                <span
+                  aria-hidden
+                  className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--color-success)]"
+                />
+                <span>{confPct}%</span>
+              </>
+            )}
+          </span>
+        </button>
+        {confirmed ? (
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-[--radius-md] border border-[color:var(--color-success)]/30 bg-[color:var(--color-success)]/10 px-2.5 py-1.5 text-[11px] font-bold text-[color:var(--color-success)]">
+            <span aria-hidden>✓</span> Confirmed
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-[--radius-md] border border-primary/35 bg-primary-bg px-2.5 py-1.5 text-[11px] font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10"
+          >
+            Confirm
+            {confirmKey && (
+              <kbd className="rounded-[--radius-sm] border border-border-light bg-surface px-1 font-sans text-[10px] font-bold text-text-secondary shadow-sm">
+                {confirmKey}
+              </kbd>
+            )}
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       ref={rowRef}
@@ -2911,11 +3481,14 @@ function ProblemGradeRow({
           </p>
           <div
             ref={stepsRef}
+            // Never clamp when a deduction anchors to a step — the
+            // highlighted step must be visible (and scroll-targetable) for
+            // the receipt's "↳ step N" link to land on it.
             className={`mt-2 space-y-2 text-sm text-text-primary ${
-              stepsExpanded ? "" : "max-h-40 overflow-hidden"
+              stepsExpanded || stepAnchors.size > 0 ? "" : "max-h-40 overflow-hidden"
             }`}
             style={
-              stepsOverflow && !stepsExpanded
+              stepsOverflow && !stepsExpanded && stepAnchors.size === 0
                 ? {
                     maskImage:
                       "linear-gradient(to bottom, black 75%, transparent 100%)",
@@ -2925,11 +3498,22 @@ function ProblemGradeRow({
                 : undefined
             }
           >
-            {problem.student_steps.map((step, i) => (
-              <StudentStepRow key={i} step={step} index={i} />
-            ))}
+            {problem.student_steps.map((step, i) => {
+              const anchor = stepAnchors.get(i + 1);
+              return (
+                <StudentStepRow
+                  key={i}
+                  step={step}
+                  index={i}
+                  anchor={anchor}
+                  anchorId={
+                    anchor ? `${anchorBaseId}-step-${i + 1}` : undefined
+                  }
+                />
+              );
+            })}
           </div>
-          {stepsOverflow && (
+          {stepsOverflow && stepAnchors.size === 0 && (
             <button
               type="button"
               onClick={() => setStepsExpanded((v) => !v)}
@@ -2975,6 +3559,20 @@ function ProblemGradeRow({
             </div>
           )}
         </div>
+      )}
+
+      {/* Itemized receipt — the AI's per-problem ledger. Renders only
+          when the AI supplied a `deductions` breakdown (additive: rows
+          without it keep showing just the reasoning hero above). Anchors
+          each deduction to the matching student-work step. */}
+      {deductions !== null && (
+        <GradeReceipt
+          deductions={deductions}
+          status={current ?? "partial"}
+          percent={entry?.percent ?? 0}
+          aiConfidence={aiGrade?.confidence ?? null}
+          onAnchorClick={scrollToStep}
+        />
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -3072,6 +3670,203 @@ function ProblemGradeRow({
           }
           className="mt-1 w-full resize-y rounded-[--radius-sm] border border-border-light bg-surface px-2.5 py-1.5 text-xs leading-relaxed text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted"
         />
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Itemized grade receipt — renders the AI's per-problem `deductions`
+// ledger as a "why this score" breakdown: credit lines (things done
+// right, ✓) and debit lines (−X% with the reason), summing to
+// SCORE = 100 − Σ points_off = percent. Each debit that anchors to a
+// student-work step gets a color-matched [N] badge + "↳ step N" link
+// that highlights + scrolls to that step in the work list above. Full
+// credit (no debits) collapses to "✓ Full credit"; an itemized zero to
+// "✗ No credit · <reason>".
+// ────────────────────────────────────────────────────────────────────
+
+function GradeReceipt({
+  deductions,
+  status,
+  percent,
+  aiConfidence,
+  onAnchorClick,
+}: {
+  deductions: GradeDeduction[];
+  status: GradeStatus;
+  percent: number;
+  aiConfidence: number | null;
+  onAnchorClick: (stepRef: number) => void;
+}) {
+  const credits = deductions.filter((d) => d.points_off <= 0);
+  const debits = deductions.filter((d) => d.points_off > 0);
+  const score = Math.round(percent);
+  const confPct = aiConfidence != null ? Math.round(aiConfidence * 100) : null;
+  const confLow = aiConfidence != null && aiConfidence < CONFIDENCE_LOW;
+
+  // Short-forms when there's nothing itemized to subtract.
+  if (debits.length === 0) {
+    if (status === "full") {
+      return (
+        <div className="mt-3 inline-flex items-center gap-2 rounded-[--radius-md] border border-[color:var(--color-success-border)] bg-[color:var(--color-success-light)]/60 px-3 py-2 text-xs font-bold text-[color:var(--color-success)]">
+          <span aria-hidden>✓</span> Full credit
+        </div>
+      );
+    }
+    if (status === "zero") {
+      const reason = deductions[0]?.reason ?? null;
+      return (
+        <div className="mt-3 inline-flex items-center gap-2 rounded-[--radius-md] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)]/60 px-3 py-2 text-xs font-bold text-[color:var(--color-error)]">
+          <span aria-hidden>✗</span> No credit
+          {reason && (
+            <span className="font-semibold">
+              · <MathText text={reason} />
+            </span>
+          )}
+        </div>
+      );
+    }
+    // Partial with no itemized debits (shouldn't normally occur — the grader
+    // synthesizes a reconciling entry) — show the score plainly rather than
+    // an empty itemized box.
+    return (
+      <div className="mt-3 inline-flex items-center gap-2 rounded-[--radius-md] border border-[color:var(--color-warning-dark)]/30 bg-[color:var(--color-warning-bg)]/60 px-3 py-2 text-xs font-bold text-[color:var(--color-warning-dark)]">
+        Partial · {score}%
+      </div>
+    );
+  }
+
+  // Tone per anchored debit — cycles amber/info in document order, the
+  // same basis ProblemGradeRow uses to tint the matching step, so the
+  // badge colors line up across the receipt and the work list.
+  let anchorN = 0;
+  const scoreColor =
+    status === "zero"
+      ? "text-[color:var(--color-error)]"
+      : status === "full"
+        ? "text-[color:var(--color-success)]"
+        : "text-[color:var(--color-warning-dark)]";
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt)]">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-dashed border-border px-3 py-2">
+        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--color-text-secondary)]">
+          Why {score}% — itemized
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold">
+          <span aria-hidden>🤖</span>
+          <span className="text-text-muted">AI breakdown</span>
+          {confPct != null && (
+            <>
+              <span
+                aria-hidden
+                className={`inline-block h-1.5 w-1.5 rounded-full ${
+                  confLow
+                    ? "bg-[color:var(--color-warning)]"
+                    : "bg-[color:var(--color-success)]"
+                }`}
+              />
+              <span
+                className={
+                  confLow
+                    ? "text-[color:var(--color-warning-dark)]"
+                    : "text-text-muted"
+                }
+              >
+                {confPct}% confidence
+              </span>
+            </>
+          )}
+        </span>
+      </div>
+      <div className="py-1">
+        {credits.map((d, i) => (
+          <div
+            key={`c${i}`}
+            className="flex items-center gap-2.5 px-3 py-1.5 text-[12.5px]"
+          >
+            <span
+              aria-hidden
+              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-[color:var(--color-success-border)] bg-[color:var(--color-success-light)] text-[10px] font-extrabold text-[color:var(--color-success)]"
+            >
+              ✓
+            </span>
+            <span className="min-w-0 flex-1 text-text-primary">
+              <MathText text={d.reason} />
+            </span>
+            <span className="shrink-0 font-mono text-[12px] font-semibold text-[color:var(--color-success)]">
+              full
+            </span>
+          </div>
+        ))}
+        {debits.map((d, i) => {
+          const anchored = d.step_ref != null;
+          const tone = anchored ? ANCHOR_TONES[anchorN++ % ANCHOR_TONES.length] : null;
+          const a = tone ? ANCHOR_STYLE[tone] : null;
+          return (
+            <div
+              key={`d${i}`}
+              className={`flex items-center gap-2.5 px-3 py-1.5 text-[12.5px] ${
+                a
+                  ? `mx-1.5 my-px rounded-[--radius-sm] ${
+                      tone === "amber"
+                        ? "bg-[color:var(--color-warning-bg)]/50"
+                        : "bg-[color:var(--color-info-light)]/50"
+                    }`
+                  : ""
+              }`}
+            >
+              {a ? (
+                <span
+                  aria-hidden
+                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] text-[10px] font-extrabold ${a.badge}`}
+                >
+                  {d.step_ref}
+                </span>
+              ) : (
+                <span
+                  aria-hidden
+                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] text-[10px] font-extrabold text-[color:var(--color-error)]"
+                >
+                  −
+                </span>
+              )}
+              <span className="min-w-0 flex-1 text-text-primary">
+                <MathText text={d.reason} />
+                {anchored && (
+                  <button
+                    type="button"
+                    onClick={() => onAnchorClick(d.step_ref as number)}
+                    className={`ml-1.5 inline-flex items-center gap-0.5 align-baseline text-[10px] font-bold hover:underline ${
+                      tone === "amber"
+                        ? "text-[color:var(--color-warning-dark)]"
+                        : "text-[color:var(--color-info)]"
+                    }`}
+                  >
+                    ↳ step {d.step_ref} in work
+                  </button>
+                )}
+              </span>
+              <span className="shrink-0 font-mono text-[12px] font-semibold text-[color:var(--color-error)]">
+                −{Math.round(d.points_off)}%
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between border-t border-dashed border-border bg-surface px-3 py-2">
+        <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-[color:var(--color-text-secondary)]">
+          Score
+        </span>
+        <span className="flex items-baseline gap-2">
+          <span className="font-mono text-[11px] text-text-muted">
+            100{debits.map((d, i) => <span key={i}> − {Math.round(d.points_off)}</span>)}
+          </span>
+          <span className={`font-mono text-lg font-bold ${scoreColor}`}>
+            {score}%
+          </span>
+        </span>
       </div>
     </div>
   );
@@ -3378,6 +4173,12 @@ const SHORTCUT_GROUPS: { heading: string; rows: { keys: string[]; label: string 
       { keys: ["3"], label: "Partial — 50%" },
       { keys: ["4"], label: "Partial — 25%" },
       { keys: ["5"], label: "No credit — 0%" },
+    ],
+  },
+  {
+    heading: "Confident (collapsed) rows",
+    rows: [
+      { keys: ["1", "5"], label: "The AI's own key confirms in place + advances" },
     ],
   },
   {
@@ -3770,18 +4571,73 @@ function TranscriptTurn({
   );
 }
 
+// Shared "Full" zoom — every submitted page stacked vertically in a
+// modal. Used by both the header-strip thumbnail (narrow layout) and the
+// pinned work rail's "⤢ Full" toggle (wide layout), so the zoom view is
+// identical wherever the teacher opens it from.
+function WorkLightbox({
+  files,
+  open,
+  onClose,
+}: {
+  files: SubmissionFile[];
+  open: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Modal open={open} onClose={onClose} className="max-w-4xl bg-surface p-3">
+      <div className="flex items-center justify-between pb-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+          Student&apos;s work
+          {files.length > 1 ? ` · ${files.length} pages` : ""}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary"
+          aria-label="Close"
+        >
+          Close ✕
+        </button>
+      </div>
+      <div className="mx-auto flex max-h-[80vh] flex-col gap-3 overflow-y-auto">
+        {files.map((f, i) => {
+          const src = `data:${f.media_type};base64,${f.data}`;
+          if (f.media_type === "application/pdf") {
+            return (
+              <embed
+                key={i}
+                src={src}
+                type="application/pdf"
+                className="h-[70vh] w-full rounded-[--radius-md] border border-border-light bg-white"
+              />
+            );
+          }
+          return (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={i}
+              src={src}
+              alt={`Student handwritten submission, page ${i + 1}`}
+              className="rounded-[--radius-md] border border-border-light object-contain"
+            />
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
 /**
  * Student's submitted pages (images + PDFs): compact thumbnail +
  * page count that opens every file in a modal. The work is a
  * reference the teacher consults WHILE grading, so it lives in the
  * page header strip — one click away from any scroll position —
- * rather than as its own scan-path block.
+ * rather than as its own scan-path block. On the wide (3-column)
+ * layout the PinnedWorkRail makes the work glanceable and this strip
+ * affordance hides; below ~1100px the rail unpins and this takes over.
  */
 function StudentWorkThumbButton({ files }: { files: SubmissionFile[] }) {
-  // Header-strip affordance — small thumb (first page) + page count,
-  // expands on click to a vertical scroll-stack of every submitted
-  // file. The vertical stack is intentional: while grading, teachers
-  // want to scan all pages at once, not click prev/next.
   const [open, setOpen] = useState(false);
   const first = files[0];
   if (!first) return null;
@@ -3809,46 +4665,114 @@ function StudentWorkThumbButton({ files }: { files: SubmissionFile[] }) {
           View work{files.length > 1 ? ` · ${files.length} pages` : ""} ↗
         </span>
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} className="max-w-4xl bg-surface p-3">
-        <div className="flex items-center justify-between pb-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-            Student&apos;s work
-            {files.length > 1 ? ` · ${files.length} pages` : ""}
-          </p>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary"
-            aria-label="Close"
-          >
-            Close ✕
-          </button>
-        </div>
-        <div className="mx-auto flex max-h-[80vh] flex-col gap-3 overflow-y-auto">
-          {files.map((f, i) => {
-            const src = `data:${f.media_type};base64,${f.data}`;
-            if (f.media_type === "application/pdf") {
-              return (
-                <embed
-                  key={i}
-                  src={src}
-                  type="application/pdf"
-                  className="h-[70vh] w-full rounded-[--radius-md] border border-border-light bg-white"
-                />
-              );
-            }
-            return (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={i}
-                src={src}
-                alt={`Student handwritten submission, page ${i + 1}`}
-                className="rounded-[--radius-md] border border-border-light object-contain"
-              />
-            );
-          })}
-        </div>
-      </Modal>
+      <WorkLightbox files={files} open={open} onClose={() => setOpen(false)} />
     </>
+  );
+}
+
+/**
+ * Pinned student-work rail (wide layout, 3rd column). Promotes the
+ * student's submitted pages out of the modal so they're glanceable while
+ * grading — the split view. A sticky panel that keeps the first page in
+ * view as the teacher scrolls the grade column; "⤢ Full" opens the same
+ * lightbox for a zoom, and "📌 Pinned" collapses the inline photo to
+ * reclaim vertical space (a session preference lifted to the page so it
+ * persists across students). Hidden below ~1100px, where the header-strip
+ * thumbnail takes over so the roster + grade column never get crushed.
+ */
+function PinnedWorkRail({
+  files,
+  studentName,
+  pinned,
+  onTogglePinned,
+}: {
+  files: SubmissionFile[] | null;
+  studentName: string | null;
+  pinned: boolean;
+  onTogglePinned: () => void;
+}) {
+  const [full, setFull] = useState(false);
+  const firstName = studentName ? studentName.split(" ")[0] : null;
+  const hasFiles = !!files && files.length > 0;
+  return (
+    <div className="sticky top-3 overflow-hidden rounded-[--radius-xl] border border-border-light bg-surface shadow-md">
+      <div className="flex items-center justify-between gap-2 border-b border-border-light px-3 py-2.5">
+        <span className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--color-text-secondary)]">
+          {firstName ? `${firstName}'s work` : "Student's work"}
+          {hasFiles && files!.length > 1 ? ` · ${files!.length} pages` : ""}
+        </span>
+        {hasFiles && (
+          <div className="flex shrink-0 gap-1.5">
+            <button
+              type="button"
+              onClick={onTogglePinned}
+              aria-pressed={pinned}
+              className={`rounded-[--radius-sm] border px-2 py-1 text-[11px] font-semibold transition-colors ${
+                pinned
+                  ? "border-primary/30 bg-primary-bg text-primary"
+                  : "border-border-light bg-surface text-text-muted hover:text-text-primary"
+              }`}
+            >
+              📌 {pinned ? "Pinned" : "Pin"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFull(true)}
+              className="rounded-[--radius-sm] border border-border-light bg-surface px-2 py-1 text-[11px] font-semibold text-text-muted transition-colors hover:border-primary/40 hover:text-primary"
+            >
+              ⤢ Full
+            </button>
+          </div>
+        )}
+      </div>
+      {!hasFiles ? (
+        <div className="px-3 py-10 text-center text-[11px] text-text-muted">
+          No photo on this submission.
+        </div>
+      ) : pinned ? (
+        <div className="max-h-[calc(100vh-7rem)] overflow-y-auto bg-[color:var(--color-surface-alt-2)]/40 p-2">
+          <div className="flex flex-col gap-2">
+            {files!.map((f, i) => {
+              const src = `data:${f.media_type};base64,${f.data}`;
+              if (f.media_type === "application/pdf") {
+                return (
+                  <embed
+                    key={i}
+                    src={src}
+                    type="application/pdf"
+                    className="h-[420px] w-full rounded-[--radius-sm] border border-border-light bg-white"
+                  />
+                );
+              }
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setFull(true)}
+                  className="block w-full overflow-hidden rounded-[--radius-sm] border border-border-light"
+                  aria-label={`Open page ${i + 1} full size`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={src}
+                    alt={`Student handwritten submission, page ${i + 1}`}
+                    className="w-full object-contain"
+                  />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onTogglePinned}
+          className="w-full px-3 py-4 text-center text-[11px] font-semibold text-text-muted hover:text-primary"
+        >
+          Photo collapsed — click to pin it back
+        </button>
+      )}
+      <WorkLightbox files={files ?? []} open={full} onClose={() => setFull(false)} />
+    </div>
   );
 }
