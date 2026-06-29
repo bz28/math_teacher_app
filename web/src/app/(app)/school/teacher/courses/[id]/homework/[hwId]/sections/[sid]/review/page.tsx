@@ -1,7 +1,8 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { MathText } from "@/components/shared/math-text";
 import { Modal } from "@/components/ui/modal";
 import {
@@ -178,13 +179,32 @@ function ConfidenceSignal({ confidence }: { confidence: number | null }) {
   );
 }
 
-export default function HomeworkSectionReviewPage({
+// Suspense boundary required because the inner component reads
+// useSearchParams (the ?student= deep-link focus), which opts the page
+// into dynamic rendering and must be wrapped to satisfy Next.js.
+export default function HomeworkSectionReviewPage(props: {
+  params: Promise<{ id: string; hwId: string; sid: string }>;
+}) {
+  return (
+    <Suspense>
+      <HomeworkSectionReview {...props} />
+    </Suspense>
+  );
+}
+
+function HomeworkSectionReview({
   params,
 }: {
   params: Promise<{ id: string; hwId: string; sid: string }>;
 }) {
   const { id: courseId, hwId: assignmentId, sid: sectionId } = use(params);
   const backHref = `/school/teacher/courses/${courseId}?tab=submissions`;
+  // Deep-link focus — the "Needs you today" triage queue routes here with
+  // ?student=<id> so a clicked queue row lands directly on that student
+  // instead of the default auto-pick. Falls through to the auto-pick when
+  // absent or stale (student not on this roster).
+  const searchParams = useSearchParams();
+  const focusStudentId = searchParams.get("student");
 
   const [hwTitle, setHwTitle] = useState<string>("");
   const [sectionName, setSectionName] = useState<string>("");
@@ -336,7 +356,16 @@ export default function HomeworkSectionReviewPage({
             (e.submission.grade_published_at === null || e.submission.grade_dirty),
         );
         const firstSubmitter = merged.find((e) => e.submission !== null);
-        const pick = firstUnreleased ?? firstSubmitter;
+        // A deep-link from the triage queue pins the exact student, but
+        // only if they actually submitted on this roster — otherwise the
+        // stale param is ignored and we fall back to the auto-pick.
+        const focused =
+          focusStudentId !== null
+            ? merged.find(
+                (e) => e.student_id === focusStudentId && e.submission !== null,
+              )
+            : undefined;
+        const pick = focused ?? firstUnreleased ?? firstSubmitter;
         if (pick) setSelectedStudentId(pick.student_id);
       })
       .catch((e) => {
@@ -346,7 +375,7 @@ export default function HomeworkSectionReviewPage({
     return () => {
       cancelled = true;
     };
-  }, [assignmentId, courseId, sectionId]);
+  }, [assignmentId, courseId, sectionId, focusStudentId]);
 
   // Item analysis is HW-wide and read-only, so it loads independently
   // of the roster/detail panels — a failure here never blocks grading.
