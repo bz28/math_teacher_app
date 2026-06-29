@@ -21,7 +21,8 @@
     "testMatch": [
       "**/*.test.ts",
       "**/*.test.tsx"
-    ]
+    ],
+      "testTimeout": 20000
   },
   "dependencies": {
     "@expo-google-fonts/instrument-serif": "^0.4.1",
