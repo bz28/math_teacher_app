@@ -53,6 +53,13 @@ interface Props {
 
 const MIN_MESSAGE_CHARS = 5;
 
+// The honest "I can't explain this" exit. Tapping the chip sends this
+// as the student's message, bypassing the MIN_MESSAGE_CHARS gate so a
+// truthful "I'm stuck" is always one tap away — never a blocked send
+// that effectively coaches a frozen kid into fabricating an answer.
+// The agent already handles arbitrary input and replies supportively.
+const STUCK_MESSAGE = "I'm stuck — I'm not sure how to explain this.";
+
 /**
  * Kid-facing conversational integrity chat.
  *
@@ -79,6 +86,11 @@ export function IntegrityCheckChat({
   const [error, setError] = useState<string | null>(null);
   const [turnStartedAt, setTurnStartedAt] = useState<number>(Date.now());
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Whether the student is parked at (or near) the bottom of the
+  // transcript. Updated on scroll; consulted before auto-scrolling on
+  // new turns so we never yank a student who scrolled up to re-read
+  // their own work back down to the latest message.
+  const atBottomRef = useRef<boolean>(true);
   const telemetry = useTurnTelemetry();
   const device = useDeviceType();
   const lastActivityRef = useRef<number>(Date.now());
@@ -131,12 +143,26 @@ export function IntegrityCheckChat({
     };
   }, [assignmentId]);
 
-  // Auto-scroll to the newest turn whenever the transcript grows.
+  // Auto-scroll to the newest turn whenever the transcript grows — but
+  // only when the student was already at the bottom. If they scrolled
+  // up to re-read the problem or their own earlier answer, leave them
+  // there instead of yanking them to the latest message.
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const el = scrollRef.current;
+    if (el && atBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
     }
   }, [state?.transcript.length, pendingStudentMessage]);
+
+  // Track whether the student is near the bottom (within ~120px). Read
+  // by the auto-scroll effect above. Threshold is generous so normal
+  // "reading the latest reply" still counts as at-bottom.
+  const handleTranscriptScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    atBottomRef.current = distanceFromBottom <= 120;
+  };
 
   const problemsVerdicted = useMemo(() => {
     if (!state) return 0;
@@ -199,11 +225,32 @@ export function IntegrityCheckChat({
     ];
   }, [state, pendingStudentMessage]);
 
-  async function handleSend() {
-    const trimmed = message.trim();
-    if (trimmed.length < MIN_MESSAGE_CHARS || sending || isComplete) return;
+  // Latest agent message, mirrored into a polite aria-live region below
+  // so a screen-reader student hears each reply as it lands. We mirror
+  // the newest agent turn only (not student turns, which the SR already
+  // reads on send) to avoid re-announcing the whole transcript.
+  const latestAgentMessage = useMemo(() => {
+    for (let i = visibleTranscript.length - 1; i >= 0; i--) {
+      if (visibleTranscript[i].role !== "student") {
+        return visibleTranscript[i].content;
+      }
+    }
+    return "";
+  }, [visibleTranscript]);
+
+  // `override` is the honest "I'm stuck" chip path: it carries its own
+  // message and skips the MIN_MESSAGE_CHARS gate (the gate exists only
+  // to stop empty / one-word free-text sends — it must never block the
+  // truthful "I can't explain this"). Free-text sends pass no override
+  // and stay gated.
+  async function handleSend(override?: string) {
+    const trimmed = (override ?? message).trim();
+    const isOverride = override != null;
+    if (sending || isComplete) return;
+    if (!isOverride && trimmed.length < MIN_MESSAGE_CHARS) return;
+    if (trimmed.length === 0) return;
     setPendingStudentMessage(trimmed);
-    setMessage("");
+    if (!isOverride) setMessage("");
     setSending(true);
     setError(null);
     try {
@@ -411,6 +458,7 @@ export function IntegrityCheckChat({
 
           <div
             ref={scrollRef}
+            onScroll={handleTranscriptScroll}
             className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 py-4"
           >
             {/* Supportive "why am I here" intro. Always shown above
@@ -429,6 +477,10 @@ export function IntegrityCheckChat({
                   trick questions and nothing to look up — just explain
                   your thinking. It usually takes a few minutes.
                 </p>
+                <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
+                  Just answer here in your own words — staying on this
+                  page helps us see it&rsquo;s really you.
+                </p>
               </div>
             )}
             {visibleTranscript.map((t) => (
@@ -443,14 +495,22 @@ export function IntegrityCheckChat({
               <div className="flex justify-start">
                 <div className="flex items-center gap-2 rounded-[--radius-md] border border-border bg-surface px-3 py-2 text-xs italic text-text-muted">
                   <span className="inline-flex gap-1">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:150ms]" />
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:300ms]" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary motion-reduce:animate-none" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:150ms] motion-reduce:animate-none" />
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:300ms] motion-reduce:animate-none" />
                   </span>
                   AI is thinking…
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Polite live region: a screen-reader student hears each new
+              agent reply as it lands. Visually hidden — the bubbles above
+              are the visual surface. Kept outside the scroll container so
+              its updates aren't tied to scroll position. */}
+          <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {latestAgentMessage}
           </div>
 
           {isComplete ? (
@@ -484,19 +544,33 @@ export function IntegrityCheckChat({
                 <div
                   role="status"
                   aria-live="polite"
-                  className="mb-2 flex items-center justify-between gap-2 rounded-[--radius-sm] border border-warning-dark/20 bg-warning-bg px-3 py-2 text-xs text-warning-dark"
+                  className="mb-2 flex items-center justify-between gap-2 rounded-[--radius-sm] border border-info-border bg-info-light px-3 py-2 text-xs text-info"
                 >
                   <span>Still there? Take your time.</span>
                   <button
                     type="button"
                     onClick={handleNeedMoreTime}
-                    className="rounded-full bg-warning px-2 py-0.5 font-bold text-white hover:bg-warning-dark"
+                    className="rounded-full bg-info px-2 py-0.5 font-bold text-white hover:bg-info/90"
                   >
                     I need more time
                   </button>
                 </div>
               )}
               {error && <p className="mb-2 text-xs text-error">{error}</p>}
+              {/* The honest exit. A frozen student who genuinely can't
+                  put their reasoning into words taps this instead of
+                  being told their truthful "idk" is too short. Sends a
+                  fixed message that bypasses the char gate so the agent
+                  can respond with support, not a rejection. Low emphasis
+                  on purpose — always available, never the loud default. */}
+              <button
+                type="button"
+                onClick={() => void handleSend(STUCK_MESSAGE)}
+                disabled={sending}
+                className="mb-2 inline-flex items-center rounded-full border border-border-light bg-bg-subtle px-3 py-1 text-xs font-medium text-text-secondary transition-colors hover:border-primary hover:text-primary disabled:opacity-50"
+              >
+                I&rsquo;m stuck — not sure how to explain this
+              </button>
               <div className="flex items-end gap-2">
                 <textarea
                   value={message}
@@ -560,11 +634,22 @@ export function IntegrityCheckChat({
                   {sending ? "…" : "Send"}
                 </button>
               </div>
-              {message.length > 0 && message.trim().length < MIN_MESSAGE_CHARS && (
-                <p className="mt-1 text-xs text-text-muted">
-                  Try a sentence or two ({MIN_MESSAGE_CHARS}+ characters).
+              <div className="mt-1 flex items-start justify-between gap-2">
+                <p className="text-xs text-text-muted">
+                  {message.length > 0 &&
+                    message.trim().length < MIN_MESSAGE_CHARS &&
+                    `Try a sentence or two (${MIN_MESSAGE_CHARS}+ characters).`}
                 </p>
-              )}
+                {/* Plain Enter inserts a newline; only ⌘/Ctrl+Enter
+                    sends (phone-typer safety). Surface that so desktop
+                    students aren't left guessing. Desktop only — the
+                    shortcut is meaningless on a touch keyboard. */}
+                {device === "desktop" && (
+                  <p className="shrink-0 text-xs text-text-muted">
+                    <kbd className="font-sans">⌘↵</kbd> to send
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </div>
