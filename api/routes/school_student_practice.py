@@ -34,7 +34,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import func, select, update
+from sqlalchemy import distinct, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1544,6 +1544,12 @@ async def submit_homework(
             AssignmentSection.assignment_id == assignment_id,
             SectionEnrollment.student_id == user.id,
         )
+        # Deterministic attribution when the student is enrolled in
+        # multiple sections of the same course: always pick the
+        # earliest-enrolled section (section_id tiebreaks ties on
+        # enrolled_at) so a submission lands in a stable section
+        # rather than an arbitrary one chosen per call.
+        .order_by(SectionEnrollment.enrolled_at.asc(), SectionEnrollment.section_id.asc())
         .limit(1)
     )).scalar_one_or_none()
     if section_id is None:
@@ -1948,8 +1954,13 @@ async def next_variation(
 
 
 async def _seen_count(db: AsyncSession, student_id: uuid.UUID, anchor_id: uuid.UUID) -> int:
+    # Count DISTINCT bank items, not raw rows. `learn_this_problem`
+    # intentionally mints extra BankConsumption rows for already-seen
+    # items, so a raw row count over-counts and would drive `remaining`
+    # to 0 while unseen siblings still exist. Distinct-by-item matches
+    # the fresh-serve branch's dedup (it builds a set of seen ids).
     return int((await db.execute(
-        select(func.count(BankConsumption.id)).where(
+        select(func.count(distinct(BankConsumption.bank_item_id))).where(
             BankConsumption.student_id == student_id,
             BankConsumption.anchor_bank_item_id == anchor_id,
         )
@@ -2391,6 +2402,10 @@ async def record_practice_activity(
             AssignmentSection.assignment_id == assignment_id,
             SectionEnrollment.student_id == user.id,
         )
+        # Deterministic attribution for a multi-section student: always
+        # the earliest-enrolled section (section_id tiebreaks), so a
+        # recorded activity lands in a stable section per call.
+        .order_by(SectionEnrollment.enrolled_at.asc(), SectionEnrollment.section_id.asc())
         .limit(1)
     )).scalar_one()
 

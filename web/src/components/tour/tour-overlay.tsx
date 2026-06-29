@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { useTour } from "./tour-provider";
@@ -15,10 +16,45 @@ import { Spotlight } from "./spotlight";
 export function TourOverlay() {
   const { phase, definition, stepIndex, handoffActive, next, back, end, getTarget } = useTour();
 
+  // The portal's single host node, a direct child of document.body. We
+  // mark every OTHER body child inert + aria-hidden while the tour is up
+  // so the modal semantics are real: the pointer blocker stops mouse
+  // clicks, and inert stops keyboard/AT traversal into the page behind
+  // the scrim. The host (cover, spotlight, live region) stays reachable.
+  const hostRef = useRef<HTMLDivElement>(null);
+
+  const active = typeof document !== "undefined" && phase !== "idle" && !!definition;
+  // Lift inert during a handoff: a live handoff opens a REAL app surface
+  // (the New course / New section dialog) that renders inline in the app
+  // tree — inerting that tree would make the dialog unreachable, breaking
+  // the handoff. The handoff is the one moment the page behind is meant
+  // to be used; the spotlight yields (pointer-events none) then too.
+  const inertActive = active && !handoffActive;
+
+  useEffect(() => {
+    if (!inertActive) return;
+    const host = hostRef.current;
+    if (!host) return;
+    const changed: { el: HTMLElement; prevAria: string | null; prevInert: boolean }[] = [];
+    for (const child of Array.from(document.body.children)) {
+      if (child === host || !(child instanceof HTMLElement)) continue;
+      changed.push({ el: child, prevAria: child.getAttribute("aria-hidden"), prevInert: child.inert });
+      child.setAttribute("aria-hidden", "true");
+      child.inert = true;
+    }
+    return () => {
+      for (const c of changed) {
+        if (c.prevAria === null) c.el.removeAttribute("aria-hidden");
+        else c.el.setAttribute("aria-hidden", c.prevAria);
+        c.el.inert = c.prevInert;
+      }
+    };
+  }, [inertActive]);
+
   // The overlay only mounts once a tour is active (user/effect-driven,
   // never during hydration), so guarding on `document` is enough — no
   // mounted-flag effect needed.
-  if (typeof document === "undefined" || phase === "idle" || !definition) return null;
+  if (!active || !definition) return null;
 
   const step = definition.steps[stepIndex];
 
@@ -94,5 +130,8 @@ export function TourOverlay() {
     </AnimatePresence>
   );
 
-  return createPortal(body, document.body);
+  // A plain wrapper (no layout/transform) so its fixed children still
+  // position against the viewport; it just gives us one identifiable
+  // host node to exclude from the inert sweep above.
+  return createPortal(<div ref={hostRef}>{body}</div>, document.body);
 }
