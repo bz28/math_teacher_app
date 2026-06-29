@@ -24,6 +24,14 @@ export class TurnTelemetryTracker {
   private pauses = 0;
   private edits = 0;
   private prevLen = 0;
+  private needMoreTime = false;
+
+  /** Student tapped the calm "I need more time" affordance this turn. A
+   *  benign signal for the teacher (it means we extended their window, not
+   *  that anything is wrong) — persists for the rest of the session like web. */
+  markNeedMoreTime(): void {
+    this.needMoreTime = true;
+  }
 
   /** A backgrounded interval that ended (app returned to foreground). */
   recordBlur(durationMs: number, at: string): void {
@@ -61,8 +69,7 @@ export class TurnTelemetryTracker {
       focus_blur_events: this.blurs,
       paste_events: this.pastes,
       typing_cadence,
-      // No "need more time" button on mobile yet — always false here.
-      need_more_time_used: false,
+      need_more_time_used: this.needMoreTime,
       device_type: "mobile",
     };
   }
@@ -76,6 +83,7 @@ export class TurnTelemetryTracker {
     this.pauses = 0;
     this.edits = 0;
     this.prevLen = 0;
+    this.needMoreTime = false;
   }
 }
 
@@ -108,6 +116,7 @@ export function useTurnTelemetry() {
     () => ({
       onTextChange: (text: string) =>
         tracker.current.recordTextChange(text, Date.now(), new Date().toISOString()),
+      markNeedMoreTime: () => tracker.current.markNeedMoreTime(),
       collect: () => tracker.current.build(),
       reset: () => tracker.current.reset(),
     }),
