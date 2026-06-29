@@ -70,6 +70,24 @@ export default function PracticePage() {
     await submitPracticeAnswer(choice, subject);
   }
 
+  // Error is terminal — check it BEFORE the loading/!practiceBatch guard.
+  // On a failed fresh generation the store sets phase "error" while
+  // practiceBatch is still null, so a loading-first guard would trap the
+  // student on the "Building…" state forever and never reach recovery.
+  if (phase === "error") {
+    // Generation failed — no in-place retry for the original seed, so
+    // the honest recovery is back to Learn. Branded surface only (the
+    // duplicate error toast was removed) so the failure shows once.
+    return (
+      <PageErrorState
+        title="That didn't generate"
+        message="We couldn't build your practice set just now. Head back to Learn and try again."
+        retryLabel="Back to Learn"
+        onRetry={() => router.push("/learn")}
+      />
+    );
+  }
+
   if (phase === "loading" || !practiceBatch) {
     return (
       <GeneratingState
@@ -127,20 +145,6 @@ export default function PracticePage() {
           </Button>
         </div>
       </div>
-    );
-  }
-
-  if (phase === "error") {
-    // Generation failed — no in-place retry for the original seed, so
-    // the honest recovery is back to Learn. Branded surface only (the
-    // duplicate error toast was removed) so the failure shows once.
-    return (
-      <PageErrorState
-        title="That didn't generate"
-        message="We couldn't build your practice set just now. Head back to Learn and try again."
-        retryLabel="Back to Learn"
-        onRetry={() => router.push("/learn")}
-      />
     );
   }
 

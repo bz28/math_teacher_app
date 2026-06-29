@@ -104,19 +104,10 @@ export default function LearnSessionPage() {
     );
   }
 
-  if (phase === "loading" || !session) {
-    return (
-      <GeneratingState
-        message={
-          <>
-            Building your <span className="font-display-serif italic text-primary">walkthrough…</span>
-          </>
-        }
-        subtext="Breaking this problem into clear, guided steps. This takes a few seconds."
-      />
-    );
-  }
-
+  // Error is terminal — check it BEFORE the loading/!session guard. On a
+  // failed fresh generation the store sets phase "error" while session is
+  // still null, so a loading-first guard would trap the student on the
+  // "Building…" state forever and never reach this recovery surface.
   if (phase === "error") {
     // Generation failed — there's no in-place retry for the original
     // input, so the honest recovery is back to Learn to start over.
@@ -128,6 +119,19 @@ export default function LearnSessionPage() {
         message="We couldn't build this walkthrough just now. Head back to Learn and try again."
         retryLabel="Back to Learn"
         onRetry={() => router.push("/learn")}
+      />
+    );
+  }
+
+  if (phase === "loading" || !session) {
+    return (
+      <GeneratingState
+        message={
+          <>
+            Building your <span className="font-display-serif italic text-primary">walkthrough…</span>
+          </>
+        }
+        subtext="Breaking this problem into clear, guided steps. This takes a few seconds."
       />
     );
   }

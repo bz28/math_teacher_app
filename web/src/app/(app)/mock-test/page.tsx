@@ -91,6 +91,24 @@ export default function MockTestPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [phase, mockTest, setMockTestIndex, submitMockTest, subject]);
 
+  // Error is terminal — check it BEFORE the loading / !mockTest guards.
+  // On a failed fresh generation the store sets phase "error" while
+  // mockTest is still null, so a guard ordered ahead of this would trap
+  // the student on a spinner/skeleton forever and never reach recovery.
+  if (phase === "error") {
+    // Generation failed — no in-place retry for the original config, so
+    // the honest recovery is back to Learn. Branded surface only (the
+    // duplicate error toast was removed) so the failure shows once.
+    return (
+      <PageErrorState
+        title="That didn't generate"
+        message="We couldn't compose your exam just now. Head back to Learn and try again."
+        retryLabel="Back to Learn"
+        onRetry={() => router.push("/learn")}
+      />
+    );
+  }
+
   if (phase === "loading") {
     return (
       <GeneratingState
@@ -120,20 +138,6 @@ export default function MockTestPage() {
       <div className="mx-auto max-w-3xl space-y-4">
         <SkeletonStep />
       </div>
-    );
-  }
-
-  if (phase === "error") {
-    // Generation failed — no in-place retry for the original config, so
-    // the honest recovery is back to Learn. Branded surface only (the
-    // duplicate error toast was removed) so the failure shows once.
-    return (
-      <PageErrorState
-        title="That didn't generate"
-        message="We couldn't compose your exam just now. Head back to Learn and try again."
-        retryLabel="Back to Learn"
-        onRetry={() => router.push("/learn")}
-      />
     );
   }
 
