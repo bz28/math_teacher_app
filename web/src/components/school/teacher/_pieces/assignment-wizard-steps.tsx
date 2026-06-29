@@ -162,6 +162,7 @@ export function AssignmentProblemsStep({
   onDismissPending,
   disabled,
   helperText,
+  extraControls,
 }: {
   count: number;
   onCountChange: (v: number) => void;
@@ -181,6 +182,10 @@ export function AssignmentProblemsStep({
   onDismissPending: (id: string) => void;
   disabled: boolean;
   helperText: string;
+  /** Optional controls rendered between Focus and the source-material
+   *  picker. The HW wizard slots its advanced generation params here;
+   *  the practice flow leaves it undefined. */
+  extraControls?: React.ReactNode;
 }) {
   // Local draft so the teacher can transiently clear the input (e.g.
   // delete "5" and type "12") without the controlled value snapping
@@ -279,6 +284,8 @@ export function AssignmentProblemsStep({
           className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
         />
       </div>
+
+      {extraControls}
 
       <SourceMaterialPicker
         courseId={courseId}
