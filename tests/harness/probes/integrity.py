@@ -151,7 +151,8 @@ def _ext(steps: list[tuple[int, str, str]], final: str) -> dict[str, Any]:
 
 
 # ── The golden set ────────────────────────────────────────────────────────
-# 14 cases spanning the four dispositions and the three harm fears. Correct-on-
+# 22 cases (14 base + 8 hard adversarial) spanning the four dispositions and
+# the three harm fears. Correct-on-
 # paper cases use a final answer byte-equal to the answer key so the
 # correctness check trivially matches (verified tier, no extra LLM call);
 # wrong/blank cases drop to the struggling tier.
@@ -511,6 +512,315 @@ GOLDEN_CASES: list[IntegrityCase] = [
         harm=HARM_HONEST_INARTICULATE,
         rationale="Wrong + ESL + genuinely trying — tutor_pivot, never flag.",
     ),
+    # ════════════════════════════════════════════════════════════════════
+    # HARD ADVERSARIAL EXTENSION (corpus-hardening phase).
+    #
+    # The 14 cases above are "mild" — the inarticulate ones still produce
+    # a clean, on-topic terse explanation, and the memorized ones HONESTLY
+    # admit "I just memorized it." The 8 cases below are built to stress the
+    # two failure modes the rubric's REQUIRED dims (paraphrase_originality,
+    # causal_fluency) are hypothesized to confuse with articulacy:
+    #
+    #   (a) FALSE-FLAG an honest-but-inarticulate kid who genuinely did the
+    #       work but explains in halting/terse/textbook-verbatim/dialect
+    #       phrasing AND freezes on a transfer twist. The underlying work is
+    #       correct and the specific content (when it surfaces) is right —
+    #       so the GOLD is pass/needs_practice, NEVER flag. harm tag asserts
+    #       the no-flag floor.
+    #   (b) FALSE-PASS a smooth memorizer who narrates one rehearsed problem
+    #       fluently (high surface paraphrase_originality / causal_fluency —
+    #       the exact dims the judge rewards) but, on a genuine transfer /
+    #       why-probe, reveals the narration was a recited script. The crack
+    #       lines are consumed ONLY if the agent chooses to probe deeper — so
+    #       if a fluent opener earns an immediate pass, THAT is the false-pass
+    #       this case is built to catch. harm tag asserts the no-pass ceiling.
+    #
+    # All are CORRECT on paper (final answer byte-equal to the key → verified
+    # tier, no extra equivalence call) so the disposition turns purely on the
+    # interview, not on correctness.
+    # ════════════════════════════════════════════════════════════════════
+
+    # ── (a) extreme honest-inarticulate, freezes on a transfer twist ────
+    IntegrityCase(
+        name="honest-esl-extreme-terse-transfer-freeze",
+        persona="honest-ESL-extreme-terse",
+        question="Solve 5x - 8 = 27 for x.",
+        correct_answer="x = 7",
+        difficulty="easy",
+        extraction=_ext(
+            [
+                (1, "5x - 8 = 27", "the equation"),
+                (2, "5x = 35", "add 8"),
+                (3, "x = 7", "divide 5"),
+            ],
+            "x = 7",
+        ),
+        student_script=[
+            "I add 8. 27 and 8 is 35. So 5x = 35.",
+            "Divide 5. 35 divide 5 is seven. x is seven.",
+            # consumed only if the agent presses a transfer twist:
+            "Um... with new number I not sure. I have to do again on "
+            "paper. Same steps but I cannot say fast in my head.",
+            "I add 8 because the problem take away 8, so I put back. "
+            "The transfer question make me nervous, but the math I know.",
+        ],
+        gold=DISPOSITION_NEEDS_PRACTICE,
+        accepts={DISPOSITION_PASS, DISPOSITION_NEEDS_PRACTICE},
+        harm=HARM_HONEST_INARTICULATE,
+        rationale=(
+            "Correct work + correct terse reasoning (add 8 to undo -8, "
+            "divide by 5). Freezes verbally on a transfer twist out of "
+            "language/anxiety, not missing understanding — must NOT flag."
+        ),
+    ),
+    IntegrityCase(
+        name="honest-textbook-verbatim-correct",
+        persona="honest-textbook-verbatim",
+        question="Solve 4x + 5 = 21 for x.",
+        correct_answer="x = 4",
+        difficulty="easy",
+        extraction=_ext(
+            [
+                (1, "4x + 5 = 21", "the equation"),
+                (2, "4x = 16", "subtract 5"),
+                (3, "x = 4", "divide by 4"),
+            ],
+            "x = 4",
+        ),
+        student_script=[
+            "To solve a linear equation one must isolate the variable by "
+            "performing inverse operations on both sides while maintaining "
+            "equality.",
+            "I subtracted five from both sides because five was added to "
+            "the term four x; this yields four x equals sixteen. Then I "
+            "divided both sides by four to obtain x equals four.",
+            "Five is the constant added to the variable term, so its "
+            "inverse operation, subtraction, removes it. Four is the "
+            "coefficient, so division by four isolates x.",
+        ],
+        gold=DISPOSITION_PASS,
+        accepts={DISPOSITION_PASS, DISPOSITION_NEEDS_PRACTICE},
+        harm=HARM_HONEST_INARTICULATE,
+        rationale=(
+            "Phrasing is textbook-verbatim (reads as LOW "
+            "paraphrase_originality — the 'copy-paste feel' the dim "
+            "penalizes) but the content is specific, correct, and causal. "
+            "A bookish/ESL kid who genuinely understands; verbatim phrasing "
+            "alone must not drive a flag."
+        ),
+    ),
+    IntegrityCase(
+        name="honest-halting-freezes-on-twist-percent",
+        persona="honest-halting",
+        question="What is 40% of 60?",
+        correct_answer="24",
+        difficulty="easy",
+        extraction=_ext(
+            [
+                (1, "40\\% = 0.40", "convert percent"),
+                (2, "0.40 \\times 60 = 24", "multiply"),
+            ],
+            "24",
+        ),
+        student_script=[
+            "i made 40% into 0.4 ... then times 60",
+            "0.4 times 60 is 24",
+            # consumed only if the agent presses a 'what if 50%?' twist:
+            "um ... bigger i think? i'm not sure ... i'd have to redo it "
+            "on paper, i can't do the new one in my head",
+            "percent is out of 100 so 40 is 0.40 ... i get the steps, "
+            "doing it fast in my head just trips me up",
+        ],
+        gold=DISPOSITION_NEEDS_PRACTICE,
+        accepts={DISPOSITION_PASS, DISPOSITION_NEEDS_PRACTICE},
+        harm=HARM_HONEST_INARTICULATE,
+        rationale=(
+            "Correct; knows percent→decimal then multiply. Freezes on a "
+            "MENTAL transfer twist from processing-speed/anxiety, not a "
+            "cheating signal — needs_practice at worst, never flag."
+        ),
+    ),
+    # ── (a) dialect / ESL on a correct, genuinely-understood answer ─────
+    IntegrityCase(
+        name="honest-aave-correct-understood",
+        persona="honest-AAVE",
+        question="Solve 3x + 4 = 19 for x.",
+        correct_answer="x = 5",
+        difficulty="easy",
+        extraction=_ext(
+            [
+                (1, "3x + 4 = 19", "the equation"),
+                (2, "3x = 15", "subtract 4"),
+                (3, "x = 5", "divide by 3"),
+            ],
+            "x = 5",
+        ),
+        student_script=[
+            "Aight so first thing, I had to get rid of that 4 hangin on "
+            "with the 3x, so I took 4 off both sides — 19 minus 4 leave "
+            "you 15, so now it's 3x equal 15.",
+            "Then it's 3 of them x's makin 15, so I just split that 15 up "
+            "into 3 even pieces, each one come out to 5. So x is 5.",
+            "I took the 4 off cause it was added on, and the only way to "
+            "undo addin somethin is to subtract it back out.",
+        ],
+        gold=DISPOSITION_PASS,
+        accepts={DISPOSITION_PASS, DISPOSITION_NEEDS_PRACTICE},
+        harm=HARM_HONEST_INARTICULATE,
+        rationale=(
+            "AAVE dialect, but names the specific numbers + correct "
+            "inverse-operation reasoning = genuine understanding. Dialect "
+            "must not depress paraphrase/causal into a flag."
+        ),
+    ),
+    IntegrityCase(
+        name="honest-esl-spanish-syntax-correct",
+        persona="honest-ESL-spanish-syntax",
+        question="Solve 6x + 2 = 20 for x.",
+        correct_answer="x = 3",
+        difficulty="easy",
+        extraction=_ext(
+            [
+                (1, "6x + 2 = 20", "the equation"),
+                (2, "6x = 18", "subtract 2"),
+                (3, "x = 3", "divide by 6"),
+            ],
+            "x = 3",
+        ),
+        student_script=[
+            "First I quit the 2 from the both sides, because is positive "
+            "I put it negative — 20 menos 2 is 18, so stay 6x = 18.",
+            "After, the x have a 6 that multiply, so for take it out I "
+            "divide — 18 between 6 is 3. The x is 3.",
+            "I subtract the 2 because it was suming to the 6x, and to undo "
+            "a sum you have to rest it. Is the contrary operation.",
+        ],
+        gold=DISPOSITION_PASS,
+        accepts={DISPOSITION_PASS, DISPOSITION_NEEDS_PRACTICE},
+        harm=HARM_HONEST_INARTICULATE,
+        rationale=(
+            "Spanish-influenced syntax ('menos', 'between' for divide, "
+            "'rest' for subtract) but correct, specific, causal reasoning "
+            "— genuine understanding; must pass."
+        ),
+    ),
+    # ── (b) sophisticated memorized/coached-fluent, cracks under probe ──
+    IntegrityCase(
+        name="memorized-coached-fluent-cracks-transfer",
+        persona="memorized-coached-fluent",
+        question="Solve x^2 - 8x + 15 = 0.",
+        correct_answer="x = 3 or x = 5",
+        difficulty="medium",
+        extraction=_ext(
+            [
+                (1, "x^2 - 8x + 15 = 0", "the equation"),
+                (2, "(x-3)(x-5) = 0", "factor"),
+                (3, "x = 3, x = 5", "roots"),
+            ],
+            "x = 3 or x = 5",
+        ),
+        student_script=[
+            # Smooth, specific, rehearsed opener — a shallow judge passes here.
+            "So you factor the quadratic into two binomials — find the pair "
+            "of numbers that multiply to fifteen and add to negative eight, "
+            "which is (x minus three)(x minus five) — then set each factor "
+            "to zero to get the roots, three and five.",
+            # consumed only if the agent presses a transfer twist:
+            "Oh. Um, if the fifteen were a sixteen it'd be... the same kind "
+            "of thing, you factor it. (x minus three)(x minus five)... yeah, "
+            "you'd just factor it the same way.",
+            "You set them to zero because that's the method — that's how you "
+            "solve quadratics, you set the factors to zero. I'm not really "
+            "sure why beyond that, it's just the steps I followed.",
+            "Honestly I went over this exact problem a bunch of times before, "
+            "so I had it down cold. The changed numbers kind of throw me.",
+        ],
+        gold=DISPOSITION_FLAG_FOR_REVIEW,
+        accepts={DISPOSITION_FLAG_FOR_REVIEW, DISPOSITION_NEEDS_PRACTICE},
+        harm=HARM_MEMORIZED_FLUENT,
+        rationale=(
+            "Surface-fluent recital of THIS exact problem. On a one-digit "
+            "transfer twist they re-emit the memorized factors (now wrong) "
+            "and can't justify the zero-product step; admits drilling this "
+            "exact problem. Correct on paper, can't genuinely explain → "
+            "lean flag. The danger is the fluent opener earning a PASS."
+        ),
+    ),
+    IntegrityCase(
+        name="memorized-smooth-causal-wrong-on-transfer",
+        persona="memorized-smooth-causal",
+        question="A car travels at a constant 15 m/s for 4 s. How far does it go?",
+        correct_answer="60 m",
+        difficulty="easy",
+        extraction=_ext(
+            [
+                (1, "d = vt", "formula"),
+                (2, "d = 15 \\times 4", "substitute"),
+                (3, "d = 60\\,\\text{m}", "compute"),
+            ],
+            "60 m",
+        ),
+        student_script=[
+            # HIGH surface causal_fluency — sounds like deep understanding.
+            "Distance equals velocity times time. Velocity is the rate you "
+            "cover ground, so keeping that rate up over a stretch of time "
+            "adds up into total distance — that's the intuition. Fifteen "
+            "times four is sixty meters.",
+            # consumed only if the agent presses a transfer twist:
+            "Um... if it drove for twice as long? It'd... I think it stays "
+            "sixty? Wait, no — I'm not sure. Maybe the same, since the speed "
+            "didn't change.",
+            "I kind of had that explanation ready — we drilled the d equals "
+            "v t one in tutoring and I remembered how to say it. The "
+            "follow-up I genuinely don't know.",
+        ],
+        gold=DISPOSITION_FLAG_FOR_REVIEW,
+        accepts={DISPOSITION_FLAG_FOR_REVIEW, DISPOSITION_NEEDS_PRACTICE},
+        harm=HARM_MEMORIZED_FLUENT,
+        rationale=(
+            "The surface causal_fluency is HIGH — the exact dim the judge "
+            "rewards — yet a basic transfer (double the time) is answered "
+            "WRONG, exposing the causal story as a recited script. The "
+            "strongest false-pass test: fluent 'why' that's hollow."
+        ),
+    ),
+    IntegrityCase(
+        name="memorized-rehearsed-blank-on-why-slope",
+        persona="memorized-rehearsed",
+        question="Find the slope of the line through (1, 2) and (4, 11).",
+        correct_answer="3",
+        difficulty="medium",
+        extraction=_ext(
+            [
+                (1, "m = \\frac{11-2}{4-1}", "slope formula"),
+                (2, "m = \\frac{9}{3}", "compute"),
+                (3, "m = 3", "simplify"),
+            ],
+            "3",
+        ),
+        student_script=[
+            "Slope is rise over run, so it's the change in y over the change "
+            "in x. Eleven minus two is nine, four minus one is three, nine "
+            "over three is three. The slope is three.",
+            "Because that's the formula — rise over run, y over x. That's "
+            "just how slope is defined; I don't really know how to say why "
+            "it's that way and not flipped.",
+            "Swap the two points? Um, I think it'd be different, maybe "
+            "negative three? I'm honestly guessing — I just plugged into the "
+            "formula the way it was written.",
+            "I memorized rise over run and the formula. I'll be honest, I "
+            "just followed it.",
+        ],
+        gold=DISPOSITION_NEEDS_PRACTICE,
+        accepts={DISPOSITION_NEEDS_PRACTICE, DISPOSITION_FLAG_FOR_REVIEW},
+        harm=HARM_MEMORIZED_FLUENT,
+        rationale=(
+            "Fluent formula recital with correct specifics but no concept "
+            "(can't justify the ratio, guesses on the swap-transfer). Sits "
+            "on the needs_practice/flag boundary; the harm is that surface "
+            "fluency tempts a PASS."
+        ),
+    ),
 ]
 
 
@@ -768,7 +1078,7 @@ class IntegrityProbe(Probe):
     name = "integrity"
     needs_browser = False
     default_constraint = (
-        "Integrity-judgment golden set: 14 scripted transcripts across the "
+        "Integrity-judgment golden set: 22 scripted transcripts across the "
         "hard personas (honest-fluent, honest-inarticulate, memorized-fluent, "
         "copied-correct, uncertain-blank, prompt-injection, struggling). "
         "Asserts the agent's disposition lands in the labeled band and that "
