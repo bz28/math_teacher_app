@@ -42,7 +42,13 @@ def _verify_webhook_secret(authorization: str | None) -> None:
     # Constant-time comparison — a plain `!=` short-circuits on the first
     # differing byte, leaking the secret's length/prefix via timing.
     expected = f"Bearer {secret}"
-    if authorization is None or not secrets.compare_digest(authorization, expected):
+    # compare_digest raises TypeError on a non-ASCII (latin-1 128-255) header;
+    # treat that as a failed auth (→ 403), not an uncaught 500. Fails closed.
+    try:
+        ok = authorization is not None and secrets.compare_digest(authorization, expected)
+    except TypeError:
+        ok = False
+    if not ok:
         logger.warning("Webhook authorization failed")
         raise ValueError("Invalid webhook authorization")
 
