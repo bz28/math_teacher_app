@@ -11,6 +11,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from httpx import AsyncClient
+from sqlalchemy import text
 
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
@@ -441,6 +442,63 @@ async def test_courses_flagged_complete_without_disposition(
             status="complete",
             disposition=None,
         ))
+        await s.commit()
+
+    c = (await client.get(
+        "/v1/teacher/courses", headers=_auth(w["teacher_token"]),
+    )).json()["courses"][0]
+    assert c["flagged"] == 1
+
+
+async def test_courses_flagged_abandoned_interview(
+    client: AsyncClient,
+) -> None:
+    """An interview the student walked away from sits in awaiting_student
+    forever (no scheduler finalizes it). Once it's stalled past the
+    wall-clock deadline it must count toward needs-attention so the badge
+    nudges the teacher to look — a freshly-stalled one must NOT."""
+    from api.core.integrity_pipeline import ABANDONED_INTERVIEW_DEADLINE
+
+    w = await _seed_teacher_with_course()
+    hw_id = await _publish_homework(
+        course_id=w["course_id"], teacher_id=w["teacher_id"],
+        section_id=w["section_id"], unit_id=w["unit_id"],
+        due_at=None,
+    )
+    async with get_session_factory()() as s:
+        sub = Submission(
+            assignment_id=hw_id, student_id=w["student_id"],
+            section_id=w["section_id"], status="submitted",
+        )
+        s.add(sub)
+        await s.flush()
+        s.add(IntegrityCheckSubmission(
+            submission_id=sub.id,
+            status="awaiting_student",
+            disposition=None,
+        ))
+        await s.commit()
+        sub_id = sub.id
+
+    # Recently stalled → not yet counted.
+    c = (await client.get(
+        "/v1/teacher/courses", headers=_auth(w["teacher_token"]),
+    )).json()["courses"][0]
+    assert c["flagged"] == 0
+
+    # Backdate past the deadline → now counted. Raw UPDATE so updated_at
+    # is set explicitly (onupdate would otherwise stamp now()).
+    stale = (
+        datetime.now(UTC) - ABANDONED_INTERVIEW_DEADLINE - timedelta(hours=1)
+    )
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE integrity_check_submissions "
+                "SET updated_at = :ts WHERE submission_id = :sid"
+            ),
+            {"ts": stale, "sid": sub_id},
+        )
         await s.commit()
 
     c = (await client.get(
