@@ -55,6 +55,10 @@ export function ImageUpload({
   const remaining = maxProblems - currentQueueLength;
 
   const [manualMode, setManualMode] = useState(false);
+  // The manual selector defaults to single-problem crop (the common case);
+  // a one-tap link switches to multi-area selection for a photo with several
+  // problems. See RectangleSelector's `variant`.
+  const [selectMode, setSelectMode] = useState<"crop" | "multi">("crop");
 
   const autoExtract = useCallback(
     async (base64: string) => {
@@ -62,10 +66,11 @@ export function ImageUpload({
       try {
         const res = await imageApi.extract(base64, subject);
         if (res.problems.length === 0) {
-          // A SUCCESSFUL call that genuinely found nothing — manual area
-          // selection is a sensible next step (maybe the layout confused it).
-          setError("No problems found in the photo. Try selecting the problem areas manually.");
+          // A SUCCESSFUL call that genuinely found nothing — fall to manual
+          // selection, defaulting to single-problem crop (the common case).
+          setError("No problems found in the photo. Crop to your problem and try again.");
           setManualMode(true);
+          setSelectMode("crop");
           setPhase("select");
           return;
         }
@@ -233,8 +238,10 @@ export function ImageUpload({
     );
   }
 
-  // Rectangle selection phase (manual fallback)
+  // Manual selection phase — defaults to single-problem crop, with a
+  // one-tap switch to multi-area selection for a photo with several problems.
   if (phase === "select" && imageBase64 && manualMode) {
+    const multiMax = Math.min(10, remaining, scansRemaining);
     return (
       <RectangleSelector
         imageBase64={imageBase64}
@@ -244,7 +251,16 @@ export function ImageUpload({
           setImageBase64(null);
           setManualMode(false);
         }}
-        maxRectangles={Math.min(10, remaining, scansRemaining)}
+        variant={selectMode}
+        // Crop = one box — but still respect a 0-scan quota (min(1, multiMax)),
+        // so an out-of-scans user gets the no-scans state, not a free crop.
+        maxRectangles={selectMode === "crop" ? Math.min(1, multiMax) : multiMax}
+        onSwitchVariant={
+          // Only offer the multi-area path when there's room for >1 problem.
+          selectMode === "crop" && multiMax <= 1
+            ? undefined
+            : () => setSelectMode((m) => (m === "crop" ? "multi" : "crop"))
+        }
         limitHint={scansRemaining < Infinity && scansRemaining <= remaining ? "scan limit" : undefined}
       />
     );
