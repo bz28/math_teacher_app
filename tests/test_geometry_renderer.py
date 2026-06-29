@@ -430,6 +430,38 @@ def test_circle_chord_references_unknown_point_rejected() -> None:
         )
 
 
+def test_render_circle_tolerates_unmatched_label_keys() -> None:
+    """A label keyed off geometry that was never declared structurally
+    (a tangent segment 'TA', an external point 'P') must NOT drop the whole
+    figure — the stray keys are filtered, the valid ones kept, and the
+    diagram renders. This was a real generation bug: the validator raised,
+    render_figure_or_none swallowed it, and the question saved with no figure.
+    """
+    spec = CircleFigure(
+        radius=5.0,
+        points={"A": 0.0, "B": 120.0},
+        chords=["AB"],
+        chord_labels={"AB": "chord", "TA": "tangent"},  # "TA" not a chord
+        point_labels={"A": "A", "P": "P"},  # "P" not a circle point
+    )
+    # Stray keys dropped; valid ones retained.
+    assert spec.chord_labels == {"AB": "chord"}
+    assert spec.point_labels == {"A": "A"}
+    # And it still renders end-to-end with the valid label intact.
+    svg = render_figure(
+        {
+            "shape": "circle",
+            "radius": 5.0,
+            "points": {"A": 0.0, "B": 120.0},
+            "chords": ["AB"],
+            "chord_labels": {"AB": "chord", "TA": "tangent"},
+            "point_labels": {"A": "A", "P": "P"},
+        },
+    )
+    assert "<circle" in svg
+    assert svg.startswith("<svg")
+
+
 # ── Circles: end-to-end render ──────────────────────────────────────
 
 
