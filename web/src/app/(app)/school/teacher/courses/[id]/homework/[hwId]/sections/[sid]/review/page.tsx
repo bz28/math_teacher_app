@@ -1028,10 +1028,13 @@ function HomeworkSectionReview({
 
       {roster !== null && roster.length > 0 && (
         // 3-column split: roster | grade column | pinned photo. The photo
-        // rail is the 3rd track only on the wide layout (>=1100px); below
-        // that it's display:none and the strip thumbnail in the grade
-        // column takes over, so roster + grade never get crushed.
-        <div className="mt-5 grid items-start gap-5 md:grid-cols-[280px_minmax(0,1fr)] min-[1100px]:grid-cols-[248px_minmax(0,1fr)_372px]">
+        // rail is the 3rd track only on the wide (xl, >=1280px) layout;
+        // below that it's display:none and the strip thumbnail in the grade
+        // column takes over, so roster + grade never get crushed. xl (a
+        // named breakpoint) is used over an arbitrary min-[1100px] because
+        // arbitrary min-[] variants don't sort with the breakpoint scale —
+        // md:grid-cols would cascade after and override it.
+        <div className="mt-5 grid items-start gap-5 md:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[248px_minmax(0,1fr)_372px]">
           {/* Student list — uncertainty-first triage groups */}
           <aside className="self-start rounded-[--radius-xl] border border-border-light bg-surface shadow-sm">
             <div className="flex items-center justify-between gap-2 border-b border-border-light px-4 py-2.5">
@@ -1107,10 +1110,10 @@ function HomeworkSectionReview({
             )}
           </section>
 
-          {/* Pinned student-work rail — wide layout only. Reads the
-              current detail's files; unpins below 1100px (the strip
-              thumbnail handles it there). */}
-          <aside className="hidden min-[1100px]:block">
+          {/* Pinned student-work rail — wide (xl) layout only. Reads the
+              current detail's files; unpins below xl (the strip thumbnail
+              in the grade column handles it there). */}
+          <aside className="hidden xl:block">
             <PinnedWorkRail
               files={
                 detailIsCurrent && detail && selectedEntry?.submission
@@ -2534,11 +2537,11 @@ function SubmissionDetailPanel({
               student →" navigation, since teachers click Next
               student rapidly and we don't want the View work button
               absorbing accidental hits. */}
-          {/* Hidden on the wide layout, where the pinned work rail keeps
-              the photo glanceable; shown below 1100px where the rail
+          {/* Hidden on the wide (xl) layout, where the pinned work rail
+              keeps the photo glanceable; shown below xl where the rail
               unpins. */}
           {detail.files && detail.files.length > 0 && (
-            <span className="min-[1100px]:hidden">
+            <span className="xl:hidden">
               <StudentWorkThumbButton files={detail.files} />
             </span>
           )}
