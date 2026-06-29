@@ -322,6 +322,11 @@ function HomeworkSectionReview({
   // counters by the right amount without a refetch.
   const [pendingReviewedOtherSections, setPendingReviewedOtherSections] = useState(0);
   const [dirtyReviewedOtherSections, setDirtyReviewedOtherSections] = useState(0);
+  // Other-section submissions about to be published (pending or dirty)
+  // whose integrity check landed on an unresolved flag_for_review. The
+  // publish action is HW-wide, so the soft publish-confirm must count
+  // these too — snapshotted at fetch time like the counters above.
+  const [flaggedOtherSections, setFlaggedOtherSections] = useState(0);
   // Submission currently being marked reviewed via the explicit no-edit
   // affordance. Single slot — only one student is open at a time.
   const [markingReviewedId, setMarkingReviewedId] = useState<string | null>(null);
@@ -368,18 +373,28 @@ function HomeworkSectionReview({
         let otherGraded = 0;
         let otherPendingReviewed = 0;
         let otherDirtyReviewed = 0;
+        let otherFlagged = 0;
         for (const r of subs.submissions) {
           if (r.is_preview) continue;
           if (r.section_id === sectionId) {
             submissionByStudent.set(r.student_id, r);
           } else if (r.final_score !== null) {
             otherGraded += 1;
+            // Mirror the in-section flagged-to-publish rule (see below):
+            // only flag_for_review, only while unresolved, only when the
+            // grade is actually about to go out (pending or dirty).
+            const ov = r.integrity_overview;
+            const isFlaggedUnresolved =
+              ov?.disposition === "flag_for_review" &&
+              ov.resolution === "unresolved";
             if (r.grade_published_at === null) {
               otherPending += 1;
               if (r.reviewed_at) otherPendingReviewed += 1;
+              if (isFlaggedUnresolved) otherFlagged += 1;
             } else if (r.grade_dirty) {
               otherDirty += 1;
               if (r.reviewed_at) otherDirtyReviewed += 1;
+              if (isFlaggedUnresolved) otherFlagged += 1;
             }
           }
         }
@@ -388,6 +403,7 @@ function HomeworkSectionReview({
         setGradedOtherSections(otherGraded);
         setPendingReviewedOtherSections(otherPendingReviewed);
         setDirtyReviewedOtherSections(otherDirtyReviewed);
+        setFlaggedOtherSections(otherFlagged);
         const merged: RosterEntry[] = s.students
           .map((st) => ({
             student_id: st.id,
@@ -790,7 +806,9 @@ function HomeworkSectionReview({
       // check landed on flag_for_review and the teacher hasn't resolved
       // it yet. Only flag_for_review (not the other dispositions) and
       // only while unresolved — a teacher who marked it reviewed has
-      // already made the call. Scoped to the loaded section's roster.
+      // already made the call. This is the in-section portion; the
+      // cross-section portion (flaggedOtherSections) is added in below
+      // so the count matches what the HW-wide publish actually releases.
       const ov = s.integrity_overview;
       if (
         (isPending || isDirty) &&
@@ -818,6 +836,10 @@ function HomeworkSectionReview({
     pendingReviewedOtherSections +
     dirtyReviewedOtherSections;
   const unreviewedToPublishTotal = toReleaseTotal - reviewedToPublishTotal;
+  // Flagged-to-publish across the whole HW — the publish action is
+  // HW-wide, so the soft confirm counts both the loaded section and the
+  // snapshotted other-section flags.
+  const flaggedToPublishTotal = flaggedToPublishInSection + flaggedOtherSections;
 
   // Publish every pending-or-dirty submission on the HW. Backend is
   // idempotent. On success we mirror the publish timestamp onto every
@@ -868,6 +890,11 @@ function HomeworkSectionReview({
           setDirtyOtherSections(0);
           setPendingReviewedOtherSections(0);
           setDirtyReviewedOtherSections(0);
+          // Full publish releases every other-section flag too. (A
+          // reviewed-only run can leave unreviewed flags unpublished, and
+          // we don't track the reviewed-flag split — that path keeps the
+          // snapshot, refreshed on next open like the other counters.)
+          setFlaggedOtherSections(0);
         }
         // If the open student's grade was part of the publish, clear
         // the local dirty flag on detail too so the strip updates
@@ -1202,7 +1229,7 @@ function HomeworkSectionReview({
         dirtyOtherSections={dirtyOtherSections}
         reviewedToPublish={reviewedToPublishTotal}
         unreviewedToPublish={unreviewedToPublishTotal}
-        flaggedToPublish={flaggedToPublishInSection}
+        flaggedToPublish={flaggedToPublishTotal}
         publishing={publishing}
         error={publishError}
         onConfirm={handlePublish}
@@ -1606,10 +1633,16 @@ function RegradeConfirmDialog({
 // a verdict requiring teacher attention.
 // ────────────────────────────────────────────────────────────────────
 
-const FLAGGED_DISPOSITIONS = new Set([
-  "flag_for_review",
-  "tutor_pivot",
-]);
+// Dispositions the "flagged" filter and resolve control treat as
+// needing teacher attention. Only `flag_for_review` — the integrity-
+// concern verdict. `tutor_pivot` is deliberately NOT here: it means the
+// student got the problem WRONG on paper and the AI tutored them through
+// it (integrity_ai.py — "wrong work is a learning signal, not a cheating
+// signal"). It surfaces as an informational disposition pill + via
+// practice insights, not as a teacher-review flag. This mirrors the
+// backend needs-attention aggregate, which also excludes tutor_pivot
+// (teacher_courses.py / teacher_assignments.py).
+const FLAGGED_DISPOSITIONS = new Set(["flag_for_review"]);
 
 function isFlagged(entry: RosterEntry): boolean {
   const sub = entry.submission;

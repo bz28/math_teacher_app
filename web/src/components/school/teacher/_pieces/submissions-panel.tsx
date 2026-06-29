@@ -224,9 +224,10 @@ export function ActivityPill({
   );
 }
 
-// Loud, filled disposition pill for the queue row. Only renders for
-// states that demand teacher action — flag-for-review (red),
-// tutor_pivot (amber), and inconclusive complete-with-no-disposition
+// Loud, filled disposition pill for the queue row. Renders for the
+// notable verdicts — flag-for-review (red, the only one that needs
+// teacher action), tutor_pivot (amber, informational: the student was
+// tutored through it), and inconclusive complete-with-no-disposition
 // (gray). pass / needs_practice render nothing so quiet rows stay
 // quiet. Color weights match ActivityPill so they sit visually as
 // siblings on the row. Red is reserved for this disposition channel
@@ -686,11 +687,14 @@ const RESOLUTION_LABEL: Record<IntegrityResolutionOutcome, string> = {
 /** True for a terminal check the roster surfaces as needing the
  *  teacher's eyes — the states the "Mark reviewed" action can clear.
  *  Mirrors the review-page `isFlagged` + the backend flagged aggregate
- *  (flag_for_review / tutor_pivot / unreadable / inconclusive). */
+ *  (flag_for_review / unreadable / inconclusive). `tutor_pivot` is NOT
+ *  here: it's a learning outcome (student got it wrong on paper, AI
+ *  tutored them — "a learning signal, not a cheating signal"), surfaced
+ *  as an informational pill, and the backend aggregate excludes it too. */
 export function integrityNeedsResolution(d: TeacherIntegrityDetail): boolean {
   if (d.overall_status === "skipped_unreadable") return true;
   if (d.overall_status === "complete" && !d.disposition) return true;
-  return d.disposition === "flag_for_review" || d.disposition === "tutor_pivot";
+  return d.disposition === "flag_for_review";
 }
 
 function formatResolvedAt(iso: string): string {
