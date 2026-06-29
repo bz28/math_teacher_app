@@ -108,6 +108,31 @@ class IntegrityCheckSubmission(Base):
         JSON, nullable=True,
     )
 
+    # Teacher-action layer on top of the AI verdict. The agent's
+    # `disposition` is its holistic judgment and never changes; this
+    # records that a teacher reviewed the check and what they decided.
+    # A flagged submission stays in the roster "needs attention" bucket
+    # until a teacher resolves it here. One of:
+    #   unresolved (default) — no teacher has acted yet
+    #   cleared — teacher reviewed and is satisfied (no concern)
+    #   confirmed_concern — teacher agrees this needs follow-up
+    #   contacted — teacher has reached out to the student/guardian
+    # `cleared` / `confirmed_concern` / `contacted` all count as
+    # "resolved" for the flagged aggregate — the teacher has handled it.
+    resolution: Mapped[str] = mapped_column(
+        String(32), nullable=False,
+        default="unresolved", server_default="unresolved",
+    )
+    # Teacher who set the current resolution; null while unresolved.
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )

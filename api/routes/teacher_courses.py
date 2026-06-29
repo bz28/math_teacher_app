@@ -165,14 +165,35 @@ def _flagged_case() -> Any:
     """Counts submissions needing teacher attention from the integrity
     pipeline — flagged disposition, unreadable extraction, inconclusive
     complete (turn cap / no sampled problems), or student-raised
-    'reader got something wrong' before confirm."""
+    'reader got something wrong' before confirm.
+
+    Each integrity-check-based branch also requires the check to be
+    unresolved: once a teacher marks it reviewed, it's handled and no
+    longer counts. The extraction_flagged branch has no integrity-check
+    row to resolve, so it stays until the submission is graded."""
+    integrity_unresolved = (
+        IntegrityCheckSubmission.resolution == "unresolved"
+    )
     return case(
-        (IntegrityCheckSubmission.disposition == "flag_for_review", 1),
-        (IntegrityCheckSubmission.status == "skipped_unreadable", 1),
+        (
+            and_(
+                IntegrityCheckSubmission.disposition == "flag_for_review",
+                integrity_unresolved,
+            ),
+            1,
+        ),
+        (
+            and_(
+                IntegrityCheckSubmission.status == "skipped_unreadable",
+                integrity_unresolved,
+            ),
+            1,
+        ),
         (
             and_(
                 IntegrityCheckSubmission.status == "complete",
                 IntegrityCheckSubmission.disposition.is_(None),
+                integrity_unresolved,
             ),
             1,
         ),

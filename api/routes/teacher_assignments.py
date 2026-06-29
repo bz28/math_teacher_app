@@ -1158,14 +1158,37 @@ async def submissions_inbox(
     #     AI calls downstream
     # pass / needs_practice / tutor_pivot are teacher-facing notes
     # but not "flagged" for attention.
+    #
+    # Each integrity-check-based branch additionally requires the check
+    # to be unresolved: once a teacher marks it reviewed (cleared /
+    # confirmed_concern / contacted), it's handled and drops out of the
+    # needs-attention count. The extraction_flagged branch has no
+    # integrity-check row to resolve (no AI ran), so it stays as-is —
+    # the teacher clears it by grading the submission manually.
+    integrity_unresolved = (
+        IntegrityCheckSubmission.resolution == "unresolved"
+    )
     flagged_expr = func.sum(
         case(
-            (IntegrityCheckSubmission.disposition == "flag_for_review", 1),
-            (IntegrityCheckSubmission.status == "skipped_unreadable", 1),
+            (
+                and_(
+                    IntegrityCheckSubmission.disposition == "flag_for_review",
+                    integrity_unresolved,
+                ),
+                1,
+            ),
+            (
+                and_(
+                    IntegrityCheckSubmission.status == "skipped_unreadable",
+                    integrity_unresolved,
+                ),
+                1,
+            ),
             (
                 and_(
                     IntegrityCheckSubmission.status == "complete",
                     IntegrityCheckSubmission.disposition.is_(None),
+                    integrity_unresolved,
                 ),
                 1,
             ),
@@ -1334,6 +1357,10 @@ async def list_submissions(
                 "problem_count": total,
                 "complete_count": done,
                 "notable_count": notable_count if terminal else None,
+                # Teacher-action layer: lets the roster's client-side
+                # flagged filter drop a check the teacher has reviewed.
+                # unresolved / cleared / confirmed_concern / contacted.
+                "resolution": check.resolution,
             }
 
         submissions.append({
