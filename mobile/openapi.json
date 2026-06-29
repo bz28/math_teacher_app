@@ -265,12 +265,14 @@
             "type": "string"
           },
           "contact_name": {
+            "maxLength": 200,
             "title": "Contact Name",
             "type": "string"
           },
           "message": {
             "anyOf": [
               {
+                "maxLength": 5000,
                 "type": "string"
               },
               {
@@ -281,10 +283,12 @@
           },
           "role": {
             "default": "teacher",
+            "maxLength": 100,
             "title": "Role",
             "type": "string"
           },
           "school_name": {
+            "maxLength": 200,
             "title": "School Name",
             "type": "string"
           }

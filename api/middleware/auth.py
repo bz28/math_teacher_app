@@ -37,14 +37,19 @@ async def get_current_user(
     # Verify user is still active on every request
     from api.models.user import User
 
-    result = await db.execute(select(User.is_active, User.name, User.email).where(User.id == user_id))
+    result = await db.execute(
+        select(User.is_active, User.name, User.email, User.role).where(User.id == user_id)
+    )
     row = result.one_or_none()
     if row is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     if not row.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account deactivated")
 
-    return CurrentUser(user_id=user_id, role=str(payload["role"]), name=row.name or row.email)
+    # Read role from the DB, not the JWT — a role change (e.g. admin demotion via
+    # PATCH /admin/users/{id}/role) must take effect immediately, not at token
+    # expiry. The query above already runs each request, so this is free.
+    return CurrentUser(user_id=user_id, role=str(row.role), name=row.name or row.email)
 
 
 async def get_current_user_full(

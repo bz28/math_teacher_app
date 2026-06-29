@@ -71,11 +71,21 @@ export function RectangleSelector({
   const [tooSmallToast, setTooSmallToast] = useState(false);
   const nextId = useRef(1);
 
-  // Scale factors
-  const sx = displaySize.w && imgNatural.w ? imgNatural.w / displaySize.w : 1;
-  const sy = displaySize.h && imgNatural.h ? imgNatural.h / displaySize.h : 1;
-  const isx = displaySize.w && imgNatural.w ? displaySize.w / imgNatural.w : 1;
-  const isy = displaySize.h && imgNatural.h ? displaySize.h / imgNatural.h : 1;
+  // object-contain letterbox geometry. The <img> renders object-contain inside
+  // its content box, so an image whose aspect ratio differs from the box (e.g. a
+  // tall portrait photo in a wide-ish box) is letterboxed: scaled by ONE uniform
+  // factor and centered, leaving empty bars on two sides. Mapping pointer↔image
+  // must use that single scale AND subtract the centering offset — computing sx
+  // and sy independently and ignoring the offset shifted the crop off the real
+  // image region for any non-matching aspect, breaking portrait extraction.
+  const scale =
+    displaySize.w && displaySize.h && imgNatural.w && imgNatural.h
+      ? Math.min(displaySize.w / imgNatural.w, displaySize.h / imgNatural.h)
+      : 1;
+  const renderedW = imgNatural.w * scale;
+  const renderedH = imgNatural.h * scale;
+  const offsetX = (displaySize.w - renderedW) / 2;
+  const offsetY = (displaySize.h - renderedH) / 2;
 
   const toImg = useCallback(
     (cx: number, cy: number) => {
@@ -83,27 +93,27 @@ export function RectangleSelector({
       if (!img) return { x: 0, y: 0 };
       const r = img.getBoundingClientRect();
       return {
-        x: Math.max(0, Math.min(Math.round((cx - r.left) * sx), imgNatural.w)),
-        y: Math.max(0, Math.min(Math.round((cy - r.top) * sy), imgNatural.h)),
+        x: Math.max(0, Math.min(Math.round((cx - r.left - offsetX) / scale), imgNatural.w)),
+        y: Math.max(0, Math.min(Math.round((cy - r.top - offsetY) / scale), imgNatural.h)),
       };
     },
-    [sx, sy, imgNatural],
+    [scale, offsetX, offsetY, imgNatural],
   );
 
   const toDsp = useCallback(
     (ix: number, iy: number, iw: number, ih: number) => ({
-      left: ix * isx,
-      top: iy * isy,
-      width: iw * isx,
-      height: ih * isy,
+      left: ix * scale + offsetX,
+      top: iy * scale + offsetY,
+      width: iw * scale,
+      height: ih * scale,
     }),
-    [isx, isy],
+    [scale, offsetX, offsetY],
   );
 
   // Check if pointer is over a handle or inside a rectangle
   const hitTest = useCallback(
     (imgX: number, imgY: number) => {
-      const handlePx = HANDLE_SIZE / isx; // handle size in image space
+      const handlePx = HANDLE_SIZE / scale; // handle size in image space
       // Check handles first (higher priority)
       for (let i = rectangles.length - 1; i >= 0; i--) {
         const r = rectangles[i];
@@ -128,7 +138,7 @@ export function RectangleSelector({
       }
       return { hit: "empty" as const };
     },
-    [rectangles, isx],
+    [rectangles, scale],
   );
 
   const handlePointerDown = useCallback(

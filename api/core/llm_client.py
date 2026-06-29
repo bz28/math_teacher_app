@@ -66,7 +66,7 @@ MODEL_REASON = MODEL_SONNET
 # Pricing per token (USD)
 _PRICING: dict[str, tuple[float, float]] = {
     MODEL_SONNET: (3.0 / 1_000_000, 15.0 / 1_000_000),
-    MODEL_HAIKU: (0.80 / 1_000_000, 4.0 / 1_000_000),
+    MODEL_HAIKU: (1.0 / 1_000_000, 5.0 / 1_000_000),
 }
 # Fallback for unknown models
 _DEFAULT_PRICING = _PRICING[MODEL_SONNET]
