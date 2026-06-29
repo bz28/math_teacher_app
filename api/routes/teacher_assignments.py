@@ -26,6 +26,7 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
 from api.middleware.rate_limit import limiter
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
+from api.models.course import Course
 from api.models.integrity_check import (
     IntegrityCheckProblem,
     IntegrityCheckSubmission,
@@ -676,6 +677,44 @@ async def list_all_assignments(
     )).scalars().all()
 
     return {"assignments": await _serialize_assignment_list(db, list(assignments))}
+
+
+@router.get("/rubric-sources")
+async def list_rubric_sources(
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Teacher's assignments that already have a non-empty grading rubric,
+    for the "Copy grading setup from another homework" picker. Returns a
+    lean projection (id, title, course name, type, rubric) — no content /
+    answer-key hydration, no per-assignment stats — since the picker only
+    needs to label each option and load its rubric on pick. Reuses the
+    existing `Assignment.rubric` data; no new storage."""
+    rows = (await db.execute(
+        select(Assignment, Course.name)
+        .join(Course, Course.id == Assignment.course_id)
+        .where(Assignment.teacher_id == current_user.user_id)
+        .where(Assignment.rubric.isnot(None))
+        .order_by(Assignment.created_at.desc())
+    )).all()
+
+    return {
+        "sources": [
+            {
+                "id": str(a.id),
+                "title": a.title,
+                "course_name": course_name,
+                "type": a.type,
+                "rubric": a.rubric,
+                "created_at": a.created_at.isoformat(),
+            }
+            # Guard against rows where rubric is a stored-but-empty dict
+            # ({}): they carry no reusable text, so exclude them from the
+            # picker rather than offering a blank "copy" that does nothing.
+            for a, course_name in rows
+            if isinstance(a.rubric, dict) and a.rubric
+        ]
+    }
 
 
 @router.get("/assignments/{assignment_id}")
