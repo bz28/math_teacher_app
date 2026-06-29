@@ -982,6 +982,7 @@ export default function HomeworkDetailPage({
               saveState={saveStates.rubric}
               saveError={saveErrors.rubric}
               onChange={onChangeRubric}
+              copyFromAssignmentId={assignmentId}
             />
           )}
 
