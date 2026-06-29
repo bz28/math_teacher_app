@@ -389,17 +389,23 @@ export function NewPracticeModal({
             </>
           ) : step === 2 ? (
             <>
-              <button
-                type="button"
-                onClick={() => {
-                  setError(null);
-                  setStep(1);
-                }}
-                disabled={busy}
-                className="text-xs font-semibold text-text-muted hover:text-text-primary disabled:opacity-50"
-              >
-                ← Back
-              </button>
+              {/* For a seeded (Re-teach) open, Details IS the first step —
+                  there's no clone/source step to go back to. */}
+              {!seeded ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setStep(1);
+                  }}
+                  disabled={busy}
+                  className="text-xs font-semibold text-text-muted hover:text-text-primary disabled:opacity-50"
+                >
+                  ← Back
+                </button>
+              ) : (
+                <span />
+              )}
               <button
                 type="button"
                 onClick={onStep2Continue}

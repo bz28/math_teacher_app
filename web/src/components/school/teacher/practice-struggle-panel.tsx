@@ -206,7 +206,7 @@ function StruggleRow({
   const denom = Math.max(item.students_practiced, item.students_struggled, 1);
   const ratio = item.students_struggled / denom;
   return (
-    <li className="group py-3.5">
+    <li className="py-3.5">
       <div className="flex items-baseline justify-between gap-4">
         <div className="flex min-w-0 items-baseline gap-2.5">
           <span className="shrink-0 font-mono text-[11px] text-text-muted tabular-nums">
