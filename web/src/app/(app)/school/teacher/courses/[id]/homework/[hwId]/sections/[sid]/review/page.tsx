@@ -768,11 +768,13 @@ function HomeworkSectionReview({
     dirtyInSection,
     gradedInSection,
     reviewedToPublishInSection,
+    flaggedToPublishInSection,
   } = useMemo(() => {
     let pending = 0;
     let dirty = 0;
     let graded = 0;
     let reviewedToPublish = 0;
+    let flaggedToPublish = 0;
     for (const e of roster ?? []) {
       const s = e.submission;
       if (!s || s.final_score === null) continue;
@@ -784,12 +786,26 @@ function HomeworkSectionReview({
       // A grade is "to publish" if pending or dirty; count the vetted
       // ones so the dialog can split reviewed vs unopened.
       if ((isPending || isDirty) && s.reviewed_at) reviewedToPublish += 1;
+      // Soft publish-confirm: a grade about to go out whose integrity
+      // check landed on flag_for_review and the teacher hasn't resolved
+      // it yet. Only flag_for_review (not the other dispositions) and
+      // only while unresolved — a teacher who marked it reviewed has
+      // already made the call. Scoped to the loaded section's roster.
+      const ov = s.integrity_overview;
+      if (
+        (isPending || isDirty) &&
+        ov?.disposition === "flag_for_review" &&
+        ov.resolution === "unresolved"
+      ) {
+        flaggedToPublish += 1;
+      }
     }
     return {
       pendingInSection: pending,
       dirtyInSection: dirty,
       gradedInSection: graded,
       reviewedToPublishInSection: reviewedToPublish,
+      flaggedToPublishInSection: flaggedToPublish,
     };
   }, [roster]);
   const pendingTotal = pendingInSection + pendingOtherSections;
@@ -1186,6 +1202,7 @@ function HomeworkSectionReview({
         dirtyOtherSections={dirtyOtherSections}
         reviewedToPublish={reviewedToPublishTotal}
         unreviewedToPublish={unreviewedToPublishTotal}
+        flaggedToPublish={flaggedToPublishInSection}
         publishing={publishing}
         error={publishError}
         onConfirm={handlePublish}
@@ -1288,6 +1305,7 @@ function PublishConfirmDialog({
   dirtyOtherSections,
   reviewedToPublish,
   unreviewedToPublish,
+  flaggedToPublish,
   publishing,
   error,
   onConfirm,
@@ -1303,6 +1321,10 @@ function PublishConfirmDialog({
    *  disclosure + whether "Publish only reviewed" is offered. */
   reviewedToPublish: number;
   unreviewedToPublish: number;
+  /** Submissions about to be published whose integrity check flagged
+   *  them for review and the teacher hasn't resolved yet. Drives the
+   *  soft confirm — a warning, never a block. */
+  flaggedToPublish: number;
   publishing: boolean;
   error: string | null;
   onConfirm: (reviewedOnly?: boolean) => void;
@@ -1346,6 +1368,21 @@ function PublishConfirmDialog({
         <p className="mt-3 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-3 py-2 text-xs text-[color:var(--color-warning-dark)]  dark:bg-[color:var(--color-warning)]/10 ">
           <span className="font-semibold">{dirtyTotal}</span>{" "}
           {dirtyTotal === 1 ? "is an edit" : "are edits"} to already-published grades.
+        </p>
+      )}
+      {/* Soft integrity confirm — a flagged-for-review submission is
+       *  about to go out unresolved. Warn, don't block: the teacher can
+       *  still publish (legit reasons exist), but they make the call
+       *  with eyes open instead of by accident. */}
+      {flaggedToPublish > 0 && (
+        <p className="mt-3 rounded-[--radius-md] border border-[color:var(--color-error)]/30 bg-[color:var(--color-error-light)] px-3 py-2 text-xs text-[color:var(--color-error)]">
+          <span aria-hidden>⚑ </span>
+          <span className="font-semibold">{flaggedToPublish}</span>{" "}
+          {flaggedToPublish === 1
+            ? "submission is flagged for review"
+            : "submissions are flagged for review"}{" "}
+          and not yet resolved. Publish anyway, or close this and review
+          {flaggedToPublish === 1 ? " it" : " them"} first?
         </p>
       )}
       {otherSections > 0 && (
@@ -2065,6 +2102,19 @@ function rowStatusLabel(entry: RosterEntry): {
   if (!sub) {
     return { text: "Not submitted", dotClass: "bg-gray-300" };
   }
+  // Student said "the reader got my work wrong" on the confirm screen —
+  // the submission skipped AI grading + integrity entirely and needs a
+  // manual pass. Surface it loudly (red) until the teacher publishes a
+  // clean grade, at which point the published branch below takes over.
+  if (
+    sub.extraction_flagged_at &&
+    !(sub.grade_published_at && !sub.grade_dirty)
+  ) {
+    return {
+      text: "Reader misread · review",
+      dotClass: "bg-[color:var(--color-error)]",
+    };
+  }
   // Unreadable photo never got an AI grade — call it out distinctly so
   // the teacher knows this row needs a manual pass (or a resubmit),
   // not just an unopened suggestion. Warning dot, reusing the same
@@ -2706,6 +2756,41 @@ function SubmissionDetailPanel({
           </button>
         </div>
       </div>
+
+      {/* Reader-misread callout — the student declined the OCR reading
+          ("the reader got my work wrong") on the confirm screen, so the
+          submission skipped AI grading + integrity entirely. There's no
+          integrity check to render below, which is exactly why this
+          needs its own loud signal: without it the row would look like
+          an ordinary ungraded submission and the dodge (or the genuine
+          misread) would slip by. Honor-code by design — no interview is
+          forced — so the teacher is the backstop. */}
+      {row?.extraction_flagged_at && (
+        <div
+          className="rounded-[--radius-xl] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] p-3"
+          role="status"
+        >
+          <div className="flex items-start gap-3">
+            <span
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-error)] text-sm font-bold text-white"
+              aria-hidden
+            >
+              ⚠
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-text-primary">
+                Student said the reader got their work wrong — review
+              </p>
+              <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
+                They declined the scanned reading on the confirm screen,
+                so no AI grading or understanding check ran. If the photo
+                really was misread, grade from the original work; if it
+                looks like a dodge, follow up with the student.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Integrity verdict — the #1 trust signal. First full content
           block so the teacher sees the verdict before they start

@@ -13,7 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.integrity_pipeline import (
+    ABANDONED_INTERVIEW_DEADLINE,
     PROBLEM_STATUS_DIAGNOSIS_ONLY,
+    finalize_if_abandoned,
 )
 from api.core.integrity_pipeline import (
     STATUS_COMPLETE as INTEGRITY_COMPLETE,
@@ -1192,6 +1194,20 @@ async def submissions_inbox(
                 ),
                 1,
             ),
+            # Abandoned interview stalled past the deadline — not yet
+            # finalized (a teacher opening the roster does that lazily),
+            # but counted so the needs-attention badge nudges them to look.
+            (
+                and_(
+                    IntegrityCheckSubmission.status.in_(
+                        ("awaiting_student", "in_progress"),
+                    ),
+                    IntegrityCheckSubmission.updated_at
+                    < (datetime.now(UTC) - ABANDONED_INTERVIEW_DEADLINE),
+                    integrity_unresolved,
+                ),
+                1,
+            ),
             (Submission.extraction_flagged_at.is_not(None), 1),
             else_=0,
         ),
@@ -1293,6 +1309,19 @@ async def list_submissions(
         select(IntegrityCheckSubmission)
         .where(IntegrityCheckSubmission.submission_id.in_(sub_ids))
     )).scalars().all() if sub_ids else []
+
+    # Lazy on-read finalization: a student who abandoned the interview
+    # leaves the check stuck in awaiting_student / in_progress forever
+    # (the turn cap only fires on a new student turn, and this deployment
+    # has no scheduler — see finalize_if_abandoned). The teacher loading
+    # the roster is the trigger that flips any check past the wall-clock
+    # deadline to a terminal inconclusive state so it stops hiding.
+    finalized_any = False
+    for c in check_rows:
+        if await finalize_if_abandoned(c, db):
+            finalized_any = True
+    if finalized_any:
+        await db.commit()
 
     check_by_sub: dict[uuid.UUID, IntegrityCheckSubmission] = {
         c.submission_id: c for c in check_rows

@@ -814,6 +814,80 @@ async def test_turn_hard_cap_force_finalizes(
     assert r.status_code == 409
 
 
+async def test_abandoned_interview_finalizes_on_teacher_read(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A student who opens the check and walks away leaves it stuck in
+    awaiting_student forever — the turn cap only fires on a NEW student
+    turn, and this deployment has no scheduler. The teacher reading the
+    submission detail is the lazy trigger that finalizes a check stalled
+    past the wall-clock deadline into a terminal, no-verdict state so it
+    surfaces ("Interview incomplete") instead of hiding in purgatory."""
+    from datetime import UTC, datetime, timedelta
+
+    from api.core.integrity_pipeline import ABANDONED_INTERVIEW_DEADLINE
+
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    # Sanity: a freshly-stalled (but not yet past-deadline) check is NOT
+    # finalized — a student who steps away briefly is unaffected.
+    r = await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["overall_status"] == "awaiting_student"
+
+    # Backdate the check's last activity past the deadline. Raw UPDATE so
+    # we set updated_at explicitly (the column's onupdate would otherwise
+    # stamp now() and defeat the backdate).
+    stale = datetime.now(UTC) - ABANDONED_INTERVIEW_DEADLINE - timedelta(hours=1)
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE integrity_check_submissions "
+                "SET updated_at = :ts WHERE submission_id = :sid"
+            ),
+            {"ts": stale, "sid": submission_id},
+        )
+        await s.commit()
+
+    # Teacher reads the detail → lazy finalize fires.
+    r = await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["overall_status"] == "complete"
+    # No intent-carrying disposition — we never judged the student.
+    assert body["disposition"] is None
+    assert body["headline"] == "Interview incomplete"
+
+    # The flip is persisted (not just computed on the way out) and the
+    # pending problem went terminal-but-null-rubric, never a phantom
+    # verdict.
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.status == "complete"
+        assert check.disposition is None
+        problems = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(
+                IntegrityCheckProblem.integrity_check_submission_id
+                == check.id
+            )
+        )).scalars().all()
+        capped = [p for p in problems if p.status == "cap_reached"]
+        assert capped, "expected the pending problem to go cap_reached"
+        for p in capped:
+            assert p.rubric is None
+
+
 async def test_turn_409_when_complete(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:

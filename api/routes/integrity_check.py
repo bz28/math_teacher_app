@@ -29,6 +29,7 @@ from api.core.integrity_pipeline import (
     STATUS_SKIPPED_UNREADABLE,
     TOOL_GENERATE_VARIANT,
     count_student_turns,
+    finalize_if_abandoned,
     process_student_turn,
 )
 from api.database import get_db
@@ -692,6 +693,13 @@ async def teacher_get_integrity_detail(
     )
 
     check = await _load_check_for_submission(db, submission_id)
+    # Lazy on-read finalization: if the student abandoned the interview
+    # and it's been stuck past the wall-clock deadline, flip it to a
+    # terminal inconclusive state here so the teacher sees "interview
+    # incomplete" instead of a frozen in-progress check. No scheduler in
+    # this deployment, so the teacher's read is the trigger.
+    if check is not None and await finalize_if_abandoned(check, db):
+        await db.commit()
     if check is None:
         return TeacherIntegrityDetail(
             submission_id=str(submission_id),

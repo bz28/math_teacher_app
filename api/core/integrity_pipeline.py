@@ -26,6 +26,7 @@ import json
 import logging
 import re
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, NamedTuple
 
 from sqlalchemy import func, select
@@ -1844,16 +1845,25 @@ async def _apply_finish_check(
     return f"accepted: disposition {disposition}, check complete"
 
 
-async def _force_finalize_turn_cap(
-    check: IntegrityCheckSubmission, db: AsyncSession,
+async def _finalize_inconclusive(
+    check: IntegrityCheckSubmission,
+    db: AsyncSession,
+    *,
+    problem_reason: str,
+    overall_summary: str,
+    closing_text: str | None,
+    headline: str | None = None,
 ) -> None:
-    """Hard-cap enforcement: 10 student turns without a finish_check.
+    """Shared force-finalize: flip the check to a terminal, no-verdict
+    state so it leaves purgatory and surfaces to the teacher.
 
     Emits no disposition (left null) so the teacher dashboard surfaces
-    this as "inconclusive — agent ran out of time" rather than any of
-    the four intent-carrying dispositions. Per-problem rubrics are
-    likewise left null on pending problems; the teacher sees the
-    partial transcript and decides.
+    this as inconclusive rather than any of the four intent-carrying
+    dispositions. Pending per-problem rows go terminal-but-null-rubric
+    (`cap_reached`) so a rubric-aware query never sees a phantom verdict;
+    the teacher reads the partial transcript and decides. `closing_text`
+    is appended as an agent turn when a student is plausibly still on the
+    other end (turn cap); pass None when nobody is there (abandoned).
     """
     problems = (await db.execute(
         select(IntegrityCheckProblem).where(
@@ -1863,27 +1873,114 @@ async def _force_finalize_turn_cap(
     for p in problems:
         if p.status == PROBLEM_STATUS_PENDING:
             # Distinct terminal status — NOT verdict_submitted. A pending
-            # problem killed by the cap has no rubric, so labeling it
-            # verdict_submitted would claim a verdict that never happened
-            # and poison any rubric-aware query. Leave rubric null.
+            # problem with no rubric labeled verdict_submitted would claim
+            # a verdict that never happened and poison any rubric-aware
+            # query. Leave rubric null.
             p.status = PROBLEM_STATUS_CAP_REACHED
-            p.ai_reasoning = (
-                "Conversation hit the turn cap before this problem was "
-                "verdicted."
-            )
+            p.ai_reasoning = problem_reason
     check.status = STATUS_COMPLETE
-    check.overall_summary = (
-        "Conversation hit the turn cap — inconclusive. Teacher review."
-    )
-    await _append_agent_text(
-        check.id,
-        "Thanks for sticking with this. That's all the time we have — your "
-        "work is with your teacher.",
-        db,
-    )
+    check.overall_summary = overall_summary
+    if headline is not None:
+        check.headline = headline
+    if closing_text is not None:
+        await _append_agent_text(check.id, closing_text, db)
     check.activity_summary = compute_activity_summary(
         await _load_turns(check.id, db),
     )
+
+
+async def _force_finalize_turn_cap(
+    check: IntegrityCheckSubmission, db: AsyncSession,
+) -> None:
+    """Hard-cap enforcement: 10 student turns without a finish_check.
+
+    Emits no disposition (left null) so the teacher dashboard surfaces
+    this as "inconclusive — agent ran out of time" rather than any of
+    the four intent-carrying dispositions.
+    """
+    await _finalize_inconclusive(
+        check, db,
+        problem_reason=(
+            "Conversation hit the turn cap before this problem was "
+            "verdicted."
+        ),
+        overall_summary=(
+            "Conversation hit the turn cap — inconclusive. Teacher review."
+        ),
+        closing_text=(
+            "Thanks for sticking with this. That's all the time we have — "
+            "your work is with your teacher."
+        ),
+    )
+
+
+# Wall-clock deadline after which a check still sitting in
+# awaiting_student / in_progress is treated as abandoned. The turn-cap
+# finalize only fires on a NEW student turn (inside process_student_turn),
+# so a student who simply closes the tab leaves the row stuck forever.
+# This deployment runs a single uvicorn process with no scheduler/cron
+# (see api/main.py lifespan — the only periodic-looking task,
+# _cleanup_expired_tokens, fires once at startup), so there is nothing to
+# sweep these rows server-side. We finalize them lazily whenever a teacher
+# reads the roster or a submission (see finalize_if_abandoned call sites).
+# 12h is generous enough that a student who steps away mid-check and
+# returns the same evening is unaffected, while a truly-abandoned check
+# surfaces to the teacher by the next day.
+ABANDONED_INTERVIEW_DEADLINE = timedelta(hours=12)
+
+
+async def _force_finalize_abandoned(
+    check: IntegrityCheckSubmission, db: AsyncSession,
+) -> None:
+    """Finalize an interview the student walked away from.
+
+    Distinct teacher-facing copy from the turn-cap case (a different
+    headline + summary) so an abandoned check reads as "the student left"
+    rather than "the agent ran out of time" — and never as a pass. No
+    closing agent turn: there's nobody on the other end to read it.
+    """
+    await _finalize_inconclusive(
+        check, db,
+        problem_reason=(
+            "The student left the understanding check before this problem "
+            "was verdicted."
+        ),
+        overall_summary=(
+            "Interview incomplete — the student left before finishing. "
+            "There's no verdict to pass or fail here; review the partial "
+            "transcript and follow up."
+        ),
+        closing_text=None,
+        headline="Interview incomplete",
+    )
+
+
+async def finalize_if_abandoned(
+    check: IntegrityCheckSubmission, db: AsyncSession,
+) -> bool:
+    """Lazy on-read finalization for stalled interviews.
+
+    If `check` is still in awaiting_student / in_progress and its last
+    activity is older than ABANDONED_INTERVIEW_DEADLINE, force-finalize it
+    as inconclusive (abandoned) and return True. Otherwise no-op → False.
+    Mutates `check` in place; the caller is responsible for committing.
+
+    Last activity is read off `check.updated_at` (bumped on every student
+    turn, since process_student_turn mutates the row each turn) with a
+    `created_at` fallback for the awaiting_student case where no turn ever
+    landed.
+    """
+    if check.status not in (STATUS_AWAITING_STUDENT, STATUS_IN_PROGRESS):
+        return False
+    last_activity = check.updated_at or check.created_at
+    if last_activity is None:
+        return False
+    if last_activity.tzinfo is None:
+        last_activity = last_activity.replace(tzinfo=UTC)
+    if datetime.now(UTC) - last_activity < ABANDONED_INTERVIEW_DEADLINE:
+        return False
+    await _force_finalize_abandoned(check, db)
+    return True
 
 
 _SOFT_NUDGE_MARKER = "(Wrap up:"
