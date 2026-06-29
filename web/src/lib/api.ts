@@ -1137,6 +1137,9 @@ export interface StudentInsight {
   revealed_count: number;
   trend: StudentInsightTrend | null;
   status: StudentInsightStatus;
+  /** The 1-2 concepts this student wrestled with most. Empty when there
+   *  isn't enough practice signal to judge or they had no struggles. */
+  top_struggles: string[];
 }
 
 export interface SectionStudentInsightsResponse {

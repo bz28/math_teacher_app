@@ -365,17 +365,20 @@ async def _insert_activity(
     p: dict[str, Any],
     student_id: uuid.UUID,
     rows: list[tuple[str, str | None, datetime | None]],
+    bank_item_id: uuid.UUID | None = None,
 ) -> None:
     """Insert PracticeActivity rows for one student. Each row is
     (mode, outcome, created_at) — created_at None defers to the
-    server default (now). Lets a test control recency + ordering."""
+    server default (now). Lets a test control recency + ordering.
+    bank_item_id defaults to the first seeded item; pass another to
+    exercise per-concept struggle aggregation."""
     async with get_session_factory()() as s:
         for mode, outcome, created_at in rows:
             kwargs: dict[str, Any] = dict(
                 student_id=student_id,
                 section_id=p["section_id"],
                 practice_assignment_id=p["practice_id"],
-                bank_item_id=p["item_ids"][0],
+                bank_item_id=bank_item_id or p["item_ids"][0],
                 mode=mode,
                 outcome=outcome,
             )
@@ -441,6 +444,8 @@ async def test_insights_struggling_student(
     assert me["practiced_count"] == 6
     assert me["first_try_rate"] == round(2 / 6, 3)
     assert me["retry_count"] == 4
+    # The struggled-on concept is surfaced inline (item_ids[0] = "Factoring").
+    assert me["top_struggles"] == ["Factoring"]
 
 
 async def test_insights_thriving_student(
@@ -458,6 +463,53 @@ async def test_insights_thriving_student(
     me = _insight_for(data, world["student_id"])
     assert me["status"] == "thriving"
     assert me["first_try_rate"] == 0.8
+
+
+async def test_insights_top_struggles_ranked_and_capped(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    p = await _seed_practice(world)
+    # Wrestled with item 0 ("Factoring") more than item 1
+    # ("Completing the square") — both should surface, worst first.
+    await _insert_activity(
+        p, world["student_id"], [("practice", "retry", None)] * 3,
+        bank_item_id=p["item_ids"][0],
+    )
+    await _insert_activity(
+        p, world["student_id"], [("practice", "retry", None)],
+        bank_item_id=p["item_ids"][1],
+    )
+
+    data = await _get_insights(client, world, p)
+    me = _insight_for(data, world["student_id"])
+    assert me["top_struggles"] == ["Factoring", "Completing the square"]
+
+
+async def test_insights_top_struggles_empty_below_signal_floor(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    p = await _seed_practice(world)
+    # Only 2 practiced (< _MIN_PRACTICE_FOR_SIGNAL) — two unlucky retries
+    # aren't enough signal to label a struggle concept.
+    await _insert_activity(p, world["student_id"], [("practice", "retry", None)] * 2)
+
+    data = await _get_insights(client, world, p)
+    me = _insight_for(data, world["student_id"])
+    assert me["status"] == "needs_nudge"
+    assert me["top_struggles"] == []
+
+
+async def test_insights_top_struggles_empty_without_struggles(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    p = await _seed_practice(world)
+    # Engaged and all first-try — no retry/reveal, so nothing to surface.
+    await _insert_activity(p, world["student_id"], [("practice", "first_try", None)] * 5)
+
+    data = await _get_insights(client, world, p)
+    me = _insight_for(data, world["student_id"])
+    assert me["status"] == "thriving"
+    assert me["top_struggles"] == []
 
 
 async def test_insights_needs_nudge_when_stale(
@@ -566,7 +618,7 @@ async def test_insights_payload_has_no_answers_or_scores(
     assert set(me.keys()) == {
         "student_id", "name", "practiced_count", "learn_walkthroughs",
         "last_active", "first_try_rate", "retry_count", "revealed_count",
-        "trend", "status",
+        "trend", "status", "top_struggles",
     }
     blob = str(data).lower()
     for forbidden in ("answer", "score", "grade", "distractor", "solution"):
