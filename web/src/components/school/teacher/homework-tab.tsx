@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { teacher, type TeacherAssignment, type TeacherUnit } from "@/lib/api";
-import { TOUR_IDS, useTour } from "@/components/tour";
-import { useAuthStore } from "@/stores/auth";
+import { TOUR_IDS } from "@/components/tour";
 import { topUnits } from "@/lib/units";
 import { Select } from "@/components/ui";
 import { NewHomeworkModal } from "./_pieces/new-homework-modal";
@@ -73,34 +72,6 @@ export function HomeworkTab({
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
-
-  // ── First-use feature walkthrough: hw-create ──
-  // Fires the first time the New Homework modal opens — a compact
-  // coachmark over the modal's mode toggle and submit button. Because
-  // the modal sits at z-50, the compact tour rides above it (z-60). Same
-  // guards as the persona auto-starts: latch once, never restart a live
-  // tour, teacher-only, skip preview shadows, desktop md+ gate.
-  const tour = useTour();
-  const user = useAuthStore((s) => s.user);
-  const hwTourStartedRef = useRef(false);
-  useEffect(() => {
-    if (!showNew) return;
-    if (hwTourStartedRef.current) return;
-    if (tour.isActive) return;
-    if (!user || user.role !== "teacher" || user.is_preview) return;
-    if (user.tours_seen.includes("hw-create")) return;
-    if (
-      typeof window === "undefined" ||
-      !window.matchMedia("(min-width: 768px)").matches
-    )
-      return;
-    // Defer to first paint so the modal's spotlight targets are mounted.
-    const raf = requestAnimationFrame(() => {
-      hwTourStartedRef.current = true;
-      tour.start("hw-create");
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [showNew, user, tour]);
 
   // ── Derive filter options from all homeworks ──
 

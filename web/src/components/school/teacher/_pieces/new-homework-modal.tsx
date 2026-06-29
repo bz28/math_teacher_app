@@ -9,7 +9,6 @@ import {
   type TeacherDocument,
   type TeacherUnit,
 } from "@/lib/api";
-import { TOUR_IDS } from "@/components/tour";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { topUnits } from "@/lib/units";
 import { fileToBase64, formatFileSize } from "@/lib/utils";
@@ -668,7 +667,6 @@ export function NewHomeworkModal({
           {mode === "generate" ? (
             <button
               type="button"
-              data-tour-id={TOUR_IDS.hwCreateGenerate}
               onClick={onGenerate}
               disabled={!canGenerate}
               className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
@@ -721,7 +719,6 @@ function ModeTabs({
     <div
       role="tablist"
       aria-label="Homework creation mode"
-      data-tour-id={TOUR_IDS.hwCreateMode}
       className="flex gap-1.5"
     >
       {tabs.map((t, i) => {

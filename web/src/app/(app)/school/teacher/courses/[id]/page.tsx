@@ -245,7 +245,10 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   });
   useTourAction(TOUR_ACTIONS.gotoMaterials, () => setTab("materials"));
   useTourAction(TOUR_ACTIONS.gotoHomework, () => setTab("homework"));
+  useTourAction(TOUR_ACTIONS.gotoPractice, () => setTab("practice"));
+  useTourAction(TOUR_ACTIONS.gotoInsights, () => setTab("insights"));
   useTourAction(TOUR_ACTIONS.gotoSubmissions, () => setTab("submissions"));
+  useTourAction(TOUR_ACTIONS.gotoGrades, () => setTab("grades"));
 
   if (loading) {
     return (
@@ -308,7 +311,17 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
           <button
             key={t.key}
             type="button"
-            data-tour-id={t.key === "submissions" ? TOUR_IDS.teacherSubmissions : undefined}
+            // Submissions and Grades anchor the onboarding tour on their
+            // tab buttons — both tabs render an empty state (no stable
+            // header/control) for a from-zero teacher, so the always-
+            // mounted tab button is the only reliable spotlight target.
+            data-tour-id={
+              t.key === "submissions"
+                ? TOUR_IDS.teacherSubmissions
+                : t.key === "grades"
+                  ? TOUR_IDS.teacherGrades
+                  : undefined
+            }
             onClick={() => setTab(t.key)}
             className={`relative shrink-0 py-3 text-sm font-medium transition-colors ${
               tab === t.key

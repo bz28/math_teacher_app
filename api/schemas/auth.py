@@ -143,24 +143,17 @@ class UserResponse(BaseModel):
 
 
 # Keys for a first-run onboarding tour the frontend marks "seen" once.
-# Two families share the same engine + persistence:
-#   • Persona overviews (login-time) — "teacher" (courses dashboard),
-#     "student" (school-student dashboard), "personal" (the non-school
-#     learner's /home).
-#   • Feature first-use walkthroughs (contextual coachmarks fired the
-#     first time a teacher actually uses a surface) — "hw-create"
-#     (New Homework modal), "review-flow" (submission review page),
-#     "integrity" (a flagged submission's understanding check), and
-#     "insights" (the Student Insights tab). Each maps to a
-#     TourDefinition the frontend renders with the same engine.
+# One per persona overview (login-time): "teacher" (courses dashboard +
+# a comprehensive walk over every course-workspace tab), "student"
+# (school-student dashboard), "personal" (the non-school learner's
+# /home). The old per-feature first-use coachmarks (hw-create,
+# review-flow, integrity, insights) were retired — they fired once,
+# invisibly, and confused teachers; the teacher overview now covers
+# those surfaces itself.
 TourPersona = Literal[
     "teacher",
     "student",
     "personal",
-    "hw-create",
-    "review-flow",
-    "integrity",
-    "insights",
 ]
 
 

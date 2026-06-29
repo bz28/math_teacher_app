@@ -2,11 +2,20 @@
  * Field Guide tour definitions, one per persona.
  *
  * The teacher tour ships first and replaces the old setup checklist. It
- * is one linear from-zero journey for a brand-new teacher who has
+ * is one comprehensive from-zero journey for a brand-new teacher who has
  * nothing: step 1 creates their first course (on the courses list), the
- * tour carries across the navigation into that course, and steps 2-5
- * walk the rest of the setup path (section → students → materials →
- * homework) before step 6 explains grading + the integrity check.
+ * tour carries across the navigation into that course, then it walks
+ * EVERY workspace tab left-to-right — section → invite → materials →
+ * homework → practice → student insights → submissions → grades. The
+ * later tabs (practice/insights/submissions/grades) are empty for a
+ * fresh teacher, so each step spotlights a stable anchor that exists in
+ * the from-zero state (a header or a primary control, never a data row)
+ * and the copy EXPLAINS what the tab is for and what will fill it in.
+ *
+ * This single tour replaced the old per-feature first-use coachmarks
+ * (hw-create / review-flow / integrity / insights), which fired once,
+ * invisibly, the first time a teacher touched a surface and confused
+ * more than they helped.
  *
  * Adding a persona is purely additive: author a `TourDefinition` and
  * register it in `TOURS`. The engine renders it unchanged.
@@ -18,7 +27,7 @@ const TEACHER_TOUR: TourDefinition = {
   cover: {
     eyebrow: "Welcome to Veradic",
     title: "Your classroom, *quietly* intelligent.",
-    subtitle: "A short walk through the six things that get a class running — starting from scratch.",
+    subtitle: "A short walk through every tab that gets a class running — starting from scratch.",
     footnote: "~2 min · we'll create your first course together",
     cta: "Take the tour",
     skip: "Skip for now",
@@ -107,13 +116,46 @@ const TEACHER_TOUR: TourDefinition = {
       onEnter: TOUR_ACTIONS.gotoHomework,
     },
     {
+      id: "practice",
+      target: TOUR_IDS.teacherPractice,
+      eyebrow: "Practice",
+      title: "Low-stakes reps",
+      body: "Spin up ungraded practice sets so students can drill a concept until it clicks — no grade on the line. Clone one from any homework or start fresh.",
+      // New-practice button is top-right — tuck the card beside it. Always
+      // mounted, so it anchors cleanly even with zero practice sets yet.
+      placement: "left",
+      onEnter: TOUR_ACTIONS.gotoPractice,
+    },
+    {
+      id: "insights",
+      target: TOUR_IDS.teacherInsights,
+      eyebrow: "Student Insights",
+      title: "Who's thriving, who needs a nudge",
+      body: "This is where each student's practice signal shows up once they get going — effort, first-try rate, and trend — so you can see who to check on. It fills in as your class starts practicing.",
+      // Anchors the always-mounted section header, which renders before
+      // any roster data — so this lands cleanly on an empty class.
+      placement: "bottom",
+      onEnter: TOUR_ACTIONS.gotoInsights,
+    },
+    {
       id: "grade",
       target: TOUR_IDS.teacherSubmissions,
-      eyebrow: "The grade",
+      eyebrow: "Submissions",
       title: "Where the real work pays off",
-      body: "AI pre-grades every submission and can quietly interview a student to confirm the work is their own. You stay the judge — review, adjust, and publish when it's right.",
+      body: "As students turn work in it lands here, AI pre-graded — and the AI can quietly interview a student to confirm the work is their own. You stay the judge: review, adjust, and publish when it's right.",
       placement: "bottom",
       onEnter: TOUR_ACTIONS.gotoSubmissions,
+    },
+    {
+      id: "grades",
+      target: TOUR_IDS.teacherGrades,
+      eyebrow: "Grades",
+      title: "Your gradebook of record",
+      body: "Published grades collect here, by section — your at-a-glance read on who's strong and who's slipping, exportable to your SIS in a click. It populates as you publish.",
+      // The Grades tab early-returns an empty state with no header for a
+      // fresh class, so anchor the always-mounted tab button itself.
+      placement: "bottom",
+      onEnter: TOUR_ACTIONS.gotoGrades,
     },
   ],
   finish: {
@@ -231,155 +273,12 @@ const PERSONAL_TOUR: TourDefinition = {
   },
 };
 
-// ────────────────────────────────────────────────────────────────────
-// Feature first-use walkthroughs.
-//
-// Unlike the persona overviews above, these are SHORT contextual
-// coachmarks (`compact: true` → no welcome cover, straight into 2-3
-// spotlights) that fire the first time a teacher actually uses a
-// feature. Every step is grounded to a real mounted control; the host
-// surface auto-starts the tour while the key is absent from
-// `tours_seen` and marks it seen on finish/skip.
-// ────────────────────────────────────────────────────────────────────
-
-/**
- * hw-create — first open of the New Homework modal. Two beats grounded
- * on always-mounted modal controls: the Generate/Upload mode toggle and
- * the primary submit button. "Review before assigning" and "assign to a
- * section" happen downstream (review queue → HW detail), so they live in
- * the copy rather than spotlighting controls absent from the modal.
- */
-const HW_CREATE_TOUR: TourDefinition = {
-  persona: "hw-create",
-  compact: true,
-  steps: [
-    {
-      id: "build",
-      target: TOUR_IDS.hwCreateMode,
-      intro: "First time creating homework",
-      eyebrow: "Build it",
-      title: "Two ways to start",
-      body: "Generate fresh problems from this unit's materials, or Upload a worksheet to digitize — either way you choose the source.",
-      placement: "bottom",
-    },
-    {
-      id: "review",
-      target: TOUR_IDS.hwCreateGenerate,
-      eyebrow: "Then review",
-      title: "You review before students do",
-      body: "We draft the problems and drop you in a review queue — edit any of them, then assign to a section and publish when it's right.",
-      placement: "top",
-    },
-  ],
-};
-
-/**
- * review-flow — first open of a section's submission review page. Three
- * beats along the trust path: the AI pre-grade, the reviewed checkpoint,
- * and publishing. Anchored to the Problems card, the "Mark reviewed"
- * button (present while a grade is unvetted), and the header Publish
- * button.
- */
-const REVIEW_FLOW_TOUR: TourDefinition = {
-  persona: "review-flow",
-  compact: true,
-  steps: [
-    {
-      id: "pre-grade",
-      target: TOUR_IDS.reviewGrade,
-      intro: "First time grading here",
-      eyebrow: "The AI's first pass",
-      title: "Every problem, pre-graded",
-      body: "The AI grades each problem and flags low-confidence calls. Adjust any score — editing one auto-vouches that you reviewed it.",
-      placement: "top",
-    },
-    {
-      id: "reviewed",
-      target: TOUR_IDS.reviewReviewed,
-      eyebrow: "Your checkpoint",
-      title: "Vouch with one click",
-      body: "Agree with the AI as-is? Mark reviewed signs off without changing a thing — so students only ever see grades you stand behind.",
-      placement: "bottom",
-    },
-    {
-      id: "publish",
-      target: TOUR_IDS.reviewPublish,
-      eyebrow: "Release it",
-      title: "Publish when you're ready",
-      body: "Publishing releases every graded submission in this homework to students at once. Nothing is visible to them until you do.",
-      placement: "bottom",
-    },
-  ],
-};
-
-/**
- * integrity — first time a flagged submission's understanding check is
- * shown. Two beats: what the check is, then the verdict. Only auto-fires
- * once the AI has reached a disposition, so both anchors are mounted.
- */
-const INTEGRITY_TOUR: TourDefinition = {
-  persona: "integrity",
-  compact: true,
-  steps: [
-    {
-      id: "check",
-      target: TOUR_IDS.integrityCheck,
-      intro: "This one was flagged",
-      eyebrow: "Understanding check",
-      title: "The AI quietly interviewed them",
-      body: "When work looks unlike a student's own, the AI asks them to explain it — a short conversation you can read in full.",
-      placement: "bottom",
-    },
-    {
-      id: "verdict",
-      target: TOUR_IDS.integrityVerdict,
-      eyebrow: "The verdict",
-      title: "A call, not a conviction",
-      body: "It summarizes whether the explanation matched the work. It's a signal to look closer — you stay the judge of what happens next.",
-      placement: "bottom",
-    },
-  ],
-};
-
-/**
- * insights — first open of the Student Insights tab with real activity.
- * Two beats: the per-student roster, then the framing that it's
- * formative signal rather than a grade.
- */
-const INSIGHTS_TOUR: TourDefinition = {
-  persona: "insights",
-  compact: true,
-  steps: [
-    {
-      id: "roster",
-      target: TOUR_IDS.insightsRoster,
-      intro: "Your class at a glance",
-      eyebrow: "The roster",
-      title: "Every student, one read",
-      body: "Each row rolls up a student's practice — effort, first-try rate, trend — with a status chip surfacing who needs a nudge.",
-      placement: "top",
-    },
-    {
-      id: "signal",
-      target: TOUR_IDS.insightsSignal,
-      eyebrow: "Read it right",
-      title: "Signal, not a grade",
-      body: "These are formative cues to steer your attention — not scores. Nothing here is shown to students or counted against them.",
-      placement: "bottom",
-    },
-  ],
-};
-
-/** All tours, keyed by persona overview or feature walkthrough. Each
- *  plugs into the same engine — no engine changes required to add one. */
+/** All tours, keyed by persona overview. Each plugs into the same
+ *  engine — no engine changes required to add one. */
 export const TOURS: Record<string, TourDefinition> = {
   teacher: TEACHER_TOUR,
   student: STUDENT_TOUR,
   personal: PERSONAL_TOUR,
-  "hw-create": HW_CREATE_TOUR,
-  "review-flow": REVIEW_FLOW_TOUR,
-  integrity: INTEGRITY_TOUR,
-  insights: INSIGHTS_TOUR,
 };
 
 export function getTour(key: string): TourDefinition | null {
