@@ -397,15 +397,59 @@ class GradingProbe(Probe):
 
     # ── deterministic check = does the grade match the label? ────────────
 
+    # Tolerance (in percentage points) for the deduction-ledger reconcile
+    # check. `points_off` is integer; `percent` can be fractional, so a
+    # sub-point gap is rounding, not a real disagreement. Matches
+    # grading_ai._LEDGER_TOLERANCE.
+    _LEDGER_TOLERANCE = 1.0
+
     def deterministic_checks(self, item: GeneratedItem) -> list[CheckResult]:
         actual = item.raw.get("actual_status")
         accepts = set(item.raw.get("accepts") or [])
         expected = item.raw.get("expected")
         ok = actual in accepts
-        return [
+        checks = [
             CheckResult(
                 f"score_status matches label (expected {expected}, got {actual})",
                 ok,
                 "" if ok else f"got {actual!r}, accept {sorted(accepts)}",
             )
         ]
+
+        # Ledger reconciles to the score: 100 − sum(points_off) ≈ percent.
+        # The deduction ledger must be a faithful receipt for the grade, not
+        # a free-floating annotation — a partial grade of 60 must itemize 40
+        # points of deductions. Empty ledger ⇒ full credit (percent 100).
+        grade = item.raw.get("grade") or {}
+        percent = grade.get("percent")
+        deductions = grade.get("deductions")
+        if isinstance(percent, (int, float)) and isinstance(deductions, list):
+            total_off = sum(
+                int(d.get("points_off", 0))
+                for d in deductions
+                if isinstance(d, dict)
+                and isinstance(d.get("points_off"), (int, float))
+                and not isinstance(d.get("points_off"), bool)
+            )
+            reconciled = 100.0 - total_off
+            recon_ok = abs(reconciled - float(percent)) <= self._LEDGER_TOLERANCE
+            checks.append(
+                CheckResult(
+                    "deduction ledger reconciles to percent "
+                    f"(100 − {total_off} = {reconciled}, percent={percent})",
+                    recon_ok,
+                    "" if recon_ok
+                    else f"ledger sums to {total_off} off, "
+                    f"expected {round(100.0 - float(percent), 2)}",
+                )
+            )
+        else:
+            checks.append(
+                CheckResult(
+                    "deduction ledger present and reconcilable",
+                    False,
+                    f"missing/invalid: percent={percent!r}, "
+                    f"deductions={type(deductions).__name__}",
+                )
+            )
+        return checks

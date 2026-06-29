@@ -85,6 +85,26 @@ partial credit.
 AND set `student_answer` to null. Do not invent placeholder prose for the answer field.
 - Keep reasoning concise (1-2 sentences per problem).
 
+Deduction ledger (REQUIRED for every problem — `deductions` field):
+Set `percent` FIRST as your holistic judgment, then itemize a `deductions` \
+ledger that RECONCILES to it: 100 − (sum of every entry's `points_off`) must \
+equal `percent`. This makes the grade a transparent receipt rather than an \
+unexplained number — decide the score, then show your arithmetic for it.
+- FULL credit (percent 100): emit an empty list (no entries) — nothing was \
+taken off.
+- PARTIAL credit: one entry per distinct thing that cost points, with \
+`points_off` summing to (100 − percent). Example: percent 95 → a single entry \
+with points_off 5; percent 60 → entries summing to 40.
+- ZERO credit (percent 0): entries summing to ~100 — a single entry with \
+points_off 100 and reason "No valid work / final answer wrong" is fine.
+- Each entry's `reason` is concise and teacher-facing and names the rubric \
+criterion that drove it (e.g. "Partial credit: small execution error — sign \
+flip reading the roots"). Set `step_ref` to the `step_num` of the student's \
+extracted work the deduction is about (so the review UI can highlight that \
+step), or null when it isn't step-specific (e.g. "no work shown", "final \
+answer wrong"). Keep the ledger consistent with `reasoning` — same call, \
+itemized.
+
 Student feedback (REQUIRED for every problem — `student_feedback` field):
 For each problem, in addition to `reasoning`, produce a `student_feedback` string \
 that the student will read directly when the teacher publishes the grade. This is \
@@ -320,7 +340,11 @@ async def grade_submission_with_ai(
 
     Returns:
         {"grades": [{problem_position, student_answer, score_status,
-                      percent, confidence, reasoning}]}
+                      percent, confidence, reasoning, student_feedback,
+                      deductions}]}
+        where `deductions` is the itemized partial-credit ledger
+        (list of {points_off, reason, step_ref}) that reconciles to
+        `percent` — see the grading prompt + _reconcile_deductions.
     """
     system = _GRADING_SYSTEM.format(
         rubric_block=_build_rubric_block(rubric),
@@ -359,10 +383,81 @@ async def grade_submission_with_ai(
 
 # ── Pipeline integration ───────────────────────────────────────────
 
+# Tolerance (in percentage points) for the deduction ledger reconciling
+# to `percent`. The model emits integer `points_off`; the clamped
+# `percent` can be fractional, so a sub-point gap is rounding, not a real
+# disagreement. A gap larger than this means the itemization genuinely
+# doesn't add up to the score — we keep the score and replace the ledger.
+_LEDGER_TOLERANCE = 1.0
+
+
+def _reconcile_deductions(
+    raw_deductions: Any,
+    percent: float,
+    *,
+    fallback_reason: str | None,
+    submission_id: str | None,
+    problem_id: str,
+) -> list[dict[str, Any]]:
+    """Sanitize the model's deduction ledger and make it reconcile to the
+    authoritative `percent` — NEVER the other way around.
+
+    The contract: 100 − sum(points_off) should equal `percent`. We sanitize
+    each entry (non-negative int `points_off`, string `reason`, int|null
+    `step_ref`) and check the sum against the target (100 − percent). When it
+    reconciles within `_LEDGER_TOLERANCE`, we keep the model's itemization.
+    When it doesn't, the ledger is untrustworthy — but the SCORE is owned by
+    `percent`, so we never let the bad ledger move it: we log the discrepancy
+    and replace the ledger with a single catch-all entry that reconciles by
+    construction (or `[]` for full credit). The persisted ledger therefore
+    ALWAYS reconciles to the persisted percent.
+    """
+    target = 100.0 - percent
+    items: list[dict[str, Any]] = []
+    total = 0
+    for d in raw_deductions or []:
+        if not isinstance(d, dict):
+            continue
+        po = d.get("points_off")
+        if not isinstance(po, (int, float)) or isinstance(po, bool):
+            continue
+        po_int = max(0, int(round(po)))
+        step_ref = d.get("step_ref")
+        if not isinstance(step_ref, int) or isinstance(step_ref, bool):
+            step_ref = None
+        reason = d.get("reason")
+        items.append({
+            "points_off": po_int,
+            "reason": str(reason) if reason else "",
+            "step_ref": step_ref,
+        })
+        total += po_int
+
+    if abs(total - target) <= _LEDGER_TOLERANCE:
+        return items
+
+    # Doesn't reconcile — trust percent, log, synthesize a consistent receipt.
+    logger.warning(
+        "deduction ledger didn't reconcile (submission=%s problem=%s): "
+        "sum(points_off)=%s, expected %s for percent=%s — replacing ledger, "
+        "score unchanged",
+        submission_id, problem_id, total, round(target, 2), percent,
+    )
+    rounded_target = int(round(target))
+    if rounded_target <= 0:
+        return []
+    return [{
+        "points_off": rounded_target,
+        "reason": fallback_reason or "Points off (itemization unavailable)",
+        "step_ref": None,
+    }]
+
 
 def _build_breakdown(
     grades: list[dict[str, Any]],
     pos_to_bid: dict[Any, str],
+    *,
+    submission_id: str | None = None,
 ) -> tuple[list[dict[str, Any]], float | None]:
     """Turn the model's raw per-problem grades into the actionable
     breakdown the teacher edits, plus the averaged `ai_score`.
@@ -378,6 +473,12 @@ def _build_breakdown(
       or -10 would corrupt `ai_score = total_percent / len(breakdown)`.
       Clamping the partial percent keeps every persisted percent — and
       therefore `ai_score` — inside [0, 100].
+
+    The per-problem `deductions` ledger is reconciled to the clamped
+    `percent` via `_reconcile_deductions` so the persisted itemization is
+    always a faithful receipt for the score; a ledger that doesn't add up
+    is replaced (the score, owned by `percent`, never moves). The raw model
+    ledger is preserved verbatim on `ai_breakdown` (the immutable snapshot).
     """
     for g in grades:
         raw_conf = g.get("confidence")
@@ -414,6 +515,15 @@ def _build_breakdown(
             "confidence": g.get("confidence"),
             "feedback": g.get("student_feedback") or g.get("reasoning"),
             "student_answer": g.get("student_answer"),
+            # Itemized partial-credit receipt, reconciled to `percent` (the
+            # source of truth for the score) — see _reconcile_deductions.
+            "deductions": _reconcile_deductions(
+                g.get("deductions"),
+                percent,
+                fallback_reason=g.get("reasoning"),
+                submission_id=submission_id,
+                problem_id=bid,
+            ),
         })
         total_percent += percent
 
@@ -491,7 +601,9 @@ async def run_ai_grading_for_submission(
     # model's confidence (in place) and partial percents so a corrupt
     # value can't push ai_score outside [0, 100].
     pos_to_bid = {p["position"]: p["bank_item_id"] for p in problems}
-    breakdown, ai_score = _build_breakdown(grades, pos_to_bid)
+    breakdown, ai_score = _build_breakdown(
+        grades, pos_to_bid, submission_id=str(submission_id),
+    )
 
     # Upsert the grade row (race-safe with teacher manual grading).
     await db.execute(

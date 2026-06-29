@@ -749,6 +749,7 @@ async def call_claude_vision(
     model: str | None = None,
     max_tokens: int = 1024,
     thinking_budget: int | None = None,
+    temperature: float | None = None,
     submission_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
 ) -> dict[str, object]:
@@ -761,6 +762,11 @@ async def call_claude_vision(
     call. This forces tool_choice to "auto" (required by the API). The
     budget must be >= 1024 and < max_tokens; thinking tokens are billed
     as output tokens.
+
+    `temperature` (if set) pins the sampling temperature — 0.0 makes the
+    read greedy/reproducible so the same image extracts the same work on
+    every run. Mirrors call_claude_json's guard: extended thinking forces
+    temperature 1.0, so a custom temperature requires thinking_budget=None.
     """
     if not _circuit.allow_request():
         raise RuntimeError("Circuit breaker is open — Claude API temporarily unavailable")
@@ -772,6 +778,13 @@ async def call_claude_vision(
     thinking_kwargs, effective_tool_choice = _build_thinking_kwargs(
         thinking_budget, max_tokens, tool_choice_default
     )
+    if temperature is not None:
+        if thinking_budget is not None and temperature != 1.0:
+            raise ValueError(
+                "extended thinking forces temperature 1.0; pass thinking_budget="
+                "None to use a custom temperature"
+            )
+        thinking_kwargs["temperature"] = temperature
 
     # Build a readable text summary of the input BEFORE the call, so it's
     # available to log on the FAILURE paths too (binary blocks replaced
