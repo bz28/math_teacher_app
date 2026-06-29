@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   teacher,
@@ -9,6 +10,7 @@ import {
   type TeacherSection,
 } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NewPracticeModal } from "./_pieces/new-practice-modal";
 
 /**
  * Class struggle-insights — "Where the class is struggling." A re-teach
@@ -27,11 +29,15 @@ import { Skeleton } from "@/components/ui/skeleton";
  */
 export function PracticeStrugglePanel({ courseId }: { courseId: string }) {
   const reduce = useReducedMotion();
+  const router = useRouter();
   const [sections, setSections] = useState<TeacherSection[] | null>(null);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [insights, setInsights] = useState<PracticeInsightsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // The concept the teacher chose to re-teach — opens the new-practice
+  // modal pre-seeded on that concept. Null = modal closed.
+  const [reteach, setReteach] = useState<string | null>(null);
 
   // Load the section list once — drives the pivot and gives us a
   // section_id to scope the (per-section) insights read.
@@ -150,10 +156,31 @@ export function PracticeStrugglePanel({ courseId }: { courseId: string }) {
                 item={item}
                 rank={i + 1}
                 reduce={!!reduce}
+                onReteach={() => setReteach(item.concept)}
               />
             ))}
           </ol>
         </div>
+      )}
+
+      {/* Re-teach → pre-seeded practice generation. Closes the
+          insight→action loop: the chosen concept seeds the new-practice
+          modal's title and generation focus so the teacher lands ready to
+          generate a targeted set on exactly what the class struggled on. */}
+      {reteach !== null && (
+        <NewPracticeModal
+          courseId={courseId}
+          seed={{ title: `Re-teach: ${reteach}`, focus: reteach }}
+          onClose={() => setReteach(null)}
+          onCreated={(newId) => {
+            setReteach(null);
+            // Mirror the practice tab: the new set opens in the editor,
+            // whose generating hero covers the wait while items land.
+            router.push(
+              `/school/teacher/courses/${courseId}/homework/${newId}`,
+            );
+          }}
+        />
       )}
     </section>
   );
@@ -165,10 +192,12 @@ function StruggleRow({
   item,
   rank,
   reduce,
+  onReteach,
 }: {
   item: PracticeInsightItem;
   rank: number;
   reduce: boolean;
+  onReteach: () => void;
 }) {
   // Proportion of the students who practiced this item that ended up
   // struggling on it. Guard the denominator — students_struggled is
@@ -195,14 +224,40 @@ function StruggleRow({
         </span>
       </div>
 
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[color:var(--color-surface-alt-2)]">
-        <motion.div
-          className="h-full rounded-full"
-          style={{ backgroundColor: "rgb(14, 82, 56)" }}
-          initial={reduce ? false : { width: 0 }}
-          animate={{ width: `${ratio * 100}%` }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-        />
+      {/* Proportion bar with a quiet trailing action — the bar names the
+          struggle, the "Re-teach" link is the natural next step on it. */}
+      <div className="mt-2 flex items-center gap-3">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[color:var(--color-surface-alt-2)]">
+          <motion.div
+            className="h-full rounded-full"
+            style={{ backgroundColor: "rgb(14, 82, 56)" }}
+            initial={reduce ? false : { width: 0 }}
+            animate={{ width: `${ratio * 100}%` }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={onReteach}
+          aria-label={`Re-teach ${item.concept} — start a targeted practice set`}
+          className="group/reteach inline-flex shrink-0 items-center gap-1 rounded-[--radius-sm] text-[11px] font-medium text-text-muted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
+          Re-teach
+          <svg
+            aria-hidden
+            width="11"
+            height="11"
+            viewBox="0 0 14 14"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="transition-transform group-hover/reteach:translate-x-0.5"
+          >
+            <path d="M5 3l4 4-4 4" />
+          </svg>
+        </button>
       </div>
     </li>
   );
