@@ -3047,6 +3047,13 @@
             "title": "Student Id",
             "type": "string"
           },
+          "top_struggles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Top Struggles",
+            "type": "array"
+          },
           "trend": {
             "anyOf": [
               {
@@ -3074,7 +3081,8 @@
           "retry_count",
           "revealed_count",
           "trend",
-          "status"
+          "status",
+          "top_struggles"
         ],
         "title": "StudentInsight",
         "type": "object"

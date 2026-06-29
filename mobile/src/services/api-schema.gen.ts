@@ -4506,6 +4506,8 @@ export interface components {
             status: "thriving" | "on_track" | "needs_nudge" | "struggling" | "no_activity";
             /** Student Id */
             student_id: string;
+            /** Top Struggles */
+            top_struggles: string[];
             /** Trend */
             trend: ("improving" | "slipping" | "steady") | null;
         };
