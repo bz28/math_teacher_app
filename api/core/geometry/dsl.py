@@ -244,14 +244,23 @@ class CircleFigure(BaseModel):
                 )
             seen_chord[canon] = c
 
-        for chord_key in self.chord_labels:
-            if chord_key not in self.chords and chord_key[::-1] not in self.chords:
-                raise ValueError(
-                    f"chord_labels key {chord_key!r} doesn't match any entry in chords",
-                )
-        for pt in self.point_labels:
-            if pt not in names:
-                raise ValueError(f"point_labels references unknown point: {pt}")
+        # Tolerate (drop) label keys that don't match a declared chord/point
+        # rather than rejecting the whole figure. The LLM routinely keys a
+        # label off geometry it never declared structurally — a tangent
+        # segment like "TA", or an external point "P" that the circumference-
+        # only `points` map can't even express. The renderer already drives
+        # entirely off `chords`/`points` and ignores unmatched label keys
+        # (`chord_labels.get(chord)`, `point_labels.get(name, name)`), so the
+        # strict raise bought nothing — it only turned a harmless unused label
+        # into a dropped diagram (the figure never rendered at all). Filtering
+        # keeps every valid label and silently discards the stray ones.
+        self.chord_labels = {
+            k: v for k, v in self.chord_labels.items()
+            if k in self.chords or k[::-1] in self.chords
+        }
+        self.point_labels = {
+            k: v for k, v in self.point_labels.items() if k in names
+        }
 
         return self
 
