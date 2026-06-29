@@ -14730,6 +14730,35 @@
         ]
       }
     },
+    "/v1/teacher/rubric-sources": {
+      "get": {
+        "description": "Teacher's assignments that already have a non-empty grading rubric,\nfor the \"Copy grading setup from another homework\" picker. Returns a\nlean projection (id, title, course name, type, rubric) \u2014 no content /\nanswer-key hydration, no per-assignment stats \u2014 since the picker only\nneeds to label each option and load its rubric on pick. Reuses the\nexisting `Assignment.rubric` data; no new storage.",
+        "operationId": "list_rubric_sources_v1_teacher_rubric_sources_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Rubric Sources V1 Teacher Rubric Sources Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Rubric Sources",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
     "/v1/teacher/submissions/{submission_id}": {
       "get": {
         "description": "Full per-submission detail for the teacher view: image + per-\nproblem typed answers shown alongside the original problem text\nand the answer key. No grading or annotations in this PR.",
