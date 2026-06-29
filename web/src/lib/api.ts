@@ -912,6 +912,20 @@ export interface TeacherRubric {
   notes?: string;
 }
 
+/** One reusable grading setup the teacher already authored on another
+ *  assignment. Powers the "Copy grading setup from another homework"
+ *  picker on the grading-setup card — reuses existing
+ *  `Assignment.rubric` data, no new storage. The endpoint only returns
+ *  assignments whose rubric is non-empty. */
+export interface RubricSource {
+  id: string;
+  title: string;
+  course_name: string;
+  type: string;
+  rubric: TeacherRubric;
+  created_at: string;
+}
+
 /** Per-problem grade row. Shape matches the SubmissionGrade.breakdown
  *  JSON persisted by the grade endpoint — `score_status` drives the
  *  Full/Partial/Zero pill; `percent` is the committed numeric value.
@@ -1278,6 +1292,12 @@ export const teacher = {
   },
   allAssignments() {
     return apiFetch<{ assignments: TeacherAssignment[] }>("/teacher/assignments");
+  },
+  /** Assignments that already have a non-empty grading rubric, for the
+   *  "Copy grading setup from another homework" picker. Lean projection
+   *  (id/title/course/rubric) — no content or stats. */
+  rubricSources() {
+    return apiFetch<{ sources: RubricSource[] }>("/teacher/rubric-sources");
   },
   assignment(assignmentId: string) {
     return apiFetch<TeacherAssignment & {
