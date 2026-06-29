@@ -44,6 +44,48 @@ def test_key_is_stable_and_order_independent() -> None:
     assert c.key("call_claude_json", {"a": 1, "b": 3, "model": "m"}) != k1
 
 
+def test_key_redacts_run_varying_ids() -> None:
+    """A multi-turn agent's transcript carries run-varying ids — a fresh DB-row
+    UUID (the integrity `problem_id`) and the live API's ephemeral `toolu_…`
+    tool-use ids. The key must redact BOTH so the same logical turn replays at
+    $0 across record/replay sessions, while genuinely different content (the
+    growing transcript / tool input) still hashes distinctly."""
+    c = Cassette("record", root=cass_mod._DEFAULT_DIR)
+
+    def turn(problem_id: str, toolu: str) -> dict[str, Any]:
+        return {
+            "mode": "integrity_agent",
+            "model": "m",
+            "system_prompt": "agent",
+            "messages": [
+                {"role": "user", "content": f"problem_id: {problem_id}"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "tool_use", "id": toolu, "name": "v", "input": {}},
+                    ],
+                },
+            ],
+        }
+
+    # Same logical turn, different run-varying ids → identical key.
+    k_run1 = c.key(
+        "call_claude_conversation",
+        turn("d5f7b3a2-1c4e-4a6b-9e0d-2f8c7a1b6e30", "toolu_01AAAAAAAAAAAAAAAAAAAAAA"),
+    )
+    k_run2 = c.key(
+        "call_claude_conversation",
+        turn("9e0d2f8c-7a1b-4e30-8c7a-1b6e305f7b3a", "toolu_01ZZZZZZZZZZZZZZZZZZZZZZ"),
+    )
+    assert k_run1 == k_run2
+
+    # A different tool name is real content — must still hash distinctly even
+    # though the ids redact to the same tokens.
+    other = turn("d5f7b3a2-1c4e-4a6b-9e0d-2f8c7a1b6e30", "toolu_01AAAAAAAAAAAAAAAAAAAAAA")
+    other["messages"][1]["content"][0]["name"] = "finish_check"
+    assert c.key("call_claude_conversation", other) != k_run1
+
+
 def test_build_identity_drops_noise_and_resolves_model() -> None:
     ident = build_identity(
         {
