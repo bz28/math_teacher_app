@@ -30,6 +30,50 @@ import {
 
 type GradeStatus = GradeBreakdownEntry["score_status"];
 
+// ── Keyboard grading — focus-safety helpers ─────────────────────────
+//
+// The grading shortcuts (1/2/3, j/k, Enter…) live on a document-level
+// listener so they work no matter where focus sits in the problems
+// pane. That power makes guarding against accidental hijacks the whole
+// game: a teacher typing "2/3" in a feedback box, or a percent into the
+// partial input, must NEVER trip a grade shortcut.
+//
+// `isTypingTarget` is the gate — when the active element is any text
+// surface (input, textarea, select, or contenteditable) the global
+// handler bails entirely. We read `document.activeElement` rather than
+// the event target because the listener is global and we care about
+// where focus actually *is*, not where the key originated.
+function isTypingTarget(el: Element | null): boolean {
+  if (!el) return false;
+  const tag = el.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return (el as HTMLElement).isContentEditable === true;
+}
+
+// Any open modal on this page renders a `[role="dialog"]` (the shared
+// Modal — publish/regrade confirms — plus the verdict-legend, integrity
+// conversation, and image lightbox). They're all conditionally rendered,
+// so a match means a dialog is genuinely open. While one is, the grading
+// shortcuts must NOT fire — otherwise 1/2/3 would grade the problem
+// *behind* the dialog and Enter/→ would switch students underneath a
+// publish/regrade confirm. The dialog owns the keyboard until it closes.
+function isDialogOpen(): boolean {
+  return document.querySelector('[role="dialog"]') !== null;
+}
+
+// `isActionableTarget` distinguishes a focused button/link (which
+// handles its own Enter/Space activation) from a focused problem row
+// (an inert tabIndex=-1 div). We only treat Enter as "next student"
+// when focus is NOT on an actionable control, so pressing Enter on a
+// focused grade button activates that button instead of double-firing
+// a student advance.
+function isActionableTarget(el: Element | null): boolean {
+  if (!el) return false;
+  const tag = el.tagName;
+  if (tag === "BUTTON" || tag === "A") return true;
+  return el.getAttribute("role") === "button";
+}
+
 // Rubric drift — does the grade's frozen rubric snapshot differ from
 // the assignment's current rubric? Normalizes both sides to the same
 // four-field shape with missing fields treated as empty strings, so a
@@ -1792,6 +1836,225 @@ function SubmissionDetailPanel({
   // explicit "Mark reviewed" affordance (the no-edit accept path).
   const canMarkReviewed = detail.final_score !== null && !detail.reviewed_at;
 
+  // ── Keyboard grading ──────────────────────────────────────────────
+  //
+  // The single biggest speed multiplier for grinding through a stack of
+  // papers: 1/2/3 grade the *focused* problem (driving the same
+  // setProblemGrade the buttons call), then advance to the next
+  // ungraded one so a teacher can rip 1,1,2,1,3 straight down. j/k (or
+  // ↑/↓) move focus; Enter/→ jumps to the next student. The focus model
+  // is keyboard-real — each row is a tabIndex=-1 div that we actually
+  // `.focus()`, so screen readers track it and Tab order stays sane.
+  const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
+  // Live DOM handles to each problem row, indexed by position in
+  // detail.problems, so keyboard nav can move real focus.
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // The default focus lands on the first ungraded problem (or the first
+  // problem when all are graded / there are none). Derived — not stored
+  // via an effect — so it stays correct as the student changes without
+  // tripping the set-state-in-effect rule.
+  const defaultFocusIndex = useMemo(() => {
+    const i = detail.problems.findIndex(
+      (p) => !breakdownByProblem.has(p.bank_item_id),
+    );
+    return i === -1 ? 0 : i;
+  }, [detail.problems, breakdownByProblem]);
+
+  // Explicit focus is keyed by submission_id so it auto-resets when the
+  // teacher moves to the next student (the stored sid no longer matches,
+  // so we fall back to that student's first-ungraded default) — again
+  // without an effect.
+  const [focusState, setFocusState] = useState<{ sid: string; index: number } | null>(
+    null,
+  );
+  const focusedIndex =
+    focusState && focusState.sid === detail.submission_id
+      ? Math.min(focusState.index, Math.max(0, detail.problems.length - 1))
+      : defaultFocusIndex;
+
+  // Move the focus highlight AND real DOM focus to a row. preventScroll
+  // on .focus() then a single smooth scrollIntoView avoids a double
+  // jump; reduced-motion users get an instant scroll.
+  const moveFocus = useCallback(
+    (index: number) => {
+      const clamped = Math.max(0, Math.min(index, detail.problems.length - 1));
+      setFocusState({ sid: detail.submission_id, index: clamped });
+      const el = rowRefs.current[clamped];
+      if (!el) return;
+      const reduce =
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      el.focus({ preventScroll: true });
+      el.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+    },
+    [detail.problems.length, detail.submission_id],
+  );
+
+  // After grading the focused problem, advance to the next *ungraded*
+  // problem below it; wrap to an earlier ungraded one if the tail is
+  // done; else just step down one (or hold at the last row). The
+  // just-graded row at `from` is skipped because we start the scan at
+  // from+1 — breakdownByProblem hasn't optimistically updated yet at
+  // call time, so we can't rely on it reflecting the grade we just set.
+  const nextUngradedAfter = useCallback(
+    (from: number) => {
+      const probs = detail.problems;
+      for (let i = from + 1; i < probs.length; i++) {
+        if (!breakdownByProblem.has(probs[i].bank_item_id)) return i;
+      }
+      for (let i = 0; i < from; i++) {
+        if (!breakdownByProblem.has(probs[i].bank_item_id)) return i;
+      }
+      return Math.min(from + 1, probs.length - 1);
+    },
+    [detail.problems, breakdownByProblem],
+  );
+
+  // Grade the focused problem via the SAME path the buttons use. For
+  // partial we preserve an existing partial percent (so re-pressing 2
+  // doesn't clobber a deliberate value) and otherwise default to 50,
+  // exactly like the Partial button's pickPartial.
+  const gradeFocused = useCallback(
+    (status: GradeStatus, explicitPercent?: number) => {
+      const p = detail.problems[focusedIndex];
+      if (!p) return;
+      let pct: number | undefined;
+      if (status === "partial") {
+        if (explicitPercent !== undefined) {
+          // A keyboard quarter-grade (75 / 50 / 25) — use it directly.
+          pct = explicitPercent;
+        } else {
+          const existing = breakdownByProblem.get(p.bank_item_id);
+          pct =
+            existing?.score_status === "partial"
+              ? Math.round(existing.percent)
+              : 50;
+        }
+      }
+      onGradeProblem(p.bank_item_id, status, pct);
+      moveFocus(nextUngradedAfter(focusedIndex));
+    },
+    [
+      detail.problems,
+      focusedIndex,
+      breakdownByProblem,
+      onGradeProblem,
+      moveFocus,
+      nextUngradedAfter,
+    ],
+  );
+
+  // The document-level grading listener. Memoized over the current
+  // focus/handlers; the effect re-subscribes when that identity changes.
+  const handleGradingKey = useCallback(
+    (e: KeyboardEvent) => {
+      // While the cheatsheet — or ANY other modal (publish/regrade
+      // confirm, verdict legend, integrity conversation, image lightbox)
+      // — is open, that dialog owns the keyboard. Don't grade or navigate
+      // the submission underneath it. The cheatsheet flag is explicit;
+      // isDialogOpen() catches every other [role="dialog"].
+      if (cheatsheetOpen || isDialogOpen()) return;
+
+      // "?" toggles the shortcut cheatsheet — but only when not typing
+      // (a "?" inside feedback must reach the textarea).
+      if (e.key === "?") {
+        if (isTypingTarget(document.activeElement)) return;
+        e.preventDefault();
+        setCheatsheetOpen(true);
+        return;
+      }
+
+      // Escape blurs a focused text field (percent / feedback) so the
+      // grading shortcuts resume. Handled before the typing-gate so it
+      // can act *on* the typing target.
+      if (e.key === "Escape") {
+        const a = document.activeElement;
+        if (isTypingTarget(a)) (a as HTMLElement).blur();
+        return;
+      }
+
+      // The critical gate: never hijack typing.
+      if (isTypingTarget(document.activeElement)) return;
+      // Leave browser/OS chords alone (Cmd+1 tab switch, etc.).
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      switch (e.key) {
+        // Quarter-scale grading: 1=100, 2=75, 3=50, 4=25, 5=0. The common
+        // partial grades sit on dedicated keys, so the teacher rarely needs
+        // the % field — each press grades the focused problem and advances.
+        case "1":
+          e.preventDefault();
+          gradeFocused("full");
+          break;
+        case "2":
+          e.preventDefault();
+          gradeFocused("partial", 75);
+          break;
+        case "3":
+          e.preventDefault();
+          gradeFocused("partial", 50);
+          break;
+        case "4":
+          e.preventDefault();
+          gradeFocused("partial", 25);
+          break;
+        case "5":
+          e.preventDefault();
+          gradeFocused("zero");
+          break;
+        case "j":
+        case "J":
+        case "ArrowDown":
+          e.preventDefault();
+          moveFocus(focusedIndex + 1);
+          break;
+        case "k":
+        case "K":
+        case "ArrowUp":
+          e.preventDefault();
+          moveFocus(focusedIndex - 1);
+          break;
+        case "Enter":
+          // Let a focused button/link handle its own Enter; only Enter
+          // from an inert focus (a row / body) means "next student".
+          if (isActionableTarget(document.activeElement)) break;
+          if (nextStudent) {
+            e.preventDefault();
+            onSelectNext();
+          }
+          break;
+        case "ArrowRight":
+        case "]":
+          if (nextStudent) {
+            e.preventDefault();
+            onSelectNext();
+          }
+          break;
+        default:
+          break;
+      }
+    },
+    [
+      cheatsheetOpen,
+      gradeFocused,
+      moveFocus,
+      focusedIndex,
+      nextStudent,
+      onSelectNext,
+    ],
+  );
+
+  useEffect(() => {
+    // Capture phase, deliberately: it runs before React's bubble-phase
+    // synthetic handlers, so when Enter is pressed inside the partial %
+    // input the field still holds focus (isTypingTarget → true) and we
+    // bail — before the input's own onKeyDown blurs it. A bubble-phase
+    // listener would see focus already gone and mis-fire "next student".
+    document.addEventListener("keydown", handleGradingKey, true);
+    return () => document.removeEventListener("keydown", handleGradingKey, true);
+  }, [handleGradingKey]);
+
   return (
     <div className="space-y-4">
       {/* Compact student strip — name on the left, progress + next on
@@ -1956,9 +2219,27 @@ function SubmissionDetailPanel({
           lightbox lives in the page header (one click away from any
           problem). */}
       <div className="rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-          Problems · {totalProblems}
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+            Problems · {totalProblems}
+          </p>
+          {/* Quiet, discoverable entry point to the keyboard cheatsheet.
+              Mirrors the integrity "Guide" affordance so the page has one
+              consistent "press for help" vocabulary. */}
+          <button
+            type="button"
+            onClick={() => setCheatsheetOpen(true)}
+            className="inline-flex shrink-0 items-center gap-1 rounded-[--radius-sm] px-1.5 py-0.5 text-[10px] font-semibold text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            aria-label="Show keyboard shortcuts"
+            aria-haspopup="dialog"
+          >
+            Press{" "}
+            <kbd className="rounded border border-border-light bg-[color:var(--color-surface-alt-2)] px-1 font-sans text-[10px] font-bold text-text-secondary">
+              ?
+            </kbd>{" "}
+            for shortcuts
+          </button>
+        </div>
         <div className="mt-3">
           <RubricSection
             rubric={rubric}
@@ -1967,7 +2248,7 @@ function SubmissionDetailPanel({
           />
         </div>
         <div className="mt-3 space-y-3">
-          {detail.problems.map((p) => (
+          {detail.problems.map((p, i) => (
             <ProblemGradeRow
               // Compose the key with submission_id so the row remounts
               // per student. Without this, React reuses the same
@@ -1978,6 +2259,10 @@ function SubmissionDetailPanel({
               problem={p}
               entry={breakdownByProblem.get(p.bank_item_id) ?? null}
               aiGrade={aiByPosition.get(p.position) ?? null}
+              focused={i === focusedIndex}
+              rowRef={(el) => {
+                rowRefs.current[i] = el;
+              }}
               onChange={(status, partialPercent) =>
                 onGradeProblem(p.bank_item_id, status, partialPercent)
               }
@@ -1988,6 +2273,10 @@ function SubmissionDetailPanel({
           ))}
         </div>
       </div>
+
+      {cheatsheetOpen && (
+        <KeyboardShortcutsModal onClose={() => setCheatsheetOpen(false)} />
+      )}
     </div>
   );
 }
@@ -2271,12 +2560,20 @@ function ProblemGradeRow({
   problem,
   entry,
   aiGrade,
+  focused,
+  rowRef,
   onChange,
   onFeedbackChange,
 }: {
   problem: TeacherSubmissionDetailProblem;
   entry: GradeBreakdownEntry | null;
   aiGrade: AiGradeEntry | null;
+  /** This row is the keyboard-focused problem — draws the left accent
+   *  bar + ring and receives real DOM focus via `rowRef`. */
+  focused: boolean;
+  /** Registers the row's root element with the parent so keyboard nav
+   *  can move actual focus (the model is focus-real, not aria-only). */
+  rowRef: (el: HTMLDivElement | null) => void;
   onChange: (status: GradeStatus, partialPercent?: number) => void;
   onFeedbackChange: (text: string) => void;
 }) {
@@ -2438,7 +2735,22 @@ function ProblemGradeRow({
     : null;
 
   return (
-    <div className="rounded-[--radius-md] border border-border-light bg-surface/40 p-4">
+    <div
+      ref={rowRef}
+      tabIndex={-1}
+      // Inert focus target: a tabIndex=-1 div the parent .focus()es so
+      // keyboard grading has a real focus anchor. aria-current marks it
+      // as the active row for assistive tech.
+      aria-current={focused ? "true" : undefined}
+      className={`rounded-[--radius-md] border bg-surface/40 p-4 outline-none transition-[box-shadow,border-color] ${
+        focused
+          ? // Editorial focus affordance: a quiet left accent bar (inset
+            // shadow so it hugs the rounded corner) plus a faint ring —
+            // present, not loud.
+            "border-primary/40 shadow-[inset_3px_0_0_0_var(--color-primary)] ring-1 ring-primary/20"
+          : "border-border-light"
+      }`}
+    >
       <div className="flex items-baseline gap-2">
         <span className="text-xs font-bold text-text-muted">{problem.position}.</span>
         <div className="min-w-0 flex-1">
@@ -2971,6 +3283,155 @@ function VerdictLegendModal({ onClose }: { onClose: () => void }) {
             );
           })}
         </ul>
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Keyboard shortcuts cheatsheet ───────────────────────────────────
+//
+// A small, dismissible reference for the grading keys, opened by "?"
+// or the quiet "Press ? for shortcuts" hint. Same modal vocabulary as
+// the integrity verdict legend above (Escape-closes, click-outside,
+// focus moved into the dialog) so the page has one consistent dialog
+// behaviour.
+
+const SHORTCUT_GROUPS: { heading: string; rows: { keys: string[]; label: string }[] }[] = [
+  {
+    heading: "Grade the focused problem",
+    rows: [
+      { keys: ["1"], label: "Full credit — 100%" },
+      { keys: ["2"], label: "Partial — 75%" },
+      { keys: ["3"], label: "Partial — 50%" },
+      { keys: ["4"], label: "Partial — 25%" },
+      { keys: ["5"], label: "No credit — 0%" },
+    ],
+  },
+  {
+    heading: "Move",
+    rows: [
+      { keys: ["J", "↓"], label: "Next problem" },
+      { keys: ["K", "↑"], label: "Previous problem" },
+    ],
+  },
+  {
+    heading: "Students",
+    rows: [{ keys: ["Enter", "→"], label: "Next student" }],
+  },
+  {
+    heading: "Help",
+    rows: [
+      { keys: ["?"], label: "Toggle this cheatsheet" },
+      { keys: ["Esc"], label: "Close, or leave a text field" },
+    ],
+  },
+];
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="inline-flex min-w-[1.5rem] items-center justify-center rounded-[--radius-sm] border border-border-light bg-[color:var(--color-surface-alt-2)] px-1.5 py-0.5 font-sans text-[11px] font-bold text-text-secondary shadow-sm">
+      {children}
+    </kbd>
+  );
+}
+
+function KeyboardShortcutsModal({ onClose }: { onClose: () => void }) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  // Escape closes — bubble phase, matching the verdict legend. The
+  // panel's grading listener bails while this modal is open, so the
+  // two never fight over a keystroke.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "?") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // Move focus into the dialog so SR announces the title and Tab cycles
+  // inside; the wrapper has tabIndex={-1} purely to be focusable.
+  useEffect(() => {
+    dialogRef.current?.focus();
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kbd-shortcuts-title"
+        className="w-full max-w-md rounded-[--radius-xl] bg-surface p-6 shadow-xl focus:outline-none"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2
+              id="kbd-shortcuts-title"
+              className="text-lg font-bold text-text-primary"
+            >
+              Keyboard shortcuts
+            </h2>
+            <p className="mt-1 text-xs text-text-muted">
+              Grade without leaving the keyboard — press a number to score the
+              highlighted problem, then it advances to the next ungraded one.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-full p-1 text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <span aria-hidden className="text-lg leading-none">×</span>
+          </button>
+        </div>
+        <div className="mt-4 space-y-4">
+          {SHORTCUT_GROUPS.map((group) => (
+            <div key={group.heading}>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+                {group.heading}
+              </p>
+              <ul className="mt-2 space-y-1.5">
+                {group.rows.map((row) => (
+                  <li
+                    key={row.label}
+                    className="flex items-center justify-between gap-4"
+                  >
+                    <span className="text-sm text-text-primary">{row.label}</span>
+                    <span className="flex shrink-0 items-center gap-1">
+                      {row.keys.map((k, i) => (
+                        <span key={k} className="flex items-center gap-1">
+                          {i > 0 && (
+                            <span className="text-[10px] text-text-muted">or</span>
+                          )}
+                          <Kbd>{k}</Kbd>
+                        </span>
+                      ))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
         <div className="mt-6 flex justify-end">
           <button
             type="button"
