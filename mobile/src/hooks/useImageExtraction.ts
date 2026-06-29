@@ -155,6 +155,12 @@ export function useImageExtraction(
     try {
       const allProblems: string[] = [];
       let worstConfidence = "high";
+      // Track API failures separately: allSettled swallows rejections, so
+      // without this a service error (out of credits / rate-limit / network)
+      // would look identical to "found nothing" and we'd tell the student to
+      // draw bigger boxes — chasing a problem that isn't there. Mirrors the
+      // web fix (#692).
+      let anyRejected = false;
 
       for (let i = 0; i < rectangles.length; i += 3) {
         const batch = rectangles.slice(i, i + 3);
@@ -171,6 +177,8 @@ export function useImageExtraction(
             if (r.value.confidence === "low") worstConfidence = "low";
             else if (r.value.confidence === "medium" && worstConfidence !== "low")
               worstConfidence = "medium";
+          } else {
+            anyRejected = true;
           }
         }
         setState((prev) => ({
@@ -180,7 +188,11 @@ export function useImageExtraction(
       }
 
       if (allProblems.length === 0) {
-        setError("No problems found in the selected areas. Try drawing larger rectangles.");
+        setError(
+          anyRejected
+            ? "Couldn't reach the extraction service. Please try again in a moment."
+            : "No problems found in the selected areas. Try drawing larger boxes.",
+        );
         setState((prev) => ({ ...prev, phase: "preview", extracting: false, extractionProgress: null }));
         return;
       }
