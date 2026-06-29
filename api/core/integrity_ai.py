@@ -539,6 +539,28 @@ def build_problems_briefing(
     return "\n".join(lines)
 
 
+class _AgentContentBlock:
+    """Attribute-accessible view over one serialized content block.
+
+    `call_claude_conversation` returns JSON-native dicts (so the harness
+    cassette can round-trip them); the agent loop in
+    `integrity_pipeline` reads blocks via `getattr(b, "type"/"text"/
+    "name"/"id"/"input")`. This thin wrapper exposes exactly those
+    attributes so the pipeline is identical whether the turn was a live
+    Claude call or a $0 cassette replay — no `isinstance` coupling to
+    the SDK's block classes anywhere downstream.
+    """
+
+    __slots__ = ("type", "text", "id", "name", "input")
+
+    def __init__(self, block: dict[str, Any]) -> None:
+        self.type = block.get("type")
+        self.text = block.get("text", "")
+        self.id = block.get("id", "")
+        self.name = block.get("name", "")
+        self.input = block.get("input", {})
+
+
 async def run_agent_turn(
     system_prompt: str,
     messages: list[dict[str, Any]],
@@ -549,18 +571,24 @@ async def run_agent_turn(
 ) -> list[Any]:
     """One Claude round trip for the conversational integrity agent.
 
-    Returns the raw response.content (list of content blocks). The
-    caller walks the blocks: for tool_use blocks it must validate,
-    apply side effects, and reply with tool_result messages; then
-    call this again until the model returns text without any
-    tool_use.
+    Returns the assistant's content blocks as `_AgentContentBlock`
+    views (text + tool_use). The caller walks the blocks: for tool_use
+    blocks it must validate, apply side effects, and reply with
+    tool_result messages; then call this again until the model returns
+    text without any tool_use.
+
+    `temperature=0.0` pins the verdict so an identical transcript yields
+    the same disposition on every run — the precondition for measuring a
+    judgment change (the integrity eval harness) rather than chasing
+    sampling noise. The integrity Vision extraction upstream is already
+    temp-0 (extract_student_work), so the whole chain is reproducible.
 
     `submission_id` and `call_metadata` are forwarded to the LLM-call
     log so the admin dashboard can correlate the agent's calls with
     the rest of the submission's pipeline (Vision, equivalence,
     grading) and surface posture/turn context as debug chips.
     """
-    return await call_claude_conversation(
+    blocks = await call_claude_conversation(
         system_prompt,
         messages,
         LLMMode.INTEGRITY_AGENT,
@@ -568,9 +596,11 @@ async def run_agent_turn(
         user_id=user_id,
         model=MODEL_REASON,
         max_tokens=AGENT_MAX_TOKENS_PER_TURN,
+        temperature=0.0,
         submission_id=submission_id,
         call_metadata=call_metadata,
     )
+    return [_AgentContentBlock(b) for b in blocks]
 
 
 # ── Silent per-wrong-problem diagnosis ──────────────────────────────

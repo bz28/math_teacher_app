@@ -73,6 +73,22 @@
       ]
     }
   },
+  "16db3b7ddbd9d2c6929f5989e47aa143": {
+    "meta": {
+      "mode": "integrity_answer_equivalence",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a math grader checking equivalence of final answers. Return one entry pe || For each problem below, decide whether the student's answer is mathematically equivalent to the answer key. Equivale",
+      "recorded_at": 1782754942.908724
+    },
+    "response": {
+      "results": [
+        {
+          "equivalent": false,
+          "problem_position": 1
+        }
+      ]
+    }
+  },
   "1b17b9005a65597489624961d711df8a": {
     "meta": {
       "mode": "practice_eval",
@@ -360,6 +376,22 @@
           "score_status": "zero",
           "student_answer": "$x = 17$",
           "student_feedback": "Your steps don't reflect the algebra needed to solve for x. To isolate x, start by subtracting 3 from both sides (2x = 8), then divide both sides by 2 to get x = 4."
+        }
+      ]
+    }
+  },
+  "61d7e09fe784f9b78e89f11d9d0b9de8": {
+    "meta": {
+      "mode": "integrity_answer_equivalence",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a math grader checking equivalence of final answers. Return one entry pe || For each problem below, decide whether the student's answer is mathematically equivalent to the answer key. Equivale",
+      "recorded_at": 1782754893.010622
+    },
+    "response": {
+      "results": [
+        {
+          "equivalent": false,
+          "problem_position": 1
         }
       ]
     }

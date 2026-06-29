@@ -10,6 +10,7 @@ from tests.harness.probe import Probe
 from tests.harness.probes.generation import GenerationProbe
 from tests.harness.probes.geometry import GeometryProbe
 from tests.harness.probes.grading import GradingProbe
+from tests.harness.probes.integrity import IntegrityProbe
 from tests.harness.probes.latex import LatexProbe
 
 PROBES: dict[str, Callable[[int], Probe]] = {
@@ -23,4 +24,9 @@ PROBES: dict[str, Callable[[int], Probe]] = {
     # Grading-quality golden set: a fixed 12-case labeled suite, so (like
     # generation) the per-case count is a property of the suite, not --count.
     "grading": lambda count: GradingProbe(),
+    # Integrity-judgment golden set: a fixed 14-case labeled suite driving the
+    # real conversational agent. Like grading, the suite size is a property of
+    # the corpus, not --count. $0 replay gates the scaffolding; --mode record
+    # re-records for a judgment sweep.
+    "integrity": lambda count: IntegrityProbe(),
 }
