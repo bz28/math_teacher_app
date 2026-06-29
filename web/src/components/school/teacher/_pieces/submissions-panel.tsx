@@ -96,6 +96,22 @@ function OverviewBadge({ overview }: { overview: IntegrityOverview | null }) {
   return <DispositionPill disposition={overview.disposition} />;
 }
 
+// Student declined the OCR reading on the confirm screen — the
+// submission skipped AI grading + integrity, so there's no
+// integrity_overview to render. Without this badge the row would show
+// no signal at all and the "reader got it wrong" claim would vanish
+// silently; the teacher is the backstop, so surface it loudly.
+function ReaderFlagBadge() {
+  return (
+    <span
+      className="rounded-full bg-[color:var(--color-error-light)] px-2 py-[3px] text-[10.5px] font-semibold text-[color:var(--color-error)]"
+      title="Student said the reader got their work wrong — no AI grading ran. Review and grade manually."
+    >
+      ⚠ Reader misread
+    </span>
+  );
+}
+
 // ── Rubric display ──
 
 const RUBRIC_DIM_LABELS: Record<keyof IntegrityRubric, string> = {
@@ -1221,6 +1237,7 @@ export function SubmissionsPanel({ assignmentId, onClose }: Props) {
                         LATE
                       </span>
                     )}
+                    {r.extraction_flagged_at && <ReaderFlagBadge />}
                     <OverviewBadge overview={r.integrity_overview} />
                     {r.submitted_at && (
                       <span>{new Date(r.submitted_at).toLocaleDateString()}</span>
