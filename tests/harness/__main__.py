@@ -78,6 +78,20 @@ def _parse(argv: list[str]) -> argparse.Namespace:
         default=os.environ.get("HARNESS_SUMMARY_DB", _DEFAULT_SUMMARY_DB),
     )
 
+    fl = sub.add_parser(
+        "flows",
+        help="run the end-to-end user-journey flows against a running app",
+    )
+    fl.add_argument("--mode", default="replay", choices=["replay", "record", "auto"])
+    fl.add_argument("--db", default=os.environ.get("HARNESS_DATABASE_URL", _DEFAULT_DB))
+    fl.add_argument("--api-base", default=os.environ.get("HARNESS_API_BASE", _DEFAULT_API))
+    fl.add_argument("--web-base", default=os.environ.get("HARNESS_WEB_BASE", _DEFAULT_WEB))
+    fl.add_argument(
+        "--only", default="",
+        help="comma list of flow names to run (default: all). e.g. "
+             "join_class,submit_homework,grade_publish",
+    )
+
     imp = sub.add_parser("improve", help="autonomous improver: scan real pages -> proposals")
     imp_sub = imp.add_subparsers(dest="improve_cmd", required=True)
     scan = imp_sub.add_parser("scan", help="scan surfaces, detect + judge, propose improvements")
@@ -250,6 +264,50 @@ def _run_for_diff(args: argparse.Namespace) -> int:
 
     asyncio.run(_exec())
     return 1 if failed else 0
+
+
+def _run_flows(args: argparse.Namespace) -> int:
+    """Run the end-to-end user-journey flows against a running app and print a
+    PASS/FAIL line per journey. Browser journeys (login/logout) need the web app
+    up; API journeys (join_class/submit_homework/grade_publish) need only the
+    API. A journey that can't run (e.g. its surface unreachable) is DROPPED, not
+    failed — same conservative contract the improver relies on. Exit code is
+    non-zero iff a journey ran and reported a real failure."""
+    from tests.harness.browser import HarnessBrowser
+    from tests.harness.improver.flows import FlowResult, flow_names, run_flows
+    from tests.harness.seed import seed_world
+
+    only = {n.strip() for n in args.only.split(",") if n.strip()} or None
+    if only:
+        unknown = only - set(flow_names())
+        if unknown:
+            raise SystemExit(
+                f"unknown flow(s): {', '.join(sorted(unknown))}. "
+                f"known: {', '.join(flow_names())}",
+            )
+
+    async def _exec() -> list[FlowResult]:
+        seed = await seed_world()
+        async with HarnessBrowser(args.web_base) as browser:
+            return await run_flows(
+                browser, args.web_base, args.api_base, seed, only=only,
+            )
+
+    results = asyncio.run(_exec())
+    requested = only or set(flow_names())
+    ran = {r.name for r in results}
+    dropped = sorted(requested - ran)
+    passed = sum(1 for r in results if r.passed)
+    print(f"\n[flows] api={args.api_base} web={args.web_base}")
+    for r in results:
+        print(f"  {'PASS' if r.passed else 'FAIL'}  {r.name:<16} {r.title}")
+        if not r.passed:
+            for issue in r.issues:
+                print(f"        ↳ {issue}")
+    for name in dropped:
+        print(f"  DROP  {name:<16} (surface unreachable — skipped, not failed)")
+    print(f"\n[flows] {passed}/{len(results)} ran-flows passed, {len(dropped)} dropped")
+    return 0 if passed == len(results) else 1
 
 
 def _run_explore(args: argparse.Namespace) -> int:
@@ -435,7 +493,7 @@ def _run_improve_gather(args: argparse.Namespace) -> int:
             if not args.no_flows and "web" in bases:
                 from tests.harness.improver.flows import flow_failures, run_flows
                 flow_fails = flow_failures(
-                    await run_flows(browser, args.web_base, seed),
+                    await run_flows(browser, args.web_base, args.api_base, seed),
                 )
         failures: list[dict[str, object]] = []
         cost: float | None = 0.0
@@ -780,6 +838,8 @@ def main(argv: list[str]) -> int:
         return _run_explore(args)
     if args.cmd == "for-diff":
         return _run_for_diff(args)
+    if args.cmd == "flows":
+        return _run_flows(args)
 
     from tests.harness.report import write_report
     from tests.harness.runner import RunConfig, persist_run_summary, run_probe

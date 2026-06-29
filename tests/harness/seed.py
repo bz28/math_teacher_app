@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
 from api.core.auth import create_access_token, create_refresh_token, hash_password
 from api.database import get_session_factory
-from api.models.assignment import Assignment, AssignmentSection
+from api.models.assignment import Assignment, AssignmentSection, Submission
 from api.models.course import Course, CourseTeacher
 from api.models.question_bank import FORMAT_MCQ, QuestionBankItem
 from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
@@ -293,3 +293,65 @@ async def seed_world_rich() -> RichSeed:
         **{k: getattr(base, k) for k in base.__dataclass_fields__},
         practice_assignment_id=practice_id,
     )
+
+
+async def seed_joinable_section(seed: Seed) -> str:
+    """A section the seeded student is NOT in yet, carrying a live join
+    code — the precondition for the join-class flow. It lives in a fresh
+    course (not the seeded one) so the student doesn't trip the
+    one-enrollment-per-course guard, and is owned by the seeded teacher.
+    Returns the join code.
+    """
+    async with get_session_factory()() as s:
+        school_id = (await s.execute(
+            select(Course.school_id).where(Course.id == uuid.UUID(seed.course_id))
+        )).scalar_one()
+        course = Course(name="Joinable Course", subject="math", school_id=school_id)
+        s.add(course)
+        await s.flush()
+        s.add(CourseTeacher(
+            course_id=course.id, teacher_id=uuid.UUID(seed.teacher_id), role="owner",
+        ))
+        # <=10 chars, uppercase, unique (the column is UNIQUE) — the shape
+        # `POST /teacher/join` upper-cases and looks up.
+        code = f"J{uuid.uuid4().hex[:7].upper()}"
+        s.add(Section(
+            course_id=course.id, name="Joinable", join_code=code,
+            join_code_expires_at=datetime.now(UTC) + timedelta(days=30),
+        ))
+        await s.commit()
+    return code
+
+
+async def seed_submitted_submission(seed: Seed) -> str:
+    """A fresh student enrolled in the seeded section with one SUBMITTED
+    submission on the seeded homework — the precondition for the
+    grade-and-publish flow. A distinct student (not the seeded one) so it
+    never collides with the submit-homework flow on the
+    UNIQUE(assignment_id, student_id) constraint. Returns the submission id.
+    """
+    course_id = uuid.UUID(seed.course_id)
+    async with get_session_factory()() as s:
+        section_id = (await s.execute(
+            select(SectionEnrollment.section_id).where(
+                SectionEnrollment.student_id == uuid.UUID(seed.student_id),
+                SectionEnrollment.course_id == course_id,
+            ).limit(1)
+        )).scalar_one()
+        student = User(
+            email=f"harness_submitter_{uuid.uuid4().hex[:6]}@t.com",
+            password_hash=hash_password("x"), grade_level=8, role="student",
+            name="Harness Submitter",
+        )
+        s.add(student)
+        await s.flush()
+        s.add(SectionEnrollment(
+            section_id=section_id, course_id=course_id, student_id=student.id,
+        ))
+        submission = Submission(
+            assignment_id=uuid.UUID(seed.assignment_id), student_id=student.id,
+            section_id=section_id, status="submitted", files=[], is_late=False,
+        )
+        s.add(submission)
+        await s.commit()
+        return str(submission.id)

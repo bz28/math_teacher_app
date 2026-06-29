@@ -31,16 +31,39 @@ def test_flow_alert_md_renders_failures() -> None:
 
 
 async def test_run_flows_drops_infra_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A flow that raises (browser crash, infra hiccup) is DROPPED — not turned
-    into a failure → proposal. Only a flow that ran and reported issues counts."""
-    async def boom(_b: object, _u: str, _s: object) -> FlowResult:
+    """A flow that raises (browser crash, API unreachable) is DROPPED — not
+    turned into a failure → proposal. Only a flow that ran and reported issues
+    counts."""
+    async def boom(_b: object, _u: str, _a: str, _s: object) -> FlowResult:
         raise RuntimeError("playwright crashed")
 
-    async def ok(_b: object, _u: str, _s: object) -> FlowResult:
+    async def ok(_b: object, _u: str, _a: str, _s: object) -> FlowResult:
         return FlowResult("ok", "OK", True)
 
     monkeypatch.setattr(flows, "_FLOWS", (boom, ok))
-    results = await run_flows(None, "http://x", None)  # type: ignore[arg-type]
+    results = await run_flows(None, "http://x", "http://api", None)  # type: ignore[arg-type]
 
     assert [r.name for r in results] == ["ok"]  # boom dropped, no false flag
     assert flow_failures(results) == []
+
+
+def test_flow_names_cover_all_journeys() -> None:
+    """`flow_names()` exposes every registered journey's selector (CLI --only)."""
+    names = flows.flow_names()
+    assert {"login", "logout", "join_class", "submit_homework", "grade_publish"} <= set(names)
+    assert len(names) == len(set(names))  # no dup selectors
+
+
+async def test_run_flows_only_selects_subset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`only=` runs just the named flows (matched by their selector name)."""
+    async def login(_b: object, _u: str, _a: str, _s: object) -> FlowResult:
+        return FlowResult("login", "Login", True)
+
+    async def _join_class_flow(_b: object, _u: str, _a: str, _s: object) -> FlowResult:
+        return FlowResult("join_class", "Join", True)
+
+    monkeypatch.setattr(flows, "_FLOWS", (login, _join_class_flow))
+    results = await run_flows(
+        None, "http://x", "http://api", None, only={"join_class"},  # type: ignore[arg-type]
+    )
+    assert [r.name for r in results] == ["join_class"]
