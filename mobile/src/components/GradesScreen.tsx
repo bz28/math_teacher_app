@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AnimatedPressable } from "./AnimatedPressable";
 import { Eyebrow } from "./Eyebrow";
+import { ListSkeleton } from "./SkeletonLoader";
 import { getSchoolGrades, type SchoolGrade } from "../services/api";
 import { averageScore } from "../utils/grades";
 import { scoreColor } from "../utils/scoreColor";
@@ -55,7 +56,7 @@ export function GradesScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color={colors.primary} style={styles.centered} />
+        <ListSkeleton rows={5} />
       ) : error ? (
         <View style={styles.centered}>
           <Ionicons name="cloud-offline-outline" size={40} color={colors.textMuted} />
