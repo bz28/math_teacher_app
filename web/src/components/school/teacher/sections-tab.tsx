@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { teacher, type TeacherSection, type TeacherSectionDetail } from "@/lib/api";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TOUR_IDS } from "@/components/tour";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -86,7 +87,9 @@ export function SectionsTab({
 
       {error && <p className="mt-3 text-xs text-[color:var(--color-error)]">{error}</p>}
 
-      {!loading && sections.length === 0 ? (
+      {loading ? (
+        <SectionsSkeleton />
+      ) : sections.length === 0 ? (
         <EmptyState
           title="No sections yet"
           description="Add a class period to get started."
@@ -128,6 +131,30 @@ export function SectionsTab({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Initial-load placeholder for the sections list. Mirrors the real
+ * silhouette — a stack of collapsed section cards — so the list
+ * settles in place rather than flashing an empty body during load.
+ */
+function SectionsSkeleton() {
+  return (
+    <div className="mt-4 space-y-3" aria-busy="true" aria-live="polite">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center justify-between gap-3 rounded-[--radius-lg] border border-border-light bg-surface p-4"
+        >
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-3 w-1/4" />
+          </div>
+          <Skeleton className="h-8 w-20 rounded-[--radius-md]" />
+        </div>
+      ))}
     </div>
   );
 }

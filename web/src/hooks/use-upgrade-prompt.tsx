@@ -24,5 +24,8 @@ export function useUpgradePrompt() {
     />
   );
 
-  return { showUpgrade: show, UpgradeModal: modal };
+  // `isUpgradeOpen` lets a host dialog suppress its own Escape-to-close
+  // while this prompt is stacked on top, so Escape dismisses only the
+  // prompt and never tears down the wizard underneath.
+  return { showUpgrade: show, UpgradeModal: modal, isUpgradeOpen: state !== null };
 }

@@ -22,12 +22,15 @@ export function ProgressBar({
   if (total === 0) return null;
 
   const pct = Math.min(100, Math.round((current / total) * 100));
+  // Route fills through semantic design tokens so the bar tracks the
+  // warm-paper palette and the [data-theme="dark"] overrides — the old
+  // bg-green-500/bg-blue-500 + `dark:` classes were orphaned from both.
   const fillClass =
     color === "green"
-      ? "bg-green-500 dark:bg-green-400"
+      ? "bg-[color:var(--color-success)]"
       : color === "amber"
-        ? "bg-[color:var(--color-warning-bg)] dark:bg-amber-400"
-        : "bg-blue-500 dark:bg-blue-400";
+        ? "bg-[color:var(--color-warning)]"
+        : "bg-[color:var(--color-info)]";
 
   return (
     <div className="flex items-center gap-2">

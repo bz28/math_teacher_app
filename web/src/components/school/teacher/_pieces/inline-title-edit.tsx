@@ -25,7 +25,7 @@ export function InlineTitleEdit({
         onClick={() => !busy && setEditing(true)}
         disabled={busy}
         title="Click to edit title"
-        className="min-w-0 flex-1 truncate rounded-[--radius-sm] text-left text-base font-bold text-text-primary decoration-text-muted/30 decoration-dotted underline-offset-4 hover:bg-primary-bg/20 hover:underline hover:decoration-primary/40 disabled:cursor-default"
+        className="min-w-0 flex-1 truncate rounded-[--radius-sm] text-left text-base font-bold text-text-primary decoration-text-muted/30 decoration-dotted underline-offset-4 hover:bg-primary-bg/20 hover:underline hover:decoration-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-default"
       >
         {value || (
           <span className="italic text-text-muted">Add a concept title…</span>
@@ -74,7 +74,7 @@ function InlineTitleEditor({
       autoFocus
       maxLength={120}
       placeholder="Add a concept title…"
-      className="min-w-0 flex-1 rounded-[--radius-sm] border border-primary bg-bg-base px-2 py-1 text-base font-bold text-text-primary focus:outline-none"
+      className="min-w-0 flex-1 rounded-[--radius-sm] border border-primary bg-bg-base px-2 py-1 text-base font-bold text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
     />
   );
 }

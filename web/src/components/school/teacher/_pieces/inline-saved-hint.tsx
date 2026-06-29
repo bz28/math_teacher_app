@@ -30,7 +30,7 @@ export function InlineSavedHint({
   }
   if (state === "error") {
     return (
-      <span className="text-[10px] font-semibold text-red-600">
+      <span className="text-[10px] font-semibold text-[color:var(--color-error)]">
         {errorMessage ?? "Save failed"}
         {onRetry && (
           <button
@@ -46,7 +46,7 @@ export function InlineSavedHint({
   }
   if (state === "saved") {
     return (
-      <span className="text-[10px] font-semibold text-green-600 ">
+      <span className="text-[10px] font-semibold text-[color:var(--color-success)]">
         ✓ Saved
       </span>
     );

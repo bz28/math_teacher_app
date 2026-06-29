@@ -9,16 +9,10 @@ import { formatDueRelative } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { TOUR_ACTIONS, TOUR_IDS, useTour, useTourAction } from "@/components/tour";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
+import { SubjectChip } from "@/components/school/teacher/_pieces/subject-chip";
 import { NeedsYouQueue } from "@/components/school/teacher/_pieces/needs-you-queue";
-import { Select } from "@/components/ui";
-
-// Subject chip color hooks. Flat tinted tag (no pill), 2px radius,
-// uppercase tracked label — matches the dashboard badge family.
-const subjectStyles: Record<string, { bg: string; text: string; label: string }> = {
-  math: { bg: "bg-[color:var(--color-primary-bg)]", text: "text-[color:var(--color-primary-dark)]", label: "Math" },
-  physics: { bg: "bg-[color:#E8F4FD] dark:bg-[#0D1F2B]", text: "text-[color:#0773C5] dark:text-[#A3D1FF]", label: "Physics" },
-  chemistry: { bg: "bg-[color:#E0F1EC] dark:bg-[#0E241D]", text: "text-[color:#006E55] dark:text-[#5FC4A6]", label: "Chemistry" },
-};
+import { Modal, Select } from "@/components/ui";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function SchoolTeacherDashboard() {
   const [courses, setCourses] = useState<TeacherCourse[]>([]);
@@ -134,6 +128,11 @@ export default function SchoolTeacherDashboard() {
         </div>
       )}
 
+      {/* Initial-load placeholder — a "Needs you today" queue + courses
+          list silhouette so a returning teacher sees the page settle in
+          place instead of a lone header floating over white space. */}
+      {loading && !error && <DashboardSkeleton />}
+
       {!loading && courses.length === 0 && !error && (
         <div className="mt-10 border-t border-b border-border-light px-0 py-20 text-center">
           <p className="font-serif italic text-[20px] text-text-muted">
@@ -204,6 +203,55 @@ export default function SchoolTeacherDashboard() {
   );
 }
 
+/**
+ * Initial-load placeholder for the dashboard body. Mirrors the real
+ * silhouette — a "Needs you today" queue card over a hairline courses
+ * list — so a returning teacher sees the page settle in place instead
+ * of a lone header over white space while courses load.
+ */
+function DashboardSkeleton() {
+  return (
+    <div className="mt-8" aria-busy="true" aria-live="polite">
+      <Skeleton className="h-7 w-44" />
+      <div className="mt-3 overflow-hidden rounded-[--radius-md] border border-border bg-surface">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div
+            key={i}
+            className={`flex items-center gap-3 px-4 py-3.5 ${
+              i === 0 ? "" : "border-t border-border-light"
+            }`}
+          >
+            <Skeleton className="h-5 w-[74px] rounded-[2px]" />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-3 w-2/3" />
+            </div>
+            <Skeleton className="h-4 w-16" />
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-10">
+        <Skeleton className="h-7 w-36" />
+        <div className="mt-3 border-t border-border-light">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex flex-col gap-3 border-b border-border-light px-1 py-5 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="min-w-0 flex-1 space-y-2">
+                <Skeleton className="h-3 w-40" />
+                <Skeleton className="h-6 w-2/5" />
+              </div>
+              <Skeleton className="h-6 w-28 rounded-[2px]" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function describeWorkload(
   courseCount: number,
   totals: { toReview: number; flagged: number },
@@ -221,7 +269,6 @@ function describeWorkload(
 }
 
 function CourseRow({ course }: { course: TeacherCourse }) {
-  const sub = subjectStyles[course.subject] ?? subjectStyles.math;
   const dueLabel = course.next_due_at ? formatDueRelative(course.next_due_at) : null;
   const hasWork = course.to_review > 0 || course.flagged > 0;
 
@@ -234,9 +281,7 @@ function CourseRow({ course }: { course: TeacherCourse }) {
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2.5 text-[11px] text-text-muted">
-          <span className={`rounded-[2px] px-1.5 py-[2px] text-[10px] font-semibold uppercase tracking-[0.08em] ${sub.bg} ${sub.text}`}>
-            {sub.label}
-          </span>
+          <SubjectChip subject={course.subject} />
           {course.grade_level && (
             <>
               <span className="font-medium uppercase tracking-[0.08em]">Grade {course.grade_level}</span>
@@ -314,10 +359,12 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[color:var(--color-overlay)] p-4" onClick={onClose}>
+    // Shared Modal carries Escape-to-close, focus-trap, aria-modal, and
+    // initial-focus — the bespoke backdrop+form this replaced had none.
+    // Dismiss is suppressed mid-submit so a backdrop/Escape can't orphan
+    // an in-flight create.
+    <Modal open onClose={onClose} dismissible={!submitting}>
       <form
-        className="w-full max-w-md rounded-[--radius-md] border border-border bg-surface p-6"
-        onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault();
           submit();
@@ -393,7 +440,7 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 
