@@ -553,7 +553,7 @@ function HomeworkSectionReview({
       submissionId: string,
       patch: Pick<
         TeacherSubmissionRow,
-        "final_score" | "breakdown" | "grade_dirty" | "reviewed_at"
+        "final_score" | "breakdown" | "grade_dirty"
       >,
     ) => {
       setRoster((prev) =>
@@ -618,14 +618,15 @@ function HomeworkSectionReview({
             final_score: res.final_score,
             breakdown: toSave,
             grade_dirty: res.grade_dirty,
-            // Editing a grade *is* reviewing it — carry the server's
-            // reviewed_at back so the roster's trust marker flips to
-            // "Reviewed by you" immediately (null on an un-grade).
-            reviewed_at: res.reviewed_at,
+            // reviewed_at is intentionally NOT touched here. A grade save
+            // never changes review state — "reviewed" is stamped only once
+            // every problem is addressed (the SubmissionDetailPanel's
+            // all-addressed effect calls mark-reviewed). Threading it back
+            // would race with and clobber that optimistic stamp.
           });
           setDetail((d) =>
             d && d.submission_id === submissionId
-              ? { ...d, grade_dirty: res.grade_dirty, reviewed_at: res.reviewed_at }
+              ? { ...d, grade_dirty: res.grade_dirty }
               : d,
           );
         }
@@ -2121,9 +2122,6 @@ function SubmissionDetailPanel({
   const skippedUnreadable =
     detail.ai_grading_status === "skipped_unreadable" &&
     detail.final_score === null;
-  // A grade exists but the teacher hasn't vouched for it — offer the
-  // explicit "Mark reviewed" affordance (the no-edit accept path).
-  const canMarkReviewed = detail.final_score !== null && !detail.reviewed_at;
 
   // ── Triage: collapse the confident grades, keep the uncertain open ──
   //
@@ -2141,6 +2139,18 @@ function SubmissionDetailPanel({
   );
   const confirmedIds =
     confirmState.sid === detail.submission_id ? confirmState.ids : EMPTY_ID_SET;
+  // Problems the teacher actively GRADED this session (pressed a grade
+  // key / clicked a grade button). Distinct from `breakdownByProblem`,
+  // which also contains the AI's pre-fill — an AI grade the teacher never
+  // touched does NOT count as addressed. Keyed by submission_id so it
+  // resets on student switch, same derivation-not-effect pattern as
+  // confirmedIds above. Lost on reload (client-only, like confirmedIds);
+  // reviewed_at remains the durable server-side truth.
+  const [gradedState, setGradedState] = useState<{ sid: string; ids: Set<string> }>(
+    () => ({ sid: detail.submission_id, ids: new Set() }),
+  );
+  const gradedThisSession =
+    gradedState.sid === detail.submission_id ? gradedState.ids : EMPTY_ID_SET;
   // Manual "open this confident row to inspect it" toggles — also keyed
   // by submission so they reset on student switch (derivation, not an
   // effect, matching the focus model below).
@@ -2187,20 +2197,74 @@ function SubmissionDetailPanel({
   const confirmProblems = useCallback(
     (ids: string[]) => {
       if (ids.length === 0) return;
+      // Confirming is the teacher vouching for the AI's grade. The grade
+      // itself is already persisted (the AI wrote breakdown + final_score),
+      // so confirming only records the local checklist — it never re-saves
+      // or mutates a grade, and it does NOT stamp the submission reviewed.
+      // Review is stamped only when EVERY problem is addressed (the
+      // allAddressed effect below), so a single confirm can't release the
+      // still-unvetted rest via "publish only reviewed".
       setConfirmState((s) => {
         const base =
           s.sid === detail.submission_id ? new Set(s.ids) : new Set<string>();
         for (const id of ids) base.add(id);
         return { sid: detail.submission_id, ids: base };
       });
-      // Confirming is the teacher vouching for the AI's grade. The grade
-      // itself is already persisted (the AI wrote breakdown + final_score),
-      // so confirming only stamps the submission reviewed — never re-saves
-      // or mutates a grade. onMarkReviewed is a no-op once already stamped.
-      if (!detail.reviewed_at) onMarkReviewed();
     },
-    [detail.submission_id, detail.reviewed_at, onMarkReviewed],
+    [detail.submission_id],
   );
+  // Record a teacher grade action so the problem counts as "addressed".
+  // Wraps onGradeProblem (the parent's persist path) — every grade-key /
+  // grade-button site calls THIS, never onGradeProblem directly.
+  const gradeProblem = useCallback(
+    (problemId: string, status: GradeStatus, partialPercent?: number) => {
+      setGradedState((s) => {
+        const base =
+          s.sid === detail.submission_id ? new Set(s.ids) : new Set<string>();
+        base.add(problemId);
+        return { sid: detail.submission_id, ids: base };
+      });
+      onGradeProblem(problemId, status, partialPercent);
+    },
+    [detail.submission_id, onGradeProblem],
+  );
+
+  // ── All-addressed → reviewed ──────────────────────────────────────
+  //
+  // A problem is ADDRESSED when the teacher confirmed it (confirmedIds)
+  // or graded it this session (gradedThisSession). The submission is
+  // "reviewed" only once every problem is addressed — that's the honest
+  // signal "publish only reviewed" reads. A single confirm or grade that
+  // doesn't complete the set must NOT stamp review.
+  const addressedCount = detail.problems.filter(
+    (p) =>
+      confirmedIds.has(p.bank_item_id) || gradedThisSession.has(p.bank_item_id),
+  ).length;
+  // allAddressed implies every problem has a grade (a confirmed problem
+  // has the AI's entry; a graded one has the teacher's), so we don't gate
+  // on detail.final_score — which isn't updated locally on a grade and
+  // would wrongly block a from-scratch / unreadable submission graded by
+  // hand this session.
+  const allAddressed = totalProblems > 0 && addressedCount === totalProblems;
+  // Every problem is addressed but it's not yet stamped — surface the
+  // explicit "Mark reviewed" affordance. Gated to allAddressed so it can
+  // NEVER be a bypass; it doubles as the retry if the auto-stamp below
+  // fails (e.g. the last grade's save hadn't committed server-side when
+  // the stamp first fired). Never shown once reviewed_at is set.
+  const canMarkReviewed = allAddressed && !detail.reviewed_at;
+
+  // Auto-stamp review the moment the submission becomes fully addressed.
+  // Fires once per submission (ref guard, reset on student switch) so a
+  // re-render while the request is in flight can't double-call; the gated
+  // button above remains for an explicit retry on failure.
+  const autoReviewedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!allAddressed) return;
+    if (detail.reviewed_at) return;
+    if (autoReviewedRef.current === detail.submission_id) return;
+    autoReviewedRef.current = detail.submission_id;
+    onMarkReviewed();
+  }, [allAddressed, detail.reviewed_at, detail.submission_id, onMarkReviewed]);
   const toggleExpand = useCallback(
     (id: string) => {
       setExpandState((s) => {
@@ -2310,14 +2374,14 @@ function SubmissionDetailPanel({
               : 50;
         }
       }
-      onGradeProblem(p.bank_item_id, status, pct);
+      gradeProblem(p.bank_item_id, status, pct);
       moveFocus(nextUngradedAfter(focusedIndex));
     },
     [
       detail.problems,
       focusedIndex,
       breakdownByProblem,
-      onGradeProblem,
+      gradeProblem,
       moveFocus,
       nextUngradedAfter,
     ],
@@ -2545,17 +2609,33 @@ function SubmissionDetailPanel({
               <StudentWorkThumbButton files={detail.files} />
             </span>
           )}
-          {/* Explicit "I looked, I agree" review for the no-edit case
-              (editing any score auto-stamps review on its own). Only
-              shown while a grade exists but is still unvetted; flips to
-              a static "Reviewed by you" badge once stamped. */}
+          {/* Addressed progress — how many problems the teacher has
+              confirmed or graded, of the total. Shown while a submission
+              is mid-review (not yet fully addressed, not yet stamped) so
+              the teacher knows exactly what's left before it counts as
+              reviewed. Disappears once every problem is addressed (the
+              Mark-reviewed control / Reviewed badge takes over). */}
+          {!detail.reviewed_at && !allAddressed && totalProblems > 0 && (
+            <span
+              className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-border-light bg-[color:var(--color-surface-alt-2)] px-2.5 py-1 text-[11px] font-bold text-text-secondary tabular-nums"
+              title="Confirm every confident grade and grade every uncertain one to mark this submission reviewed"
+            >
+              {addressedCount} of {totalProblems} addressed
+            </span>
+          )}
+          {/* Explicit "mark reviewed" — only available once EVERY problem
+              is addressed (gated by canMarkReviewed → allAddressed), so it
+              can never release an unvetted submission. The all-addressed
+              effect auto-stamps; this is the explicit affordance / retry
+              if that fails. Flips to a static "Reviewed by you" badge
+              once stamped. */}
           {canMarkReviewed && (
             <button
               type="button"
               onClick={onMarkReviewed}
               disabled={marking}
-              title="Vouch for the AI-suggested grade without changing it"
-              className="rounded-[--radius-md] border border-border-light bg-surface px-3.5 py-1.5 text-xs font-bold text-text-secondary transition-colors hover:border-primary/40 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+              title="Every problem is addressed — mark this submission reviewed"
+              className="rounded-[--radius-md] border border-[color:var(--color-success)]/40 bg-[color:var(--color-success)]/10 px-3.5 py-1.5 text-xs font-bold text-[color:var(--color-success)] transition-colors hover:border-[color:var(--color-success)]/60 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {marking ? "Marking…" : "Mark reviewed"}
             </button>
@@ -2724,7 +2804,7 @@ function SubmissionDetailPanel({
                   rowRefs.current[i] = el;
                 }}
                 onChange={(status, partialPercent) =>
-                  onGradeProblem(p.bank_item_id, status, partialPercent)
+                  gradeProblem(p.bank_item_id, status, partialPercent)
                 }
                 onFeedbackChange={(text) =>
                   onFeedbackChange(p.bank_item_id, text)

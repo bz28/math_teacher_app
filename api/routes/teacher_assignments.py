@@ -1577,14 +1577,22 @@ async def grade_submission(
         if normalized:
             grade.final_score = sum(e["percent"] for e in normalized) / len(normalized)
             grade.graded_at = now
-            grade.reviewed_by = current_user.user_id
-            grade.reviewed_at = now
+            # `reviewed_at` / `reviewed_by` are deliberately NOT stamped on a
+            # grade save. Saving a grade records THE GRADE — it does not mean
+            # the teacher has vetted the whole submission. "Reviewed" means
+            # every problem has been addressed (each confident grade confirmed
+            # or each uncertain one graded); the frontend tracks that and calls
+            # POST /mark-reviewed only once the set is complete. Stamping here
+            # would let "publish only reviewed" release a submission the moment
+            # the teacher touched a single problem — leaking the still-unvetted
+            # rest. The explicit mark-reviewed endpoint is the sole writer.
         else:
-            # Un-grade: clear every grade-state field so the row
-            # honestly reflects "not graded." teacher_notes and
-            # grade_published_at are deliberately preserved — notes
-            # are independent of the score, and a retracted-after-
-            # publish state is a UX concern for the frontend to flag.
+            # Un-grade: clear every grade-state field so the row honestly
+            # reflects "not graded" — including the review stamp, since there
+            # is nothing left to have reviewed. teacher_notes and
+            # grade_published_at are deliberately preserved — notes are
+            # independent of the score, and a retracted-after-publish state is
+            # a UX concern for the frontend to flag.
             grade.final_score = None
             grade.graded_at = None
             grade.reviewed_by = None
@@ -1607,9 +1615,10 @@ async def grade_submission(
         "final_score": grade.final_score,
         "grade_published_at": grade.grade_published_at.isoformat() if grade.grade_published_at else None,
         "grade_dirty": _is_grade_dirty(grade),
-        # Editing a grade *is* reviewing it — surfaced so the frontend can
-        # flip the row's review marker without a refetch. Null only on an
-        # un-grade (empty breakdown), which clears the review stamp above.
+        # Current review state — NOT changed by this save (a grade save never
+        # stamps review; that's the mark-reviewed endpoint's job). Surfaced so
+        # the frontend can reconcile: stays whatever it was, and is null after
+        # an un-grade (empty breakdown), which clears the stamp above.
         "reviewed_at": grade.reviewed_at.isoformat() if grade.reviewed_at else None,
     }
 
@@ -1620,13 +1629,15 @@ async def mark_submission_reviewed(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Record the teacher's explicit review of an AI-suggested grade.
+    """Stamp `reviewed_at` once the teacher has addressed every problem.
 
-    The fast path already auto-stamps `reviewed_at` whenever the teacher
-    edits any problem score (see grade_submission — editing *is*
-    reviewing). This endpoint covers the no-edit case: the teacher looked
-    at the AI's suggestion, agrees, and wants to vouch for it without
-    changing a score. Sets reviewed_by/reviewed_at on the existing grade.
+    This is the SOLE writer of the review stamp. A grade save (PATCH
+    /grade) records a grade but never marks the submission reviewed —
+    "reviewed" means every problem has been addressed (each confident
+    grade confirmed or each uncertain one graded). The frontend tracks
+    that per-submission "all addressed" state and calls this endpoint at
+    the moment it completes (a bulk "Confirm all" or the last grade), so
+    a partially-graded submission can never read as reviewed.
 
     Requires a grade to exist (final_score set) — there's nothing to
     "review" on an ungraded or skipped-unreadable submission, so we 400;

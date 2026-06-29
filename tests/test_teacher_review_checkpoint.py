@@ -3,11 +3,14 @@ state that distinguishes a grade the teacher vouched for from an
 AI-suggested one they never opened.
 
 Covers three contracts:
-  • POST /teacher/submissions/{id}/mark-reviewed stamps reviewed_at on an
-    existing grade (the no-edit "I looked, I agree" path) and 400s when
-    there's nothing to review (ungraded / skipped-unreadable).
-  • PATCH /teacher/submissions/{id}/grade auto-stamps reviewed_at on any
-    score edit (editing == reviewing) and clears it on an un-grade.
+  • POST /teacher/submissions/{id}/mark-reviewed is the SOLE writer of the
+    review stamp: it stamps reviewed_at on an existing grade (called by the
+    frontend once every problem is addressed) and 400s when there's nothing
+    to review (ungraded / skipped-unreadable).
+  • PATCH /teacher/submissions/{id}/grade records the grade (final_score +
+    graded_at) but NEVER stamps reviewed_at — saving one problem's grade
+    does not mean the whole submission is reviewed. An un-grade (empty
+    breakdown) clears every grade field, including any prior stamp.
   • POST /teacher/assignments/{id}/publish-grades with reviewed_only=True
     releases only the vetted grades, leaving unopened AI suggestions
     unpublished.
@@ -31,11 +34,14 @@ from api.models.user import User
 from tests.conftest import auth_headers as _auth
 
 
-async def _seed_hw(*, n_submissions: int = 1) -> dict[str, Any]:
-    """Seed a teacher + published 1-problem HW + `n_submissions` student
-    submissions (no grade rows). Returns the teacher token, assignment +
-    section ids, the single bank_item_id, and the submission ids in
-    creation order so tests can attach grades however they need."""
+async def _seed_hw(
+    *, n_submissions: int = 1, n_problems: int = 1
+) -> dict[str, Any]:
+    """Seed a teacher + published HW (`n_problems` problems) + `n_submissions`
+    student submissions (no grade rows). Returns the teacher token, assignment
+    + section ids, the first `bank_item_id` (back-compat) plus the full
+    `bank_item_ids` list, and the submission ids in creation order so tests
+    can attach grades however they need."""
     async with get_session_factory()() as s:
         teacher = User(
             email=f"teacher_{uuid.uuid4().hex[:6]}@t.com",
@@ -65,16 +71,21 @@ async def _seed_hw(*, n_submissions: int = 1) -> dict[str, Any]:
         s.add(assignment)
         await s.flush()
 
-        p1 = QuestionBankItem(
-            course_id=course.id, unit_id=unit.id,
-            originating_assignment_id=assignment.id,
-            title="P1", question="Solve x^2 - 5x + 6 = 0",
-            solution_steps=[], final_answer="x=2,3",
-            distractors=["a", "b", "c"], status="approved", source="generated",
-        )
-        s.add(p1)
+        bank_items: list[QuestionBankItem] = []
+        for i in range(n_problems):
+            p = QuestionBankItem(
+                course_id=course.id, unit_id=unit.id,
+                originating_assignment_id=assignment.id,
+                title=f"P{i + 1}", question="Solve x^2 - 5x + 6 = 0",
+                solution_steps=[], final_answer="x=2,3",
+                distractors=["a", "b", "c"], status="approved",
+                source="generated",
+            )
+            s.add(p)
+            bank_items.append(p)
         await s.flush()
-        assignment.content = {"problem_ids": [str(p1.id)]}
+        bank_item_ids = [str(p.id) for p in bank_items]
+        assignment.content = {"problem_ids": bank_item_ids}
         await s.flush()
 
         submission_ids: list[uuid.UUID] = []
@@ -99,7 +110,8 @@ async def _seed_hw(*, n_submissions: int = 1) -> dict[str, Any]:
             "teacher_token": create_access_token(str(teacher.id), "teacher"),
             "assignment_id": assignment.id,
             "section_id": section.id,
-            "bank_item_id": str(p1.id),
+            "bank_item_id": bank_item_ids[0],
+            "bank_item_ids": bank_item_ids,
             "submission_ids": submission_ids,
         }
 
@@ -111,9 +123,9 @@ async def _add_grade(
     reviewed: bool,
     ai_grading_status: str | None = None,
 ) -> None:
-    """Attach a SubmissionGrade directly (bypassing the grade endpoint so
-    we can build an AI-suggested-but-unreviewed row, which the endpoint
-    would otherwise auto-stamp)."""
+    """Attach a SubmissionGrade directly so a test can build an exact
+    review state (e.g. an AI-suggested-but-unreviewed row, or a vetted
+    one) without driving the grade endpoint."""
     async with get_session_factory()() as s:
         now = datetime.now(UTC)
         s.add(SubmissionGrade(
@@ -194,9 +206,10 @@ async def test_mark_reviewed_rejects_skipped_unreadable(
     assert grade.reviewed_at is None
 
 
-async def test_edit_grade_autostamps_review(client: AsyncClient) -> None:
-    """Editing any problem score IS reviewing — the grade endpoint stamps
-    reviewed_at, and an un-grade (empty breakdown) clears it again."""
+async def test_edit_grade_does_not_stamp_review(client: AsyncClient) -> None:
+    """Saving a grade records the grade (final_score + graded_at) but does
+    NOT stamp reviewed_at — saving is not reviewing. An un-grade (empty
+    breakdown) still clears every grade field."""
     world = await _seed_hw()
     sub_id = world["submission_ids"][0]
 
@@ -208,22 +221,83 @@ async def test_edit_grade_autostamps_review(client: AsyncClient) -> None:
         ]},
     )
     assert r.status_code == 200, r.text
-    assert r.json()["reviewed_at"] is not None
+    assert r.json()["final_score"] == 100.0
+    # The grade is recorded but the submission is NOT reviewed yet.
+    assert r.json()["reviewed_at"] is None
     grade = await _get_grade(sub_id)
-    assert grade.reviewed_at is not None
-    assert grade.reviewed_by is not None
+    assert grade.final_score == 100.0
+    assert grade.graded_at is not None
+    assert grade.reviewed_at is None
+    assert grade.reviewed_by is None
 
-    # Un-grade: clearing the breakdown clears the review stamp.
+    # Un-grade: clearing the breakdown clears every grade field.
     r = await client.patch(
         f"/v1/teacher/submissions/{sub_id}/grade",
         headers=_auth(world["teacher_token"]),
         json={"breakdown": []},
     )
     assert r.status_code == 200, r.text
+    assert r.json()["final_score"] is None
     assert r.json()["reviewed_at"] is None
     grade = await _get_grade(sub_id)
+    assert grade.final_score is None
+    assert grade.graded_at is None
     assert grade.reviewed_at is None
     assert grade.reviewed_by is None
+
+
+async def test_reviewed_only_after_all_problems_addressed(
+    client: AsyncClient,
+) -> None:
+    """The all-addressed contract end to end on a 3-problem HW:
+
+      • grading ONE problem leaves reviewed_at null (not reviewed),
+      • grading the rest still leaves it null (a grade save never stamps),
+      • the explicit mark-reviewed call — which the frontend fires only once
+        every problem is addressed — is what finally stamps it.
+
+    Guards the exact bug this change closes: a single grade save must not
+    let "publish only reviewed" release a partially-vetted submission.
+    """
+    world = await _seed_hw(n_problems=3)
+    sub_id = world["submission_ids"][0]
+    pids = world["bank_item_ids"]
+    headers = _auth(world["teacher_token"])
+
+    # Grade just the first problem.
+    r = await client.patch(
+        f"/v1/teacher/submissions/{sub_id}/grade",
+        headers=headers,
+        json={"breakdown": [{"problem_id": pids[0], "score_status": "full"}]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["reviewed_at"] is None
+    assert (await _get_grade(sub_id)).reviewed_at is None
+
+    # Grade the remaining two — still just saving, still not reviewed.
+    r = await client.patch(
+        f"/v1/teacher/submissions/{sub_id}/grade",
+        headers=headers,
+        json={"breakdown": [
+            {"problem_id": pids[0], "score_status": "full"},
+            {"problem_id": pids[1], "score_status": "zero"},
+            {"problem_id": pids[2], "score_status": "full"},
+        ]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["reviewed_at"] is None
+    assert (await _get_grade(sub_id)).reviewed_at is None
+
+    # Now everything is addressed — the frontend fires mark-reviewed.
+    r = await client.post(
+        f"/v1/teacher/submissions/{sub_id}/mark-reviewed",
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["reviewed_at"] is not None
+    grade = await _get_grade(sub_id)
+    assert grade.reviewed_at is not None
+    assert grade.reviewed_by is not None
 
 
 async def test_publish_reviewed_only_releases_vetted_grades(
