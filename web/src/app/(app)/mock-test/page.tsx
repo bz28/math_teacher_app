@@ -6,8 +6,8 @@ import { useSessionStore } from "@/stores/learn";
 import { useMockTestStore } from "@/stores/mock-test";
 import { useEntitlementStore } from "@/stores/entitlements";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
-import { Button, Card, Badge } from "@/components/ui";
-import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
+import { Button, Card, Badge, PageErrorState } from "@/components/ui";
+import { useRedirectOnIdle } from "@/hooks/use-session-effects";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
 import { GeneratingState } from "@/components/shared/generating-state";
@@ -25,7 +25,6 @@ export default function MockTestPage() {
   const {
     mockTest,
     phase,
-    error,
     beginMockTest,
     saveMockTestAnswer,
     toggleMockTestFlag,
@@ -58,7 +57,6 @@ export default function MockTestPage() {
   }, [mockTest, phase, submitMockTest, subject]);
 
   useRedirectOnIdle(phase, mockTest);
-  useErrorToast(phase, error);
 
   // Confetti on good mock test score (>=70%)
   useEffect(() => {
@@ -93,6 +91,24 @@ export default function MockTestPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [phase, mockTest, setMockTestIndex, submitMockTest, subject]);
 
+  // Error is terminal — check it BEFORE the loading / !mockTest guards.
+  // On a failed fresh generation the store sets phase "error" while
+  // mockTest is still null, so a guard ordered ahead of this would trap
+  // the student on a spinner/skeleton forever and never reach recovery.
+  if (phase === "error") {
+    // Generation failed — no in-place retry for the original config, so
+    // the honest recovery is back to Learn. Branded surface only (the
+    // duplicate error toast was removed) so the failure shows once.
+    return (
+      <PageErrorState
+        title="That didn't generate"
+        message="We couldn't compose your exam just now. Head back to Learn and try again."
+        retryLabel="Back to Learn"
+        onRetry={() => router.push("/learn")}
+      />
+    );
+  }
+
   if (phase === "loading") {
     return (
       <GeneratingState
@@ -121,17 +137,6 @@ export default function MockTestPage() {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <SkeletonStep />
-      </div>
-    );
-  }
-
-  if (phase === "error") {
-    return (
-      <div className="mx-auto max-w-2xl text-center space-y-4 py-12">
-        <p className="text-error font-medium">{error}</p>
-        <Button variant="secondary" onClick={() => router.push("/learn")}>
-          Try Again
-        </Button>
       </div>
     );
   }

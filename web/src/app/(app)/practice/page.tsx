@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
 import { session as sessionApi } from "@/lib/api";
-import { Button, Badge } from "@/components/ui";
-import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
+import { Button, Badge, PageErrorState } from "@/components/ui";
+import { useRedirectOnIdle } from "@/hooks/use-session-effects";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { GeneratingState } from "@/components/shared/generating-state";
 import { useConfetti } from "@/components/ui/confetti";
@@ -21,7 +21,6 @@ export default function PracticePage() {
   const {
     practiceBatch,
     phase,
-    error,
     beginPractice,
     submitPracticeAnswer,
     skipPracticeProblem,
@@ -48,7 +47,6 @@ export default function PracticePage() {
   }, [currentProblem, practiceBatch?.currentIndex]);
 
   useRedirectOnIdle(phase, practiceBatch);
-  useErrorToast(phase, error);
 
   // Confetti on perfect practice score + complete session for history
   useEffect(() => {
@@ -70,6 +68,24 @@ export default function PracticePage() {
   async function handleChoiceSelect(choice: string) {
     setSelectedChoice(choices.indexOf(choice));
     await submitPracticeAnswer(choice, subject);
+  }
+
+  // Error is terminal — check it BEFORE the loading/!practiceBatch guard.
+  // On a failed fresh generation the store sets phase "error" while
+  // practiceBatch is still null, so a loading-first guard would trap the
+  // student on the "Building…" state forever and never reach recovery.
+  if (phase === "error") {
+    // Generation failed — no in-place retry for the original seed, so
+    // the honest recovery is back to Learn. Branded surface only (the
+    // duplicate error toast was removed) so the failure shows once.
+    return (
+      <PageErrorState
+        title="That didn't generate"
+        message="We couldn't build your practice set just now. Head back to Learn and try again."
+        retryLabel="Back to Learn"
+        onRetry={() => router.push("/learn")}
+      />
+    );
   }
 
   if (phase === "loading" || !practiceBatch) {
@@ -128,17 +144,6 @@ export default function PracticePage() {
             Cancel
           </Button>
         </div>
-      </div>
-    );
-  }
-
-  if (phase === "error") {
-    return (
-      <div className="mx-auto max-w-2xl text-center space-y-4 py-12">
-        <p className="text-error font-medium">{error}</p>
-        <Button variant="secondary" onClick={() => router.push("/learn")}>
-          Try Again
-        </Button>
       </div>
     );
   }

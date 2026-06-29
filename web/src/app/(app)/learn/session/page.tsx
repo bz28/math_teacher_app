@@ -6,11 +6,11 @@ import { motion } from "framer-motion";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
 import { useEntitlementStore } from "@/stores/entitlements";
-import { Button, Card, Badge, TypingIndicator } from "@/components/ui";
+import { Button, Card, Badge, TypingIndicator, PageErrorState } from "@/components/ui";
 import { EntitlementError } from "@/lib/api";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
-import { useRedirectOnIdle, useErrorToast } from "@/hooks/use-session-effects";
-import { SkeletonStep } from "@/components/ui/skeleton";
+import { useRedirectOnIdle } from "@/hooks/use-session-effects";
+import { GeneratingState } from "@/components/shared/generating-state";
 import { useConfetti } from "@/components/ui/confetti";
 import { CheckIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
@@ -26,7 +26,6 @@ export default function LearnSessionPage() {
   const {
     session,
     phase,
-    error,
     chatHistory,
     learnQueue,
     advanceStep,
@@ -66,7 +65,6 @@ export default function LearnSessionPage() {
   }, [resumeId, resumeSession]);
 
   useRedirectOnIdle(phase, resumeId || session);
-  useErrorToast(phase, error);
 
   // Confetti on completion
   useEffect(() => {
@@ -106,23 +104,35 @@ export default function LearnSessionPage() {
     );
   }
 
-  if (phase === "loading" || !session) {
+  // Error is terminal — check it BEFORE the loading/!session guard. On a
+  // failed fresh generation the store sets phase "error" while session is
+  // still null, so a loading-first guard would trap the student on the
+  // "Building…" state forever and never reach this recovery surface.
+  if (phase === "error") {
+    // Generation failed — there's no in-place retry for the original
+    // input, so the honest recovery is back to Learn to start over.
+    // Branded surface only (the duplicate error toast was removed) so
+    // the failure shows exactly once.
     return (
-      <div className="mx-auto max-w-3xl space-y-6">
-        <SkeletonStep />
-        <SkeletonStep />
-      </div>
+      <PageErrorState
+        title="That didn't generate"
+        message="We couldn't build this walkthrough just now. Head back to Learn and try again."
+        retryLabel="Back to Learn"
+        onRetry={() => router.push("/learn")}
+      />
     );
   }
 
-  if (phase === "error") {
+  if (phase === "loading" || !session) {
     return (
-      <div className="mx-auto max-w-2xl text-center space-y-4 py-12">
-        <p className="text-error font-medium">{error}</p>
-        <Button variant="secondary" onClick={() => router.push("/learn")}>
-          Try Again
-        </Button>
-      </div>
+      <GeneratingState
+        message={
+          <>
+            Building your <span className="font-display-serif italic text-primary">walkthrough…</span>
+          </>
+        }
+        subtext="Breaking this problem into clear, guided steps. This takes a few seconds."
+      />
     );
   }
 

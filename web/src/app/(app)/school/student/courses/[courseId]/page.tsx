@@ -8,6 +8,8 @@ import {
   type StudentHomeworkSummary,
   type StudentPracticeSummary,
 } from "@/lib/api";
+import { PageErrorState } from "@/components/ui";
+import { SkeletonCard } from "@/components/ui/skeleton";
 
 type TabKey = "homework" | "practice";
 const TABS: { key: TabKey; label: string }[] = [
@@ -86,21 +88,39 @@ function ClassDetailInner() {
   );
 }
 
+// Quiet loading placeholder for the homework/practice lists — a few
+// card-shaped shimmers in place of a bare "Loading…" line.
+function ListSkeleton() {
+  return (
+    <div className="grid gap-3">
+      <SkeletonCard />
+      <SkeletonCard />
+      <SkeletonCard />
+    </div>
+  );
+}
+
 function HomeworkList({ courseId }: { courseId: string }) {
   const [homework, setHomework] = useState<StudentHomeworkSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!courseId) return;
     schoolStudent
       .listHomework(courseId)
-      .then(setHomework)
-      .catch(() => setError("Couldn't load your homework. Please try again."));
+      .then((hw) => {
+        setHomework(hw);
+        setError(null);
+      })
+      .catch(() => setError("We couldn't load your homework right now."));
   }, [courseId]);
 
-  if (error) return <p className="py-6 text-center text-error">{error}</p>;
-  if (homework === null)
-    return <p className="py-6 text-center text-text-muted">Loading…</p>;
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (error) return <PageErrorState message={error} onRetry={load} />;
+  if (homework === null) return <ListSkeleton />;
   if (homework.length === 0) {
     return (
       <div className="mt-4 rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle p-8 text-center">
@@ -156,17 +176,23 @@ function PracticeList({ courseId }: { courseId: string }) {
   const [practice, setPractice] = useState<StudentPracticeSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!courseId) return;
     schoolStudent
       .listPractice(courseId)
-      .then(setPractice)
-      .catch(() => setError("Couldn't load practice. Please try again."));
+      .then((p) => {
+        setPractice(p);
+        setError(null);
+      })
+      .catch(() => setError("We couldn't load practice right now."));
   }, [courseId]);
 
-  if (error) return <p className="py-6 text-center text-error">{error}</p>;
-  if (practice === null)
-    return <p className="py-6 text-center text-text-muted">Loading…</p>;
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (error) return <PageErrorState message={error} onRetry={load} />;
+  if (practice === null) return <ListSkeleton />;
   if (practice.length === 0) {
     return (
       <div className="mt-4 rounded-[--radius-md] border border-dashed border-border-light bg-bg-subtle p-8 text-center">

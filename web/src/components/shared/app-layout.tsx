@@ -109,6 +109,14 @@ function StudentLayout({ children }: { children: React.ReactNode }) {
   // school student who wanders to a personal route (they carry school_id)
   // has their own "student" tour in the school sidebar instead.
   const isPersonalLearner = user?.role === "student" && !user?.school_id;
+  // History is dead weight for school-linked students: their tutor time
+  // runs through homework/practice flows, which write Submission rows,
+  // not the section-tagged Session rows /history reads — so the tab is
+  // always empty for them. Drop it from their nav; personal learners
+  // keep it (their free-form sessions populate it).
+  const navItems = user?.school_id
+    ? studentNavItems.filter((item) => item.href !== "/history")
+    : studentNavItems;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -134,7 +142,7 @@ function StudentLayout({ children }: { children: React.ReactNode }) {
             </Link>
 
             <nav className="hidden items-center gap-5 md:flex">
-              {studentNavItems.map((item) => {
+              {navItems.map((item) => {
                 const active = pathname.startsWith(item.href);
                 return (
                   <Link
@@ -191,7 +199,7 @@ function StudentLayout({ children }: { children: React.ReactNode }) {
           text + thin top-edge accent (no tinted pill bg). */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border-light bg-[color:var(--color-surface-alt)]/95 backdrop-blur-md md:hidden">
         <div className="flex h-16 items-stretch">
-          {studentNavItems.map((item) => {
+          {navItems.map((item) => {
             const active = pathname.startsWith(item.href);
             return (
               <Link
