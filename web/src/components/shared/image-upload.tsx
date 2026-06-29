@@ -82,7 +82,10 @@ export function ImageUpload({
         setCropImages(new Array(res.problems.length).fill(hasDiagram ? base64 : undefined));
         setSelected(new Array(res.problems.length).fill(true));
         setPhase("upload");
-        setImageBase64(null);
+        // Keep the original image so the result modal can offer "crop to your
+        // problem" if auto-extract grabbed the wrong region — no re-upload.
+        // (No error is set on success, so the upload screen's #692 "Try again"
+        // affordance, gated on `imageBase64 && error`, stays hidden.)
       } catch {
         // A THROWN error means the extraction SERVICE failed (API down,
         // out of credits, rate-limited, network) — NOT "we looked and found
@@ -185,7 +188,9 @@ export function ImageUpload({
       setCropImages(allCropImages);
       setSelected(new Array(allProblems.length).fill(true));
       setPhase("upload");
-      setImageBase64(null);
+      // Keep the original so re-crop stays available (and repeatable) from the
+      // result modal — handleExtractRectangles always crops from this original,
+      // never reassigns it. closeResultModal drops it once the user is done.
     },
     [imageBase64, subject, setPhase, onExtractComplete],
   );
@@ -210,7 +215,24 @@ export function ImageUpload({
   const closeResultModal = useCallback(() => {
     setResult(null);
     setEditingIndex(null);
+    // Drop the retained original once the user is done with this result —
+    // the next upload sets a fresh image. (Re-crop does NOT call this; it
+    // needs the image to re-enter the crop flow.)
+    setImageBase64(null);
   }, []);
+
+  // "Not quite right?" — re-enter the crop flow on the SAME image (the one
+  // retained on a successful auto-extract), no re-upload. Closes the result
+  // modal but keeps imageBase64, then drops into single-problem crop.
+  const handleRecrop = useCallback(() => {
+    if (!imageBase64) return;
+    setResult(null);
+    setEditingIndex(null);
+    setError(null);
+    setManualMode(true);
+    setSelectMode("crop");
+    setPhase("select");
+  }, [imageBase64, setPhase]);
 
   function handleConfirm() {
     if (!result) return;
@@ -454,7 +476,20 @@ export function ImageUpload({
                     </div>
                   )}
 
-                  <div className="flex justify-end gap-3">
+                  <div className="flex flex-wrap items-center justify-end gap-3">
+                    {imageBase64 && (
+                      // Escape hatch when auto-extract grabbed the wrong region
+                      // (or the whole messy page as one problem): re-crop the
+                      // same image without re-uploading.
+                      <button
+                        type="button"
+                        onClick={handleRecrop}
+                        className="mr-auto text-sm font-medium text-text-secondary underline-offset-2 transition-colors hover:text-primary hover:underline"
+                      >
+                        Not quite right?{" "}
+                        <span className="font-display-serif italic">Crop to your problem</span>
+                      </button>
+                    )}
                     <Button variant="ghost" onClick={closeResultModal}>
                       Cancel
                     </Button>
