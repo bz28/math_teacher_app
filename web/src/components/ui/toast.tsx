@@ -133,6 +133,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div
         role="region"
         aria-label="Notifications"
+        // Excluded from the tour's inert sweep (tour-overlay.tsx) so a toast
+        // raised mid-tour is still announced + dismissable.
+        data-toast-root
         className="pointer-events-none fixed right-0 top-0 z-50 flex flex-col items-end gap-2 p-4"
       >
         <AnimatePresence mode="popLayout">

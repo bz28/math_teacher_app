@@ -37,11 +37,19 @@ export function WelcomeCover({
 
   useEffect(() => {
     const prevFocus = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
     document.body.style.overflow = "hidden";
     requestAnimationFrame(() => primaryRef.current?.focus());
     return () => {
       document.body.style.overflow = "";
-      prevFocus?.focus();
+      // Only pull focus back if it's STILL inside the cover at unmount.
+      // AnimatePresence defers this unmount ~300ms — by which point the
+      // spotlight has already focused its Next button, so focus has left
+      // the panel. Restoring blindly would yank it back behind the scrim;
+      // when the engine has moved it on, leave it where it landed.
+      if (panel?.contains(document.activeElement)) {
+        prevFocus?.focus();
+      }
     };
   }, []);
 
