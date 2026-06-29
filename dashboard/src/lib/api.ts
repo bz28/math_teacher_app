@@ -268,6 +268,8 @@ export const api = {
   harnessRuns: (params?: Record<string, string>) => request<HarnessRunsData>("/admin/harness-runs", params),
   harnessReport: (id: string) => request<{ html: string }>(`/admin/harness-runs/${id}/report`),
   quality: (params?: Record<string, string>) => request<QualityData>("/admin/quality", params),
+  gradingQuality: (params?: Record<string, string>) =>
+    request<GradingQualityData>("/admin/grading-quality", params),
   users: (params?: Record<string, string>) => request<UsersData>("/admin/users", params),
   studentAccessLog: (params?: Record<string, string>) =>
     request<StudentAccessLogData>("/admin/audit-logs/student-access", params),
@@ -432,6 +434,33 @@ export interface QualityData {
     created_at: string;
   }[];
   total_count: number;
+}
+
+// ── AI grading quality (teacher-override analytics) ──
+
+export type GradingDirection = "too_harsh" | "too_generous" | "balanced";
+
+/** Headline metrics shared by the global summary and every group bucket
+ *  (subject, course, day). `mean_delta` is the signed direction signal:
+ *  positive = teachers raised scores = AI too harsh. */
+export interface GradingBucket {
+  graded_problems: number;
+  overridden_problems: number;
+  override_rate: number;
+  mean_delta: number;
+  direction: GradingDirection;
+  mean_override_magnitude: number;
+  raised: number;
+  lowered: number;
+}
+
+export interface GradingQualityData {
+  summary: GradingBucket & { reviewed_submissions: number };
+  status_matrix: { from: string; to: string; count: number; is_change: boolean }[];
+  by_subject: (GradingBucket & { subject: string })[];
+  by_course: (GradingBucket & { course: string; subject: string })[];
+  trend: (GradingBucket & { day: string })[];
+  subjects: string[];
 }
 
 // Lead types
