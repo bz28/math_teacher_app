@@ -1,0 +1,23 @@
+{
+  "description": "Live proof of the AI Workshop re-solve fix. Same \"clean it up\" request that previously published a fudged 166deg now returns the solver-verified 178deg.",
+  "verified_final_answer": "$\\overset{\\frown}{TB} = 178°$",
+  "question": "From external point $P$, a tangent touches circle $O$ at point $T$, and a secant passes through the circle intersecting it at points $A$ and $B$ (with $A$ between $P$ and $B$). The far arc $\\overset{\\frown}{TB}$ (not containing $A$) measures $(8x + 6)°$, and the near arc $\\overset{\\frown}{TA}$ (between the tangent and secant on the near side) measures $(4x - 2)°$. The angle formed at $P$ is $\\angle TPB = 47°$. Using the secant–tangent angle theorem, set up and solve an equation to find the degree measure of arc $\\overset{\\frown}{TB}$.",
+  "solution_steps": [
+    {
+      "title": "Understand the Setup",
+      "description": "From external point $P$, a **tangent** touches the circle at $T$ and a **secant** cuts through at $A$ (near) then $B$ (far).\n\nThe key relationship here is the **Secant–Tangent Angle Theorem**:\n$$\\angle P = \\frac{1}{2}\\bigl(\\text{far arc} - \\text{near arc}\\bigr)$$\nThe angle at the outside point always equals **half the difference** of the two arcs it intercepts — the bigger arc it \"sees\" minus the smaller one.\n\nHere:\n- Far arc: $\\overset{\\frown}{TB} = (8x + 6)°$\n- Near arc: $\\overset{\\frown}{TA} = (4x - 2)°$\n- Angle at $P$: $47°$"
+    },
+    {
+      "title": "Set Up the Equation",
+      "description": "Plug everything into the theorem:\n$$47 = \\frac{1}{2}\\bigl[(8x + 6) - (4x - 2)\\bigr]$$\nSubtracting distributes the minus sign across $(4x - 2)$:\n$$47 = \\frac{1}{2}\\bigl[8x + 6 - 4x + 2\\bigr] = \\frac{1}{2}(4x + 8)$$"
+    },
+    {
+      "title": "Solve for x",
+      "description": "Multiply both sides by $2$ to clear the fraction:\n$$94 = 4x + 8$$\nSubtract $8$:\n$$86 = 4x$$\nDivide by $4$:\n$$x = 21.5$$"
+    },
+    {
+      "title": "Find Arc TB",
+      "description": "Substitute $x = 21.5$ into the far arc expression:\n$$\\overset{\\frown}{TB} = 8(21.5) + 6 = 172 + 6 = 178°$$\n\nA quick sanity check — near arc $\\overset{\\frown}{TA} = 4(21.5) - 2 = 86 - 2 = 84°$, and indeed $\\tfrac{1}{2}(178 - 84) = \\tfrac{1}{2}(94) = 47°$ ✓"
+    }
+  ]
+}
