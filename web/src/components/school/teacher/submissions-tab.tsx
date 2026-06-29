@@ -1,13 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { teacher, type SubmissionsInboxRow } from "@/lib/api";
 import { formatDueShort } from "@/lib/utils";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { Select } from "@/components/ui";
 import { ProgressBar } from "./_pieces/progress-bar";
 import { StatusPill } from "./_pieces/status-pill";
+
+/** Review-pane deep link for a (HW × section) inbox row. Shared by the
+ *  row link, the "Grade next" jump, and the zero-submission preview so
+ *  the route shape lives in exactly one place. */
+function reviewHref(courseId: string, row: SubmissionsInboxRow): string {
+  return `/school/teacher/courses/${courseId}/homework/${row.assignment_id}/sections/${row.section_id}/review`;
+}
 
 /**
  * Submissions tab — the teacher's grading inbox.
@@ -16,19 +25,31 @@ import { StatusPill } from "./_pieces/status-pill";
  * work (flagged or to-grade) sort to the top by due date ascending;
  * fully-handled rows sink so finished HWs don't outrank ones that
  * still need attention.
+ *
+ * Two batch affordances sit above the list so a teacher doesn't have
+ * to hunt rows for the most common moves:
+ *   • "Grade next" jumps straight into the highest-priority review pane
+ *     (flagged → ungraded-overdue → ungraded).
+ *   • "Republish all" fans the existing per-HW publish-grades endpoint
+ *     across every homework with edited-but-unreleased grades.
  */
 export function SubmissionsTab({ courseId }: { courseId: string }) {
+  const router = useRouter();
   const [rows, setRows] = useState<SubmissionsInboxRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sectionId, setSectionId] = useState<string>("all");
   const [search, setSearch] = useState("");
 
+  const load = useCallback(async () => {
+    const res = await teacher.submissionsInbox(courseId);
+    return res.rows;
+  }, [courseId]);
+
   useEffect(() => {
     let cancelled = false;
-    teacher
-      .submissionsInbox(courseId)
-      .then((res) => {
-        if (!cancelled) setRows(res.rows);
+    load()
+      .then((r) => {
+        if (!cancelled) setRows(r);
       })
       .catch((e) => {
         if (!cancelled) {
@@ -38,7 +59,7 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [courseId]);
+  }, [load]);
 
   const sections = useMemo(() => {
     if (!rows) return [];
@@ -63,6 +84,17 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
     }
     return out.slice().sort(compareRows);
   }, [rows, sectionId, search]);
+
+  // "Grade next" target — the single highest-priority row in the
+  // CURRENT view (respects the section/search filter so the jump lands
+  // where the teacher is looking). null when nothing needs grading.
+  const gradeNext = useMemo(() => pickGradeNext(filtered), [filtered]);
+
+  // "Republish all" set — every homework with edited-but-unreleased
+  // (dirty) grades, computed across the WHOLE inbox (unfiltered): the
+  // publish-grades endpoint is HW-wide and idempotent, so this is a
+  // global "flush my pending edits" action, not a per-section one.
+  const dirtyBatch = useMemo(() => collectDirtyBatch(rows ?? []), [rows]);
 
   if (error) {
     return <p className="mt-6 text-sm text-[color:var(--color-error)]">{error}</p>;
@@ -115,6 +147,21 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
         </Select>
       </div>
 
+      <BatchActionBar
+        gradeNext={gradeNext}
+        onGradeNext={() => {
+          if (gradeNext) router.push(reviewHref(courseId, gradeNext.row));
+        }}
+        dirtyBatch={dirtyBatch}
+        onRepublished={() =>
+          load()
+            .then(setRows)
+            .catch((e) =>
+              setError(e instanceof Error ? e.message : "Failed to refresh inbox"),
+            )
+        }
+      />
+
       {filtered.length === 0 ? (
         <p className="mt-8 text-center text-xs text-text-muted">
           No homework matches those filters.
@@ -131,6 +178,159 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
 }
 
 // ────────────────────────────────────────────────────────────────────
+// Batch action bar — "Grade next" jump + "Republish all" fan-out. Only
+// renders when at least one of the two has something to act on, so a
+// caught-up inbox stays clean.
+// ────────────────────────────────────────────────────────────────────
+
+function BatchActionBar({
+  gradeNext,
+  onGradeNext,
+  dirtyBatch,
+  onRepublished,
+}: {
+  gradeNext: GradeNextTarget | null;
+  onGradeNext: () => void;
+  dirtyBatch: DirtyBatch;
+  onRepublished: () => void;
+}) {
+  const reduce = useReducedMotion();
+  const [confirming, setConfirming] = useState(false);
+  const [republishing, setRepublishing] = useState(false);
+  const [republishError, setRepublishError] = useState<string | null>(null);
+
+  // Bulk republish only earns its place when MULTIPLE homeworks are
+  // dirty — a single dirty HW is better handled by its own row / the
+  // per-HW republish button in the review pane.
+  const showRepublish = dirtyBatch.assignmentIds.length >= 2;
+
+  if (!gradeNext && !showRepublish) return null;
+
+  const handleRepublishAll = async () => {
+    setRepublishing(true);
+    setRepublishError(null);
+    // Fan the existing HW-wide publish-grades endpoint across every
+    // dirty homework. allSettled so one failure doesn't abort the rest;
+    // we report the honest count of failures and still refresh so the
+    // succeeded ones drop out of the list.
+    const results = await Promise.allSettled(
+      dirtyBatch.assignmentIds.map((id) => teacher.publishGrades(id, false)),
+    );
+    const failed = results.filter((r) => r.status === "rejected").length;
+    setRepublishing(false);
+    if (failed > 0) {
+      setRepublishError(
+        failed === dirtyBatch.assignmentIds.length
+          ? "Couldn’t republish — please try again."
+          : `Republished some, but ${failed} ${failed === 1 ? "homework" : "homeworks"} failed. Try again.`,
+      );
+    } else {
+      setConfirming(false);
+    }
+    onRepublished();
+  };
+
+  return (
+    <div className="mt-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)] px-4 py-3">
+        {/* Grade next */}
+        {gradeNext ? (
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={onGradeNext}
+              className="shrink-0 rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-primary-dark"
+            >
+              Grade next →
+            </button>
+            <span className="min-w-0 truncate text-[11px] text-text-muted">
+              {gradeNext.reason} ·{" "}
+              <span className="font-semibold text-text-secondary">
+                {gradeNext.row.assignment_title}
+              </span>{" "}
+              · {gradeNext.row.section_name}
+            </span>
+          </div>
+        ) : (
+          <span aria-hidden />
+        )}
+
+        {/* Republish all — inline confirm (republish pushes grades to
+            students, so it asks first; the affordance stays calm, not
+            alarming). */}
+        {showRepublish && (
+          <AnimatePresence mode="wait" initial={false}>
+            {confirming ? (
+              <motion.div
+                key="confirm"
+                initial={reduce ? false : { opacity: 0, x: 6 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={reduce ? { opacity: 0 } : { opacity: 0, x: 6 }}
+                transition={{ duration: reduce ? 0 : 0.15 }}
+                className="flex flex-wrap items-center gap-2"
+              >
+                <span className="text-[11px] text-text-secondary">
+                  Send {dirtyBatch.dirtyCount} updated{" "}
+                  {dirtyBatch.dirtyCount === 1 ? "grade" : "grades"} to students
+                  across {dirtyBatch.assignmentIds.length} homeworks
+                  {dirtyBatch.pendingCount > 0 && (
+                    <>
+                      {" "}
+                      <span className="text-text-muted">
+                        (+{dirtyBatch.pendingCount} newly graded)
+                      </span>
+                    </>
+                  )}
+                  ?
+                </span>
+                <button
+                  type="button"
+                  onClick={handleRepublishAll}
+                  disabled={republishing}
+                  className="rounded-[--radius-sm] bg-[color:var(--color-warning-dark)] px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-[color:var(--color-warning)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {republishing ? "Republishing…" : "Yes, republish"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirming(false);
+                    setRepublishError(null);
+                  }}
+                  disabled={republishing}
+                  className="rounded-[--radius-sm] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:text-text-primary disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </motion.div>
+            ) : (
+              <motion.button
+                key="trigger"
+                type="button"
+                onClick={() => setConfirming(true)}
+                initial={reduce ? false : { opacity: 0, x: 6 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={reduce ? { opacity: 0 } : { opacity: 0, x: 6 }}
+                transition={{ duration: reduce ? 0 : 0.15 }}
+                className="inline-flex items-center gap-1.5 rounded-[--radius-md] border border-[color:var(--color-warning)]/40 bg-[color:var(--color-warning-bg)] px-4 py-2 text-xs font-bold text-[color:var(--color-warning-dark)] transition-colors hover:border-[color:var(--color-warning)]/70 dark:bg-[color:var(--color-warning)]/10"
+              >
+                <span aria-hidden>↻</span>
+                Republish all ({dirtyBatch.dirtyCount}) →
+              </motion.button>
+            )}
+          </AnimatePresence>
+        )}
+      </div>
+      {republishError && (
+        <p className="mt-2 text-xs font-semibold text-[color:var(--color-error)]">
+          {republishError}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
 
 function InboxRow({
   row,
@@ -139,7 +339,7 @@ function InboxRow({
   row: SubmissionsInboxRow;
   courseId: string;
 }) {
-  const href = `/school/teacher/courses/${courseId}/homework/${row.assignment_id}/sections/${row.section_id}/review`;
+  const href = reviewHref(courseId, row);
   const dueLabel = row.due_at ? formatDueShort(row.due_at) : "No due date";
   const overdueDays = row.due_at ? daysOverdue(row.due_at) : 0;
   // "To review" = anything that needs the teacher's attention before
@@ -168,8 +368,8 @@ function InboxRow({
           : "Review →";
 
   // Body content is identical between the link and waiting variants —
-  // only the outer wrapper and the right-side CTA differ. Pulling it
-  // out keeps the two branches scannable side-by-side.
+  // only the right-side CTA differs. Pulling it out keeps the two
+  // branches scannable side-by-side.
   const body = (
     <>
       <div className="min-w-0 flex-1">
@@ -215,7 +415,7 @@ function InboxRow({
         </div>
         {isAwaiting ? (
           <p className="mt-2 text-[11px] italic text-text-muted">
-            No work to review yet
+            No work to review yet — open to preview the roster &amp; rubric
           </p>
         ) : (
           // Single summary line + a single bar showing overall grading
@@ -240,8 +440,11 @@ function InboxRow({
         )}
       </div>
       {isAwaiting ? (
-        <span className="shrink-0 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)] px-4 py-2 text-xs font-semibold text-text-muted">
-          Awaiting submissions
+        // Zero-submission rows used to be a dead end. They're now a
+        // quiet link into the review pane so a teacher can preview the
+        // roster and sanity-check before work lands.
+        <span className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-4 py-2 text-xs font-semibold text-text-secondary group-hover:border-primary/40 group-hover:text-text-primary">
+          Preview →
         </span>
       ) : (
         <span className="shrink-0 rounded-[--radius-md] bg-primary px-4 py-2 text-xs font-bold text-white group-hover:bg-primary-dark">
@@ -251,21 +454,14 @@ function InboxRow({
     </>
   );
 
-  // Awaiting rows aren't clickable — there's no work to review, so a
-  // link to the empty review page would be a dead end. Render as a
-  // plain container without the hover affordance.
-  if (isAwaiting) {
-    return (
-      <div className="flex items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3">
-        {body}
-      </div>
-    );
-  }
-
+  // Every row is now clickable — has-work rows jump into grading, and
+  // zero-submission rows open the review pane to preview the roster.
+  // The `group` hover affordance is shared; the awaiting variant just
+  // carries a calmer right-side label.
   return (
     <Link
       href={href}
-      className="flex items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3 transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-sm"
+      className="group flex items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3 transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-sm"
     >
       {body}
     </Link>
@@ -304,3 +500,82 @@ function daysOverdue(iso: string): number {
   return days > 0 ? days : 0;
 }
 
+// ────────────────────────────────────────────────────────────────────
+// Batch-action derivations
+// ────────────────────────────────────────────────────────────────────
+
+type GradeNextTarget = { row: SubmissionsInboxRow; reason: string };
+
+/** Priority tier for the "Grade next" jump. Lower = more urgent.
+ *  Mirrors the audit's flagged → ungraded-overdue → ungraded order.
+ *  Dirty-only rows return null — republishing edited grades is the
+ *  Republish-all action's job, not a grading jump. */
+function gradeNextTier(r: SubmissionsInboxRow): number | null {
+  if (r.flagged > 0) return 0;
+  // Ungraded = needs a grade or a first publish. Excludes `dirty`
+  // (which lives inside `published`), so a clean-but-edited row never
+  // pulls "Grade next".
+  const ungraded = r.submitted - r.published;
+  if (ungraded > 0) {
+    return r.due_at && daysOverdue(r.due_at) > 0 ? 1 : 2;
+  }
+  return null;
+}
+
+function pickGradeNext(rows: SubmissionsInboxRow[]): GradeNextTarget | null {
+  let best: SubmissionsInboxRow | null = null;
+  let bestTier = Number.POSITIVE_INFINITY;
+  let bestDue = Number.POSITIVE_INFINITY;
+  for (const r of rows) {
+    const tier = gradeNextTier(r);
+    if (tier === null) continue;
+    const due = dueKey(r);
+    if (tier < bestTier || (tier === bestTier && due < bestDue)) {
+      best = r;
+      bestTier = tier;
+      bestDue = due;
+    }
+  }
+  if (!best) return null;
+  const reason =
+    best.flagged > 0
+      ? `⚑ ${best.flagged} flagged`
+      : bestTier === 1
+        ? `${best.submitted - best.published} to grade · overdue`
+        : `${best.submitted - best.published} to grade`;
+  return { row: best, reason };
+}
+
+type DirtyBatch = {
+  /** Distinct homework ids with edited-but-unreleased grades. The
+   *  publish-grades endpoint is HW-wide, so we fan out over these, not
+   *  over rows (a HW can span several section rows). */
+  assignmentIds: string[];
+  /** Total dirty grades across those homeworks — the "(N)" count. */
+  dirtyCount: number;
+  /** Freshly graded-but-never-published grades on the same homeworks.
+   *  The endpoint publishes these alongside the dirty ones, so the
+   *  confirm discloses them honestly. */
+  pendingCount: number;
+};
+
+function collectDirtyBatch(rows: SubmissionsInboxRow[]): DirtyBatch {
+  const ids = new Set<string>();
+  let dirtyCount = 0;
+  // First pass: which homeworks have any dirty grade, and the total
+  // dirty count.
+  for (const r of rows) {
+    if (r.dirty > 0) {
+      ids.add(r.assignment_id);
+      dirtyCount += r.dirty;
+    }
+  }
+  // Second pass: pending (graded-but-unpublished) grades that live on
+  // the same homeworks and would publish in the same fan-out. `to_grade`
+  // is exactly the graded-but-unpublished count per row.
+  let pendingCount = 0;
+  for (const r of rows) {
+    if (ids.has(r.assignment_id)) pendingCount += r.to_grade;
+  }
+  return { assignmentIds: Array.from(ids), dirtyCount, pendingCount };
+}
