@@ -396,6 +396,49 @@ async def chat_with_bank_item(
         if all(v is None for v in proposal.values()):
             proposal = None
 
+    # Deterministic correctness: when the proposal rewrites the QUESTION, the
+    # chat's own inline solution can silently disagree with it — it may fudge a
+    # value to land a rounder answer, or "verify" against a stale number (we
+    # saw exactly this: a tangent–secant rewrite that reported 166° for a
+    # problem whose real answer is 178°). Rather than trust the chat to grade
+    # itself, re-solve the new question with the SAME decomposition path that
+    # first-pass generation uses, and take the solution + final answer from the
+    # solver. The chat owns the question text (and figure); the solver owns the
+    # answer. If the solver itself fails, we keep the chat's inline solution
+    # (no worse than before) rather than block the proposal.
+    if proposal and proposal.get("question"):
+        from api.core.assignment_generation import generate_solutions
+        from api.core.constants import SOLUTION_FAILED_SENTINEL_PREFIX
+
+        try:
+            solved = await generate_solutions(
+                [{"text": proposal["question"]}],
+                subject=course.subject,
+                user_id=str(user_id),
+            )
+        except Exception:
+            logger.exception("Workshop re-solve failed; keeping chat's inline solution")
+            solved = []
+        sol = solved[0] if solved else None
+        if sol and not str(sol.get("final_answer") or "").startswith(
+            SOLUTION_FAILED_SENTINEL_PREFIX
+        ):
+            steps = sol.get("steps")
+            proposal["solution_steps"] = (
+                _render_step_figures(steps) if isinstance(steps, list) and steps else None
+            )
+            proposal["final_answer"] = str(sol.get("final_answer") or "") or None
+            # Replace (not append) the chat's prose: its narrative may assert a
+            # specific answer it computed free-hand, which can disagree with the
+            # solver's verified one (we saw the reply claim 118° while the
+            # solver returned the correct 178°). A contradictory reply next to
+            # the preview reads as broken. State only what we can stand behind.
+            reply = (
+                "I've rewritten the problem. To make sure the rewrite is "
+                "correct, the solution steps and final answer below were "
+                "re-derived independently rather than written by hand."
+            )
+
     ai_msg: dict[str, Any] = {
         "role": "ai",
         "text": reply or "(no reply)",

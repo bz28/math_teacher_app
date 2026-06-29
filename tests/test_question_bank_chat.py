@@ -9,9 +9,18 @@ Claude) so we don't unit-test it here — the helpers are where the
 state-machine logic lives that we want to lock down.
 """
 
-from unittest.mock import MagicMock
+import uuid
+from unittest.mock import AsyncMock, MagicMock
 
-from api.core.question_bank_chat import _build_user_context, _strip_internal_fields
+import pytest
+
+import api.core.assignment_generation as assignment_generation
+import api.core.question_bank_chat as qbc
+from api.core.question_bank_chat import (
+    _build_user_context,
+    _strip_internal_fields,
+    chat_with_bank_item,
+)
 
 
 class TestStripInternalFields:
@@ -106,3 +115,121 @@ class TestBuildUserContext:
         item = self._make_item(generation_prompt="only word problems")
         ctx = _build_user_context(item, "Unit 5", "Algebra 1")
         assert "Original generation constraint: only word problems" in ctx
+
+
+class TestQuestionRewriteReSolve:
+    """When a workshop proposal rewrites the QUESTION, the chat's inline
+    solution can silently disagree with it (it may fudge a value to land a
+    rounder answer). The fix re-solves the new question with the same
+    decomposition path generation uses and takes the answer from the solver,
+    not from the chat. These lock that behavior down."""
+
+    def _item(self) -> MagicMock:
+        item = MagicMock()
+        item.chat_messages = []
+        item.source_doc_ids = []
+        item.unit_id = None
+        item.course_id = uuid.uuid4()
+        item.question = "Old tangent-secant question with an ugly answer."
+        item.solution_steps = [{"title": "Solve", "description": "x = 46/3"}]
+        item.final_answer = "$386/3°$"
+        item.generation_prompt = None
+        return item
+
+    def _course(self) -> MagicMock:
+        course = MagicMock()
+        course.subject = "math"
+        course.name = "Accelerated Geometry"
+        return course
+
+    def _db(self) -> MagicMock:
+        db = MagicMock()
+        db.commit = AsyncMock()
+        return db
+
+    async def test_question_rewrite_takes_answer_from_solver(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        new_q = "arcs (8x+6) and (4x-2), exterior angle 47, find arc TB."
+        # Chat proposes a rewrite with a FUDGED inline answer (the bug).
+        monkeypatch.setattr(qbc, "fetch_document_images", AsyncMock(return_value=[]))
+        monkeypatch.setattr(
+            qbc,
+            "call_claude_json",
+            AsyncMock(
+                return_value={
+                    "reply": "I rewrote it: x = 7 and arc TB = 118.",
+                    "proposal": {
+                        "question": new_q,
+                        "final_answer": "$166°$",
+                        "solution_steps": [
+                            {"title": "Fudge", "description": "use x=20 -> 166"}
+                        ],
+                    },
+                }
+            ),
+        )
+        # Solver returns the CORRECT answer for that question.
+        solver = AsyncMock(
+            return_value=[
+                {
+                    "question_text": new_q,
+                    "steps": [{"title": "Solve", "description": "2x+4=47 -> x=21.5"}],
+                    "final_answer": "$178°$",
+                }
+            ]
+        )
+        monkeypatch.setattr(assignment_generation, "generate_solutions", solver)
+
+        ai_msg = await chat_with_bank_item(
+            self._db(), self._item(), self._course(),
+            teacher_message="make the numbers clean", user_id=uuid.uuid4(),
+        )
+
+        proposal = ai_msg["proposal"]
+        # Answer comes from the solver, not the chat's fudged 166.
+        assert proposal["final_answer"] == "$178°$"
+        assert "166" not in proposal["final_answer"]
+        # Steps come from the solver too.
+        assert proposal["solution_steps"][0]["description"] == "2x+4=47 -> x=21.5"
+        # The solver was actually invoked on the NEW question.
+        solver.assert_awaited_once()
+        assert solver.await_args.args[0] == [{"text": new_q}]
+        # The chat's contradictory prose ("118") is replaced with a neutral note.
+        assert "118" not in ai_msg["text"]
+        assert "re-derived independently" in ai_msg["text"]
+
+    async def test_solution_only_edit_does_not_re_solve(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Teacher asks to tweak only the solution wording; question unchanged.
+        # We must NOT override their edit with a fresh solve.
+        monkeypatch.setattr(qbc, "fetch_document_images", AsyncMock(return_value=[]))
+        monkeypatch.setattr(
+            qbc,
+            "call_claude_json",
+            AsyncMock(
+                return_value={
+                    "reply": "Made step 1 more concise.",
+                    "proposal": {
+                        "question": None,
+                        "final_answer": None,
+                        "solution_steps": [
+                            {"title": "Solve", "description": "concise version"}
+                        ],
+                    },
+                }
+            ),
+        )
+        solver = AsyncMock(return_value=[])
+        monkeypatch.setattr(assignment_generation, "generate_solutions", solver)
+
+        ai_msg = await chat_with_bank_item(
+            self._db(), self._item(), self._course(),
+            teacher_message="make step 1 concise", user_id=uuid.uuid4(),
+        )
+
+        solver.assert_not_awaited()
+        assert ai_msg["proposal"]["solution_steps"][0]["description"] == "concise version"
+        # Reply is left as-is (no question rewrite happened).
+        assert ai_msg["text"] == "Made step 1 more concise."
