@@ -84,6 +84,21 @@ describe("ExtractionConfirmScreen", () => {
     expect(mockedApi.confirmExtraction).toHaveBeenCalledWith("sub-1", { "1:final": "5" });
   });
 
+  it("shows a source-photo strip of the submitted pages to compare against", async () => {
+    mockedApi.getSubmission.mockResolvedValue({
+      ...SUBMISSION,
+      files: [
+        { data: "QQ==", media_type: "image/jpeg" },
+        { data: "QQ==", media_type: "application/pdf", filename: "work.pdf" },
+      ],
+    } as never);
+    render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);
+
+    expect(await waitForText("Your work · tap to enlarge")).toBeTruthy();
+    expect(screen.getByLabelText("View page 1")).toBeTruthy();
+    expect(screen.getByLabelText("View page 2")).toBeTruthy();
+  });
+
   it("acknowledges without a confirm UI when no integrity/grading pipeline runs", async () => {
     mockedApi.getSubmission.mockResolvedValue({
       ...SUBMISSION,

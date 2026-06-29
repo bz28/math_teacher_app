@@ -3351,6 +3351,8 @@ export interface components {
         };
         /** BreakdownEntry */
         BreakdownEntry: {
+            /** Deductions */
+            deductions?: components["schemas"]["Deduction"][] | null;
             /** Feedback */
             feedback?: string | null;
             /** Percent */
@@ -3641,6 +3643,21 @@ export interface components {
             section_name: string;
             /** Title */
             title: string;
+        };
+        /**
+         * Deduction
+         * @description One line in a problem's itemized grade receipt — the AI's
+         *     justification for a single point change. Threaded through the teacher
+         *     save so the receipt survives an edit that *doesn't* touch the score
+         *     (e.g. confirming the AI grade, or editing only the feedback).
+         */
+        Deduction: {
+            /** Points Off */
+            points_off: number;
+            /** Reason */
+            reason: string;
+            /** Step Ref */
+            step_ref?: number | null;
         };
         /** DeleteAccountRequest */
         DeleteAccountRequest: {
