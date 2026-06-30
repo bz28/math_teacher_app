@@ -65,6 +65,14 @@ export default function GradingSet() {
         </ol>
       </section>
 
+      {/* ── DISCLOSURE + PROVENANCE (mirrors IntegritySet) ───────── */}
+      <section className="it-section it-disclosure">
+        <div className="it-framing">{g.meta.framing}</div>
+        <div className="it-provenance mono">
+          {g.meta.source} · model {g.meta.model} · captured {g.meta.capturedAt}
+        </div>
+      </section>
+
       {/* ── BY THE NUMBERS (grading-specific capability strip) ───── */}
       <section className="it-section it-worth">
         <div className="it-section-head">

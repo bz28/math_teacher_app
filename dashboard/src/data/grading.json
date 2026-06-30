@@ -39,7 +39,7 @@
     {
       "src": "/golden-set-grading/04-anchored.png",
       "title": "Each deduction points to the exact step",
-      "caption": "The −20% sign error highlights step 3 of the handwriting; the −7% arithmetic slip highlights step 5. The grade is tied to the work itself, not floating above it — so you can check the read in seconds."
+      "caption": "The −20% sign error highlights step 3 of the handwriting — moving −6 across the equals sign should make it +6; the −7% arithmetic slip highlights step 4, where 9 − 6 was written as 4 instead of 3. The grade is tied to the work itself, not floating above it — so you can check the read in seconds."
     },
     {
       "src": "/golden-set-grading/05-triage.png",
@@ -68,7 +68,7 @@
       },
       {
         "title": "Every grade you can defend",
-        "body": "When a parent asks why it's a 73, you have the receipt: full credit for the setup, a −20 sign error in step 3, a −7 arithmetic slip in step 5. Not an opinion — a breakdown."
+        "body": "When a parent asks why it's a 73, you have the receipt: full credit for the setup, a −20 sign error in step 3 (the −6 kept its sign crossing the equals), a −7 arithmetic slip in step 4 (9 − 6 written as 4, not 3). Not an opinion — a breakdown."
       },
       {
         "title": "Consistent across the whole class",
