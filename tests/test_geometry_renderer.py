@@ -13,7 +13,13 @@ import math
 import pytest
 
 from api.core.geometry import FigureSpecError, render_figure
-from api.core.geometry.dsl import CircleFigure, PolygonFigure, TriangleFigure
+from api.core.geometry.dsl import (
+    CircleFigure,
+    CircleLine,
+    ExternalPoint,
+    PolygonFigure,
+    TriangleFigure,
+)
 from api.core.geometry.solver import (
     circumcircle_of_triangle,
     incircle_of_triangle,
@@ -460,6 +466,153 @@ def test_render_circle_tolerates_unmatched_label_keys() -> None:
     )
     assert "<circle" in svg
     assert svg.startswith("<svg")
+
+
+# ── Circles: external points (tangent / secant from outside) ────────
+
+
+def test_external_point_tangent_secant_lands_outside() -> None:
+    """A tangent–secant external point is the exact intersection of the
+    tangent and the secant, and lies OUTSIDE the circle."""
+    spec = CircleFigure(
+        radius=1.0,
+        points={"T": 90.0, "A": 250.0, "B": 20.0},
+        external_points={"P": ExternalPoint(
+            line1=CircleLine(tangent_at="T"),
+            line2=CircleLine(secant_through=["A", "B"]),
+        )},
+    )
+    px, py = solve_circle(spec)["P"]
+    assert math.hypot(px, py) > spec.radius
+    # Tangent at T (the top of the circle) is the horizontal line y = r,
+    # so P sits on it exactly.
+    assert py == pytest.approx(1.0, abs=1e-6)
+
+
+def test_external_point_two_secants_power_of_a_point_outside() -> None:
+    spec = CircleFigure(
+        radius=1.0,
+        points={"A": 33.0, "B": 97.0, "C": 327.0, "D": 263.0},
+        external_points={"P": ExternalPoint(
+            line1=CircleLine(secant_through=["A", "B"]),
+            line2=CircleLine(secant_through=["C", "D"]),
+        )},
+    )
+    assert math.hypot(*solve_circle(spec)["P"]) > spec.radius
+
+
+def test_external_point_two_tangents_meet_on_axis() -> None:
+    """Tangents at symmetric points (±60°) meet on the x-axis, outside."""
+    spec = CircleFigure(
+        radius=1.0,
+        points={"S": 60.0, "T": 300.0},
+        external_points={"P": ExternalPoint(
+            line1=CircleLine(tangent_at="S"),
+            line2=CircleLine(tangent_at="T"),
+        )},
+    )
+    px, py = solve_circle(spec)["P"]
+    assert px == pytest.approx(2.0, abs=1e-6)
+    assert py == pytest.approx(0.0, abs=1e-6)
+
+
+def test_external_point_parallel_lines_rejected() -> None:
+    """Two parallel secants never meet — surfaced as a clean error."""
+    spec = CircleFigure(
+        radius=1.0,
+        points={"A": 160.0, "B": 20.0, "C": 200.0, "D": 340.0},
+        external_points={"P": ExternalPoint(
+            line1=CircleLine(secant_through=["A", "B"]),
+            line2=CircleLine(secant_through=["C", "D"]),
+        )},
+    )
+    with pytest.raises(FigureSpecError, match="parallel"):
+        solve_circle(spec)
+
+
+def test_external_point_interior_intersection_rejected() -> None:
+    """Two diameters cross at the center — inside, so not an external point."""
+    spec = CircleFigure(
+        radius=1.0,
+        points={"A": 0.0, "B": 180.0, "C": 90.0, "D": 270.0},
+        external_points={"P": ExternalPoint(
+            line1=CircleLine(secant_through=["A", "B"]),
+            line2=CircleLine(secant_through=["C", "D"]),
+        )},
+    )
+    with pytest.raises(FigureSpecError, match="inside"):
+        solve_circle(spec)
+
+
+def test_external_point_unknown_reference_rejected() -> None:
+    with pytest.raises(ValueError, match="unknown circle point"):
+        CircleFigure(
+            radius=1.0,
+            points={"T": 90.0},
+            external_points={"P": ExternalPoint(
+                line1=CircleLine(tangent_at="Z"),
+                line2=CircleLine(tangent_at="T"),
+            )},
+        )
+
+
+def test_external_point_name_collision_rejected() -> None:
+    with pytest.raises(ValueError, match="collides"):
+        CircleFigure(
+            radius=1.0,
+            points={"T": 90.0, "P": 0.0},
+            external_points={"P": ExternalPoint(
+                line1=CircleLine(tangent_at="T"),
+                line2=CircleLine(tangent_at="P"),
+            )},
+        )
+
+
+def test_external_point_empty_tangent_name_rejected_at_validation() -> None:
+    """An empty-string tangent_at is still a tangent line (set, not None), so
+    it must be reference-checked — "" is not a real point. Without this it
+    slipped past validation and KeyError'd in the solver (coords[""]) instead
+    of failing cleanly here."""
+    with pytest.raises(ValueError, match="unknown circle point"):
+        CircleFigure(
+            radius=1.0,
+            points={"T": 90.0},
+            external_points={"P": ExternalPoint(
+                line1=CircleLine(tangent_at=""),
+                line2=CircleLine(tangent_at="T"),
+            )},
+        )
+
+
+def test_circle_line_requires_exactly_one_kind() -> None:
+    with pytest.raises(ValueError, match="exactly one"):
+        CircleLine(tangent_at="T", secant_through=["A", "B"])
+    with pytest.raises(ValueError, match="exactly one"):
+        CircleLine()
+    with pytest.raises(ValueError, match="two distinct"):
+        CircleLine(secant_through=["A", "A"])
+
+
+def test_render_external_point_draws_point_and_widens_viewbox() -> None:
+    """End-to-end: the external point renders with its label + the
+    tangent/secant segments, and the viewBox grows past the bare circle to
+    include it (so P is never clipped at the edge)."""
+    base = {
+        "shape": "circle", "radius": 1.0, "show_center": True,
+        "points": {"T": 90.0, "A": 250.0, "B": 20.0},
+    }
+    with_ext = {
+        **base,
+        "external_points": {
+            "P": {"line1": {"tangent_at": "T"},
+                  "line2": {"secant_through": ["A", "B"]}},
+        },
+    }
+    svg = render_figure(with_ext)
+    assert svg.startswith("<svg")
+    assert ">P<" in svg              # external point label present
+    assert svg.count("<line") >= 2   # the tangent + secant segments
+    assert _viewbox(svg)[2] > _viewbox(render_figure(base))[2]
 
 
 # ── Circles: end-to-end render ──────────────────────────────────────

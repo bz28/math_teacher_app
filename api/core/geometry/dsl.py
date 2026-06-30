@@ -178,6 +178,54 @@ class TriangleFigure(BaseModel):
         return self
 
 
+class CircleLine(BaseModel):
+    """One line used to locate an external point — either the tangent to
+    the circle at a named on-circle point, or the secant/chord line
+    through two named on-circle points. Exactly one of the two is set.
+
+    Keeping a line *relational* (named points, not coordinates) is what
+    lets the solver compute the external point exactly, the same way the
+    rest of the engine derives geometry instead of trusting the LLM to
+    invent (x, y)."""
+
+    # Tangent to the circle at this named on-circle point.
+    tangent_at: str | None = None
+    # The line through these two named on-circle points (a secant/chord
+    # extended). Order doesn't matter; the solver picks the far end to draw.
+    secant_through: list[str] | None = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> CircleLine:
+        set_count = (self.tangent_at is not None) + (self.secant_through is not None)
+        if set_count != 1:
+            raise ValueError(
+                "a circle line must set exactly one of tangent_at / secant_through",
+            )
+        if self.secant_through is not None and (
+            len(self.secant_through) != 2
+            or self.secant_through[0] == self.secant_through[1]
+        ):
+            raise ValueError("secant_through must list two distinct point names")
+        return self
+
+
+class ExternalPoint(BaseModel):
+    """A point OUTSIDE the circle, located as the intersection of two
+    lines (each a tangent or a secant defined by on-circle points). The
+    solver computes its exact position and the renderer draws the point
+    plus the segments from it to the circle.
+
+    This is what makes the external-point Circle Theorems expressible
+    without coordinate-guessing: tangent–secant angle (tangent × secant),
+    secant–secant / power-of-a-point (secant × secant), and two-tangent
+    (tangent × tangent) configurations."""
+
+    line1: CircleLine
+    line2: CircleLine
+    # Optional display label; defaults to the dict key the point is under.
+    label: str | None = None
+
+
 class CircleFigure(BaseModel):
     """A circle with optional named points on the circumference, chords,
     labeled radii, and angle labels.
@@ -219,6 +267,10 @@ class CircleFigure(BaseModel):
     # Display labels at named points (e.g. when the LLM wants point
     # A drawn with a different visible name).
     point_labels: dict[str, str] = Field(default_factory=dict)
+    # Points OUTSIDE the circle, each defined as the intersection of two
+    # tangent/secant lines. The solver computes their coordinates; the
+    # renderer draws the point + the tangent/secant segments to the circle.
+    external_points: dict[str, ExternalPoint] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _validate(self) -> CircleFigure:
@@ -261,6 +313,32 @@ class CircleFigure(BaseModel):
         self.point_labels = {
             k: v for k, v in self.point_labels.items() if k in names
         }
+
+        # External points: names must not collide with circumference points,
+        # and every line they reference must point at declared on-circle
+        # points. (The geometric checks — lines actually intersect, and the
+        # result lies OUTSIDE the circle — need coordinates, so the solver
+        # enforces them and raises FigureSpecError.)
+        for ext_name, ext in self.external_points.items():
+            if ext_name in names:
+                raise ValueError(
+                    f"external point {ext_name!r} collides with a circumference point name",
+                )
+            for line in (ext.line1, ext.line2):
+                # Mirror the solver's `is not None` test exactly: a tangent
+                # line is one where tangent_at is set — even to "" — otherwise
+                # an empty-string name skips this check and then KeyErrors in
+                # the solver (coords[""]) instead of failing cleanly here.
+                refs = (
+                    [line.tangent_at]
+                    if line.tangent_at is not None
+                    else (line.secant_through or [])
+                )
+                for p in refs:
+                    if p not in names:
+                        raise ValueError(
+                            f"external point {ext_name!r} references unknown circle point {p!r}",
+                        )
 
         return self
 

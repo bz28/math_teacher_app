@@ -15,7 +15,13 @@ from __future__ import annotations
 
 import math
 
-from api.core.geometry.dsl import CircleFigure, FigureSpecError, PolygonFigure, TriangleFigure
+from api.core.geometry.dsl import (
+    CircleFigure,
+    CircleLine,
+    FigureSpecError,
+    PolygonFigure,
+    TriangleFigure,
+)
 
 Point = tuple[float, float]
 
@@ -427,7 +433,56 @@ def solve_circle(spec: CircleFigure) -> dict[str, Point]:
     for name, angle_deg in spec.points.items():
         rad = math.radians(angle_deg)
         coords[name] = (spec.radius * math.cos(rad), spec.radius * math.sin(rad))
+
+    # External points: each is the intersection of two tangent/secant lines
+    # defined by on-circle points. Computing it (rather than letting the LLM
+    # place it) keeps the figure exact and is what makes tangent–secant /
+    # power-of-a-point configurations drawable.
+    for ext_name, ext in spec.external_points.items():
+        p1, d1 = _circle_line_ray(ext.line1, coords)
+        p2, d2 = _circle_line_ray(ext.line2, coords)
+        pt = _intersect_lines(p1, d1, p2, d2)
+        if pt is None:
+            raise FigureSpecError(
+                f"external point {ext_name!r}: its two lines are parallel and never meet",
+            )
+        # The whole point of an external point is that it lies OUTSIDE the
+        # circle. If the two lines meet on/inside it, the spec describes an
+        # interior intersection (a different configuration) — drop it loudly.
+        if math.hypot(pt[0], pt[1]) <= spec.radius * (1.0 + 1e-6):
+            raise FigureSpecError(
+                f"external point {ext_name!r} lands on or inside the circle; "
+                "its two lines must intersect outside the circle",
+            )
+        coords[ext_name] = pt
     return coords
+
+
+def _circle_line_ray(line: CircleLine, coords: dict[str, Point]) -> tuple[Point, Point]:
+    """A tangent/secant line as (point_on_line, direction_vector) in solved
+    coords. A tangent at T is perpendicular to the radius OT; a secant runs
+    through its two named on-circle points."""
+    if line.tangent_at is not None:
+        tx, ty = coords[line.tangent_at]
+        # Perpendicular to the radius (tx, ty) — rotate 90°.
+        return (tx, ty), (-ty, tx)
+    a, b = line.secant_through  # type: ignore[misc]  # validator guarantees 2 names
+    ax, ay = coords[a]
+    bx, by = coords[b]
+    return (ax, ay), (bx - ax, by - ay)
+
+
+def _intersect_lines(
+    p1: Point, d1: Point, p2: Point, d2: Point,
+) -> Point | None:
+    """Intersection of the infinite lines p1+t·d1 and p2+s·d2. Returns None
+    when the lines are parallel (or coincident)."""
+    cross = d1[0] * d2[1] - d1[1] * d2[0]
+    if abs(cross) < 1e-9:
+        return None
+    dx, dy = p2[0] - p1[0], p2[1] - p1[1]
+    t = (dx * d2[1] - dy * d2[0]) / cross
+    return (p1[0] + t * d1[0], p1[1] + t * d1[1])
 
 
 def _solve_asa(
