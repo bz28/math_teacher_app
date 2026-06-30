@@ -43,7 +43,7 @@
       "src": "/golden-set-teacherday/04-reteach-modal.png",
       "step": "One click",
       "label": "Re-teach, pre-titled",
-      "sub": "The button on that row opens a practice set already named \"Re-teach: Distributing a negative across parentheses\" — scoped to the exact concept, nothing to set up."
+      "sub": "The button on that row opens a practice set already named \"Re-teach: Distributing a negative across parentheses\" — the title and the concept already filled in for you."
     },
     "action": {
       "src": "/golden-set-teacherday/05-generated-practice.png",
