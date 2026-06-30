@@ -2542,6 +2542,72 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   color: var(--muted);
 }
 
+/* ---- ★ THE MOMENT — loop variant (teaching day) ------------- */
+/* The differentiator rendered as the insight→action loop itself: three
+   connected beats — the struggle signal, the one-click pre-titled reteach, and
+   the ten problems the AI writes on the spot — flowing left to right with
+   accent arrows in the gutters. Reuses the `.it-moment` band; the head centers
+   (.it-moment-head-center), then the 3-up loop carries the proof. */
+.td-loop {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 44px;
+  max-width: 1200px;
+  margin: 0 auto;
+  align-items: start;
+}
+.td-loop-beat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+/* Accent arrow sitting in the gutter to the LEFT of beats 2 and 3, anchored
+   near the top of the frames where the eye lands. */
+.td-loop-arrow {
+  position: absolute;
+  left: -22px;
+  top: 104px;
+  transform: translateX(-50%);
+  font-family: var(--font-sans);
+  font-size: 26px;
+  line-height: 1;
+  color: var(--accent);
+  pointer-events: none;
+}
+.td-loop-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.td-loop-card-head {
+  min-height: 70px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.td-loop-step {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  color: var(--accent);
+}
+.td-loop-label {
+  font-family: var(--font-display);
+  font-weight: 400;
+  text-transform: none;
+  font-size: 20px;
+  line-height: 1.18;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+}
+.td-loop-sub {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
 /* ---- PAYOFF — 4-up points grid (grading) -------------------- */
 /* Compound selector so it beats the base `.it-payoff-points` (3-up)
    regardless of source order. */
@@ -2878,6 +2944,13 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   .it-flowstep:nth-child(even) .it-flowstep-copy { order: 1; }
   .it-flowstep:nth-child(even) .it-flowstep-shot { order: 2; }
   .it-moment-grid { grid-template-columns: 1fr; }
+  .td-loop { grid-template-columns: 1fr; gap: 56px; max-width: 560px; }
+  .td-loop-arrow {
+    left: 50%;
+    top: -42px;
+    transform: translateX(-50%) rotate(90deg);
+  }
+  .td-loop-card-head { min-height: 0; }
   .gen-verify { grid-template-columns: 1fr; }
   .gen-verify-check { border-left: none; border-top: 1px solid var(--rule-strong); }
   .it-payoff-points { grid-template-columns: 1fr; gap: 28px; }
