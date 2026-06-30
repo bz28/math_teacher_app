@@ -70,6 +70,7 @@ const FIELDS: Field[] = [
   },
 ];
 
+const round1 = (n: number) => Math.round(n * 10) / 10;
 const hrs = (n: number) => n.toFixed(1);
 
 export default function RoiCalculator() {
@@ -77,9 +78,13 @@ export default function RoiCalculator() {
   const baseId = useId();
 
   const { hand, withVeradic, back, headline } = useMemo(() => {
-    const hand = (vals.students * vals.assignments * vals.minutes) / 60;
-    const withVeradic = hand * (vals.review / 100);
-    const back = hand - withVeradic;
+    // Round each operand to 1 decimal ONCE, then derive the next value from the
+    // value the buyer actually sees — so every printed line (breakdown rows AND
+    // the literal equations) is internally consistent at every slider position:
+    //   displayed hand − displayed withVeradic === displayed back, always.
+    const hand = round1((vals.students * vals.assignments * vals.minutes) / 60);
+    const withVeradic = round1(hand * (vals.review / 100));
+    const back = round1(hand - withVeradic);
     return { hand, withVeradic, back, headline: Math.round(back) };
   }, [vals]);
 
