@@ -1,7 +1,8 @@
+import "katex/dist/katex.min.css";
 import StatCard from "../components/StatCard";
+import MathText from "../components/MathText";
 import HeroBlock from "../components/demo/HeroBlock";
 import FlowStep from "../components/demo/FlowStep";
-import BrowserFrame from "../components/demo/BrowserFrame";
 import { loadTeacherDaySet } from "../lib/teacher-day";
 
 const g = loadTeacherDaySet();
@@ -9,14 +10,20 @@ const g = loadTeacherDaySet();
 // The story runs: hero → setup flow (01–02, the morning queue and landing on
 // the exact student) → ★ the insight→action loop (the differentiator, pulled
 // out as the centerpiece) → payoff. Mirrors GradingSet / GenerationSet's
-// structure and aesthetic; the only bespoke piece is the moment, where instead
-// of a single screenshot we render the loop as three connected beats — the
-// struggle signal (03), the pre-titled one-click reteach (04), and the ten
-// problems the AI writes on the spot (05) — so the page itself shows that
-// seeing the problem and fixing it are the same motion.
+// structure and aesthetic; the only bespoke piece is the moment.
+//
+// The moment is the customer-pitch climax, so legibility is the whole point: a
+// teacher has to READ it on a screen-share. We render it as crisp HTML, not
+// tiny screenshots — the struggle signal (a real ranked row) and the one-click
+// pre-titled reteach as two compact text panels (the insight), then the
+// problems the AI writes on the spot as the large, vector-sharp centerpiece
+// (the fix). Seeing the problem and fixing it are the same motion — and a
+// teacher can actually read the problems.
 
 const m = g.moment;
-const beats = [m.signal, m.bridge, m.action] as const;
+const sig = m.signalRow;
+const fix = m.fix;
+const missedPct = Math.round((sig.missed / sig.total) * 100);
 
 export default function TeacherDaySet() {
   return (
@@ -54,25 +61,76 @@ export default function TeacherDaySet() {
             <p className="it-moment-body">{m.body}</p>
           </div>
 
-          <ol className="td-loop">
-            {beats.map((b, i) => (
-              <li key={b.src} className={`td-loop-beat td-loop-beat-${i}`}>
-                {i > 0 && (
-                  <span className="td-loop-arrow" aria-hidden="true">
-                    →
+          {/* The insight: the struggle signal → the one-click pre-titled
+              reteach, rendered as crisp text so both read at presentation
+              scale (the screenshots were illegible side-by-side at ~360px). */}
+          <div className="td-signal">
+            <div className="td-signal-card">
+              <span className="td-signal-step mono">{m.signal.step}</span>
+              <h3 className="td-signal-label">{m.signal.label}</h3>
+              <div className="td-struggle-row">
+                <div className="td-struggle-line">
+                  <span className="td-struggle-concept">{sig.concept}</span>
+                  <span className="td-struggle-count mono">
+                    {sig.missed} of {sig.total} missed
                   </span>
-                )}
-                <div className="td-loop-card">
-                  <header className="td-loop-card-head">
-                    <span className="td-loop-step mono">{b.step}</span>
-                    <h3 className="td-loop-label">{b.label}</h3>
-                  </header>
-                  <BrowserFrame src={b.src} alt={b.label} tone={i === 2 ? "moment" : "default"} />
-                  <p className="td-loop-sub">{b.sub}</p>
                 </div>
-              </li>
-            ))}
-          </ol>
+                <div className="td-struggle-bar">
+                  <span style={{ width: `${missedPct}%` }} />
+                </div>
+              </div>
+              <p className="td-signal-sub">{m.signal.sub}</p>
+            </div>
+
+            <span className="td-signal-arrow" aria-hidden="true">
+              →
+            </span>
+
+            <div className="td-signal-card">
+              <span className="td-signal-step mono">{m.bridge.step}</span>
+              <h3 className="td-signal-label">{m.bridge.label}</h3>
+              <div className="td-reteach-title">
+                <span className="td-reteach-tick" aria-hidden="true">
+                  ↻
+                </span>
+                {m.reteachTitle}
+              </div>
+              <p className="td-signal-sub">{m.bridge.sub}</p>
+            </div>
+          </div>
+
+          {/* The fix: the problems the AI writes on the spot — the centerpiece,
+              rendered as vector-crisp HTML so a teacher can actually READ a few
+              of them. */}
+          <div className="td-fix">
+            <header className="td-fix-head">
+              <div>
+                <span className="td-fix-step mono">{m.action.step}</span>
+                <h3 className="td-fix-label">{m.action.label}</h3>
+              </div>
+              <span className="td-fix-pill mono">{fix.count} problems generated</span>
+            </header>
+            <ol className="td-fix-grid">
+              {fix.problems.map((p) => (
+                <li key={p.n} className="td-fix-card">
+                  <header className="td-fix-card-head">
+                    <span className="td-fix-n mono">
+                      {p.n} / {fix.count}
+                    </span>
+                    <h4 className="td-fix-title">{p.title}</h4>
+                  </header>
+                  <div className="td-fix-q">
+                    <MathText>{p.question}</MathText>
+                  </div>
+                  <div className="td-fix-answer">
+                    <span className="td-fix-answer-label">Answer</span>
+                    <MathText>{p.answer}</MathText>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <p className="td-fix-foot mono">{fix.foot}</p>
+          </div>
 
           <p className="it-moment-sell">{m.sell}</p>
           <p className="it-moment-note">{m.note}</p>

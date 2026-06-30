@@ -32,7 +32,37 @@
     "title": "Seeing the problem and fixing it are the same click.",
     "body": "Open Student Insights and the class is ranked by where it's stuck, not who scored what — \"6 of 8 missed distributing a negative across parentheses,\" right at the top, with each student's status beside it. Every other tool stops here: it shows you the gap and leaves the fix to your Sunday. Veradic puts a Re-teach button on that row. One click opens a practice set already titled for exactly that concept — and the AI writes ten fresh problems on it, on the spot. The signal and the fix are the same motion.",
     "sell": "Most tools show you a dashboard of what went wrong. This turns it into ten problems that fix it — in one click.",
-    "note": "Illustrative seeded class (Algebra I · Period 3). The \"6 of 8\" struggle figures and per-student status are seeded demo data shown to read the mechanism — not a real class outcome. The reteach set and its ten problems are generated live by the product.",
+    "note": "Illustrative seeded class (Algebra I · Period 3). The \"6 of 8\" struggle figures and per-student status are seeded demo data shown to read the mechanism — not a real class outcome. The reteach set is generated live by the product; the three problems below are representative of that set, on exactly this concept.",
+    "signalRow": {
+      "concept": "Distributing a negative across parentheses",
+      "missed": 6,
+      "total": 8
+    },
+    "reteachTitle": "Re-teach: Distributing a negative across parentheses",
+    "fix": {
+      "count": 10,
+      "foot": "Full worked solutions on every problem · each editable in plain English",
+      "problems": [
+        {
+          "n": 1,
+          "title": "Two negative distributions, combine like terms",
+          "question": "Solve for $x$:  $-(2x+7)-(x-3)=2(x+1)$",
+          "answer": "$x = -\\dfrac{6}{5}$"
+        },
+        {
+          "n": 2,
+          "title": "Distribute the negative, then isolate",
+          "question": "Solve for $x$:  $-(3x-5)=4-(x+9)$",
+          "answer": "$x = 5$"
+        },
+        {
+          "n": 3,
+          "title": "Simplify by distributing a negative",
+          "question": "Simplify:  $-2(x-4)-(3x+1)$",
+          "answer": "$-5x+7$"
+        }
+      ]
+    },
     "signal": {
       "src": "/golden-set-teacherday/03-class-struggling.png",
       "step": "The signal",

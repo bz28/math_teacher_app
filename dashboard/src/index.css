@@ -2543,69 +2543,251 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 }
 
 /* ---- ★ THE MOMENT — loop variant (teaching day) ------------- */
-/* The differentiator rendered as the insight→action loop itself: three
-   connected beats — the struggle signal, the one-click pre-titled reteach, and
-   the ten problems the AI writes on the spot — flowing left to right with
-   accent arrows in the gutters. Reuses the `.it-moment` band; the head centers
-   (.it-moment-head-center), then the 3-up loop carries the proof. */
-.td-loop {
+/* This is the customer-pitch climax, so it's built for legibility on a
+   screen-share — rendered as crisp HTML, not the three illegible side-by-side
+   ~360px screenshots it used to be. Two parts:
+     1. THE INSIGHT (.td-signal) — the struggle signal as a real ranked row,
+        then the one-click pre-titled reteach, as two compact text panels with
+        an accent arrow between them.
+     2. THE FIX (.td-fix) — the problems the AI writes on the spot, rendered
+        large via MathText as the centerpiece so a teacher can READ a few.
+   Reuses the `.it-moment` band; the head centers (.it-moment-head-center). */
+
+/* --- the insight: signal → one-click reteach --- */
+.td-signal {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 44px;
-  max-width: 1200px;
-  margin: 0 auto;
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 22px;
+  max-width: 960px;
+  margin: 0 auto 40px;
 }
-.td-loop-beat {
-  position: relative;
+.td-signal-card {
   display: flex;
   flex-direction: column;
+  gap: 13px;
+  padding: 22px 24px;
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: 10px;
+  box-shadow: 0 14px 36px -28px rgba(20, 19, 15, 0.4);
 }
-/* Accent arrow sitting in the gutter to the LEFT of beats 2 and 3, anchored
-   near the top of the frames where the eye lands. */
-.td-loop-arrow {
-  position: absolute;
-  left: -22px;
-  top: 104px;
-  transform: translateX(-50%);
-  font-family: var(--font-sans);
-  font-size: 26px;
-  line-height: 1;
-  color: var(--accent);
-  pointer-events: none;
-}
-.td-loop-card {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.td-loop-card-head {
-  min-height: 70px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.td-loop-step {
+.td-signal-step {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1.4px;
   color: var(--accent);
 }
-.td-loop-label {
+.td-signal-label {
   font-family: var(--font-display);
   font-weight: 400;
-  text-transform: none;
-  font-size: 20px;
+  font-size: 19px;
   line-height: 1.18;
   letter-spacing: -0.2px;
   color: var(--ink);
 }
-.td-loop-sub {
+.td-signal-sub {
   font-family: var(--font-sans);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 12.5px;
+  line-height: 1.58;
   color: var(--ink-soft);
+  margin-top: auto;
+}
+.td-signal-arrow {
+  align-self: center;
+  font-family: var(--font-sans);
+  font-size: 28px;
+  line-height: 1;
+  color: var(--accent);
+}
+/* the struggle line, rendered as a real ranked row (not a screenshot crop) */
+.td-struggle-row {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 13px 15px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+}
+.td-struggle-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.td-struggle-concept {
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.td-struggle-count {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--accent);
+}
+.td-struggle-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(20, 19, 15, 0.08);
+  overflow: hidden;
+}
+.td-struggle-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+/* the pre-filled reteach title — the one-click bridge */
+.td-reteach-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 15px;
+  background: var(--paper);
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.td-reteach-tick {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fbfdf6;
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* --- the fix: the generated problems, the readable centerpiece --- */
+.td-fix {
+  max-width: 1060px;
+  margin: 0 auto;
+  border: 1px solid var(--rule-strong);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: 0 22px 54px -30px rgba(20, 19, 15, 0.46);
+}
+.td-fix-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px;
+  background:
+    radial-gradient(120% 160% at 0% 0%, rgba(74, 107, 58, 0.1) 0%, transparent 62%),
+    var(--ok-soft);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.td-fix-step {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  color: var(--ok);
+  margin-bottom: 4px;
+}
+.td-fix-label {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 1.12;
+  letter-spacing: -0.3px;
+  color: var(--ink);
+}
+.td-fix-pill {
+  flex: none;
+  padding: 7px 13px;
+  background: var(--ok);
+  color: #fbfdf6;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+.td-fix-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+}
+.td-fix-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 22px 24px;
+  border-right: 1px solid var(--rule);
+}
+.td-fix-card:last-child {
+  border-right: none;
+}
+.td-fix-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.td-fix-n {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+.td-fix-title {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  line-height: 1.32;
+  color: var(--ink-soft);
+}
+.td-fix-q {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.td-fix-answer {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: auto;
+  padding: 11px 14px;
+  background: var(--ok-soft);
+  border-radius: 7px;
+  font-size: 16px;
+  color: var(--ink);
+}
+.td-fix-answer-label {
+  flex: none;
+  font-family: var(--font-sans);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--ok);
+}
+.td-fix-foot {
+  padding: 14px 24px;
+  border-top: 1px solid var(--rule);
+  background: var(--paper);
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  color: var(--muted);
+  text-align: center;
 }
 
 /* ---- PAYOFF — 4-up points grid (grading) -------------------- */
@@ -2944,13 +3126,11 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   .it-flowstep:nth-child(even) .it-flowstep-copy { order: 1; }
   .it-flowstep:nth-child(even) .it-flowstep-shot { order: 2; }
   .it-moment-grid { grid-template-columns: 1fr; }
-  .td-loop { grid-template-columns: 1fr; gap: 56px; max-width: 560px; }
-  .td-loop-arrow {
-    left: 50%;
-    top: -42px;
-    transform: translateX(-50%) rotate(90deg);
-  }
-  .td-loop-card-head { min-height: 0; }
+  .td-signal { grid-template-columns: 1fr; gap: 16px; max-width: 560px; }
+  .td-signal-arrow { transform: rotate(90deg); }
+  .td-fix-grid { grid-template-columns: 1fr; }
+  .td-fix-card { border-right: none; border-bottom: 1px solid var(--rule); }
+  .td-fix-card:last-child { border-bottom: none; }
   .gen-verify { grid-template-columns: 1fr; }
   .gen-verify-check { border-left: none; border-top: 1px solid var(--rule-strong); }
   .it-payoff-points { grid-template-columns: 1fr; gap: 28px; }
