@@ -32,7 +32,7 @@
     "title": "Seeing the problem and fixing it are the same click.",
     "body": "Open Student Insights and the class is ranked by where it's stuck, not who scored what — \"6 of 8 missed distributing a negative across parentheses,\" right at the top, with each student's status beside it. Every other tool stops here: it shows you the gap and leaves the fix to your Sunday. Veradic puts a Re-teach button on that row. One click opens a practice set already titled for exactly that concept — and the AI writes ten fresh problems on it, on the spot. The signal and the fix are the same motion.",
     "sell": "Most tools show you a dashboard of what went wrong. This turns it into ten problems that fix it — in one click.",
-    "note": "Illustrative seeded class (Algebra I · Period 3). The \"6 of 8\" struggle figures and per-student status are seeded demo data shown to read the mechanism — not a real class outcome. The reteach set is generated live by the product; the three problems below are representative of that set, on exactly this concept.",
+    "note": "Illustrative seeded class (Algebra I · Period 3). The \"6 of 8\" struggle figures and per-student status are seeded demo data shown to read the mechanism — not a real class outcome. The reteach set is generated live by the product; the three problems below are three of the ten it actually wrote for this reteach, on exactly this concept — verbatim from the generated set.",
     "signalRow": {
       "concept": "Distributing a negative across parentheses",
       "missed": 6,
@@ -51,15 +51,15 @@
         },
         {
           "n": 2,
-          "title": "Distribute the negative, then isolate",
-          "question": "Solve for $x$:  $-(3x-5)=4-(x+9)$",
-          "answer": "$x = 5$"
+          "title": "Negative distribution, variables both sides",
+          "question": "Solve for $x$:  $-(x+6)=2x-3$",
+          "answer": "$x = -1$"
         },
         {
           "n": 3,
-          "title": "Simplify by distributing a negative",
-          "question": "Simplify:  $-2(x-4)-(3x+1)$",
-          "answer": "$-5x+7$"
+          "title": "Nested negatives, multi-step solve",
+          "question": "Solve for $x$:  $2-(4x-6)=3x+1$",
+          "answer": "$x = 1$"
         }
       ]
     },
