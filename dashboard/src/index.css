@@ -2349,6 +2349,51 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   color: var(--muted);
 }
 
+/* ---- ★ THE MOMENT — receipt variant (grading) --------------- */
+/* A single centered column: heading, the framed receipt screenshot pulled
+   to the middle, then the selling line + an honesty note. Reuses the
+   `.it-moment` band; only the layout below the head differs. */
+.it-moment-receipt .it-moment-head {
+  max-width: 64ch;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+.it-moment-receipt .it-moment-title,
+.it-moment-receipt .it-moment-body {
+  margin-left: auto;
+  margin-right: auto;
+}
+.it-moment-figure {
+  margin: 0 auto;
+  max-width: 760px;
+}
+.it-moment-sell {
+  margin: 32px auto 0;
+  max-width: 50ch;
+  text-align: center;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(20px, 2.4vw, 25px);
+  line-height: 1.4;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+}
+.it-moment-note {
+  margin: 18px auto 0;
+  max-width: 64ch;
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ---- PAYOFF — 4-up points grid (grading) -------------------- */
+.it-payoff-points-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
 /* ---- PROOF --------------------------------------------------- */
 .it-proof .it-framing {
   margin-top: 0;
@@ -2679,5 +2724,6 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   .it-flowstep:nth-child(even) .it-flowstep-shot { order: 2; }
   .it-moment-grid { grid-template-columns: 1fr; }
   .it-payoff-points { grid-template-columns: 1fr; gap: 28px; }
+  .it-payoff-points-4 { grid-template-columns: repeat(2, 1fr); gap: 28px; }
   .it-roi-card { grid-template-columns: 1fr; }
 }
