@@ -2774,6 +2774,13 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 }
 .dh-beat-shot .it-frame-bar { height: 26px; }
 .dh-beat-shot .it-frame-dots i { width: 7px; height: 7px; }
+/* Uniform thumbnail height so all four step captions align on one baseline;
+   crop from the top so the most identifiable part of each screen stays. */
+.dh-beat-shot .it-frame img {
+  height: 156px;
+  object-fit: cover;
+  object-position: top center;
+}
 .dh-beat-step {
   display: inline-block;
   font-size: 12px;
@@ -2792,6 +2799,7 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   font-size: 21px;
   line-height: 1.16;
   letter-spacing: -0.2px;
+  text-transform: none;
   color: var(--ink);
   margin-bottom: 8px;
 }
@@ -2858,6 +2866,7 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   font-size: 28px;
   line-height: 1.1;
   letter-spacing: -0.4px;
+  text-transform: none;
   color: var(--ink);
 }
 .dh-card-benefit {
