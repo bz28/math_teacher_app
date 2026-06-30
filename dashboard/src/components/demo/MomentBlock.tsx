@@ -20,7 +20,10 @@ export default function MomentBlock({
     <section className="it-moment" aria-labelledby="moment-title">
       <div className="it-moment-inner">
         <div className="it-moment-head">
-          <span className="it-moment-eyebrow">{moment.eyebrow}</span>
+          <span className="it-moment-eyebrow">
+            <span className="it-moment-step mono">Step 05</span>
+            {moment.eyebrow}
+          </span>
           <h2 id="moment-title" className="it-moment-title">
             {moment.title}
           </h2>
