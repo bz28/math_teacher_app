@@ -9,8 +9,23 @@ import pytest
 
 from api.core.step_decomposition import (
     Decomposition,
+    _build_system_prompt,
     _parse_decomposition,
 )
+
+
+def test_system_prompt_template_format_is_safe() -> None:
+    """The decomposition system prompt is a `.format()` template. Every
+    literal curly brace in the body must be escaped `{{`/`}}` or Python
+    treats it as a placeholder and raises KeyError/ValueError at call
+    time. (Mirrors the same guard on the question-generation prompt — an
+    unescaped figure-spec example like {"A": 30} broke this before.)
+    """
+    for subject in ("math", "geometry", "physics", "chemistry"):
+        out = _build_system_prompt(subject)
+        assert "figure_spec" in out  # geometry guidance present
+    # The external-point guidance must survive formatting intact.
+    assert "external_points" in _build_system_prompt("geometry")
 
 
 class TestParseDecomposition:
