@@ -71,8 +71,9 @@ export default function IntegritySet() {
         <h2>Gold × predicted, and the harms we hold to zero</h2>
         <p className="gs-section-sub">
           Across the full 22-case adversarial set, replayed from the system's recorded conversations.
-          The two mistakes that would hurt students most — falsely accusing the honest, and
-          rubber-stamping the memorizer — are held to zero.
+          It isn't a perfect diagonal, and that's the honest result: every off-diagonal call is a
+          conservative, within-band one. What's held to zero are the two mistakes that would actually
+          hurt students — falsely accusing the honest, and rubber-stamping the memorizer.
         </p>
         <ConfusionMatrix dispositions={it.dispositions} matrix={it.matrix} />
       </section>
