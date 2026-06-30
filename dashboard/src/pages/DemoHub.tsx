@@ -9,9 +9,10 @@ const h = loadDemoHub();
 
 // The demo front door. A founder opens this to pitch the whole platform in one
 // read: the overarching promise (hero), how the pieces fit into a single loop,
-// the two deep-dive stories you can step into, the business case (reused ROI),
-// and an ink payoff. It links OUT to /golden-set/integrity and /golden-set/grading
-// — it doesn't re-tell those stories. Reuses the shipped .it-* editorial system.
+// the four deep-dive stories you can step into, the business case (reused ROI),
+// and an ink payoff. It links OUT to /golden-set/{integrity,grading,generation,
+// teacher-day} — it doesn't re-tell those stories. Reuses the shipped .it-*
+// editorial system.
 
 export default function DemoHub() {
   return (
@@ -67,21 +68,6 @@ export default function DemoHub() {
               </div>
             </Link>
           ))}
-        </div>
-
-        <div className="dh-coming">
-          <span className="dh-coming-label">{h.useCases.coming.label}</span>
-          <div className="dh-coming-grid">
-            {h.useCases.coming.items.map((item) => (
-              <div className="dh-coming-item" key={item.title}>
-                <div className="dh-coming-head">
-                  <h4 className="dh-coming-title">{item.title}</h4>
-                  <span className="dh-coming-badge">In build</span>
-                </div>
-                <p className="dh-coming-line">{item.line}</p>
-              </div>
-            ))}
-          </div>
         </div>
 
         <div className="it-framing dh-framing">{h.meta.framing}</div>
