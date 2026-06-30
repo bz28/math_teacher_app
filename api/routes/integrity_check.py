@@ -11,7 +11,7 @@ transcript + per-problem + overall state.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -29,6 +29,7 @@ from api.core.integrity_pipeline import (
     STATUS_SKIPPED_UNREADABLE,
     TOOL_GENERATE_VARIANT,
     count_student_turns,
+    finalize_if_abandoned,
     process_student_turn,
 )
 from api.database import get_db
@@ -49,6 +50,21 @@ router = APIRouter(tags=["integrity"])
 # Min chars in a student message. Same 5-char floor we enforced on
 # answers in the quiz-style flow — prevents empty/"x"-spam.
 MIN_MESSAGE_CHARS = 5
+
+# Teacher resolution states for an integrity check (see
+# IntegrityCheckSubmission.resolution). "unresolved" is the default the
+# column carries; the resolve endpoint only ever sets one of the three
+# terminal outcomes. All three count as "handled" for the roster
+# flagged aggregate.
+RESOLUTION_UNRESOLVED = "unresolved"
+RESOLUTION_CLEARED = "cleared"
+RESOLUTION_CONFIRMED_CONCERN = "confirmed_concern"
+RESOLUTION_CONTACTED = "contacted"
+RESOLUTION_OUTCOMES = (
+    RESOLUTION_CLEARED,
+    RESOLUTION_CONFIRMED_CONCERN,
+    RESOLUTION_CONTACTED,
+)
 
 
 # ── Response shapes ─────────────────────────────────────────────────
@@ -189,6 +205,14 @@ class TurnRequest(BaseModel):
 class DismissRequest(BaseModel):
     problem_id: uuid.UUID
     reason: str = Field(default="", max_length=500)
+
+
+class ResolveRequest(BaseModel):
+    """Teacher's session-level resolution of an integrity check. The
+    outcome is what the teacher decided after reviewing — it does NOT
+    change the AI's disposition. All three outcomes clear the flag from
+    the roster's needs-attention aggregate."""
+    resolution: Literal["cleared", "confirmed_concern", "contacted"]
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
@@ -627,6 +651,14 @@ class TeacherIntegrityDetail(BaseModel):
     # student turn carried telemetry or the check hasn't finalized.
     # See IntegrityActivitySummary above.
     activity_summary: IntegrityActivitySummary | None
+    # Teacher-action layer (separate from the AI verdict above). The
+    # resolution a teacher set after reviewing; "unresolved" until then.
+    # cleared / confirmed_concern / contacted all mark the flag handled.
+    resolution: str
+    # Display name of the teacher who set the resolution + when. Both
+    # null while unresolved.
+    resolved_by_name: str | None
+    resolved_at: datetime | None
     problems: list[TeacherIntegrityProblemRow]
     transcript: list[TeacherTranscriptTurn]
 
@@ -661,6 +693,13 @@ async def teacher_get_integrity_detail(
     )
 
     check = await _load_check_for_submission(db, submission_id)
+    # Lazy on-read finalization: if the student abandoned the interview
+    # and it's been stuck past the wall-clock deadline, flip it to a
+    # terminal inconclusive state here so the teacher sees "interview
+    # incomplete" instead of a frozen in-progress check. No scheduler in
+    # this deployment, so the teacher's read is the trigger.
+    if check is not None and await finalize_if_abandoned(check, db):
+        await db.commit()
     if check is None:
         return TeacherIntegrityDetail(
             submission_id=str(submission_id),
@@ -672,9 +711,22 @@ async def teacher_get_integrity_detail(
             inline_variant_used=False,
             inline_variant_result=None,
             activity_summary=None,
+            resolution=RESOLUTION_UNRESOLVED,
+            resolved_by_name=None,
+            resolved_at=None,
             problems=[],
             transcript=[],
         )
+
+    # Resolver name for the "Reviewed by …" chip. One small lookup,
+    # only when the check has actually been resolved.
+    resolved_by_name: str | None = None
+    if check.resolved_by is not None:
+        resolver = (await db.execute(
+            select(User).where(User.id == check.resolved_by)
+        )).scalar_one_or_none()
+        if resolver is not None:
+            resolved_by_name = resolver.name or resolver.email
 
     problems = await _load_problems(db, check.id)
 
@@ -740,6 +792,9 @@ async def teacher_get_integrity_detail(
         inline_variant_used=check.inline_variant_used,
         inline_variant_result=check.inline_variant_result,
         activity_summary=check.activity_summary,
+        resolution=check.resolution,
+        resolved_by_name=resolved_by_name,
+        resolved_at=check.resolved_at,
         problems=problem_rows,
         transcript=transcript_rows,
     )
@@ -801,4 +856,38 @@ async def teacher_dismiss_problem(
     # shows the agent's original disposition alongside which problems
     # were dismissed; teacher interprets.
 
+    await db.commit()
+
+
+@router.post(
+    "/teacher/integrity/submissions/{submission_id}/resolve", status_code=204,
+)
+async def teacher_resolve_integrity(
+    submission_id: uuid.UUID,
+    body: ResolveRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Set the teacher's session-level resolution on an integrity check.
+
+    This is the "I handled this" action — it does NOT touch the AI's
+    disposition (the agent's verdict stands), but it clears the flag
+    from the roster's needs-attention aggregate so a reviewed
+    submission stops showing as flagged forever. Owner-of-course gated,
+    like the other teacher integrity endpoints. Idempotent: re-resolving
+    with a new outcome just updates the outcome and re-stamps who/when."""
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if sub is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
+
+    check = await _load_check_for_submission(db, submission_id)
+    if check is None:
+        raise HTTPException(status_code=404, detail="Integrity check not found")
+
+    check.resolution = body.resolution
+    check.resolved_by = current_user.user_id
+    check.resolved_at = datetime.now(UTC)
     await db.commit()

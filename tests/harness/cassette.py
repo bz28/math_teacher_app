@@ -33,9 +33,38 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
+
+# Run-varying identifiers leak into a multi-turn agent's transcript and would
+# change the cassette key on every run — defeating $0 replay. We redact them
+# in the hashed key payload to fixed tokens so the key is stable across runs.
+# Distinct calls still hash distinctly: turns differ by their text (growing
+# transcript: student messages, agent replies, tool inputs + results) and
+# cases differ by their question text, never by a redacted id alone — so
+# redaction can't collapse two real logical calls onto one key.
+#
+# Two id families are redacted:
+#   - Canonical UUIDs (8-4-4-4-12): a DB-driven probe (e.g. integrity) mints a
+#     fresh row PK like the integrity `problem_id` every run; the agent echoes
+#     it back inside its tool input, so it ends up in the transcript.
+#   - Anthropic tool-use ids (`toolu_…`): the live API assigns a fresh id to
+#     every tool_use block. The integrity agent loop persists those ids and
+#     replays them into each later turn's transcript, so without this an
+#     agent turn's key would be pinned to ephemeral ids the API chose at
+#     record time — re-recording (or any session that didn't reuse the exact
+#     same ids) would compute a different key and miss on replay.
+#
+# A payload with neither id family (grading/geometry/json/vision) is unchanged
+# byte-for-byte, so existing committed cassette keys for those probes are
+# unaffected — `toolu_` never appears in their single-shot payloads.
+_UUID_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+)
+_TOOL_USE_ID_RE = re.compile(r"toolu_[A-Za-z0-9]+")
 
 # Sentinel for "no cassette on disk" — distinct from a recorded `None`.
 MISS: Any = object()
@@ -92,6 +121,11 @@ class Cassette:
         payload = json.dumps(
             {"fn": fn_name, **identity}, sort_keys=True, default=str,
         )
+        # Redact run-varying ids (random row UUIDs + ephemeral `toolu_` tool-use
+        # ids) so a DB-driven multi-turn agent replays at $0 (see _UUID_RE /
+        # _TOOL_USE_ID_RE). No-op on payloads without either.
+        payload = _UUID_RE.sub("<uuid>", payload)
+        payload = _TOOL_USE_ID_RE.sub("<toolu>", payload)
         return hashlib.sha256(payload.encode()).hexdigest()[:32]
 
     def _file(self, fn_name: str) -> Path:

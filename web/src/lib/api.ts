@@ -1700,6 +1700,15 @@ export const teacher = {
       body: JSON.stringify({ problem_id: problemId, reason }),
     });
   },
+  /** Set the teacher's session-level resolution on an integrity check —
+   *  the "I handled this" action. Clears the flag from the roster's
+   *  needs-attention aggregate. Does NOT change the AI's disposition. */
+  resolveIntegrity(submissionId: string, resolution: IntegrityResolutionOutcome) {
+    return apiFetch<void>(`/teacher/integrity/submissions/${submissionId}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ resolution }),
+    });
+  },
   /** Create or reuse a shadow student, return its JWT pair. */
   previewAsStudent() {
     return apiFetch<TokenPair>("/teacher/preview-student", { method: "POST" });
@@ -1716,6 +1725,10 @@ export interface IntegrityOverview {
    *  clean" (0), "Activity: 1 notable moment" (1), "Activity: N
    *  notable moments" (≥2). Null on in-progress / no telemetry. */
   notable_count: number | null;
+  /** Teacher's session-level resolution. "unresolved" until a teacher
+   *  marks the check reviewed; the other outcomes drop it from the
+   *  roster's flagged filter. */
+  resolution: IntegrityResolution;
 }
 
 export interface TeacherSubmissionRow {
@@ -2428,6 +2441,23 @@ export type IntegrityDisposition =
   | "tutor_pivot"
   | "flag_for_review";
 
+/** Teacher's session-level resolution of an integrity check — the
+ *  "I handled this" action layered on top of the AI verdict. The three
+ *  non-default outcomes all clear the flag from the roster's
+ *  needs-attention aggregate. The disposition is untouched. */
+export type IntegrityResolution =
+  | "unresolved"
+  | "cleared"
+  | "confirmed_concern"
+  | "contacted";
+
+/** The three outcomes a teacher can choose when marking a check
+ *  reviewed (excludes the default "unresolved"). */
+export type IntegrityResolutionOutcome = Exclude<
+  IntegrityResolution,
+  "unresolved"
+>;
+
 export type IntegrityOverallStatus =
   | "no_check"           // HW has integrity checks disabled
   | "extracting"         // pipeline is still running Vision extraction
@@ -2646,6 +2676,13 @@ export interface TeacherIntegrityDetail {
   inline_variant_used: boolean;
   inline_variant_result: IntegrityInlineVariantResult | null;
   activity_summary: IntegrityActivitySummary | null;
+  /** Teacher-action layer (separate from the AI verdict). The
+   *  resolution a teacher set after reviewing; "unresolved" until then. */
+  resolution: IntegrityResolution;
+  /** Name of the teacher who resolved it + when. Both null while
+   *  unresolved. */
+  resolved_by_name: string | null;
+  resolved_at: string | null;
   problems: TeacherIntegrityProblemRow[];
   transcript: TeacherIntegrityTranscriptTurn[];
 }

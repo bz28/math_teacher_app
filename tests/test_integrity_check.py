@@ -16,7 +16,7 @@ from typing import Any
 from unittest.mock import patch
 
 from httpx import AsyncClient
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 
 from api.database import get_session_factory
 from api.models.integrity_check import (
@@ -814,6 +814,80 @@ async def test_turn_hard_cap_force_finalizes(
     assert r.status_code == 409
 
 
+async def test_abandoned_interview_finalizes_on_teacher_read(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A student who opens the check and walks away leaves it stuck in
+    awaiting_student forever — the turn cap only fires on a NEW student
+    turn, and this deployment has no scheduler. The teacher reading the
+    submission detail is the lazy trigger that finalizes a check stalled
+    past the wall-clock deadline into a terminal, no-verdict state so it
+    surfaces ("Interview incomplete") instead of hiding in purgatory."""
+    from datetime import UTC, datetime, timedelta
+
+    from api.core.integrity_pipeline import ABANDONED_INTERVIEW_DEADLINE
+
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    # Sanity: a freshly-stalled (but not yet past-deadline) check is NOT
+    # finalized — a student who steps away briefly is unaffected.
+    r = await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["overall_status"] == "awaiting_student"
+
+    # Backdate the check's last activity past the deadline. Raw UPDATE so
+    # we set updated_at explicitly (the column's onupdate would otherwise
+    # stamp now() and defeat the backdate).
+    stale = datetime.now(UTC) - ABANDONED_INTERVIEW_DEADLINE - timedelta(hours=1)
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE integrity_check_submissions "
+                "SET updated_at = :ts WHERE submission_id = :sid"
+            ),
+            {"ts": stale, "sid": submission_id},
+        )
+        await s.commit()
+
+    # Teacher reads the detail → lazy finalize fires.
+    r = await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["overall_status"] == "complete"
+    # No intent-carrying disposition — we never judged the student.
+    assert body["disposition"] is None
+    assert body["headline"] == "Interview incomplete"
+
+    # The flip is persisted (not just computed on the way out) and the
+    # pending problem went terminal-but-null-rubric, never a phantom
+    # verdict.
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.status == "complete"
+        assert check.disposition is None
+        problems = (await s.execute(
+            select(IntegrityCheckProblem)
+            .where(
+                IntegrityCheckProblem.integrity_check_submission_id
+                == check.id
+            )
+        )).scalars().all()
+        capped = [p for p in problems if p.status == "cap_reached"]
+        assert capped, "expected the pending problem to go cap_reached"
+        for p in capped:
+            assert p.rubric is None
+
+
 async def test_turn_409_when_complete(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
@@ -1155,6 +1229,64 @@ async def test_teacher_dismiss_marks_problem(
         headers=_auth(world["teacher_token"]),
     )).json()
     assert detail3["problems"][0]["teacher_dismissal_reason"] == "revised reason"
+
+
+async def test_teacher_resolve_records_outcome_and_is_idempotent(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The session-level resolution endpoint records who/when and the
+    chosen outcome on the integrity check, surfaces it on the detail
+    payload, and is idempotent — re-resolving overwrites the outcome and
+    re-stamps the resolver. The AI disposition is never touched."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    # Default state: unresolved, no resolver recorded.
+    detail = (await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )).json()
+    assert detail["resolution"] == "unresolved"
+    assert detail["resolved_by_name"] is None
+    assert detail["resolved_at"] is None
+
+    # Teacher resolves it.
+    r = await client.post(
+        f"/v1/teacher/integrity/submissions/{submission_id}/resolve",
+        headers=_auth(world["teacher_token"]),
+        json={"resolution": "contacted"},
+    )
+    assert r.status_code == 204, r.text
+
+    detail2 = (await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )).json()
+    assert detail2["resolution"] == "contacted"
+    assert detail2["resolved_by_name"]  # resolver name/email present
+    assert detail2["resolved_at"] is not None
+
+    # Idempotent: re-resolving with a new outcome overwrites it.
+    r = await client.post(
+        f"/v1/teacher/integrity/submissions/{submission_id}/resolve",
+        headers=_auth(world["teacher_token"]),
+        json={"resolution": "cleared"},
+    )
+    assert r.status_code == 204, r.text
+    detail3 = (await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )).json()
+    assert detail3["resolution"] == "cleared"
+
+    # Invalid outcome is rejected by the request schema.
+    r = await client.post(
+        f"/v1/teacher/integrity/submissions/{submission_id}/resolve",
+        headers=_auth(world["teacher_token"]),
+        json={"resolution": "unresolved"},
+    )
+    assert r.status_code == 422
 
 
 async def test_teacher_dismiss_keeps_disposition_frozen(
@@ -2248,6 +2380,109 @@ async def test_finish_check_accepts_mixed_rubric_band(
         )).scalar_one()
         assert check.status == "complete"
         assert check.disposition == "needs_practice"
+
+
+# ── Understanding-check gate (verified-tier pass requires a concept probe) ──
+
+
+async def _force_verified_tier(submission_id: str) -> None:
+    """Pin the check to the verified tier so the understanding-check gate
+    (which only guards a `pass` on a correct-on-paper answer) engages."""
+    from api.core.integrity_pipeline import (
+        SELECTION_REASON_VERIFIED_HARDEST_CORRECT,
+    )
+
+    async with get_session_factory()() as s:
+        await s.execute(
+            update(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+            .values(
+                probe_selection_reason=SELECTION_REASON_VERIFIED_HARDEST_CORRECT,
+            )
+        )
+        await s.commit()
+
+
+async def test_finish_check_rejects_verified_pass_without_concept_probe(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A fluent walkthrough that maxes both required dims is NOT enough to
+    pass on the verified tier: without `transfer` or `prediction` scored,
+    the gate rejects `pass` so the agent runs the one conceptual probe
+    first. Guards the smooth-memorizer false-pass."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    await _force_verified_tier(submission_id)
+    problem_id = await _only_problem_id(submission_id)
+
+    # High/high on the REQUIRED dims, but no conceptual probe scored.
+    await _verdict_then_finish_script(
+        problem_id,
+        {"paraphrase_originality": "high", "causal_fluency": "high"},
+        "pass",
+    )
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "You factor it and set each one to zero."},
+    )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        # Finalize rejected — check stays open, no disposition recorded.
+        assert check.status != "complete"
+        assert check.disposition is None
+
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(IntegrityConversationTurn.role == "tool_result")
+        )).scalars().all()
+        assert any(
+            "requires the one understanding check" in t.content
+            for t in tool_results
+        )
+
+
+async def test_finish_check_accepts_verified_pass_with_concept_probe(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The mirror: once the conceptual probe is scored (`prediction` here),
+    a verified-tier `pass` on a strong rubric clears the gate and the check
+    completes. The genuine understander is not penalized."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    await _force_verified_tier(submission_id)
+    problem_id = await _only_problem_id(submission_id)
+
+    await _verdict_then_finish_script(
+        problem_id,
+        {
+            "paraphrase_originality": "high",
+            "causal_fluency": "high",
+            "prediction": "high",
+        },
+        "pass",
+    )
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "Bigger — a larger total means a larger x."},
+    )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.status == "complete"
+        assert check.disposition == "pass"
 
 
 # ── Telemetry ──────────────────────────────────────────────────────

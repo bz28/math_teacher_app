@@ -13,7 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.integrity_pipeline import (
+    ABANDONED_INTERVIEW_DEADLINE,
     PROBLEM_STATUS_DIAGNOSIS_ONLY,
+    finalize_if_abandoned,
 )
 from api.core.integrity_pipeline import (
     STATUS_COMPLETE as INTEGRITY_COMPLETE,
@@ -1158,14 +1160,51 @@ async def submissions_inbox(
     #     AI calls downstream
     # pass / needs_practice / tutor_pivot are teacher-facing notes
     # but not "flagged" for attention.
+    #
+    # Each integrity-check-based branch additionally requires the check
+    # to be unresolved: once a teacher marks it reviewed (cleared /
+    # confirmed_concern / contacted), it's handled and drops out of the
+    # needs-attention count. The extraction_flagged branch has no
+    # integrity-check row to resolve (no AI ran), so it stays as-is —
+    # the teacher clears it by grading the submission manually.
+    integrity_unresolved = (
+        IntegrityCheckSubmission.resolution == "unresolved"
+    )
     flagged_expr = func.sum(
         case(
-            (IntegrityCheckSubmission.disposition == "flag_for_review", 1),
-            (IntegrityCheckSubmission.status == "skipped_unreadable", 1),
+            (
+                and_(
+                    IntegrityCheckSubmission.disposition == "flag_for_review",
+                    integrity_unresolved,
+                ),
+                1,
+            ),
+            (
+                and_(
+                    IntegrityCheckSubmission.status == "skipped_unreadable",
+                    integrity_unresolved,
+                ),
+                1,
+            ),
             (
                 and_(
                     IntegrityCheckSubmission.status == "complete",
                     IntegrityCheckSubmission.disposition.is_(None),
+                    integrity_unresolved,
+                ),
+                1,
+            ),
+            # Abandoned interview stalled past the deadline — not yet
+            # finalized (a teacher opening the roster does that lazily),
+            # but counted so the needs-attention badge nudges them to look.
+            (
+                and_(
+                    IntegrityCheckSubmission.status.in_(
+                        ("awaiting_student", "in_progress"),
+                    ),
+                    IntegrityCheckSubmission.updated_at
+                    < (datetime.now(UTC) - ABANDONED_INTERVIEW_DEADLINE),
+                    integrity_unresolved,
                 ),
                 1,
             ),
@@ -1271,6 +1310,19 @@ async def list_submissions(
         .where(IntegrityCheckSubmission.submission_id.in_(sub_ids))
     )).scalars().all() if sub_ids else []
 
+    # Lazy on-read finalization: a student who abandoned the interview
+    # leaves the check stuck in awaiting_student / in_progress forever
+    # (the turn cap only fires on a new student turn, and this deployment
+    # has no scheduler — see finalize_if_abandoned). The teacher loading
+    # the roster is the trigger that flips any check past the wall-clock
+    # deadline to a terminal inconclusive state so it stops hiding.
+    finalized_any = False
+    for c in check_rows:
+        if await finalize_if_abandoned(c, db):
+            finalized_any = True
+    if finalized_any:
+        await db.commit()
+
     check_by_sub: dict[uuid.UUID, IntegrityCheckSubmission] = {
         c.submission_id: c for c in check_rows
     }
@@ -1334,6 +1386,10 @@ async def list_submissions(
                 "problem_count": total,
                 "complete_count": done,
                 "notable_count": notable_count if terminal else None,
+                # Teacher-action layer: lets the roster's client-side
+                # flagged filter drop a check the teacher has reviewed.
+                # unresolved / cleared / confirmed_concern / contacted.
+                "resolution": check.resolution,
             }
 
         submissions.append({

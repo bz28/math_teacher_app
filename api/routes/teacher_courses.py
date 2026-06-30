@@ -1,6 +1,7 @@
 """Teacher course management — CRUD."""
 
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,6 +10,7 @@ from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.integrity_pipeline import ABANDONED_INTERVIEW_DEADLINE
 from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
@@ -164,15 +166,52 @@ def _dirty_case() -> Any:
 def _flagged_case() -> Any:
     """Counts submissions needing teacher attention from the integrity
     pipeline — flagged disposition, unreadable extraction, inconclusive
-    complete (turn cap / no sampled problems), or student-raised
-    'reader got something wrong' before confirm."""
+    complete (turn cap / no sampled problems), an abandoned interview
+    stalled past the wall-clock deadline, or student-raised 'reader got
+    something wrong' before confirm.
+
+    Each integrity-check-based branch also requires the check to be
+    unresolved: once a teacher marks it reviewed, it's handled and no
+    longer counts. The extraction_flagged branch has no integrity-check
+    row to resolve, so it stays until the submission is graded."""
+    integrity_unresolved = (
+        IntegrityCheckSubmission.resolution == "unresolved"
+    )
+    abandoned_cutoff = datetime.now(UTC) - ABANDONED_INTERVIEW_DEADLINE
     return case(
-        (IntegrityCheckSubmission.disposition == "flag_for_review", 1),
-        (IntegrityCheckSubmission.status == "skipped_unreadable", 1),
+        (
+            and_(
+                IntegrityCheckSubmission.disposition == "flag_for_review",
+                integrity_unresolved,
+            ),
+            1,
+        ),
+        (
+            and_(
+                IntegrityCheckSubmission.status == "skipped_unreadable",
+                integrity_unresolved,
+            ),
+            1,
+        ),
         (
             and_(
                 IntegrityCheckSubmission.status == "complete",
                 IntegrityCheckSubmission.disposition.is_(None),
+                integrity_unresolved,
+            ),
+            1,
+        ),
+        # Abandoned interview: still in awaiting_student / in_progress past
+        # the deadline. Not yet finalized (a teacher opening the roster
+        # does that lazily), but counted here so the needs-attention badge
+        # nudges them to look in the first place.
+        (
+            and_(
+                IntegrityCheckSubmission.status.in_(
+                    ("awaiting_student", "in_progress"),
+                ),
+                IntegrityCheckSubmission.updated_at < abandoned_cutoff,
+                integrity_unresolved,
             ),
             1,
         ),

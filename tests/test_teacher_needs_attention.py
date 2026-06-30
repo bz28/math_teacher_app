@@ -171,6 +171,66 @@ async def test_flagged_trumps_ungraded(client: AsyncClient) -> None:
     assert body["items"][0]["reason"] == "flagged"
 
 
+async def test_resolved_flag_drops_from_queue(client: AsyncClient) -> None:
+    """A teacher who marks the integrity check reviewed clears it from
+    the needs-attention queue — the flagged aggregate treats a resolved
+    check as handled, no longer needing attention."""
+    w = await _seed()
+    hw = await _publish_hw(w, due_at=None)
+    sub_id = await _add_submission(w, hw)
+    async with get_session_factory()() as s:
+        s.add(IntegrityCheckSubmission(
+            submission_id=sub_id, status="complete", disposition="flag_for_review",
+        ))
+        # Clean published grade so the ONLY reason this surfaces is the
+        # flag — isolates the flagged aggregate from the ungraded bucket.
+        s.add(SubmissionGrade(
+            submission_id=sub_id, final_score=90.0, published_final_score=90.0,
+            grade_published_at=datetime.now(UTC),
+        ))
+        await s.commit()
+    # Flagged before any teacher action.
+    assert (await _get(w, client))["items"][0]["reason"] == "flagged"
+
+    # Teacher marks it reviewed (owner-gated endpoint).
+    r = await client.post(
+        f"/v1/teacher/integrity/submissions/{sub_id}/resolve",
+        headers=_auth(w["teacher_token"]),
+        json={"resolution": "cleared"},
+    )
+    assert r.status_code == 204, r.text
+
+    # Resolved → flag clears, grade is clean, so it drops entirely.
+    assert await _get(w, client) == {"items": [], "total": 0}
+
+
+async def test_resolve_owner_gated(client: AsyncClient) -> None:
+    """Only the assignment owner can resolve an integrity check — a
+    different teacher is rejected and the flag stays put for the owner."""
+    w1 = await _seed()
+    w2 = await _seed()
+    hw = await _publish_hw(w1, due_at=None)
+    sub_id = await _add_submission(w1, hw)
+    async with get_session_factory()() as s:
+        s.add(IntegrityCheckSubmission(
+            submission_id=sub_id, status="complete", disposition="flag_for_review",
+        ))
+        s.add(SubmissionGrade(
+            submission_id=sub_id, final_score=90.0, published_final_score=90.0,
+            grade_published_at=datetime.now(UTC),
+        ))
+        await s.commit()
+
+    r = await client.post(
+        f"/v1/teacher/integrity/submissions/{sub_id}/resolve",
+        headers=_auth(w2["teacher_token"]),
+        json={"resolution": "cleared"},
+    )
+    assert r.status_code in (403, 404), r.text
+    # Still flagged for the true owner — the non-owner's call did nothing.
+    assert (await _get(w1, client))["items"][0]["reason"] == "flagged"
+
+
 async def test_dirty_published_grade_surfaces(client: AsyncClient) -> None:
     w = await _seed()
     hw = await _publish_hw(w, due_at=None)

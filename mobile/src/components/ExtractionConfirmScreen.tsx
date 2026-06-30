@@ -29,6 +29,10 @@ import { confidenceBand, groupExtraction } from "../utils/extraction";
 import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
 
 const POLL_MS = 2500;
+// Give up on the "Reading your work…" wait after this long and offer a retry
+// instead of spinning forever on a stalled extraction. Mirrors the integrity
+// chat's PREPARE_TIMEOUT_MS / web's pending-view timeout.
+const EXTRACTION_TIMEOUT_MS = 90_000;
 
 interface Props {
   assignmentId: string;
@@ -55,6 +59,10 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
   // Only touched fields land here; sent to confirm-extraction.
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [zoomFile, setZoomFile] = useState<SubmissionFile | null>(null);
+  // Elapsed sense + give-up fallback for the "Reading your work…" wait.
+  const [prepElapsedMs, setPrepElapsedMs] = useState(0);
+  const [prepTimedOut, setPrepTimedOut] = useState(false);
+  const [pollNonce, setPollNonce] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const needsExtraction = (s: SubmissionState) => s.integrity_check_enabled || s.ai_grading_enabled;
@@ -66,18 +74,36 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
 
   useEffect(() => {
     let active = true;
+    const startedAt = Date.now();
+    setPrepTimedOut(false);
+    setPrepElapsedMs(0);
     const tick = async () => {
+      const stalled = Date.now() - startedAt >= EXTRACTION_TIMEOUT_MS;
       try {
         const s = await getSubmission(assignmentId);
         if (!active) return;
         setState(s);
         setError(false);
-        if (!settled(s)) timer.current = setTimeout(tick, POLL_MS);
+        if (!settled(s)) {
+          // Stalled extraction: stop the spinner and offer a retry instead
+          // of polling forever.
+          if (stalled) {
+            setPrepTimedOut(true);
+            return;
+          }
+          setPrepElapsedMs(Date.now() - startedAt);
+          timer.current = setTimeout(tick, POLL_MS);
+        }
       } catch {
         if (!active) return;
         setError(true);
         // Transient blip — keep polling so the screen recovers on its own
         // rather than stalling on the spinner until the user re-enters.
+        if (stalled) {
+          setPrepTimedOut(true);
+          return;
+        }
+        setPrepElapsedMs(Date.now() - startedAt);
         timer.current = setTimeout(tick, POLL_MS);
       }
     };
@@ -87,7 +113,7 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
       if (timer.current) clearTimeout(timer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignmentId]);
+  }, [assignmentId, pollNonce]);
 
   const doConfirm = useCallback(async () => {
     if (!state || acting) return;
@@ -153,14 +179,35 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
     );
   }
 
+  // Extraction stalled past the timeout — stop spinning, offer a retry so the
+  // student isn't stranded on an endless spinner. Work keeps processing
+  // server-side, so a retry usually just picks up the finished result.
+  if (state.extraction == null && prepTimedOut) {
+    return (
+      <Centered styles={styles} colors={colors}>
+        <Ionicons name="time-outline" size={40} color={colors.textMuted} />
+        <Text style={styles.doneTitle}>This is taking longer than usual</Text>
+        <Text style={styles.bodyText}>
+          Your work is saved. You can try again now or come back in a bit.
+        </Text>
+        <Button label="Try again" onPress={() => setPollNonce((n) => n + 1)} />
+        <Button label="I'll check back later" variant="ghost" onPress={onDone} />
+      </Centered>
+    );
+  }
+
   // Extraction still running. Offer an exit — it keeps processing server-side,
   // so the student isn't trapped if it's slow; they can confirm later.
   if (state.extraction == null) {
+    const seconds = Math.floor(prepElapsedMs / 1000);
     return (
       <Centered styles={styles} colors={colors}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.doneTitle}>Reading your work…</Text>
-        <Text style={styles.bodyText}>This takes a few seconds. Hang tight.</Text>
+        <Text style={styles.bodyText}>
+          This usually takes about 20 seconds.
+          {seconds >= 10 ? ` (${seconds}s)` : ""}
+        </Text>
         <Button label="I'll check back later" variant="ghost" onPress={onDone} />
       </Centered>
     );

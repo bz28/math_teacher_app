@@ -179,14 +179,20 @@ export function IntegrityPendingView({
 
   return (
     <div className="mx-auto max-w-2xl py-12 text-center">
-      {/* Pure CSS spinner — no dependency weight on low-end Android */}
-      <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-border border-t-primary" />
+      {/* Pure CSS spinner — no dependency weight on low-end Android.
+          motion-reduce removes the spin for students who ask the OS to
+          reduce motion; the border ring still reads as a wait state. */}
+      <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-border border-t-primary motion-reduce:animate-none" />
       <h1 className="mt-6 text-2xl font-bold text-text-primary">
         {copy.title}…
       </h1>
       <p className="mt-3 text-sm text-text-secondary">{copy.subtitle}</p>
+      {/* Anchor expectations to the real budget: the poll times out at
+          90s (TIMEOUT_MS), so promising "about 20 seconds" while a live
+          counter ticks past it manufactures the exact anxiety this
+          screen exists to calm. "About a minute" sits inside the window. */}
       <p className="mt-4 text-xs text-text-muted">
-        This usually takes about 20 seconds.
+        This usually takes about a minute.
         {seconds >= 10 && ` (${seconds}s)`}
       </p>
     </div>

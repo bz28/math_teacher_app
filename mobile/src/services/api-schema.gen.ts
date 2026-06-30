@@ -2800,6 +2800,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/integrity/submissions/{submission_id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Teacher Resolve Integrity
+         * @description Set the teacher's session-level resolution on an integrity check.
+         *
+         *     This is the "I handled this" action — it does NOT touch the AI's
+         *     disposition (the agent's verdict stands), but it clears the flag
+         *     from the roster's needs-attention aggregate so a reviewed
+         *     submission stops showing as flagged forever. Owner-of-course gated,
+         *     like the other teacher integrity endpoints. Idempotent: re-resolving
+         *     with a new outcome just updates the outcome and re-stamps who/when.
+         */
+        post: operations["teacher_resolve_integrity_v1_teacher_integrity_submissions__submission_id__resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/join": {
         parameters: {
             query?: never;
@@ -4318,6 +4345,20 @@ export interface components {
             /** Signup School Name */
             signup_school_name?: string | null;
         };
+        /**
+         * ResolveRequest
+         * @description Teacher's session-level resolution of an integrity check. The
+         *     outcome is what the teacher decided after reviewing — it does NOT
+         *     change the AI's disposition. All three outcomes clear the flag from
+         *     the roster's needs-attention aggregate.
+         */
+        ResolveRequest: {
+            /**
+             * Resolution
+             * @enum {string}
+             */
+            resolution: "cleared" | "confirmed_concern" | "contacted";
+        };
         /** RespondRequest */
         RespondRequest: {
             /**
@@ -4788,6 +4829,12 @@ export interface components {
             probe_selection_reason: string | null;
             /** Problems */
             problems: components["schemas"]["TeacherIntegrityProblemRow"][];
+            /** Resolution */
+            resolution: string;
+            /** Resolved At */
+            resolved_at: string | null;
+            /** Resolved By Name */
+            resolved_by_name: string | null;
             /** Submission Id */
             submission_id: string;
             /** Transcript */
@@ -10388,6 +10435,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["DismissRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    teacher_resolve_integrity_v1_teacher_integrity_submissions__submission_id__resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveRequest"];
             };
         };
         responses: {

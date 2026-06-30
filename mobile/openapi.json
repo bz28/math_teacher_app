@@ -2419,6 +2419,25 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "ResolveRequest": {
+        "description": "Teacher's session-level resolution of an integrity check. The\noutcome is what the teacher decided after reviewing \u2014 it does NOT\nchange the AI's disposition. All three outcomes clear the flag from\nthe roster's needs-attention aggregate.",
+        "properties": {
+          "resolution": {
+            "enum": [
+              "cleared",
+              "confirmed_concern",
+              "contacted"
+            ],
+            "title": "Resolution",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resolution"
+        ],
+        "title": "ResolveRequest",
+        "type": "object"
+      },
       "RespondRequest": {
         "properties": {
           "request_advance": {
@@ -3749,6 +3768,33 @@
             "title": "Problems",
             "type": "array"
           },
+          "resolution": {
+            "title": "Resolution",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolved_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By Name"
+          },
           "submission_id": {
             "title": "Submission Id",
             "type": "string"
@@ -3771,6 +3817,9 @@
           "inline_variant_used",
           "inline_variant_result",
           "activity_summary",
+          "resolution",
+          "resolved_by_name",
+          "resolved_at",
           "problems",
           "transcript"
         ],
@@ -14117,6 +14166,58 @@
           }
         ],
         "summary": "Teacher Dismiss Problem",
+        "tags": [
+          "integrity"
+        ]
+      }
+    },
+    "/v1/teacher/integrity/submissions/{submission_id}/resolve": {
+      "post": {
+        "description": "Set the teacher's session-level resolution on an integrity check.\n\nThis is the \"I handled this\" action \u2014 it does NOT touch the AI's\ndisposition (the agent's verdict stands), but it clears the flag\nfrom the roster's needs-attention aggregate so a reviewed\nsubmission stops showing as flagged forever. Owner-of-course gated,\nlike the other teacher integrity endpoints. Idempotent: re-resolving\nwith a new outcome just updates the outcome and re-stamps who/when.",
+        "operationId": "teacher_resolve_integrity_v1_teacher_integrity_submissions__submission_id__resolve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Teacher Resolve Integrity",
         "tags": [
           "integrity"
         ]

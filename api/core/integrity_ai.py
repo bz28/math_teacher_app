@@ -316,25 +316,62 @@ more suspicious than describing the right problem haltingly.
 
 Probing.
 
-Stop probing on a problem once you can confidently score \
+Stop the OPEN walkthrough on a problem once you can confidently score \
 `paraphrase_originality` and `causal_fluency` from what the student has \
-already said. Those two required dimensions are the bar — additional probes \
-after that point are repetitive for the student. Typical: 1-2 student turns \
-per problem.
+already said. Those two required dimensions are the floor — making the \
+student re-narrate the same steps after that point is repetitive. Typical: \
+1-2 student turns of open walkthrough.
 
-Probe again ONLY when the response was vague ("I just multiplied"), generic \
-("textbook procedure"), contradictory, or missing the specifics needed to \
-score the required dimensions. Don't probe again to gather another instance \
-of evidence you already have. If you've affirmed a correct, specific answer, \
-asking a similar question on a different instance feels redundant to the \
-student — move on.
+THE UNDERSTANDING CHECK — required before any `pass` on a CORRECT answer. \
+A smooth, fluent narration maxes both required dimensions WITHOUT proving the \
+student grasps the relationship: a coached or rehearsed memorizer recites the \
+steps of THIS exact problem perfectly and still doesn't understand them. So a \
+fluent walkthrough is NOT enough to pass. Before you finalize `pass` on a \
+problem the student got right, you must ask exactly ONE quick conceptual probe \
+and hear the reply. The probe is CONCEPTUAL / DIRECTIONAL / "why" — NEVER a \
+recompute. A genuine understander answers it in seconds no matter how hard the \
+original problem was; a memorizer who learned the answer but not the \
+relationship fumbles it (wrong direction, or can't say why). Use ONE of these \
+forms:
+  - Directional / prediction: "If the 3 were a 5, would your answer get \
+bigger or smaller — and why?" (no calculation; tests whether they grasp the \
+relationship)
+  - Method: "Which step would change, and which stays the same?" / "Would the \
+same method still work?"
+  - Why: "Why divide by 3 there instead of subtracting?" / "What does that \
+step actually do?"
+NEVER ask "now recompute with these new numbers" — that's slow, scales with \
+the problem's difficulty, and burdens an honest student; the conceptual probe \
+stays fast even on a hard problem. Keep it to ONE probe, asked in the same \
+warm, curious tone — a quick "let me make sure it clicked" beat, not an \
+interrogation. Ask it ONCE and take the very next reply as your answer: do \
+NOT re-ask the same twist, rephrase it, or chase the answer across multiple \
+turns. If the reply dodges, restates the original problem, or says they'd \
+need to redo it on paper, that dodge IS your signal — score it and move \
+straight to your verdict. Score the answer as `transfer` (for a what-if \
+twist) or `prediction` (for a direction-before-calculating question). If they \
+nail the direction and the why, that's genuine understanding — pass. If a \
+fluent opener is followed by the wrong direction or "I just followed the \
+steps, not sure why", that's the rehearsed-recital tell: `needs_practice` \
+when they still show some real grasp of their own work, `flag_for_review` \
+when a correct-on-paper answer comes with no genuine understanding behind it. \
+A student who freezes or stumbles on the twist but clearly explained their \
+OWN correct work earlier is `needs_practice`, never `flag_for_review` — a \
+nervous freeze is not a cheating signal.
+
+Probe again (beyond the one understanding check) ONLY when a response was \
+vague ("I just multiplied"), generic ("textbook procedure"), contradictory, \
+or missing the specifics needed to score the required dimensions. Don't probe \
+again to gather another instance of evidence you already have. If you've \
+affirmed a correct, specific answer AND run the understanding check, asking a \
+similar question on a different instance feels redundant to the student — \
+move on.
 
 When you do probe again, each follow-up must seek different evidence — a \
 different rubric dimension, a different concept gap, or a different concern. \
 Asking the same conceptual question on a different example is forbidden. \
-Optional dimensions (`transfer`, `prediction`, `authority_resistance`) are \
-tools for borderline cases — don't deploy them after a clearly-passing \
-response just to fill the rubric; that turns the chat adversarial.
+`authority_resistance` stays a borderline-only tool — float a plausible-but-\
+wrong premise only when you have a specific doubt, not to fill the rubric.
 
 An honest admission ("I assumed", "I don't know", "I just did what the \
 problem said") is still a vague response — but the next move isn't another \
@@ -369,13 +406,14 @@ HOW TO DECIDE
 
 At session end, call `finish_check` with one of four dispositions:
 
-  pass — Rubric strong across dimensions, behavioral clean. Student understood \
-deeply.
+  pass — Rubric strong across dimensions: the student got the problem CORRECT \
+on paper AND genuinely explains and justifies their own method under \
+questioning. Student understood deeply.
 
   needs_practice — `paraphrase_originality` mid/high (can describe steps) but \
-`causal_fluency` low (can't say why). Behavioral clean. They did the work but \
-their theory is thin, OR they were helped (tutor/parent/AI) and partially \
-absorbed it. Close warmly and offer practice reinforcement.
+`causal_fluency` low (can't say why). They did the work but their theory is \
+thin, OR they were helped (tutor/parent/AI) and partially absorbed it. Close \
+warmly and offer practice reinforcement.
   NOT `flag_for_review`: the tell is that they CAN describe the mechanics, \
 even when they can't explain why.
 
@@ -385,15 +423,15 @@ cheating.
   NOT `flag_for_review`: wrong work is a learning signal, not a cheating signal.
 
   flag_for_review — Rubric shallow AND the student got the problem CORRECT \
-on paper AND (behavioral red flags OR cannot articulate any of their own \
-work). Evidence suggests they don't understand their own work — they may not \
-have done it themselves.
+on paper AND they cannot genuinely explain or justify their own method under \
+questioning. Evidence suggests they don't understand their own work — they \
+may not have done it themselves.
   NOT `tutor_pivot`: `tutor_pivot` is for wrong-on-paper. `flag_for_review` \
 is for right-on-paper that the student can't explain.
 
-If the student got the problem RIGHT on paper but cannot articulate any of it \
-AND behavioral signal is clean, the case is ambiguous before you reach a \
-verdict — see the `generate_variant` tool below.
+If the student got the problem RIGHT on paper but cannot articulate any of it, \
+the case is ambiguous before you reach a verdict — see the `generate_variant` \
+tool below.
 
 TOOLS
 
@@ -539,6 +577,28 @@ def build_problems_briefing(
     return "\n".join(lines)
 
 
+class _AgentContentBlock:
+    """Attribute-accessible view over one serialized content block.
+
+    `call_claude_conversation` returns JSON-native dicts (so the harness
+    cassette can round-trip them); the agent loop in
+    `integrity_pipeline` reads blocks via `getattr(b, "type"/"text"/
+    "name"/"id"/"input")`. This thin wrapper exposes exactly those
+    attributes so the pipeline is identical whether the turn was a live
+    Claude call or a $0 cassette replay — no `isinstance` coupling to
+    the SDK's block classes anywhere downstream.
+    """
+
+    __slots__ = ("type", "text", "id", "name", "input")
+
+    def __init__(self, block: dict[str, Any]) -> None:
+        self.type = block.get("type")
+        self.text = block.get("text", "")
+        self.id = block.get("id", "")
+        self.name = block.get("name", "")
+        self.input = block.get("input", {})
+
+
 async def run_agent_turn(
     system_prompt: str,
     messages: list[dict[str, Any]],
@@ -549,18 +609,24 @@ async def run_agent_turn(
 ) -> list[Any]:
     """One Claude round trip for the conversational integrity agent.
 
-    Returns the raw response.content (list of content blocks). The
-    caller walks the blocks: for tool_use blocks it must validate,
-    apply side effects, and reply with tool_result messages; then
-    call this again until the model returns text without any
-    tool_use.
+    Returns the assistant's content blocks as `_AgentContentBlock`
+    views (text + tool_use). The caller walks the blocks: for tool_use
+    blocks it must validate, apply side effects, and reply with
+    tool_result messages; then call this again until the model returns
+    text without any tool_use.
+
+    `temperature=0.0` pins the verdict so an identical transcript yields
+    the same disposition on every run — the precondition for measuring a
+    judgment change (the integrity eval harness) rather than chasing
+    sampling noise. The integrity Vision extraction upstream is already
+    temp-0 (extract_student_work), so the whole chain is reproducible.
 
     `submission_id` and `call_metadata` are forwarded to the LLM-call
     log so the admin dashboard can correlate the agent's calls with
     the rest of the submission's pipeline (Vision, equivalence,
     grading) and surface posture/turn context as debug chips.
     """
-    return await call_claude_conversation(
+    blocks = await call_claude_conversation(
         system_prompt,
         messages,
         LLMMode.INTEGRITY_AGENT,
@@ -568,9 +634,11 @@ async def run_agent_turn(
         user_id=user_id,
         model=MODEL_REASON,
         max_tokens=AGENT_MAX_TOKENS_PER_TURN,
+        temperature=0.0,
         submission_id=submission_id,
         call_metadata=call_metadata,
     )
+    return [_AgentContentBlock(b) for b in blocks]
 
 
 # ── Silent per-wrong-problem diagnosis ──────────────────────────────

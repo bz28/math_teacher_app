@@ -9,6 +9,8 @@ import {
   ActivityDigest,
   ActivityPill,
   ActivityTurnMarker,
+  integrityNeedsResolution,
+  ResolveIntegrityControl,
   RowDispositionPill,
   type IntegrityActivityNotableTurnLite,
 } from "@/components/school/teacher/_pieces/submissions-panel";
@@ -19,6 +21,7 @@ import {
   type GradeBreakdownEntry,
   type GradeDeduction,
   type IntegrityDisposition,
+  type IntegrityResolutionOutcome,
   type ItemAnalysisResponse,
   type SubmissionFile,
   type TeacherIntegrityDetail,
@@ -319,6 +322,11 @@ function HomeworkSectionReview({
   // counters by the right amount without a refetch.
   const [pendingReviewedOtherSections, setPendingReviewedOtherSections] = useState(0);
   const [dirtyReviewedOtherSections, setDirtyReviewedOtherSections] = useState(0);
+  // Other-section submissions about to be published (pending or dirty)
+  // whose integrity check landed on an unresolved flag_for_review. The
+  // publish action is HW-wide, so the soft publish-confirm must count
+  // these too — snapshotted at fetch time like the counters above.
+  const [flaggedOtherSections, setFlaggedOtherSections] = useState(0);
   // Submission currently being marked reviewed via the explicit no-edit
   // affordance. Single slot — only one student is open at a time.
   const [markingReviewedId, setMarkingReviewedId] = useState<string | null>(null);
@@ -365,18 +373,28 @@ function HomeworkSectionReview({
         let otherGraded = 0;
         let otherPendingReviewed = 0;
         let otherDirtyReviewed = 0;
+        let otherFlagged = 0;
         for (const r of subs.submissions) {
           if (r.is_preview) continue;
           if (r.section_id === sectionId) {
             submissionByStudent.set(r.student_id, r);
           } else if (r.final_score !== null) {
             otherGraded += 1;
+            // Mirror the in-section flagged-to-publish rule (see below):
+            // only flag_for_review, only while unresolved, only when the
+            // grade is actually about to go out (pending or dirty).
+            const ov = r.integrity_overview;
+            const isFlaggedUnresolved =
+              ov?.disposition === "flag_for_review" &&
+              ov.resolution === "unresolved";
             if (r.grade_published_at === null) {
               otherPending += 1;
               if (r.reviewed_at) otherPendingReviewed += 1;
+              if (isFlaggedUnresolved) otherFlagged += 1;
             } else if (r.grade_dirty) {
               otherDirty += 1;
               if (r.reviewed_at) otherDirtyReviewed += 1;
+              if (isFlaggedUnresolved) otherFlagged += 1;
             }
           }
         }
@@ -385,6 +403,7 @@ function HomeworkSectionReview({
         setGradedOtherSections(otherGraded);
         setPendingReviewedOtherSections(otherPendingReviewed);
         setDirtyReviewedOtherSections(otherDirtyReviewed);
+        setFlaggedOtherSections(otherFlagged);
         const merged: RosterEntry[] = s.students
           .map((st) => ({
             student_id: st.id,
@@ -569,6 +588,43 @@ function HomeworkSectionReview({
     [],
   );
 
+  // A teacher marked the integrity check reviewed. Mirror the new
+  // resolution onto the roster row's overview so the flagged filter +
+  // "needs your eyes" subhead update instantly, then refetch the detail
+  // so the resolved-by name + timestamp on the banner are authoritative.
+  const handleIntegrityResolved = useCallback(
+    (submissionId: string, resolution: IntegrityResolutionOutcome) => {
+      setRoster((prev) =>
+        prev
+          ? prev.map((e) =>
+              e.submission?.id === submissionId &&
+              e.submission.integrity_overview
+                ? {
+                    ...e,
+                    submission: {
+                      ...e.submission,
+                      integrity_overview: {
+                        ...e.submission.integrity_overview,
+                        resolution,
+                      },
+                    },
+                  }
+                : e,
+            )
+          : prev,
+      );
+      teacher
+        .integrityDetail(submissionId)
+        .then((d) =>
+          setIntegrity((prev) =>
+            prev?.submission_id === submissionId ? d : prev,
+          ),
+        )
+        .catch(() => {});
+    },
+    [],
+  );
+
   // Persist the current breakdown. Full-replacement semantics: we
   // send every graded entry on every call, the backend writes the
   // row, recomputes `final_score`, and returns the authoritative
@@ -728,11 +784,13 @@ function HomeworkSectionReview({
     dirtyInSection,
     gradedInSection,
     reviewedToPublishInSection,
+    flaggedToPublishInSection,
   } = useMemo(() => {
     let pending = 0;
     let dirty = 0;
     let graded = 0;
     let reviewedToPublish = 0;
+    let flaggedToPublish = 0;
     for (const e of roster ?? []) {
       const s = e.submission;
       if (!s || s.final_score === null) continue;
@@ -744,12 +802,28 @@ function HomeworkSectionReview({
       // A grade is "to publish" if pending or dirty; count the vetted
       // ones so the dialog can split reviewed vs unopened.
       if ((isPending || isDirty) && s.reviewed_at) reviewedToPublish += 1;
+      // Soft publish-confirm: a grade about to go out whose integrity
+      // check landed on flag_for_review and the teacher hasn't resolved
+      // it yet. Only flag_for_review (not the other dispositions) and
+      // only while unresolved — a teacher who marked it reviewed has
+      // already made the call. This is the in-section portion; the
+      // cross-section portion (flaggedOtherSections) is added in below
+      // so the count matches what the HW-wide publish actually releases.
+      const ov = s.integrity_overview;
+      if (
+        (isPending || isDirty) &&
+        ov?.disposition === "flag_for_review" &&
+        ov.resolution === "unresolved"
+      ) {
+        flaggedToPublish += 1;
+      }
     }
     return {
       pendingInSection: pending,
       dirtyInSection: dirty,
       gradedInSection: graded,
       reviewedToPublishInSection: reviewedToPublish,
+      flaggedToPublishInSection: flaggedToPublish,
     };
   }, [roster]);
   const pendingTotal = pendingInSection + pendingOtherSections;
@@ -762,6 +836,10 @@ function HomeworkSectionReview({
     pendingReviewedOtherSections +
     dirtyReviewedOtherSections;
   const unreviewedToPublishTotal = toReleaseTotal - reviewedToPublishTotal;
+  // Flagged-to-publish across the whole HW — the publish action is
+  // HW-wide, so the soft confirm counts both the loaded section and the
+  // snapshotted other-section flags.
+  const flaggedToPublishTotal = flaggedToPublishInSection + flaggedOtherSections;
 
   // Publish every pending-or-dirty submission on the HW. Backend is
   // idempotent. On success we mirror the publish timestamp onto every
@@ -812,6 +890,11 @@ function HomeworkSectionReview({
           setDirtyOtherSections(0);
           setPendingReviewedOtherSections(0);
           setDirtyReviewedOtherSections(0);
+          // Full publish releases every other-section flag too. (A
+          // reviewed-only run can leave unreviewed flags unpublished, and
+          // we don't track the reviewed-flag split — that path keeps the
+          // snapshot, refreshed on next open like the other counters.)
+          setFlaggedOtherSections(0);
         }
         // If the open student's grade was part of the publish, clear
         // the local dirty flag on detail too so the strip updates
@@ -1094,6 +1177,7 @@ function HomeworkSectionReview({
                 }}
                 onGradeProblem={setProblemGrade}
                 onFeedbackChange={setProblemFeedback}
+                onIntegrityResolved={handleIntegrityResolved}
                 onMarkReviewed={() =>
                   void handleMarkReviewed(selectedEntry.submission!.id)
                 }
@@ -1145,6 +1229,7 @@ function HomeworkSectionReview({
         dirtyOtherSections={dirtyOtherSections}
         reviewedToPublish={reviewedToPublishTotal}
         unreviewedToPublish={unreviewedToPublishTotal}
+        flaggedToPublish={flaggedToPublishTotal}
         publishing={publishing}
         error={publishError}
         onConfirm={handlePublish}
@@ -1247,6 +1332,7 @@ function PublishConfirmDialog({
   dirtyOtherSections,
   reviewedToPublish,
   unreviewedToPublish,
+  flaggedToPublish,
   publishing,
   error,
   onConfirm,
@@ -1262,6 +1348,10 @@ function PublishConfirmDialog({
    *  disclosure + whether "Publish only reviewed" is offered. */
   reviewedToPublish: number;
   unreviewedToPublish: number;
+  /** Submissions about to be published whose integrity check flagged
+   *  them for review and the teacher hasn't resolved yet. Drives the
+   *  soft confirm — a warning, never a block. */
+  flaggedToPublish: number;
   publishing: boolean;
   error: string | null;
   onConfirm: (reviewedOnly?: boolean) => void;
@@ -1305,6 +1395,21 @@ function PublishConfirmDialog({
         <p className="mt-3 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-3 py-2 text-xs text-[color:var(--color-warning-dark)]  dark:bg-[color:var(--color-warning)]/10 ">
           <span className="font-semibold">{dirtyTotal}</span>{" "}
           {dirtyTotal === 1 ? "is an edit" : "are edits"} to already-published grades.
+        </p>
+      )}
+      {/* Soft integrity confirm — a flagged-for-review submission is
+       *  about to go out unresolved. Warn, don't block: the teacher can
+       *  still publish (legit reasons exist), but they make the call
+       *  with eyes open instead of by accident. */}
+      {flaggedToPublish > 0 && (
+        <p className="mt-3 rounded-[--radius-md] border border-[color:var(--color-error)]/30 bg-[color:var(--color-error-light)] px-3 py-2 text-xs text-[color:var(--color-error)]">
+          <span aria-hidden>⚑ </span>
+          <span className="font-semibold">{flaggedToPublish}</span>{" "}
+          {flaggedToPublish === 1
+            ? "submission is flagged for review"
+            : "submissions are flagged for review"}{" "}
+          and not yet resolved. Publish anyway, or close this and review
+          {flaggedToPublish === 1 ? " it" : " them"} first?
         </p>
       )}
       {otherSections > 0 && (
@@ -1528,10 +1633,16 @@ function RegradeConfirmDialog({
 // a verdict requiring teacher attention.
 // ────────────────────────────────────────────────────────────────────
 
-const FLAGGED_DISPOSITIONS = new Set([
-  "flag_for_review",
-  "tutor_pivot",
-]);
+// Dispositions the "flagged" filter and resolve control treat as
+// needing teacher attention. Only `flag_for_review` — the integrity-
+// concern verdict. `tutor_pivot` is deliberately NOT here: it means the
+// student got the problem WRONG on paper and the AI tutored them through
+// it (integrity_ai.py — "wrong work is a learning signal, not a cheating
+// signal"). It surfaces as an informational disposition pill + via
+// practice insights, not as a teacher-review flag. This mirrors the
+// backend needs-attention aggregate, which also excludes tutor_pivot
+// (teacher_courses.py / teacher_assignments.py).
+const FLAGGED_DISPOSITIONS = new Set(["flag_for_review"]);
 
 function isFlagged(entry: RosterEntry): boolean {
   const sub = entry.submission;
@@ -1541,6 +1652,9 @@ function isFlagged(entry: RosterEntry): boolean {
   if (sub.extraction_flagged_at) return true;
   const overview = sub.integrity_overview;
   if (!overview) return false;
+  // A teacher who marked the check reviewed has handled it — drop it
+  // from the flagged filter (matches the backend flagged aggregate).
+  if (overview.resolution !== "unresolved") return false;
   // `IntegrityOverview` exposes only `complete | in_progress`, so the
   // `skipped_unreadable` granular state isn't directly visible from
   // the row. The full `TeacherIntegrityDetail` (loaded only for the
@@ -2021,6 +2135,19 @@ function rowStatusLabel(entry: RosterEntry): {
   if (!sub) {
     return { text: "Not submitted", dotClass: "bg-gray-300" };
   }
+  // Student said "the reader got my work wrong" on the confirm screen —
+  // the submission skipped AI grading + integrity entirely and needs a
+  // manual pass. Surface it loudly (red) until the teacher publishes a
+  // clean grade, at which point the published branch below takes over.
+  if (
+    sub.extraction_flagged_at &&
+    !(sub.grade_published_at && !sub.grade_dirty)
+  ) {
+    return {
+      text: "Reader misread · review",
+      dotClass: "bg-[color:var(--color-error)]",
+    };
+  }
   // Unreadable photo never got an AI grade — call it out distinctly so
   // the teacher knows this row needs a manual pass (or a resubmit),
   // not just an unopened suggestion. Warning dot, reusing the same
@@ -2078,6 +2205,7 @@ function SubmissionDetailPanel({
   onSelectNext,
   onGradeProblem,
   onFeedbackChange,
+  onIntegrityResolved,
   onMarkReviewed,
   marking,
   regrading,
@@ -2095,6 +2223,10 @@ function SubmissionDetailPanel({
   onSelectNext: () => void;
   onGradeProblem: (problemId: string, status: GradeStatus, partialPercent?: number) => void;
   onFeedbackChange: (problemId: string, text: string) => void;
+  onIntegrityResolved: (
+    submissionId: string,
+    resolution: IntegrityResolutionOutcome,
+  ) => void;
   onMarkReviewed: () => void;
   marking: boolean;
   regrading: boolean;
@@ -2658,12 +2790,48 @@ function SubmissionDetailPanel({
         </div>
       </div>
 
+      {/* Reader-misread callout — the student declined the OCR reading
+          ("the reader got my work wrong") on the confirm screen, so the
+          submission skipped AI grading + integrity entirely. There's no
+          integrity check to render below, which is exactly why this
+          needs its own loud signal: without it the row would look like
+          an ordinary ungraded submission and the dodge (or the genuine
+          misread) would slip by. Honor-code by design — no interview is
+          forced — so the teacher is the backstop. */}
+      {row?.extraction_flagged_at && (
+        <div
+          className="rounded-[--radius-xl] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] p-3"
+          role="status"
+        >
+          <div className="flex items-start gap-3">
+            <span
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-error)] text-sm font-bold text-white"
+              aria-hidden
+            >
+              ⚠
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-text-primary">
+                Student said the reader got their work wrong — review
+              </p>
+              <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
+                They declined the scanned reading on the confirm screen,
+                so no AI grading or understanding check ran. If the photo
+                really was misread, grade from the original work; if it
+                looks like a dodge, follow up with the student.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Integrity verdict — the #1 trust signal. First full content
           block so the teacher sees the verdict before they start
           grading. Hides when HW had integrity disabled / no check. */}
       <IntegrityBanner
         integrity={integrity}
         overviewFallback={row?.integrity_overview ?? null}
+        onResolved={onIntegrityResolved}
       />
 
       {/* Rubric drift banner — only renders when the assignment's live
@@ -4402,9 +4570,14 @@ function KeyboardShortcutsModal({ onClose }: { onClose: () => void }) {
 function IntegrityBanner({
   integrity,
   overviewFallback,
+  onResolved,
 }: {
   integrity: TeacherIntegrityDetail | null;
   overviewFallback: TeacherSubmissionRow["integrity_overview"] | null;
+  onResolved: (
+    submissionId: string,
+    resolution: IntegrityResolutionOutcome,
+  ) => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -4439,7 +4612,14 @@ function IntegrityBanner({
     }
   })();
   if (!key) return null;
-  const style = INTEGRITY_STYLE[key];
+  // A teacher who marked the check reviewed has handled it — drop the
+  // loud verdict color to a neutral tint (keep the icon/label) so a
+  // resolved flag no longer reads as an open alarm.
+  const resolved =
+    !!integrity && integrity.resolution !== "unresolved";
+  const style = resolved
+    ? { ...INTEGRITY_STYLE[key], ...NEUTRAL_STYLE }
+    : INTEGRITY_STYLE[key];
   // Prefer the agent-emitted headline (chat-grounded verdict title) over
   // the generic per-disposition fallback. AI-emitted is only present
   // when the agent ran a finish_check; non-AI states (extracting,
@@ -4491,6 +4671,25 @@ function IntegrityBanner({
                     {overviewFallback.problem_count} sampled problems graded.
                   </p>
                 )}
+                {/* "Mark reviewed" — only on checks that need attention
+                    (or already resolved). Clearing one drops it from the
+                    roster flagged filter. Needs full detail (resolution
+                    + resolved-by); hidden during the overview-only gap. */}
+                {integrity &&
+                  (integrityNeedsResolution(integrity) ||
+                    integrity.resolution !== "unresolved") && (
+                    <div className="mt-2.5">
+                      <ResolveIntegrityControl
+                        submissionId={integrity.submission_id}
+                        resolution={integrity.resolution}
+                        resolvedByName={integrity.resolved_by_name}
+                        resolvedAt={integrity.resolved_at}
+                        onResolved={(r) =>
+                          onResolved(integrity.submission_id, r)
+                        }
+                      />
+                    </div>
+                  )}
               </div>
             </div>
             {hasMeaningfulTranscript && (
