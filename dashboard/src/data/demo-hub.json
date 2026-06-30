@@ -1,0 +1,131 @@
+{
+  "meta": {
+    "framing": "The screens below are captured from the live product. One seeded student — the 73% receipt — is illustrative, labeled wherever it appears. No outcome stats, no pricing: capability facts only.",
+    "source": "Live product captures + evaluation harness",
+    "model": "claude",
+    "capturedAt": "2026-06"
+  },
+  "hero": {
+    "eyebrow": "Veradic · The platform",
+    "headline": "Snap the homework. The grading and the understanding check run themselves — and you get your evenings back.",
+    "subhead": "The nights spent grading at the kitchen table. Never quite sure who actually understands until the test tells you. Veradic reads each student's handwritten work, grades every problem with a receipt, has a calm three-minute chat to check they truly get it, then hands you a class you can see at a glance — and the few who need you.",
+    "triplet": ["Grades the work", "Checks understanding", "Shows you who's struggling"],
+    "cue": "See how it fits together"
+  },
+  "loop": {
+    "eyebrow": "A day in the life",
+    "title": "One loop, from a photo to a class you can see",
+    "sub": "The pieces fit into a single rhythm. A student sends their work; you get back a graded, understood, triaged class — without the kitchen-table night.",
+    "beats": [
+      {
+        "step": "01",
+        "title": "A student submits a photo",
+        "line": "They snap their handwritten work and send it in — no scanner, no app gymnastics.",
+        "shot": "/golden-set-integrity/02-submit-work.png"
+      },
+      {
+        "step": "02",
+        "title": "The AI grades it — with a receipt",
+        "line": "Every problem scored, every point traced back to the handwriting it came from.",
+        "shot": "/golden-set-grading/03-receipt.png"
+      },
+      {
+        "step": "03",
+        "title": "It checks they understand",
+        "line": "A short, calm conversation that catches the memorizer one graded answer can't.",
+        "shot": "/golden-set-integrity/05-conceptual-probe.png"
+      },
+      {
+        "step": "04",
+        "title": "You see the class at a glance",
+        "line": "A graded roster with the few who need a human surfaced — not the whole stack to re-check.",
+        "shot": "/golden-set-integrity/08-teacher-roster.png"
+      }
+    ]
+  },
+  "useCases": {
+    "eyebrow": "The core",
+    "title": "Two pieces that change the week — open either one",
+    "sub": "Each is a real, working surface. Step into it to see the actual product, end to end, with the system's own output.",
+    "cards": [
+      {
+        "key": "integrity",
+        "tag": "The differentiator",
+        "title": "The understanding check",
+        "benefit": "Catches the smooth memorizer that one graded answer can't. A calm three-minute chat per student — and the kid never sees a verdict, so a teacher always makes the call.",
+        "shot": "/golden-set-integrity/05-conceptual-probe.png",
+        "to": "/golden-set/integrity",
+        "cta": "See how it works"
+      },
+      {
+        "key": "grading",
+        "tag": "The everyday workhorse",
+        "title": "AI grading you can defend",
+        "benefit": "Every problem scored with a receipt — 100 − 20 − 7 = 73% — sitting right next to the handwriting it came from. You review the few it's unsure about and sign off.",
+        "shot": "/golden-set-grading/03-receipt.png",
+        "to": "/golden-set/grading",
+        "cta": "See how it works"
+      }
+    ],
+    "coming": {
+      "label": "Also coming to the platform",
+      "items": [
+        {
+          "title": "Problem generation",
+          "line": "Worksheets and quizzes from your standards — every problem re-derived and checked."
+        },
+        {
+          "title": "Your teaching week",
+          "line": "The whole class in one view: who's ahead, who's stuck, what to reteach next."
+        }
+      ]
+    }
+  },
+  "roi": {
+    "eyebrow": "The math, your numbers",
+    "title": "What it's worth to you",
+    "sub": "Veradic grades every paper and runs the understanding check; you review the slice that's flagged or uncertain. Drag your own class through the model below — the arithmetic is right there, nothing hidden.",
+    "byNumbers": [
+      {
+        "value": "Every student",
+        "label": "Checked, not sampled",
+        "sub": "the whole class — not a spot-check of five"
+      },
+      {
+        "value": "~3 min",
+        "label": "Per-student understanding check",
+        "sub": "a conversation, not an interrogation"
+      },
+      {
+        "value": "Per-problem",
+        "label": "Itemized, defensible grades",
+        "sub": "every point traced back to the work"
+      },
+      {
+        "value": "0",
+        "label": "Honest students wrongly flagged",
+        "sub": "on our 22-case adversarial test set"
+      }
+    ]
+  },
+  "payoff": {
+    "eyebrow": "Why it's worth it",
+    "title": "What the whole platform gives back.",
+    "lead": "Not another dashboard to babysit. Three things that actually change your week:",
+    "points": [
+      {
+        "title": "Your evenings",
+        "body": "The grading and the understanding check run on their own. You review the handful that need a human — not the whole stack at 10pm."
+      },
+      {
+        "title": "Fair and accurate",
+        "body": "Every grade itemized and traceable; every understanding call conservative. Across our adversarial test set, zero honest students were ever falsely flagged."
+      },
+      {
+        "title": "You see every student",
+        "body": "Not a sampled five — the whole class, with the ones who are quietly struggling surfaced before the test does it for you."
+      }
+    ],
+    "closing": "Your evenings back. Grading that's fair and that you can defend. And — for the first time — every student, seen. That's the platform."
+  }
+}
