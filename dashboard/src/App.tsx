@@ -10,6 +10,7 @@ import HarnessRuns from "./pages/HarnessRuns";
 import Quality from "./pages/Quality";
 import GradingQuality from "./pages/GradingQuality";
 import GoldenSet from "./pages/GoldenSet";
+import IntegritySet from "./pages/IntegritySet";
 import Users from "./pages/Users";
 import LeadDetail from "./pages/LeadDetail";
 import Leads from "./pages/Leads";
@@ -65,6 +66,7 @@ export default function App() {
           <Route path="/quality" element={<Quality />} />
           <Route path="/grading-quality" element={<GradingQuality />} />
           <Route path="/golden-set" element={<GoldenSet />} />
+          <Route path="/golden-set/integrity" element={<IntegritySet />} />
           <Route
             path="/submissions/:submissionId/trace"
             element={<SubmissionTrace />}
