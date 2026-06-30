@@ -10,6 +10,7 @@
 // becomes a fetch returning the SAME shape and the page doesn't change.
 
 import raw from "../data/demo-hub.json";
+import type { HeroPeek } from "./integrity-set";
 
 // Structurally identical to integrity-set's Hero so the shared HeroBlock accepts
 // this data unchanged.
@@ -19,6 +20,7 @@ export type Hero = {
   subhead: string;
   triplet: string[];
   cue: string;
+  peek?: HeroPeek;
 };
 
 export type LoopBeat = {

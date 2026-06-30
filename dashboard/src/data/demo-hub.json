@@ -10,7 +10,17 @@
     "headline": "Snap the homework. The grading and the understanding check run themselves — and you get your evenings back.",
     "subhead": "The nights spent grading at the kitchen table. Never quite sure who actually understands until the test tells you. Veradic reads each student's handwritten work, grades every problem with a receipt, has a calm three-minute chat to check they truly get it, then hands you a class you can see at a glance — and the few who need you.",
     "triplet": ["Grades the work", "Checks understanding", "Shows you who's struggling"],
-    "cue": "See how it fits together"
+    "cue": "See how it fits together",
+    "peek": {
+      "label": "Your class · at a glance",
+      "status": { "text": "End to end", "tone": "good" },
+      "rows": [
+        { "k": "Graded", "v": "30 of 30", "tone": "good" },
+        { "k": "Understanding checked", "v": "30 of 30", "tone": "good" },
+        { "k": "Need you first", "v": "5", "tone": "accent" }
+      ],
+      "foot": "Illustrative — the platform, end to end"
+    }
   },
   "loop": {
     "eyebrow": "A day in the life",

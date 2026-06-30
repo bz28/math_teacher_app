@@ -41,12 +41,30 @@ export type Matrix = {
 
 export type FlowShot = { src: string; title: string; caption: string };
 
+// A quiet, illustrative product peek shown on the right of the hero so the
+// opening frame reads like a real working product instead of blank paper.
+// Shared across every story for one consistent opening rhythm; content is
+// always illustrative (see each peek's `foot`), never a new measured claim.
+export type HeroPeekRow = {
+  k: string;
+  v: string;
+  tone?: "good" | "warn" | "accent" | "muted";
+};
+
+export type HeroPeek = {
+  label: string;
+  status: { text: string; tone: "good" | "warn" | "accent" | "info" | "muted" };
+  rows: HeroPeekRow[];
+  foot: string;
+};
+
 export type Hero = {
   eyebrow: string;
   headline: string;
   subhead: string;
   triplet: string[];
   cue: string;
+  peek?: HeroPeek;
 };
 
 export type Moment = {
