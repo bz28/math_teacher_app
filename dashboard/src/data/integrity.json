@@ -43,6 +43,7 @@
     "body": "Before it will clear a correct answer, the check asks a single conceptual question — if this number changed, would your answer go up or down, and why? A student who truly understands can reason about it in a sentence. A student who only memorized the steps can't. That one question is the thing no answer key can do.",
     "quoteAttr": "— the smooth memorizer, right after the probe",
     "shot": "/golden-set-integrity/05-conceptual-probe.png",
+    "step": "Step 03",
     "scenario": 4
   },
   "payoff": {
@@ -187,15 +188,9 @@
     ]
   },
   "flow": [
-    { "src": "/golden-set-integrity/01-homework-problem.png", "title": "The work they already do", "caption": "It starts with the same homework, on the same problems. Nothing new for a student to learn — they just turn in their work." },
-    { "src": "/golden-set-integrity/02-submit-work.png", "title": "A photo, not a keyboard", "caption": "Students snap a picture of their handwritten solution — up to ten pages. The AI reads it exactly as written. No typing, no scanner." },
-    { "src": "/golden-set-integrity/03-chat-intro.png", "title": "A calm three-minute chat", "caption": "The check opens warm and low-stakes — “just talk me through your thinking.” No trick questions, nothing to look up." },
-    { "src": "/golden-set-integrity/04-first-answer.png", "title": "In their own words", "caption": "Not multiple choice — the student narrates how they actually solved it, one step at a time." },
-    { "src": "/golden-set-integrity/05-conceptual-probe.png", "title": "The one question that matters", "caption": "The single conceptual probe: if this number changed, would your answer go up or down — and why?" },
-    { "src": "/golden-set-integrity/06-stuck-chip.png", "title": "Stuck is allowed", "caption": "One tap on “I'm stuck” and the AI shifts to gentle help. Honesty is never punished — admitting it never counts against them." },
-    { "src": "/golden-set-integrity/07-supportive-close.png", "title": "It always ends kindly", "caption": "Whatever the AI concludes, the student sees only a warm thank-you — never a verdict, never an accusation." },
-    { "src": "/golden-set-integrity/08-teacher-roster.png", "title": "Your class, at a glance", "caption": "Greens are cleared. The one student who needs your eyes is surfaced — so you're reviewing one, not thirty." },
-    { "src": "/golden-set-integrity/09-flagged-detail.png", "title": "The whole story, in one place", "caption": "Open a flag and the full conversation and the AI's own reasoning are right there — so your call is informed, not a guess." },
-    { "src": "/golden-set-integrity/10-resolved.png", "title": "You make the final call", "caption": "The teacher clears it or confirms it. The AI surfaces; a human always decides." }
+    { "src": "/golden-set-integrity/02-submit-work.png", "title": "A photo of the work they already did", "caption": "It starts with the same homework, on the same problems. The student snaps a picture of their handwritten solution — up to ten pages — and the AI reads it exactly as written. No typing, no scanner." },
+    { "src": "/golden-set-integrity/03-chat-intro.png", "title": "A calm three-minute chat", "caption": "The check opens warm and low-stakes — “just talk me through your thinking.” No trick questions, nothing to look up. The student narrates how they actually solved it, in their own words." },
+    { "src": "/golden-set-integrity/07-supportive-close.png", "title": "It always ends kindly", "caption": "Stuck is allowed — one tap on “I'm stuck” shifts the AI to gentle help, and admitting it never counts against them. Whatever the AI concludes, the student sees only a warm thank-you — never a verdict, never an accusation." },
+    { "src": "/golden-set-integrity/08-teacher-roster.png", "title": "Your class, on your desk", "caption": "Greens are cleared; the one student who needs your eyes is surfaced. Open the flag and the full conversation and the AI's own reasoning are right there — so your call is informed, not a guess. The AI surfaces; you make the final call." }
   ]
 }
