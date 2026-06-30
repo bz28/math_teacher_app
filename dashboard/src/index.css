@@ -2729,3 +2729,229 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   .it-payoff-points.it-payoff-points-4 { grid-template-columns: repeat(2, 1fr); gap: 28px; }
   .it-roi-card { grid-template-columns: 1fr; }
 }
+
+/* ============================================================
+   Demo hub — the platform front door. Sits on the .it-* system;
+   the dh- classes cover the loop visual, the navigable use-case
+   cards, and the "also in the platform" placeholders.
+   ============================================================ */
+
+/* ---- THE LOOP (day in the life) ----------------------------- */
+.dh-loop {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 26px;
+}
+.dh-beat {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+/* the thumbnail carries the connector arrow into the next beat */
+.dh-beat-shot {
+  position: relative;
+}
+.dh-beat:not(:last-child) .dh-beat-shot::after {
+  content: "→";
+  position: absolute;
+  top: 50%;
+  right: -20px;
+  transform: translateY(-50%);
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--muted-2);
+  z-index: 1;
+  pointer-events: none;
+}
+/* the loop's frames are small — soften the heavy story-shot shadow */
+.dh-beat-shot .it-frame {
+  border-radius: 9px;
+  box-shadow: 0 12px 28px -22px rgba(20, 19, 15, 0.42);
+}
+.dh-beat-shot .it-frame-bar { height: 26px; }
+.dh-beat-shot .it-frame-dots i { width: 7px; height: 7px; }
+.dh-beat-step {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.dh-beat-step::before {
+  content: "STEP ";
+  color: var(--muted-2);
+}
+.dh-beat-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 21px;
+  line-height: 1.16;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.dh-beat-line {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.56;
+  color: var(--muted);
+}
+
+/* ---- THE CORE USE-CASE CARDS -------------------------------- */
+.dh-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 28px;
+}
+.dh-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: 12px;
+  overflow: hidden;
+  color: inherit;
+  text-decoration: none;
+  box-shadow: 0 1px 0 rgba(20, 19, 15, 0.03), 0 18px 40px -30px rgba(20, 19, 15, 0.34);
+  transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+.dh-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: 0 1px 0 rgba(20, 19, 15, 0.03), 0 26px 56px -30px rgba(20, 19, 15, 0.42);
+  text-decoration: none;
+}
+.dh-card-shot {
+  padding: 26px 26px 0;
+  background:
+    radial-gradient(120% 120% at 50% 0%, var(--paper-2) 0%, transparent 60%);
+}
+.dh-card-shot .it-frame {
+  border-radius: 9px 9px 0 0;
+  border-bottom: none;
+  box-shadow: 0 18px 36px -26px rgba(20, 19, 15, 0.4);
+}
+.dh-card-body {
+  padding: 24px 28px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+.dh-card-tag {
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.dh-card-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 28px;
+  line-height: 1.1;
+  letter-spacing: -0.4px;
+  color: var(--ink);
+}
+.dh-card-benefit {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.dh-card-cta {
+  margin-top: auto;
+  padding-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--accent);
+}
+.dh-card-cta-arrow {
+  transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.dh-card:hover .dh-card-cta-arrow {
+  transform: translateX(4px);
+}
+
+/* ---- ALSO IN THE PLATFORM (honest placeholders) ------------- */
+.dh-coming {
+  margin-top: 30px;
+}
+.dh-coming-label {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  margin-bottom: 14px;
+}
+.dh-coming-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+.dh-coming-item {
+  padding: 16px 18px;
+  background: var(--paper);
+  border: 1px dashed var(--rule-strong);
+  border-radius: 8px;
+}
+.dh-coming-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.dh-coming-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 18px;
+  letter-spacing: -0.2px;
+  color: var(--ink-soft);
+}
+.dh-coming-badge {
+  font-family: var(--font-sans);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.dh-coming-line {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.dh-framing {
+  margin-top: 28px;
+}
+
+@media (max-width: 960px) {
+  .dh-loop { grid-template-columns: repeat(2, 1fr); gap: 30px 26px; }
+  .dh-beat:nth-child(2n) .dh-beat-shot::after { content: none; }
+}
+@media (max-width: 720px) {
+  .dh-loop { grid-template-columns: 1fr; gap: 34px; }
+  .dh-beat .dh-beat-shot::after { content: none; }
+  .dh-cards { grid-template-columns: 1fr; }
+  .dh-coming-grid { grid-template-columns: 1fr; }
+}
