@@ -45,7 +45,7 @@
   },
   "useCases": {
     "eyebrow": "The core",
-    "title": "Two pieces that change the week — open either one",
+    "title": "Four pieces that change the week — open any one",
     "sub": "Each is a real, working surface. Step into it to see the actual product, end to end, with the system's own output.",
     "cards": [
       {
@@ -65,21 +65,26 @@
         "shot": "/golden-set-grading/03-receipt.png",
         "to": "/golden-set/grading",
         "cta": "See how it works"
+      },
+      {
+        "key": "generation",
+        "tag": "Trust what you assign",
+        "title": "Problem generation",
+        "benefit": "Turn a worksheet into a ready-to-assign set — every problem independently re-derived, figures and worked solutions included, so the answer key is never quietly wrong.",
+        "shot": "/golden-set/shots/f3_review.png",
+        "to": "/golden-set/generation",
+        "cta": "See how it works"
+      },
+      {
+        "key": "teacher-day",
+        "tag": "Your whole day",
+        "title": "Your teaching week",
+        "benefit": "Walk in to a to-do list, not a scoreboard — the few students who need you surfaced first, then turn a class-wide gap into ten practice problems in one click.",
+        "shot": "/golden-set-teacherday/01-needs-you-today.png",
+        "to": "/golden-set/teacher-day",
+        "cta": "See how it works"
       }
-    ],
-    "coming": {
-      "label": "Also coming to the platform",
-      "items": [
-        {
-          "title": "Problem generation",
-          "line": "Worksheets and quizzes from your standards — every problem re-derived and checked."
-        },
-        {
-          "title": "Your teaching week",
-          "line": "The whole class in one view: who's ahead, who's stuck, what to reteach next."
-        }
-      ]
-    }
+    ]
   },
   "roi": {
     "eyebrow": "The math, your numbers",

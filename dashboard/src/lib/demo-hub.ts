@@ -45,14 +45,11 @@ export type UseCaseCard = {
   cta: string;
 };
 
-export type ComingItem = { title: string; line: string };
-
 export type UseCases = {
   eyebrow: string;
   title: string;
   sub: string;
   cards: UseCaseCard[];
-  coming: { label: string; items: ComingItem[] };
 };
 
 export type ByNumber = { value: string; label: string; sub: string };

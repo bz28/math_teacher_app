@@ -3122,62 +3122,6 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   transform: translateX(4px);
 }
 
-/* ---- ALSO IN THE PLATFORM (honest placeholders) ------------- */
-.dh-coming {
-  margin-top: 30px;
-}
-.dh-coming-label {
-  display: block;
-  font-family: var(--font-sans);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--muted-2);
-  margin-bottom: 14px;
-}
-.dh-coming-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14px;
-}
-.dh-coming-item {
-  padding: 16px 18px;
-  background: var(--paper);
-  border: 1px dashed var(--rule-strong);
-  border-radius: 8px;
-}
-.dh-coming-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 6px;
-}
-.dh-coming-title {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 18px;
-  letter-spacing: -0.2px;
-  color: var(--ink-soft);
-}
-.dh-coming-badge {
-  font-family: var(--font-sans);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--muted);
-  background: var(--paper-2);
-  border: 1px solid var(--rule);
-  padding: 2px 7px;
-  border-radius: 999px;
-}
-.dh-coming-line {
-  font-family: var(--font-sans);
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--muted);
-}
 .dh-framing {
   margin-top: 28px;
 }
@@ -3190,5 +3134,4 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   .dh-loop { grid-template-columns: 1fr; gap: 34px; }
   .dh-beat .dh-beat-shot::after { content: none; }
   .dh-cards { grid-template-columns: 1fr; }
-  .dh-coming-grid { grid-template-columns: 1fr; }
 }
