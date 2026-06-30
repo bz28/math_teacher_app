@@ -1,8 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getToken } from "./lib/api";
 import Layout from "./components/Layout";
-import PresentLayout from "./components/PresentLayout";
-import PresentOverview from "./pages/PresentOverview";
 import { ConfirmProvider } from "./components/ConfirmProvider";
 import ServiceStatusBanner from "./components/ServiceStatusBanner";
 import Login from "./pages/Login";
@@ -11,12 +9,7 @@ import LLMCalls from "./pages/LLMCalls";
 import HarnessRuns from "./pages/HarnessRuns";
 import Quality from "./pages/Quality";
 import GradingQuality from "./pages/GradingQuality";
-import DemoHub from "./pages/DemoHub";
 import GoldenSet from "./pages/GoldenSet";
-import IntegritySet from "./pages/IntegritySet";
-import GradingSet from "./pages/GradingSet";
-import GenerationSet from "./pages/GenerationSet";
-import TeacherDaySet from "./pages/TeacherDaySet";
 import Users from "./pages/Users";
 import LeadDetail from "./pages/LeadDetail";
 import Leads from "./pages/Leads";
@@ -41,24 +34,6 @@ export default function App() {
       <ConfirmProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
-
-        {/* PRESENT MODE — the founder's full-screen pitch shell. Same admin
-            gate (the founder is logged in), but no sidebar: the approved demo
-            stories reused inside a clean presenter frame. Additive to /demo
-            and /golden-set/*, which keep their admin chrome. */}
-        <Route
-          element={
-            <ProtectedRoute>
-              <PresentLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/present" element={<PresentOverview />} />
-          <Route path="/present/integrity" element={<IntegritySet />} />
-          <Route path="/present/grading" element={<GradingSet />} />
-          <Route path="/present/generation" element={<GenerationSet />} />
-          <Route path="/present/teacher-day" element={<TeacherDaySet />} />
-        </Route>
 
         <Route
           element={
@@ -90,12 +65,7 @@ export default function App() {
           <Route path="/harness-runs" element={<HarnessRuns />} />
           <Route path="/quality" element={<Quality />} />
           <Route path="/grading-quality" element={<GradingQuality />} />
-          <Route path="/demo" element={<DemoHub />} />
           <Route path="/golden-set" element={<GoldenSet />} />
-          <Route path="/golden-set/integrity" element={<IntegritySet />} />
-          <Route path="/golden-set/grading" element={<GradingSet />} />
-          <Route path="/golden-set/generation" element={<GenerationSet />} />
-          <Route path="/golden-set/teacher-day" element={<TeacherDaySet />} />
           <Route
             path="/submissions/:submissionId/trace"
             element={<SubmissionTrace />}
