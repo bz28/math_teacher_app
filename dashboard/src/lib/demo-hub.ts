@@ -23,18 +23,24 @@ export type Hero = {
   peek?: HeroPeek;
 };
 
-export type LoopBeat = {
+export type FlowBeat = {
   step: string;
   title: string;
   line: string;
+  /** The explicit ease through-line — how little the teacher has to do at this beat. */
+  ease: string;
   shot: string;
+  /** Present only on the analytics beat — its prominence label (e.g. "What you can see"). */
+  feature?: string;
 };
 
-export type Loop = {
+export type Flow = {
   eyebrow: string;
   title: string;
   sub: string;
-  beats: LoopBeat[];
+  beats: FlowBeat[];
+  /** One honest ease/capability line that caps the spine. */
+  cap: string;
 };
 
 export type UseCaseCard = {
@@ -81,7 +87,7 @@ export type DemoHub = {
     capturedAt: string;
   };
   hero: Hero;
-  loop: Loop;
+  flow: Flow;
   useCases: UseCases;
   roi: Roi;
   payoff: Payoff;
