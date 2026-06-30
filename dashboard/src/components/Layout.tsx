@@ -27,6 +27,7 @@ const DIAGNOSTIC_NAV: NavItem[] = [
   { to: "/golden-set", label: "Golden set" },
   { to: "/golden-set/integrity", label: "Integrity set" },
   { to: "/golden-set/grading", label: "Grading set" },
+  { to: "/golden-set/generation", label: "Generation set" },
 ];
 
 const INTERNAL_NAV: NavItem[] = [
