@@ -1,0 +1,159 @@
+{
+  "meta": {
+    "framing": "The screens below are captured from the live product. One seeded student — the 73% receipt — is illustrative, labeled wherever it appears. No outcome stats, no pricing: capability facts only.",
+    "source": "Live product captures + evaluation harness",
+    "model": "claude",
+    "capturedAt": "2026-06"
+  },
+  "hero": {
+    "eyebrow": "Veradic · The platform",
+    "headline": "Snap the homework. The grading and the understanding check run themselves — and you get your evenings back.",
+    "subhead": "The nights spent grading at the kitchen table. Never quite sure who actually understands until the test tells you. Veradic reads each student's handwritten work, grades every problem with a receipt, has a calm three-minute chat to check they truly get it, then hands you a class you can see at a glance — and the few who need you.",
+    "triplet": ["Grades the work", "Checks understanding", "Shows you who's struggling"],
+    "cue": "See how it fits together",
+    "peek": {
+      "label": "Your class · at a glance",
+      "status": { "text": "End to end", "tone": "good" },
+      "rows": [
+        { "k": "Graded", "v": "30 of 30", "tone": "good" },
+        { "k": "Understanding checked", "v": "30 of 30", "tone": "good" },
+        { "k": "Need you first", "v": "5", "tone": "accent" }
+      ],
+      "foot": "Illustrative — the platform, end to end"
+    }
+  },
+  "flow": {
+    "eyebrow": "A day in your teacher's life",
+    "title": "One simple loop — from a worksheet to a class you can actually see",
+    "sub": "Not four separate tools to learn. One connected workflow, start to finish. Watch how little the teacher actually has to do.",
+    "beats": [
+      {
+        "step": "01",
+        "title": "Assign",
+        "line": "Turn any worksheet you already have into a ready-to-assign set — every problem independently re-derived and the answer key checked for you.",
+        "ease": "From material they already have",
+        "shot": "/golden-set/shots/f3_review.png"
+      },
+      {
+        "step": "02",
+        "title": "Students just snap a photo",
+        "line": "A photo of their handwritten work, sent from any phone already in their pocket.",
+        "ease": "No typing. No scanner. No new device.",
+        "shot": "/golden-set-integrity/02-submit-work.png"
+      },
+      {
+        "step": "03",
+        "title": "The AI grades it — and checks they understand",
+        "line": "Every problem scored with a receipt, then a calm three-minute chat confirms the student truly gets it — catching the memorizer one graded answer can't.",
+        "ease": "Automatically — the teacher doesn't lift a finger",
+        "shot": "/golden-set-grading/03-receipt.png"
+      },
+      {
+        "step": "04",
+        "title": "You open to a to-do list, not a scoreboard",
+        "line": "The handful of students who need you, surfaced first — and underneath, the analytics: exactly which students are slipping and which concepts the whole class is missing. Visibility into learning, not just a wall of averages.",
+        "ease": "Ranked and surfaced for you — no spreadsheet, no hunting",
+        "shot": "/golden-set-teacherday/03-class-struggling.png",
+        "feature": "What you can see"
+      },
+      {
+        "step": "05",
+        "title": "See the gap, fix it in one click",
+        "line": "Click a weak concept and targeted practice writes itself — aimed at exactly the students who need it.",
+        "ease": "One click — the practice writes itself",
+        "shot": "/golden-set-teacherday/05-generated-practice.png"
+      }
+    ],
+    "cap": "That's the whole loop — a photo, a check, a click. There's almost nothing for a teacher to learn."
+  },
+  "useCases": {
+    "eyebrow": "The core",
+    "title": "Four pieces that change the week — open any one",
+    "sub": "Each is a real, working surface. Step into it to see the actual product, end to end, with the system's own output.",
+    "cards": [
+      {
+        "key": "integrity",
+        "tag": "The differentiator",
+        "title": "The understanding check",
+        "benefit": "Catches the smooth memorizer that one graded answer can't. A calm three-minute chat per student — and the kid never sees a verdict, so a teacher always makes the call.",
+        "shot": "/golden-set-integrity/05-conceptual-probe.png",
+        "to": "/golden-set/integrity",
+        "cta": "See how it works"
+      },
+      {
+        "key": "grading",
+        "tag": "The everyday workhorse",
+        "title": "AI grading you can defend",
+        "benefit": "Every problem scored with a receipt — 100 − 20 − 7 = 73% — sitting right next to the handwriting it came from. You review the few it's unsure about and sign off.",
+        "shot": "/golden-set-grading/03-receipt.png",
+        "to": "/golden-set/grading",
+        "cta": "See how it works"
+      },
+      {
+        "key": "generation",
+        "tag": "Trust what you assign",
+        "title": "Problem generation",
+        "benefit": "Turn a worksheet into a ready-to-assign set — every problem independently re-derived, figures and worked solutions included, so the answer key is never quietly wrong.",
+        "shot": "/golden-set/shots/f3_review.png",
+        "to": "/golden-set/generation",
+        "cta": "See how it works"
+      },
+      {
+        "key": "teacher-day",
+        "tag": "Your whole day",
+        "title": "Your teaching week",
+        "benefit": "Walk in to a to-do list, not a scoreboard — the few students who need you surfaced first, then turn a class-wide gap into ten practice problems in one click.",
+        "shot": "/golden-set-teacherday/01-needs-you-today.png",
+        "to": "/golden-set/teacher-day",
+        "cta": "See how it works"
+      }
+    ]
+  },
+  "roi": {
+    "eyebrow": "The math, your numbers",
+    "title": "What it's worth to you",
+    "sub": "Veradic grades every paper and runs the understanding check; you still see every one — but a quick review of its work is far faster than grading from scratch. Drag your own class through the model below — the arithmetic is right there, nothing hidden.",
+    "byNumbers": [
+      {
+        "value": "Every student",
+        "label": "Checked, not sampled",
+        "sub": "the whole class — not a spot-check of five"
+      },
+      {
+        "value": "~3 min",
+        "label": "Per-student understanding check",
+        "sub": "a conversation, not an interrogation"
+      },
+      {
+        "value": "Per-problem",
+        "label": "Itemized, defensible grades",
+        "sub": "every point traced back to the work"
+      },
+      {
+        "value": "0",
+        "label": "Honest students wrongly flagged",
+        "sub": "on our 22-case adversarial test set"
+      }
+    ]
+  },
+  "payoff": {
+    "eyebrow": "For your school",
+    "title": "What this gives a school that stands behind it.",
+    "lead": "Not another tool to roll out and babysit. Three things a head of education can put their name to — in every classroom, for every student:",
+    "points": [
+      {
+        "title": "Every teacher gets their evenings back",
+        "body": "The grading and the understanding check run on their own — teachers review only the handful that need a human, not the whole stack at 10pm. And there's almost nothing to learn — a photo, a review, a click; no training program to roll out."
+      },
+      {
+        "title": "Integrity you can stand behind",
+        "body": "Every grade itemized and traceable; every understanding call conservative, and the student never sees a verdict — so a teacher always makes the final call. Across our adversarial test set, zero honest students were ever falsely flagged. Reputation you can defend to any parent."
+      },
+      {
+        "title": "No student quietly falls behind",
+        "body": "You see where every student is — the whole class, not a sampled five — with the ones slipping and the concepts the class is missing surfaced before the test does it for you."
+      }
+    ],
+    "closing": "Evenings back for every teacher. Integrity you can put your name to. And every student seen, so no one slips through. Honestly — this is what I'd want every school you know to have. If it earns it, an introduction to the schools in your circle would mean the world."
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "meta": {
+    "title": "Problem generation — golden set",
+    "subtitle": "How the AI writes a problem set from your worksheet — and re-derives every answer before you see it",
+    "framing": "The walkthrough screens below are captured from the live product. The verified problem in the centerpiece is one worked example from our hand-checked Golden Set — labeled illustrative, shown so you can read exactly how the re-derivation works. Capability facts only: no outcome stats, no pricing.",
+    "capturedAt": "2026-06-29",
+    "model": "claude-sonnet-4-6",
+    "source": "generation walkthrough · live capture + verified Golden Set"
+  },
+  "hero": {
+    "eyebrow": "Veradic · Problem generation",
+    "headline": "Hand it a worksheet. Get back a problem set you can actually trust.",
+    "subhead": "Finding or writing good problems eats a Sunday afternoon — and the AI generators that promise to help will hand you a clean-looking question with an answer key that's quietly wrong, the kind you don't catch until a student does. Veradic generates a full set from the worksheet you already use — figures, worked solutions, the works — then re-derives every answer itself, so what you hand out is correct.",
+    "triplet": ["Generated from your worksheet", "Figures + worked solutions", "Every answer re-derived"],
+    "cue": "See how it works",
+    "peek": {
+      "label": "Generated problem",
+      "status": { "text": "✓ Verified", "tone": "good" },
+      "rows": [
+        { "k": "Figure", "v": "rendered" },
+        { "k": "Worked solution", "v": "included" },
+        { "k": "Answer key", "v": "re-derived", "tone": "good" }
+      ],
+      "foot": "Illustrative — every answer re-derived independently"
+    }
+  },
+  "flowSetup": [
+    {
+      "src": "/golden-set/shots/f1_dashboard.png",
+      "title": "Start from the course you already teach",
+      "caption": "Your courses, your units — the starting point. Point Veradic at a worksheet you'd use anyway and it generates a problem set tuned to that exact material, instead of you combing the web for something close enough to assign."
+    },
+    {
+      "src": "/golden-set/shots/f2_homework.png",
+      "title": "A whole problem set, written from your worksheet",
+      "caption": "Minutes later: a full set drawn from your material — free-response and multiple-choice together, each with its figure and a complete worked solution. Want more? One tap generates the next batch. The blank page is gone."
+    }
+  ],
+  "moment": {
+    "step": "Step 03",
+    "eyebrow": "The moment that sets it apart",
+    "title": "It re-derives every problem before you ever see it.",
+    "body": "Most AI generators hand you a problem and a confident answer key — and sometimes that answer is just wrong. Veradic doesn't trust its own first pass. Every problem it writes is independently re-worked from scratch — the figure, the steps, and the final answer all checked against a fresh derivation — and only the ones that survive that check land in your review queue. You're not auditing a black box; you can read the re-derivation yourself.",
+    "sell": "An AI that grades its own work before it ever reaches your students.",
+    "note": "Illustrative example, pulled verbatim from our hand-checked Golden Set — the same generated problem and re-derivation shown on the Golden Set page. Not a real student's assignment.",
+    "verifiedLabel": "Verified — re-derived by hand",
+    "courseKey": "geometry",
+    "problemN": 2
+  },
+  "flowResolution": [
+    {
+      "src": "/golden-set/shots/f3_review.png",
+      "title": "Review each problem with its full answer key",
+      "caption": "Every generated problem opens with its complete worked solution and answer key on the left and an AI Workshop on the right. You're checking and approving the set — not building one from a blank rubric."
+    },
+    {
+      "src": "/golden-set/shots/f4_workshop.png",
+      "title": "Refine any problem in plain English",
+      "caption": "Want a fresh real-world context, a harder version, or different numbers? Just ask. Veradic rewrites the problem — and re-derives the new answer independently, so a quick edit can't quietly break the answer key behind your back."
+    },
+    {
+      "src": "/golden-set/shots/f5_accepted.png",
+      "title": "Accept the verified revision",
+      "caption": "The rewrite arrives already checked — its solution and final answer 're-derived independently rather than written by hand.' Accept it and the verified version replaces the original, with one tap to undo if you change your mind."
+    },
+    {
+      "src": "/golden-set/shots/f6_approved.png",
+      "title": "Approved — ready to assign",
+      "caption": "Reviewed and approved, nothing rejected. The set is ready to publish to students — every problem trustworthy, the whole thing built in less time than it used to take to write one."
+    }
+  ],
+  "payoff": {
+    "eyebrow": "Why it's worth it",
+    "title": "What a teacher gets back.",
+    "lead": "Not another tool that makes more work. Four things that change how a problem set comes together:",
+    "points": [
+      {
+        "title": "Hours of writing, gone",
+        "body": "The set arrives drafted from your own worksheet. You review and approve instead of staring at a blank page on a Sunday night, hunting for problems that fit the unit."
+      },
+      {
+        "title": "An answer key you can trust",
+        "body": "Every problem is independently re-derived before it reaches you — so you're not handing students a question whose 'correct' answer is quietly wrong and finding out from a confused class."
+      },
+      {
+        "title": "Figures and solutions, included",
+        "body": "Each problem comes with its diagram and a full worked solution — ready to hand out, ready to teach from, nothing left to sketch by hand or reconstruct later."
+      },
+      {
+        "title": "Tuned, then yours to refine",
+        "body": "Generated from your material and your standards, then adjustable in plain English — and nothing reaches a student until you approve it."
+      }
+    ],
+    "closing": "A full problem set from your own worksheet, every answer re-derived and checked, figures and solutions included — and you still approve each one before it reaches a student. That's the whole point."
+  },
+  "byNumbers": [
+    {
+      "value": "Re-derived",
+      "label": "Every answer checked",
+      "sub": "each problem independently re-worked from scratch before it reaches review"
+    },
+    {
+      "value": "Figures + solutions",
+      "label": "Not just a question",
+      "sub": "diagrams and full worked steps generated with every problem"
+    },
+    {
+      "value": "Plain English",
+      "label": "Refine by asking",
+      "sub": "harder, fresh context, new numbers — and the rewrite is re-derived too"
+    },
+    {
+      "value": "From your material",
+      "label": "Tuned to your worksheet",
+      "sub": "drawn from the standards and the worksheet you already teach"
+    }
+  ]
+}
