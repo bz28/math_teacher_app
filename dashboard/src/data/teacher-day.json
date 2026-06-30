@@ -12,7 +12,17 @@
     "headline": "Walk in already knowing who needs you — and what to reteach before the test.",
     "subhead": "Most teacher dashboards are a scoreboard: a wall of averages that tells you how the class did, never what to do next. So the gaps stay invisible until the test — you find out a whole class never had distributing-a-negative down only after it costs them points. Veradic opens to a to-do list, not a scoreboard: the students who need you first, the concept the class is stuck on, and the reteach set already written — before the test gets there first.",
     "triplet": ["Who needs you, first", "Where the class is stuck", "One-click reteach"],
-    "cue": "See how it works"
+    "cue": "See how it works",
+    "peek": {
+      "label": "Student Insights · where stuck",
+      "status": { "text": "Reteach ready", "tone": "warn" },
+      "rows": [
+        { "k": "Distributing a negative", "v": "6 of 8", "tone": "warn" },
+        { "k": "Combining like terms", "v": "2 of 8", "tone": "muted" },
+        { "k": "One-step equations", "v": "0 of 8", "tone": "good" }
+      ],
+      "foot": "Illustrative — ranked by concept, not by grade"
+    }
   },
   "flowSetup": [
     {

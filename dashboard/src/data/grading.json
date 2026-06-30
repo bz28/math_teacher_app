@@ -12,7 +12,17 @@
     "headline": "Hand it a photo. Get the whole class graded — every point explained — before your coffee's cold.",
     "subhead": "Grading nights at the kitchen table. The quiet worry of whether a 73 is actually fair — or whether the same paper would've earned a 78 on a different evening. Veradic reads each student's handwritten work, grades every problem, and shows you exactly where each point went. You review the few it's unsure about, then sign off.",
     "triplet": ["Reads their work", "Grades every point", "You stay the judge"],
-    "cue": "See how it works"
+    "cue": "See how it works",
+    "peek": {
+      "label": "Grade receipt · Problem 4",
+      "status": { "text": "73%", "tone": "muted" },
+      "rows": [
+        { "k": "Setup + method", "v": "full credit", "tone": "good" },
+        { "k": "Sign error", "v": "−20%", "tone": "warn" },
+        { "k": "Arithmetic slip", "v": "−7%", "tone": "warn" }
+      ],
+      "foot": "Illustrative — every point, where it went"
+    }
   },
   "flowSetup": [
     {

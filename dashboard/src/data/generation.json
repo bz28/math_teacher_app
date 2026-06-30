@@ -12,7 +12,17 @@
     "headline": "Hand it a worksheet. Get back a problem set you can actually trust.",
     "subhead": "Finding or writing good problems eats a Sunday afternoon — and the AI generators that promise to help will hand you a clean-looking question with an answer key that's quietly wrong, the kind you don't catch until a student does. Veradic generates a full set from the worksheet you already use — figures, worked solutions, the works — then re-derives every answer itself, so what you hand out is correct.",
     "triplet": ["Generated from your worksheet", "Figures + worked solutions", "Every answer re-derived"],
-    "cue": "See how it works"
+    "cue": "See how it works",
+    "peek": {
+      "label": "Generated problem",
+      "status": { "text": "✓ Verified", "tone": "good" },
+      "rows": [
+        { "k": "Figure", "v": "rendered" },
+        { "k": "Worked solution", "v": "included" },
+        { "k": "Answer key", "v": "re-derived", "tone": "good" }
+      ],
+      "foot": "Illustrative — every answer re-derived independently"
+    }
   },
   "flowSetup": [
     {

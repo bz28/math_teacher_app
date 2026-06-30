@@ -35,7 +35,17 @@
     "headline": "Snap the homework. Get your evenings back — and finally know who really understands.",
     "subhead": "Veradic reads each student's handwritten work, has a calm three-minute chat to check they truly get it, then hands you a graded roster. It catches the smooth memorizer — and never falsely accuses an honest kid.",
     "triplet": ["Reads their work", "Checks they understand", "Hands you the roster"],
-    "cue": "See how it works"
+    "cue": "See how it works",
+    "peek": {
+      "label": "Understanding check · roster",
+      "status": { "text": "Whole class", "tone": "muted" },
+      "rows": [
+        { "k": "Jordan M.", "v": "Understood", "tone": "good" },
+        { "k": "Priya S.", "v": "Needs practice", "tone": "warn" },
+        { "k": "Alex T.", "v": "Review", "tone": "accent" }
+      ],
+      "foot": "Illustrative — every student checked, not a spot-check"
+    }
   },
   "moment": {
     "eyebrow": "The moment that sets it apart",

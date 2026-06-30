@@ -13,6 +13,7 @@
 // page doesn't change. Keep it stable.
 
 import raw from "../data/teacher-day.json";
+import type { HeroPeek } from "./integrity-set";
 
 // Structurally identical to grading-set's Hero / FlowShot so the shared demo
 // components (HeroBlock, FlowStep) accept this data unchanged.
@@ -22,6 +23,7 @@ export type Hero = {
   subhead: string;
   triplet: string[];
   cue: string;
+  peek?: HeroPeek;
 };
 
 export type FlowShot = { src: string; title: string; caption: string };
