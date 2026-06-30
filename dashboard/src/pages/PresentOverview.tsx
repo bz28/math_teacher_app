@@ -1,14 +1,15 @@
 import { Link } from "react-router-dom";
 import StatCard from "../components/StatCard";
 import HeroBlock from "../components/demo/HeroBlock";
+import FlowSpine from "../components/demo/FlowSpine";
 import BrowserFrame from "../components/demo/BrowserFrame";
 import RoiCalculator from "../components/demo/RoiCalculator";
 import { loadDemoHub } from "../lib/demo-hub";
 
 const h = loadDemoHub();
 
-// The present-mode home base. Same value-prop, loop, use-case tiles, ROI and
-// ink payoff as the in-dashboard DemoHub — but every tile leads INTO present
+// The present-mode home base. Same value-prop, flow spine, use-case tiles, ROI
+// and ink payoff as the in-dashboard DemoHub — but every tile leads INTO present
 // mode (/present/<story>) rather than the admin /golden-set/* pages, so the
 // founder never falls back into the admin chrome mid-pitch. Content and copy
 // are reused verbatim; only the destinations are remapped. The card `key`
@@ -19,29 +20,8 @@ export default function PresentOverview() {
     <div className="it-demo it-page">
       <HeroBlock hero={h.hero} />
 
-      {/* ── THE LOOP — how the pieces fit (day in the life) ──────── */}
-      <section id="flow" className="it-section">
-        <div className="it-section-head">
-          <span className="eyebrow">{h.loop.eyebrow}</span>
-          <h2>{h.loop.title}</h2>
-          <p className="it-section-sub">{h.loop.sub}</p>
-        </div>
-
-        <ol className="dh-loop">
-          {h.loop.beats.map((beat) => (
-            <li className="dh-beat" key={beat.step}>
-              <div className="dh-beat-shot">
-                <BrowserFrame src={beat.shot} alt={beat.title} />
-              </div>
-              <div className="dh-beat-copy">
-                <span className="dh-beat-step mono">{beat.step}</span>
-                <h3 className="dh-beat-title">{beat.title}</h3>
-                <p className="dh-beat-line">{beat.line}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </section>
+      {/* ── THE FLOW SPINE — one connected workflow (day in the life) ─ */}
+      <FlowSpine flow={h.flow} />
 
       {/* ── THE CORE USE CASES — big entry tiles into present mode ─ */}
       <section className="it-section">

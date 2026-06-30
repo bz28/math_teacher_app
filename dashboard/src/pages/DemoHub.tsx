@@ -1,18 +1,20 @@
 import { Link } from "react-router-dom";
 import StatCard from "../components/StatCard";
 import HeroBlock from "../components/demo/HeroBlock";
+import FlowSpine from "../components/demo/FlowSpine";
 import BrowserFrame from "../components/demo/BrowserFrame";
 import RoiCalculator from "../components/demo/RoiCalculator";
 import { loadDemoHub } from "../lib/demo-hub";
 
 const h = loadDemoHub();
 
-// The demo front door. A founder opens this to pitch the whole platform in one
-// read: the overarching promise (hero), how the pieces fit into a single loop,
+// The demo front door. A founder walks a head of education through it: the
+// overarching promise (hero), the end-to-end flow spine that shows the whole
+// platform is ONE simple connected workflow ("a day in your teacher's life"),
 // the four deep-dive stories you can step into, the business case (reused ROI),
-// and an ink payoff. It links OUT to /golden-set/{integrity,grading,generation,
-// teacher-day} — it doesn't re-tell those stories. Reuses the shipped .it-*
-// editorial system.
+// and a school + referral close. It links OUT to /golden-set/{integrity,grading,
+// generation,teacher-day} — it doesn't re-tell those stories. Reuses the shipped
+// .it-* editorial system.
 
 export default function DemoHub() {
   return (
@@ -28,29 +30,8 @@ export default function DemoHub() {
 
       <HeroBlock hero={h.hero} />
 
-      {/* ── THE LOOP — how the pieces fit (day in the life) ──────── */}
-      <section id="flow" className="it-section">
-        <div className="it-section-head">
-          <span className="eyebrow">{h.loop.eyebrow}</span>
-          <h2>{h.loop.title}</h2>
-          <p className="it-section-sub">{h.loop.sub}</p>
-        </div>
-
-        <ol className="dh-loop">
-          {h.loop.beats.map((beat) => (
-            <li className="dh-beat" key={beat.step}>
-              <div className="dh-beat-shot">
-                <BrowserFrame src={beat.shot} alt={beat.title} />
-              </div>
-              <div className="dh-beat-copy">
-                <span className="dh-beat-step mono">{beat.step}</span>
-                <h3 className="dh-beat-title">{beat.title}</h3>
-                <p className="dh-beat-line">{beat.line}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </section>
+      {/* ── THE FLOW SPINE — one connected workflow (day in the life) ─ */}
+      <FlowSpine flow={h.flow} />
 
       {/* ── THE CORE USE CASES — navigable into the deep-dives ───── */}
       <section className="it-section">
