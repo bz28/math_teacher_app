@@ -5,9 +5,46 @@ import ConfusionMatrix from "../components/ConfusionMatrix";
 import HeroBlock from "../components/demo/HeroBlock";
 import FlowStep from "../components/demo/FlowStep";
 import MomentBlock from "../components/demo/MomentBlock";
+import RoiCalculator from "../components/demo/RoiCalculator";
 import { loadIntegritySet } from "../lib/integrity-set";
 
 const it = loadIntegritySet();
+
+// "By the numbers" — concrete capability facts, not measured outcomes. The two
+// accuracy facts carry the adversarial-test-set qualifier verbatim so the claim
+// stays honest about exactly where the number comes from.
+const byNumbers: { value: string; label: string; sub: string }[] = [
+  {
+    value: "Every student",
+    label: "Checked, not sampled",
+    sub: "the whole class — not a spot-check of ~5",
+  },
+  {
+    value: "~3 min",
+    label: "Per-student check",
+    sub: "a short conversation, not an interrogation",
+  },
+  {
+    value: "10 pages",
+    label: "Of handwriting, read",
+    sub: "photographed work parsed end to end",
+  },
+  {
+    value: "0",
+    label: "Honest students wrongly flagged",
+    sub: "on our 22-case adversarial test set",
+  },
+  {
+    value: "Caught",
+    label: "The memorizers",
+    sub: "rehearsed answers — on our adversarial test set",
+  },
+  {
+    value: "Per-problem",
+    label: "Itemized grades",
+    sub: "every question scored, with reasoning",
+  },
+];
 
 // The 05 probe is pulled out as its own emotional beat (MomentBlock), so the
 // flow walkthrough runs 01–04, climaxes on the probe, then resolves 06–10.
@@ -114,6 +151,30 @@ export default function IntegritySet() {
 
         <div className="it-provenance mono">
           {it.meta.source} · model {it.meta.model} · captured {it.meta.capturedAt}
+        </div>
+      </section>
+
+      {/* ── THE MATH (ROI — your numbers) ────────────────────────── */}
+      <section className="it-section it-worth">
+        <div className="it-section-head">
+          <span className="eyebrow">The math, your numbers</span>
+          <h2>What it's worth to you</h2>
+          <p className="it-section-sub">
+            Veradic grades every paper and runs the understanding check; you review the slice that's
+            flagged or uncertain. Drag your own class through the model below — the arithmetic is
+            right there, nothing hidden.
+          </p>
+        </div>
+
+        <RoiCalculator />
+
+        <div className="it-worth-strip">
+          <h3 className="it-proof-h">By the numbers</h3>
+          <div className="stat-grid gs-stats it-worth-stats">
+            {byNumbers.map((s) => (
+              <StatCard key={s.label} label={s.label} value={s.value} sub={s.sub} />
+            ))}
+          </div>
         </div>
       </section>
 
