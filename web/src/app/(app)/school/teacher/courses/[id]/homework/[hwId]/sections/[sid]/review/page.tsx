@@ -1384,7 +1384,7 @@ function PublishConfirmDialog({
       {unreviewedToPublish > 0 && (
         <p className="mt-3 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-3 py-2 text-xs text-[color:var(--color-warning-dark)]  dark:bg-[color:var(--color-warning)]/10 ">
           <span className="font-semibold">{total}</span>{" "}
-          {total === 1 ? "grade" : "grades"} \u2014{" "}
+          {total === 1 ? "grade" : "grades"} —{" "}
           <span className="font-semibold">{reviewedToPublish}</span>{" "}
           you&rsquo;ve reviewed,{" "}
           <span className="font-semibold">{unreviewedToPublish}</span>{" "}

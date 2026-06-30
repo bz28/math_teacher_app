@@ -39,7 +39,34 @@ export type Matrix = {
   harm: HarmMetric[];
 };
 
-export type FlowShot = { src: string; caption: string };
+export type FlowShot = { src: string; title: string; caption: string };
+
+export type Hero = {
+  eyebrow: string;
+  headline: string;
+  subhead: string;
+  triplet: string[];
+  cue: string;
+};
+
+export type Moment = {
+  eyebrow: string;
+  title: string;
+  body: string;
+  quoteAttr: string;
+  shot: string;
+  scenario: number;
+};
+
+export type PayoffPoint = { title: string; body: string };
+
+export type Payoff = {
+  eyebrow: string;
+  title: string;
+  lead: string;
+  points: PayoffPoint[];
+  closing: string;
+};
 
 export type IntegritySet = {
   meta: {
@@ -52,6 +79,9 @@ export type IntegritySet = {
     source: string;
     stats: Stat[];
   };
+  hero: Hero;
+  moment: Moment;
+  payoff: Payoff;
   dispositions: Disposition[];
   scenarios: Scenario[];
   matrix: Matrix;
