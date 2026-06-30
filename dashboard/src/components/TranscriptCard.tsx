@@ -18,8 +18,14 @@ function DispositionPill({ kind }: { kind: DispositionKey }) {
   );
 }
 
-export default function TranscriptCard({ scenario }: { scenario: Scenario }) {
-  const [open, setOpen] = useState(false);
+export default function TranscriptCard({
+  scenario,
+  defaultOpen = false,
+}: {
+  scenario: Scenario;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   const match = scenario.gold === scenario.predicted;
 
   return (
