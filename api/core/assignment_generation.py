@@ -90,6 +90,21 @@ Pick the variant by setting `shape`:
   with `center_label` (defaults to "O").
 - `radius_label` draws a labeled radius to the FIRST named point.
 - Don't emit the same chord twice ('AB' or 'BA' — pick one).
+- For a point OUTSIDE the circle (tangent–secant angle, two secants /
+  power of a point, two tangents from a point), use `external_points`.
+  Each entry names a point defined as the intersection of two lines —
+  `line1`/`line2`, where each line is either `{{"tangent_at": "T"}}`
+  (tangent at on-circle point T) or `{{"secant_through": ["A", "B"]}}`
+  (line through on-circle points A and B). The renderer computes the
+  point and draws the tangent/secant segments to the circle, so you
+  never give coordinates. e.g. a tangent–secant from P:
+  `{{"P": {{"line1": {{"tangent_at": "T"}}, "line2": {{"secant_through":
+  ["A", "B"]}}}}}}`. Spread the on-circle points out so the two lines
+  meet OUTSIDE the circle — don't fake an external point with a chord.
+  For TWO secants from P, put the two near points (closer to P) close
+  together on the arc facing P and the two far points close together on
+  the opposite arc (e.g. near ~30° and ~330°, far ~100° and ~260°) so
+  both secants converge to P; parallel chords never meet.
 
 **Polygons** (`shape: "polygon"`, for 4+ sides — squares,
 pentagons, hexagons, n-gons; for triangles use `shape: "triangle"`

@@ -154,12 +154,38 @@ _TRIANGLE_FIGURE_SCHEMA: dict[str, Any] = {
 }
 
 
+_CIRCLE_LINE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "description": (
+        "One line that helps locate an external point. Set EXACTLY ONE "
+        "of: tangent_at (the tangent to the circle at that on-circle "
+        "point) or secant_through (the line through two on-circle points)."
+    ),
+    "properties": {
+        "tangent_at": {
+            "type": "string",
+            "description": "Name of the on-circle point the tangent line touches.",
+        },
+        "secant_through": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Exactly two on-circle point names the secant line passes through."
+            ),
+        },
+    },
+}
+
+
 _CIRCLE_FIGURE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "description": (
         "Circle figure. Use for problems involving circles, chords, "
         "tangents, inscribed/central angles, or arcs. Each named "
-        "point sits on the circumference at the angle you specify."
+        "point sits on the circumference at the angle you specify. For a "
+        "point OUTSIDE the circle (tangent–secant, two-secant / power of "
+        "a point, two-tangent setups), use `external_points` rather than "
+        "faking it with a chord."
     ),
     "properties": {
         "type": {"type": "string", "enum": ["geometry"]},
@@ -217,6 +243,43 @@ _CIRCLE_FIGURE_SCHEMA: dict[str, Any] = {
                 "the key from `points`). Keyed by point name."
             ),
             "additionalProperties": {"type": "string"},
+        },
+        "external_points": {
+            "type": "object",
+            "description": (
+                "Points OUTSIDE the circle — the right way to draw "
+                "tangent–secant, secant–secant (power of a point), and "
+                "two-tangent figures. Keyed by name; each is the "
+                "INTERSECTION of two lines (line1, line2). The renderer "
+                "computes the position and draws the tangent/secant "
+                "segments to the circle, so you never supply coordinates "
+                "— you only name the on-circle points. Example, a "
+                "tangent–secant from external point P (tangent at T, "
+                "secant through A and B): {\"P\": {\"line1\": "
+                "{\"tangent_at\": \"T\"}, \"line2\": {\"secant_through\": "
+                "[\"A\", \"B\"]}}}. The two lines MUST meet outside the "
+                "circle, so spread the on-circle points out (well-"
+                "separated chords / tangent points) rather than placing "
+                "them so the lines run nearly parallel. For TWO SECANTS "
+                "from P: put the two NEAR points (the ones closer to P) "
+                "close together on the arc facing P, and the two FAR "
+                "points close together on the opposite arc — e.g. near "
+                "points around 30° and 330°, far points around 100° and "
+                "260°, which makes both secants converge to P out to the "
+                "right. Parallel chords (both near horizontal) never meet."
+            ),
+            "additionalProperties": {
+                "type": "object",
+                "properties": {
+                    "line1": _CIRCLE_LINE_SCHEMA,
+                    "line2": _CIRCLE_LINE_SCHEMA,
+                    "label": {
+                        "type": "string",
+                        "description": "Display label for the point (default the key).",
+                    },
+                },
+                "required": ["line1", "line2"],
+            },
         },
     },
     "required": ["type", "shape", "radius"],

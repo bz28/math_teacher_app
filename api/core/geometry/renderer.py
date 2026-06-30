@@ -21,6 +21,7 @@ from pydantic import TypeAdapter
 
 from api.core.geometry.dsl import (
     CircleFigure,
+    CircleLine,
     FigureSpec,
     FigureSpecError,
     PolygonFigure,
@@ -338,6 +339,24 @@ def _radius_line(from_pt: Point, to_pt: Point) -> str:
     )
 
 
+def _external_segment_target(
+    line: CircleLine, coords: dict[str, Point], from_pt: Point,
+) -> Point | None:
+    """On-circle endpoint to draw a segment to, from an external point: the
+    tangent point for a tangent line, or the FARTHER of the two secant points
+    (so the drawn segment spans the whole secant — from outside the circle,
+    through the near point, to the far point)."""
+    if line.tangent_at is not None:
+        return coords.get(line.tangent_at)
+    a, b = line.secant_through  # type: ignore[misc]  # validator guarantees 2 names
+    pa, pb = coords.get(a), coords.get(b)
+    if pa is None or pb is None:
+        return None
+    da = math.hypot(pa[0] - from_pt[0], pa[1] - from_pt[1])
+    db = math.hypot(pb[0] - from_pt[0], pb[1] - from_pt[1])
+    return pa if da >= db else pb
+
+
 def _circle_annotation_labels(
     annotation: TriangleCircleAnnotation,
     center: Point,
@@ -473,17 +492,24 @@ def _render_circle(
     radius = spec.radius * scale
     coords = {k: (x * scale, y * scale) for k, (x, y) in coords.items()}
 
-    # Bounding box: extend radius units around center, plus padding.
+    # External points (already solved + scaled) sit OUTSIDE the circle, so
+    # the bounding box must grow to include them or they clip at the edge.
+    ext_pts = [coords[name] for name in spec.external_points if name in coords]
+
+    # Bounding box: the circle, every external point, plus label padding.
     pad = _label_padding([
         *spec.point_labels.values(),
         *spec.chord_labels.values(),
         *spec.points,
+        *spec.external_points,
+        *(e.label or "" for e in spec.external_points.values()),
         spec.center_label if spec.show_center else "",
         spec.radius_label or "",
     ])
-    bound = radius
-    min_x, max_x = -bound - pad, bound + pad
-    min_y, max_y = -bound - pad, bound + pad
+    xs = [-radius, radius, *(p[0] for p in ext_pts)]
+    ys = [-radius, radius, *(p[1] for p in ext_pts)]
+    min_x, max_x = min(xs) - pad, max(xs) + pad
+    min_y, max_y = min(ys) - pad, max(ys) + pad
     width = max_x - min_x
     height = max_y - min_y
 
@@ -514,6 +540,23 @@ def _render_circle(
             f'stroke="{_STROKE}" stroke-width="{_STROKE_WIDTH}"/>',
         )
 
+    # 2b. External-point segments — for each external point, draw the two
+    # tangent/secant lines from it to the circle (tangent point, or the far
+    # end of the secant so the segment spans the whole secant).
+    for ext_name, ext in spec.external_points.items():
+        if ext_name not in coords:
+            continue
+        px, py = coords[ext_name]
+        for line in (ext.line1, ext.line2):
+            target = _external_segment_target(line, coords, (px, py))
+            if target is None:
+                continue
+            tx, ty = target
+            parts.append(
+                f'<line x1="{px:.4f}" y1="{py:.4f}" x2="{tx:.4f}" y2="{ty:.4f}" '
+                f'stroke="{_STROKE}" stroke-width="{_STROKE_WIDTH}"/>',
+            )
+
     # 3. Optional radius line (from center to first named point) — drawn
     # whenever radius_label is set so the label has something to anchor on.
     radius_target: str | None = None
@@ -543,6 +586,15 @@ def _render_circle(
             f'<circle cx="{x:.4f}" cy="{y:.4f}" r="{dot_r:.4f}" fill="{_STROKE}"/>',
         )
 
+    # 5b. External point dots.
+    for ext_name in spec.external_points:
+        if ext_name not in coords:
+            continue
+        ex, ey = coords[ext_name]
+        parts.append(
+            f'<circle cx="{ex:.4f}" cy="{ey:.4f}" r="{dot_r:.4f}" fill="{_STROKE}"/>',
+        )
+
     parts.append("</g>")  # close the flipped group — text uses upright coords
 
     # 6. Center label.
@@ -559,6 +611,18 @@ def _render_circle(
         display = spec.point_labels.get(name, name)
         # Outward-radial offset of _LABEL_OFFSET units.
         norm = math.hypot(x, y) or 1.0  # 1.0 guard for degenerate radius=0 (impossible: validator)
+        ox = (x / norm) * _LABEL_OFFSET
+        oy = (y / norm) * _LABEL_OFFSET
+        parts.append(_text(x + ox, -(y + oy), display, size=_VERTEX_FONT_SIZE))
+
+    # 7b. External point labels — offset outward (away from the circle
+    # center) so they clear the point marker and the segments meeting there.
+    for ext_name, ext in spec.external_points.items():
+        if ext_name not in coords:
+            continue
+        x, y = coords[ext_name]
+        display = ext.label or ext_name
+        norm = math.hypot(x, y) or 1.0
         ox = (x / norm) * _LABEL_OFFSET
         oy = (y / norm) * _LABEL_OFFSET
         parts.append(_text(x + ox, -(y + oy), display, size=_VERTEX_FONT_SIZE))
