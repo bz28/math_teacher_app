@@ -23,12 +23,7 @@ const DIAGNOSTIC_NAV: NavItem[] = [
   { to: "/harness-runs", label: "Harness runs" },
   { to: "/quality", label: "Solution quality" },
   { to: "/grading-quality", label: "Grading quality" },
-  { to: "/demo", label: "The pitch" },
-  { to: "/golden-set", label: "Golden set" },
-  { to: "/golden-set/integrity", label: "Integrity set" },
-  { to: "/golden-set/grading", label: "Grading set" },
-  { to: "/golden-set/generation", label: "Generation set" },
-  { to: "/golden-set/teacher-day", label: "Teacher's day" },
+  { to: "/golden-set", label: "Generation QA" },
 ];
 
 const INTERNAL_NAV: NavItem[] = [

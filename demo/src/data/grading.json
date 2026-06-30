@@ -1,0 +1,116 @@
+{
+  "meta": {
+    "title": "AI grading — golden set",
+    "subtitle": "How the AI grades real handwritten work — and how it shows its math",
+    "framing": "Illustrative seeded demo data, not a real student. The 73% receipt below is one worked example, captured live from the product so you can read the mechanism — Veradic grades real photographed work this exact way; the names and numbers here are there to show how.",
+    "capturedAt": "2026-06-29",
+    "model": "claude-sonnet-4-6",
+    "source": "grading walkthrough · live capture"
+  },
+  "hero": {
+    "eyebrow": "Veradic · AI grading",
+    "headline": "Hand it a photo. Get the whole class graded — every point explained — before your coffee's cold.",
+    "subhead": "Grading nights at the kitchen table. The quiet worry of whether a 73 is actually fair — or whether the same paper would've earned a 78 on a different evening. Veradic reads each student's handwritten work, grades every problem, and shows you exactly where each point went. You review the few it's unsure about, then sign off.",
+    "triplet": ["Reads their work", "Grades every point", "You stay the judge"],
+    "cue": "See how it works",
+    "peek": {
+      "label": "Grade receipt · Problem 4",
+      "status": { "text": "73%", "tone": "muted" },
+      "rows": [
+        { "k": "Setup + method", "v": "full credit", "tone": "good" },
+        { "k": "Sign error", "v": "−20%", "tone": "warn" },
+        { "k": "Arithmetic slip", "v": "−7%", "tone": "warn" }
+      ],
+      "foot": "Illustrative — every point, where it went"
+    }
+  },
+  "flowSetup": [
+    {
+      "src": "/golden-set-grading/01-inbox.png",
+      "title": "The work comes in already graded",
+      "caption": "Open Submissions to a class that's already scored — five ready to review, not thirty to grade from a blank rubric. You're reviewing, not starting over."
+    },
+    {
+      "src": "/golden-set-grading/02-overview.png",
+      "title": "The work and the read, side by side",
+      "caption": "The student's actual photographed page sits right beside the AI's grade and its reasoning — one screen, nothing to cross-reference, every problem in reach."
+    }
+  ],
+  "moment": {
+    "step": "Step 03",
+    "eyebrow": "The moment that sets it apart",
+    "title": "Every point, accounted for.",
+    "body": "Most tools hand back a number and leave you to trust it. Veradic shows the receipt. Full credit for the setup. Full credit for the method. Then each place a point came off, named in plain words and sized — a −20% sign error, a −7% arithmetic slip — adding up to a score you can read straight down the page.",
+    "sell": "100 − 20 (sign error) − 7 (arithmetic) = 73 — no black-box score; a breakdown you and the student can both see.",
+    "note": "Illustrative seeded example — Maya Chen isn't a real student. The receipt is captured live from the product so you can read exactly how a grade is built.",
+    "shot": "/golden-set-grading/03-receipt.png"
+  },
+  "flowResolution": [
+    {
+      "src": "/golden-set-grading/04-anchored.png",
+      "title": "Each deduction points to the exact step",
+      "caption": "The −20% sign error highlights step 3 of the handwriting — moving −6 across the equals sign should make it +6; the −7% arithmetic slip highlights step 4, where 9 − 6 was written as 4 instead of 3. The grade is tied to the work itself, not floating above it — so you can check the read in seconds."
+    },
+    {
+      "src": "/golden-set-grading/05-triage.png",
+      "title": "Your time goes only where the AI was unsure",
+      "caption": "The roster sorts itself — one student needs your eyes, five the AI is confident on. A low-confidence read is surfaced, not buried, so your attention lands on the one paper that needs it."
+    },
+    {
+      "src": "/golden-set-grading/06-override.png",
+      "title": "You're the judge — one click to override",
+      "caption": "Disagree with the AI's Partial 73%? Tap Full. It records that you overrode the suggestion and keeps a one-tap revert. The AI proposes; the teacher decides — every time."
+    },
+    {
+      "src": "/golden-set-grading/07-publish.png",
+      "title": "Nothing reaches a student until you say so",
+      "caption": "Grades stay private until you publish. The confirm step tells you exactly what's going out — how many you reviewed, how many are still AI-suggested — so nothing slips out by accident."
+    }
+  ],
+  "payoff": {
+    "eyebrow": "Why it's worth it",
+    "title": "What a teacher gets back.",
+    "lead": "Not another inbox to babysit. Four things that change how grading feels:",
+    "points": [
+      {
+        "title": "Graded in minutes, not nights",
+        "body": "The class comes in already scored. You review the handful the AI flagged instead of carrying the whole stack home to the kitchen table."
+      },
+      {
+        "title": "Every grade you can defend",
+        "body": "When a parent asks why it's a 73, you have the receipt: full credit for the setup, a −20 sign error in step 3 (the −6 kept its sign crossing the equals), a −7 arithmetic slip in step 4 (9 − 6 written as 4, not 3). Not an opinion — a breakdown."
+      },
+      {
+        "title": "Consistent across the whole class",
+        "body": "The same rubric, applied the same way to every paper. The student in period 3 is graded by the same standard as the one in period 1 — no drift as the night wears on."
+      },
+      {
+        "title": "You stay in control",
+        "body": "Nothing is final until you publish, every score is one tap to override, and the student never sees a grade you didn't sign off on."
+      }
+    ],
+    "closing": "Graded in minutes, every point explained, the same standard for every kid — and you still sign off on each one. That's the whole point."
+  },
+  "byNumbers": [
+    {
+      "value": "Per problem",
+      "label": "Itemized, not one score",
+      "sub": "every question broken into the line items that built it"
+    },
+    {
+      "value": "Anchored",
+      "label": "To the exact step",
+      "sub": "each deduction points at the handwriting it came from"
+    },
+    {
+      "value": "Only the flagged",
+      "label": "Review, not re-grade",
+      "sub": "you open the slice the AI was unsure about — not all thirty"
+    },
+    {
+      "value": "One tap",
+      "label": "Override, anytime",
+      "sub": "the AI suggests; the teacher always makes the final call"
+    }
+  ]
+}

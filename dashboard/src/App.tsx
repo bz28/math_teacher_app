@@ -9,12 +9,7 @@ import LLMCalls from "./pages/LLMCalls";
 import HarnessRuns from "./pages/HarnessRuns";
 import Quality from "./pages/Quality";
 import GradingQuality from "./pages/GradingQuality";
-import DemoHub from "./pages/DemoHub";
 import GoldenSet from "./pages/GoldenSet";
-import IntegritySet from "./pages/IntegritySet";
-import GradingSet from "./pages/GradingSet";
-import GenerationSet from "./pages/GenerationSet";
-import TeacherDaySet from "./pages/TeacherDaySet";
 import Users from "./pages/Users";
 import LeadDetail from "./pages/LeadDetail";
 import Leads from "./pages/Leads";
@@ -39,6 +34,7 @@ export default function App() {
       <ConfirmProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
+
         <Route
           element={
             <ProtectedRoute>
@@ -69,12 +65,7 @@ export default function App() {
           <Route path="/harness-runs" element={<HarnessRuns />} />
           <Route path="/quality" element={<Quality />} />
           <Route path="/grading-quality" element={<GradingQuality />} />
-          <Route path="/demo" element={<DemoHub />} />
           <Route path="/golden-set" element={<GoldenSet />} />
-          <Route path="/golden-set/integrity" element={<IntegritySet />} />
-          <Route path="/golden-set/grading" element={<GradingSet />} />
-          <Route path="/golden-set/generation" element={<GenerationSet />} />
-          <Route path="/golden-set/teacher-day" element={<TeacherDaySet />} />
           <Route
             path="/submissions/:submissionId/trace"
             element={<SubmissionTrace />}
