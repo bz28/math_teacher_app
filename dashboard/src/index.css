@@ -3146,6 +3146,9 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 .present-shell {
   min-height: 100vh;
   background: var(--paper);
+  /* Safety net for the stories' full-bleed bands (margin: 0 -56px) on a
+     narrower presenter screen — admin chrome has this on .main-content. */
+  overflow-x: hidden;
 }
 
 .present-bar {

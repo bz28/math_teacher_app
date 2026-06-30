@@ -54,6 +54,9 @@ export default function PresentLayout() {
       if (isEditableTarget(e.target)) return;
 
       if (e.key === "Escape" || e.key === "Home") {
+        // In fullscreen, let Esc exit fullscreen first — don't also navigate
+        // to the overview, which would lose the presenter's place mid-pitch.
+        if (e.key === "Escape" && document.fullscreenElement) return;
         if (location.pathname !== PRESENT_HOME) {
           e.preventDefault();
           navigate(PRESENT_HOME);
