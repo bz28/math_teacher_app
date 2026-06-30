@@ -2632,6 +2632,42 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   color: var(--ink);
   margin-bottom: 14px;
 }
+/* The "rigor behind it" expandable — the cold ML-eval proof (stats grid +
+   confusion matrix), demoted below the warm human transcripts and folded
+   away by default so a teacher meets the legible proof first. */
+.it-rigor {
+  margin-top: 56px;
+  border-top: 1px solid var(--rule);
+  padding-top: 22px;
+}
+.it-rigor-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+  transition: color 0.15s ease;
+}
+.it-rigor-summary:hover { color: var(--accent); }
+.it-rigor-summary::-webkit-details-marker { display: none; }
+.it-rigor-summary::before {
+  content: "›";
+  display: inline-block;
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.it-rigor[open] > .it-rigor-summary::before { transform: rotate(90deg); }
+.it-rigor-body { margin-top: 8px; }
+.it-rigor-body .it-proof-stats { margin-top: 28px; }
+
 .it-provenance {
   margin-top: 44px;
   padding-top: 16px;

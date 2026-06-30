@@ -21,7 +21,7 @@ export default function MomentBlock({
       <div className="it-moment-inner">
         <div className="it-moment-head">
           <span className="it-moment-eyebrow">
-            <span className="it-moment-step mono">Step 05</span>
+            <span className="it-moment-step mono">{moment.step}</span>
             {moment.eyebrow}
           </span>
           <h2 id="moment-title" className="it-moment-title">

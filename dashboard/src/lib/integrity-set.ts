@@ -55,6 +55,7 @@ export type Moment = {
   body: string;
   quoteAttr: string;
   shot: string;
+  step: string;
   scenario: number;
 };
 
