@@ -1,4 +1,4 @@
-import type { Disposition, Matrix } from "../lib/integrity-set";
+import type { Disposition, DispositionKey, Matrix } from "../lib/integrity-set";
 
 // Short axis labels so the grid stays compact; the full labels live in the legend.
 const SHORT: Record<string, string> = {
@@ -7,6 +7,22 @@ const SHORT: Record<string, string> = {
   tutor_pivot: "Got tutored",
   flag_for_review: "Review",
 };
+
+// The two harm regions — the cells where a miss would actually hurt a student.
+// These are NOT every off-diagonal cell: the benign off-diagonal cells are
+// conservative within-band calls. A cell is a harm cell only when the
+// prediction lands OUTSIDE the acceptable band in a harmful direction:
+//   · false-pass — anything stricter than "Understood" cleared as Understood
+//     (a memorizer / copied answer slips through): the Understood column,
+//     below the diagonal.
+//   · false-flag — an honest, correct student ("Understood" gold) pushed all
+//     the way to Review: the top-right corner.
+// In this run every one of these is 0 — that's the load-bearing guarantee.
+function isHarmCell(gold: DispositionKey, pred: DispositionKey): boolean {
+  const falsePass = pred === "pass" && gold !== "pass";
+  const falseFlag = gold === "pass" && pred === "flag_for_review";
+  return falsePass || falseFlag;
+}
 
 export default function ConfusionMatrix({
   dispositions,
@@ -38,11 +54,12 @@ export default function ConfusionMatrix({
                 <th className="it-matrix-rowh">{SHORT[row.key]}</th>
                 {dispositions.map((col, j) => {
                   const n = matrix.counts[i][j];
-                  const diag = i === j;
+                  const kind =
+                    i === j ? "diag" : isHarmCell(row.key, col.key) ? "harm" : "off";
                   return (
                     <td
                       key={col.key}
-                      className={`it-matrix-cell mono ${diag ? "diag" : "off"} ${n === 0 ? "zero" : ""}`}
+                      className={`it-matrix-cell mono ${kind} ${n === 0 ? "zero" : ""}`}
                     >
                       {n}
                     </td>
@@ -52,6 +69,11 @@ export default function ConfusionMatrix({
             ))}
           </tbody>
         </table>
+        <div className="it-matrix-legend">
+          <span className="it-matrix-key it-matrix-key-diag">Exact match</span>
+          <span className="it-matrix-key it-matrix-key-off">Within band — conservative call</span>
+          <span className="it-matrix-key it-matrix-key-harm">Harm zone — held to zero</span>
+        </div>
         <div className="it-matrix-note">{matrix.note}</div>
       </div>
 
