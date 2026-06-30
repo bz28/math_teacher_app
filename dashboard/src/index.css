@@ -2390,7 +2390,9 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 }
 
 /* ---- PAYOFF — 4-up points grid (grading) -------------------- */
-.it-payoff-points-4 {
+/* Compound selector so it beats the base `.it-payoff-points` (3-up)
+   regardless of source order. */
+.it-payoff-points.it-payoff-points-4 {
   grid-template-columns: repeat(4, 1fr);
 }
 
@@ -2724,6 +2726,6 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   .it-flowstep:nth-child(even) .it-flowstep-shot { order: 2; }
   .it-moment-grid { grid-template-columns: 1fr; }
   .it-payoff-points { grid-template-columns: 1fr; gap: 28px; }
-  .it-payoff-points-4 { grid-template-columns: repeat(2, 1fr); gap: 28px; }
+  .it-payoff-points.it-payoff-points-4 { grid-template-columns: repeat(2, 1fr); gap: 28px; }
   .it-roi-card { grid-template-columns: 1fr; }
 }
