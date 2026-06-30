@@ -7,25 +7,16 @@ import { loadDemoHub } from "../lib/demo-hub";
 
 const h = loadDemoHub();
 
-// The demo front door. A founder opens this to pitch the whole platform in one
-// read: the overarching promise (hero), how the pieces fit into a single loop,
-// the four deep-dive stories you can step into, the business case (reused ROI),
-// and an ink payoff. It links OUT to /golden-set/{integrity,grading,generation,
-// teacher-day} — it doesn't re-tell those stories. Reuses the shipped .it-*
-// editorial system.
+// The present-mode home base. Same value-prop, loop, use-case tiles, ROI and
+// ink payoff as the in-dashboard DemoHub — but every tile leads INTO present
+// mode (/present/<story>) rather than the admin /golden-set/* pages, so the
+// founder never falls back into the admin chrome mid-pitch. Content and copy
+// are reused verbatim; only the destinations are remapped. The card `key`
+// (integrity | grading | generation | teacher-day) maps 1:1 to the route.
 
-export default function DemoHub() {
+export default function PresentOverview() {
   return (
     <div className="it-demo it-page">
-      {/* Launch into the full-screen, sidebar-free presenter view used to
-          pitch a teacher live. The in-dashboard demo below stays as-is. */}
-      <div className="dh-present-launch">
-        <Link to="/present" className="dh-present-btn">
-          Present
-          <span className="dh-present-btn-arrow" aria-hidden="true">▸</span>
-        </Link>
-      </div>
-
       <HeroBlock hero={h.hero} />
 
       {/* ── THE LOOP — how the pieces fit (day in the life) ──────── */}
@@ -52,7 +43,7 @@ export default function DemoHub() {
         </ol>
       </section>
 
-      {/* ── THE CORE USE CASES — navigable into the deep-dives ───── */}
+      {/* ── THE CORE USE CASES — big entry tiles into present mode ─ */}
       <section className="it-section">
         <div className="it-section-head">
           <span className="eyebrow">{h.useCases.eyebrow}</span>
@@ -62,7 +53,7 @@ export default function DemoHub() {
 
         <div className="dh-cards">
           {h.useCases.cards.map((card) => (
-            <Link className="dh-card" to={card.to} key={card.key}>
+            <Link className="dh-card" to={`/present/${card.key}`} key={card.key}>
               <div className="dh-card-shot">
                 <BrowserFrame src={card.shot} alt={card.title} />
               </div>

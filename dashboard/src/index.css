@@ -3135,3 +3135,164 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   .dh-beat .dh-beat-shot::after { content: none; }
   .dh-cards { grid-template-columns: 1fr; }
 }
+
+/* ──────────────────────────────────────────────────────────────────
+   PRESENT MODE — the founder's full-screen pitch shell
+   No admin sidebar. A quiet hairline top bar (wordmark · overview ·
+   the four story jump links · fullscreen), then the reused, approved
+   story content full-bleed below. The bar must never compete with the
+   content, so it stays slim, paper-toned, and low-contrast until hover.
+   ────────────────────────────────────────────────────────────────── */
+.present-shell {
+  min-height: 100vh;
+  background: var(--paper);
+  /* Safety net for the stories' full-bleed bands (margin: 0 -56px) on a
+     narrower presenter screen — admin chrome has this on .main-content. */
+  overflow-x: hidden;
+}
+
+.present-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  height: 54px;
+  padding: 0 28px;
+  background: rgba(247, 245, 240, 0.86);
+  backdrop-filter: saturate(1.4) blur(10px);
+  -webkit-backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--rule);
+}
+
+.present-bar-left {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex: none;
+}
+.present-wordmark {
+  font-family: var(--font-display);
+  font-size: 21px;
+  letter-spacing: -0.4px;
+  color: var(--ink);
+  line-height: 1;
+}
+.present-wordmark:hover { text-decoration: none; }
+.present-overview-link {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  transition: color 0.15s ease;
+}
+.present-overview-link:hover { color: var(--ink); text-decoration: none; }
+.present-overview-link.active { color: var(--accent); }
+
+/* Center the story jump links so the bar reads as an editorial index. */
+.present-jump {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 auto;
+}
+.present-jump-link {
+  position: relative;
+  padding: 6px 14px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  color: var(--muted);
+  border-radius: 6px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.present-jump-link:hover {
+  color: var(--ink);
+  background: rgba(20, 19, 15, 0.04);
+  text-decoration: none;
+}
+.present-jump-link.active {
+  color: var(--ink);
+  font-weight: 600;
+}
+.present-jump-link.active::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.present-fs-btn {
+  flex: none;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--muted-2);
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.present-fs-btn:hover { color: var(--ink); border-color: var(--ink); }
+
+/* The story canvas. 56px horizontal padding so the stories' full-bleed
+   bands (.it-payoff, .it-moment — they break out with margin: 0 -56px)
+   reach the container edges exactly as they do inside the admin layout. */
+.present-content {
+  max-width: 1292px;
+  margin: 0 auto;
+  padding: 36px 56px 0;
+}
+
+/* Entry button on the in-dashboard /demo hub. */
+.dh-present-launch {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.dh-present-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--ink);
+  border-radius: 999px;
+  padding: 9px 20px;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.dh-present-btn:hover {
+  background: var(--accent);
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+.dh-present-btn-arrow {
+  font-size: 13px;
+  line-height: 1;
+  transform: translateY(0.5px);
+}
+
+@media (max-width: 860px) {
+  .present-bar { gap: 14px; padding: 0 16px; }
+  .present-jump { gap: 0; }
+  .present-jump-link { padding: 6px 9px; font-size: 12px; }
+  .present-content { padding: 24px 24px 0; }
+}
+@media (max-width: 680px) {
+  .present-jump { display: none; }
+}
