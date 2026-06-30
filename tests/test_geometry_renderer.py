@@ -568,6 +568,22 @@ def test_external_point_name_collision_rejected() -> None:
         )
 
 
+def test_external_point_empty_tangent_name_rejected_at_validation() -> None:
+    """An empty-string tangent_at is still a tangent line (set, not None), so
+    it must be reference-checked — "" is not a real point. Without this it
+    slipped past validation and KeyError'd in the solver (coords[""]) instead
+    of failing cleanly here."""
+    with pytest.raises(ValueError, match="unknown circle point"):
+        CircleFigure(
+            radius=1.0,
+            points={"T": 90.0},
+            external_points={"P": ExternalPoint(
+                line1=CircleLine(tangent_at=""),
+                line2=CircleLine(tangent_at="T"),
+            )},
+        )
+
+
 def test_circle_line_requires_exactly_one_kind() -> None:
     with pytest.raises(ValueError, match="exactly one"):
         CircleLine(tangent_at="T", secant_through=["A", "B"])

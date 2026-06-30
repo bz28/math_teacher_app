@@ -325,7 +325,15 @@ class CircleFigure(BaseModel):
                     f"external point {ext_name!r} collides with a circumference point name",
                 )
             for line in (ext.line1, ext.line2):
-                refs = [line.tangent_at] if line.tangent_at else (line.secant_through or [])
+                # Mirror the solver's `is not None` test exactly: a tangent
+                # line is one where tangent_at is set — even to "" — otherwise
+                # an empty-string name skips this check and then KeyErrors in
+                # the solver (coords[""]) instead of failing cleanly here.
+                refs = (
+                    [line.tangent_at]
+                    if line.tangent_at is not None
+                    else (line.secant_through or [])
+                )
                 for p in refs:
                     if p not in names:
                         raise ValueError(
