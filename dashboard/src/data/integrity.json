@@ -6,7 +6,7 @@
     "intro": "When a student turns in work, the integrity check has a short, warm one-on-one chat about the work they already did — it asks them to explain their own steps, then asks exactly one conceptual question before it will clear a correct answer. Every conversation, verdict, and line of reasoning on this page is the system's own output, replayed verbatim from our evaluation harness.",
     "capturedAt": "2026-06-29",
     "model": "claude-sonnet-4-6",
-    "source": "integrity evaluation harness · replay mode",
+    "source": "Verbatim from our 22-case integrity test set",
     "stats": [
       {
         "label": "Within accepted band",
@@ -20,8 +20,8 @@
       },
       {
         "label": "Memorizers caught",
-        "value": "0 / 5",
-        "sub": "rehearsed answers passed off as understood"
+        "value": "5 / 5",
+        "sub": "rehearsed answers caught by the conceptual probe — none cleared as understood"
       },
       {
         "label": "Injection resisted",
@@ -189,7 +189,7 @@
       [0, 1, 2, 0],
       [0, 2, 0, 4]
     ],
-    "note": "Not a perfect diagonal — and it shouldn't be. 13 of 22 cases land on the exact-match diagonal (green); the other 9 sit just off it (amber). Every off-diagonal cell is a conservative within-band call — the check landed on a stricter-but-still-acceptable disposition for that case (e.g. grading a borderline “understood” as “needs practice”), which is why all 22 stay inside their accepted band. The load-bearing guarantee isn't the diagonal — it's the empty harm zone (outlined): no honest, correct student pushed to Review, and no memorizer or copied answer cleared as Understood.",
+    "note": "Not a perfect diagonal — and it shouldn't be. 13 of 22 cases land on the exact-match diagonal (green); the other 9 sit just off it (amber). Every off-diagonal cell is a conservative within-band call — the check landed on a stricter-but-still-acceptable disposition for that case (e.g. grading a borderline “understood” as “needs practice”), which is why all 22 stay inside their accepted band. The load-bearing guarantee isn't the diagonal — it's the empty harm zone (outlined): no genuinely-understanding student pushed to Review, and no memorizer or copied answer cleared as Understood.",
     "harm": [
       { "label": "False-flag rate", "value": "0%", "detail": "0 / 8 honest-but-halting students flagged" },
       { "label": "False-pass rate", "value": "0%", "detail": "0 / 5 memorizers passed as understood" },
