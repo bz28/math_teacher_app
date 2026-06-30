@@ -49,11 +49,15 @@ If a genuine product/design fork needs the user, **leave it noted and do other (
 - Branch first (`git checkout -b ...` or a worktree); **never push to main.**
 - Small, cohesive, conventional commits (`feat:`/`fix:`/`docs:`/`chore:`/`refactor:`/`test:`).
 - Pre-launch: change code directly — no back-compat shims, migrations for "old" rows, or feature flags with no audience.
+- **Changed a backend endpoint or schema? Regenerate `mobile/openapi.json`** in the same change — CI has a staleness gate ("OpenAPI spec is up to date" / "API types match the spec") that fails otherwise. This has bitten repeatedly; on any `backend` CI failure, check this first.
+- **Verify the blast radius of shared-code changes.** A change to a shared component / store / hook / API contract can silently break surfaces it didn't obviously touch — exercise every call site and adjacent screen, not just the new thing (and screenshot each affected surface, §5). List anything you couldn't verify as an explicit risk.
 - Cover a significant new feature with durable, conservative-assert coverage (harness probe for AI output; a flow for a multi-step journey). Trivial/cosmetic → browser render check only.
 
 ## 4. Cold-review (mandatory before merge)
 
 Spawn a **fresh independent review agent with no conversation context** (`general-purpose`, background, `git diff main...<branch>`). Two passes; label findings **confirmed** (traced) vs **suspected**; tier P0–P3. For higher-stakes PRs run both the in-session `/review` *and* the cold agent — they're complementary. **Fix every confirmed finding before merging.**
+
+The cold review's findings are themselves hypotheses — **verify each against *current* `origin/main` before acting.** A finding computed against a stale local `main` can flag a "rogue change" that's actually already merged (e.g. `git diff origin/main...<branch> -- <file>` comes back empty). `git fetch` and confirm before you fix or block.
 
 ## 5. Test (real evidence)
 
