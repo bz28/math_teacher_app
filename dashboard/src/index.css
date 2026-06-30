@@ -1922,10 +1922,12 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   text-align: center;
 }
 .it-matrix-corner {
-  position: relative;
+  position: static;
   background: var(--paper);
   font-family: var(--font-sans);
   min-width: 92px;
+  overflow: visible;
+  white-space: normal;
 }
 .it-axis-pred {
   display: block;
@@ -1946,8 +1948,12 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   text-transform: uppercase; letter-spacing: 0.4px;
   color: var(--muted);
   background: var(--paper);
+  position: static;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
-.it-matrix-rowh { text-align: right; white-space: nowrap; }
+.it-matrix-rowh { text-align: right; }
 .it-matrix-cell { font-size: 15px; font-weight: 600; }
 .it-matrix-cell.diag { background: var(--ok-soft); color: var(--ink); }
 .it-matrix-cell.off { color: var(--muted-2); }
