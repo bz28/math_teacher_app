@@ -28,7 +28,7 @@ SEGMENTS=(
   "card:01-section"   "scene:1-section:0:auto"
   "card:02-materials" "scene:2-materials:0:auto"
   "card:03-generate"  "scene:3-generate:0:auto" "scene:3-solution:0:auto" "scene:3-figure:0:auto"
-  "card:04-submit"    "scene:4-submit:0:auto" "scene:4-chat:0:auto"
+  "card:04-submit"    "scene:4-submit:0:auto" "scene:4-chat:0:auto" "scene:4-verdict:0:auto"
   "card:05-grade"     "scene:5-grade:0:auto" "scene:5-insights:0:auto"
   "card:06-reteach"   "scene:6-reteach:0:auto"
   "card:07-practice"  "scene:7-practice:0:auto" "scene:7-learn:0:auto"
@@ -100,9 +100,10 @@ pk 2-materials 0.70 materials
 pk 3-generate  0.80 soccer-problems
 pk 3-solution  0.75 worked-solution
 pk 3-figure    0.80 figure-reshape
-pk 4-submit    0.60 photo
-pk 4-chat      0.55 understanding-chat
-pk 4-chat      0.92 understanding-verdict
+pk 4-submit    0.70 photo
+pk 4-chat      0.50 understanding-chat
+pk 4-chat      0.92 understanding-terminal
+pk 4-verdict   0.75 integrity-flag
 pk 5-grade     0.55 receipt
 pk 5-grade     0.88 integrity-verdict
 pk 5-insights  0.45 struggle-list

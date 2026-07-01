@@ -10,6 +10,7 @@ from api.core.auth import create_access_token, create_refresh_token
 PEOPLE = {
     "teacher": ("td_teacher_d592cc@t.com", "teacher"),
     "maya":    ("maya_d52a@school.edu",    "student"),
+    "jordan":  ("jordan_a395@school.edu",  "student"),
 }
 
 async def main() -> None:

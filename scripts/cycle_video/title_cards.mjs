@@ -19,7 +19,7 @@ const CARDS = [
   ['01-section', 'Teacher', 'Start a class.', 'A new section, in seconds.'],
   ['02-materials', 'Teacher', 'Add your materials.', 'Drop in what you already teach from.'],
   ['03-generate', 'Teacher', 'Generate the homework.', 'Describe it once — the AI writes the problems.'],
-  ['04-submit', 'Student', 'Submit, and prove you get it.', 'A photo of the work, then a quick understanding check.'],
+  ['04-submit', 'Student', 'Submit, and prove you get it.', 'A photo of the work — then a check no grade can fake.'],
   ['05-grade', 'Teacher', 'Grade, and see the class.', 'Every problem graded — with a receipt.'],
   ['06-reteach', 'Teacher', 'Re-teach in one click.', 'Turn a weak spot into targeted practice.'],
   ['07-practice', 'Student', 'Practice and learn.', 'The loop closes — the student gets better.'],

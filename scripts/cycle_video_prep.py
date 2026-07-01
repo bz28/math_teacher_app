@@ -48,6 +48,71 @@ GEO_REJECT = "aa4b63dd-2767-4b62-b302-9edf046f71e2"  # exterior angle (ugly ans)
 MAYA_LIN_SUB = "34f22f8f-42fc-401e-a9d5-bb3d54bbd86d"  # Period 3 Maya's sub
 MAYA_Q3_BANK = "f447f2b0-9a2c-4ab9-aac2-d9083c40d828"  # 2(x-3)=4x+8
 
+# ── The integrity CATCH (Jordan Blake) ───────────────────────────────
+# A student who got a problem RIGHT — correct final answer AND clean
+# written steps — but can't explain WHY any step works or adapt to a
+# tweak. That's the signal a grade can never see: a right answer that
+# isn't real understanding. We author it as a COMPLETE flag_for_review
+# check so the teacher review renders a resolved red verdict (not a
+# loading state) and the student route plays the warm chat + terminal.
+JORDAN_LIN_SUB = "729a070d-4250-497c-bdc7-887e3280fa29"  # Jordan's Period 3 sub
+LIN_P4_BANK = "9d78f5ab-7de0-428d-8cb3-9a73bcb0d51e"  # 5x - 7 = 3x + 2  (x = 4.5)
+LIN_PROBLEM_IDS = [  # the four LIN problems, in on-HW order (positions 1-4)
+    "729dbc13-354d-4bb3-9e19-c9aea884844a",  # 2x + 3 = 11      → x = 4
+    "b162bbe1-43f8-45cb-ac21-652cb3f0a60e",  # 3(x - 4) + 5     → 3x - 7
+    "f447f2b0-9a2c-4ab9-aac2-d9083c40d828",  # 3(x - 2) = 2x+9  → x = 15
+    "9d78f5ab-7de0-428d-8cb3-9a73bcb0d51e",  # 5x - 7 = 3x + 2  → x = 4.5
+]
+# Jordan's correct, fully-worked steps on problem 4 (verified below).
+# 5x - 7 = 3x + 2  → (−3x)  2x - 7 = 2  → (+7)  2x = 9  → (÷2)  x = 4.5
+JORDAN_P4_STEPS = [
+    {"problem_position": 4, "step_num": 1, "latex": "5x - 7 = 3x + 2", "plain_english": ""},
+    {"problem_position": 4, "step_num": 2, "latex": "2x - 7 = 2", "plain_english": ""},
+    {"problem_position": 4, "step_num": 3, "latex": "2x = 9", "plain_english": ""},
+    {"problem_position": 4, "step_num": 4, "latex": "x = 4.5", "plain_english": ""},
+]
+JORDAN_WORK_EXTRACTION = {
+    "steps": JORDAN_P4_STEPS,
+    "final_answers": [
+        {"problem_position": 4, "answer_latex": "x = 4.5", "answer_plain": "x = 4.5"},
+    ],
+    "confidence": 0.94,
+}
+# Jordan's correct final answers across all four problems (so the grade
+# reads a clean 100% and the flag lands on a perfect score — the whole
+# point: the grade can't tell him apart from a student who understands).
+JORDAN_FINAL_ANSWERS = {
+    LIN_PROBLEM_IDS[0]: "x = 4",
+    LIN_PROBLEM_IDS[1]: "3x - 7",
+    LIN_PROBLEM_IDS[2]: "x = 15",
+    LIN_PROBLEM_IDS[3]: "x = 4.5",
+}
+# The catch transcript. The AI stays warm the whole way and never
+# accuses — it just probes, hears hollow answers, and privately flags
+# it for the teacher. Reveals turn-by-turn on camera.
+JORDAN_TURNS = [
+    ("agent",
+     "Hi Jordan — thanks for turning that in! Your answer to problem 4, "
+     "$x = 4.5$, is exactly right. I just want to hear your thinking. You "
+     "started with $5x - 7 = 3x + 2$ — what was your very first step?"),
+    ("student",
+     "I moved everything around to get x by itself. The answer's 4.5."),
+    ("agent",
+     "Right idea. Let's slow down on one move: how did you get from "
+     "$5x - 7 = 3x + 2$ to $2x - 7 = 2$? What happened to the $3x$?"),
+    ("student",
+     "I'm not really sure why, that's just how it goes. I knew it came out "
+     "to 4.5."),
+    ("agent",
+     "No worries — one more and we're done. If the problem were "
+     "$6x - 7 = 3x + 2$ instead, what would your first step be?"),
+    ("student",
+     "I don't know. I just remembered the steps for this one."),
+    ("agent",
+     "Thanks, Jordan — that's really helpful, exactly what I needed. "
+     "We're all set here!"),
+]
+
 ALG_COURSE = "c99b654b-7ef8-4b05-a1df-a57c47d98f6e"
 SECTION = "845950c6-dc06-40a7-ba72-278ae63c221c"       # Period 3
 ALG_UNIT = "5547f6d5-0487-4174-bae0-a25908900c68"      # Linear Equations
@@ -196,8 +261,9 @@ async def main() -> None:
         # 1b ── suppress first-run onboarding tours for the two actors ─
         await s.execute(text(
             "update users set tours_seen = '[\"student\",\"teacher\",\"personal\"]'::jsonb "
-            "where email in ('td_teacher_d592cc@t.com','maya_d52a@school.edu')"))
-        print("marked onboarding tours seen for teacher + Maya")
+            "where email in ('td_teacher_d592cc@t.com','maya_d52a@school.edu',"
+            "'jordan_a395@school.edu')"))
+        print("marked onboarding tours seen for teacher + Maya + Jordan")
 
         # 1c ── stamp the section's students with the course's school so
         #        the SPA recognises them as school students (the seed left
@@ -420,6 +486,123 @@ async def main() -> None:
         flag_modified(grade, "breakdown")
         flag_modified(grade, "ai_breakdown")
         print(f"seeded 73% receipt on problem 3 (class avg {grade.final_score:.0f}%)")
+
+        # 4b ── the integrity CATCH: Jordan's right-but-can't-explain ──
+        # Correct work + correct final answers + a COMPLETE
+        # flag_for_review verdict, so the student route plays the warm
+        # turn-by-turn chat and the teacher review lands on a resolved
+        # red flag banner (not a loading state).
+        jordan_sub_uuid = uuid.UUID(JORDAN_LIN_SUB)
+        jsub = (await s.execute(select(Submission).where(
+            Submission.id == jordan_sub_uuid))).scalar_one()
+        # Clean, correct P4 work (verified: 5x-7=3x+2 → x=4.5).
+        jext = dict(jsub.extraction or {})
+        jext["steps"] = ([st for st in jext.get("steps", [])
+                          if st.get("problem_position") != 4] + JORDAN_P4_STEPS)
+        jext["final_answers"] = [
+            {"problem_position": 4, "answer_latex": "x = 4.5", "answer_plain": "x = 4.5"},
+        ]
+        jsub.extraction = jext
+        jsub.extraction_confirmed_at = jsub.extraction_confirmed_at or now
+        jsub.final_answers = dict(JORDAN_FINAL_ANSWERS)
+        flag_modified(jsub, "extraction")
+        flag_modified(jsub, "final_answers")
+
+        # A clean 100% grade — every answer correct. The flag sits on a
+        # perfect score, which is exactly the point.
+        jgrade = (await s.execute(select(SubmissionGrade).where(
+            SubmissionGrade.submission_id == jordan_sub_uuid))).scalar_one_or_none()
+        if jgrade is None:
+            jgrade = SubmissionGrade(submission_id=jordan_sub_uuid)
+            s.add(jgrade)
+        jbreakdown = []
+        jai_grades = []
+        for pos, pid in enumerate(LIN_PROBLEM_IDS, start=1):
+            ans = JORDAN_FINAL_ANSWERS[pid]
+            jbreakdown.append({
+                "problem_id": pid, "score_status": "correct",
+                "percent": 100.0, "confidence": 0.95,
+                "feedback": "Correct.", "deductions": [], "student_answer": ans,
+            })
+            jai_grades.append({
+                "problem_position": pos, "student_answer": ans,
+                "score_status": "correct", "percent": 100.0, "confidence": 0.95,
+                "reasoning": "Final answer matches the key.",
+                "student_feedback": "Correct.", "deductions": [],
+            })
+        jgrade.breakdown = jbreakdown
+        jgrade.ai_breakdown = {"grades": jai_grades}
+        jgrade.final_score = 100.0
+        jgrade.ai_score = 100.0
+        jgrade.graded_at = now
+        jgrade.grade_published_at = None
+        flag_modified(jgrade, "breakdown")
+        flag_modified(jgrade, "ai_breakdown")
+
+        # Rebuild the integrity check as a COMPLETE flag_for_review.
+        jexisting = (await s.execute(
+            select(IntegrityCheckSubmission.id)
+            .where(IntegrityCheckSubmission.submission_id == jordan_sub_uuid)
+        )).scalars().all()
+        for cid in jexisting:
+            await s.execute(delete(IntegrityConversationTurn).where(
+                IntegrityConversationTurn.integrity_check_submission_id == cid))
+            await s.execute(delete(IntegrityCheckProblem).where(
+                IntegrityCheckProblem.integrity_check_submission_id == cid))
+        await s.execute(delete(IntegrityCheckSubmission).where(
+            IntegrityCheckSubmission.submission_id == jordan_sub_uuid))
+
+        jcheck = IntegrityCheckSubmission(
+            submission_id=jordan_sub_uuid,
+            status="complete",
+            disposition="flag_for_review",
+            headline="Correct answer — but couldn't explain the steps",
+            overall_summary=(
+                "Jordan's final answer (x = 4.5) is correct and his written "
+                "steps are clean — but he couldn't say why the 3x moved or "
+                "adapt to a small change in the problem. Worth a quick "
+                "conversation before this counts."),
+            probe_selection_reason="verified_hardest_correct",
+            resolution="unresolved",
+        )
+        s.add(jcheck)
+        await s.flush()
+        s.add(IntegrityCheckProblem(
+            integrity_check_submission_id=jcheck.id,
+            bank_item_id=uuid.UUID(LIN_P4_BANK),
+            sample_position=0,
+            status="verdict_submitted",
+            student_work_extraction=JORDAN_WORK_EXTRACTION,
+            rubric={
+                "paraphrase_originality": "low", "causal_fluency": "low",
+                "transfer": "low", "prediction": "not_probed",
+                "authority_resistance": "not_probed", "self_correction": "not_observed",
+            },
+            ai_reasoning=(
+                "Answer and written steps are correct, but the student could "
+                "not explain why 3x was subtracted, gave a memorized "
+                "justification, and could not adapt the first step to a "
+                "modified problem — no causal grasp of the method."),
+            selected_reason="verified_hardest_correct",
+        ))
+        for i, (role, content) in enumerate(JORDAN_TURNS):
+            s.add(IntegrityConversationTurn(
+                integrity_check_submission_id=jcheck.id,
+                ordinal=i, role=role, content=content,
+                seconds_on_turn=None, telemetry=None,
+            ))
+        print(f"seeded COMPLETE flag_for_review catch ({len(JORDAN_TURNS)} turns) "
+              f"on Jordan's Linear Equations submission")
+
+        # 4c ── push the Systems-of-Equations due date into the future so
+        #        the student submit scene reads clean (no past-due "late"
+        #        banner / warning-colored button on camera).
+        await s.execute(
+            text("update assignments set due_at = :d where id = :i"),
+            {"d": now + timedelta(days=14),
+             "i": "0bb2e228-d653-4d91-b03e-13e46006c498"},
+        )
+        print("pushed Systems-of-Equations due date to +14d (clean submit scene)")
 
         # 5 ── reset the workshop figure item to its canonical 8-15-17 so
         #       the scene 3d live reshape starts from a known state and

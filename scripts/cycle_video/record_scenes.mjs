@@ -41,6 +41,7 @@ const ID = {
   SYSTEMS: '0bb2e228-d653-4d91-b03e-13e46006c498',
   PRACTICE: 'f1b8b77e-706b-4d07-97fe-c808a8548ccf',
   MAYA: '845d3c76-9fe8-4cec-b5ab-e43446400edd',
+  JORDAN: '0f63c477-12f8-4cbc-b4dc-ad62642f2cdc',
   SOCCER: '5e0c7a11-50cc-4bb0-9e11-50cc0a11500c',
 };
 const ALG_LINEAR_UNIT = '5547f6d5-0487-4174-bae0-a25908900c68';
@@ -228,42 +229,70 @@ const CLIPS = {
     await capClear(page); await sleep(page, 500);
   },
 
-  // 3a · TEACHER — describe a homework + set a "soccer" focus, then cut to
-  //      the generated, unmistakably soccer-themed problems.
+  // 3a · TEACHER — the REAL new-homework wizard, all four steps, in
+  //      order: Details → Problems (type a "soccer" focus) → Grading →
+  //      Review. Breezed through so completeness reads as "look how
+  //      fast," then a veil-cut to the pre-generated soccer problems.
   async '3-generate'(page) {
-    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=homework`, { zoom: 1.0, waitMs: 1300 });
-    await cap(page, 'Describe the homework once.');
-    await sleep(page, 800);
-    await go(page, page.getByRole('button', { name: /new homework/i }));
-    await sleep(page, 1000);
-    const title = page.locator('input[placeholder*="Quadratics"], input[placeholder*="HW"], input[placeholder*="Unit"]').first();
-    if (await title.count()) { await go(page, title, { click: true }); await title.fill('Soccer word problems').catch(() => {}); }
+    // One steady framing for the whole scene — zoom set on the homework
+    // tab before the modal is on camera, then held (no mid-scene zoom).
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=homework`, { zoom: 1.15, waitMs: 1200 });
+    await cap(page, 'New homework — start to finish.');
+    await sleep(page, 700);
+    await go(page, page.getByRole('button', { name: /new homework/i }).first());
+    // Wait for the wizard's Step 1 (Details) to settle.
+    const dialog = page.getByRole('dialog', { name: /new homework/i });
+    await dialog.waitFor({ state: 'visible', timeout: 9000 }).catch(() => {});
+    await sleep(page, 700);
+
+    // ── Step 1 · Details — title + pick the unit. Breeze through. ──
+    await cap(page, 'Name it, pick the unit.');
+    const title = dialog.locator('input[placeholder*="Quadratics"], input[type="text"]').first();
+    if (await title.count()) {
+      await go(page, title, { click: true });
+      await title.pressSequentially('Soccer word problems', { delay: 30 }).catch(() => {});
+    }
+    await sleep(page, 400);
+    // The "Linear Equations" unit chip (a real click, shown).
+    await go(page, dialog.getByRole('button', { name: /^✓?\s*Linear Equations$/ }).first(), { click: true }).catch(() => {});
     await sleep(page, 600);
-    await go(page, page.getByText(/Linear Equations/).first(), { click: true }).catch(() => {});
+    await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});
     await sleep(page, 500);
-    await go(page, page.getByRole('button', { name: /Continue|Next/i }).first(), { click: true }).catch(() => {});
-    await sleep(page, 900);
-    const focus = page.locator('input[placeholder*="word problems"], textarea[placeholder*="word problems"]').first();
+
+    // ── Step 2 · Problems — TYPE the "soccer" focus (not pre-filled). ──
+    await cap(page, 'Set a focus — just type it.');
+    const focus = dialog.locator('input[placeholder*="word problems"], textarea[placeholder*="word problems"]').first();
     if (await focus.count()) {
       await go(page, focus, { click: true });
-      await focus.fill('soccer — players, goals, matches, standings').catch(() => {});
-      await sleep(page, 700);
-      await cap(page, 'Set a focus — like soccer.');
-      await sleep(page, 1600);
-    } else {
-      await cap(page, 'Set a focus — like soccer.');
-      await sleep(page, 1400);
-    }
+      await focus.pressSequentially('soccer', { delay: 95 }).catch(() => {});
+      await sleep(page, 1100);
+    } else { await sleep(page, 800); }
+    await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});
+    await sleep(page, 500);
+
+    // ── Step 3 · Grading — the rubric, sensible defaults already in. ──
+    await cap(page, 'Grading rubric — defaults ready.');
+    await sleep(page, 1300);
+    await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});
+    await sleep(page, 500);
+
+    // ── Step 4 · Review — one last look, then create. ──
+    await cap(page, 'One last look — then create.');
+    await sleep(page, 1600);
+    // Glide the cursor to "Create & generate" but DON'T fire a live job
+    // — bridge the AI write with the brand veil and land on the real,
+    // pre-generated soccer set. No spinner ever hits the frame.
+    await go(page, dialog.getByRole('button', { name: /Create & generate/i }).first(), { click: false }).catch(() => {});
+    await sleep(page, 700);
     await capClear(page); await sleep(page, 300);
-    // The AI writes the set — bridge the wait with the brand veil (no
-    // spinner) and land on the real, pre-generated soccer problems.
+
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.SOCCER}`,
       { zoom: 1.18, waitMs: 1500, anchor: 'text=/soccer|goals|match/i' });
-    await page.mouse.wheel(0, 150); await sleep(page, 700);
+    await page.mouse.wheel(0, 150); await sleep(page, 600);
     await cap(page, 'Every problem — themed to soccer.');
-    await sleep(page, 2600);
-    await page.mouse.wheel(0, 170); await sleep(page, 2000);
-    await capClear(page); await sleep(page, 500);
+    await sleep(page, 2200);
+    await page.mouse.wheel(0, 170); await sleep(page, 1600);
+    await capClear(page); await sleep(page, 400);
   },
 
   // 3b · TEACHER — open a generated problem to reveal its worked solution
@@ -304,25 +333,42 @@ const CLIPS = {
     await capClear(page); await sleep(page, 500);
   },
 
-  // 4a · STUDENT — snap a photo of the work and turn it in.
+  // 4a · STUDENT (Jordan) — his own screen: attach a photo of the work
+  //      and turn it in. Framed unmistakably as the student's view; the
+  //      attached work is staged (no live extraction wait on camera).
   async '4-submit'(page) {
     await gotoClean(page, `/school/student/courses/${ID.ALG}/homework/${ID.SYSTEMS}`,
-      { zoom: 1.05, waitMs: 1400 });
-    await cap(page, 'The student just snaps a photo of their work.');
-    await sleep(page, 1100);
+      { zoom: 1.16, waitMs: 1300 });
+    await cap(page, "This is the student's screen.");
+    await sleep(page, 1200);
     const fin = page.locator('input[type=file]').first();
     await fin.setInputFiles(`${ASSETS}/handwriting.png`).catch(() => {});
+    // Bring the "Submit your homework" panel + the staged photo of the
+    // work into view and hold there — the attached work is the focus.
+    await page.getByText(/Submit your homework/i).first().scrollIntoViewIfNeeded({ timeout: 4000 }).catch(() => {});
+    await page.mouse.wheel(0, 120); await sleep(page, 1400);
+    await cap(page, 'Snap a photo of your work.');
     await sleep(page, 2400);
-    await cap(page, 'One tap to turn it in.');
-    await sleep(page, 1800);
-    // Show the turn-in CTA but don't trigger a live extraction/wait.
-    await go(page, page.getByRole('button', { name: /review .* turn in|turn in/i }).first(), { click: false }).catch(() => {});
-    await sleep(page, 1600);
+    // Open the confirm ("your teacher will see exactly this") — glide
+    // the cursor, then commit with a reliable element-level click
+    // (never submits / triggers a live extraction wait). Element click
+    // is used because a synthetic mouse click under zoom can miss the
+    // small CTA.
+    const turnInBtn = page.getByRole('button', { name: /review .* turn in/i }).first();
+    await go(page, turnInBtn, { click: false }).catch(() => {});
+    await turnInBtn.click({ timeout: 3000 }).catch(() => {});
+    await sleep(page, 1000);
+    await page.getByText(/Ready to turn it in/i).first().scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+    await sleep(page, 700);
+    await cap(page, 'Your teacher sees exactly what you turn in.');
+    await sleep(page, 3000);
     await capClear(page); await sleep(page, 500);
   },
 
-  // 4b · STUDENT — the understanding check plays as a flowing conversation,
-  //      then lands on its closing verdict.
+  // 4b · STUDENT (Jordan) — the understanding check. He got the answer
+  //      RIGHT, but as the chat reveals turn-by-turn he can't explain a
+  //      single step. The AI stays warm to him the whole way (the catch
+  //      is surfaced privately to the teacher in 4-verdict).
   async '4-chat'(page) {
     await gotoClean(page, `/school/student/courses/${ID.ALG}/homework/${ID.LIN}`,
       { zoom: 1.0, waitMs: 1800, anchor: 'text=/understanding check/i' });
@@ -349,27 +395,45 @@ const CLIPS = {
         window.__scroller = window.__scroller.parentElement;
     });
     await sleep(page, 500);
-    await cap(page, 'A short chat checks they really understand.');
-    await sleep(page, 700);
+    await cap(page, 'After turning in work, a quick check — is it really yours?');
+    await sleep(page, 900);
     const n = await page.evaluate(() => (window.__rows || []).length);
     for (let i = 0; i < n; i++) {
       await page.evaluate((idx) => {
         const el = window.__rows[idx];
         if (el) { el.style.opacity = '1'; el.style.transform = 'none'; el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
       }, i);
-      await sleep(page, i % 2 === 1 ? 1650 : 1250);
+      // Swap the caption partway so the viewer reads the turn — the
+      // answer was right, but the "why" keeps coming up empty.
+      if (i === 1) { await cap(page, 'Just explain your thinking — in your own words.'); }
+      if (i === 3) { await cap(page, 'The answer is right… but the "why" keeps coming up empty.'); }
+      await sleep(page, i % 2 === 1 ? 1750 : 1300);
     }
-    await sleep(page, 500);
-    await cap(page, 'A right answer no longer means they got it.');
+    await sleep(page, 800);
+    // The chat is recorded live (in_progress) so it ends on the
+    // student's last hollow answer — no closing panel. The AI stayed
+    // warm the whole way; the catch is surfaced to the teacher next.
+    await cap(page, "He got it right — but couldn't explain a single step.");
+    await sleep(page, 3000);
+    await capClear(page); await sleep(page, 1400);
+  },
+
+  // 4c · TEACHER — the CATCH. Same submission, the teacher's review: a
+  //      correct answer on a perfect grade, quietly flagged — the thing
+  //      a grade can never do. Lands on the resolved red verdict banner.
+  async '4-verdict'(page) {
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.LIN}/sections/${ID.SEC}/review?student=${ID.JORDAN}`,
+      { zoom: 1.12, waitMs: 2000, anchor: 'text=/Jordan/i' });
+    await cap(page, 'You see the catch a grade never could.');
     await sleep(page, 1600);
-    // Reveal the closing verdict, then clear the caption so the outcome
-    // panel ("check passed / your teacher has everything they need")
-    // holds clean on camera.
-    await cap(page, 'She explained it in her own words — check passed.');
-    await sleep(page, 600);
-    await page.evaluate(() => { const t = window.__term; if (t) { t.style.opacity = '1'; t.style.transform = 'none'; t.scrollIntoView({ block: 'center', behavior: 'smooth' }); } });
-    await sleep(page, 2400);
-    await capClear(page); await sleep(page, 2200);
+    // Bring the integrity flag banner into view and hold on it.
+    await page.evaluate(() => { const e = Array.from(document.querySelectorAll('*')).find((n) => /couldn.t explain the steps/i.test(n.textContent || '') && n.children.length < 8); if (e) e.scrollIntoView({ block: 'center' }); });
+    await sleep(page, 1200);
+    await cap(page, 'Correct answer — but he couldn’t explain it.');
+    await sleep(page, 3200);
+    await cap(page, 'Warm to the student, honest with you.');
+    await sleep(page, 2600);
+    await capClear(page); await sleep(page, 600);
   },
 
   // 5a · TEACHER — the itemized grading receipt (math that adds up) + the
@@ -474,9 +538,10 @@ const CLIPS = {
 // ─────────────────────────────── runner ───────────────────────────────
 const WHO = {
   '1-section': 'teacher', '2-materials': 'teacher', '3-generate': 'teacher',
-  '3-solution': 'teacher', '3-figure': 'teacher', '4-submit': 'maya',
-  '4-chat': 'maya', '5-grade': 'teacher', '5-insights': 'teacher',
-  '6-reteach': 'teacher', '7-practice': 'maya', '7-learn': 'maya',
+  '3-solution': 'teacher', '3-figure': 'teacher', '4-submit': 'jordan',
+  '4-chat': 'jordan', '4-verdict': 'teacher', '5-grade': 'teacher',
+  '5-insights': 'teacher', '6-reteach': 'teacher', '7-practice': 'maya',
+  '7-learn': 'maya',
 };
 
 const want = process.argv.slice(2);
