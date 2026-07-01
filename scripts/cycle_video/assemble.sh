@@ -25,10 +25,10 @@ SEGMENTS=(
   "card:00-open"
   "card:01-section"   "scene:1-section:0:14"
   "card:02-materials" "scene:2-materials:0:9.2"
-  "card:03-generate"  "scene:3-generate:0:29"
-  "card:04-submit"    "scene:4-submit:0:19.8"
+  "card:03-generate"  "scene:3-generate:0:32.5"
+  "card:04-submit"    "scene:4-submit:0:19.2"
   "card:05-grade"     "scene:5-grade:0:18.2"
-  "card:06-reteach"   "scene:6-reteach:0:17"
+  "card:06-reteach"   "scene:6-reteach:0:15.2"
   "card:07-practice"  "scene:7-practice:0:23"
   "card:08-close"
 )
@@ -84,9 +84,9 @@ for c in 00-open 01-section 02-materials 03-generate 04-submit 05-grade 06-retea
 done
 pick "$SCENES/scene-1-section.webm" 11 "$FRAMES_DIR/$(printf '%02d' $n)-section.png"; n=$((n+1))
 pick "$SCENES/scene-2-materials.webm" 9 "$FRAMES_DIR/$(printf '%02d' $n)-materials.png"; n=$((n+1))
-pick "$SCENES/scene-3-generate.webm" 26 "$FRAMES_DIR/$(printf '%02d' $n)-figure.png"; n=$((n+1))
+pick "$SCENES/scene-3-generate.webm" 30 "$FRAMES_DIR/$(printf '%02d' $n)-figure.png"; n=$((n+1))
 pick "$SCENES/scene-4-submit.webm" 8  "$FRAMES_DIR/$(printf '%02d' $n)-photo.png"; n=$((n+1))
-pick "$SCENES/scene-4-submit.webm" 20 "$FRAMES_DIR/$(printf '%02d' $n)-understanding-chat.png"; n=$((n+1))
+pick "$SCENES/scene-4-submit.webm" 16 "$FRAMES_DIR/$(printf '%02d' $n)-understanding-chat.png"; n=$((n+1))
 pick "$SCENES/scene-5-grade.webm" 6  "$FRAMES_DIR/$(printf '%02d' $n)-receipt.png"; n=$((n+1))
 pick "$SCENES/scene-5-grade.webm" 18 "$FRAMES_DIR/$(printf '%02d' $n)-struggle-list.png"; n=$((n+1))
 pick "$SCENES/scene-6-reteach.webm" 14 "$FRAMES_DIR/$(printf '%02d' $n)-reteach.png"; n=$((n+1))

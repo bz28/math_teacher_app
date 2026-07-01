@@ -39,13 +39,18 @@ const sleep = (p, ms) => p.waitForTimeout(ms);
 // survive client navigations within a context.
 const INIT = `
 (() => {
+  // Mount the cursor + caption on <html> (documentElement), NOT <body>.
+  // Scene legibility zooms the app via document.body.style.zoom; keeping
+  // these overlays outside <body> leaves them at their native size and
+  // centred, so the caption reads identically across every scene.
+  const ROOT = () => document.documentElement;
   function ensure() {
     if (!document.getElementById('__cur')) {
       const c = document.createElement('div'); c.id='__cur';
       c.style.cssText='position:fixed;z-index:2147483647;width:22px;height:22px;left:-50px;top:-50px;'
         +'border-radius:50%;background:rgba(31,92,67,.28);border:2px solid #1f5c43;'
         +'pointer-events:none;transition:transform .04s linear;box-shadow:0 1px 6px rgba(0,0,0,.18)';
-      document.body.appendChild(c);
+      ROOT().appendChild(c);
     }
     if (!document.getElementById('__cap')) {
       const w = document.createElement('div'); w.id='__cap';
@@ -57,7 +62,7 @@ const INIT = `
       const dot=document.createElement('span');
       dot.style.cssText='width:11px;height:11px;border-radius:50%;background:#b8431a;flex:0 0 auto';
       const txt=document.createElement('span'); txt.id='__captxt';
-      w.appendChild(dot); w.appendChild(txt); document.body.appendChild(w);
+      w.appendChild(dot); w.appendChild(txt); ROOT().appendChild(w);
     }
   }
   window.__moveCur=(x,y)=>{const c=document.getElementById('__cur');if(c)c.style.transform='translate('+x+'px,'+y+'px)';};
@@ -65,17 +70,36 @@ const INIT = `
   window.__cap=(t)=>{ensure();const w=document.getElementById('__cap');const x=document.getElementById('__captxt');
     if(x)x.textContent=t; if(w){w.style.opacity='1';w.style.transform='translateX(-50%) translateY(0)';}};
   window.__capClear=()=>{const w=document.getElementById('__cap');if(w){w.style.opacity='0';w.style.transform='translateX(-50%) translateY(8px)';}};
-  function boot(){ ensure(); try{ if(document.body) new MutationObserver(ensure).observe(document.body,{childList:true}); }catch(e){} }
+  // Strip distracting app chrome for a clean frame: the Next.js dev
+  // indicator (the dark "N" badge, portal-mounted) and the persistent
+  // "Take the tour" / "Try as Student" nav controls.
+  const HIDE_LABELS=['Take the tour','Try as Student','Try as student'];
+  function hideChrome(){
+    if(!document.getElementById('__hidecss')){
+      const s=document.createElement('style'); s.id='__hidecss';
+      s.textContent='nextjs-portal{display:none!important}[data-nextjs-toast]{display:none!important}'
+        +'[data-next-badge]{display:none!important}[data-next-badge-root]{display:none!important}';
+      (document.head||document.documentElement).appendChild(s);
+    }
+    document.querySelectorAll('nextjs-portal').forEach(e=>e.remove());
+    document.querySelectorAll('a,button').forEach(el=>{
+      const t=(el.textContent||'').trim();
+      if(HIDE_LABELS.includes(t)) el.style.setProperty('display','none','important');
+    });
+  }
+  window.__hideChrome=hideChrome;
+  function boot(){ ensure(); hideChrome();
+    try{ if(document.documentElement) new MutationObserver(()=>{ensure();hideChrome();}).observe(document.documentElement,{childList:true,subtree:true}); }catch(e){} }
   if (document.readyState!=='loading') boot(); else document.addEventListener('DOMContentLoaded', boot);
 })();
 `;
 
-async function newCtx(who) {
+async function newCtx(who, view = VIEW) {
   const browser = global.__b;
   const dir = path.join(OUT, `_rec_${who}_${Date.now()}`);
   const ctx = await browser.newContext({
-    viewport: VIEW, deviceScaleFactor: 1,
-    recordVideo: { dir, size: VIEW },
+    viewport: view, deviceScaleFactor: 1,
+    recordVideo: { dir, size: view },
   });
   const t = TOK[who];
   await ctx.addInitScript(([a, r]) => {
@@ -103,6 +127,15 @@ async function deleteDemoSections() {
 
 async function cap(page, text) { await page.evaluate((t) => window.__cap && window.__cap(t), text); }
 async function capClear(page) { await page.evaluate(() => window.__capClear && window.__capClear()); }
+
+// Enlarge the app for legibility on wide, sparse screens (the
+// understanding chat, the create-homework result), whose content sits in
+// a centred ~1024px column that reads tiny in a native 1920 frame. Zooms
+// document.body (the app tree) — NOT documentElement — so the
+// cursor/caption overlays mounted on <html> stay native-sized and
+// centred. 1 resets. Only ever applied when nothing else is clicked
+// afterwards, since CSS-zoom can desync Playwright's coordinate clicks.
+async function setZoom(page, z) { await page.evaluate((v) => { document.body.style.zoom = String(v); }, z); }
 
 // Move the synthetic cursor smoothly to an element and (optionally)
 // click. Bounded: if the element isn't visible within `find` ms we skip
@@ -225,19 +258,31 @@ const SCENES = {
     const focus = page.locator('input[placeholder*="word problems"], input[placeholder*="Focus"], textarea[placeholder*="Focus"]').first();
     if (await focus.count()) { await go(page, focus, { click: true }); await focus.fill('triangles & angles — include a diagram').catch(() => {}); }
     await sleep(page, 700);
-    await cap(page, 'Three problems — and it draws the diagram.');
-    await sleep(page, 1200);
+    await cap(page, 'Then let the AI write the problems.');
+    await sleep(page, 1100);
     // the AI does the work — cut to the (pre-generated) result
     await generatingBeat(page, 'Generating problems…');
     await gotoClean(page, `/school/teacher/courses/${ID.GEO}/homework/${ID.GEO_HW}`, 1800);
-    await page.mouse.wheel(0, 240); await sleep(page, 1400);
-    // open the figure problem
+    // The caption now lands over the ACTUAL generated problems, not the
+    // wizard setup step. Zoom the list so the three prompts read large,
+    // then reset before the coordinate click (CSS-zoom desyncs it).
+    await setZoom(page, 1.3);
+    await sleep(page, 300);
+    await page.mouse.wheel(0, 210); await sleep(page, 1000);
+    await cap(page, 'Three problems — and it draws the diagram.');
+    await sleep(page, 2600);
+    await capClear(page); await sleep(page, 300);
+    await setZoom(page, 1); await sleep(page, 400);
+    // open the figure problem (zoom reset so the coordinate click lands),
+    // then zoom the opened dialog so the figure + prompt read large.
     await go(page, page.getByRole('button', { name: /right triangle/i }).first(), { click: true }).catch(async () => {
       await go(page, page.getByText(/right triangle/i).first(), { click: true }).catch(() => {});
     });
-    await sleep(page, 2200);
+    await sleep(page, 900);
+    await setZoom(page, 1.5);
+    await sleep(page, 1300);
     await cap(page, 'A clean, self-checked figure — every time.');
-    await sleep(page, 2400);
+    await sleep(page, 2600);
     await capClear(page); await sleep(page, 500);
   },
 
@@ -252,14 +297,24 @@ const SCENES = {
     await go(page, page.getByRole('button', { name: /review .* turn in/i }).first(), { click: true }).catch(() => {});
     await sleep(page, 1800);
     await capClear(page); await sleep(page, 400);
-    // the understanding check (seeded transcript renders in-place)
+    // The understanding check (seeded transcript renders in-place). This
+    // is the signature moment — the AI's probe + the student's answer
+    // MUST be comfortably readable. Zoom the two-pane chat so the
+    // conversation fills the frame, and park on an AI-probe →
+    // student-explanation exchange.
     await gotoClean(page, `/school/student/courses/${ID.ALG}/homework/${ID.LIN}`, 2200);
+    await setZoom(page, 1.7);
+    await sleep(page, 900);
     await cap(page, 'Then a short chat checks they really understand.');
-    await sleep(page, 1800);
-    await page.mouse.wheel(0, 220); await sleep(page, 1700);
-    await page.mouse.wheel(0, 220); await sleep(page, 1900);
+    // Reveal the opening probe, then settle on the reasoning exchange.
+    await page.evaluate(() => {
+      const sc = Array.from(document.querySelectorAll('div')).find(
+        (d) => d.scrollHeight > d.clientHeight + 40 && /Walk me through|distributed|Quick check/i.test(d.textContent || ''));
+      if (sc) sc.scrollTop = Math.max(0, sc.scrollHeight * 0.34);
+    });
+    await sleep(page, 3200);
     await cap(page, 'A right answer no longer means they get it.');
-    await sleep(page, 2200);
+    await sleep(page, 2600);
     await capClear(page); await sleep(page, 500);
   },
 
