@@ -138,13 +138,20 @@ export default function HomeworkPage() {
           //                         the integrity-sampled per-problem
           //                         confirm was collapsed into that)
           //   "in_progress"      → chat
-          //   "complete" / "skipped_unreadable" / "no_check"
-          //                      → stay on homework view
+          //   "complete" / "skipped_unreadable"
+          //                      → chat, so the student can review the
+          //                        finished conversation and see its
+          //                        closing verdict (the chat renders a
+          //                        read-only completion panel once the
+          //                        check is done — no live input box).
+          //   "no_check"         → stay on homework view
           if (integrity.overall_status === "extracting") {
             setMode({ kind: "integrity_pending" });
           } else if (
             integrity.overall_status === "awaiting_student"
             || integrity.overall_status === "in_progress"
+            || integrity.overall_status === "complete"
+            || integrity.overall_status === "skipped_unreadable"
           ) {
             setMode({ kind: "integrity_chat" });
           }

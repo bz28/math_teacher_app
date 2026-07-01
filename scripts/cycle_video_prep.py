@@ -24,7 +24,10 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, select, text
 
+from sqlalchemy.orm.attributes import flag_modified
+
 from api.database import get_session_factory
+from api.models.assignment import Submission, SubmissionGrade
 from api.models.integrity_check import (
     IntegrityCheckProblem,
     IntegrityCheckSubmission,
@@ -116,20 +119,20 @@ RENAMES = {
 TURNS = [
     ("agent",
      "Thanks for turning that in, Maya! Quick check on problem 3 — you had "
-     "$2(x-3) = 4x + 8$. Walk me through your very first move and why you "
+     "$3(x-2) = 2x + 9$. Walk me through your very first move and why you "
      "did it."),
     ("student",
-     "I distributed the 2 into the parentheses first, so 2(x - 3) becomes "
-     "2x - 6. You have to multiply both the x and the -3 by the 2, "
+     "I distributed the 3 into the parentheses first, so 3(x - 2) becomes "
+     "3x - 6. You have to multiply both the x and the -2 by the 3, "
      "otherwise the two sides aren't equal anymore."),
     ("agent",
      "Exactly - distributing across *both* terms is the key idea, and "
-     "you said why. Once you had $2x - 6 = 4x + 8$, how did you decide which "
+     "you said why. Once you had $3x - 6 = 2x + 9$, how did you decide which "
      "terms to move where?"),
     ("student",
      "I wanted the x's on one side and the plain numbers on the other, so I "
-     "subtracted 4x from both sides to collect the variables. That's the part "
-     "I rushed - I think I slipped a sign when I carried the 8 across."),
+     "subtracted 2x from both sides to collect the variables. That's the part "
+     "I rushed - I think I slipped a sign when I moved the -6 across."),
     ("agent",
      "That's a really honest read of your own work. Your method is solid "
      "- it was a sign slip on one step, not a misunderstanding. Slowing "
@@ -153,21 +156,26 @@ STRUGGLE_CONCEPTS = [
 ]
 _OUTCOME = {"f": "first_try", "r": "retry", "x": "revealed"}
 
+# Maya's problem-3 work, shown verbatim on the grading receipt AND used
+# as the understanding-check work extraction. The visible steps carry the
+# two real errors the receipt names:
+#   step 3  `3x - 2x = 9 - 6`  → SIGN error (should be 9 + 6)   → -20%
+#   step 4  `x = 4`            → ARITHMETIC (9 - 6 = 3, not 4)  → -7%
+# Correct answer is x = 15; her final answer is x = 4 → 73%.
+MAYA_Q3_STEPS = [
+    {"problem_position": 3, "step_num": 1, "latex": "3(x - 2) = 2x + 9", "plain_english": ""},
+    {"problem_position": 3, "step_num": 2, "latex": "3x - 6 = 2x + 9", "plain_english": ""},
+    {"problem_position": 3, "step_num": 3, "latex": "3x - 2x = 9 - 6", "plain_english": ""},
+    {"problem_position": 3, "step_num": 4, "latex": "x = 4", "plain_english": ""},
+]
+MAYA_Q3_DEDUCTIONS = [
+    {"points_off": 20, "reason": "Sign error moving -6 across", "step_ref": 3},
+    {"points_off": 7, "reason": "Arithmetic: 9 - 6 = 3, not 4", "step_ref": 4},
+]
 MAYA_WORK_EXTRACTION = {
-    "steps": [
-        {"problem_position": 3, "step_num": 1, "latex": "2(x-3) = 4x + 8",
-         "plain_english": ""},
-        {"problem_position": 3, "step_num": 2, "latex": "2x - 6 = 4x + 8",
-         "plain_english": ""},
-        {"problem_position": 3, "step_num": 3, "latex": "2x - 4x = 8 + 6",
-         "plain_english": ""},
-        {"problem_position": 3, "step_num": 4, "latex": "-2x = 14",
-         "plain_english": ""},
-        {"problem_position": 3, "step_num": 5, "latex": "x = -6",
-         "plain_english": ""},
-    ],
+    "steps": MAYA_Q3_STEPS,
     "final_answers": [
-        {"problem_position": 3, "answer_latex": "x = -6", "answer_plain": "x = -6"},
+        {"problem_position": 3, "answer_latex": "x = 4", "answer_plain": "x = 4"},
     ],
     "confidence": 0.9,
 }
@@ -292,7 +300,16 @@ async def main() -> None:
                 acts += 1
         print(f"rebuilt struggle picture: {len(STRUGGLE_CONCEPTS)} concepts, {acts} activities")
 
-        # 3 ── seed Maya's in-progress understanding check ───────────
+        # 3 ── seed Maya's COMPLETED understanding check + verdict ────
+        # Seeded `complete` + `pass` (not `in_progress`): the student
+        # scene plays the flowing chat AND lands on the completion
+        # verdict, and the teacher review shows a RESOLVED green verdict
+        # ("Student understood their own work") instead of a perpetual
+        # "Integrity check running" placeholder. The student page routes
+        # a completed check back into the chat (see the routing fix in
+        # school/student/.../homework/[assignmentId]/page.tsx).
+        teacher_id = (await s.execute(text(
+            "select id from users where email='td_teacher_d592cc@t.com'"))).scalar()
         sub_uuid = uuid.UUID(MAYA_LIN_SUB)
         existing = (await s.execute(
             select(IntegrityCheckSubmission.id)
@@ -308,8 +325,15 @@ async def main() -> None:
 
         check = IntegrityCheckSubmission(
             submission_id=sub_uuid,
-            status="in_progress",
-            disposition=None,
+            status="complete",
+            disposition="pass",
+            headline="Explained her method in her own words",
+            overall_summary=(
+                "Maya walked through distributing 3 across (x − 2) and "
+                "collecting like terms in her own words, and caught that "
+                "her only slip was a sign error — not a misunderstanding."),
+            probe_selection_reason="verified_hardest_correct",
+            resolution="unresolved",
         )
         s.add(check)
         await s.flush()
@@ -317,8 +341,13 @@ async def main() -> None:
             integrity_check_submission_id=check.id,
             bank_item_id=uuid.UUID(MAYA_Q3_BANK),
             sample_position=0,
-            status="pending",
+            status="verdict_submitted",
             student_work_extraction=MAYA_WORK_EXTRACTION,
+            rubric={"paraphrase_originality": "high", "causal_fluency": "high"},
+            ai_reasoning=(
+                "Explained distributing across both terms and why, then "
+                "identified her own sign slip — clear ownership of the method."),
+            selected_reason="verified_hardest_correct",
         ))
         for i, (role, content) in enumerate(TURNS):
             s.add(IntegrityConversationTurn(
@@ -326,8 +355,80 @@ async def main() -> None:
                 ordinal=i, role=role, content=content,
                 seconds_on_turn=None, telemetry=None,
             ))
-        print(f"seeded understanding-check chat ({len(TURNS)} turns) on Maya's "
-              "Linear Equations submission")
+        print(f"seeded COMPLETE understanding-check + pass verdict "
+              f"({len(TURNS)} turns) on Maya's Linear Equations submission")
+
+        # 4 ── the grading receipt: problem 3 = 3(x-2)=2x+9 @ 73% ─────
+        # Answer key + student's shown work + the itemized receipt whose
+        # two named errors line up with the two visible bad steps.
+        q3 = (await s.execute(select(QuestionBankItem).where(
+            QuestionBankItem.id == uuid.UUID(MAYA_Q3_BANK)))).scalar_one()
+        q3.question = r"Solve for x:  $3(x - 2) = 2x + 9$"
+        q3.final_answer = r"$x = 15$"
+
+        sub = (await s.execute(select(Submission).where(
+            Submission.id == sub_uuid))).scalar_one()
+        ext = dict(sub.extraction or {})
+        ext["steps"] = ([st for st in ext.get("steps", [])
+                         if st.get("problem_position") != 3] + MAYA_Q3_STEPS)
+        ext["final_answers"] = ([fa for fa in ext.get("final_answers", [])
+                                 if fa.get("problem_position") != 3]
+                                + [{"problem_position": 3, "answer_latex": "x = 4",
+                                    "answer_plain": "x = 4"}])
+        sub.extraction = ext
+        sub.extraction_confirmed_at = sub.extraction_confirmed_at or now
+        fa = dict(sub.final_answers or {})
+        fa[MAYA_Q3_BANK] = "x = 4"
+        sub.final_answers = fa
+        flag_modified(sub, "extraction")
+        flag_modified(sub, "final_answers")
+
+        grade = (await s.execute(select(SubmissionGrade).where(
+            SubmissionGrade.submission_id == sub_uuid))).scalar_one_or_none()
+        if grade is None:
+            grade = SubmissionGrade(submission_id=sub_uuid)
+            s.add(grade)
+        entry = {
+            "problem_id": MAYA_Q3_BANK, "score_status": "partial",
+            "percent": 73.0, "confidence": 0.9,
+            "feedback": ("Right approach and clean setup — but when you moved "
+                         "the -6 across the equals sign it should become +6 "
+                         "(step 3), and 9 - 6 is 3, not 4 (step 4)."),
+            "deductions": MAYA_Q3_DEDUCTIONS, "student_answer": "x = 4",
+        }
+        grade.breakdown = ([e for e in (grade.breakdown or [])
+                            if e.get("problem_id") != MAYA_Q3_BANK] + [entry])
+        ai = dict(grade.ai_breakdown or {})
+        ai_grade = {
+            "problem_position": 3, "student_answer": "x = 4",
+            "score_status": "partial", "percent": 73.0, "confidence": 0.9,
+            "reasoning": ("Setup and method are correct; sign error moving -6 "
+                          "across in step 3, and an arithmetic slip (9 - 6 = 3, "
+                          "not 4) in step 4."),
+            "student_feedback": ("Right approach — flip the sign of the -6 when "
+                                 "it crosses the equals sign (step 3), and "
+                                 "recheck 9 - 6 in step 4."),
+            "deductions": MAYA_Q3_DEDUCTIONS,
+        }
+        ai["grades"] = ([g for g in ai.get("grades", [])
+                         if g.get("problem_position") != 3] + [ai_grade])
+        grade.ai_breakdown = ai
+        grade.final_score = sum(e["percent"] for e in grade.breakdown) / len(grade.breakdown)
+        grade.ai_score = grade.final_score
+        grade.graded_at = now
+        grade.grade_published_at = None
+        flag_modified(grade, "breakdown")
+        flag_modified(grade, "ai_breakdown")
+        print(f"seeded 73% receipt on problem 3 (class avg {grade.final_score:.0f}%)")
+
+        # 5 ── reset the workshop figure item to its canonical 8-15-17 so
+        #       the scene 3d live reshape starts from a known state and
+        #       any prior on-camera Accept doesn't accumulate.
+        fig = (await s.execute(select(QuestionBankItem).where(
+            QuestionBankItem.id == uuid.UUID("44e22fa0-bafb-4f01-bb4c-514e8a93228d")
+        ))).scalar_one()
+        fig.chat_messages = []
+        flag_modified(fig, "chat_messages")
 
         await s.commit()
     print("prep complete")
