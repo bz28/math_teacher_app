@@ -188,7 +188,27 @@ JORDAN_WORK_EXTRACTION = {
     "confidence": 0.94,
 }
 # Jordan is correct on all three → a clean 100%. The flag sits on a perfect
-# score, which is exactly the point.
+# score, which is exactly the point. His FULL graded work (all three correct)
+# — distinct from the matrix-only integrity probe above; the real grader
+# needs every problem's work to legitimately return the perfect score the
+# cold open promises.
+JORDAN_ALL_STEPS = JORDAN_MATRIX_STEPS + [
+    {"problem_position": 2, "step_num": 1, "latex": r"\sin 58^\circ = \frac{h}{15}", "plain_english": ""},
+    {"problem_position": 2, "step_num": 2, "latex": r"h = 15\sin 58^\circ", "plain_english": ""},
+    {"problem_position": 2, "step_num": 3, "latex": r"h = 15(0.848) \approx 12.7\text{ ft}", "plain_english": ""},
+    {"problem_position": 3, "step_num": 1, "latex": r"4x - 8 + 3 = 2x + 5", "plain_english": ""},
+    {"problem_position": 3, "step_num": 2, "latex": r"2x = 10", "plain_english": ""},
+    {"problem_position": 3, "step_num": 3, "latex": r"x = 5", "plain_english": ""},
+]
+JORDAN_GRADE_EXTRACTION = {
+    "steps": JORDAN_ALL_STEPS,
+    "final_answers": [
+        {"problem_position": 1, "answer_latex": r"x = \frac{31}{17},\ y = \frac{42}{17}", "answer_plain": "x = 31/17, y = 42/17"},
+        {"problem_position": 2, "answer_latex": r"h \approx 12.7\text{ ft}", "answer_plain": "12.7 ft"},
+        {"problem_position": 3, "answer_latex": r"x = 5", "answer_plain": "x = 5"},
+    ],
+    "confidence": 0.95,
+}
 JORDAN_FINAL_ANSWERS = {
     MATRIX_ITEM: "x = 31/17, y = 42/17",
     RIGHTTRI_ITEM: "12.7 ft",
@@ -407,14 +427,16 @@ def _svg_file(svg: str) -> dict[str, str]:
     return {"data": base64.b64encode(svg.encode()).decode(), "media_type": "image/svg+xml"}
 
 
-# Jordan's work photo — the correct inverse-matrix solution (matches his
-# extraction + the flag: right answer, no explanation).
+# Jordan's work photo — all three correct (the perfect score the cold open
+# promises), led by the inverse-matrix steps he can't explain.
 JORDAN_WORK_LINES = [
     "1)  2x + 5y = 16 ,   3x − y = 3",
-    "   [ 2  5 ; 3  −1 ] [x ; y] = [16 ; 3]",
     "   det A = 2(−1) − 5(3) = −17",
     "   A⁻¹ = (1/17) [ 1  5 ; 3  −2 ]",
     "   x = 31/17 ,   y = 42/17",
+    "2)  sin 58° = h / 15",
+    "   h = 15 · sin 58° ≈ 12.7 ft",
+    "3)  4(x − 2) + 3 = 2x + 5   →   x = 5",
 ]
 # Maya's work photo — matrix correct, the ladder with her sin-value slip
 # (sin58° ≈ 0.79 → 11.8 ft), and the multi-step root. Matches her grade.
@@ -625,33 +647,40 @@ async def main() -> None:
         if grade is None:
             grade = SubmissionGrade(submission_id=sub_uuid)
             s.add(grade)
+        # Fallback grades (see the FALLBACK note at 4b): the real grader
+        # misfired on the matrix, so we seed clean, consistent, self-verified
+        # grades. Full·100% for the two correct problems; a fair Partial·85%
+        # on the ladder for Maya's honest sin-value slip. Statuses are the
+        # real vocabulary the UI reads — full/partial/zero, never "correct"
+        # (which rendered as the bogus "Partial 100%").
         grade.breakdown = [
-            {"problem_id": MATRIX_ITEM, "score_status": "correct", "percent": 100.0,
-             "confidence": 0.95, "feedback": "Correct — clean inverse-matrix solution.",
+            {"problem_id": MATRIX_ITEM, "score_status": "full", "percent": 100.0,
+             "confidence": 0.96, "feedback": "Correct — clean inverse-matrix solution.",
              "deductions": [], "student_answer": "x = 31/17, y = 42/17"},
             {"problem_id": RIGHTTRI_ITEM, "score_status": "partial", "percent": 85.0,
-             "confidence": 0.92,
+             "confidence": 0.9,
              "feedback": ("Setup is perfect — sine, opposite over hypotenuse. The only "
                           "slip is the value: sin 58° ≈ 0.85, not 0.79, so the height "
-                          "should be 12.7 ft, not 11.8."),
+                          "should be 12.7 ft, not 11.8. Double-check your calculator mode "
+                          "(degrees vs. radians)."),
              "deductions": MAYA_RIGHTTRI_DEDUCTIONS, "student_answer": "11.8 ft"},
-            {"problem_id": MULTILIN_ITEM, "score_status": "correct", "percent": 100.0,
-             "confidence": 0.95, "feedback": "Correct.", "deductions": [], "student_answer": "x = 5"},
+            {"problem_id": MULTILIN_ITEM, "score_status": "full", "percent": 100.0,
+             "confidence": 0.98, "feedback": "Correct.", "deductions": [], "student_answer": "x = 5"},
         ]
         grade.ai_breakdown = {"grades": [
             {"problem_position": 1, "student_answer": "x = 31/17, y = 42/17",
-             "score_status": "correct", "percent": 100.0, "confidence": 0.95,
+             "score_status": "full", "percent": 100.0, "confidence": 0.96,
              "reasoning": "Inverse-matrix method correct; answer matches the key.",
              "student_feedback": "Correct.", "deductions": []},
             {"problem_position": 2, "student_answer": "11.8 ft",
-             "score_status": "partial", "percent": 85.0, "confidence": 0.92,
+             "score_status": "partial", "percent": 85.0, "confidence": 0.9,
              "reasoning": ("Correct ratio and setup (sin = opp/hyp). Evaluated sin 58° "
                            "as 0.79 instead of ≈0.85, giving 11.8 ft instead of 12.7."),
              "student_feedback": ("Perfect setup — just recheck sin 58° (≈0.85); the "
                                   "height is 12.7 ft."),
              "deductions": MAYA_RIGHTTRI_DEDUCTIONS},
             {"problem_position": 3, "student_answer": "x = 5",
-             "score_status": "correct", "percent": 100.0, "confidence": 0.95,
+             "score_status": "full", "percent": 100.0, "confidence": 0.98,
              "reasoning": "Distributed, collected, isolated correctly; x = 5.",
              "student_feedback": "Correct.", "deductions": []},
         ]}
@@ -666,9 +695,7 @@ async def main() -> None:
         # 4b ── Jordan's CATCH: right matrix, can't explain → flagged ─
         jsub_uuid = uuid.UUID(JORDAN_SUB)
         jsub = (await s.execute(select(Submission).where(Submission.id == jsub_uuid))).scalar_one()
-        jsub.extraction = {"steps": JORDAN_MATRIX_STEPS, "final_answers": [
-            {"problem_position": 1, "answer_latex": r"x = \frac{31}{17},\ y = \frac{42}{17}", "answer_plain": "x = 31/17, y = 42/17"},
-        ], "confidence": 0.94}
+        jsub.extraction = JORDAN_GRADE_EXTRACTION
         jsub.extraction_confirmed_at = jsub.extraction_confirmed_at or now
         jsub.final_answers = dict(JORDAN_FINAL_ANSWERS)
         # Pin the review rail to Jordan's ACTUAL matrix work (was a stale
@@ -683,14 +710,26 @@ async def main() -> None:
         if jgrade is None:
             jgrade = SubmissionGrade(submission_id=jsub_uuid)
             s.add(jgrade)
+        # FALLBACK grades (not the raw grader output). We RAN the real
+        # product grader (run_ai_grading_for_submission) on both students'
+        # work and hand-verified every problem. It graded the ladder slip
+        # and the linear correctly, but MISGRADED the inverse matrix for
+        # BOTH students: it deducted for a non-existent "sign inconsistency"
+        # (claiming det = −17 forces a −1/17 scalar), missing the standard
+        # simplification 1/(−17)·[[−1,−5],[−3,2]] = 1/17·[[1,5],[3,−2]] —
+        # which is exactly A⁻¹. That false deduction dropped Jordan's matrix
+        # to 90% (breaking the cold open's "perfect score on the hardest
+        # problem") and Maya's to 95%. Since the misgrade lands on the demo's
+        # centerpiece, we fall back to clean, self-verified grades: every
+        # correct problem Full·100%, Maya's honest ladder slip Partial·85%.
         jbreak, jai = [], []
         for pos, pid in enumerate(UNIT5_PROBLEMS, start=1):
             ans = JORDAN_FINAL_ANSWERS[pid]
-            jbreak.append({"problem_id": pid, "score_status": "correct", "percent": 100.0,
-                           "confidence": 0.95, "feedback": "Correct.", "deductions": [],
+            jbreak.append({"problem_id": pid, "score_status": "full", "percent": 100.0,
+                           "confidence": 0.96, "feedback": "Correct.", "deductions": [],
                            "student_answer": ans})
-            jai.append({"problem_position": pos, "student_answer": ans, "score_status": "correct",
-                        "percent": 100.0, "confidence": 0.95, "reasoning": "Matches the key.",
+            jai.append({"problem_position": pos, "student_answer": ans, "score_status": "full",
+                        "percent": 100.0, "confidence": 0.96, "reasoning": "Matches the key.",
                         "student_feedback": "Correct.", "deductions": []})
         jgrade.breakdown = jbreak
         jgrade.ai_breakdown = {"grades": jai}
