@@ -21,7 +21,7 @@ WORK="${WORK_DIR:-/tmp/cycle-build}"
 OUT_MP4="${OUT_MP4:-/tmp/veradic-cycle.mp4}"
 FRAMES_DIR="${FRAMES_DIR:-/tmp/cycle-frames}"
 FPS=30
-CARD_SEC=2.4
+CARD_SEC=2.0
 XF=0.5                  # cross-dissolve duration
 PUSH_SECS=5             # seconds for a push-in to reach its target, then hold
 
@@ -74,7 +74,8 @@ norm_scene () {  # $1 webm  $2 start  $3 dur(or "auto")  $4 out  $5 scene-id  $6
   local dur="$3"
   if [ "$dur" = "auto" ]; then
     local raw; raw=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$1")
-    dur=$(echo "$raw - $start - 0.18" | bc)
+    # Trim the post-caption hold at the tail (kills dead air, tightens pace).
+    dur=$(echo "$raw - $start - 1.0" | bc)
   fi
   local target; target=$(push_for "$5")
   # Pre-upscale to the push target so text stays crisp at full zoom, then

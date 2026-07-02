@@ -286,26 +286,26 @@ const CLIPS = {
   //     type a focus, and point it at the worksheet. Then veil-cut to the
   //     three problems the focus pulled — and land the focus-control beat.
   async '3-generate'(page) {
-    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=homework`, { zoom: 1.13, waitMs: 1200 });
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=homework`, { zoom: 1.13, waitMs: 900 });
     await cap(page, 'Now build the homework — from that same sheet.');
-    await sleep(page, 700);
+    await sleep(page, 500);
     await go(page, page.getByRole('button', { name: /new homework/i }).first());
     const dialog = page.getByRole('dialog', { name: /new homework/i });
     await dialog.waitFor({ state: 'visible', timeout: 9000 }).catch(() => {});
-    await sleep(page, 700);
+    await sleep(page, 450);
 
     // Step 1 · Details.
     await cap(page, 'Name it. Pick the unit.');
     const title = dialog.locator('input[placeholder*="Quadratics"], input[type="text"]').first();
     if (await title.count()) {
       await go(page, title, { click: true });
-      await title.pressSequentially('Unit 5 Review', { delay: 34 }).catch(() => {});
+      await title.pressSequentially('Unit 5 Review', { delay: 20 }).catch(() => {});
     }
-    await sleep(page, 400);
+    await sleep(page, 250);
     await go(page, dialog.getByRole('button', { name: /^✓?\s*Linear Equations$/ }).first(), { click: true }).catch(() => {});
-    await sleep(page, 600);
+    await sleep(page, 350);
     await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});
-    await sleep(page, 500);
+    await sleep(page, 350);
 
     // Step 2 · Problems — count 3, TYPE the focus, pick the worksheet source.
     await cap(page, 'How many? Just three today.');
@@ -313,42 +313,42 @@ const CLIPS = {
     if (await countInput.count()) {
       await go(page, countInput, { click: true });
       await countInput.fill('3').catch(() => {});
-      await sleep(page, 900);
+      await sleep(page, 550);
     }
-    await cap(page, 'Then aim it — matrices, right-triangle trig, multi-step.');
+    await cap(page, 'Then aim it — matrices, trig, multi-step.');
     const focus = dialog.locator('input[placeholder*="word problems"], textarea[placeholder*="word problems"]').first();
     if (await focus.count()) {
       await go(page, focus, { click: true });
-      await focus.pressSequentially('inverse matrices, right-triangle trig, and multi-step equations', { delay: 24 }).catch(() => {});
-      await sleep(page, 900);
-    } else { await sleep(page, 800); }
+      await focus.pressSequentially('inverse matrices, right-triangle trig, multi-step equations', { delay: 16 }).catch(() => {});
+      await sleep(page, 500);
+    } else { await sleep(page, 500); }
     await cap(page, 'And build from your own worksheet — one click.');
     const srcRow = dialog.getByText('worksheet.png', { exact: true }).first();
     await go(page, srcRow, { click: true }).catch(() => {});
-    await sleep(page, 1500);
+    await sleep(page, 850);
     await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});
-    await sleep(page, 500);
+    await sleep(page, 350);
 
     // Step 3 · Grading (sensible defaults) → Step 4 · Review → create.
     await cap(page, 'Grading rubric — sensible defaults, already in.');
-    await sleep(page, 1300);
+    await sleep(page, 850);
     await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});
-    await sleep(page, 500);
+    await sleep(page, 350);
     await cap(page, 'One last look, then build.');
-    await sleep(page, 1500);
+    await sleep(page, 950);
     await go(page, dialog.getByRole('button', { name: /Create & generate/i }).first(), { click: false }).catch(() => {});
-    await sleep(page, 700);
-    await capClear(page); await sleep(page, 300);
+    await sleep(page, 450);
+    await capClear(page); await sleep(page, 250);
 
     // Reveal the three problems the focus pulled (land on a real line).
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}`,
-      { zoom: 1.15, waitMs: 2200, anchor: 'text=/inverse matrix/i' });
-    await page.mouse.wheel(0, 260); await sleep(page, 700);
+      { zoom: 1.15, waitMs: 1500, anchor: 'text=/inverse matrix/i' });
+    await page.mouse.wheel(0, 260); await sleep(page, 500);
     await cap(page, 'Three problems — exactly the topics you named.');
-    await sleep(page, 2400);
-    await cap(page, 'The sheet covers the whole unit. The focus pulled just these — no quadratics, no stats.');
-    await sleep(page, 3200);
-    await capClear(page); await sleep(page, 400);
+    await sleep(page, 1900);
+    await cap(page, 'The whole unit’s on the sheet — the focus pulled just these. No quadratics, no stats.');
+    await sleep(page, 3000);
+    await capClear(page); await sleep(page, 300);
   },
 
   // 3b · TEACHER — open the ladder problem: a self-checked figure AND a
@@ -375,22 +375,18 @@ const CLIPS = {
   //      is pre-warmed off-camera → lands instantly, no thinking spinner.)
   async '3-workshop'(page) {
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}`,
-      { zoom: 1.05, waitMs: 1400, anchor: 'text=/inverse matrix/i' });
+      { zoom: 1.05, waitMs: 1200, anchor: 'text=/inverse matrix/i' });
     await cap(page, 'Want to change a problem? Just say so.');
-    await sleep(page, 900);
+    await sleep(page, 700);
     await go(page, page.getByText(/inverse matrix/i).first(), { click: true }).catch(() => {});
     await page.getByRole('button', { name: /^Accept$/ }).first().waitFor({ state: 'visible', timeout: 9000 }).catch(() => {});
-    await sleep(page, 1400);
+    await sleep(page, 1200);
     await cap(page, '“Make it a system with no solution.”');
-    await sleep(page, 2600);
-    await page.mouse.wheel(0, 300); await sleep(page, 1800);
+    await sleep(page, 2300);
+    await page.mouse.wheel(0, 300); await sleep(page, 1400);
     await cap(page, 'It rewrites the system — and re-checks: no solution.');
-    await sleep(page, 3000);
-    await go(page, page.getByText(/Show solution/i).first(), { click: true }).catch(() => {});
-    await sleep(page, 1000);
-    await cap(page, 'The whole answer key re-derives itself.');
-    await page.mouse.wheel(0, 320); await sleep(page, 2600);
-    await capClear(page); await sleep(page, 500);
+    await sleep(page, 2800);
+    await capClear(page); await sleep(page, 400);
   },
 
   // 4 · STUDENT (Aisha) — her screen: snap the work, turn it in.
