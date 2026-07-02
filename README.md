@@ -1,285 +1,78 @@
-# Veradic AI
+# Veradic
 
-An AI-powered tutoring app that teaches students how to solve math and chemistry problems step-by-step through guided problem-solving, not by giving answers. Built with React Native (mobile), Next.js (web), and FastAPI (backend).
+Veradic is an AI math-education **school portal**. A student photographs their handwritten homework; the platform reads the work, grades every problem with a written "receipt," runs a short conversational understanding-check to catch the student who got the right answer without really understanding, and hands the teacher a class they can see at a glance — graded, with the few students who need attention surfaced first. It serves three audiences from one codebase: **students** (school-enrolled and independent learners), **teachers** (courses, assignments, grading, analytics), and **schools/districts** (the institutions teachers belong to). Alongside the class workflow it keeps a self-study loop — Learn, Practice, and Mock-test — for individual learners.
 
-## What It Does
+> This README is a map of the codebase. Product and customer context lives in [`docs/product/overview.md`](docs/product/overview.md).
 
-Students snap a photo of their homework or type a problem. The app breaks it into steps and guides them through each one with an interactive AI tutor they can chat with at any point. After learning, students can generate unlimited similar problems to practice, or take timed mock exams.
+## The parts
 
-## App Modes
+### Web — `web/` (Next.js, veradicai.com)
+The primary product surface **and** the marketing site, one Next.js 16 App Router app (React 19, TypeScript, Tailwind v4, Zustand, Framer Motion, KaTeX).
+- **Public / marketing**: landing (`/`), `/students`, `/for-districts`, `/demo` (request-a-demo), `/subjects/{math,physics,chemistry}`, and legal pages under `(legal)/` (`/privacy`, `/terms`, `/support`, `/trust`).
+- **Auth**: `/login`, `/register`, `/set-password`, `/invite` (section join).
+- **Student app** (`(app)/`): `/home`, self-study `/learn` + `/practice` + `/mock-test` + `/review` + `/history`, and the classroom surface under `/school/student/*` (courses, homework, per-assignment practice, grades, practice-history).
+- **Teacher portal**: `/school/teacher/*` — courses, units, sections, assignments/homework, per-section grade review, per-student drill-down.
+- **Billing**: `/pricing` (Stripe checkout).
 
-### Learn Mode
-- AI breaks problems into ordered solution steps
-- Students work through each step with guidance
-- Chat with the AI tutor anytime — ask questions about any step
-- After completing a problem, practice similar ones or flag for review
+### Mobile — `mobile/` (Expo / React Native)
+The student-facing native app (Expo 54, React Native 0.81, TypeScript, Zustand, KaTeX via WebView). App name/slug **Veradic**. Two tab sets chosen at login:
+- **Personal learner**: Solve (photo → extract → learn), History, Review (weak spots), Account.
+- **School student**: Home, Grades, Study/Practice, Account — plus Join-class, Homework, and the Integrity understanding-check chat.
+- IAP via RevenueCat; generates its typed API client from `openapi.json` (`npm run gen:api`).
 
-### Mock Test Mode
-- Input problems manually, scan a worksheet, or generate similar questions from a seed problem
-- Timed or untimed exam simulation with free navigation between questions
-- Submit handwritten work photos for AI diagnosis
-- Review results and learn flagged problems in Learn mode
+### Demo — `demo/` (standalone Vite pitch site, demo.veradicai.com)
+A zero-auth, zero-API static React SPA (Vite 7, React Router) for sales/founder presentations. A front-door hub (`/`) plus a full-screen **present** mode (`/present`) with the four flagship stories, in pitch order: **integrity** (understanding), **grading**, **generation**, **teacher-day**. Content is bundled JSON captured from the live product / evaluation harness — no live calls.
 
-## Features
+### Admin dashboard — `dashboard/` (Vite / React ops console)
+Internal ops + sales + AI-quality console (Vite 7, React Router, Recharts). Default landing is **Leads**. Areas: Leads / Lead detail, Schools / School detail, Independent students & teachers, Teacher detail, Admins (invite), Audit logs, and diagnostics — **LLM calls**, **Harness runs**, **Quality**, **Grading quality**, **Golden set**, and per-submission trace. Its own admin JWT auth.
 
-- **Photo scanning** — Take a photo or pick from gallery; AI extracts multiple problems automatically
-- **Problem queue** — Queue up to 10 problems from photos or text input
-- **Generate similar problems** — One problem generates unlimited practice variations
-- **Work submission** — Attach photos of handwritten work for AI diagnosis and feedback
-- **Interactive AI tutor** — Ask questions about any step during a session
-- **Step-by-step learning** — Problems decomposed into teachable steps with hints
-- **Mock exams** — Timed tests with configurable settings
-- **Session history** — Review past sessions, resume unfinished ones
-- **Multi-subject** — Mathematics and Chemistry
+### Backend — `api/` (FastAPI + Postgres)
+FastAPI (Python 3.12, SQLAlchemy 2 async, Alembic, asyncpg) serving everything under `/v1`. Anthropic Claude for all AI. Auth is JWT + refresh-token rotation (bcrypt, email-OTP MFA, brute-force lockout).
+- **Data model** (`api/models/`): users (roles: student / teacher / admin); schools (institutional vs individual/indie-teacher) → courses → units → sections → enrollments/invites; assignments → submissions → grades; integrity-check submissions/problems/conversation-turns; question bank + generation jobs; self-study sessions; practice activity; billing (Stripe events, subscriptions); and ops tables (contact leads, lead notes/meetings, LLM calls, harness runs, quality scores, audit logs).
+- **Endpoint groups** (`api/routes/`, mounted in `api/main.py`): `auth`, `session` (learn/practice/mock-test), `practice`, `image` (extraction), `work` (work diagnosis), `integrity_check`, `weak_spots`, `teacher/*` (courses, sections, units, assignments, grades, documents, question-bank, practice-activity, preview, visibility), `school_student_practice`, `billing` + `webhook`, `contact`, and `admin/*` (leads, schools, users, overview, quality, grading-quality, harness, llm) + `admin_audit_logs`.
+- **AI core** (`api/core/`): step decomposition, tutor, grading (`grading_ai`), integrity (`integrity_ai` + `integrity_pipeline`), document vision + image extraction, assignment/question-bank generation, an LLM judge, subjects, a geometry figure engine, cost tracking + LLM logging.
 
-## Tech Stack
+### Harness & improver — `tests/harness/`
+An autonomous browser harness (Playwright + cached Chromium, token injection, isolated seed, cassette `$0` replay, cost tracker) that drives the **real running app** to test AI-generated surfaces (figures, solutions, grading). On top of it sits the **autonomous improver**: it scans the app, produces ranked/deduped improvement proposals, and — on approval — implements, reviews, and opens a PR. The route catalog it walks lives in `tests/harness/improver/surfaces.py`. See [`tests/harness/improver/README.md`](tests/harness/improver/README.md).
 
-| Layer | Technology |
-|-------|-----------|
-| Web | Next.js 16 (App Router), TypeScript, Tailwind CSS v4, Zustand, Framer Motion |
-| Mobile | React Native (Expo 54), TypeScript, Zustand |
-| Backend | FastAPI (Python), SQLAlchemy, Alembic |
-| AI | Claude API (Anthropic) |
-| Database | PostgreSQL |
-| Auth | JWT + refresh token rotation, bcrypt |
-| Monitoring | Sentry (backend + mobile, optional) |
+## Run it
 
-## Project Structure
-
-```
-web/                    # Next.js website (veradicai.com)
-  src/
-    app/                # App Router pages
-      (app)/            # Authenticated app routes (home, learn, mock-test, history)
-      (marketing)/      # Public pages
-      login/            # Login page
-      register/         # Registration page
-    components/         # UI components
-      ui/               # Primitives (Button, Card, Input, Modal, Badge, Skeleton)
-      landing/          # Landing page sections
-      auth/             # Auth provider and guard
-      shared/           # App layout, image upload, work diagnosis
-    lib/                # API client, utilities
-    stores/             # Zustand stores (auth, session)
-    styles/             # Design tokens
-
-mobile/                 # React Native app (Expo)
-  src/
-    components/         # Screens and UI components
-    services/api.ts     # Backend API client
-    stores/             # Zustand state management
-    hooks/              # Custom hooks (image extraction)
-    theme.ts            # Design system
-
-api/                    # FastAPI backend
-  core/                 # Business logic
-  routes/               # API endpoints
-  models/               # SQLAlchemy models
-  schemas/              # Pydantic request/response schemas
-  alembic/              # Database migrations
-  middleware/           # Auth, logging, rate limiting
-
-dashboard/              # Admin web dashboard (React + Vite)
-tests/                  # Backend test suite
-```
-
-## Deployment
-
-### Architecture
-
-```
-                    ┌─────────────────────┐
-  veradicai.com ──> │   Vercel (Web)      │
-                    │   Next.js 16        │
-                    └────────┬────────────┘
-                             │ API calls
-                             v
-                    ┌─────────────────────┐     ┌──────────────┐
-                    │   Railway (API)     │────>│  Railway      │
-                    │   FastAPI + Python  │     │  PostgreSQL   │
-                    └─────────────────────┘     └──────────────┘
-                             ^
-                             │ API calls
-                    ┌────────┴────────────┐
-                    │   Expo (Mobile)     │
-                    │   React Native      │
-                    └─────────────────────┘
-```
-
-### Production URLs
-
-| Service | URL |
-|---------|-----|
-| Website | https://math-teacher-app-eight.vercel.app (custom domain: veradicai.com) |
-| Backend API | https://mathteacherapp-production.up.railway.app/v1 |
-| Database | Railway PostgreSQL (internal) |
-
-### Website (Vercel)
-
-The Next.js web app is deployed on Vercel with automatic deploys from `main`.
-
-**Setup:**
-1. Import repo on [vercel.com/new](https://vercel.com/new)
-2. Set **Root Directory** to `web`
-3. Framework is auto-detected as Next.js
-4. Add environment variables:
-   - `NEXT_PUBLIC_API_URL` = `https://mathteacherapp-production.up.railway.app/v1`
-   - `NEXT_PUBLIC_SITE_URL` = `https://veradicai.com`
-5. Deploy
-
-**Important:** `NEXT_PUBLIC_` env vars are baked in at build time. If you change them, you must redeploy (with build cache disabled) for the change to take effect.
-
-**Custom domain:** In Vercel project Settings > Domains, add `veradicai.com`. Then add the DNS records Vercel provides at your domain registrar (Spaceship).
-
-### Backend API (Railway)
-
-The FastAPI backend runs on Railway with automatic deploys from `main`.
-
-**Setup:**
-1. Create a new project on [railway.com](https://railway.com)
-2. Add a **PostgreSQL** database to the project
-3. Add a **GitHub service** connected to this repo
-4. In the service **Settings**:
-   - **Build Command:** `pip install -e "."`
-   - **Start Command:** `pip install -e "." && python -m alembic upgrade head && python -m uvicorn api.main:app --host 0.0.0.0 --port $PORT`
-   - (The start command re-installs dependencies because Railway's build and deploy environments are separate)
-5. In the service **Variables**, add:
-
-| Variable | Value | Description |
-|----------|-------|-------------|
-| `DATABASE_URL` | `postgresql+asyncpg://...` | Railway Postgres URL with `+asyncpg` prefix |
-| `JWT_SECRET` | random string | Secret for signing auth tokens |
-| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | `15` | Access token lifetime |
-| `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Refresh token lifetime |
-| `CLAUDE_API_KEY` | `sk-ant-...` | Anthropic API key |
-| `APP_ENV` | `production` | Environment name |
-| `LOG_LEVEL` | `INFO` | Logging level |
-| `SENTRY_DSN` | (empty) | Sentry DSN, leave empty to disable |
-| `DAILY_COST_LIMIT_USD` | `50.0` | Daily LLM spend alert threshold |
-| `CORS_ORIGINS` | `["https://math-teacher-app-eight.vercel.app","https://veradicai.com","http://localhost:3000"]` | Allowed origins for CORS |
-
-**Important:** The `DATABASE_URL` from Railway uses `postgresql://` but this app requires `postgresql+asyncpg://`. When copying the URL from the Postgres service, change the prefix.
-
-6. Generate a public domain in Settings > Networking
-
-### CORS
-
-The backend must allow requests from all frontend origins. Update the `CORS_ORIGINS` variable on Railway when adding new domains:
-- `https://veradicai.com` — production website
-- `https://math-teacher-app-eight.vercel.app` — Vercel deployment
-- `http://localhost:3000` — local web development
-- `http://localhost:8081` — local mobile development
-
-### Mobile (Expo)
-
-Mobile builds are managed through Expo EAS. The mobile app connects to the same backend API.
-
-## Local Development
-
-### Prerequisites
-- Node.js 20+
-- Python 3.12+
-- PostgreSQL (or Docker)
-- pnpm (for web)
-
-### Backend
+Prerequisites: Python 3.12+, Node 20+, PostgreSQL 16 (or Docker), and `pnpm` for `web/` (npm for mobile/demo/dashboard). Full detail in [`DEVELOPMENT.md`](DEVELOPMENT.md).
 
 ```bash
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
+# Backend (FastAPI) — http://localhost:8000  (docs at /docs)
+python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
+cp .env.example .env            # set CLAUDE_API_KEY, DATABASE_URL, JWT_SECRET
+docker compose -f infra/docker-compose.yml up -d db   # or your own Postgres
+alembic upgrade head
+uvicorn api.main:app --reload --port 8000
 
-# Copy environment variables
-cp .env.example .env
-# Edit .env with your database URL, Claude API key, etc.
+# Web (Next.js) — http://localhost:3000
+cd web && pnpm install && pnpm dev
 
-# Start PostgreSQL (if using Docker)
-docker compose up -d postgres
+# Mobile (Expo) — http://localhost:8081 / simulator
+cd mobile && npm install && npm start      # npm run ios | android | web
 
-# Run database migrations
-python -m alembic upgrade head
+# Demo (Vite) — http://localhost:4173 (preview) / 5173 (dev)
+cd demo && npm install && npm run dev
 
-# Start the server
-python -m uvicorn api.main:app --reload --port 8000
+# Admin dashboard (Vite) — http://localhost:5173
+cd dashboard && npm install && npm run dev   # set VITE_API_URL=http://localhost:8000/v1
 ```
 
-### Web
+Tests & checks: `pytest tests/ -m "not integration"` (unit), `ruff check api/ tests/`, `mypy api/`. AI-surface harness: `python -m tests.harness for-diff` (replay is `$0`).
 
-```bash
-cd web
-pnpm install
-pnpm dev
-# Opens at http://localhost:3000
-# API defaults to http://localhost:8000/v1
+## Architecture
 
-# To point at production backend instead:
-NEXT_PUBLIC_API_URL=https://mathteacherapp-production.up.railway.app/v1 pnpm dev
+```
+  Students ──▶ mobile/ (Expo)  ─┐
+              web/ (Next.js) ───┼──▶  api/ (FastAPI, /v1)  ──▶  PostgreSQL
+  Teachers ──▶ web/ (Next.js) ──┘            │
+                                             ├──▶  Anthropic Claude  (grading, integrity,
+  Ops/sales ─▶ dashboard/ (Vite) ────────────┘        tutoring, generation, judge)
+                                             ├──▶  Stripe (web) / RevenueCat (mobile)  — billing
+  Sales ─────▶ demo/ (Vite SPA, no API) ──▶ bundled JSON (self-contained)
 ```
 
-### Mobile
-
-```bash
-cd mobile
-npm install
-npx expo start
-```
-
-### Running Tests
-
-```bash
-# Backend tests
-pytest tests/ -v -m "not integration"
-
-# Web build + lint check
-cd web && pnpm build && pnpm lint
-
-# Mobile type check
-cd mobile && npx tsc --noEmit
-```
-
-### Running Migrations
-
-```bash
-# Apply all pending migrations
-python -m alembic upgrade head
-
-# Create a new migration after model changes
-python -m alembic revision --autogenerate -m "description of change"
-```
-
-## Environment Variables
-
-See `.env.example` for all required variables. Key ones:
-
-| Variable | Description |
-|----------|------------|
-| `DATABASE_URL` | PostgreSQL connection string (must use `+asyncpg` driver) |
-| `CLAUDE_API_KEY` | Anthropic API key for AI features |
-| `JWT_SECRET` | Random secret for signing auth tokens |
-| `SENTRY_DSN` | Sentry error tracking (optional, leave empty to disable) |
-| `APP_ENV` | `development` or `production` |
-| `CORS_ORIGINS` | JSON array of allowed frontend origins |
-
-## API Overview
-
-All routes are prefixed with `/v1/`.
-
-| Endpoint | Description |
-|----------|------------|
-| `POST /auth/register` | Register (email, password, name, grade) |
-| `POST /auth/login` | Login |
-| `POST /auth/refresh` | Refresh access token |
-| `GET /auth/me` | Current user info |
-| `POST /session` | Create tutoring session |
-| `POST /session/{id}/respond` | Submit answer or ask question |
-| `GET /session/history` | List past sessions |
-| `POST /session/{id}/similar` | Generate a similar problem |
-| `POST /session/mock-test` | Create mock test session |
-| `POST /session/mock-test/{id}/complete` | Submit mock test results |
-| `POST /practice/generate` | Generate similar practice problems |
-| `POST /practice/check` | Check a practice answer |
-| `POST /image/extract` | Extract problems from photo |
-| `POST /work/submit` | Submit work photo for diagnosis |
+**Deploy targets:** the web app targets Vercel and the API + Postgres target Railway per the historical deployment notes and the `veradicai.com` URLs baked into `api/config.py`. The repo itself only contains a local Docker stack (`infra/docker-compose.yml` + `infra/Dockerfile`); the exact hosting for web/API/demo/dashboard is **not fully verifiable from code and should be confirmed against the live infrastructure.**
