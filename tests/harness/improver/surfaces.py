@@ -3,6 +3,7 @@
 Routes mirror the actual file-based routers:
   web   → web/src/app/**            (Next.js, default :3000)
   admin → dashboard/src/App.tsx     (Vite/React, default :5173)
+  demo  → demo/src/App.tsx          (Vite/React SPA, zero auth, default :4173)
   mobile_web → the Expo web build   (react-native-web, default :8081)
 
 `{course_id}` / `{assignment_id}` / `{student_id}` placeholders are filled from
@@ -82,16 +83,30 @@ _ADMIN = [
     Surface("admin.llm_calls", "admin", "/llm-calls", "admin", "LLM calls"),
 ]
 
+# --- demo (standalone public Vite SPA, zero auth) -------------------------
+# demo/src/App.tsx: a react-router BrowserRouter showcase, no auth, no API. All
+# routes are public and served by `vite preview` (history-fallback → index.html
+# handles the deep client-side routes below).
+_DEMO = [
+    Surface("demo.hub", "demo", "/", "public", "Demo hub"),
+    Surface("demo.present", "demo", "/present", "public", "Present overview"),
+    Surface("demo.present_integrity", "demo", "/present/integrity", "public", "Present: integrity"),
+    Surface("demo.present_grading", "demo", "/present/grading", "public", "Present: grading"),
+    Surface("demo.present_generation", "demo", "/present/generation", "public", "Present: generation"),
+    Surface("demo.present_teacher_day", "demo", "/present/teacher-day", "public", "Present: teacher day"),
+]
+
 # --- mobile (Expo web build) — needs Expo token key -----------------------
 _MOBILE_WEB = [
     Surface("mobile.auth", "mobile_web", "/", "public", "Mobile auth/onboarding"),
     Surface("mobile.solve", "mobile_web", "/", "student", "Mobile solve tab"),
 ]
 
-# Admin sits right after the public pages so a modest surface cap (e.g. 17 =
-# 12 public + 5 admin) covers both without the authed web app crowding it out.
+# Admin + demo sit right after the public pages so a modest surface cap (e.g.
+# 23 = 12 public + 5 admin + 6 demo) covers all three without the authed web app
+# crowding them out.
 CATALOG: list[Surface] = [
-    *_WEB_PUBLIC, *_ADMIN, *_WEB_STUDENT, *_WEB_TEACHER, *_MOBILE_WEB,
+    *_WEB_PUBLIC, *_ADMIN, *_DEMO, *_WEB_STUDENT, *_WEB_TEACHER, *_MOBILE_WEB,
 ]
 
 # Apps with working auth + base-url plumbing today. mobile_web joins once its

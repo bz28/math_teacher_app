@@ -17,8 +17,8 @@ on:
   workflow_dispatch: # manual trigger for testing / on-demand scans
     inputs:
       max_surfaces:
-        description: "Cap surfaces (0 = all); 17 = 12 public web + 5 admin"
-        default: "17"
+        description: "Cap surfaces (0 = all); 23 = 12 public web + 5 admin + 6 demo"
+        default: "23"
 
 permissions:
   contents: write # push the improver/state branch
@@ -42,6 +42,7 @@ jobs:
       HARNESS_API_BASE: http://localhost:8000/v1
       HARNESS_WEB_BASE: http://localhost:3000
       HARNESS_ADMIN_BASE: http://localhost:5173
+      HARNESS_DEMO_BASE: http://127.0.0.1:4173
       IMPROVER_STATE_DIR: ${{ github.workspace }}/_improver_state
       NEXT_PUBLIC_API_URL: http://localhost:8000/v1
     services:
@@ -96,10 +97,23 @@ jobs:
           npm run build                       # VITE_API_URL defaults to :8000/v1, which matches
           (npm run preview -- --port 5173 --host 127.0.0.1 &) # served at :5173
 
+      # Best-effort, same contract as the admin build: the demo is a standalone
+      # zero-auth Vite SPA (no API/db). `vite preview` history-falls-back to
+      # index.html, so the deep client-side routes (/present/integrity, …) serve
+      # fine. A demo build/boot failure just records per-surface errors — the web
+      # scan continues.
+      - name: Build + serve the demo app
+        working-directory: demo
+        continue-on-error: true
+        run: |
+          npm ci
+          npm run build
+          (npm run preview -- --port 4173 --host 127.0.0.1 &) # served at :4173
+
       - name: Start the API (harness DB, cassette mode)
         run: (python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --log-level warning &)
 
-      - name: Wait for API + web (dashboard best-effort)
+      - name: Wait for API + web (dashboard + demo best-effort)
         run: |
           ok=0
           for i in $(seq 1 60); do
@@ -117,6 +131,13 @@ jobs:
             sleep 2
           done
           [ "$dash" = 1 ] || echo "::warning::admin dashboard not up — admin surfaces skipped/errored; web scan continues"
+          # Demo is best-effort too — warn but never fail the run if it's down.
+          demo=0
+          for i in $(seq 1 10); do
+            if curl -sf http://127.0.0.1:4173 >/dev/null 2>&1; then demo=1; echo "demo up"; break; fi
+            sleep 2
+          done
+          [ "$demo" = 1 ] || echo "::warning::demo app not up — demo surfaces skipped/errored; web scan continues"
 
       - name: Restore queue + ledger from improver/state
         run: |
@@ -131,8 +152,8 @@ jobs:
       - name: Gather evidence ($0 — browser + detectors + screenshots, no LLM)
         run: |
           python -m tests.harness improve gather \
-            --dir "$IMPROVER_STATE_DIR/evidence" --apps web,admin \
-            --max-surfaces "${{ github.event.inputs.max_surfaces || '17' }}"
+            --dir "$IMPROVER_STATE_DIR/evidence" --apps web,admin,demo \
+            --max-surfaces "${{ github.event.inputs.max_surfaces || '23' }}"
 
       - name: Judge on the Claude plan (Claude Code headless)
         working-directory: ${{ env.IMPROVER_STATE_DIR }}/evidence
@@ -169,12 +190,45 @@ jobs:
           path: ${{ env.IMPROVER_STATE_DIR }}/evidence
           if-no-files-found: ignore
 
+      # Publish the current run's surface screenshots so the issue can embed them.
+      # A dedicated orphan branch (single force-pushed commit of only the current
+      # PNGs, named <proposal_id>.png) that GitHub serves as raw images — it never
+      # grows unbounded, and demo/vercel.json's "improver/*": false keeps Vercel
+      # from trying to build it. Best-effort: an image-publish hiccup must not
+      # sink the digest (the digest just omits missing images).
+      - name: Stage + publish proposal screenshots
+        if: success()
+        continue-on-error: true
+        run: |
+          SHOT_DIR="$IMPROVER_STATE_DIR/shots_by_id"
+          rm -rf "$SHOT_DIR"
+          python -m tests.harness improve screenshots \
+            --dir "$IMPROVER_STATE_DIR/evidence" --out "$SHOT_DIR"
+          if ls "$SHOT_DIR"/*.png >/dev/null 2>&1; then
+            TMP=$(mktemp -d)
+            cp -f "$SHOT_DIR"/*.png "$TMP/"
+            git -C "$TMP" init -q
+            git -C "$TMP" config user.name "improver-bot"
+            git -C "$TMP" config user.email "improver@users.noreply.github.com"
+            git -C "$TMP" checkout -q -b improver-screenshots-tmp
+            git -C "$TMP" add -A
+            git -C "$TMP" commit -q -m "improver screenshots $(date -u +%FT%TZ)" || exit 0
+            git -C "$TMP" push -f \
+              "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" \
+              improver-screenshots-tmp:improver/screenshots
+          else
+            echo "no screenshots staged — digest will render without images"
+          fi
+
       - name: File the proposal digest as an issue
         if: success()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          DIGEST=$(python -m tests.harness improve digest 2>/dev/null || true)
+          DIGEST=$(python -m tests.harness improve digest \
+            --screenshot-dir "$IMPROVER_STATE_DIR/shots_by_id" \
+            --screenshot-base-url "${{ github.server_url }}/${{ github.repository }}/raw/improver/screenshots" \
+            2>/dev/null || true)
           # Broken user journeys aren't proposals (the agent can't edit
           # auth/billing) — they ride along as a human alert at the top.
           ALERT=$(python -m tests.harness improve flow-alert --dir "$IMPROVER_STATE_DIR/evidence" 2>/dev/null || true)

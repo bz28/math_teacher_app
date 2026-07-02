@@ -76,21 +76,107 @@ def test_forbidden_catches_inflected_auth_schema_terms() -> None:
     assert not _p("Fix nav overflow", change="tighten the gap").forbidden
 
 
-def test_digest_groups_by_category_and_escapes_tags() -> None:
+def test_digest_sections_by_app_and_escapes_tags() -> None:
     from tests.harness.improver.proposals import to_dict
     from tests.harness.improver.report import proposals_digest_md
 
-    a11y = to_dict(_p("Wrap each <li> in a <ul>", change="fix the <ul>", conf=0.95))
-    a11y["category"] = "a11y"
-    feature = to_dict(_p("Add a dashboard filter", conf=0.4))
-    feature["category"] = "feature"
-    md = proposals_digest_md([a11y, feature])
-    # Product proposals surface above the a11y wall, regardless of (lower) score.
-    assert md.index("## Feature") < md.index("## A11y")
-    # The census line counts both buckets.
-    assert "1 feature" in md and "1 a11y" in md
+    web = to_dict(_p("Wrap each <li> in a <ul>", surface="web.public.landing", change="fix the <ul>"))
+    admin = to_dict(_p("Tidy the leads table", surface="admin.leads"))
+    demo = to_dict(_p("Polish the demo hub", surface="demo.hub"))
+    md = proposals_digest_md([demo, admin, web])  # deliberately out of app order
+    # PRIMARY grouping is by app, in the fixed order Web → Admin → Demo → Mobile.
+    assert md.index("## Web") < md.index("## Admin") < md.index("## Demo") < md.index("## Mobile")
+    # Mobile is a standing placeholder (not scanned yet), never proposals.
+    assert "Not yet scanned" in md
+    # The census line counts each app bucket.
+    assert "1 Web" in md and "1 Admin" in md and "1 Demo" in md
     # Literal tags are escaped so GitHub renders them as text, not real elements.
     assert "&lt;li&gt;" in md and "<li>" not in md
+
+
+def test_digest_caps_per_app_but_never_caps_highs() -> None:
+    """Each app section shows at most 5 full cards — EXCEPT Highs, which are
+    never trimmed. Mediums beyond the cap collapse into a '+ N more' one-liner
+    list so nothing is lost."""
+    from tests.harness.improver.proposals import to_dict
+    from tests.harness.improver.report import proposals_digest_md
+
+    highs = [to_dict(_p(f"High fix {i}", surface="web.public.landing",
+                        sev="high", conf=0.9 - i * 0.01)) for i in range(7)]
+    meds = [to_dict(_p(f"Medium fix {i}", surface="web.public.landing",
+                       sev="medium", conf=0.5)) for i in range(3)]
+    md = proposals_digest_md(highs + meds)
+    # All 7 Highs are shown as full cards (cap of 5 only trims Medium/Low).
+    for p in highs:
+        assert f"`{p['id']}`\n- **What:**" in md
+    # The 3 Mediums (beyond the cap, since 7 Highs already exceed it) collapse.
+    assert "_+ 3 more (Medium/Low):_" in md
+    for p in meds:
+        assert f"- `{p['id']}` **medium**" in md          # one-liner
+        assert f"`{p['id']}`\n- **What:**" not in md       # not a full card
+
+
+def test_digest_caps_mediums_when_highs_leave_slots() -> None:
+    """With few Highs, Mediums fill the section up to the cap, then the rest
+    collapse — 2 Highs + 8 Mediums, cap 5 → 2+3 cards shown, 5 collapsed."""
+    from tests.harness.improver.proposals import to_dict
+    from tests.harness.improver.report import proposals_digest_md
+
+    highs = [to_dict(_p(f"H{i}", surface="admin.leads", sev="high", conf=0.9)) for i in range(2)]
+    meds = [to_dict(_p(f"M{i}", surface="admin.leads", sev="medium", conf=0.9 - i * 0.01))
+            for i in range(8)]
+    md = proposals_digest_md(highs + meds)
+    shown_cards = sum(1 for p in highs + meds if f"`{p['id']}`\n- **What:**" in md)
+    assert shown_cards == 5                                # 2 High + 3 Medium
+    assert "_+ 5 more (Medium/Low):_" in md
+
+
+def test_digest_mobile_placeholder_even_with_no_proposals() -> None:
+    from tests.harness.improver.proposals import to_dict
+    from tests.harness.improver.report import proposals_digest_md
+
+    md = proposals_digest_md([to_dict(_p("x", surface="web.public.landing"))])
+    assert "## Mobile" in md and "🔴 Not yet scanned — Expo auth injection pending" in md
+
+
+def test_digest_renders_mobile_proposals_when_present() -> None:
+    """Regression: once mobile scanning lands, a mobile.* proposal must be
+    rendered as a real, approvable card — not silently dropped behind the
+    placeholder while still inflating the census/header counts."""
+    from tests.harness.improver.proposals import to_dict
+    from tests.harness.improver.report import proposals_digest_md
+
+    web = to_dict(_p("Web thing", surface="web.public.landing"))
+    mob = to_dict(_p("Fix the mobile solve tab", surface="mobile.solve", sev="high"))
+    md = proposals_digest_md([web, mob])
+    # The mobile proposal is a real, approvable full card, not hidden.
+    assert f"`{mob['id']}`\n- **What:**" in md
+    assert f"approve {mob['id']}" in md
+    # The placeholder is gone once mobile has real proposals.
+    assert "Not yet scanned" not in md
+    # Census counts it — and now it's actually visible, so the count is honest.
+    assert "1 Mobile" in md
+
+
+def test_digest_embeds_screenshots_for_shown_cards_only() -> None:
+    from tests.harness.improver.proposals import to_dict
+    from tests.harness.improver.report import proposals_digest_md
+
+    # 6 Highs (all shown as cards) + 1 Low (collapsed past the cap-5, since the
+    # 6 Highs already exceed it). Only the shown cards embed their image.
+    highs = [to_dict(_p(f"H{i}", surface="web.public.landing", sev="high")) for i in range(6)]
+    low = to_dict(_p("L", surface="web.public.landing", sev="low"))
+    props = highs + [low]
+    ids = {p["id"] for p in props}
+    base = "https://github.com/o/r/raw/improver/screenshots"
+    md = proposals_digest_md(props, screenshot_ids=ids, screenshot_base_url=base)
+    for p in highs:
+        assert f"![]({base}/{p['id']}.png)" in md          # shown card → image
+    assert f"{low['id']}.png" not in md                     # collapsed → no image
+    # A proposal with no staged screenshot gets no image (no broken link).
+    solo = to_dict(_p("no shot", surface="web.public.landing"))
+    md2 = proposals_digest_md([solo], screenshot_ids=set(), screenshot_base_url=base)
+    assert ".png" not in md2
 
 
 def test_digest_bounds_body_for_large_backlog() -> None:
@@ -257,3 +343,23 @@ def test_admin_role_routing_and_reachable_within_cap() -> None:
     # catalog order puts admin right after the public pages, so [:17] includes it
     within_cap = surfaces_for(("web", "admin"))[:17]
     assert any(s.app == "admin" for s in within_cap)
+
+
+# --- demo scan (Channel: the standalone public showcase SPA) --------------
+
+def test_demo_surfaces_in_catalog_and_scan_cap() -> None:
+    """The demo app's routes are catalogued as public, zero-auth surfaces, and
+    web+admin+demo all fit within the 23-surface scan cap."""
+    from tests.harness.improver.surfaces import CATALOG, surfaces_for
+
+    keys = {s.key for s in CATALOG}
+    assert {
+        "demo.hub", "demo.present", "demo.present_integrity",
+        "demo.present_grading", "demo.present_generation", "demo.present_teacher_day",
+    } <= keys
+    demo = surfaces_for(("demo",))
+    assert demo and all(s.app == "demo" and s.role == "public" for s in demo)
+    # catalog order puts demo right after admin, so [:23] (public+admin+demo)
+    # includes every demo surface before the authed web app crowds them out.
+    within_cap = surfaces_for(("web", "admin", "demo"))[:23]
+    assert sum(1 for s in within_cap if s.app == "demo") == len(demo)

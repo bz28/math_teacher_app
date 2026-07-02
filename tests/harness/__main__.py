@@ -17,6 +17,9 @@ from typing import Any
 
 _DEFAULT_API = "http://localhost:8000/v1"
 _DEFAULT_WEB = "http://localhost:3000"
+# The demo is a standalone zero-auth Vite SPA; `vite preview` serves it (with
+# history-fallback for its deep client-side routes) on :4173 by default.
+_DEFAULT_DEMO = "http://localhost:4173"
 _DEFAULT_DB = "postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_harness"
 # Run summaries land in the MAIN app DB (what the admin dashboard reads),
 # separate from the harness test DB above.
@@ -99,10 +102,11 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     # runs replay them for $0.
     scan.add_argument("--mode", default="auto", choices=["replay", "record", "auto"])
     scan.add_argument("--db", default=os.environ.get("HARNESS_DATABASE_URL", _DEFAULT_DB))
-    scan.add_argument("--apps", default="web", help="comma list: web,admin,mobile_web")
+    scan.add_argument("--apps", default="web", help="comma list: web,admin,demo,mobile_web")
     scan.add_argument("--web-base", default=os.environ.get("HARNESS_WEB_BASE", _DEFAULT_WEB))
     scan.add_argument("--api-base", default=os.environ.get("HARNESS_API_BASE", _DEFAULT_API))
     scan.add_argument("--admin-base", default=os.environ.get("HARNESS_ADMIN_BASE", ""))
+    scan.add_argument("--demo-base", default=os.environ.get("HARNESS_DEMO_BASE", _DEFAULT_DEMO))
     scan.add_argument("--mobile-base", default=os.environ.get("HARNESS_MOBILE_BASE", ""))
     scan.add_argument("--max-surfaces", type=int, default=0, help="cap surfaces (0 = all)")
     scan.add_argument("--max-size", default="M", choices=["S", "M", "L"], help="drop bigger proposals")
@@ -130,6 +134,7 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     gather.add_argument("--web-base", default=os.environ.get("HARNESS_WEB_BASE", _DEFAULT_WEB))
     gather.add_argument("--api-base", default=os.environ.get("HARNESS_API_BASE", _DEFAULT_API))
     gather.add_argument("--admin-base", default=os.environ.get("HARNESS_ADMIN_BASE", ""))
+    gather.add_argument("--demo-base", default=os.environ.get("HARNESS_DEMO_BASE", _DEFAULT_DEMO))
     gather.add_argument("--mobile-base", default=os.environ.get("HARNESS_MOBILE_BASE", ""))
     gather.add_argument("--max-surfaces", type=int, default=0)
     gather.add_argument("--no-content", action="store_true",
@@ -169,7 +174,25 @@ def _parse(argv: list[str]) -> argparse.Namespace:
 
     imp_sub.add_parser("budget", help="show the improver's rolling-window budget usage")
     imp_sub.add_parser("proposals", help="list the durable proposal queue")
-    imp_sub.add_parser("digest", help="explain-simple bullet plan of open proposals (markdown)")
+    dg = imp_sub.add_parser("digest", help="explain-simple bullet plan of open proposals (markdown)")
+    dg.add_argument(
+        "--screenshot-dir", default="",
+        help="dir of staged '<proposal_id>.png' files; shown cards embed the matching image",
+    )
+    dg.add_argument(
+        "--screenshot-base-url", default="",
+        help="raw base URL the embedded '<id>.png' images resolve against "
+             "(e.g. https://github.com/<owner>/<repo>/raw/improver/screenshots)",
+    )
+
+    # Stage the current run's surface screenshots as '<proposal_id>.png' for the
+    # open queue, so the scan workflow can force-push them to a dedicated orphan
+    # branch and the digest can embed them in the issue.
+    ss = imp_sub.add_parser(
+        "screenshots", help="stage open-proposal surface screenshots as <id>.png",
+    )
+    ss.add_argument("--dir", required=True, help="gather evidence dir (holds shots/)")
+    ss.add_argument("--out", required=True, help="output dir for the <id>.png files")
     for verb, helptext in (
         ("approve", "mark a proposal approved (ready to execute)"),
         ("reject", "mark a proposal rejected (never re-surfaced)"),
@@ -368,13 +391,24 @@ def _run_improve_queue(args: argparse.Namespace) -> int:
         return float(v) if isinstance(v, (int, float)) else 0.0
 
     if cmd == "digest":
+        from pathlib import Path
+
         from tests.harness.improver.report import proposals_digest_md
         open_props = [it.proposal for it in queue.by_status("proposed")]
+        # Screenshots (optional): a dir of staged '<id>.png' tells the digest
+        # which shown cards can embed an image, and the raw base URL is where
+        # GitHub resolves them from (the improver/screenshots orphan branch).
+        shot_ids: set[str] = set()
+        if args.screenshot_dir:
+            shot_ids = {p.stem for p in Path(args.screenshot_dir).glob("*.png")}
         # Bound the digest for the GitHub-issue body. Issue bodies are hard-
         # capped at 65,536 chars; the scan workflow prepends a ~280-char header
         # before this digest, and file_backlog.sh applies a final byte-cap — so
         # leave margin here. Over budget → hybrid (all proposals still listed).
-        print(proposals_digest_md(open_props, max_chars=64000))
+        print(proposals_digest_md(
+            open_props, max_chars=64000,
+            screenshot_ids=shot_ids, screenshot_base_url=args.screenshot_base_url,
+        ))
         return 0
 
     if cmd == "proposals":
@@ -478,7 +512,8 @@ def _run_improve_gather(args: argparse.Namespace) -> int:
         surfaces = surfaces[: args.max_surfaces]
     bases: dict[str, str] = {
         k: v for k, v in {
-            "web": args.web_base, "admin": args.admin_base, "mobile_web": args.mobile_base,
+            "web": args.web_base, "admin": args.admin_base,
+            "demo": args.demo_base, "mobile_web": args.mobile_base,
         }.items() if v
     }
 
@@ -595,6 +630,40 @@ def _run_improve_flow_alert(args: argparse.Namespace) -> int:
     alert = flow_alert_md(findings.get("flow_failures") or [])
     if alert:
         print(alert)
+    return 0
+
+
+def _run_improve_screenshots(args: argparse.Namespace) -> int:
+    """Stage the current run's surface screenshots as '<proposal_id>.png' for the
+    OPEN queue, so the scan workflow can force-push them to the dedicated
+    `improver/screenshots` orphan branch and the digest can embed them.
+
+    Maps each open proposal → its first surface's screenshot
+    (`<evidence>/shots/<surface_key>.png`, written by `gather`). A proposal whose
+    surface wasn't scanned this run (e.g. carried forward from an older run) has
+    no shot and is simply skipped — the digest then omits its image (no broken
+    link). Only the current run's PNGs are written, so the force-pushed branch
+    never grows unbounded."""
+    import shutil
+    from pathlib import Path
+
+    from tests.harness.improver.state import Queue
+
+    shots_dir = Path(args.dir) / "shots"
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    queue = Queue.load()
+    staged = 0
+    for it in queue.by_status("proposed"):
+        p = it.proposal
+        surface = str(p.get("surface_key") or "").split(",")[0].strip()
+        if not surface:
+            continue
+        src = shots_dir / f"{surface}.png"
+        if src.exists():
+            shutil.copyfile(src, out_dir / f"{it.id}.png")
+            staged += 1
+    print(f"[improve:screenshots] staged {staged} screenshot(s) → {out_dir}")
     return 0
 
 
@@ -719,7 +788,8 @@ def _run_improve_scan(args: argparse.Namespace) -> int:
         surfaces = surfaces[: args.max_surfaces]
     bases: dict[str, str] = {
         k: v for k, v in {
-            "web": args.web_base, "admin": args.admin_base, "mobile_web": args.mobile_base,
+            "web": args.web_base, "admin": args.admin_base,
+            "demo": args.demo_base, "mobile_web": args.mobile_base,
         }.items() if v
     }
 
@@ -826,6 +896,8 @@ def main(argv: list[str]) -> int:
             return _run_improve_ingest(args)
         if improve_cmd == "flow-alert":
             return _run_improve_flow_alert(args)
+        if improve_cmd == "screenshots":
+            return _run_improve_screenshots(args)
         if improve_cmd == "llm-scan":
             return _run_improve_llm_scan(args)
         if improve_cmd == "execute":
