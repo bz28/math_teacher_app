@@ -18,14 +18,20 @@ import urllib.request
 
 API = os.environ.get("API_BASE", "http://localhost:8000/v1")
 TOKEN = os.environ["TOKEN"]
-FIGURE_ITEM = "44e22fa0-bafb-4f01-bb4c-514e8a93228d"  # right triangle 8-15-17
-REQUEST = "Change the legs to 9 and 12 instead."
+# The matrix system item (Unit 5 Review, problem 1). The Workshop edits it
+# IN PLACE into an inconsistent, no-solution system — the film's only
+# no-solution beat — and re-verifies that it has no solution.
+MATRIX_ITEM = "a1b2c3d4-0001-4001-8001-000000000001"
+REQUEST = (
+    "Change this into an inconsistent system with no solution: make it "
+    "2x + 4y = 6 and 3x + 6y = 15. Re-solve and confirm there is no solution."
+)
 
 
 def main() -> int:
     body = json.dumps({"message": REQUEST}).encode()
     r = urllib.request.Request(
-        f"{API}/teacher/question-bank/{FIGURE_ITEM}/chat",
+        f"{API}/teacher/question-bank/{MATRIX_ITEM}/chat",
         data=body, method="POST",
         headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"},
     )
@@ -33,9 +39,9 @@ def main() -> int:
         d = json.loads(resp.read().decode())
     msgs = d.get("chat_messages") or []
     prop = (msgs[-1].get("proposal") if msgs else None) or {}
-    ok = bool(prop.get("figure_svg")) and bool(prop.get("final_answer"))
+    ok = bool(prop.get("question")) and bool(prop.get("final_answer"))
     print(f"workshop pre-warmed: {len(msgs)} msgs, "
-          f"figure={bool(prop.get('figure_svg'))}, answer={prop.get('final_answer')}")
+          f"question_changed={bool(prop.get('question'))}, answer={prop.get('final_answer')!r}")
     return 0 if ok else 1
 
 

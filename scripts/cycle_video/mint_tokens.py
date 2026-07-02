@@ -11,6 +11,7 @@ PEOPLE = {
     "teacher": ("td_teacher_d592cc@t.com", "teacher"),
     "maya":    ("maya_d52a@school.edu",    "student"),
     "jordan":  ("jordan_a395@school.edu",  "student"),
+    "aisha":   ("aisha_bd62@school.edu",   "student"),  # fresh submitter (no sub yet)
 }
 
 async def main() -> None:
