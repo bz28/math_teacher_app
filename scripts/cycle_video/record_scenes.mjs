@@ -374,7 +374,7 @@ const CLIPS = {
     await go(page, page.getByText(/show solution/i).first(), { click: true }).catch(() => {});
     await sleep(page, 1400);
     await cap(page, '— for a worked solution and a verified answer.');
-    await sleep(page, 3000);
+    await sleep(page, 2500);
     await capClear(page); await sleep(page, 500);
   },
 
@@ -443,7 +443,7 @@ const CLIPS = {
     await page.getByText(/Ready to turn it in/i).first().scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
     await sleep(page, 700);
     await cap(page, 'Your teacher sees exactly what you turn in.');
-    await sleep(page, 3000);
+    await sleep(page, 2600);
     await capClear(page); await sleep(page, 500);
   },
 
@@ -456,7 +456,7 @@ const CLIPS = {
     // up (beforeReveal), so the scene fades in on an EMPTY thread — no
     // pre-flash of the full conversation — then reveals one turn at a time.
     await gotoClean(page, `/school/student/courses/${ID.ALG}/homework/${ID.LIN}`,
-      { zoom: 1.0, waitMs: 1800, anchor: 'text=/understanding check/i',
+      { zoom: 1.12, waitMs: 1800, anchor: 'text=/understanding check/i',
         beforeReveal: () => page.evaluate(() => {
           const bubbles = Array.from(document.querySelectorAll('div')).filter((d) =>
             /\bjustify-(start|end)\b/.test(d.className) &&
@@ -496,7 +496,7 @@ const CLIPS = {
     // student's last hollow answer — no closing panel. The AI stayed
     // warm the whole way; the catch is surfaced to the teacher next.
     await cap(page, "Right answer — and not one step he can explain.");
-    await sleep(page, 3000);
+    await sleep(page, 2600);
     await capClear(page); await sleep(page, 1400);
   },
 
@@ -512,7 +512,7 @@ const CLIPS = {
     await page.evaluate(() => { const e = Array.from(document.querySelectorAll('*')).find((n) => /couldn.t explain the steps/i.test(n.textContent || '') && n.children.length < 8); if (e) e.scrollIntoView({ block: 'center' }); });
     await sleep(page, 1200);
     await cap(page, 'A correct answer — that he can’t explain.');
-    await sleep(page, 3000);
+    await sleep(page, 2600);
     // Behavior context CORROBORATES the flag (never replaces it): the
     // "Activity during the integrity check" digest sits right below the
     // banner — pasted answer + tabbed out. Bring it into view and frame
@@ -525,7 +525,7 @@ const CLIPS = {
     });
     await sleep(page, 900);
     await cap(page, 'Behavior backs it up: pasted the answer, tabbed away — but the read stays the call.');
-    await sleep(page, 3400);
+    await sleep(page, 3000);
     await cap(page, 'Warm to the student. Honest with you.');
     await sleep(page, 2400);
     await capClear(page); await sleep(page, 600);
@@ -551,9 +551,9 @@ const CLIPS = {
     await page.mouse.wheel(0, 150);
     await sleep(page, 1400);
     await cap(page, '100 − 20 (sign error) − 7 (arithmetic) = 73%.');
-    await sleep(page, 3400);
+    await sleep(page, 2900);
     await cap(page, 'The AI proposes — you set full, partial, or none.');
-    await sleep(page, 2800);
+    await sleep(page, 2400);
     // The resolved integrity verdict at the top (no spinner — a verdict).
     await page.evaluate(() => { const e = Array.from(document.querySelectorAll('*')).find((n) => /method in her own words/i.test(n.textContent || '') && n.children.length < 8); if (e) e.scrollIntoView({ block: 'center' }); });
     await sleep(page, 1200);
