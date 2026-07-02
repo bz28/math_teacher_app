@@ -21,7 +21,7 @@ WORK="${WORK_DIR:-/tmp/cycle-build}"
 OUT_MP4="${OUT_MP4:-/tmp/veradic-cycle.mp4}"
 FRAMES_DIR="${FRAMES_DIR:-/tmp/cycle-frames}"
 FPS=30
-CARD_SEC=2.0
+CARD_SEC=1.8
 XF=0.5                  # cross-dissolve duration
 PUSH_SECS=5             # seconds for a push-in to reach its target, then hold
 
@@ -38,7 +38,7 @@ SEGMENTS=(
   "card:04-submit:none"    "scene:4-submit:0:auto" "scene:4-chat:0:auto" "scene:4-verdict:0:auto"
   "card:05-grade:none"     "scene:5-grade:0:auto" "scene:5-insights:0:auto"
   "card:06-reteach:none"   "scene:6-reteach:0:auto"
-  "card:07-practice:none"  "scene:7-practice:0:auto" "scene:7-learn:0:auto"
+  "card:07-practice:none"  "scene:7-practice:0:auto"
   "card:08-close:out"
 )
 
@@ -46,14 +46,14 @@ SEGMENTS=(
 # cinematic pull); everything else gets a subtle drift.
 push_for () {
   case "$1" in
-    0-cold)     echo 1.10 ;;
-    3-figure)   echo 1.12 ;;
-    3-workshop) echo 1.12 ;;
-    4-chat)     echo 1.11 ;;
-    4-verdict)  echo 1.11 ;;
-    5-grade)    echo 1.12 ;;
-    5-insights) echo 1.08 ;;
-    *)          echo 1.06 ;;
+    0-cold)     echo 1.12 ;;
+    3-figure)   echo 1.14 ;;
+    3-workshop) echo 1.13 ;;
+    4-chat)     echo 1.12 ;;
+    4-verdict)  echo 1.13 ;;
+    5-grade)    echo 1.14 ;;
+    5-insights) echo 1.09 ;;
+    *)          echo 1.075 ;;
   esac
 }
 
@@ -68,14 +68,14 @@ format=yuv420p$fade" \
     -an -c:v libx264 -preset medium -crf 18 "$2" -loglevel error
 }
 
-HEAD=0.7                # trim the opening veil-paper (the dissolve bridges it)
+HEAD=1.0                # trim the opening veil-paper (the dissolve bridges it)
 norm_scene () {  # $1 webm  $2 start  $3 dur(or "auto")  $4 out  $5 scene-id  $6 fadein(0|1)
   local start; start=$(echo "$2 + $HEAD" | bc | awk '{printf "%.3f", $0}')
   local dur="$3"
   if [ "$dur" = "auto" ]; then
     local raw; raw=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$1")
     # Trim the post-caption hold at the tail (kills dead air, tightens pace).
-    dur=$(echo "$raw - $start - 1.0" | bc)
+    dur=$(echo "$raw - $start - 1.3" | bc)
   fi
   local target; target=$(push_for "$5")
   # Pre-upscale to the push target so text stays crisp at full zoom, then

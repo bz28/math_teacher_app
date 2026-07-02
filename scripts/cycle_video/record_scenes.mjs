@@ -189,13 +189,13 @@ async function curveMove(page, x, y, steps = 32) {
 
 // Move the synthetic cursor smoothly to an element and (optionally)
 // click — zoom-safe. Bounded: a missing locator is skipped, never stalls.
-async function go(page, locator, { click = true, settle = 520, find = 4000 } = {}) {
+async function go(page, locator, { click = true, settle = 380, find = 4000 } = {}) {
   const el = locator.first();
   try { await el.waitFor({ state: 'visible', timeout: find }); }
   catch { return false; }
-  await sleep(page, 220);
+  await sleep(page, 150);
   let r; try { r = await rectOf(el); } catch { return false; }
-  await sleep(page, 160);
+  await sleep(page, 110);
   await curveMove(page, r.x, r.y);
   await sleep(page, settle);
   if (click) { await page.mouse.move(r.x, r.y); await page.mouse.down(); await sleep(page, 80); await page.mouse.up(); }
@@ -212,10 +212,14 @@ async function gotoClean(page, url, { zoom = 1, waitMs = 1500, anchor = null, be
   await veilOn(page).catch(() => {});   // re-assert on the fresh document
   await setZoom(page, zoom);
   if (anchor) { try { await page.locator(anchor).first().waitFor({ state: 'visible', timeout: 9000 }); } catch {} }
-  await sleep(page, waitMs);
-  if (beforeReveal) { try { await beforeReveal(); } catch {} await sleep(page, 200); }
+  // Lift the veil PROMPTLY once content is ready (short cream, no dead air),
+  // then hold the remaining settle on the now-visible content — so every
+  // card→scene dissolve resolves onto real content, never a cream veil.
+  const preReveal = Math.min(waitMs, 620);
+  await sleep(page, preReveal);
+  if (beforeReveal) { try { await beforeReveal(); } catch {} await sleep(page, 180); }
   await veilOff(page);
-  await sleep(page, 300);
+  await sleep(page, Math.max(360, waitMs - preReveal));
 }
 
 // ─────────────────────────────── clips ───────────────────────────────
