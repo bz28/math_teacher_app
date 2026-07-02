@@ -416,9 +416,8 @@ async def main() -> None:
         # Rename the ONE assignment + point it at the three problems.
         await s.execute(
             text("update assignments set title='Unit 5 Review', status='published', "
-                 "content=:c, unit_ids=:u where id=:a"),
-            {"c": json.dumps({"problem_ids": UNIT5_PROBLEMS}),
-             "u": json.dumps([UNIT]), "a": UNIT5})
+                 "content=:c where id=:a"),
+            {"c": json.dumps({"problem_ids": UNIT5_PROBLEMS}), "a": UNIT5})
         # Clean, future due date → no "late" banner on the submit scene.
         await s.execute(text("update assignments set due_at=:d, integrity_check_enabled=true, "
                              "ai_grading_enabled=true where id=:a"),
