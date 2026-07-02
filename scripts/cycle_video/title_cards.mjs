@@ -20,15 +20,15 @@ const cached = execSync(
 //   kind 'hero'  → centered bookend
 //   kind 'story' → left editorial, numbered
 const CARDS = [
-  ['00-open',     'hero',  'Veradic', null, 'The whole teaching loop.', 'From a teacher’s first click to a student who’s better — one place.'],
-  ['01-section',  'story', 'Teacher', 1, 'Start a class.', 'A new section, live in seconds.'],
-  ['02-materials','story', 'Teacher', 2, 'Add your materials.', 'Drop in what you already teach from.'],
-  ['03-generate', 'story', 'Teacher', 3, 'Generate the homework.', 'Describe it once — the AI writes the problems.'],
-  ['04-submit',   'story', 'Student', 4, 'Prove you get it.', 'Snap the work, then pass a check no grade can fake.'],
+  ['00-open',     'hero',  'Veradic', null, 'The whole teaching loop.', 'From a teacher’s first click to a student who actually understands — one place.'],
+  ['01-section',  'story', 'Teacher', 1, 'Start a class.', 'Every class you teach, live in seconds.'],
+  ['02-materials','story', 'Teacher', 2, 'Bring your materials.', 'Build from the worksheets you already use.'],
+  ['03-generate', 'story', 'Teacher', 3, 'Generate the homework.', 'Aim it at a topic — the AI writes the problems, figures, and answer keys.'],
+  ['04-submit',   'story', 'Student', 4, 'Prove you understand.', 'Snap the work — then pass a check no grade can fake.'],
   ['05-grade',    'story', 'Teacher', 5, 'Grade the whole class.', 'Every problem scored — with a receipt that adds up.'],
-  ['06-reteach',  'story', 'Teacher', 6, 'Re-teach in one click.', 'Turn a weak spot into targeted practice.'],
+  ['06-reteach',  'story', 'Teacher', 6, 'Re-teach in one click.', 'Turn the class’s weakest spot into targeted practice.'],
   ['07-practice', 'story', 'Student', 7, 'Practice, and get better.', 'The loop closes — the student learns.'],
-  ['08-close',    'hero',  'Veradic', null, 'The whole loop, in one place.', ''],
+  ['08-close',    'cta',   'Veradic', null, 'Generate. Check understanding.\nGrade. Re-teach.', 'For every class you teach.'],
 ];
 const TOTAL = 7;
 
@@ -79,6 +79,33 @@ const hero = (title) => `<!doctype html><html><head>${head}<style>${base}
   <div class="footer"><div class="hair"></div><span>Veradic</span><span>The teaching loop</span></div>
 </body></html>`;
 
+// ── closing CTA card ──
+const cta = (title, sub) => `<!doctype html><html><head>${head}<style>${base}
+  .stage { position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; z-index:2; padding:0 120px; }
+  .eyebrow { color:#b8431a; font-size:20px; font-weight:600; letter-spacing:.42em;
+    text-transform:uppercase; margin-bottom:38px; }
+  .title { font-family:'Instrument Serif',Georgia,serif; font-weight:400;
+    font-size:104px; line-height:1.04; letter-spacing:-.012em; text-align:center;
+    max-width:1400px; white-space:pre-line; }
+  .sub { margin-top:30px; font-size:30px; color:#6b6862; font-weight:400; letter-spacing:.005em; }
+  .rule { width:72px; height:2px; background:#b8431a; margin:46px 0 40px; border-radius:2px; }
+  .pill { display:flex; align-items:center; gap:22px; font-size:23px; font-weight:600; color:#1c1b16; }
+  .pill .site { color:#1f5c43; letter-spacing:.01em; }
+  .pill .dot { width:5px; height:5px; border-radius:50%; background:#c9c3b6; }
+  .pill .go { color:#b8431a; letter-spacing:.02em; }
+</style></head><body>
+  <div class="mark"><div class="dot">V</div><div class="name">Veradic</div></div>
+  <div class="stage">
+    <div class="eyebrow">Veradic</div>
+    <div class="title">${title}</div>
+    <div class="sub">${sub}</div>
+    <div class="rule"></div>
+    <div class="pill"><span class="site">veradicai.com</span><span class="dot"></span><span class="go">Start a pilot →</span></div>
+  </div>
+  <div class="footer"><div class="hair"></div><span>Veradic</span><span>The teaching loop</span></div>
+</body></html>`;
+
 // ── left editorial story card ──
 const story = (sideLabel, index, title, subtitle) => `<!doctype html><html><head>${head}<style>${base}
   .side { position:absolute; left:132px; top:50%; transform:translateY(-50%) rotate(180deg);
@@ -110,7 +137,9 @@ const story = (sideLabel, index, title, subtitle) => `<!doctype html><html><head
 const b = await chromium.launch({ executablePath: cached || undefined, headless: true });
 const page = await b.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
 for (const [id, kind, sideLabel, index, title, subtitle] of CARDS) {
-  const markup = kind === 'hero' ? hero(title) : story(sideLabel, index, title, subtitle);
+  const markup = kind === 'hero' ? hero(title)
+    : kind === 'cta' ? cta(title, subtitle)
+    : story(sideLabel, index, title, subtitle);
   await page.setContent(markup, { waitUntil: 'networkidle' });
   await page.waitForTimeout(650); // let webfonts settle
   await page.screenshot({ path: `${OUT}/card-${id}.png` });
