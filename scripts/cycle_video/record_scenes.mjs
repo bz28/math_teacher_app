@@ -31,18 +31,14 @@ const CACHED = execSync(
   `ls -d ~/Library/Caches/ms-playwright/chromium-*/chrome-mac*/Chromium.app/Contents/MacOS/Chromium 2>/dev/null | tail -1`
 ).toString().trim();
 
-// ── seed IDs ──
+// ── seed IDs (General Math · Period 3 — Unit 5 Review) ──
 const ID = {
-  ALG: 'c99b654b-7ef8-4b05-a1df-a57c47d98f6e',
-  SEC: '845950c6-dc06-40a7-ba72-278ae63c221c',
-  GEO: 'b24c145a-bf54-4fde-865d-792ff22f1c48',
-  GEO_HW: '75375c6c-7e39-44a2-842e-f7b4f72ecd71',
-  LIN: 'c072c9b6-fd0c-4565-9bab-afea06a3dcd4',
-  SYSTEMS: '0bb2e228-d653-4d91-b03e-13e46006c498',
-  PRACTICE: 'f1b8b77e-706b-4d07-97fe-c808a8548ccf',
-  MAYA: '845d3c76-9fe8-4cec-b5ab-e43446400edd',
-  JORDAN: '0f63c477-12f8-4cbc-b4dc-ad62642f2cdc',
-  SOCCER: '5e0c7a11-50cc-4bb0-9e11-50cc0a11500c',
+  ALG: 'c99b654b-7ef8-4b05-a1df-a57c47d98f6e',       // course "General Math"
+  SEC: '845950c6-dc06-40a7-ba72-278ae63c221c',       // Period 3
+  UNIT5: 'c072c9b6-fd0c-4565-9bab-afea06a3dcd4',      // the ONE assignment
+  PRACTICE: 'f1b8b77e-706b-4d07-97fe-c808a8548ccf',   // re-teach practice set
+  MAYA: '845d3c76-9fe8-4cec-b5ab-e43446400edd',       // exonerated + graded
+  JORDAN: '0f63c477-12f8-4cbc-b4dc-ad62642f2cdc',     // the integrity catch
 };
 const ALG_LINEAR_UNIT = '5547f6d5-0487-4174-bae0-a25908900c68';
 
@@ -223,12 +219,32 @@ async function gotoClean(page, url, { zoom = 1, waitMs = 1500, anchor = null, be
 }
 
 // ─────────────────────────────── clips ───────────────────────────────
+// One coherent loop on the SAME "Unit 5 Review" assignment (General Math ·
+// Period 3 · Ms. Rivera). Three problems — a matrix system, a 15-ft ladder,
+// a multi-step equation — thread every scene. Captions sell the value, not
+// the clicks. Full-bleed: the assembler shows each clip edge-to-edge and
+// pushes in (Ken-Burns) on the money shots; nothing floats.
 const CLIPS = {
-  // 1 · TEACHER — create a class section.
+  // 0 · COLD OPEN — the catch, before the title. A perfect score that
+  //     isn't real understanding: Jordan got the matrix right but can't
+  //     explain a step. Hard hook that the story later pays off.
+  async '0-cold'(page) {
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}/sections/${ID.SEC}/review?student=${ID.JORDAN}`,
+      { zoom: 1.16, waitMs: 1900, anchor: 'text=/couldn.t explain the inverse/i' });
+    await page.evaluate(() => { const e = [...document.querySelectorAll('*')].find((n) => /couldn.t explain the inverse/i.test(n.textContent || '') && n.children.length < 8); if (e) e.scrollIntoView({ block: 'center' }); });
+    await sleep(page, 700);
+    await cap(page, 'A perfect score on the hardest problem.');
+    await sleep(page, 2700);
+    await cap(page, 'And he can’t explain a single step of it.');
+    await sleep(page, 3000);
+    await capClear(page); await sleep(page, 700);
+  },
+
+  // 1 · TEACHER — spin up a class section.
   async '1-section'(page) {
     await deleteDemoSections();
-    await gotoClean(page, `/school/teacher/courses/${ID.ALG}`, { zoom: 1.1, waitMs: 1400, anchor: 'text=/Period 3/i' });
-    await cap(page, 'Name it — and the class is live.');
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}`, { zoom: 1.12, waitMs: 1400, anchor: 'text=/Period 3/i' });
+    await cap(page, 'Every class you teach, in one place.');
     await sleep(page, 1100);
     await go(page, page.getByRole('button', { name: /new section/i }));
     await sleep(page, 800);
@@ -238,79 +254,60 @@ const CLIPS = {
     await sleep(page, 700);
     await go(page, page.getByRole('button', { name: /^Create$/ }));
     await sleep(page, 1700);
-    await cap(page, 'Done. Share the join code — the class is in.');
-    await sleep(page, 2100);
+    await cap(page, 'A new section is live — just share the join code.');
+    await sleep(page, 2000);
     await capClear(page); await sleep(page, 500);
     await deleteDemoSections();
   },
 
-  // 2 · TEACHER — add course materials by UPLOADING a worksheet on
-  //      camera: glide to Upload, attach, watch it land in the list
-  //      (no magic appearance). One warm-up material is pre-seeded so
-  //      the grid visibly goes 1 → 2 files.
+  // 2 · TEACHER — bring in the materials you already teach from.
   async '2-materials'(page) {
     try {
-      // Idempotent: remove prior on-camera uploads (the seeded warm-up
-      // "Warm-up — solving equations.png" is preserved).
       const h = { Authorization: 'Bearer ' + TOK.teacher.access };
       const docs = await (await fetch(`${API}/v1/teacher/courses/${ID.ALG}/documents`, { headers: h })).json();
       const list = docs.documents || docs.items || (Array.isArray(docs) ? docs : []);
       for (const d of list) if ((d.filename || d.name || '') === 'worksheet.png')
         await apiDelete(`${API}/v1/teacher/courses/${ID.ALG}/documents/${d.id}`);
     } catch (e) {}
-    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=materials`, { zoom: 1.1, waitMs: 1500 });
-    await cap(page, 'Drop in what you already teach from.');
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=materials`, { zoom: 1.12, waitMs: 1500 });
+    await cap(page, 'Bring in the materials you already teach from.');
     await sleep(page, 1300);
-    // Glide the cursor to the Upload control so the upload reads as a
-    // real click, not a file teleporting in. (We don't fire the click —
-    // it would open the OS picker, which can't be filmed headless — we
-    // stage the file straight into the same input the picker feeds.)
     await go(page, page.getByRole('button', { name: /^Upload Files$/i }).first(), { click: false }).catch(() => {});
     await sleep(page, 300);
     const input = page.locator('input[type=file]').first();
     await input.setInputFiles(`${ASSETS}/worksheet.png`).catch(() => {});
-    // The grid goes 1 → 2 files + an "Uploaded 1 file" toast — the
-    // upload transition, on camera.
     await sleep(page, 1900);
-    await cap(page, 'Uploaded — ready to build from.');
+    await cap(page, 'Your Unit 5 review sheet — ready to build from.');
     await sleep(page, 2000);
     await capClear(page); await sleep(page, 500);
   },
 
-  // 3a · TEACHER — the REAL new-homework wizard, all four steps, in
-  //      order: Details → Problems (type a "soccer" focus) → Grading →
-  //      Review. Breezed through so completeness reads as "look how
-  //      fast," then a veil-cut to the pre-generated soccer problems.
+  // 3 · TEACHER — the real new-homework wizard: name it, pick the unit,
+  //     type a focus, and point it at the worksheet. Then veil-cut to the
+  //     three problems the focus pulled — and land the focus-control beat.
   async '3-generate'(page) {
-    // One steady framing for the whole scene — zoom set on the homework
-    // tab before the modal is on camera, then held (no mid-scene zoom).
-    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=homework`, { zoom: 1.15, waitMs: 1200 });
-    await cap(page, 'New homework, start to finish.');
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=homework`, { zoom: 1.13, waitMs: 1200 });
+    await cap(page, 'Now build the homework — from that same sheet.');
     await sleep(page, 700);
     await go(page, page.getByRole('button', { name: /new homework/i }).first());
-    // Wait for the wizard's Step 1 (Details) to settle.
     const dialog = page.getByRole('dialog', { name: /new homework/i });
     await dialog.waitFor({ state: 'visible', timeout: 9000 }).catch(() => {});
     await sleep(page, 700);
 
-    // ── Step 1 · Details — title + pick the unit. Breeze through. ──
+    // Step 1 · Details.
     await cap(page, 'Name it. Pick the unit.');
     const title = dialog.locator('input[placeholder*="Quadratics"], input[type="text"]').first();
     if (await title.count()) {
       await go(page, title, { click: true });
-      await title.pressSequentially('Soccer word problems', { delay: 30 }).catch(() => {});
+      await title.pressSequentially('Unit 5 Review', { delay: 34 }).catch(() => {});
     }
     await sleep(page, 400);
-    // The "Linear Equations" unit chip (a real click, shown).
     await go(page, dialog.getByRole('button', { name: /^✓?\s*Linear Equations$/ }).first(), { click: true }).catch(() => {});
     await sleep(page, 600);
     await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});
     await sleep(page, 500);
 
-    // ── Step 2 · Problems — pick a count (3), TYPE the "soccer" focus,
-    //      and select the uploaded worksheet as a source. ──
-    // Count → a custom 3, so the wizard, the Review summary, and the
-    // generated set all agree on 3.
+    // Step 2 · Problems — count 3, TYPE the focus, pick the worksheet source.
     await cap(page, 'How many? Just three today.');
     const countInput = dialog.locator('input[aria-label="Custom problem count"]').first();
     if (await countInput.count()) {
@@ -318,124 +315,100 @@ const CLIPS = {
       await countInput.fill('3').catch(() => {});
       await sleep(page, 900);
     }
-    await cap(page, 'Set the focus — just type it.');
+    await cap(page, 'Then aim it — matrices, right-triangle trig, multi-step.');
     const focus = dialog.locator('input[placeholder*="word problems"], textarea[placeholder*="word problems"]').first();
     if (await focus.count()) {
       await go(page, focus, { click: true });
-      await focus.pressSequentially('soccer', { delay: 95 }).catch(() => {});
+      await focus.pressSequentially('inverse matrices, right-triangle trig, and multi-step equations', { delay: 24 }).catch(() => {});
       await sleep(page, 900);
     } else { await sleep(page, 800); }
-    // Source material — click the worksheet uploaded in scene 2 so it's
-    // visibly chosen as the generation source ("1 of 2 selected").
-    await cap(page, 'Build from your own worksheet — one click.');
+    await cap(page, 'And build from your own worksheet — one click.');
     const srcRow = dialog.getByText('worksheet.png', { exact: true }).first();
     await go(page, srcRow, { click: true }).catch(() => {});
-    await sleep(page, 1600);
+    await sleep(page, 1500);
     await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});
     await sleep(page, 500);
 
-    // ── Step 3 · Grading — the rubric, sensible defaults already in. ──
-    await cap(page, 'Grading rubric — sensible defaults, ready.');
+    // Step 3 · Grading (sensible defaults) → Step 4 · Review → create.
+    await cap(page, 'Grading rubric — sensible defaults, already in.');
     await sleep(page, 1300);
     await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});
     await sleep(page, 500);
-
-    // ── Step 4 · Review — one last look, then create. ──
-    await cap(page, 'One last look, then create.');
-    await sleep(page, 1600);
-    // Glide the cursor to "Create & generate" but DON'T fire a live job
-    // — bridge the AI write with the brand veil and land on the real,
-    // pre-generated soccer set. No spinner ever hits the frame.
+    await cap(page, 'One last look, then build.');
+    await sleep(page, 1500);
     await go(page, dialog.getByRole('button', { name: /Create & generate/i }).first(), { click: false }).catch(() => {});
     await sleep(page, 700);
     await capClear(page); await sleep(page, 300);
 
-    // Anchor on a REAL problem line (not the word "soccer", which paints
-    // in the title before the set loads) so the veil never lifts onto a
-    // "Loading…" frame.
-    await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.SOCCER}`,
-      { zoom: 1.18, waitMs: 2400, anchor: 'text=/Amara|striker|goals|match/i' });
-    await page.mouse.wheel(0, 150); await sleep(page, 600);
-    await cap(page, 'Three problems — every one themed to soccer.');
-    await sleep(page, 2200);
-    await page.mouse.wheel(0, 170); await sleep(page, 1600);
+    // Reveal the three problems the focus pulled (land on a real line).
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}`,
+      { zoom: 1.15, waitMs: 2200, anchor: 'text=/inverse matrix/i' });
+    await page.mouse.wheel(0, 260); await sleep(page, 700);
+    await cap(page, 'Three problems — exactly the topics you named.');
+    await sleep(page, 2400);
+    await cap(page, 'The sheet covers the whole unit. The focus pulled just these — no quadratics, no stats.');
+    await sleep(page, 3200);
     await capClear(page); await sleep(page, 400);
   },
 
-  // 3b · TEACHER — open a generated problem to reveal its worked solution
-  //      + verified final answer (proof it makes answer keys, not just Qs).
-  async '3-solution'(page) {
-    await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.SOCCER}`,
-      { zoom: 1.0, waitMs: 1400, anchor: 'text=/Amara/i' });
+  // 3b · TEACHER — open the ladder problem: a self-checked figure AND a
+  //      verified answer key. Proof it writes answers, not just questions.
+  async '3-figure'(page) {
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}`,
+      { zoom: 1.05, waitMs: 1400, anchor: 'text=/ladder leans/i' });
     await cap(page, 'Open any problem —');
     await sleep(page, 900);
-    await go(page, page.getByText(/striker Amara scored/i).first(), { click: true }).catch(() => {});
-    await sleep(page, 1500);
-    await go(page, page.getByText(/show solution/i).first(), { click: true }).catch(() => {});
-    await sleep(page, 1400);
-    await cap(page, '— for a worked solution and a verified answer.');
-    await sleep(page, 2500);
+    await go(page, page.getByText(/ladder leans/i).first(), { click: true }).catch(() => {});
+    await sleep(page, 1600);
+    await cap(page, 'It drew the figure itself — and checked it.');
+    await sleep(page, 2400);
+    await go(page, page.getByText(/Show solution/i).first(), { click: true }).catch(() => {});
+    await sleep(page, 1200);
+    await cap(page, 'Every problem ships with a worked, verified answer key.');
+    await page.mouse.wheel(0, 320); await sleep(page, 2600);
+    await page.mouse.wheel(0, 300); await sleep(page, 2400);
     await capClear(page); await sleep(page, 500);
   },
 
-  // 3c+3d · TEACHER — a self-checked geometry figure, then reshape it in
-  //      plain English (AI Workshop) and watch it redraw + re-verify. The
-  //      reshape proposal is pre-warmed off-camera (workshop_prewarm.py)
-  //      so it lands instantly — no thinking spinner on camera.
-  async '3-figure'(page) {
-    await gotoClean(page, `/school/teacher/courses/${ID.GEO}/homework/${ID.GEO_HW}`,
-      { zoom: 1.0, waitMs: 1400, anchor: 'text=/right triangle/i' });
-    await cap(page, 'Geometry? A clean, self-checked figure.');
+  // 3c · TEACHER — the AI Workshop: edit the matrix in plain English into a
+  //      no-solution system, and watch it re-solve and confirm. (Proposal
+  //      is pre-warmed off-camera → lands instantly, no thinking spinner.)
+  async '3-workshop'(page) {
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}`,
+      { zoom: 1.05, waitMs: 1400, anchor: 'text=/inverse matrix/i' });
+    await cap(page, 'Want to change a problem? Just say so.');
     await sleep(page, 900);
-    await go(page, page.getByText(/right triangle/i).first(), { click: true }).catch(() => {});
-    // Modal opens straight into the pre-warmed proposal: before + redraw.
+    await go(page, page.getByText(/inverse matrix/i).first(), { click: true }).catch(() => {});
     await page.getByRole('button', { name: /^Accept$/ }).first().waitFor({ state: 'visible', timeout: 9000 }).catch(() => {});
     await sleep(page, 1400);
-    await cap(page, 'Reshape it in plain English: “make the legs 9 and 12.”');
+    await cap(page, '“Make it a system with no solution.”');
     await sleep(page, 2600);
-    // Scroll from the "Before" figure down to the freshly redrawn one.
-    await page.mouse.wheel(0, 300); await sleep(page, 1900);
-    await cap(page, 'It redraws — and re-verifies the answer: AB = 15.');
-    await sleep(page, 2800);
-    // The WHOLE problem regenerates — not just the picture. Expand the
-    // worked solution and reveal the rewritten steps (before → after)
-    // so it's clear the answer key is re-derived too.
+    await page.mouse.wheel(0, 300); await sleep(page, 1800);
+    await cap(page, 'It rewrites the system — and re-checks: no solution.');
+    await sleep(page, 3000);
     await go(page, page.getByText(/Show solution/i).first(), { click: true }).catch(() => {});
     await sleep(page, 1000);
-    await cap(page, 'The worked solution rewrites too — every step re-derived.');
-    await page.mouse.wheel(0, 360); await sleep(page, 2600);
-    await page.mouse.wheel(0, 340); await sleep(page, 2600);
+    await cap(page, 'The whole answer key re-derives itself.');
+    await page.mouse.wheel(0, 320); await sleep(page, 2600);
     await capClear(page); await sleep(page, 500);
   },
 
-  // 4a · STUDENT (Jordan) — his own screen: attach a photo of the work
-  //      and turn it in. Framed unmistakably as the student's view; the
-  //      attached work is staged (no live extraction wait on camera).
+  // 4 · STUDENT (Aisha) — her screen: snap the work, turn it in.
   async '4-submit'(page) {
-    await gotoClean(page, `/school/student/courses/${ID.ALG}/homework/${ID.SYSTEMS}`,
-      { zoom: 1.16, waitMs: 1300 });
-    await cap(page, "Now — the student’s screen.");
+    await gotoClean(page, `/school/student/courses/${ID.ALG}/homework/${ID.UNIT5}`,
+      { zoom: 1.14, waitMs: 1300 });
+    await cap(page, 'Now — the student’s screen.');
     await sleep(page, 1200);
-    // Bring the "Submit your homework" attach panel into view first, so
-    // the file is shown being ATTACHED — not sitting there pre-attached.
     await page.getByText(/Submit your homework/i).first().scrollIntoViewIfNeeded({ timeout: 4000 }).catch(() => {});
     await page.mouse.wheel(0, 120); await sleep(page, 800);
     await cap(page, 'Snap a photo of the work — attach it.');
-    // Glide to the attach dropzone (don't fire the click — it opens the
-    // un-filmable OS picker — stage into the same input it feeds), then
-    // the staged page row appears live: attaching → attached.
     await go(page, page.getByRole('button', { name: /Add files/i }).first(), { click: false }).catch(() => {});
     await sleep(page, 300);
     const fin = page.locator('input[type=file]').first();
     await fin.setInputFiles(`${ASSETS}/handwriting.png`).catch(() => {});
     await sleep(page, 1600);
     await cap(page, 'Attached — Page 1 · handwriting.png.');
-    await sleep(page, 2200);
-    // Open the confirm ("your teacher will see exactly this") — glide
-    // the cursor, then commit with a reliable element-level click
-    // (never submits / triggers a live extraction wait). Element click
-    // is used because a synthetic mouse click under zoom can miss the
-    // small CTA.
+    await sleep(page, 2000);
     const turnInBtn = page.getByRole('button', { name: /review .* turn in/i }).first();
     await go(page, turnInBtn, { click: false }).catch(() => {});
     await turnInBtn.click({ timeout: 3000 }).catch(() => {});
@@ -443,41 +416,33 @@ const CLIPS = {
     await page.getByText(/Ready to turn it in/i).first().scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
     await sleep(page, 700);
     await cap(page, 'Your teacher sees exactly what you turn in.');
-    await sleep(page, 2600);
+    await sleep(page, 2400);
     await capClear(page); await sleep(page, 500);
   },
 
-  // 4b · STUDENT (Jordan) — the understanding check. He got the answer
-  //      RIGHT, but as the chat reveals turn-by-turn he can't explain a
-  //      single step. The AI stays warm to him the whole way (the catch
-  //      is surfaced privately to the teacher in 4-verdict).
+  // 4b · STUDENT (Jordan) — the understanding check, revealed turn by turn.
+  //      He got the matrix RIGHT; the "why" keeps coming up empty. The AI
+  //      stays warm the whole way (the catch is surfaced to the teacher).
   async '4-chat'(page) {
-    // Hide every chat bubble + the closing verdict WHILE the veil is still
-    // up (beforeReveal), so the scene fades in on an EMPTY thread — no
-    // pre-flash of the full conversation — then reveals one turn at a time.
-    await gotoClean(page, `/school/student/courses/${ID.ALG}/homework/${ID.LIN}`,
-      { zoom: 1.12, waitMs: 1800, anchor: 'text=/understanding check/i',
+    await gotoClean(page, `/school/student/courses/${ID.ALG}/homework/${ID.UNIT5}`,
+      { zoom: 1.1, waitMs: 1800, anchor: 'text=/understanding check/i',
         beforeReveal: () => page.evaluate(() => {
           const bubbles = Array.from(document.querySelectorAll('div')).filter((d) =>
             /\bjustify-(start|end)\b/.test(d.className) &&
             d.parentElement && Array.from(d.parentElement.children).filter((c) =>
               /\bjustify-(start|end)\b/.test(c.className)).length >= 3);
-          // De-dupe to the true bubble row set (largest sibling group).
           let cont = null, best = 0;
           bubbles.forEach((b) => {
             const n = Array.from(b.parentElement.children).filter((c) => /\bjustify-(start|end)\b/.test(c.className)).length;
             if (n > best) { best = n; cont = b.parentElement; }
           });
           window.__rows = cont ? Array.from(cont.children).filter((c) => /\bjustify-(start|end)\b/.test(c.className)) : [];
-          window.__term = Array.from(document.querySelectorAll('div,section')).find((d) =>
-            /Thanks for walking me through/i.test(d.textContent || '') &&
-            (d.textContent || '').length < 400) || null;
-          [...window.__rows, window.__term].forEach((el) => { if (el) { el.style.transition = 'opacity .45s ease, transform .45s ease'; el.style.opacity = '0'; el.style.transform = 'translateY(12px)'; } });
+          [...window.__rows].forEach((el) => { if (el) { el.style.transition = 'opacity .45s ease, transform .45s ease'; el.style.opacity = '0'; el.style.transform = 'translateY(12px)'; } });
           window.__scroller = cont;
           while (window.__scroller && window.__scroller.scrollHeight <= window.__scroller.clientHeight + 10)
             window.__scroller = window.__scroller.parentElement;
         }) });
-    await cap(page, 'Then a quick check — is the work really yours?');
+    await cap(page, 'Then a quick check — is the understanding really there?');
     await sleep(page, 900);
     const n = await page.evaluate(() => (window.__rows || []).length);
     for (let i = 0; i < n; i++) {
@@ -485,79 +450,61 @@ const CLIPS = {
         const el = window.__rows[idx];
         if (el) { el.style.opacity = '1'; el.style.transform = 'none'; el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
       }, i);
-      // Swap the caption partway so the viewer reads the turn — the
-      // answer was right, but the "why" keeps coming up empty.
       if (i === 1) { await cap(page, 'Just explain your thinking, in your own words.'); }
       if (i === 3) { await cap(page, 'The answer’s right — but the “why” keeps coming up empty.'); }
       await sleep(page, i % 2 === 1 ? 1750 : 1300);
     }
     await sleep(page, 800);
-    // The chat is recorded live (in_progress) so it ends on the
-    // student's last hollow answer — no closing panel. The AI stayed
-    // warm the whole way; the catch is surfaced to the teacher next.
-    await cap(page, "Right answer — and not one step he can explain.");
+    await cap(page, 'Right answer — and not one step he can explain.');
     await sleep(page, 2600);
     await capClear(page); await sleep(page, 1400);
   },
 
-  // 4c · TEACHER — the CATCH. Same submission, the teacher's review: a
-  //      correct answer on a perfect grade, quietly flagged — the thing
-  //      a grade can never do. Lands on the resolved red verdict banner.
+  // 4c · TEACHER — the CATCH, on a perfect score. A right answer, quietly
+  //      flagged — the thing a grade can never do. Behavior corroborates.
   async '4-verdict'(page) {
-    await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.LIN}/sections/${ID.SEC}/review?student=${ID.JORDAN}`,
-      { zoom: 1.12, waitMs: 1700, anchor: 'text=/couldn.t explain the steps/i' });
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}/sections/${ID.SEC}/review?student=${ID.JORDAN}`,
+      { zoom: 1.12, waitMs: 1700, anchor: 'text=/couldn.t explain the inverse/i' });
     await cap(page, 'You see the catch a grade never could.');
     await sleep(page, 1600);
-    // Bring the integrity flag banner into view and hold on it.
-    await page.evaluate(() => { const e = Array.from(document.querySelectorAll('*')).find((n) => /couldn.t explain the steps/i.test(n.textContent || '') && n.children.length < 8); if (e) e.scrollIntoView({ block: 'center' }); });
+    await page.evaluate(() => { const e = Array.from(document.querySelectorAll('*')).find((n) => /couldn.t explain the inverse/i.test(n.textContent || '') && n.children.length < 8); if (e) e.scrollIntoView({ block: 'center' }); });
     await sleep(page, 1200);
     await cap(page, 'A correct answer — that he can’t explain.');
     await sleep(page, 2600);
-    // Behavior context CORROBORATES the flag (never replaces it): the
-    // "Activity during the integrity check" digest sits right below the
-    // banner — pasted answer + tabbed out. Bring it into view and frame
-    // it honestly as supporting evidence, not the verdict itself.
     await page.evaluate(() => {
       const e = Array.from(document.querySelectorAll('*')).find((n) =>
-        /Activity during the integrity check/i.test(n.textContent || '') &&
-        n.children.length < 8);
+        /Activity during the integrity check/i.test(n.textContent || '') && n.children.length < 8);
       if (e) e.scrollIntoView({ block: 'center' });
     });
     await sleep(page, 900);
-    await cap(page, 'Behavior backs it up: pasted the answer, tabbed away — but the read stays the call.');
-    await sleep(page, 3000);
+    await cap(page, 'Behavior backs it up: pasted the answer, tabbed away.');
+    await sleep(page, 2800);
     await cap(page, 'Warm to the student. Honest with you.');
-    await sleep(page, 2400);
+    await sleep(page, 2200);
     await capClear(page); await sleep(page, 600);
   },
 
-  // 5a · TEACHER — the itemized grading receipt (math that adds up) + the
-  //      teacher setting the call per item + the resolved integrity verdict.
+  // 5 · TEACHER — the itemized grade + the resolved understanding check.
+  //     Maya's ladder: perfect setup, one honest trig slip → fair 85%.
   async '5-grade'(page) {
-    await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.LIN}/sections/${ID.SEC}/review?student=${ID.MAYA}`,
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}/sections/${ID.SEC}/review?student=${ID.MAYA}`,
       { zoom: 1.12, waitMs: 2000, anchor: 'text=/Maya/i' });
-    await cap(page, 'Open any grade — the math is right there.');
+    await cap(page, 'Grade the class — with a receipt that adds up.');
     await sleep(page, 1600);
-    // Expand problem 3's confident row to reveal its itemized receipt.
-    // Glide the cursor there, then commit with a single element-level
-    // click (reliable on the small target under zoom; a second mouse
-    // click would just toggle it back shut).
-    const expandBtn = page.getByRole('button', { name: /Expand problem 3 to inspect/i }).first();
+    const expandBtn = page.getByRole('button', { name: /Expand problem 2 to inspect/i }).first();
     await go(page, expandBtn, { click: false }).catch(() => {});
     await expandBtn.click({ timeout: 3000 }).catch(() => {});
     await sleep(page, 1300);
-    // Scroll the itemized ledger (Why 73% — itemized) into view.
     await page.getByText(/itemized/i).first().scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
     await page.mouse.wheel(0, 150);
     await sleep(page, 1400);
-    await cap(page, '100 − 20 (sign error) − 7 (arithmetic) = 73%.');
+    await cap(page, 'Perfect setup — one trig slip. 100 − 15 = 85%.');
     await sleep(page, 2900);
     await cap(page, 'The AI proposes — you set full, partial, or none.');
-    await sleep(page, 2400);
-    // The resolved integrity verdict at the top (no spinner — a verdict).
+    await sleep(page, 2200);
     await page.evaluate(() => { const e = Array.from(document.querySelectorAll('*')).find((n) => /method in her own words/i.test(n.textContent || '') && n.children.length < 8); if (e) e.scrollIntoView({ block: 'center' }); });
     await sleep(page, 1200);
-    await cap(page, 'And the understanding check comes back resolved.');
+    await cap(page, 'And her understanding check comes back cleared.');
     await sleep(page, 2400);
     await capClear(page); await sleep(page, 600);
   },
@@ -565,7 +512,7 @@ const CLIPS = {
   // 5b · TEACHER — class insights: per-concept struggle + per-student roster.
   async '5-insights'(page) {
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=insights`,
-      { zoom: 1.12, waitMs: 1800, anchor: 'text=/Distributing a negative/i' });
+      { zoom: 1.12, waitMs: 1800, anchor: 'text=/inverse matrix/i' });
     await cap(page, 'See exactly where the class is struggling.');
     await sleep(page, 2400);
     await page.mouse.wheel(0, 520); await sleep(page, 1800);
@@ -574,38 +521,35 @@ const CLIPS = {
     await capClear(page); await sleep(page, 500);
   },
 
-  // 6 · TEACHER — one-click reteach → targeted practice set.
+  // 6 · TEACHER — one-click reteach → a targeted practice set.
   async '6-reteach'(page) {
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=insights`,
-      { zoom: 1.12, waitMs: 1600, anchor: 'text=/Distributing a negative/i' });
+      { zoom: 1.12, waitMs: 1600, anchor: 'text=/inverse matrix/i' });
     await cap(page, 'One click turns a weak spot into practice.');
     await sleep(page, 1200);
     await go(page, page.getByRole('button', { name: /re-teach|reteach/i }).first(), { click: true }).catch(() => {});
     await sleep(page, 1200);
     await capClear(page); await sleep(page, 200);
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.PRACTICE}`,
-      { zoom: 1.15, waitMs: 1600, anchor: 'text=/distribut/i' });
+      { zoom: 1.13, waitMs: 1600, anchor: 'text=/determinant|solution|system/i' });
     await page.mouse.wheel(0, 160); await sleep(page, 1200);
     await cap(page, 'A targeted set — written for them, automatically.');
     await sleep(page, 2600);
     await capClear(page); await sleep(page, 500);
   },
 
-  // 7a · STUDENT — practice with an instant check.
+  // 7 · STUDENT — practice with an instant check.
   async '7-practice'(page) {
     await gotoClean(page, `/school/student/courses/${ID.ALG}/practice/${ID.PRACTICE}`,
-      { zoom: 1.15, waitMs: 1700 });
+      { zoom: 1.13, waitMs: 1700 });
     await cap(page, 'The student practices — with an instant check.');
     await sleep(page, 1100);
     await go(page, page.getByRole('button', { name: /^Practice/ }).first(), { click: true }).catch(() => {});
     await sleep(page, 1600);
-    // The correct answer to −(3x−5) is −3x+5 — the ONLY option whose
-    // math contains a "+". Find that option button (KaTeX renders the
-    // text into spans, so match on textContent) and click it, so the
-    // instant check lands on "Correct".
+    // The correct determinant is −17; pick that option (KaTeX → textContent).
     const pick = await page.evaluate(() => {
       const btns = Array.from(document.querySelectorAll('button'));
-      const opt = btns.find((b) => /[+＋]/.test(b.textContent || '') && /3x/.test(b.textContent || '') && (b.textContent || '').length < 40);
+      const opt = btns.find((b) => /(^|[^\d-])-\s*17($|[^\d])/.test((b.textContent || '').replace(/\s/g, ' ')) && (b.textContent || '').length < 40);
       if (!opt) return null;
       opt.scrollIntoView({ block: 'center' });
       const r = opt.getBoundingClientRect();
@@ -621,7 +565,7 @@ const CLIPS = {
   // 7b · STUDENT — Learn: the worked solution, one step at a time.
   async '7-learn'(page) {
     await gotoClean(page, `/school/student/courses/${ID.ALG}/practice/${ID.PRACTICE}`,
-      { zoom: 1.15, waitMs: 1500 });
+      { zoom: 1.13, waitMs: 1500 });
     await go(page, page.getByRole('button', { name: /^Learn/ }).first(), { click: true }).catch(() => {});
     await sleep(page, 1800);
     await cap(page, 'Or walks the solution, one step at a time.');
@@ -634,11 +578,11 @@ const CLIPS = {
 
 // ─────────────────────────────── runner ───────────────────────────────
 const WHO = {
-  '1-section': 'teacher', '2-materials': 'teacher', '3-generate': 'teacher',
-  '3-solution': 'teacher', '3-figure': 'teacher', '4-submit': 'jordan',
-  '4-chat': 'jordan', '4-verdict': 'teacher', '5-grade': 'teacher',
-  '5-insights': 'teacher', '6-reteach': 'teacher', '7-practice': 'maya',
-  '7-learn': 'maya',
+  '0-cold': 'teacher', '1-section': 'teacher', '2-materials': 'teacher',
+  '3-generate': 'teacher', '3-figure': 'teacher', '3-workshop': 'teacher',
+  '4-submit': 'aisha', '4-chat': 'jordan', '4-verdict': 'teacher',
+  '5-grade': 'teacher', '5-insights': 'teacher', '6-reteach': 'teacher',
+  '7-practice': 'maya', '7-learn': 'maya',
 };
 
 const want = process.argv.slice(2);
@@ -648,7 +592,7 @@ global.__b = await chromium.launch({ executablePath: CACHED || undefined, headle
 for (const id of ids) {
   const ctx = await newCtx(WHO[id]);
   const page = await ctx.newPage();
-  CUR = { x: VIEW.width / 2, y: VIEW.height / 2 };   // reset cursor per clip
+  CUR = { x: VIEW.width / 2, y: VIEW.height / 2 };
   const errors = [];
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', e => errors.push('PAGEERR ' + e.message));
