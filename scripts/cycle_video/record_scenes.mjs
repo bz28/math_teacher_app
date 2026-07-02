@@ -176,13 +176,19 @@ async function go(page, locator, { click = true, settle = 520, find = 4000 } = {
   return true;
 }
 
-async function gotoClean(page, url, { zoom = 1, waitMs = 1500, anchor = null } = {}) {
+// `onSettle` runs while the brand veil is STILL up — after the anchor is
+// visible + the page has settled, but before the veil lifts. Use it to
+// prime a screen (e.g. hide-then-reveal a chat) so the first on-camera
+// frame is already in its intended start state — no pre-flash of settled
+// content, ever.
+async function gotoClean(page, url, { zoom = 1, waitMs = 1500, anchor = null, onSettle = null } = {}) {
   await veilOn(page).catch(() => {});
   await page.goto(WEB + url, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
   await page.waitForLoadState('load', { timeout: 8000 }).catch(() => {});
   await setZoom(page, zoom);
   if (anchor) { try { await page.locator(anchor).first().waitFor({ state: 'visible', timeout: 9000 }); } catch {} }
   await sleep(page, waitMs);
+  if (onSettle) { try { await onSettle(); } catch (e) { console.log('onSettle threw:', e.message); } }
   await veilOff(page);
   await sleep(page, 260);
 }
@@ -417,38 +423,51 @@ const CLIPS = {
   //      single step. The AI stays warm to him the whole way (the catch
   //      is surfaced privately to the teacher in 4-verdict).
   async '4-chat'(page) {
-    await gotoClean(page, `/school/student/courses/${ID.ALG}/homework/${ID.LIN}`,
-      { zoom: 1.0, waitMs: 1800, anchor: 'text=/understanding check/i' });
-    // Hide every message + the closing verdict, then reveal them in
-    // sequence so the chat reads as a live conversation.
-    await page.evaluate(() => {
-      const bubbles = Array.from(document.querySelectorAll('div')).filter((d) =>
-        /\bjustify-(start|end)\b/.test(d.className) &&
-        d.parentElement && Array.from(d.parentElement.children).filter((c) =>
-          /\bjustify-(start|end)\b/.test(c.className)).length >= 3);
-      // De-dupe to the true bubble row set (largest sibling group).
-      let cont = null, best = 0;
-      bubbles.forEach((b) => {
-        const n = Array.from(b.parentElement.children).filter((c) => /\bjustify-(start|end)\b/.test(c.className)).length;
-        if (n > best) { best = n; cont = b.parentElement; }
-      });
-      window.__rows = cont ? Array.from(cont.children).filter((c) => /\bjustify-(start|end)\b/.test(c.className)) : [];
-      window.__term = Array.from(document.querySelectorAll('div,section')).find((d) =>
-        /Thanks for walking me through/i.test(d.textContent || '') &&
-        (d.textContent || '').length < 400) || null;
-      [...window.__rows, window.__term].forEach((el) => { if (el) { el.style.transition = 'opacity .45s ease, transform .45s ease'; el.style.opacity = '0'; el.style.transform = 'translateY(12px)'; } });
-      window.__scroller = cont;
-      while (window.__scroller && window.__scroller.scrollHeight <= window.__scroller.clientHeight + 10)
-        window.__scroller = window.__scroller.parentElement;
+    // Hide every message + the closing verdict WHILE the veil is still up
+    // (onSettle), then reveal them in sequence — so the first on-camera
+    // frame is an empty check, never a flash of the full conversation.
+    await gotoClean(page, `/school/student/courses/${ID.ALG}/homework/${ID.LIN}`, {
+      zoom: 1.0, waitMs: 1800, anchor: 'text=/understanding check/i',
+      onSettle: async () => {
+        await page.evaluate(() => {
+          const bubbles = Array.from(document.querySelectorAll('div')).filter((d) =>
+            /\bjustify-(start|end)\b/.test(d.className) &&
+            d.parentElement && Array.from(d.parentElement.children).filter((c) =>
+              /\bjustify-(start|end)\b/.test(c.className)).length >= 3);
+          // De-dupe to the true bubble row set (largest sibling group).
+          let cont = null, best = 0;
+          bubbles.forEach((b) => {
+            const n = Array.from(b.parentElement.children).filter((c) => /\bjustify-(start|end)\b/.test(c.className)).length;
+            if (n > best) { best = n; cont = b.parentElement; }
+          });
+          window.__rows = cont ? Array.from(cont.children).filter((c) => /\bjustify-(start|end)\b/.test(c.className)) : [];
+          window.__term = Array.from(document.querySelectorAll('div,section')).find((d) =>
+            /Thanks for walking me through/i.test(d.textContent || '') &&
+            (d.textContent || '').length < 400) || null;
+          // No transition on the initial hide — snap them invisible under
+          // the veil so nothing animates on the first visible frame. The
+          // reveal transition is armed just before each row is shown.
+          [...window.__rows, window.__term].forEach((el) => { if (el) { el.style.opacity = '0'; el.style.transform = 'translateY(12px)'; } });
+          window.__scroller = cont;
+          while (window.__scroller && window.__scroller.scrollHeight <= window.__scroller.clientHeight + 10)
+            window.__scroller = window.__scroller.parentElement;
+          // Pin the scroll to the top so the (now empty) thread starts clean.
+          if (window.__scroller) window.__scroller.scrollTop = 0;
+        });
+      },
     });
-    await sleep(page, 500);
-    await cap(page, 'After turning in work, a quick check — is it really yours?');
+    await sleep(page, 400);
+    await cap(page, 'He turned in work. Now a quick check — is the thinking his?');
     await sleep(page, 900);
     const n = await page.evaluate(() => (window.__rows || []).length);
     for (let i = 0; i < n; i++) {
       await page.evaluate((idx) => {
         const el = window.__rows[idx];
-        if (el) { el.style.opacity = '1'; el.style.transform = 'none'; el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+        if (el) {
+          el.style.transition = 'opacity .45s ease, transform .45s ease';
+          el.style.opacity = '1'; el.style.transform = 'none';
+          el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
       }, i);
       // Swap the caption partway so the viewer reads the turn — the
       // answer was right, but the "why" keeps coming up empty.
