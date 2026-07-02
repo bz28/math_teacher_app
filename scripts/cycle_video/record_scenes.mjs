@@ -41,6 +41,9 @@ const ID = {
   JORDAN: '0f63c477-12f8-4cbc-b4dc-ad62642f2cdc',     // the integrity catch
 };
 const ALG_LINEAR_UNIT = '5547f6d5-0487-4174-bae0-a25908900c68';
+// The labeled source sheet the demo builds from — a real, dated review
+// sheet, uploaded in scene 2 and selected in scene 3 (never "worksheet.png").
+const REVIEW_SHEET = 'Unit 5 Review — Systems & Applications (2024).png';
 
 const VIEW = { width: 1920, height: 1080 };
 const sleep = (p, ms) => p.waitForTimeout(ms);
@@ -270,7 +273,7 @@ const CLIPS = {
       const h = { Authorization: 'Bearer ' + TOK.teacher.access };
       const docs = await (await fetch(`${API}/v1/teacher/courses/${ID.ALG}/documents`, { headers: h })).json();
       const list = docs.documents || docs.items || (Array.isArray(docs) ? docs : []);
-      for (const d of list) if ((d.filename || d.name || '') === 'worksheet.png')
+      for (const d of list) if ((d.filename || d.name || '') === REVIEW_SHEET)
         await apiDelete(`${API}/v1/teacher/courses/${ID.ALG}/documents/${d.id}`);
     } catch (e) {}
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=materials`, { zoom: 1.12, waitMs: 1500 });
@@ -279,7 +282,7 @@ const CLIPS = {
     await go(page, page.getByRole('button', { name: /^Upload Files$/i }).first(), { click: false }).catch(() => {});
     await sleep(page, 300);
     const input = page.locator('input[type=file]').first();
-    await input.setInputFiles(`${ASSETS}/worksheet.png`).catch(() => {});
+    await input.setInputFiles(`${ASSETS}/${REVIEW_SHEET}`).catch(() => {});
     await sleep(page, 1900);
     await cap(page, 'Your Unit 5 review sheet — ready to build from.');
     await sleep(page, 2000);
@@ -306,7 +309,7 @@ const CLIPS = {
       await title.pressSequentially('Unit 5 Review', { delay: 20 }).catch(() => {});
     }
     await sleep(page, 250);
-    await go(page, dialog.getByRole('button', { name: /^✓?\s*Linear Equations$/ }).first(), { click: true }).catch(() => {});
+    await go(page, dialog.getByRole('button', { name: /^✓?\s*Unit 5$/ }).first(), { click: true }).catch(() => {});
     await sleep(page, 350);
     await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});
     await sleep(page, 350);
@@ -327,7 +330,7 @@ const CLIPS = {
       await sleep(page, 500);
     } else { await sleep(page, 500); }
     await cap(page, 'And build from your own worksheet — one click.');
-    const srcRow = dialog.getByText('worksheet.png', { exact: true }).first();
+    const srcRow = dialog.getByText(REVIEW_SHEET, { exact: true }).first();
     await go(page, srcRow, { click: true }).catch(() => {});
     await sleep(page, 850);
     await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});

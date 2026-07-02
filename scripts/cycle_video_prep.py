@@ -364,6 +364,71 @@ PRACTICE_PROBLEMS = [
 ]
 
 
+# ── Handwritten-work photo for the pinned review rail ────────────────
+# The teacher review page pins the submission's uploaded photo ("Jordan's
+# work" / "Maya's work"). Left unset, these submissions keep a STALE
+# linear-equation scan from an earlier seed that matches none of the three
+# Unit 5 problems. We render each student's ACTUAL work as a lined-paper
+# "photo" so the pinned rail agrees with the extraction, the chat, and the
+# flag. Jordan → the correct inverse-matrix steps (x = 31/17). Maya → the
+# matrix (correct) + the ladder with her honest sin-value slip (11.8 ft) +
+# the multi-step root.
+def _handwriting_svg(lines: list[str]) -> str:
+    """A lined-notebook 'handwritten' page from a list of work lines.
+    Cursive-ish via a system fallback; the look sells the photo, and the
+    content is the student's real extracted work."""
+    rows = []
+    y = 96
+    for ln in lines:
+        indent = ln.startswith("   ")
+        color = "#15643f" if ("=" in ln and ("31/17" in ln or "x = 5" in ln
+                              or "11.8" in ln)) else "#1c2a52"
+        rows.append(
+            f'<text x="{92 if indent else 64}" y="{y}" '
+            f'font-family="Bradley Hand, Comic Sans MS, Caveat, cursive" '
+            f'font-size="30" fill="{color}">{ln.strip()}</text>')
+        y += 62
+    height = y + 30
+    grid = "".join(
+        f'<line x1="0" y1="{ly}" x2="720" y2="{ly}" stroke="#cfe0ee" stroke-width="1"/>'
+        for ly in range(60, height, 62))
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="720" height="{height}" '
+        f'viewBox="0 0 720 {height}">'
+        f'<rect width="720" height="{height}" fill="#fdfcf7"/>'
+        f'{grid}'
+        f'<line x1="48" y1="0" x2="48" y2="{height}" stroke="#e6a89c" stroke-width="2"/>'
+        f'<text x="560" y="34" font-family="Inter, sans-serif" font-size="13" '
+        f'fill="#9aa0a6" letter-spacing="1">UNIT 5 · PERIOD 3</text>'
+        f'{"".join(rows)}</svg>')
+
+
+def _svg_file(svg: str) -> dict[str, str]:
+    return {"data": base64.b64encode(svg.encode()).decode(), "media_type": "image/svg+xml"}
+
+
+# Jordan's work photo — the correct inverse-matrix solution (matches his
+# extraction + the flag: right answer, no explanation).
+JORDAN_WORK_LINES = [
+    "1)  2x + 5y = 16 ,   3x − y = 3",
+    "   [ 2  5 ; 3  −1 ] [x ; y] = [16 ; 3]",
+    "   det A = 2(−1) − 5(3) = −17",
+    "   A⁻¹ = (1/17) [ 1  5 ; 3  −2 ]",
+    "   x = 31/17 ,   y = 42/17",
+]
+# Maya's work photo — matrix correct, the ladder with her sin-value slip
+# (sin58° ≈ 0.79 → 11.8 ft), and the multi-step root. Matches her grade.
+MAYA_WORK_LINES = [
+    "1)  A⁻¹ = (1/17) [ 1  5 ; 3  −2 ]",
+    "   x = 31/17 ,   y = 42/17",
+    "2)  sin 58° = h / 15",
+    "   h = 15 · sin 58° = 15(0.79)",
+    "   h ≈ 11.8 ft",
+    "3)  4(x − 2) + 3 = 2x + 5",
+    "   2x = 10   →   x = 5",
+]
+
+
 def _new_item(spec: dict, *, figure_spec=None, figure_svg=None) -> QuestionBankItem:
     return QuestionBankItem(
         id=uuid.UUID(spec["id"]),
@@ -383,7 +448,12 @@ async def main() -> None:
         # 1 ── the class identity: General Math, taught by Ms. Rivera ──
         await s.execute(text("update courses set name='General Math' where id=:c"), {"c": COURSE})
         await s.execute(text("update users set name='Ms. Rivera' where email=:e"), {"e": TEACHER_EMAIL})
-        print("named the class 'General Math' and the teacher 'Ms. Rivera'")
+        # The unit these three problems live in — a mixed Unit 5 review, NOT
+        # "Linear Equations" (its old, misleading name). The generation
+        # wizard groups the source picker by unit, so this is the folder the
+        # labeled review sheet sits under.
+        await s.execute(text("update units set name='Unit 5' where id=:u"), {"u": UNIT})
+        print("named the class 'General Math', the teacher 'Ms. Rivera', the unit 'Unit 5'")
 
         # 1a ── rename placeholder students ──────────────────────────
         renamed = 0
@@ -480,8 +550,10 @@ async def main() -> None:
 
         # 2d ── deterministic source material for the generation wizard.
         # Wipe accumulated on-camera uploads, seed ONE persistent warm-up
-        # material.  Scene 2 uploads worksheet.png on camera → 2 docs, so
-        # the wizard's Source picker reads "1 of 2 selected".
+        # material.  Scene 2 uploads the labeled review sheet
+        # ("Unit 5 Review — Systems & Applications (2024).png") on camera →
+        # 2 docs, so the wizard's Source picker reads "1 of 2 selected" and
+        # scene 3 selects the labeled sheet (never a generic "worksheet.png").
         teacher_uid = (await s.execute(text("select id from users where email=:e"),
                                        {"e": TEACHER_EMAIL})).scalar()
         await s.execute(text("delete from documents where course_id=:c"), {"c": COURSE})
@@ -542,8 +614,11 @@ async def main() -> None:
         ], "confidence": 0.9}
         sub.extraction_confirmed_at = sub.extraction_confirmed_at or now
         sub.final_answers = dict(MAYA_FINAL_ANSWERS)
+        # Pin the review rail to Maya's ACTUAL work (was a stale linear scan).
+        sub.files = [_svg_file(_handwriting_svg(MAYA_WORK_LINES))]
         flag_modified(sub, "extraction")
         flag_modified(sub, "final_answers")
+        flag_modified(sub, "files")
 
         grade = (await s.execute(select(SubmissionGrade).where(
             SubmissionGrade.submission_id == sub_uuid))).scalar_one_or_none()
@@ -596,8 +671,12 @@ async def main() -> None:
         ], "confidence": 0.94}
         jsub.extraction_confirmed_at = jsub.extraction_confirmed_at or now
         jsub.final_answers = dict(JORDAN_FINAL_ANSWERS)
+        # Pin the review rail to Jordan's ACTUAL matrix work (was a stale
+        # linear scan) — the correct inverse-matrix steps behind the flag.
+        jsub.files = [_svg_file(_handwriting_svg(JORDAN_WORK_LINES))]
         flag_modified(jsub, "extraction")
         flag_modified(jsub, "final_answers")
+        flag_modified(jsub, "files")
 
         jgrade = (await s.execute(select(SubmissionGrade).where(
             SubmissionGrade.submission_id == jsub_uuid))).scalar_one_or_none()

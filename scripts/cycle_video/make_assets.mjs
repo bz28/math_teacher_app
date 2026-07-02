@@ -16,9 +16,17 @@ const cached = execSync(
 ).toString().trim();
 
 // worksheet prop = the real repo asset (the sheet the demo generates from).
+// Copied under BOTH the generic name (the seeded warm-up doc's image) AND
+// the LABELED name that scene 2 uploads on camera + scene 3 selects, so the
+// generation source reads as a real, dated review sheet — never "worksheet.png".
+const REVIEW_SHEET = 'Unit 5 Review — Systems & Applications (2024).png';
 const REPO = path.resolve(new URL('../../', import.meta.url).pathname);
 const SRC = path.join(REPO, 'docs/design/unit5_review_worksheet.png');
-if (fs.existsSync(SRC)) { fs.copyFileSync(SRC, `${OUT}/worksheet.png`); console.log('worksheet <- repo unit5 sheet'); }
+if (fs.existsSync(SRC)) {
+  fs.copyFileSync(SRC, `${OUT}/worksheet.png`);
+  fs.copyFileSync(SRC, `${OUT}/${REVIEW_SHEET}`);
+  console.log('worksheet + labeled review sheet <- repo unit5 sheet');
+}
 
 // hand-written look (cursive-ish system fallback) on lined paper — the
 // student's Unit 5 work across the three problems.
