@@ -17,7 +17,9 @@ export default function VideoHero() {
   const [started, setStarted] = useState(false);
 
   function play() {
-    videoRef.current?.play();
+    // User-gesture play; swallow the rejection if the browser blocks it
+    // (e.g. codec/autoplay policy) rather than logging an unhandled rejection.
+    videoRef.current?.play().catch(() => {});
   }
 
   return (
