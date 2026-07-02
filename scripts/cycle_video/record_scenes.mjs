@@ -64,16 +64,23 @@ const INIT = `
       ROOT().appendChild(c);
     }
     if (!document.getElementById('__cap')) {
+      // Editorial lower-third: an ink pill with a soft backdrop blur, a
+      // sienna spine, and one hairline of light — eased in on a gentle
+      // spring curve. Restraint over flash.
       const w = document.createElement('div'); w.id='__cap';
-      w.style.cssText='position:fixed;z-index:2147483646;left:50%;bottom:54px;transform:translateX(-50%) translateY(8px);'
-        +'opacity:0;transition:opacity .5s ease, transform .5s ease;pointer-events:none;'
-        +'display:flex;align-items:center;gap:14px;background:rgba(20,19,15,.93);color:#f7f5f0;'
-        +'padding:15px 30px;border-radius:16px;font-family:Inter,system-ui,sans-serif;font-size:27px;'
-        +'font-weight:500;letter-spacing:.005em;box-shadow:0 10px 40px rgba(0,0,0,.28);max-width:1500px';
-      const dot=document.createElement('span');
-      dot.style.cssText='width:11px;height:11px;border-radius:50%;background:#b8431a;flex:0 0 auto';
+      w.style.cssText='position:fixed;z-index:2147483646;left:50%;bottom:62px;transform:translateX(-50%) translateY(14px) scale(.985);'
+        +'opacity:0;transition:opacity .5s cubic-bezier(.22,1,.36,1), transform .5s cubic-bezier(.22,1,.36,1);pointer-events:none;'
+        +'display:flex;align-items:stretch;background:rgba(20,19,15,.82);color:#f7f5f0;'
+        +'border-radius:15px;font-family:Inter,system-ui,sans-serif;font-size:26px;'
+        +'font-weight:500;letter-spacing:.006em;line-height:1.25;overflow:hidden;'
+        +'box-shadow:0 22px 60px rgba(20,19,15,.34), 0 3px 10px rgba(20,19,15,.22);'
+        +'border:1px solid rgba(247,245,240,.09);max-width:1500px;'
+        +'-webkit-backdrop-filter:saturate(1.1) blur(9px);backdrop-filter:saturate(1.1) blur(9px)';
+      const bar=document.createElement('span');
+      bar.style.cssText='width:4px;flex:0 0 auto;background:#b8431a;align-self:stretch';
       const txt=document.createElement('span'); txt.id='__captxt';
-      w.appendChild(dot); w.appendChild(txt); ROOT().appendChild(w);
+      txt.style.cssText='padding:15px 32px 16px 28px;display:block';
+      w.appendChild(bar); w.appendChild(txt); ROOT().appendChild(w);
     }
     // A full-frame brand veil used to bridge AI work — fades over the
     // screen so no spinner/loading frame is ever seen.
@@ -87,8 +94,8 @@ const INIT = `
   window.__moveCur=(x,y)=>{const c=document.getElementById('__cur');if(c)c.style.transform='translate('+x+'px,'+y+'px)';};
   document.addEventListener('mousemove',e=>window.__moveCur(e.clientX-11,e.clientY-11));
   window.__cap=(t)=>{ensure();const w=document.getElementById('__cap');const x=document.getElementById('__captxt');
-    if(x)x.textContent=t; if(w){w.style.opacity='1';w.style.transform='translateX(-50%) translateY(0)';}};
-  window.__capClear=()=>{const w=document.getElementById('__cap');if(w){w.style.opacity='0';w.style.transform='translateX(-50%) translateY(8px)';}};
+    if(x)x.textContent=t; if(w){w.style.opacity='1';w.style.transform='translateX(-50%) translateY(0) scale(1)';}};
+  window.__capClear=()=>{const w=document.getElementById('__cap');if(w){w.style.opacity='0';w.style.transform='translateX(-50%) translateY(14px) scale(.985)';}};
   window.__veilOn=()=>{ensure();const v=document.getElementById('__veil');if(v)v.style.opacity='1';};
   window.__veilOff=()=>{const v=document.getElementById('__veil');if(v)v.style.opacity='0';};
   const HIDE_LABELS=['Take the tour','Try as Student','Try as student'];
@@ -199,7 +206,7 @@ const CLIPS = {
   async '1-section'(page) {
     await deleteDemoSections();
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}`, { zoom: 1.1, waitMs: 1400, anchor: 'text=/Period 3/i' });
-    await cap(page, 'A class section — in seconds.');
+    await cap(page, 'A new class section — in seconds.');
     await sleep(page, 1100);
     await go(page, page.getByRole('button', { name: /new section/i }));
     await sleep(page, 800);
@@ -209,7 +216,7 @@ const CLIPS = {
     await sleep(page, 700);
     await go(page, page.getByRole('button', { name: /^Create$/ }));
     await sleep(page, 1700);
-    await cap(page, 'Done — share the join code with the class.');
+    await cap(page, "Done. Share the join code and they're in.");
     await sleep(page, 2100);
     await capClear(page); await sleep(page, 500);
     await deleteDemoSections();
@@ -256,7 +263,7 @@ const CLIPS = {
     // One steady framing for the whole scene — zoom set on the homework
     // tab before the modal is on camera, then held (no mid-scene zoom).
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=homework`, { zoom: 1.15, waitMs: 1200 });
-    await cap(page, 'New homework — start to finish.');
+    await cap(page, 'New homework, start to finish.');
     await sleep(page, 700);
     await go(page, page.getByRole('button', { name: /new homework/i }).first());
     // Wait for the wizard's Step 1 (Details) to settle.
@@ -282,14 +289,14 @@ const CLIPS = {
     //      and select the uploaded worksheet as a source. ──
     // Count → a custom 3, so the wizard, the Review summary, and the
     // generated set all agree on 3.
-    await cap(page, 'How many? Just three today.');
+    await cap(page, 'How many? Three today.');
     const countInput = dialog.locator('input[aria-label="Custom problem count"]').first();
     if (await countInput.count()) {
       await go(page, countInput, { click: true });
       await countInput.fill('3').catch(() => {});
       await sleep(page, 900);
     }
-    await cap(page, 'Set a focus — just type it.');
+    await cap(page, 'Set the focus — just type it.');
     const focus = dialog.locator('input[placeholder*="word problems"], textarea[placeholder*="word problems"]').first();
     if (await focus.count()) {
       await go(page, focus, { click: true });
@@ -298,7 +305,7 @@ const CLIPS = {
     } else { await sleep(page, 800); }
     // Source material — click the worksheet uploaded in scene 2 so it's
     // visibly chosen as the generation source ("1 of 2 selected").
-    await cap(page, 'Build from your own worksheet — one click.');
+    await cap(page, 'Ground it in your own worksheet.');
     const srcRow = dialog.getByText('worksheet.png', { exact: true }).first();
     await go(page, srcRow, { click: true }).catch(() => {});
     await sleep(page, 1600);
@@ -327,7 +334,7 @@ const CLIPS = {
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.SOCCER}`,
       { zoom: 1.18, waitMs: 2400, anchor: 'text=/Amara|striker|goals|match/i' });
     await page.mouse.wheel(0, 150); await sleep(page, 600);
-    await cap(page, 'Every problem — themed to soccer.');
+    await cap(page, 'Every problem, themed to soccer.');
     await sleep(page, 2200);
     await page.mouse.wheel(0, 170); await sleep(page, 1600);
     await capClear(page); await sleep(page, 400);
@@ -338,13 +345,13 @@ const CLIPS = {
   async '3-solution'(page) {
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.SOCCER}`,
       { zoom: 1.0, waitMs: 1400, anchor: 'text=/Amara/i' });
-    await cap(page, 'Open any problem —');
+    await cap(page, 'Open any problem…');
     await sleep(page, 900);
     await go(page, page.getByText(/striker Amara scored/i).first(), { click: true }).catch(() => {});
     await sleep(page, 1500);
     await go(page, page.getByText(/show solution/i).first(), { click: true }).catch(() => {});
     await sleep(page, 1400);
-    await cap(page, '— a full worked solution and a verified answer key.');
+    await cap(page, '…a full worked solution, answer verified.');
     await sleep(page, 3000);
     await capClear(page); await sleep(page, 500);
   },
@@ -366,14 +373,14 @@ const CLIPS = {
     await sleep(page, 2600);
     // Scroll from the "Before" figure down to the freshly redrawn one.
     await page.mouse.wheel(0, 300); await sleep(page, 1900);
-    await cap(page, 'The figure redraws — and re-verifies the answer to AB = 15.');
+    await cap(page, 'The figure redraws — and re-verifies AB = 15.');
     await sleep(page, 2800);
     // The WHOLE problem regenerates — not just the picture. Expand the
     // worked solution and reveal the rewritten steps (before → after)
     // so it's clear the answer key is re-derived too.
     await go(page, page.getByText(/Show solution/i).first(), { click: true }).catch(() => {});
     await sleep(page, 1000);
-    await cap(page, 'And the worked solution rewrites itself — every step re-derived.');
+    await cap(page, 'The worked solution rewrites too — every step re-derived.');
     await page.mouse.wheel(0, 360); await sleep(page, 2600);
     await page.mouse.wheel(0, 340); await sleep(page, 2600);
     await capClear(page); await sleep(page, 500);
@@ -385,13 +392,13 @@ const CLIPS = {
   async '4-submit'(page) {
     await gotoClean(page, `/school/student/courses/${ID.ALG}/homework/${ID.SYSTEMS}`,
       { zoom: 1.16, waitMs: 1300 });
-    await cap(page, "This is the student's screen.");
+    await cap(page, "Now, the student's screen.");
     await sleep(page, 1200);
     // Bring the "Submit your homework" attach panel into view first, so
     // the file is shown being ATTACHED — not sitting there pre-attached.
     await page.getByText(/Submit your homework/i).first().scrollIntoViewIfNeeded({ timeout: 4000 }).catch(() => {});
     await page.mouse.wheel(0, 120); await sleep(page, 800);
-    await cap(page, 'Snap a photo of your work — attach it.');
+    await cap(page, 'Snap a photo of the work, attach it.');
     // Glide to the attach dropzone (don't fire the click — it opens the
     // un-filmable OS picker — stage into the same input it feeds), then
     // the staged page row appears live: attaching → attached.
@@ -400,7 +407,7 @@ const CLIPS = {
     const fin = page.locator('input[type=file]').first();
     await fin.setInputFiles(`${ASSETS}/handwriting.png`).catch(() => {});
     await sleep(page, 1600);
-    await cap(page, 'Attached — Page 1 · handwriting.png.');
+    await cap(page, 'Attached — page one of the work.');
     await sleep(page, 2200);
     // Open the confirm ("your teacher will see exactly this") — glide
     // the cursor, then commit with a reliable element-level click
@@ -413,7 +420,7 @@ const CLIPS = {
     await sleep(page, 1000);
     await page.getByText(/Ready to turn it in/i).first().scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
     await sleep(page, 700);
-    await cap(page, 'Your teacher sees exactly what you turn in.');
+    await cap(page, 'Your teacher sees exactly what you send.');
     await sleep(page, 3000);
     await capClear(page); await sleep(page, 500);
   },
@@ -490,7 +497,7 @@ const CLIPS = {
   async '4-verdict'(page) {
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.LIN}/sections/${ID.SEC}/review?student=${ID.JORDAN}`,
       { zoom: 1.12, waitMs: 2000, anchor: 'text=/Jordan/i' });
-    await cap(page, 'You see the catch a grade never could.');
+    await cap(page, 'The catch a grade could never see.');
     await sleep(page, 1600);
     // Bring the integrity flag banner into view and hold on it.
     await page.evaluate(() => { const e = Array.from(document.querySelectorAll('*')).find((n) => /couldn.t explain the steps/i.test(n.textContent || '') && n.children.length < 8); if (e) e.scrollIntoView({ block: 'center' }); });
@@ -508,7 +515,7 @@ const CLIPS = {
       if (e) e.scrollIntoView({ block: 'center' });
     });
     await sleep(page, 900);
-    await cap(page, 'Behavior backs it up — pasted the answer, switched tabs — the read is still the call.');
+    await cap(page, 'Behavior backs it up — pasted the answer, tabbed out. The read is still the call.');
     await sleep(page, 3400);
     await cap(page, 'Warm to the student, honest with you.');
     await sleep(page, 2400);
@@ -536,7 +543,7 @@ const CLIPS = {
     await sleep(page, 1400);
     await cap(page, '100 − 20 for a sign error − 7 for arithmetic = 73%.');
     await sleep(page, 3400);
-    await cap(page, 'The AI proposes — but you set full, partial, or none.');
+    await cap(page, 'The AI proposes; you set full, partial, or none.');
     await sleep(page, 2800);
     // The resolved integrity verdict at the top (no spinner — a verdict).
     await page.evaluate(() => { const e = Array.from(document.querySelectorAll('*')).find((n) => /method in her own words/i.test(n.textContent || '') && n.children.length < 8); if (e) e.scrollIntoView({ block: 'center' }); });
@@ -559,7 +566,19 @@ const CLIPS = {
 
   // 6 · TEACHER — one-click reteach → targeted practice set.
   async '6-reteach'(page) {
-    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=insights`, { zoom: 1.12, waitMs: 1600 });
+    // 5-insights already toured the full board — so open this beat focused
+    // on the weak-spot row + its Re-teach button (scrolled in under the
+    // veil), not the board header again. Tighter framing, no re-show.
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=insights`, {
+      zoom: 1.12, waitMs: 1600,
+      onSettle: async () => {
+        await page.evaluate(() => {
+          const btn = Array.from(document.querySelectorAll('button'))
+            .find((b) => /re-?teach/i.test(b.textContent || ''));
+          if (btn) btn.scrollIntoView({ block: 'center' });
+        });
+      },
+    });
     await cap(page, 'One click turns a weak spot into practice.');
     await sleep(page, 1200);
     await go(page, page.getByRole('button', { name: /re-teach|reteach/i }).first(), { click: true }).catch(() => {});
@@ -577,7 +596,7 @@ const CLIPS = {
   async '7-practice'(page) {
     await gotoClean(page, `/school/student/courses/${ID.ALG}/practice/${ID.PRACTICE}`,
       { zoom: 1.15, waitMs: 1700 });
-    await cap(page, 'The student practices — with an instant check.');
+    await cap(page, 'Back to the student — practice, with an instant check.');
     await sleep(page, 1100);
     await go(page, page.getByRole('button', { name: /^Practice/ }).first(), { click: true }).catch(() => {});
     await sleep(page, 1600);
@@ -595,7 +614,7 @@ const CLIPS = {
     });
     if (pick) { await page.mouse.move(pick.x, pick.y, { steps: 22 }); await sleep(page, 420); await page.mouse.click(pick.x, pick.y); }
     await sleep(page, 2200);
-    await cap(page, 'Right away — they know, and they learn.');
+    await cap(page, 'Instantly — they know, and they learn.');
     await sleep(page, 1800);
     await capClear(page); await sleep(page, 500);
   },
