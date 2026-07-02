@@ -209,21 +209,34 @@ const CLIPS = {
     await deleteDemoSections();
   },
 
-  // 2 · TEACHER — add course materials (upload a worksheet).
+  // 2 · TEACHER — add course materials by UPLOADING a worksheet on
+  //      camera: glide to Upload, attach, watch it land in the list
+  //      (no magic appearance). One warm-up material is pre-seeded so
+  //      the grid visibly goes 1 → 2 files.
   async '2-materials'(page) {
     try {
+      // Idempotent: remove prior on-camera uploads (the seeded warm-up
+      // "Warm-up — solving equations.png" is preserved).
       const h = { Authorization: 'Bearer ' + TOK.teacher.access };
       const docs = await (await fetch(`${API}/v1/teacher/courses/${ID.ALG}/documents`, { headers: h })).json();
       const list = docs.documents || docs.items || (Array.isArray(docs) ? docs : []);
-      for (const d of list) if ((d.filename || d.name || '').includes('worksheet-demo'))
+      for (const d of list) if ((d.filename || d.name || '') === 'worksheet.png')
         await apiDelete(`${API}/v1/teacher/courses/${ID.ALG}/documents/${d.id}`);
     } catch (e) {}
-    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=materials`, { zoom: 1.1, waitMs: 1400 });
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=materials`, { zoom: 1.1, waitMs: 1500 });
     await cap(page, 'Drop in the materials you already teach from.');
     await sleep(page, 1300);
+    // Glide the cursor to the Upload control so the upload reads as a
+    // real click, not a file teleporting in. (We don't fire the click —
+    // it would open the OS picker, which can't be filmed headless — we
+    // stage the file straight into the same input the picker feeds.)
+    await go(page, page.getByRole('button', { name: /^Upload Files$/i }).first(), { click: false }).catch(() => {});
+    await sleep(page, 300);
     const input = page.locator('input[type=file]').first();
     await input.setInputFiles(`${ASSETS}/worksheet.png`).catch(() => {});
-    await sleep(page, 2400);
+    // The grid goes 1 → 2 files + an "Uploaded 1 file" toast — the
+    // upload transition, on camera.
+    await sleep(page, 1900);
     await cap(page, 'Uploaded — ready to build from.');
     await sleep(page, 2000);
     await capClear(page); await sleep(page, 500);
@@ -259,14 +272,30 @@ const CLIPS = {
     await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});
     await sleep(page, 500);
 
-    // ── Step 2 · Problems — TYPE the "soccer" focus (not pre-filled). ──
+    // ── Step 2 · Problems — pick a count (3), TYPE the "soccer" focus,
+    //      and select the uploaded worksheet as a source. ──
+    // Count → a custom 3, so the wizard, the Review summary, and the
+    // generated set all agree on 3.
+    await cap(page, 'How many? Just three today.');
+    const countInput = dialog.locator('input[aria-label="Custom problem count"]').first();
+    if (await countInput.count()) {
+      await go(page, countInput, { click: true });
+      await countInput.fill('3').catch(() => {});
+      await sleep(page, 900);
+    }
     await cap(page, 'Set a focus — just type it.');
     const focus = dialog.locator('input[placeholder*="word problems"], textarea[placeholder*="word problems"]').first();
     if (await focus.count()) {
       await go(page, focus, { click: true });
       await focus.pressSequentially('soccer', { delay: 95 }).catch(() => {});
-      await sleep(page, 1100);
+      await sleep(page, 900);
     } else { await sleep(page, 800); }
+    // Source material — click the worksheet uploaded in scene 2 so it's
+    // visibly chosen as the generation source ("1 of 2 selected").
+    await cap(page, 'Build from your own worksheet — one click.');
+    const srcRow = dialog.getByText('worksheet.png', { exact: true }).first();
+    await go(page, srcRow, { click: true }).catch(() => {});
+    await sleep(page, 1600);
     await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});
     await sleep(page, 500);
 
@@ -286,8 +315,11 @@ const CLIPS = {
     await sleep(page, 700);
     await capClear(page); await sleep(page, 300);
 
+    // Anchor on a REAL problem line (not the word "soccer", which paints
+    // in the title before the set loads) so the veil never lifts onto a
+    // "Loading…" frame.
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.SOCCER}`,
-      { zoom: 1.18, waitMs: 1500, anchor: 'text=/soccer|goals|match/i' });
+      { zoom: 1.18, waitMs: 2400, anchor: 'text=/Amara|striker|goals|match/i' });
     await page.mouse.wheel(0, 150); await sleep(page, 600);
     await cap(page, 'Every problem — themed to soccer.');
     await sleep(page, 2200);
@@ -329,7 +361,15 @@ const CLIPS = {
     // Scroll from the "Before" figure down to the freshly redrawn one.
     await page.mouse.wheel(0, 300); await sleep(page, 1900);
     await cap(page, 'The figure redraws — and re-verifies the answer to AB = 15.');
-    await sleep(page, 3400);
+    await sleep(page, 2800);
+    // The WHOLE problem regenerates — not just the picture. Expand the
+    // worked solution and reveal the rewritten steps (before → after)
+    // so it's clear the answer key is re-derived too.
+    await go(page, page.getByText(/Show solution/i).first(), { click: true }).catch(() => {});
+    await sleep(page, 1000);
+    await cap(page, 'And the worked solution rewrites itself — every step re-derived.');
+    await page.mouse.wheel(0, 360); await sleep(page, 2600);
+    await page.mouse.wheel(0, 340); await sleep(page, 2600);
     await capClear(page); await sleep(page, 500);
   },
 
@@ -341,14 +381,21 @@ const CLIPS = {
       { zoom: 1.16, waitMs: 1300 });
     await cap(page, "This is the student's screen.");
     await sleep(page, 1200);
+    // Bring the "Submit your homework" attach panel into view first, so
+    // the file is shown being ATTACHED — not sitting there pre-attached.
+    await page.getByText(/Submit your homework/i).first().scrollIntoViewIfNeeded({ timeout: 4000 }).catch(() => {});
+    await page.mouse.wheel(0, 120); await sleep(page, 800);
+    await cap(page, 'Snap a photo of your work — attach it.');
+    // Glide to the attach dropzone (don't fire the click — it opens the
+    // un-filmable OS picker — stage into the same input it feeds), then
+    // the staged page row appears live: attaching → attached.
+    await go(page, page.getByRole('button', { name: /Add files/i }).first(), { click: false }).catch(() => {});
+    await sleep(page, 300);
     const fin = page.locator('input[type=file]').first();
     await fin.setInputFiles(`${ASSETS}/handwriting.png`).catch(() => {});
-    // Bring the "Submit your homework" panel + the staged photo of the
-    // work into view and hold there — the attached work is the focus.
-    await page.getByText(/Submit your homework/i).first().scrollIntoViewIfNeeded({ timeout: 4000 }).catch(() => {});
-    await page.mouse.wheel(0, 120); await sleep(page, 1400);
-    await cap(page, 'Snap a photo of your work.');
-    await sleep(page, 2400);
+    await sleep(page, 1600);
+    await cap(page, 'Attached — Page 1 · handwriting.png.');
+    await sleep(page, 2200);
     // Open the confirm ("your teacher will see exactly this") — glide
     // the cursor, then commit with a reliable element-level click
     // (never submits / triggers a live extraction wait). Element click
@@ -430,9 +477,22 @@ const CLIPS = {
     await page.evaluate(() => { const e = Array.from(document.querySelectorAll('*')).find((n) => /couldn.t explain the steps/i.test(n.textContent || '') && n.children.length < 8); if (e) e.scrollIntoView({ block: 'center' }); });
     await sleep(page, 1200);
     await cap(page, 'Correct answer — but he couldn’t explain it.');
-    await sleep(page, 3200);
+    await sleep(page, 3000);
+    // Behavior context CORROBORATES the flag (never replaces it): the
+    // "Activity during the integrity check" digest sits right below the
+    // banner — pasted answer + tabbed out. Bring it into view and frame
+    // it honestly as supporting evidence, not the verdict itself.
+    await page.evaluate(() => {
+      const e = Array.from(document.querySelectorAll('*')).find((n) =>
+        /Activity during the integrity check/i.test(n.textContent || '') &&
+        n.children.length < 8);
+      if (e) e.scrollIntoView({ block: 'center' });
+    });
+    await sleep(page, 900);
+    await cap(page, 'Behavior backs it up — pasted the answer, switched tabs — the read is still the call.');
+    await sleep(page, 3400);
     await cap(page, 'Warm to the student, honest with you.');
-    await sleep(page, 2600);
+    await sleep(page, 2400);
     await capClear(page); await sleep(page, 600);
   },
 

@@ -97,7 +97,7 @@ pk () {  # $1 clip  $2 fraction  $3 label
   pick "$w" "$(mid "$w" "$2")" "$FRAMES_DIR/$(printf '%02d' $n)-$3.png"; n=$((n+1)); }
 pk 1-section   0.55 section
 pk 2-materials 0.70 materials
-pk 3-generate  0.80 soccer-problems
+pk 3-generate  0.94 soccer-problems
 pk 3-solution  0.75 worked-solution
 pk 3-figure    0.80 figure-reshape
 pk 4-submit    0.70 photo

@@ -26,8 +26,10 @@ from sqlalchemy import delete, select, text
 
 from sqlalchemy.orm.attributes import flag_modified
 
+from api.core.integrity_pipeline import compute_activity_summary
 from api.database import get_session_factory
 from api.models.assignment import Submission, SubmissionGrade
+from api.models.course import Document
 from api.models.integrity_check import (
     IntegrityCheckProblem,
     IntegrityCheckSubmission,
@@ -112,6 +114,31 @@ JORDAN_TURNS = [
      "Thanks, Jordan — that's really helpful, exactly what I needed. "
      "We're all set here!"),
 ]
+# Behavioral telemetry on Jordan's STUDENT turns (ordinals 1, 3, 5).
+# Teacher-facing evidence only — it CORROBORATES the flag, never
+# replaces it. He pasted his answer in and tabbed away while
+# "explaining" — signals that raise scrutiny; the core call stays the
+# AI's read (right answer, can't explain). The teacher review rolls
+# these into the "Activity during the integrity check" digest beside
+# the flag (paste count + tab-out count) via compute_activity_summary.
+_TEL_AT = "2026-06-30T15:42:00Z"
+JORDAN_TURN_TELEMETRY = {
+    1: {  # "I moved everything around… The answer's 4.5." — pasted + tabbed out
+        "focus_blur_events": [{"at": _TEL_AT, "duration_ms": 13000}],
+        "paste_events": [{"at": _TEL_AT, "byte_count": 118}],
+        "typing_cadence": {"total_ms": 9000, "pauses_over_3s": 2, "edits": 1},
+        "device_type": "desktop",
+        "need_more_time_used": False,
+    },
+    3: {  # "I'm not really sure why…" — tabbed away again
+        "focus_blur_events": [{"at": _TEL_AT, "duration_ms": 7000}],
+        "paste_events": [],
+        "typing_cadence": {"total_ms": 6000, "pauses_over_3s": 1, "edits": 0},
+        "device_type": "desktop",
+        "need_more_time_used": False,
+    },
+}
+JORDAN_TURN_SECONDS = {1: 40, 3: 18, 5: 22}
 
 ALG_COURSE = "c99b654b-7ef8-4b05-a1df-a57c47d98f6e"
 SECTION = "845950c6-dc06-40a7-ba72-278ae63c221c"       # Period 3
@@ -366,6 +393,37 @@ async def main() -> None:
                 acts += 1
         print(f"rebuilt struggle picture: {len(STRUGGLE_CONCEPTS)} concepts, {acts} activities")
 
+        # 2d ── deterministic source materials for the generation wizard.
+        # Wipe accumulated on-camera uploads (repeated runs left N stray
+        # worksheet.png rows), then seed ONE persistent warm-up material.
+        # Scene 2 uploads worksheet.png on camera → exactly 2 docs, so the
+        # wizard's Source picker reads "1 of 2 selected" when the teacher
+        # clicks the worksheet as the generation source (fix #4).
+        import base64
+        import os
+
+        teacher_uid = (await s.execute(text(
+            "select id from users where email='td_teacher_d592cc@t.com'"))).scalar()
+        await s.execute(text("delete from documents where course_id=:c"),
+                        {"c": ALG_COURSE})
+        _asset = os.environ.get("WORKSHEET_ASSET", "/tmp/cycle-assets/worksheet.png")
+        if teacher_uid and os.path.exists(_asset):
+            with open(_asset, "rb") as fh:
+                _raw = fh.read()
+            s.add(Document(
+                course_id=uuid.UUID(ALG_COURSE),
+                teacher_id=teacher_uid,
+                unit_id=uuid.UUID(ALG_UNIT),
+                filename="Warm-up — solving equations.png",
+                file_type="image/png",
+                file_size=len(_raw),
+                image_data=base64.b64encode(_raw).decode(),
+            ))
+            print("seeded 1 warm-up material (scene 2 adds worksheet.png on camera)")
+        else:
+            print(f"WARN: worksheet asset missing ({_asset}); "
+                  "wizard will show only the on-camera upload")
+
         # 3 ── seed Maya's COMPLETED understanding check + verdict ────
         # Seeded `complete` + `pass` (not `in_progress`): the student
         # scene plays the flowing chat AND lands on the completion
@@ -585,14 +643,28 @@ async def main() -> None:
                 "modified problem — no causal grasp of the method."),
             selected_reason="verified_hardest_correct",
         ))
+        jturn_objs = []
         for i, (role, content) in enumerate(JORDAN_TURNS):
-            s.add(IntegrityConversationTurn(
+            t = IntegrityConversationTurn(
                 integrity_check_submission_id=jcheck.id,
                 ordinal=i, role=role, content=content,
-                seconds_on_turn=None, telemetry=None,
-            ))
+                seconds_on_turn=JORDAN_TURN_SECONDS.get(i),
+                telemetry=JORDAN_TURN_TELEMETRY.get(i),
+            )
+            s.add(t)
+            jturn_objs.append(t)
+        # Roll the per-turn telemetry into the session digest the teacher
+        # review renders beside the flag (single source of truth — same
+        # function the live pipeline uses).
+        jcheck.activity_summary = compute_activity_summary(jturn_objs)
+        flag_modified(jcheck, "activity_summary")
+        _asum = jcheck.activity_summary or {}
+        _tot = _asum.get("totals", {})
         print(f"seeded COMPLETE flag_for_review catch ({len(JORDAN_TURNS)} turns) "
               f"on Jordan's Linear Equations submission")
+        print(f"  · behavior digest: {_tot.get('paste_count', 0)} paste, "
+              f"{_tot.get('tab_out_count', 0)} tab-out, "
+              f"{len(_asum.get('notable_turns', []))} notable")
 
         # 4c ── push the Systems-of-Equations due date into the future so
         #        the student submit scene reads clean (no past-due "late"
