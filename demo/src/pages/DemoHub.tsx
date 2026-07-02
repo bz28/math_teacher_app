@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import StatCard from "../components/StatCard";
 import HeroBlock from "../components/demo/HeroBlock";
+import VideoHero from "../components/demo/VideoHero";
 import FlowSpine from "../components/demo/FlowSpine";
 import BrowserFrame from "../components/demo/BrowserFrame";
 import RoiCalculator from "../components/demo/RoiCalculator";
@@ -29,6 +30,9 @@ export default function DemoHub() {
       </div>
 
       <HeroBlock hero={h.hero} />
+
+      {/* ── THE FILM — the ~4-minute product film, the landing centerpiece ─ */}
+      <VideoHero />
 
       {/* ── THE FLOW SPINE — one connected workflow (day in the life) ─ */}
       <FlowSpine flow={h.flow} />

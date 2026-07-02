@@ -1872,6 +1872,9 @@ h3 {
   .it-roi-slider:active::-webkit-slider-thumb,
   .it-roi-slider:hover::-moz-range-thumb,
   .it-roi-slider:active::-moz-range-thumb { transform: none; }
+  .dh-video-play,
+  .dh-video-play-ring { transition: none; }
+  .dh-video-play:hover .dh-video-play-ring { transform: none; }
 }
 
 @media (max-width: 920px) {
@@ -1891,6 +1894,8 @@ h3 {
   .it-payoff-points { grid-template-columns: 1fr; gap: 28px; }
   .it-payoff-points.it-payoff-points-4 { grid-template-columns: repeat(2, 1fr); gap: 28px; }
   .it-roi-card { grid-template-columns: 1fr; }
+  .dh-video { margin-top: 44px; padding-top: 44px; }
+  .dh-video-play-ring { width: 62px; height: 62px; }
 }
 
 /* ============================================================
@@ -1898,6 +1903,115 @@ h3 {
    the dh- classes cover the loop visual, the navigable use-case
    cards, and the "also in the platform" placeholders.
    ============================================================ */
+
+/* ---- THE FILM (landing centerpiece: the ~4-min product film) ----
+   Sits under the value-prop lede, above the flow spine. Centered head to read
+   as a deliberate centerpiece against the otherwise left-aligned page; the film
+   is framed as a floating window (rounded corners, soft shadow) echoing the
+   video's own aesthetic. Click-to-play with the poster; a custom play affordance
+   covers only the pristine poster, then native controls take over. */
+.dh-video {
+  margin-top: 64px;
+  padding-top: 60px;
+  border-top: 1px solid var(--rule);
+}
+.dh-video-head {
+  max-width: 34ch;
+  margin: 0 auto 36px;
+  text-align: center;
+}
+.dh-video-eyebrow {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2.4px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+.dh-video-headline {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1.06;
+  letter-spacing: -1px;
+  color: var(--ink);
+}
+.dh-video-sub {
+  font-family: var(--font-sans);
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 52ch;
+  margin: 16px auto 0;
+}
+.dh-video-frame {
+  position: relative;
+  max-width: 960px;
+  margin: 0 auto;
+  border: 1px solid var(--rule-strong);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--paper-2);
+  box-shadow:
+    0 40px 80px -36px rgba(20, 19, 15, 0.44),
+    0 12px 28px -20px rgba(20, 19, 15, 0.30);
+}
+.dh-video-el {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--paper-2);
+}
+/* Custom play affordance — only over the pristine poster; a subtle scrim keeps
+   the label + ring legible on the light title-card poster. */
+.dh-video-play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  border: 0;
+  cursor: pointer;
+  background: rgba(20, 19, 15, 0.05);
+  transition: background 0.25s ease;
+}
+.dh-video-play:hover {
+  background: rgba(20, 19, 15, 0.10);
+}
+.dh-video-play-ring {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--surface);
+  padding-left: 4px; /* optically center the triangle */
+  box-shadow:
+    0 16px 34px -12px rgba(184, 67, 26, 0.55),
+    0 0 0 11px rgba(247, 245, 240, 0.78);
+  transition: transform 0.2s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.dh-video-play:hover .dh-video-play-ring {
+  transform: scale(1.06);
+}
+.dh-video-play-label {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: rgba(247, 245, 240, 0.82);
+  padding: 5px 13px;
+  border-radius: 999px;
+  backdrop-filter: blur(2px);
+}
 
 /* ---- THE FLOW SPINE (a day in your teacher's life) ---------- */
 /* The hub centerpiece: the whole platform as ONE connected, top-to-bottom
