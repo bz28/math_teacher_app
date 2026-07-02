@@ -57,15 +57,18 @@ format=yuv420p$fade" \
     -an -c:v libx264 -preset medium -crf 18 "$2" -loglevel error
 }
 
+HEAD=0.7                # trim opening veil-paper (the card→scene dissolve
+                        # already bridges it) — reclaims ~9s of dead paper.
 norm_scene () {  # $1 webm  $2 start  $3 dur(or "auto")  $4 out
+  local start; start=$(echo "$2 + $HEAD" | bc | awk '{printf "%.3f", $0}')
   local dur="$3"
   if [ "$dur" = "auto" ]; then
     local raw; raw=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$1")
-    dur=$(echo "$raw - $2 - 0.18" | bc)
+    dur=$(echo "$raw - $start - 0.18" | bc)
   fi
   # Float the clip: fit to frame → shrink to the card rect → round corners
   # (alphamerge with mask) → composite over the warm mat (plate).
-  ffmpeg -y -ss "$2" -t "$dur" -i "$1" -i "$MASK" -i "$PLATE" \
+  ffmpeg -y -ss "$start" -t "$dur" -i "$1" -i "$MASK" -i "$PLATE" \
     -filter_complex "\
 [0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0xf7f5f0,fps=$FPS,\
 scale=$FW:$FH:flags=lanczos,format=rgba[app];\
