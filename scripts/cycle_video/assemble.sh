@@ -38,7 +38,7 @@ SEGMENTS=(
   "card:04-submit:none"    "scene:4-submit:0:auto" "scene:4-chat:0:auto" "scene:4-verdict:0:auto"
   "card:05-grade:none"     "scene:5-grade:0:auto" "scene:5-insights:0:auto"
   "card:06-reteach:none"   "scene:6-reteach:0:auto"
-  "card:07-practice:none"  "scene:7-practice:0:auto"
+  "card:07-practice:none"  "scene:7-practice:0:auto" "scene:7-learn:0:auto"
   "card:08-close:out"
 )
 
