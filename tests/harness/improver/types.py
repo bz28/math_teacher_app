@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 Role = Literal["public", "teacher", "student", "admin"]
-App = Literal["web", "admin", "mobile_web"]
+App = Literal["web", "admin", "demo", "mobile_web"]
 
 
 class _SafeIds(dict[str, str]):

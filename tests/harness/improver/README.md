@@ -59,7 +59,7 @@ Useful scan flags: `--apps web,admin,mobile_web`, `--max-surfaces N`,
 | `IMPROVER_MAX_EXEC_7D` | Hard execution (PR) cap per rolling 7d | 8 |
 | `IMPROVER_MAX_USD_7D` | Hard $ ceiling per rolling 7d | 15 |
 | `IMPROVER_LOCAL_TOKEN_CEILING_5H` | Optional: skip scan if your own local Claude usage in 5h exceeds this | 0 (off) |
-| `HARNESS_WEB_BASE` / `_ADMIN_BASE` / `_MOBILE_BASE` | App base URLs to scan | :3000 / unset / unset |
+| `HARNESS_WEB_BASE` / `_ADMIN_BASE` / `_DEMO_BASE` / `_MOBILE_BASE` | App base URLs to scan | :3000 / unset / :4173 / unset |
 
 ## Cloud-routine runbook (paste as the RemoteTrigger prompt)
 

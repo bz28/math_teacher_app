@@ -18,6 +18,10 @@ from tests.harness.improver.types import DetectorHit, PageObservation
 
 _SEV_COLOR = {"high": "#b03a2e", "medium": "#b9770e", "low": "#7a7768"}
 
+# A list of serialized proposals (to_dict(Proposal)); named for the digest's
+# per-app grouping helpers.
+_Props = list[dict[str, object]]
+
 
 def _thumb(png: bytes | None) -> str:
     if png is None:
@@ -163,35 +167,70 @@ async def persist_execute_summary(
     )
 
 
-# Section order for the digest. The scarce, high-intent PRODUCT proposals
-# (features, content-quality) come first so they're never buried under the wall
-# of mechanical a11y/bug fixes that objective detectors generate in bulk — the
-# whole reason those two arms looked "dead" was that they sorted to the bottom.
-# Unknown categories fall to the end, alphabetically.
-_DIGEST_SECTION_ORDER = ["feature", "content", "bug", "a11y", "visual", "performance"]
+# Primary grouping is by APP (derived from the surface_key prefix), so a person
+# reads the backlog one product surface at a time. Order: Web, Admin, Demo,
+# Mobile, then a catch-all "Other" for keys we don't recognise.
+_APP_SECTIONS: list[tuple[str, str]] = [
+    ("web", "Web"), ("admin", "Admin"), ("demo", "Demo"), ("mobile", "Mobile"),
+]
+_APP_LABELS: dict[str, str] = {**dict(_APP_SECTIONS), "other": "Other"}
+_SEV_ORDER = {"high": 0, "medium": 1, "low": 2}
+# At most this many proposals shown as full cards per app section — EXCEPT Highs,
+# which are never capped away (the cap only trims Medium/Low into a collapsed
+# "+ N more" list). So a section with 8 Highs shows all 8.
+_PER_APP_CAP = 5
+# Mobile isn't scanned yet (Expo SecureStore token injection is still pending),
+# so its section is a standing placeholder rather than proposals.
+_MOBILE_PLACEHOLDER = "🔴 Not yet scanned — Expo auth injection pending"
+
+
+def _app_of(surface_key: str) -> str:
+    """Map a surface_key (possibly a comma-joined multi-surface list) to its app
+    bucket via the first segment's prefix: ``web.*``→web, ``admin.*``→admin,
+    ``demo.*``→demo, ``mobile.*``→mobile; anything else → other."""
+    first = str(surface_key or "").split(",")[0].strip()
+    prefix = first.split(".", 1)[0].lower()
+    return prefix if prefix in {"web", "admin", "demo", "mobile"} else "other"
 
 
 def proposals_digest_md(
-    proposals: list[dict[str, object]], max_chars: int | None = None
+    proposals: list[dict[str, object]],
+    max_chars: int | None = None,
+    *,
+    screenshot_ids: set[str] | None = None,
+    screenshot_base_url: str = "",
 ) -> str:
-    """Explain-simple bullet plan for the proposals you approve from — readable
-    on a phone, grouped by category so features/content stay visible. Used as
-    the GitHub-issue body in the cloud loop.
+    """Explain-simple plan for the proposals you approve from — readable on a
+    phone, grouped by APP then priority. Used as the GitHub-issue body.
 
-    `max_chars` bounds the output for the GitHub-issue body (issue bodies are
-    hard-capped at 65,536 chars; a large carried-forward backlog blows past it
-    and the create/edit is silently rejected). When the full verbose digest
-    would exceed the budget, fall back to a compact one-line-per-proposal
-    listing so EVERY proposal stays visible and approvable — the full detail
-    lives in the scan run's artifacts. Pass None (the default) to never bound
-    it (e.g. the per-run HTML report, which isn't subject to the issue limit).
+    Layout: one section per app (Web, Admin, Demo, Mobile, Other). Within a
+    section, proposals sort by severity (High→Medium→Low), then by score. Each
+    section shows at most `_PER_APP_CAP` full cards — but never caps away a High;
+    the cap only trims Medium/Low, which collapse into a "+ N more" one-liner
+    list so nothing is lost. Mobile is a standing placeholder (not yet scanned).
+
+    `max_chars` bounds the output for the GitHub-issue body (hard-capped at
+    65,536 chars; a large carried-forward backlog blows past it and the
+    create/edit is silently rejected). Over budget → the full cards degrade to
+    one-liners (highest-priority first keep their cards) so EVERY shown proposal
+    stays visible and approvable. Pass None (the default) to never bound it.
+
+    `screenshot_ids` + `screenshot_base_url`: when a proposal's id is in the set,
+    embed its surface screenshot (`<base_url>/<id>.png`) inside its full card so
+    the issue shows the evidence. Only full cards get images (one-liners don't);
+    if no screenshot exists for a proposal, its card just omits the image.
     """
     if not proposals:
         return "_No open proposals._"
+    shots = screenshot_ids or set()
+    base_url = screenshot_base_url.rstrip("/")
 
     def _score(d: dict[str, object]) -> float:
         v = d.get("score", 0)
         return float(v) if isinstance(v, (int, float)) else 0.0
+
+    def _sev(d: dict[str, object]) -> str:
+        return str(d.get("severity") or "low").lower()
 
     # Proposal prose routinely names HTML tags (e.g. "wrap each <li> in a <ul>").
     # GitHub renders issue bodies as markdown-with-HTML, so an unescaped <ul>
@@ -201,6 +240,12 @@ def proposals_digest_md(
     def esc(v: object) -> str:
         return html.escape(str(v), quote=False)
 
+    def _img(p: dict[str, object]) -> str:
+        pid = str(p.get("id") or "")
+        if base_url and pid in shots:
+            return f"\n\n![]({base_url}/{pid}.png)"
+        return ""
+
     def _card(p: dict[str, object]) -> str:
         return (
             f"### {esc(p.get('title'))}  `{p.get('id')}`\n"
@@ -209,6 +254,7 @@ def proposals_digest_md(
             f"- **Size / risk:** {p.get('est_size')} · {p.get('category')} · {p.get('severity')} "
             f"(confidence {p.get('confidence')})\n"
             f"- **Approve:** comment `approve {p.get('id')}`  ·  **Skip:** `reject {p.get('id')}`"
+            + _img(p)
         )
 
     def _line(p: dict[str, object]) -> str:
@@ -216,37 +262,64 @@ def proposals_digest_md(
         # backlog fits the issue-body budget. Detail is in the run artifacts.
         return f"- `{p.get('id')}` **{p.get('severity')}** — {esc(p.get('title'))}"
 
-    buckets: dict[str, list[dict[str, object]]] = {}
+    # --- group by app, split each into shown cards + trimmed one-liners ---
+    by_app: dict[str, list[dict[str, object]]] = {}
     for p in proposals:
-        buckets.setdefault(str(p.get("category") or "other"), []).append(p)
-    ordered = [c for c in _DIGEST_SECTION_ORDER if c in buckets]
-    ordered += sorted(c for c in buckets if c not in _DIGEST_SECTION_ORDER)
-    census = " · ".join(f"{len(buckets[c])} {c}" for c in ordered)
+        by_app.setdefault(_app_of(str(p.get("surface_key") or "")), []).append(p)
 
-    def _render(row, header, sep):
+    def _split(props: _Props) -> tuple[_Props, _Props]:
+        ordered = sorted(props, key=lambda d: (_SEV_ORDER.get(_sev(d), 3), -_score(d)))
+        highs = [p for p in ordered if _sev(p) == "high"]
+        rest = [p for p in ordered if _sev(p) != "high"]
+        slots = max(0, _PER_APP_CAP - len(highs))  # Highs never capped
+        return highs + rest[:slots], rest[slots:]
+
+    # (app, label, shown, trimmed, placeholder?) in display order.
+    sections: list[tuple[str, str, _Props, _Props, bool]] = []
+    for app, label in _APP_SECTIONS:
+        if app == "mobile":
+            sections.append((app, label, [], [], True))  # standing placeholder
+            continue
+        props = by_app.get(app)
+        if not props:
+            continue
+        shown, trimmed = _split(props)
+        sections.append((app, label, shown, trimmed, False))
+    if by_app.get("other"):
+        shown, trimmed = _split(by_app["other"])
+        sections.append(("other", "Other", shown, trimmed, False))
+
+    census = " · ".join(
+        f"{len(by_app[a])} {_APP_LABELS[a]}"
+        for a in [*(x for x, _ in _APP_SECTIONS), "other"]
+        if by_app.get(a)
+    )
+
+    def _render(header: str, card_ids: set[str] | None) -> str:
         out = [header]
-        for c in ordered:
-            body = sep.join(row(p) for p in sorted(buckets[c], key=_score, reverse=True))
-            out.append(f"## {c.capitalize()} ({len(buckets[c])})\n\n{body}")
+        for app, label, shown, trimmed, placeholder in sections:
+            if placeholder:
+                out.append(f"## {label}\n\n{_MOBILE_PLACEHOLDER}")
+                continue
+            blocks = [
+                _card(p) if (card_ids is None or str(p.get("id")) in card_ids) else _line(p)
+                for p in shown
+            ]
+            section = f"## {label} ({len(shown) + len(trimmed)})\n\n" + "\n\n".join(blocks)
+            if trimmed:
+                tail = "\n".join(_line(p) for p in trimmed)
+                section += f"\n\n_+ {len(trimmed)} more (Medium/Low):_\n{tail}"
+            out.append(section)
         return "\n\n".join(out)
 
-    verbose = _render(_card, f"**{len(proposals)} open** — {census}", "\n\n")
+    verbose = _render(f"**{len(proposals)} open** — {census}", None)
     if max_chars is None or len(verbose) <= max_chars:
         return verbose
 
-    # Over budget: hybrid. Walk proposals in display order (feature/content
-    # first, then by score) giving each a full card until the budget is nearly
-    # spent, then one-liners for the rest — keeping a reserve so the remaining
-    # proposals are ALWAYS renderable as compact lines within budget. You get
-    # the full What/Why inline for the high-value proposals; the mechanical bulk
-    # stays a scannable list. Full detail for any item is in the scan run
-    # artifacts or `improve show <id>`.
-    # Reserve room for the not-yet-rendered tail using the ACTUAL longest
-    # one-liner (titles have no hard length cap), so a verbose card is only
-    # taken when every remaining proposal is still guaranteed to fit as a
-    # compact line. A constant upper bound would under-reserve for unusually
-    # long titles and could drop the tail.
-    max_line = max((len(_line(p)) + 2 for p in proposals), default=2)
+    # Over budget: degrade shown cards to one-liners, keeping the highest-
+    # priority ones (across all apps) as full cards for as long as the budget
+    # allows. Trimmed items are already one-liners. Full What/Why for any item
+    # lives in the scan run artifacts or `improve show <id>`.
     header = (
         f"**{len(proposals)} open** — {census}\n\n"
         "_Top proposals shown in full; the rest are one-liners so the whole "
@@ -254,25 +327,17 @@ def proposals_digest_md(
         "run's artifacts or `improve show <id>`. Comment `approve <id>` / "
         "`reject <id>`._"
     )
-    total = len(proposals)
-    remaining = max_chars - len(header) - 64  # slack for headers/separators
-    out = [header]
-    seen = 0
-    for c in ordered:
-        rows = []
-        for p in sorted(buckets[c], key=_score, reverse=True):
-            reserve = (total - seen - 1) * max_line
-            card = _card(p)
-            if len(card) + 2 <= remaining - reserve:
-                rows.append(card)
-                remaining -= len(card) + 2
-            else:
-                line = _line(p)
-                rows.append(line)
-                remaining -= len(line) + 2
-            seen += 1
-        out.append(f"## {c.capitalize()} ({len(buckets[c])})\n\n" + "\n\n".join(rows))
-    body = "\n\n".join(out)
+    shown_all = [p for _, _, shown, _, _ in sections for p in shown]
+    card_ids: set[str] = set()
+    cur = len(_render(header, card_ids))  # all shown as one-liners (floor)
+    # Upgrade line→card in global priority order; each swap changes only that
+    # one block's length by exactly len(card) - len(line).
+    for p in sorted(shown_all, key=lambda d: (_SEV_ORDER.get(_sev(d), 3), -_score(d))):
+        delta = len(_card(p)) - len(_line(p))
+        if cur + delta <= max_chars:
+            card_ids.add(str(p.get("id")))
+            cur += delta
+    body = _render(header, card_ids)
     if len(body) > max_chars:  # pathological titles — final guard
         footer = "\n\n_…truncated — full list in the scan run artifacts._"
         body = body[: max(0, max_chars - len(footer))].rstrip() + footer
