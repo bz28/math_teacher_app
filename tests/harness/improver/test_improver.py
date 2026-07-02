@@ -139,6 +139,25 @@ def test_digest_mobile_placeholder_even_with_no_proposals() -> None:
     assert "## Mobile" in md and "🔴 Not yet scanned — Expo auth injection pending" in md
 
 
+def test_digest_renders_mobile_proposals_when_present() -> None:
+    """Regression: once mobile scanning lands, a mobile.* proposal must be
+    rendered as a real, approvable card — not silently dropped behind the
+    placeholder while still inflating the census/header counts."""
+    from tests.harness.improver.proposals import to_dict
+    from tests.harness.improver.report import proposals_digest_md
+
+    web = to_dict(_p("Web thing", surface="web.public.landing"))
+    mob = to_dict(_p("Fix the mobile solve tab", surface="mobile.solve", sev="high"))
+    md = proposals_digest_md([web, mob])
+    # The mobile proposal is a real, approvable full card, not hidden.
+    assert f"`{mob['id']}`\n- **What:**" in md
+    assert f"approve {mob['id']}" in md
+    # The placeholder is gone once mobile has real proposals.
+    assert "Not yet scanned" not in md
+    # Census counts it — and now it's actually visible, so the count is honest.
+    assert "1 Mobile" in md
+
+
 def test_digest_embeds_screenshots_for_shown_cards_only() -> None:
     from tests.harness.improver.proposals import to_dict
     from tests.harness.improver.report import proposals_digest_md

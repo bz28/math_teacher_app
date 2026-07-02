@@ -277,10 +277,14 @@ def proposals_digest_md(
     # (app, label, shown, trimmed, placeholder?) in display order.
     sections: list[tuple[str, str, _Props, _Props, bool]] = []
     for app, label in _APP_SECTIONS:
-        if app == "mobile":
-            sections.append((app, label, [], [], True))  # standing placeholder
-            continue
         props = by_app.get(app)
+        # Mobile isn't scanned yet, so with no proposals it's a standing
+        # placeholder. But the moment mobile scanning lands and real mobile
+        # proposals exist, render them like any other section — otherwise they'd
+        # be counted in the census/header yet be invisible and un-approvable.
+        if app == "mobile" and not props:
+            sections.append((app, label, [], [], True))
+            continue
         if not props:
             continue
         shown, trimmed = _split(props)
