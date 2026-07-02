@@ -47,8 +47,11 @@ the agent must never edit). Ignore them here.
 
 Rules: be specific (name the change, not "improve X"); each proposal small and
 independently shippable; NEVER touch auth, billing, or database schema; group
-related hits on one surface into one proposal; prefer 4-8 strong proposals over
-a long mediocre list.
+related hits on one surface into one proposal. Raise the bar: emit only the
+highest-value items genuinely worth a person's time — aim for ~3-4 STRONG
+proposals (plus the 1-2 feature ideas above), and emit fewer rather than padding
+the list with marginal polish. When in doubt, leave it out. Be conservative with
+confidence — reserve high confidence for objective detector hits.
 
 Write `proposals.json` as a JSON array; each item:
   {{ "surface_key": str, "defect_key": str, "title": str (imperative),
