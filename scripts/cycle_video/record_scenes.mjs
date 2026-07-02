@@ -64,23 +64,31 @@ const INIT = `
       ROOT().appendChild(c);
     }
     if (!document.getElementById('__cap')) {
+      // Premium broadcast lower-third: charcoal glass card, sienna accent
+      // bar, paper-white type, eased rise-in. Sized generously so it stays
+      // crisp after the assembler floats/shrinks the app clip.
       const w = document.createElement('div'); w.id='__cap';
-      w.style.cssText='position:fixed;z-index:2147483646;left:50%;bottom:54px;transform:translateX(-50%) translateY(8px);'
-        +'opacity:0;transition:opacity .5s ease, transform .5s ease;pointer-events:none;'
-        +'display:flex;align-items:center;gap:14px;background:rgba(20,19,15,.93);color:#f7f5f0;'
-        +'padding:15px 30px;border-radius:16px;font-family:Inter,system-ui,sans-serif;font-size:27px;'
-        +'font-weight:500;letter-spacing:.005em;box-shadow:0 10px 40px rgba(0,0,0,.28);max-width:1500px';
-      const dot=document.createElement('span');
-      dot.style.cssText='width:11px;height:11px;border-radius:50%;background:#b8431a;flex:0 0 auto';
+      w.style.cssText='position:fixed;z-index:2147483646;left:50%;bottom:62px;transform:translateX(-50%) translateY(12px);'
+        +'opacity:0;transition:opacity .55s cubic-bezier(.22,.61,.36,1), transform .55s cubic-bezier(.22,.61,.36,1);'
+        +'pointer-events:none;display:flex;align-items:center;gap:20px;'
+        +'background:rgba(18,17,14,.9);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);'
+        +'color:#f7f5f0;padding:17px 34px 17px 28px;border-radius:16px;'
+        +'border:1px solid rgba(247,245,240,.09);'
+        +'font-family:Inter,system-ui,sans-serif;font-size:32px;font-weight:500;letter-spacing:.003em;'
+        +'box-shadow:0 22px 60px rgba(18,17,14,.4);max-width:1560px';
+      const bar=document.createElement('span');
+      bar.style.cssText='width:4px;align-self:stretch;min-height:34px;border-radius:3px;background:#b8431a;flex:0 0 auto';
       const txt=document.createElement('span'); txt.id='__captxt';
-      w.appendChild(dot); w.appendChild(txt); ROOT().appendChild(w);
+      w.appendChild(bar); w.appendChild(txt); ROOT().appendChild(w);
     }
-    // A full-frame brand veil used to bridge AI work — fades over the
-    // screen so no spinner/loading frame is ever seen.
+    // A full-frame brand veil used to bridge AI work AND every navigation.
+    // Default OPAQUE so no loading skeleton / spinner / half-painted frame
+    // is ever seen — each scene fades in from clean paper once its real
+    // content has settled (gotoClean lifts it after the anchor + hold).
     if (!document.getElementById('__veil')) {
       const v=document.createElement('div'); v.id='__veil';
       v.style.cssText='position:fixed;inset:0;z-index:2147483645;background:#f7f5f0;'
-        +'opacity:0;transition:opacity .4s ease;pointer-events:none';
+        +'opacity:1;transition:opacity .45s ease;pointer-events:none';
       ROOT().appendChild(v);
     }
   }
@@ -161,6 +169,28 @@ async function rectOf(locator) {
   });
 }
 
+// Cursor glides along a gently bowed, eased path (easeInOutQuad on a
+// quadratic bézier) so motion reads human/cinematic, never a robotic
+// straight-line jump. Last position is tracked so each move eases from
+// wherever the cursor actually is.
+let CUR = { x: VIEW.width / 2, y: VIEW.height / 2 };
+async function curveMove(page, x, y, steps = 32) {
+  const sx = CUR.x, sy = CUR.y, dx = x - sx, dy = y - sy;
+  const dist = Math.hypot(dx, dy) || 1;
+  const bow = Math.min(130, dist * 0.16);           // perpendicular arc
+  const mx = (sx + x) / 2 - (dy / dist) * bow;
+  const my = (sy + y) / 2 + (dx / dist) * bow;
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;  // easeInOutQuad
+    const ix = (1 - e) * (1 - e) * sx + 2 * (1 - e) * e * mx + e * e * x;
+    const iy = (1 - e) * (1 - e) * sy + 2 * (1 - e) * e * my + e * e * y;
+    await page.mouse.move(ix, iy);
+    await sleep(page, 9);
+  }
+  CUR = { x, y };
+}
+
 // Move the synthetic cursor smoothly to an element and (optionally)
 // click — zoom-safe. Bounded: a missing locator is skipped, never stalls.
 async function go(page, locator, { click = true, settle = 520, find = 4000 } = {}) {
@@ -170,21 +200,26 @@ async function go(page, locator, { click = true, settle = 520, find = 4000 } = {
   await sleep(page, 220);
   let r; try { r = await rectOf(el); } catch { return false; }
   await sleep(page, 160);
-  await page.mouse.move(r.x, r.y, { steps: 26 });
+  await curveMove(page, r.x, r.y);
   await sleep(page, settle);
   if (click) { await page.mouse.move(r.x, r.y); await page.mouse.down(); await sleep(page, 80); await page.mouse.up(); }
   return true;
 }
 
-async function gotoClean(page, url, { zoom = 1, waitMs = 1500, anchor = null } = {}) {
+// Navigate under the opaque veil, settle the real content, optionally run
+// a `beforeReveal` mutation (e.g. hide chat bubbles so the scene starts
+// empty) while still hidden, THEN fade the paper away onto clean content.
+async function gotoClean(page, url, { zoom = 1, waitMs = 1500, anchor = null, beforeReveal = null } = {}) {
   await veilOn(page).catch(() => {});
   await page.goto(WEB + url, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
   await page.waitForLoadState('load', { timeout: 8000 }).catch(() => {});
+  await veilOn(page).catch(() => {});   // re-assert on the fresh document
   await setZoom(page, zoom);
   if (anchor) { try { await page.locator(anchor).first().waitFor({ state: 'visible', timeout: 9000 }); } catch {} }
   await sleep(page, waitMs);
+  if (beforeReveal) { try { await beforeReveal(); } catch {} await sleep(page, 200); }
   await veilOff(page);
-  await sleep(page, 260);
+  await sleep(page, 300);
 }
 
 // ─────────────────────────────── clips ───────────────────────────────
@@ -417,32 +452,32 @@ const CLIPS = {
   //      single step. The AI stays warm to him the whole way (the catch
   //      is surfaced privately to the teacher in 4-verdict).
   async '4-chat'(page) {
+    // Hide every chat bubble + the closing verdict WHILE the veil is still
+    // up (beforeReveal), so the scene fades in on an EMPTY thread — no
+    // pre-flash of the full conversation — then reveals one turn at a time.
     await gotoClean(page, `/school/student/courses/${ID.ALG}/homework/${ID.LIN}`,
-      { zoom: 1.0, waitMs: 1800, anchor: 'text=/understanding check/i' });
-    // Hide every message + the closing verdict, then reveal them in
-    // sequence so the chat reads as a live conversation.
-    await page.evaluate(() => {
-      const bubbles = Array.from(document.querySelectorAll('div')).filter((d) =>
-        /\bjustify-(start|end)\b/.test(d.className) &&
-        d.parentElement && Array.from(d.parentElement.children).filter((c) =>
-          /\bjustify-(start|end)\b/.test(c.className)).length >= 3);
-      // De-dupe to the true bubble row set (largest sibling group).
-      let cont = null, best = 0;
-      bubbles.forEach((b) => {
-        const n = Array.from(b.parentElement.children).filter((c) => /\bjustify-(start|end)\b/.test(c.className)).length;
-        if (n > best) { best = n; cont = b.parentElement; }
-      });
-      window.__rows = cont ? Array.from(cont.children).filter((c) => /\bjustify-(start|end)\b/.test(c.className)) : [];
-      window.__term = Array.from(document.querySelectorAll('div,section')).find((d) =>
-        /Thanks for walking me through/i.test(d.textContent || '') &&
-        (d.textContent || '').length < 400) || null;
-      [...window.__rows, window.__term].forEach((el) => { if (el) { el.style.transition = 'opacity .45s ease, transform .45s ease'; el.style.opacity = '0'; el.style.transform = 'translateY(12px)'; } });
-      window.__scroller = cont;
-      while (window.__scroller && window.__scroller.scrollHeight <= window.__scroller.clientHeight + 10)
-        window.__scroller = window.__scroller.parentElement;
-    });
-    await sleep(page, 500);
-    await cap(page, 'After turning in work, a quick check — is it really yours?');
+      { zoom: 1.0, waitMs: 1800, anchor: 'text=/understanding check/i',
+        beforeReveal: () => page.evaluate(() => {
+          const bubbles = Array.from(document.querySelectorAll('div')).filter((d) =>
+            /\bjustify-(start|end)\b/.test(d.className) &&
+            d.parentElement && Array.from(d.parentElement.children).filter((c) =>
+              /\bjustify-(start|end)\b/.test(c.className)).length >= 3);
+          // De-dupe to the true bubble row set (largest sibling group).
+          let cont = null, best = 0;
+          bubbles.forEach((b) => {
+            const n = Array.from(b.parentElement.children).filter((c) => /\bjustify-(start|end)\b/.test(c.className)).length;
+            if (n > best) { best = n; cont = b.parentElement; }
+          });
+          window.__rows = cont ? Array.from(cont.children).filter((c) => /\bjustify-(start|end)\b/.test(c.className)) : [];
+          window.__term = Array.from(document.querySelectorAll('div,section')).find((d) =>
+            /Thanks for walking me through/i.test(d.textContent || '') &&
+            (d.textContent || '').length < 400) || null;
+          [...window.__rows, window.__term].forEach((el) => { if (el) { el.style.transition = 'opacity .45s ease, transform .45s ease'; el.style.opacity = '0'; el.style.transform = 'translateY(12px)'; } });
+          window.__scroller = cont;
+          while (window.__scroller && window.__scroller.scrollHeight <= window.__scroller.clientHeight + 10)
+            window.__scroller = window.__scroller.parentElement;
+        }) });
+    await cap(page, 'Then a quick check — is the work really yours?');
     await sleep(page, 900);
     const n = await page.evaluate(() => (window.__rows || []).length);
     for (let i = 0; i < n; i++) {
@@ -452,15 +487,15 @@ const CLIPS = {
       }, i);
       // Swap the caption partway so the viewer reads the turn — the
       // answer was right, but the "why" keeps coming up empty.
-      if (i === 1) { await cap(page, 'Just explain your thinking — in your own words.'); }
-      if (i === 3) { await cap(page, 'The answer is right… but the "why" keeps coming up empty.'); }
+      if (i === 1) { await cap(page, 'Just explain your thinking, in your own words.'); }
+      if (i === 3) { await cap(page, 'The answer’s right — but the “why” keeps coming up empty.'); }
       await sleep(page, i % 2 === 1 ? 1750 : 1300);
     }
     await sleep(page, 800);
     // The chat is recorded live (in_progress) so it ends on the
     // student's last hollow answer — no closing panel. The AI stayed
     // warm the whole way; the catch is surfaced to the teacher next.
-    await cap(page, "He got it right — but couldn't explain a single step.");
+    await cap(page, "Right answer — and not one step he can explain.");
     await sleep(page, 3000);
     await capClear(page); await sleep(page, 1400);
   },
@@ -611,6 +646,7 @@ global.__b = await chromium.launch({ executablePath: CACHED || undefined, headle
 for (const id of ids) {
   const ctx = await newCtx(WHO[id]);
   const page = await ctx.newPage();
+  CUR = { x: VIEW.width / 2, y: VIEW.height / 2 };   // reset cursor per clip
   const errors = [];
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', e => errors.push('PAGEERR ' + e.message));
