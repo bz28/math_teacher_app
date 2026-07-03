@@ -848,7 +848,7 @@ async def main() -> None:
              "score_status": "partial", "percent": 95.0, "confidence": 0.97,
              "reasoning": ("The student's approach is fully correct and three of four entries "
                            "match the answer key. The only error is an arithmetic slip in "
-                           "Step 4: 3×2 was written as 5 instead of 6, giving AB₂₂ = 5 instead "
+                           "Step 2: 3×2 was written as 5 instead of 6, giving AB₂₂ = 5 instead "
                            "of 6."),
              "student_feedback": ("Your matrix multiplication set-up is perfect and three of the "
                                   "four entries are correct. Double-check AB₂₂: 3 × 2 = 6, not 5."),
