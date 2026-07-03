@@ -391,17 +391,39 @@ const CLIPS = {
       for (const d of list) if ((d.filename || d.name || '') === REVIEW_SHEET)
         await apiDelete(`${API}/v1/teacher/courses/${ID.ALG}/documents/${d.id}`);
     } catch (e) {}
-    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=materials`, { zoom: 1.12, waitMs: 1500 });
+    // Zoom 1.0 so the app's image-preview lightbox (fixed inset-0) centers
+    // cleanly and shows the whole sheet without clipping.
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=materials`, { zoom: 1.0, waitMs: 1500 });
     await cap(page, 'Bring in the materials you already teach from.');
-    await sleep(page, 1300);
-    await go(page, page.getByRole('button', { name: /^Upload Files$/i }).first(), { click: false }).catch(() => {});
-    await sleep(page, 300);
+    await sleep(page, 1200);
+    // Move the cursor onto "Upload Files" (a <label> — clicking it would open
+    // the OS file dialog, which headless can't show), then feed the PNG to the
+    // real hidden input so the app runs its true upload path (uploading → done).
+    await go(page, page.getByText('Upload Files', { exact: true }).first(), { click: false }).catch(() => {});
+    await cap(page, 'Upload your worksheet — the app takes it from here.');
+    await sleep(page, 350);
     const input = page.locator('input[type=file]').first();
     await input.setInputFiles(`${ASSETS}/${REVIEW_SHEET}`).catch(() => {});
-    await sleep(page, 1900);
-    await cap(page, 'Your Unit 5 review sheet — ready to build from.');
-    await sleep(page, 2000);
-    await capClear(page); await sleep(page, 500);
+    // Wait for the uploaded sheet to land as a real card in the materials list.
+    const card = page.locator('button', { hasText: 'Matrices, Trig & Equations' }).first();
+    await card.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+    await sleep(page, 900);
+    await cap(page, 'Uploaded — your Unit 5 review sheet is in.');
+    await sleep(page, 1700);
+    // Preview it — the app's own image lightbox — so the viewer sees the ACTUAL
+    // broad sheet (matrices, trig, linear + distractors) before the focus pulls
+    // just three. Double-click the card opens the preview modal.
+    await go(page, card, { click: false }).catch(() => {});
+    await card.dblclick({ timeout: 4000 }).catch(() => {});
+    const preview = page.locator('div[role="dialog"][aria-label^="Preview:"]').first();
+    await preview.waitFor({ state: 'visible', timeout: 6000 }).catch(() => {});
+    await preview.locator('img').first().waitFor({ state: 'visible', timeout: 6000 }).catch(() => {});
+    await sleep(page, 900);
+    await cap(page, 'Matrices, trig, linear — plus distractors. This is what it builds from.');
+    await sleep(page, 3000);
+    await capClear(page); await sleep(page, 300);
+    await page.keyboard.press('Escape').catch(() => {});
+    await sleep(page, 500);
   },
 
   // 3 · TEACHER — the real new-homework wizard: name it, pick the unit,
