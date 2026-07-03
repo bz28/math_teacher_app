@@ -168,9 +168,12 @@ async def persist_execute_summary(
 
 
 # Primary grouping is by APP (derived from the surface_key prefix), so a person
-# reads the backlog one product surface at a time. Order: Web, Admin, Demo,
-# Mobile, then a catch-all "Other" for keys we don't recognise.
+# reads the backlog one product surface at a time. "Product ideas" (feature-gap
+# ideation, surface_key "product") leads because features are scarce/high-intent
+# — surface them above the bulk defect sections. Then Web, Admin, Demo, Mobile,
+# then a catch-all "Other" for keys we don't recognise.
 _APP_SECTIONS: list[tuple[str, str]] = [
+    ("product", "Product ideas"),
     ("web", "Web"), ("admin", "Admin"), ("demo", "Demo"), ("mobile", "Mobile"),
 ]
 _APP_LABELS: dict[str, str] = {**dict(_APP_SECTIONS), "other": "Other"}
@@ -186,11 +189,12 @@ _MOBILE_PLACEHOLDER = "🔴 Not yet scanned — Expo auth injection pending"
 
 def _app_of(surface_key: str) -> str:
     """Map a surface_key (possibly a comma-joined multi-surface list) to its app
-    bucket via the first segment's prefix: ``web.*``→web, ``admin.*``→admin,
-    ``demo.*``→demo, ``mobile.*``→mobile; anything else → other."""
+    bucket via the first segment's prefix: ``product*``→product (feature-gap
+    ideas), ``web.*``→web, ``admin.*``→admin, ``demo.*``→demo,
+    ``mobile.*``→mobile; anything else → other."""
     first = str(surface_key or "").split(",")[0].strip()
     prefix = first.split(".", 1)[0].lower()
-    return prefix if prefix in {"web", "admin", "demo", "mobile"} else "other"
+    return prefix if prefix in {"product", "web", "admin", "demo", "mobile"} else "other"
 
 
 def proposals_digest_md(
@@ -203,7 +207,8 @@ def proposals_digest_md(
     """Explain-simple plan for the proposals you approve from — readable on a
     phone, grouped by APP then priority. Used as the GitHub-issue body.
 
-    Layout: one section per app (Web, Admin, Demo, Mobile, Other). Within a
+    Layout: one section per app (Product ideas, Web, Admin, Demo, Mobile, Other)
+    — "Product ideas" (feature-gap ideation) leads. Within a
     section, proposals sort by severity (High→Medium→Low), then by score. Each
     section shows at most `_PER_APP_CAP` full cards — but never caps away a High;
     the cap only trims Medium/Low, which collapse into a "+ N more" one-liner

@@ -112,10 +112,7 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     scan.add_argument("--max-size", default="M", choices=["S", "M", "L"], help="drop bigger proposals")
     scan.add_argument("--no-judge", action="store_true", help="skip the UX vision judge ($)")
     scan.add_argument("--no-propose", action="store_true", help="scan only; skip all ideation ($)")
-    scan.add_argument("--no-content", action="store_true", help="skip the AI-output quality source")
-    scan.add_argument("--no-verify-corpus", action="store_true",
-                      help="propose corpus failures without re-checking they still reproduce")
-    scan.add_argument("--no-features", action="store_true", help="skip the feature-ideation source")
+    scan.add_argument("--no-features", action="store_true", help="skip the feature-gap ideation source")
     scan.add_argument("--ignore-budget", action="store_true", help="bypass the budget gate (manual runs)")
     scan.add_argument("--out", default="tests/harness/_reports/improve.html")
     scan.add_argument(
@@ -137,10 +134,6 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     gather.add_argument("--demo-base", default=os.environ.get("HARNESS_DEMO_BASE", _DEFAULT_DEMO))
     gather.add_argument("--mobile-base", default=os.environ.get("HARNESS_MOBILE_BASE", ""))
     gather.add_argument("--max-surfaces", type=int, default=0)
-    gather.add_argument("--no-content", action="store_true",
-                        help="skip the AI-output quality corpus (keeps gather strictly $0)")
-    gather.add_argument("--no-verify-corpus", action="store_true",
-                        help="don't re-run the corpus against the live generator (use it as-is)")
     gather.add_argument("--no-flows", action="store_true",
                         help="skip the browser flow tests (login etc.)")
     gather.add_argument("--ignore-budget", action="store_true")
@@ -480,22 +473,30 @@ def _run_improve_execute(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_product_overview() -> str:
+    """Text of `docs/product/overview.md` (repo-root relative) — the product
+    context the plan-billed judge grounds its feature-gap ideation in. Returns ""
+    if it's missing (the judge/ideation then falls back to catalog-only)."""
+    # __file__ = tests/harness/__main__.py → parents[2] is the repo root.
+    path = Path(__file__).resolve().parents[2] / "docs" / "product" / "overview.md"
+    try:
+        return path.read_text()
+    except OSError:
+        return ""
+
+
 def _run_improve_gather(args: argparse.Namespace) -> int:
     """Plan path, step 1: scan + save screenshots + findings.json for a Claude
-    Code agent to judge on your plan. The UI scan is $0; unless --no-content,
-    it also re-verifies the promoted-failure corpus and folds the still-failing
-    AI-generation defects into findings.json (the only LLM here — API-billed,
-    cassette-cached). Budget-gated like a scan."""
-    from datetime import UTC, datetime
-
+    Code agent to judge on your plan. Strictly $0 — no metered LLM calls: it just
+    drives the browser, runs the objective detectors, saves screenshots, and
+    writes the product overview so the plan-billed judge can ground feature-gap
+    ideation. Budget-gated like a scan."""
     from tests.harness.browser import HarnessBrowser
     from tests.harness.improver.budget import BudgetCaps, Ledger, check_scan
     from tests.harness.improver.evidence import evidence_summary, save_evidence
     from tests.harness.improver.scanner import scan_surfaces
-    from tests.harness.improver.sources import corpus_failures
     from tests.harness.improver.surfaces import surfaces_for
     from tests.harness.improver.types import PageObservation
-    from tests.harness.runner import run_cost
     from tests.harness.seed import seed_world
 
     caps = BudgetCaps.from_env()
@@ -517,9 +518,7 @@ def _run_improve_gather(args: argparse.Namespace) -> int:
         }.items() if v
     }
 
-    async def _exec() -> tuple[
-        list[PageObservation], list[dict[str, object]], list[dict[str, object]], float | None,
-    ]:
+    async def _exec() -> tuple[list[PageObservation], list[dict[str, object]]]:
         seed = await seed_world()
         flow_fails: list[dict[str, object]] = []
         async with HarnessBrowser(args.web_base) as browser:
@@ -530,30 +529,17 @@ def _run_improve_gather(args: argparse.Namespace) -> int:
                 flow_fails = flow_failures(
                     await run_flows(browser, args.web_base, args.api_base, seed),
                 )
-        failures: list[dict[str, object]] = []
-        cost: float | None = 0.0
-        if not args.no_content:
-            started = datetime.now(UTC)
-            failures = await corpus_failures(
-                api_base=args.api_base, web_base=args.web_base,
-                verify=not args.no_verify_corpus, mode=args.mode,
-            )
-            cost = await run_cost(args.mode, started)
-        return observations, failures, flow_fails, cost
+        return observations, flow_fails
 
-    obs, gen_failures, flow_fails, cost = asyncio.run(_exec())
-    # Re-verifying the corpus against the live generator is API-billed in
-    # record/auto — never log $0 on a billable run or the 7d $ cap degrades to
-    # the scan-count cap alone (mirrors `improve scan`).
-    if cost is None:
-        cost = 0.0 if args.mode == "replay" else 0.50
-    note = "plan-path gather (no LLM)" if args.no_content else "plan-path gather (+corpus re-verify)"
-    ledger.record("scan", cost_usd=cost, note=note)
+    obs, flow_fails = asyncio.run(_exec())
+    # Gather is strictly $0 (no metered generation calls) — record it as such.
+    ledger.record("scan", cost_usd=0.0, note="plan-path gather (no LLM)")
+    product_overview = _read_product_overview()
     out = save_evidence(
         obs, surfaces, Path(args.dir),
-        generation_failures=gen_failures, flow_failures=flow_fails,
+        product_context=product_overview, flow_failures=flow_fails,
     )
-    extra = f", {len(gen_failures)} still-failing generation case(s)" if gen_failures else ""
+    extra = f", product overview {'attached' if product_overview else 'MISSING (catalog-only ideation)'}"
     extra += f", {len(flow_fails)} broken flow(s)" if flow_fails else ""
     print(f"\n[improve:gather] {evidence_summary(out)}{extra} → {out}")
     print(f"next: judge on your plan — read {out}/JUDGE_PROMPT.txt + the shots, write "
@@ -765,7 +751,7 @@ def _run_improve_scan(args: argparse.Namespace) -> int:
     from tests.harness.improver.proposals import Proposal, generate_proposals, merge
     from tests.harness.improver.report import persist_scan_summary, write_scan_report
     from tests.harness.improver.scanner import scan_surfaces
-    from tests.harness.improver.sources import content_quality_proposals, feature_proposals
+    from tests.harness.improver.sources import ideate_proposals
     from tests.harness.improver.state import Queue
     from tests.harness.improver.surfaces import surfaces_for
     from tests.harness.improver.types import PageObservation
@@ -800,18 +786,15 @@ def _run_improve_scan(args: argparse.Namespace) -> int:
             obs = await scan_surfaces(
                 browser, surfaces, bases, seed, judge=not args.no_judge,
             )
-        # Three proposal sources feed one ranked list: UI (from the scan),
-        # AI-output quality (from the harness corpus), and small features.
+        # Two proposal sources feed one ranked list: UI (from the scan) and
+        # product-grounded feature-gap ideation (from the overview + catalog).
         batches: list[list[Proposal]] = []
         if not args.no_propose:
             batches.append(await generate_proposals(obs, max_size=args.max_size))
-            if not args.no_content:
-                batches.append(await content_quality_proposals(
-                    api_base=args.api_base, web_base=args.web_base,
-                    max_size=args.max_size, verify=not args.no_verify_corpus,
-                ))
             if not args.no_features:
-                batches.append(await feature_proposals(surfaces, max_size=args.max_size))
+                batches.append(await ideate_proposals(
+                    _read_product_overview(), surfaces, max_size=args.max_size,
+                ))
         # Dedupe against everything ever queued so known/rejected ideas never
         # resurface.
         proposals = merge(batches, seen_ids=seen)

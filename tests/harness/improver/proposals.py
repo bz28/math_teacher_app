@@ -242,7 +242,7 @@ def _rank(proposals: list[Proposal]) -> list[Proposal]:
 
 
 def merge(batches: list[list[Proposal]], *, seen_ids: set[str] | None = None) -> list[Proposal]:
-    """Combine proposals from several sources (UI, content-quality, features),
+    """Combine proposals from several sources (UI scan, feature-gap ideation),
     rank the union by impact-per-effort, and dedupe against each other + the
     seen set."""
     flat = [p for batch in batches for p in batch]

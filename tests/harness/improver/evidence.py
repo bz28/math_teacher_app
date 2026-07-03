@@ -28,18 +28,19 @@ For each surface: combine the objective detector hits (console errors, a11y,
 overflow, slow loads — high confidence) with what you SEE in its screenshot
 (spacing, hierarchy, contrast, affordances, copy, broken/empty states).
 
-ALWAYS include 1-2 SMALL new-feature or product-gap ideas drawn from the
-`catalog` (category "feature", lower-confidence). Propose them IN ADDITION to
-the defect fixes, never instead of them — they are tracked in their own
-section and must not be skipped just because the objective a11y/bug hits are
-more numerous or higher-confidence. If a surface is genuinely featureless,
-say so in the rationale rather than omitting the idea entirely.
-
-If `findings.json` has a non-empty `generation_failures` array, ALSO propose
-fixes for those — they are AI-generation defects the harness re-verified as
-STILL failing (each carries its `probe`, the failing `scenario`/`constraint`,
-and `fix_in` paths to start from). Set `surface_key` to "generation:<probe>",
-category "bug" or "content", and group related failures into one proposal.
+ALSO propose 2-4 high-value FEATURE-GAP ideas — real capabilities a teacher or
+student would want that DON'T exist yet. Ground them in `PRODUCT_CONTEXT.md`
+(the product overview, written to this directory) if present: read its feature
+map ("what exists today") so you propose genuine GAPS, not duplicates of shipped
+features, and honor its scope note — stay within the product's AI loop (homework
+-> grade -> understand -> reteach) and treat general LMS features (gradebook
+export, SIS/roster sync, messaging, attendance) as out of current scope. If
+`PRODUCT_CONTEXT.md` is absent, fall back to feature ideas from the route
+`catalog` alone. Set each idea's `surface_key` to "product", category "feature",
+with damped/lower confidence (they're speculative). Keep them IN ADDITION to the
+defect fixes, never instead of them — they are tracked in their own "Product
+ideas" section and must not be skipped just because the objective a11y/bug hits
+are more numerous or higher-confidence.
 
 Do NOT create proposals for the `flow_failures` array — broken user journeys
 are surfaced to a human as an alert (they usually live on auth/billing surfaces
@@ -74,17 +75,21 @@ def save_evidence(
     catalog: list[Surface],
     out_dir: Path,
     *,
-    generation_failures: list[dict[str, object]] | None = None,
+    product_context: str | None = None,
     flow_failures: list[dict[str, object]] | None = None,
 ) -> Path:
     """Write screenshots + findings.json for the agent to judge. Returns the dir.
 
-    `generation_failures` (the re-verified promoted-failure corpus from
-    `sources.corpus_failures`) and `flow_failures` (broken user journeys from
-    `flows.run_flows`) are folded into findings.json so the plan-billed judge
-    proposes AI-generation and broken-journey fixes alongside the UI work."""
+    `product_context` (the text of `docs/product/overview.md`) is written to
+    `PRODUCT_CONTEXT.md` and flagged in findings.json so the plan-billed judge
+    can ground its FEATURE-GAP ideation in what already exists. `flow_failures`
+    (broken user journeys from `flows.run_flows`) are folded into findings.json
+    so the judge can surface broken-journey alerts alongside the UI work."""
     shots = out_dir / "shots"
     shots.mkdir(parents=True, exist_ok=True)
+    has_product_context = bool(product_context and product_context.strip())
+    if has_product_context:
+        (out_dir / "PRODUCT_CONTEXT.md").write_text(product_context or "")
     surfaces: list[dict[str, object]] = []
     for o in observations:
         shot_rel = ""
@@ -108,7 +113,7 @@ def save_evidence(
             {"key": s.key, "title": s.title, "role": s.role, "app": s.app}
             for s in catalog
         ],
-        "generation_failures": generation_failures or [],
+        "product_context": has_product_context,
         "flow_failures": flow_failures or [],
     }
     (out_dir / "findings.json").write_text(json.dumps(findings, indent=2))

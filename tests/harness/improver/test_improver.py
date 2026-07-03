@@ -287,40 +287,52 @@ def test_where_to_look_and_brief() -> None:
     assert "abc123" in brief and "STOP" in brief and "schema, auth, or billing" in brief
 
 
-# --- evidence (Channel D: content-quality corpus into the plan path) ------
+# --- evidence + ideate arm (feature-gap ideation into the plan path) ------
 
-def test_save_evidence_folds_generation_failures_into_findings(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The re-verified corpus failures must reach findings.json so the
-    plan-billed judge can propose generation fixes, and the JUDGE_PROMPT must
-    tell it to."""
+def test_save_evidence_folds_product_context_into_findings(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The product overview must reach the evidence dir (PRODUCT_CONTEXT.md) and
+    be flagged in findings.json so the plan-billed judge grounds its feature-gap
+    ideation, and the JUDGE_PROMPT must tell it to."""
     import json
 
     from tests.harness.improver.evidence import JUDGE_PROMPT, save_evidence
 
-    failures = [{"probe": "geometry", "scenario": "triangle", "constraint": "c",
-                 "expected": ["triangle"], "rationale": "r", "fix_in": ["api/x.py"]}]
-    out = save_evidence([], [], tmp_path, generation_failures=failures)
+    overview = "# Veradic\n\nFeature map: grading, integrity, generation."
+    out = save_evidence([], [], tmp_path, product_context=overview)
     findings = json.loads((out / "findings.json").read_text())
-    assert findings["generation_failures"] == failures
-    # default (no failures passed) still emits the key, empty — never KeyError
+    assert findings["product_context"] is True
+    assert (out / "PRODUCT_CONTEXT.md").read_text() == overview
+    # No product context passed → flag is False, no file written (never KeyError).
     out2 = save_evidence([], [], tmp_path / "empty")
-    assert json.loads((out2 / "findings.json").read_text())["generation_failures"] == []
-    assert "generation_failures" in JUDGE_PROMPT
+    assert json.loads((out2 / "findings.json").read_text())["product_context"] is False
+    assert not (out2 / "PRODUCT_CONTEXT.md").exists()
+    # The judge is told to ground feature-gap ideation in PRODUCT_CONTEXT.md.
+    assert "PRODUCT_CONTEXT.md" in JUDGE_PROMPT and "FEATURE-GAP" in JUDGE_PROMPT
 
 
-def test_still_failing_drops_replay_cassette_gaps() -> None:
-    """A replay-mode cassette gap (errored, didn't run) must not masquerade as a
-    still-failing generation defect; in record/auto an error is a real failure."""
-    from types import SimpleNamespace
+def test_digest_product_ideas_section_renders_first() -> None:
+    """Feature-gap ideas (surface_key 'product') route to their own 'Product
+    ideas' section, which leads the digest — ahead of the bulk defect sections."""
+    from tests.harness.improver.proposals import to_dict
+    from tests.harness.improver.report import _app_of, proposals_digest_md
 
-    from tests.harness.improver.sources import _still_failing
+    # surface_key "product" maps to the product bucket.
+    assert _app_of("product") == "product"
 
-    def r(name: str, passed: bool, error: str | None) -> SimpleNamespace:
-        return SimpleNamespace(scenario=name, passed=passed, error=error)
-
-    results = [r("ok", True, None), r("real_fail", False, None), r("cassette_gap", False, "miss")]
-    assert _still_failing(results, "auto") == ["real_fail", "cassette_gap"]  # both kept
-    assert _still_failing(results, "replay") == ["real_fail"]                # gap dropped
+    idea = to_dict(_p("Add per-standard mastery view", surface="product",
+                      change="new teacher analytics panel"))
+    idea["category"] = "feature"
+    web = to_dict(_p("Fix nav overflow", surface="web.public.landing"))
+    admin = to_dict(_p("Tidy the leads table", surface="admin.leads"))
+    md = proposals_digest_md([web, admin, idea])  # deliberately not product-first
+    # "Product ideas" leads, ahead of every app defect section.
+    assert md.index("## Product ideas") < md.index("## Web")
+    assert md.index("## Product ideas") < md.index("## Admin")
+    # The feature idea is a real, approvable card in that section.
+    assert f"`{idea['id']}`\n- **What:**" in md
+    assert f"approve {idea['id']}" in md
+    # Census counts the product bucket.
+    assert "1 Product ideas" in md
 
 
 # --- admin scan (Channel B) -----------------------------------------------

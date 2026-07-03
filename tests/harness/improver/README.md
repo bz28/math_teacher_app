@@ -9,7 +9,8 @@ injection, isolated seed, cassette $0 replay, cost tracker).
 
 ```
 [scheduled: cloud routine, ~once per limit-reset window]
-  improve scan ──> screenshots + detectors + UX judge + corpus + feature pass
+  improve gather ($0) ──> screenshots + detectors + product overview + flow tests
+  ─plan judge─────────> UX fixes + feature-gap ideas (grounded in the overview)
               ──> ranked, deduped proposals ──> durable queue (improver/state branch)
   agent reads top proposals ──> PushNotification + thread digest ──> exits
                                           │
@@ -46,8 +47,28 @@ python -m tests.harness improve budget
 ```
 
 Useful scan flags: `--apps web,admin,mobile_web`, `--max-surfaces N`,
-`--max-size S|M|L`, `--no-judge`, `--no-content`, `--no-features`,
+`--max-size S|M|L`, `--no-judge`, `--no-features` (skip feature-gap ideation),
 `--ignore-budget`.
+
+## Proposal sources
+
+Two lenses feed one ranked, deduped list:
+
+- **UI scan** — screenshots + objective detectors (console errors, a11y,
+  overflow, slow loads) + a UX vision judge → visual/UX/a11y/perf/bug fixes.
+- **Ideate (feature-gap)** — reads the product overview
+  (`docs/product/overview.md`) + the route catalog and proposes a few high-value
+  FEATURE ideas: real gaps a teacher/student would want, not dupes of what
+  exists, staying within the product's AI loop (the overview's scope note).
+  Damped confidence so ideas never outrank observed defects; they land in the
+  digest's own **"Product ideas"** section, which leads. In the cloud loop this
+  runs inside the **plan-billed judge** (the overview is written to the evidence
+  dir as `PRODUCT_CONTEXT.md`); `improve scan` has a dev-only, API-billed parity
+  path (`ideate_proposals`).
+
+Generation-quality bugs are covered by the separate **$0 prod-defect arm**
+(`llm_defects.py`), which mines the backend's logged LLM-call defects over HTTP
+— the improver makes no deliberate metered generation calls.
 
 ## Configuration (env)
 
@@ -89,13 +110,13 @@ an admin-user seed) before they scan authenticated — tracked in `surfaces.py`.
 
 - **Replay determinism (UI proposer):** detector hits read the live DOM (axe,
   overflow, timing), which can vary run-to-run, so the UI proposal cassette key
-  shifts and `--mode replay` may miss it. The corpus + feature sources replay
-  cleanly (stable input hash). The scheduled loop uses `auto`, so this only
-  affects $0 regression replays of the UI proposer.
+  shifts and `--mode replay` may miss it. The ideate source replays cleanly
+  (stable input hash over the overview + catalog). The scheduled loop uses
+  `auto`, so this only affects $0 regression replays of the UI proposer.
 - **Surfaces:** default scan is `web` (public + student/teacher). admin +
   mobile_web are catalogued but excluded until their auth plumbing lands.
-- **Features source** reasons from the route catalog only; intentionally damped
-  and labelled lower-confidence.
+- **Ideate source** is grounded in the product overview + route catalog;
+  intentionally damped and labelled lower-confidence (a human vets each idea).
 
 ## Go-live checklist
 
