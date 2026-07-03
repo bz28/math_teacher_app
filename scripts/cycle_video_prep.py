@@ -471,9 +471,12 @@ MAYA_FINAL_ANSWERS = {
     MULTILIN_ITEM: "x = 46/5",
 }
 MAYA_MATRIX_DEDUCTIONS = [
+    # step_ref is 1-based into THIS problem's student_steps (2 steps). The slip
+    # is in step 2 — the final matrix where AB₂₂ reads 5 instead of 6 — so the
+    # review page tints step 2 and links the −5 ledger line straight to it.
     {"points_off": 5,
      "reason": "Partial credit: small execution error — arithmetic slip in AB₂₂ (3×2 written as 5 instead of 6)",
-     "step_ref": 4},
+     "step_ref": 2},
 ]
 
 # ── Student A..H email-prefix → realistic name (status-ordered) ──────

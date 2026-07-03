@@ -273,6 +273,11 @@ const yDigest = () => { const dl = [...document.querySelectorAll('dl')].find((d)
 const rFlag = () => { const el = [...document.querySelectorAll('*')].find((n) => /couldn.t explain/i.test(n.textContent || '') && n.children.length < 8); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
 const rRoster = () => { const el = [...document.querySelectorAll('*')].find((n) => /Jordan/i.test(n.textContent || '') && /100%/.test(n.textContent || '') && /Review/i.test(n.textContent || '') && n.children.length < 16 && n.getBoundingClientRect().width < 660 && n.getBoundingClientRect().height < 220); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
 const rDigest = () => { const dl = [...document.querySelectorAll('dl')].find((d) => /Tabbed out/i.test(d.textContent || '') && /Paste events/i.test(d.textContent || '')); const el = dl ? (dl.parentElement || dl) : null; if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
+// The one student-work step a receipt deduction anchors to — the app tags it
+// with id `work-<item>-step-<N>` and tints it. On Maya's grade that's the
+// matrix AB₂₂ slip (5, should be 6). Self-contained (Playwright serializes it).
+const yStepAnchor = () => { const el = document.querySelector('[id^="work-"][id*="-step-"]'); if (!el) return null; const se = document.scrollingElement || document.documentElement; const r = el.getBoundingClientRect(); return Math.max(0, se.scrollTop + r.top + r.height / 2 - window.innerHeight / 2); };
+const rStepAnchor = () => { const el = document.querySelector('[id^="work-"][id*="-step-"]'); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
 // Eased window scroll to a fraction of the full document height.
 async function smoothScrollToFrac(page, frac, ms = 2000) {
   await page.evaluate(async ([frac, ms]) => {
@@ -656,8 +661,16 @@ const CLIPS = {
     await smoothScrollToFrac(page, 0.24, 2300); await sleep(page, 500);
     await cap(page, 'Matrix multiply — the set-up is perfect.');
     await smoothScrollToFrac(page, 0.44, 2300); await sleep(page, 600);
+    // Center + box the EXACT erroring step the receipt anchors to (AB₂₂ = 5,
+    // should be 6) — the −5 ledger line links straight to this tinted step.
+    await scrollToFinder(page, yStepAnchor, 1100); await sleep(page, 350);
+    await highlightFinder(page, rStepAnchor, { pad: 8 });
     await cap(page, 'One honest slip: 3 × 2 = 6, not 5 → Partial 95%.');
-    await smoothScrollToFrac(page, 0.64, 2500); await sleep(page, 1100);
+    await sleep(page, 2400);
+    await cap(page, 'It shows you the exact step — you decide.');
+    await sleep(page, 2600);
+    await clearHL(page);
+    await smoothScrollToFrac(page, 0.64, 2000); await sleep(page, 700);
     await cap(page, 'The trig and the equation — full marks.');
     await smoothScrollToFrac(page, 0.83, 2300); await sleep(page, 700);
     await cap(page, 'The AI proposes — you set full, partial, or none.');
