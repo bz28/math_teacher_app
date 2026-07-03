@@ -14,9 +14,9 @@ name: Improver scan
 # Repo secrets (Settings → Secrets → Actions):
 #   CLAUDE_CODE_OAUTH_TOKEN — `claude setup-token`; the judging + ideation run on
 #     your Claude plan (included), not the API.
-#   CLAUDE_API_KEY — app SDK fallback only, so the booted API can record/replay
-#     its own cassette-backed calls if a scanned page happens to trigger one; the
-#     improver never deliberately spends it.
+# (CLAUDE_API_KEY is intentionally NOT wired to the real secret — a dummy value is
+#  set inline below so the FastAPI app can boot, which guarantees the improver can
+#  never make a metered API call. Judging + ideation are plan-billed; gather is $0.)
 
 on:
   schedule:
@@ -41,7 +41,7 @@ jobs:
     env:
       DATABASE_URL: postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_harness
       JWT_SECRET: improver-ephemeral-secret # consistent within the job (seed + API share it)
-      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }} # app SDK fallback only (cassette-backed); improver spends none
+      CLAUDE_API_KEY: "improver-no-metered-calls" # dummy, NOT the real key — app needs a value to boot; guarantees $0 (any incidental call fails harmlessly instead of billing)
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }} # plan-billed judging
       APP_ENV: test
       SENTRY_DSN: ""
