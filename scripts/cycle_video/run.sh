@@ -40,7 +40,6 @@ node "$HERE/title_cards.mjs"
 echo "==[2/7] seed published world + mint tokens=="
 WORKSHEET_ASSET=$ASSETS_OUT/worksheet.png PYTHONPATH=. $PY -m scripts.cycle_video_prep
 export TOKENS=$(PYTHONPATH=. $PY -m scripts.cycle_video.mint_tokens)
-TEACHER_TOK=$(printf '%s' "$TOKENS" | $PY -c "import sys,json;print(json.load(sys.stdin)['teacher']['access'])")
 
 echo "==[3/7] record the live understanding-check chat (Jordan in_progress)=="
 PYTHONPATH=. $PY -m scripts.cycle_video.set_jordan_inprogress
@@ -51,9 +50,8 @@ WORKSHEET_ASSET=$ASSETS_OUT/worksheet.png PYTHONPATH=. $PY -m scripts.cycle_vide
 echo "==[4/7] record published-state scenes=="
 node "$HERE/record_scenes.mjs" 0-cold 1-section 2-materials 4-submit 4-verdict 5-grade 5-insights 6-reteach 7-practice 7-learn
 
-echo "==[5/7] draft state → warm matrix workshop → record generation family=="
+echo "==[5/7] draft state → record generation family (workshop proposal pre-seeded)=="
 flip draft
-TOKEN="$TEACHER_TOK" PYTHONPATH=. $PY -m scripts.cycle_video.workshop_prewarm
 node "$HERE/record_scenes.mjs" 3-generate 3-figure 3-workshop
 
 echo "==[6/7] restore published state=="

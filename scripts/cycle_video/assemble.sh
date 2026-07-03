@@ -46,12 +46,12 @@ SEGMENTS=(
 # cinematic pull); everything else gets a subtle drift.
 push_for () {
   case "$1" in
-    0-cold)     echo 1.12 ;;
+    0-cold)     echo 1.10 ;;
     3-figure)   echo 1.14 ;;
     3-workshop) echo 1.13 ;;
     4-chat)     echo 1.12 ;;
     4-verdict)  echo 1.13 ;;
-    5-grade)    echo 1.14 ;;
+    5-grade)    echo 1.035 ;;
     5-insights) echo 1.09 ;;
     *)          echo 1.075 ;;
   esac
@@ -146,9 +146,9 @@ pk 0-cold      0.70 coldopen
 pk 1-section   0.55 section
 pk 2-materials 0.70 materials
 pk 3-generate  0.92 three-problems
-pk 3-figure    0.55 ladder-figure
-pk 3-figure    0.85 ladder-solution
-pk 3-workshop  0.60 matrix-nosolution
+pk 3-figure    0.55 zipline-figure
+pk 3-figure    0.85 zipline-solution
+pk 3-workshop  0.70 matrix-undefined
 pk 4-submit    0.70 photo
 pk 4-chat      0.55 understanding-chat
 pk 4-chat      0.92 understanding-terminal

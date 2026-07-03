@@ -225,6 +225,80 @@ async function gotoClean(page, url, { zoom = 1, waitMs = 1500, anchor = null, be
   await sleep(page, Math.max(360, waitMs - preReveal));
 }
 
+// ── Cinematic helpers (upgrades): a sienna emphasis box, eased window
+//    scrolls, and the cold-open setup overlay. All mount on <html> (outside
+//    the body-zoom) or drive the window scroll, so they read cleanly under
+//    the full-bleed framing + Ken-Burns push.
+async function highlightEl(page, fnStr, { pad = 10 } = {}) {
+  const rect = await page.evaluate((s) => {
+    let el = null; try { el = (0, eval)('(' + s + ')')(); } catch (e) {}
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) return null;
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  }, fnStr);
+  if (!rect) return false;
+  await page.evaluate(([r, pad]) => {
+    const old = document.getElementById('__hl'); if (old) old.remove();
+    const h = document.createElement('div'); h.id = '__hl';
+    h.style.cssText = 'position:fixed;z-index:2147483644;pointer-events:none;'
+      + `left:${r.x - pad}px;top:${r.y - pad}px;width:${r.w + 2 * pad}px;height:${r.h + 2 * pad}px;`
+      + 'border:3px solid #b8431a;border-radius:14px;'
+      + 'box-shadow:0 0 0 6px rgba(184,67,26,.15),0 14px 38px rgba(184,67,26,.28);'
+      + 'opacity:0;transition:opacity .5s ease';
+    document.documentElement.appendChild(h);
+    requestAnimationFrame(() => { h.style.opacity = '1'; });
+  }, [rect, pad]);
+  return true;
+}
+async function clearHL(page) { await page.evaluate(() => { const h = document.getElementById('__hl'); if (h) h.remove(); }); }
+
+// Eased window scroll so an element (fnStr → node) lands centered.
+async function smoothScrollToEl(page, fnStr, ms = 1500) {
+  await page.evaluate(async ([s, ms]) => {
+    let el = null; try { el = (0, eval)('(' + s + ')')(); } catch (e) {}
+    if (!el) return;
+    const se = document.scrollingElement || document.documentElement;
+    const r = el.getBoundingClientRect();
+    const target = Math.max(0, se.scrollTop + r.top + r.height / 2 - window.innerHeight / 2);
+    const startY = se.scrollTop, dist = target - startY, t0 = performance.now();
+    await new Promise((res) => { function step(now) { const p = Math.min(1, (now - t0) / ms);
+      const e = p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; se.scrollTop = startY + dist * e;
+      if (p < 1) requestAnimationFrame(step); else res(); } requestAnimationFrame(step); });
+  }, [fnStr, ms]);
+}
+// Eased window scroll to a fraction of the full document height.
+async function smoothScrollToFrac(page, frac, ms = 2000) {
+  await page.evaluate(async ([frac, ms]) => {
+    const se = document.scrollingElement || document.documentElement;
+    const max = Math.max(0, se.scrollHeight - window.innerHeight);
+    const target = max * frac, startY = se.scrollTop, dist = target - startY, t0 = performance.now();
+    await new Promise((res) => { function step(now) { const p = Math.min(1, (now - t0) / ms);
+      const e = p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; se.scrollTop = startY + dist * e;
+      if (p < 1) requestAnimationFrame(step); else res(); } requestAnimationFrame(step); });
+  }, [frac, ms]);
+}
+// Cold-open setup card, drawn on brand paper ABOVE the veil so it can hold
+// while the flagged review is framed underneath, then dissolve away.
+async function coldSetup(page) {
+  await page.evaluate(() => {
+    const old = document.getElementById('__setup'); if (old) old.remove();
+    const o = document.createElement('div'); o.id = '__setup';
+    o.style.cssText = 'position:fixed;inset:0;z-index:2147483645;background:#f7f5f0;'
+      + 'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+      + 'text-align:center;padding:0 12%;'
+      + "font-family:'Instrument Serif',Georgia,serif;color:#14130f;";
+    o.innerHTML =
+      '<div style="color:#b8431a;font-family:Inter,sans-serif;font-size:22px;font-weight:600;'
+      + 'letter-spacing:.42em;text-transform:uppercase;margin-bottom:44px;opacity:0;transition:opacity .6s ease" id="__su0">Veradic</div>'
+      + '<div id="__su1" style="font-size:82px;line-height:1.1;letter-spacing:-.012em;opacity:0;'
+      + 'transition:opacity .75s ease,transform .75s ease;transform:translateY(16px)">A student just earned a perfect score —</div>'
+      + '<div id="__su2" style="margin-top:24px;font-size:82px;line-height:1.1;letter-spacing:-.012em;color:#b8431a;'
+      + 'opacity:0;transition:opacity .75s ease,transform .75s ease;transform:translateY(16px)">on the hardest problem on the review.</div>';
+    document.documentElement.appendChild(o);
+  });
+}
+
 // ─────────────────────────────── clips ───────────────────────────────
 // One coherent loop on the SAME "Unit 5 Review" assignment (General Math ·
 // Period 3 · Ms. Rivera). Three problems — a matrix system, a 15-ft ladder,
@@ -232,19 +306,54 @@ async function gotoClean(page, url, { zoom = 1, waitMs = 1500, anchor = null, be
 // the clicks. Full-bleed: the assembler shows each clip edge-to-edge and
 // pushes in (Ken-Burns) on the money shots; nothing floats.
 const CLIPS = {
-  // 0 · COLD OPEN — the catch, before the title. A perfect score that
-  //     isn't real understanding: Jordan got the matrix right but can't
-  //     explain a step. Hard hook that the story later pays off.
+  // 0 · COLD OPEN — a setup card, then the catch, before the title. Open on
+  //     brand paper ("A student just earned a perfect score — on the hardest
+  //     problem"), then dissolve to the flagged review: zoomed on the flag +
+  //     the 100%, with the behavioral evidence (tabbed out 2×, paste 1)
+  //     highlighted. Jordan got the matrix product right but can't explain a
+  //     step. Hard hook the story later pays off.
   async '0-cold'(page) {
-    await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}/sections/${ID.SEC}/review?student=${ID.JORDAN}`,
-      { zoom: 1.16, waitMs: 1900, anchor: 'text=/couldn.t explain the inverse/i' });
-    await page.evaluate(() => { const e = [...document.querySelectorAll('*')].find((n) => /couldn.t explain the inverse/i.test(n.textContent || '') && n.children.length < 8); if (e) e.scrollIntoView({ block: 'center' }); });
-    await sleep(page, 700);
-    await cap(page, 'A perfect score on the hardest problem.');
-    await sleep(page, 2700);
+    // Navigate UNDER the veil; keep the app hidden while the setup card holds.
+    await veilOn(page).catch(() => {});
+    await page.goto(WEB + `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}/sections/${ID.SEC}/review?student=${ID.JORDAN}`,
+      { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+    await page.waitForLoadState('load', { timeout: 8000 }).catch(() => {});
+    await veilOn(page).catch(() => {});
+    await setZoom(page, 1.12);
+    await page.locator('text=/couldn.t explain/i').first().waitFor({ state: 'visible', timeout: 9000 }).catch(() => {});
+    // Setup card (brand paper) above the veil — two beats.
+    await coldSetup(page);
+    await sleep(page, 250);
+    await page.evaluate(() => { const e = document.getElementById('__su0'); if (e) e.style.opacity = '1'; });
+    await sleep(page, 350);
+    await page.evaluate(() => { const e = document.getElementById('__su1'); if (e) { e.style.opacity = '1'; e.style.transform = 'none'; } });
+    await sleep(page, 1600);
+    await page.evaluate(() => { const e = document.getElementById('__su2'); if (e) { e.style.opacity = '1'; e.style.transform = 'none'; } });
+    await sleep(page, 2000);
+    // Frame the flagged screen underneath (top: roster shows Jordan · 100% ·
+    // Review; detail shows the flag banner), then dissolve the card away.
+    await page.evaluate(() => { const se = document.scrollingElement || document.documentElement; se.scrollTop = 0; });
+    await veilOff(page);
+    await page.evaluate(() => { const o = document.getElementById('__setup'); if (o) { o.style.transition = 'opacity .6s ease'; o.style.opacity = '0'; } });
+    await sleep(page, 720);
+    await page.evaluate(() => { const o = document.getElementById('__setup'); if (o) o.remove(); });
+    // Beat 1 — the perfect score + the flag, together.
+    await highlightEl(page, "()=>[...document.querySelectorAll('*')].find(n=>/Jordan/i.test(n.textContent||'')&&/100%/.test(n.textContent||'')&&/Review/i.test(n.textContent||'')&&n.children.length<14&&n.getBoundingClientRect().width<640)");
+    await cap(page, 'A perfect score — quietly flagged.');
+    await sleep(page, 2400);
+    await clearHL(page);
+    // Beat 2 — the flag itself.
+    await highlightEl(page, "()=>[...document.querySelectorAll('*')].find(n=>/couldn.t explain/i.test(n.textContent||'')&&n.children.length<8)");
     await cap(page, 'And he can’t explain a single step of it.');
-    await sleep(page, 3000);
-    await capClear(page); await sleep(page, 700);
+    await sleep(page, 2600);
+    await clearHL(page);
+    // Beat 3 — the behavioral evidence (tabbed out 2×, paste 1).
+    await smoothScrollToEl(page, "()=>[...document.querySelectorAll('*')].find(n=>/Activity during the integrity check/i.test(n.textContent||'')&&n.children.length<12)", 1300);
+    await sleep(page, 300);
+    await highlightEl(page, "()=>[...document.querySelectorAll('div')].find(d=>/Activity during the integrity check/i.test(d.textContent||'')&&/Tabbed out/i.test(d.textContent||'')&&d.children.length<12)");
+    await cap(page, 'Tabbed out twice. Pasted the answer once.');
+    await sleep(page, 2900);
+    await clearHL(page); await capClear(page); await sleep(page, 700);
   },
 
   // 1 · TEACHER — spin up a class section.
@@ -326,7 +435,7 @@ const CLIPS = {
     const focus = dialog.locator('input[placeholder*="word problems"], textarea[placeholder*="word problems"]').first();
     if (await focus.count()) {
       await go(page, focus, { click: true });
-      await focus.pressSequentially('inverse matrices, right-triangle trig, multi-step equations', { delay: 16 }).catch(() => {});
+      await focus.pressSequentially('matrix multiplication, right-triangle trig, multi-step equations', { delay: 16 }).catch(() => {});
       await sleep(page, 500);
     } else { await sleep(page, 500); }
     await cap(page, 'And build from your own worksheet — one click.');
@@ -349,7 +458,7 @@ const CLIPS = {
 
     // Reveal the three problems the focus pulled (land on a real line).
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}`,
-      { zoom: 1.15, waitMs: 1500, anchor: 'text=/inverse matrix/i' });
+      { zoom: 1.15, waitMs: 1500, anchor: 'text=/matrix product|Matrix multiplication/i' });
     await page.mouse.wheel(0, 260); await sleep(page, 500);
     await cap(page, 'Three problems — exactly the topics you named.');
     await sleep(page, 1900);
@@ -362,10 +471,10 @@ const CLIPS = {
   //      verified answer key. Proof it writes answers, not just questions.
   async '3-figure'(page) {
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}`,
-      { zoom: 1.05, waitMs: 1400, anchor: 'text=/ladder leans/i' });
+      { zoom: 1.05, waitMs: 1400, anchor: 'text=/zip-line/i' });
     await cap(page, 'Open any problem —');
     await sleep(page, 900);
-    await go(page, page.getByText(/ladder leans/i).first(), { click: true }).catch(() => {});
+    await go(page, page.getByText(/zip-line/i).first(), { click: true }).catch(() => {});
     await sleep(page, 1600);
     await cap(page, 'It drew the figure itself — and checked it.');
     await sleep(page, 2400);
@@ -382,17 +491,20 @@ const CLIPS = {
   //      is pre-warmed off-camera → lands instantly, no thinking spinner.)
   async '3-workshop'(page) {
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}`,
-      { zoom: 1.05, waitMs: 1200, anchor: 'text=/inverse matrix/i' });
+      { zoom: 1.05, waitMs: 1200, anchor: 'text=/matrix product|Matrix multiplication/i' });
     await cap(page, 'Want to change a problem? Just say so.');
     await sleep(page, 700);
-    await go(page, page.getByText(/inverse matrix/i).first(), { click: true }).catch(() => {});
-    await page.getByRole('button', { name: /^Accept$/ }).first().waitFor({ state: 'visible', timeout: 9000 }).catch(() => {});
+    await go(page, page.getByText(/matrix product|Compute the matrix/i).first(), { click: true }).catch(() => {});
+    await page.getByRole('button', { name: /Accept/ }).first().waitFor({ state: 'visible', timeout: 9000 }).catch(() => {});
     await sleep(page, 1200);
-    await cap(page, '“Make it a system with no solution.”');
+    await cap(page, '“Make this one undefined.”');
     await sleep(page, 2300);
-    await page.mouse.wheel(0, 300); await sleep(page, 1400);
-    await cap(page, 'It rewrites the system — and re-checks: no solution.');
-    await sleep(page, 2800);
+    // Reveal the UPDATED SOLUTION (the conformability explanation), not just
+    // the rewritten question.
+    await go(page, page.getByRole('button', { name: /Show solution/i }).first(), { click: true }).catch(() => {});
+    await sleep(page, 1200);
+    await cap(page, 'It rewrites the question — and the solution: undefined, 2 ≠ 3.');
+    await page.mouse.wheel(0, 320); await sleep(page, 2800);
     await capClear(page); await sleep(page, 400);
   },
 
@@ -467,55 +579,63 @@ const CLIPS = {
   //      flagged — the thing a grade can never do. Behavior corroborates.
   async '4-verdict'(page) {
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}/sections/${ID.SEC}/review?student=${ID.JORDAN}`,
-      { zoom: 1.12, waitMs: 1700, anchor: 'text=/couldn.t explain the inverse/i' });
+      { zoom: 1.12, waitMs: 1700, anchor: 'text=/couldn.t explain/i' });
     await cap(page, 'You see the catch a grade never could.');
     await sleep(page, 1600);
-    await page.evaluate(() => { const e = Array.from(document.querySelectorAll('*')).find((n) => /couldn.t explain the inverse/i.test(n.textContent || '') && n.children.length < 8); if (e) e.scrollIntoView({ block: 'center' }); });
-    await sleep(page, 1200);
+    await smoothScrollToEl(page, "()=>[...document.querySelectorAll('*')].find(n=>/couldn.t explain/i.test(n.textContent||'')&&n.children.length<8)", 900);
+    await highlightEl(page, "()=>[...document.querySelectorAll('*')].find(n=>/couldn.t explain/i.test(n.textContent||'')&&n.children.length<8)");
     await cap(page, 'A correct answer — that he can’t explain.');
     await sleep(page, 2600);
-    await page.evaluate(() => {
-      const e = Array.from(document.querySelectorAll('*')).find((n) =>
-        /Activity during the integrity check/i.test(n.textContent || '') && n.children.length < 8);
-      if (e) e.scrollIntoView({ block: 'center' });
-    });
-    await sleep(page, 900);
-    await cap(page, 'Behavior backs it up: pasted the answer, tabbed away.');
-    await sleep(page, 2800);
+    await clearHL(page);
+    // Highlight the behavioral evidence (tabbed out 2×, paste 1).
+    await smoothScrollToEl(page, "()=>[...document.querySelectorAll('*')].find(n=>/Activity during the integrity check/i.test(n.textContent||'')&&n.children.length<12)", 1000);
+    await sleep(page, 250);
+    await highlightEl(page, "()=>[...document.querySelectorAll('div')].find(d=>/Activity during the integrity check/i.test(d.textContent||'')&&/Tabbed out/i.test(d.textContent||'')&&d.children.length<12)");
+    await cap(page, 'Behavior backs it up: tabbed out twice, pasted once.');
+    await sleep(page, 2900);
+    await clearHL(page);
     await cap(page, 'Warm to the student. Honest with you.');
-    await sleep(page, 2200);
+    await sleep(page, 2100);
     await capClear(page); await sleep(page, 600);
   },
 
-  // 5 · TEACHER — the itemized grade + the resolved understanding check.
-  //     Maya's ladder: perfect setup, one honest trig slip → fair 85%.
+  // 5 · TEACHER — ONE smooth, continuous scroll down Maya's grading. Problem
+  //     by problem on a single page: the matrix set-up perfect but one honest
+  //     slip (3×2 = 6, not 5) → itemized Partial 95%; the trig + the equation
+  //     full marks; her understanding check cleared. No cutting between pages.
   async '5-grade'(page) {
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}/sections/${ID.SEC}/review?student=${ID.MAYA}`,
-      { zoom: 1.12, waitMs: 2000, anchor: 'text=/Maya/i' });
-    await cap(page, 'Grade the class — with a receipt that adds up.');
-    await sleep(page, 1600);
-    const expandBtn = page.getByRole('button', { name: /Expand problem 2 to inspect/i }).first();
-    await go(page, expandBtn, { click: false }).catch(() => {});
-    await expandBtn.click({ timeout: 3000 }).catch(() => {});
-    await sleep(page, 1300);
-    await page.getByText(/itemized/i).first().scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
-    await page.mouse.wheel(0, 150);
-    await sleep(page, 1400);
-    await cap(page, 'Perfect setup — one trig slip. 100 − 15 = 85%.');
-    await sleep(page, 2900);
+      { zoom: 1.06, waitMs: 1800, anchor: 'text=/Maya/i' });
+    // Expand every AI-confident problem so each shows its steps + receipt,
+    // making the page one tall, scrollable grading document.
+    for (let k = 0; k < 3; k++) {
+      const b = page.getByRole('button', { name: /Expand problem \d+ to inspect/i }).first();
+      if (await b.count() === 0) break;
+      try { await b.click({ timeout: 2500 }); } catch {}
+      await sleep(page, 450);
+    }
+    await page.evaluate(() => { const se = document.scrollingElement || document.documentElement; se.scrollTop = 0; });
+    await sleep(page, 400);
+    await cap(page, 'Grade the class — one page, one clear receipt.');
+    await sleep(page, 1500);
+    // A single, eased, top-to-bottom scroll — obviously one page moving.
+    await cap(page, 'Her understanding check came back clear.');
+    await smoothScrollToFrac(page, 0.24, 2300); await sleep(page, 500);
+    await cap(page, 'Matrix multiply — the set-up is perfect.');
+    await smoothScrollToFrac(page, 0.44, 2300); await sleep(page, 600);
+    await cap(page, 'One honest slip: 3 × 2 = 6, not 5 → Partial 95%.');
+    await smoothScrollToFrac(page, 0.64, 2500); await sleep(page, 1100);
+    await cap(page, 'The trig and the equation — full marks.');
+    await smoothScrollToFrac(page, 0.83, 2300); await sleep(page, 700);
     await cap(page, 'The AI proposes — you set full, partial, or none.');
-    await sleep(page, 2200);
-    await page.evaluate(() => { const e = Array.from(document.querySelectorAll('*')).find((n) => /method in her own words/i.test(n.textContent || '') && n.children.length < 8); if (e) e.scrollIntoView({ block: 'center' }); });
-    await sleep(page, 1200);
-    await cap(page, 'And her understanding check comes back cleared.');
-    await sleep(page, 2400);
+    await smoothScrollToFrac(page, 1.0, 2100); await sleep(page, 1600);
     await capClear(page); await sleep(page, 600);
   },
 
   // 5b · TEACHER — class insights: per-concept struggle + per-student roster.
   async '5-insights'(page) {
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=insights`,
-      { zoom: 1.12, waitMs: 1800, anchor: 'text=/inverse matrix/i' });
+      { zoom: 1.12, waitMs: 1800, anchor: 'text=/Multiplying matrices|matrices/i' });
     await cap(page, 'See exactly where the class is struggling.');
     await sleep(page, 2400);
     await page.mouse.wheel(0, 520); await sleep(page, 1800);
@@ -527,14 +647,14 @@ const CLIPS = {
   // 6 · TEACHER — one-click reteach → a targeted practice set.
   async '6-reteach'(page) {
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=insights`,
-      { zoom: 1.12, waitMs: 1600, anchor: 'text=/inverse matrix/i' });
+      { zoom: 1.12, waitMs: 1600, anchor: 'text=/Multiplying matrices|matrices/i' });
     await cap(page, 'One click turns a weak spot into practice.');
     await sleep(page, 1200);
     await go(page, page.getByRole('button', { name: /re-teach|reteach/i }).first(), { click: true }).catch(() => {});
     await sleep(page, 1200);
     await capClear(page); await sleep(page, 200);
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.PRACTICE}`,
-      { zoom: 1.13, waitMs: 1600, anchor: 'text=/determinant|solution|system/i' });
+      { zoom: 1.13, waitMs: 1600, anchor: 'text=/product|dimension|undefined|entry/i' });
     await page.mouse.wheel(0, 160); await sleep(page, 1200);
     await cap(page, 'A targeted set — written for them, automatically.');
     await sleep(page, 2600);
@@ -549,10 +669,10 @@ const CLIPS = {
     await sleep(page, 1100);
     await go(page, page.getByRole('button', { name: /^Practice/ }).first(), { click: true }).catch(() => {});
     await sleep(page, 1600);
-    // The correct determinant is −17; pick that option (KaTeX → textContent).
+    // Correct answer: the product is undefined (2 ≠ 3). Pick that option.
     const pick = await page.evaluate(() => {
       const btns = Array.from(document.querySelectorAll('button'));
-      const opt = btns.find((b) => /(^|[^\d-])-\s*17($|[^\d])/.test((b.textContent || '').replace(/\s/g, ' ')) && (b.textContent || '').length < 40);
+      const opt = btns.find((b) => /undefined/i.test(b.textContent || '') && (b.textContent || '').length < 90);
       if (!opt) return null;
       opt.scrollIntoView({ block: 'center' });
       const r = opt.getBoundingClientRect();
