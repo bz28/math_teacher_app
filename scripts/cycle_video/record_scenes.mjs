@@ -410,7 +410,9 @@ const CLIPS = {
     const input = page.locator('input[type=file]').first();
     await input.setInputFiles(`${ASSETS}/${REVIEW_SHEET}`).catch(() => {});
     // Wait for the uploaded sheet to land as a real card in the materials list.
-    const card = page.locator('button', { hasText: 'Matrices, Trig & Equations' }).first();
+    // Match on the FULL filename — a same-named unit folder exists in the
+    // sidebar, so a loose substring would grab the folder, not the file card.
+    const card = page.locator('button', { hasText: REVIEW_SHEET }).first();
     await card.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
     await sleep(page, 900);
     await cap(page, 'Uploaded — your Unit 5 review sheet is in.');
