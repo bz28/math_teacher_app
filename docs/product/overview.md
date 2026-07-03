@@ -2,9 +2,9 @@
 
 > Source-of-truth product context for the codebase. Written to ground the autonomous
 > improver's "ideate" arm: it should propose **gaps**, not rebuild what already exists.
-> Statements marked `<!-- confirm -->` are inferred product/customer intent, not read
-> directly from code — a human should verify or rewrite them. No pricing, named
-> customers, or dates are asserted here.
+> The customer/positioning statements here were reviewed and confirmed with the owner;
+> anything still unverified is marked `<!-- confirm -->`. No pricing, named customers, or
+> dates are asserted here.
 
 ## 1. What Veradic is
 
@@ -32,15 +32,17 @@ institution-backed and solo usage.
 
 | Segment | Who | Job-to-be-done |
 |---|---|---|
-| **Students — school** | Enrolled in a teacher's section via invite/join-class | Do assigned homework by photographing work, see grades + feedback, practice weak spots. <!-- confirm --> |
-| **Students — independent** | Self-study learners, no class | Snap or type any problem, get tutored step-by-step, generate practice, take mock tests. <!-- confirm --> |
-| **Teachers** | Run courses/sections; institutional or indie | Turn worksheets into trusted assignments, let AI grade + understanding-check the class, walk in knowing who is struggling and what to reteach — with far less grading time. <!-- confirm --> |
-| **Schools / districts** | The institutions teachers belong to; the buyer for `/for-districts` | Roll Veradic out across teachers/classes with trust, privacy, and visibility into learning. <!-- confirm --> |
+| **Students — school** | Enrolled in a teacher's section via invite/join-class | Do assigned homework by photographing work, see grades + feedback, practice weak spots. |
+| **Students — independent** | Self-study learners, no class | Snap or type any problem, get tutored step-by-step, generate practice, take mock tests. |
+| **Teachers** | Run courses/sections; institutional or indie | Turn worksheets into trusted assignments, let AI grade + understanding-check the class, walk in knowing who is struggling and what to reteach — with far less grading time. |
+| **Schools / districts** | The institutions teachers belong to; the buyer for `/for-districts` | Roll Veradic out across teachers/classes with trust, privacy, and visibility into learning. |
 
-**Inferred positioning (verify):** the teacher is the primary hero and buyer of the core
-loop; the student app is the input surface; districts are the institutional expansion
-path. The `/for-districts` marketing page and the `institutional` school kind support
-this, but the exact go-to-market emphasis is a product call. <!-- confirm -->
+**Positioning (owner-confirmed):** **Build for teachers, sell to districts.** The teacher
+is the hero and daily user — the product has to win their love first; if teachers don't
+love it, nothing else matters. The **district is the buyer** and the expansion path (the
+`/for-districts` page and the `institutional` school kind), i.e. the sales motion, not the
+daily user. The **student app is the input surface** that feeds the teacher's loop. So:
+teacher-first *product*, district *sales*.
 
 ## 3. Core capabilities
 
@@ -127,30 +129,34 @@ Concrete inventory of **what exists today**, derived from `tests/harness/improve
 - Hub (`/`) + present mode (`/present`) with the four stories (integrity, grading,
   generation, teacher-day), all from bundled captured data.
 
-**Subjects:** the platform presents **math, physics, and chemistry** (subject marketing
-pages + mobile subject pills; self-study sessions carry a `subject`). The depth of engine
-support per subject beyond math is worth confirming. <!-- confirm -->
+**Subjects (owner-confirmed):** **math is the full, mature subject; physics and chemistry
+are partial.** They appear as marketing surfaces (subject pages + mobile subject pills) and
+self-study sessions carry a `subject`, but engine depth beyond math is not complete — so
+ideate *may* propose deepening physics/chemistry, and should not assume they are on par
+with math.
 
 ## 5. Principles / non-goals
 
-Sourced from code where possible; inferences flagged.
-
 - **The teacher sees every AI grade.** Grading *pre-fills* the teacher's review page
-  (`grading_ai.py` docstring: "pre-fills the teacher's review"); it is a draft for the
-  teacher, not an auto-posted score.
+  (`grading_ai.py`: "pre-fills the teacher's review"); it is a draft for the teacher, not
+  an auto-posted score.
 - **Integrity raises scrutiny, it does not auto-punish.** The check probes understanding and
   emits badges/verdicts + reasoning for the teacher; a submission it can't read is marked
-  `skipped_unreadable` rather than penalized. The intent is "raise scrutiny / surface for
-  the teacher, never auto-flag." <!-- confirm -->
+  `skipped_unreadable` rather than penalized. It raises scrutiny / surfaces for the teacher,
+  never auto-flags.
 - **Generation is verified before it's trusted.** Generated problems have their answers
-  independently re-derived / key-checked before the teacher sees them (generation story +
-  question-bank generation) — the product does not hand teachers un-checked AI output. <!-- confirm -->
-- **Tutoring guides, it doesn't give answers.** Learn mode decomposes into steps and tutors;
-  the historical product line is "guided problem-solving, not answers." <!-- confirm -->
+  independently re-derived / key-checked before the teacher sees them — the product does not
+  hand teachers un-checked AI output.
+- **Tutoring guides, it doesn't give answers.** Learn mode decomposes into steps and tutors
+  toward the student's own solution.
 - **Nothing auto-merges (engineering).** The autonomous improver stops at PR-open for human
   review (`tests/harness/improver/README.md`); it never merges its own work.
 - **AI cost + quality are first-class.** Every LLM call is logged and cost-tracked, with an
   evaluation harness, golden set, and quality dashboards — quality is measured, not assumed.
-- **Not (yet) a general LMS.** No gradebook export, SIS/roster sync, messaging, or
-  attendance in the code today — the scope is the homework→grade→understanding→reteach loop,
-  not full class management. <!-- confirm -->
+- **Focused on the AI loop today — a current scope, not a permanent boundary.** Today the
+  scope is the homework → grade → understand → reteach loop, and Veradic *complements* tools
+  like Google Classroom / Canvas rather than replacing them: there is no gradebook export,
+  SIS/roster sync, messaging, or attendance in the code. This is where the product is
+  focused **now**, not a forever non-goal — general class-management ("LMS") capabilities
+  are a possible future expansion. For now, ideate should propose within the AI loop and
+  treat LMS-style features as out of current scope unless explicitly reopened.

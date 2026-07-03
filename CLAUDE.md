@@ -1,5 +1,11 @@
 # Claude Rules
 
+## Product context
+
+- Veradic is an AI math-education **school portal**: students photograph handwritten homework; the platform grades it, runs a conversational understanding-check, and hands teachers a class-at-a-glance with the students who need help surfaced first. Full product + customer + feature context: [`docs/product/overview.md`](docs/product/overview.md) — **read it when reasoning about features or proposing changes** (it's the single source of truth; don't duplicate it here).
+- **Build for teachers, sell to districts.** The teacher is the hero/daily user (the product must win their love first); the district is the buyer/expansion path; the student app is the input surface.
+- Load-bearing principles: the teacher sees and approves **every** AI grade (nothing auto-posts); integrity **raises scrutiny, never auto-flags**; generated content is **verified before it's trusted**; tutoring **guides, never gives answers**. Subjects: **math is mature; physics/chemistry are partial.** Scope is the homework→grade→understand→reteach loop today (not a general LMS) — a current focus, not a permanent boundary.
+
 ## Ground truth
 
 - Ground every claim in the actual code. Before stating how something works, read the file and cite `file:line`. When memory or an earlier turn conflicts with what you observe now, trust what you observe and update/drop the stale recollection.
