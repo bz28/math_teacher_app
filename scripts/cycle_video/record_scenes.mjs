@@ -297,10 +297,10 @@ async function coldSetup(page) {
     o.innerHTML =
       '<div style="color:#b8431a;font-family:Inter,sans-serif;font-size:22px;font-weight:600;'
       + 'letter-spacing:.42em;text-transform:uppercase;margin-bottom:44px;opacity:0;transition:opacity .6s ease" id="__su0">Veradic</div>'
-      + '<div id="__su1" style="font-size:82px;line-height:1.1;letter-spacing:-.012em;opacity:0;'
-      + 'transition:opacity .75s ease,transform .75s ease;transform:translateY(16px)">A student just earned a perfect score —</div>'
-      + '<div id="__su2" style="margin-top:24px;font-size:82px;line-height:1.1;letter-spacing:-.012em;color:#b8431a;'
-      + 'opacity:0;transition:opacity .75s ease,transform .75s ease;transform:translateY(16px)">on the hardest problem on the review.</div>';
+      + '<div id="__su1" style="font-size:78px;line-height:1.12;letter-spacing:-.012em;opacity:0;'
+      + 'transition:opacity .75s ease,transform .75s ease;transform:translateY(16px)">A student just aced the hardest problem on the homework.</div>'
+      + '<div id="__su2" style="margin-top:28px;font-size:70px;line-height:1.14;letter-spacing:-.012em;color:#b8431a;font-style:italic;'
+      + 'opacity:0;transition:opacity .75s ease,transform .75s ease;transform:translateY(16px)">But did they understand it — or just copy the answer?</div>';
     document.documentElement.appendChild(o);
   });
 }
