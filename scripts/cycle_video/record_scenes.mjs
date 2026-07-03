@@ -229,15 +229,12 @@ async function gotoClean(page, url, { zoom = 1, waitMs = 1500, anchor = null, be
 //    scrolls, and the cold-open setup overlay. All mount on <html> (outside
 //    the body-zoom) or drive the window scroll, so they read cleanly under
 //    the full-bleed framing + Ken-Burns push.
-async function highlightEl(page, fnStr, { pad = 10 } = {}) {
-  const rect = await page.evaluate((s) => {
-    let el = null; try { el = (0, eval)('(' + s + ')')(); } catch (e) {}
-    if (!el) return null;
-    const r = el.getBoundingClientRect();
-    if (r.width < 4 || r.height < 4) return null;
-    return { x: r.x, y: r.y, w: r.width, h: r.height };
-  }, fnStr);
-  if (!rect) return false;
+// finderFn is a REAL page function returning {x,y,w,h}|null (passed to
+// evaluate directly — the app's CSP blocks eval-of-strings, so we never
+// eval; Playwright serializes the function itself).
+async function highlightFinder(page, finderFn, { pad = 10 } = {}) {
+  const rect = await page.evaluate(finderFn).catch(() => null);
+  if (!rect || rect.w < 4 || rect.h < 4) return false;
   await page.evaluate(([r, pad]) => {
     const old = document.getElementById('__hl'); if (old) old.remove();
     const h = document.createElement('div'); h.id = '__hl';
@@ -253,20 +250,29 @@ async function highlightEl(page, fnStr, { pad = 10 } = {}) {
 }
 async function clearHL(page) { await page.evaluate(() => { const h = document.getElementById('__hl'); if (h) h.remove(); }); }
 
-// Eased window scroll so an element (fnStr → node) lands centered.
-async function smoothScrollToEl(page, fnStr, ms = 1500) {
-  await page.evaluate(async ([s, ms]) => {
-    let el = null; try { el = (0, eval)('(' + s + ')')(); } catch (e) {}
-    if (!el) return;
+// Eased window scroll to an absolute scrollTop (targetFn → number|null).
+async function animateScroll(page, y, ms = 1500) {
+  await page.evaluate(async ([y, ms]) => {
     const se = document.scrollingElement || document.documentElement;
-    const r = el.getBoundingClientRect();
-    const target = Math.max(0, se.scrollTop + r.top + r.height / 2 - window.innerHeight / 2);
-    const startY = se.scrollTop, dist = target - startY, t0 = performance.now();
+    const startY = se.scrollTop, dist = y - startY, t0 = performance.now();
     await new Promise((res) => { function step(now) { const p = Math.min(1, (now - t0) / ms);
       const e = p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; se.scrollTop = startY + dist * e;
       if (p < 1) requestAnimationFrame(step); else res(); } requestAnimationFrame(step); });
-  }, [fnStr, ms]);
+  }, [y, ms]);
 }
+async function scrollToFinder(page, targetFn, ms = 1500) {
+  const y = await page.evaluate(targetFn).catch(() => null);
+  if (y == null) return;
+  await animateScroll(page, y, ms);
+}
+// Finder factories (real functions; no eval). Return centered scrollTop / rect.
+const yFlag = () => { const el = [...document.querySelectorAll('*')].find((n) => /couldn.t explain/i.test(n.textContent || '') && n.children.length < 8); if (!el) return null; const se = document.scrollingElement || document.documentElement; const r = el.getBoundingClientRect(); return Math.max(0, se.scrollTop + r.top + r.height / 2 - window.innerHeight / 2); };
+// NOTE: each finder must be SELF-CONTAINED — Playwright serializes only the
+// passed function, not module-scope helpers it references.
+const yDigest = () => { const dl = [...document.querySelectorAll('dl')].find((d) => /Tabbed out/i.test(d.textContent || '') && /Paste events/i.test(d.textContent || '')); const el = dl ? (dl.parentElement || dl) : null; if (!el) return null; const se = document.scrollingElement || document.documentElement; const r = el.getBoundingClientRect(); return Math.max(0, se.scrollTop + r.top + r.height / 2 - window.innerHeight / 2); };
+const rFlag = () => { const el = [...document.querySelectorAll('*')].find((n) => /couldn.t explain/i.test(n.textContent || '') && n.children.length < 8); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
+const rRoster = () => { const el = [...document.querySelectorAll('*')].find((n) => /Jordan/i.test(n.textContent || '') && /100%/.test(n.textContent || '') && /Review/i.test(n.textContent || '') && n.children.length < 16 && n.getBoundingClientRect().width < 660 && n.getBoundingClientRect().height < 220); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
+const rDigest = () => { const dl = [...document.querySelectorAll('dl')].find((d) => /Tabbed out/i.test(d.textContent || '') && /Paste events/i.test(d.textContent || '')); const el = dl ? (dl.parentElement || dl) : null; if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
 // Eased window scroll to a fraction of the full document height.
 async function smoothScrollToFrac(page, frac, ms = 2000) {
   await page.evaluate(async ([frac, ms]) => {
@@ -319,7 +325,7 @@ const CLIPS = {
       { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
     await page.waitForLoadState('load', { timeout: 8000 }).catch(() => {});
     await veilOn(page).catch(() => {});
-    await setZoom(page, 1.12);
+    await setZoom(page, 1.22);
     await page.locator('text=/couldn.t explain/i').first().waitFor({ state: 'visible', timeout: 9000 }).catch(() => {});
     // Setup card (brand paper) above the veil — two beats.
     await coldSetup(page);
@@ -338,19 +344,19 @@ const CLIPS = {
     await sleep(page, 720);
     await page.evaluate(() => { const o = document.getElementById('__setup'); if (o) o.remove(); });
     // Beat 1 — the perfect score + the flag, together.
-    await highlightEl(page, "()=>[...document.querySelectorAll('*')].find(n=>/Jordan/i.test(n.textContent||'')&&/100%/.test(n.textContent||'')&&/Review/i.test(n.textContent||'')&&n.children.length<14&&n.getBoundingClientRect().width<640)");
+    await highlightFinder(page, rRoster);
     await cap(page, 'A perfect score — quietly flagged.');
     await sleep(page, 2400);
     await clearHL(page);
     // Beat 2 — the flag itself.
-    await highlightEl(page, "()=>[...document.querySelectorAll('*')].find(n=>/couldn.t explain/i.test(n.textContent||'')&&n.children.length<8)");
+    await highlightFinder(page, rFlag);
     await cap(page, 'And he can’t explain a single step of it.');
     await sleep(page, 2600);
     await clearHL(page);
     // Beat 3 — the behavioral evidence (tabbed out 2×, paste 1).
-    await smoothScrollToEl(page, "()=>[...document.querySelectorAll('*')].find(n=>/Activity during the integrity check/i.test(n.textContent||'')&&n.children.length<12)", 1300);
+    await scrollToFinder(page, yDigest, 1300);
     await sleep(page, 300);
-    await highlightEl(page, "()=>[...document.querySelectorAll('div')].find(d=>/Activity during the integrity check/i.test(d.textContent||'')&&/Tabbed out/i.test(d.textContent||'')&&d.children.length<12)");
+    await highlightFinder(page, rDigest);
     await cap(page, 'Tabbed out twice. Pasted the answer once.');
     await sleep(page, 2900);
     await clearHL(page); await capClear(page); await sleep(page, 700);
@@ -582,15 +588,15 @@ const CLIPS = {
       { zoom: 1.12, waitMs: 1700, anchor: 'text=/couldn.t explain/i' });
     await cap(page, 'You see the catch a grade never could.');
     await sleep(page, 1600);
-    await smoothScrollToEl(page, "()=>[...document.querySelectorAll('*')].find(n=>/couldn.t explain/i.test(n.textContent||'')&&n.children.length<8)", 900);
-    await highlightEl(page, "()=>[...document.querySelectorAll('*')].find(n=>/couldn.t explain/i.test(n.textContent||'')&&n.children.length<8)");
+    await scrollToFinder(page, yFlag, 900);
+    await highlightFinder(page, rFlag);
     await cap(page, 'A correct answer — that he can’t explain.');
     await sleep(page, 2600);
     await clearHL(page);
     // Highlight the behavioral evidence (tabbed out 2×, paste 1).
-    await smoothScrollToEl(page, "()=>[...document.querySelectorAll('*')].find(n=>/Activity during the integrity check/i.test(n.textContent||'')&&n.children.length<12)", 1000);
+    await scrollToFinder(page, yDigest, 1000);
     await sleep(page, 250);
-    await highlightEl(page, "()=>[...document.querySelectorAll('div')].find(d=>/Activity during the integrity check/i.test(d.textContent||'')&&/Tabbed out/i.test(d.textContent||'')&&d.children.length<12)");
+    await highlightFinder(page, rDigest);
     await cap(page, 'Behavior backs it up: tabbed out twice, pasted once.');
     await sleep(page, 2900);
     await clearHL(page);
