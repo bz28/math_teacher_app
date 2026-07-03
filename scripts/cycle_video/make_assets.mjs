@@ -19,7 +19,7 @@ const cached = execSync(
 // Copied under BOTH the generic name (the seeded warm-up doc's image) AND
 // the LABELED name that scene 2 uploads on camera + scene 3 selects, so the
 // generation source reads as a real, dated review sheet — never "worksheet.png".
-const REVIEW_SHEET = 'Unit 5 Review — Systems & Applications (2024).png';
+const REVIEW_SHEET = 'Unit 5 Review — Matrices, Trig & Equations (2024).png';
 const REPO = path.resolve(new URL('../../', import.meta.url).pathname);
 const SRC = path.join(REPO, 'docs/design/unit5_review_worksheet.png');
 if (fs.existsSync(SRC)) {

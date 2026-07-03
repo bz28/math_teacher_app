@@ -756,7 +756,7 @@ async def main() -> None:
                 _raw = fh.read()
             s.add(Document(
                 course_id=uuid.UUID(COURSE), teacher_id=teacher_uid, unit_id=uuid.UUID(UNIT),
-                filename="Unit 5 warm-up — mixed review.png", file_type="image/png",
+                filename="Unit 5 warm-up — matrix & trig practice.png", file_type="image/png",
                 file_size=len(_raw), image_data=base64.b64encode(_raw).decode()))
             print("seeded 1 warm-up material (scene 2 adds the worksheet on camera)")
         else:

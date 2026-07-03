@@ -43,7 +43,7 @@ const ID = {
 const ALG_LINEAR_UNIT = '5547f6d5-0487-4174-bae0-a25908900c68';
 // The labeled source sheet the demo builds from — a real, dated review
 // sheet, uploaded in scene 2 and selected in scene 3 (never "worksheet.png").
-const REVIEW_SHEET = 'Unit 5 Review — Systems & Applications (2024).png';
+const REVIEW_SHEET = 'Unit 5 Review — Matrices, Trig & Equations (2024).png';
 
 const VIEW = { width: 1920, height: 1080 };
 const sleep = (p, ms) => p.waitForTimeout(ms);
