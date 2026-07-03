@@ -75,4 +75,4 @@ Tests & checks: `pytest tests/ -m "not integration"` (unit), `ruff check api/ te
   Sales ─────▶ demo/ (Vite SPA, no API) ──▶ bundled JSON (self-contained)
 ```
 
-**Deploy targets:** the web app targets Vercel and the API + Postgres target Railway per the historical deployment notes and the `veradicai.com` URLs baked into `api/config.py`. The repo itself only contains a local Docker stack (`infra/docker-compose.yml` + `infra/Dockerfile`); the exact hosting for web/API/demo/dashboard is **not fully verifiable from code and should be confirmed against the live infrastructure.**
+**Deploy targets:** the three frontends — web/marketing (`veradicai.com`), demo (`demo.veradicai.com`), and the admin dashboard (`admin.veradicai.com`) — deploy on **Vercel**; the **FastAPI backend and PostgreSQL run on Railway**. The repo also carries a local Docker stack (`infra/docker-compose.yml` + `infra/Dockerfile`) for development. Mobile ships via Expo/EAS.
