@@ -1,0 +1,40 @@
+{
+  "grades": [
+    {
+      "problem_position": 1,
+      "student_answer": "$AB=\\begin{pmatrix}11&24\\\\9&5\\end{pmatrix}$",
+      "score_status": "partial",
+      "percent": 95,
+      "confidence": 0.97,
+      "reasoning": "The student's approach is fully correct and three of four entries match the answer key. The only error is an arithmetic slip in Step 4: 3\u00d72 was written as 5 instead of 6, giving AB\u2082\u2082 = 5 instead of 6. This matches the 'Right approach with a small execution error' partial-credit anchor (~95%).",
+      "student_feedback": "Your matrix multiplication set-up is perfect and three of the four entries are correct. Double-check AB\u2082\u2082: 3 \u00d7 2 = 6, not 5, so the bottom-right entry should be 6.",
+      "deductions": [
+        {
+          "points_off": 5,
+          "reason": "Partial credit: small execution error \u2014 arithmetic slip in AB\u2082\u2082 (3\u00d72 written as 5 instead of 6)",
+          "step_ref": 4
+        }
+      ]
+    },
+    {
+      "problem_position": 2,
+      "student_answer": "$26.0\\text{ ft}$",
+      "score_status": "full",
+      "percent": 100,
+      "confidence": 0.99,
+      "reasoning": "The student correctly identified the sine ratio (opposite/hypotenuse), set up h = 35 sin 48\u00b0, evaluated to 25.99, and rounded to 26.0 ft, which matches the answer key exactly. Full credit criterion is met.",
+      "student_feedback": "Great work \u2014 you correctly identified the sine relationship, set up the equation, and rounded to the right number of decimal places.",
+      "deductions": []
+    },
+    {
+      "problem_position": 3,
+      "student_answer": "$x=\\dfrac{46}{5}$",
+      "score_status": "full",
+      "percent": 100,
+      "confidence": 0.95,
+      "reasoning": "The student correctly combined fractions using a common denominator of 12, simplified to 5x \u2212 22 = 24, and solved to get x = 46/5, matching the answer key exactly. Full credit criterion is met; the steps are followable with no non-obvious leaps.",
+      "student_feedback": "Excellent \u2014 you found the common denominator, simplified the numerator correctly, and solved for x without any errors.",
+      "deductions": []
+    }
+  ]
+}

@@ -1,0 +1,180 @@
+{
+  "trig": {
+    "id": "85109a7d-06cf-4bc8-b0b3-2f92b71fabe8",
+    "course_id": "c99b654b-7ef8-4b05-a1df-a57c47d98f6e",
+    "unit_id": "5895cd02-a4cf-4c6e-97d7-b09757bb61ba",
+    "title": "Right-triangle trig \u2014 height from angle and hypotenuse",
+    "question": "A zip-line cable is anchored to the top of a platform and makes a $48\u00b0$ angle with the level ground. The cable is $35\\text{ ft}$ long. To the nearest tenth of a foot, how high above the ground is the anchor point at the top of the platform?",
+    "solution_steps": [
+      {
+        "title": "Understand the Setup",
+        "description": "A zip-line cable stretches from the top of a platform down to the ground, forming a **right triangle**. The cable itself is the **hypotenuse** ($35\\text{ ft}$), the angle between the cable and the ground is $48\u00b0$, and the platform height is the **side opposite** that angle \u2014 which is exactly what we want.\n\nWhenever you know the hypotenuse and an angle, and you want the **opposite** side, the tool is $\\sin$:\n$$\\sin(\\theta) = \\frac{\\text{opposite}}{\\text{hypotenuse}}$$"
+      },
+      {
+        "title": "Set Up the Equation",
+        "description": "Plug the known values into the sine ratio, then solve for the height by multiplying both sides by $35$:\n$$\\sin(48\u00b0) = \\frac{\\text{height}}{35}$$\n$$\\text{height} = 35 \\times \\sin(48\u00b0)$$"
+      },
+      {
+        "title": "Calculate the Height",
+        "description": "Evaluate using a calculator:\n$$\\text{height} = 35 \\times \\sin(48\u00b0) \\approx 35 \\times 0.7431 \\approx 26.0\\text{ ft}$$"
+      }
+    ],
+    "final_answer": "$\\text{height} = 35 \\times \\sin(48\u00b0) \\approx \\boxed{26.0 \\text{ ft}}$",
+    "distractors": [
+      "$35 \\times \\cos(48\u00b0) \\approx 23.4 \\text{ ft}$",
+      "$35 \\times \\tan(48\u00b0) \\approx 38.9 \\text{ ft}$",
+      "$\\frac{35}{\\sin(48\u00b0)} \\approx 47.1 \\text{ ft}$"
+    ],
+    "difficulty": "medium",
+    "format": "frq",
+    "status": "pending",
+    "locked": false,
+    "source": "generated",
+    "parent_question_id": null,
+    "used_in": [],
+    "source_doc_ids": [
+      "6f8113f5-799c-48dc-ab36-eba1f7ed23a7"
+    ],
+    "generation_prompt": "Short cumulative review built from this worksheet. Produce exactly three problems, exam-style, increasing difficulty: (1) a MATRIX MULTIPLICATION problem that asks to compute the product AB of two conformable matrices; (2) a right-triangle trigonometry application WITH a diagram; (3) a multi-step linear equation with a clean numeric solution.",
+    "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+        "A",
+        "B",
+        "C"
+      ],
+      "side_labels": {
+        "AB": "35 ft",
+        "BC": "h"
+      },
+      "angle_labels": {
+        "A": "48\u00b0"
+      },
+      "side_lengths": {
+        "AB": 35,
+        "AC": 23.2,
+        "BC": 26.0
+      },
+      "right_angle_at": [
+        "C"
+      ]
+    },
+    "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-0.8800 -3.3419 6.7600 4.2219\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 5.0000,0.0000 2.2189,2.4619\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/><polyline points=\"2.0515,2.2762 2.2387,2.1105 2.4060,2.2962\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.2082\" y=\"0.0710\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A</text><text x=\"5.2098\" y=\"0.0664\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B</text><text x=\"2.1939\" y=\"-2.6805\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">C</text><text x=\"2.5000\" y=\"0.2200\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">35 ft</text><text x=\"3.7553\" y=\"-1.3957\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">h</text><text x=\"0.2915\" y=\"-0.0994\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">48\u00b0</text></svg>",
+    "has_previous_version": false,
+    "chat_messages": [],
+    "chat_soft_cap": 20,
+    "created_at": "2026-07-03T00:24:55.821999+00:00",
+    "updated_at": "2026-07-03T00:24:55.821999+00:00"
+  },
+  "linear": {
+    "id": "7f34de8e-dde1-4410-b1fd-d4623627d17b",
+    "course_id": "c99b654b-7ef8-4b05-a1df-a57c47d98f6e",
+    "unit_id": "5895cd02-a4cf-4c6e-97d7-b09757bb61ba",
+    "title": "Multi-step linear equation \u2014 solve for x",
+    "question": "Solve for $x$:\n$$\\frac{3(x-2)}{4} - \\frac{x+1}{3} = 2.$$\nShow all steps and box your answer.",
+    "solution_steps": [
+      {
+        "title": "Understand the Problem",
+        "description": "We have one equation with two fractions and need to find $x$. Fractions make algebra messy, so the key insight is to **eliminate all denominators at once** by multiplying every term by the **Least Common Denominator (LCD)**. The denominators are $4$ and $3$, so $\\text{LCD} = 12$. This instantly clears both fractions and leaves a simple linear equation."
+      },
+      {
+        "title": "Multiply Every Term by 12",
+        "description": "Multiply both sides of the equation by $12$:\n$$12 \\cdot \\frac{3(x-2)}{4} - 12 \\cdot \\frac{x+1}{3} = 12 \\cdot 2$$\n$12 \\div 4 = 3$ and $12 \\div 3 = 4$, so the fractions vanish cleanly:\n$$3 \\cdot 3(x-2) - 4(x+1) = 24$$\n$$9(x-2) - 4(x+1) = 24$$"
+      },
+      {
+        "title": "Distribute & Simplify",
+        "description": "Expand each group by distributing:\n$$9x - 18 - 4x - 4 = 24$$\nCombine the $x$-terms ($9x - 4x$) and the constants ($-18 - 4$):\n$$5x - 22 = 24$$"
+      },
+      {
+        "title": "Isolate $x$",
+        "description": "Add $22$ to both sides to move the constant:\n$$5x = 46$$\nDivide both sides by $5$:\n$$x = \\frac{46}{5}$$"
+      },
+      {
+        "title": "Verify the Solution",
+        "description": "Substitute $x = \\frac{46}{5}$ back into the original equation.\n\n**Left side:**\n$$\\frac{3\\!\\left(\\frac{46}{5}-2\\right)}{4} - \\frac{\\frac{46}{5}+1}{3} = \\frac{3 \\cdot \\frac{36}{5}}{4} - \\frac{\\frac{51}{5}}{3} = \\frac{\\frac{108}{5}}{4} - \\frac{51}{15} = \\frac{108}{20} - \\frac{51}{15}$$\n$$= \\frac{27}{5} - \\frac{17}{5} = \\frac{10}{5} = 2 \\checkmark$$\nMatches the right side, confirming our answer."
+      }
+    ],
+    "final_answer": "$x = \\dfrac{46}{5}$",
+    "distractors": [
+      "$x = 10$",
+      "$x = \\frac{34}{5}$",
+      "$x = 8$"
+    ],
+    "difficulty": "hard",
+    "format": "frq",
+    "status": "pending",
+    "locked": false,
+    "source": "generated",
+    "parent_question_id": null,
+    "used_in": [],
+    "source_doc_ids": [
+      "6f8113f5-799c-48dc-ab36-eba1f7ed23a7"
+    ],
+    "generation_prompt": "Short cumulative review built from this worksheet. Produce exactly three problems, exam-style, increasing difficulty: (1) a MATRIX MULTIPLICATION problem that asks to compute the product AB of two conformable matrices; (2) a right-triangle trigonometry application WITH a diagram; (3) a multi-step linear equation with a clean numeric solution.",
+    "figure_spec": null,
+    "figure_svg": null,
+    "has_previous_version": false,
+    "chat_messages": [],
+    "chat_soft_cap": 20,
+    "created_at": "2026-07-03T00:24:55.821999+00:00",
+    "updated_at": "2026-07-03T00:24:55.821999+00:00"
+  },
+  "matrix": {
+    "id": "8cf2a0be-84c0-447e-93b1-a69e0249ffb1",
+    "course_id": "c99b654b-7ef8-4b05-a1df-a57c47d98f6e",
+    "unit_id": "5895cd02-a4cf-4c6e-97d7-b09757bb61ba",
+    "title": "Matrix multiplication \u2014 compute product AB",
+    "question": "Compute the matrix product $AB$, where\n$$A = \\begin{bmatrix} 5 & 2 \\\\ 0 & 3 \\end{bmatrix} \\quad \\text{and} \\quad B = \\begin{bmatrix} 1 & 4 \\\\ 3 & 2 \\end{bmatrix}.$$\nGive each entry of the resulting $2 \\times 2$ matrix.",
+    "solution_steps": [
+      {
+        "title": "Understand the Setup",
+        "description": "Matrix multiplication works by taking each **row of A** and pairing it with each **column of B** \u2014 multiplying matching entries and summing them. The result lives in position $(i, j)$ of the output, produced by row $i$ of $A$ and column $j$ of $B$.\n\nFor two $2 \\times 2$ matrices, there are **four entries** to compute:\n$$AB = \\begin{pmatrix} A_{\\text{row1}} \\cdot B_{\\text{col1}} & A_{\\text{row1}} \\cdot B_{\\text{col2}} \\\\ A_{\\text{row2}} \\cdot B_{\\text{col1}} & A_{\\text{row2}} \\cdot B_{\\text{col2}} \\end{pmatrix}$$\nEach \"$\\cdot$\" means multiply element-by-element then add \u2014 this is called the **dot product**."
+      },
+      {
+        "title": "Compute Top-Left Entry",
+        "description": "Entry $(1,1)$: **Row 1 of $A$** $\\cdot$ **Column 1 of $B$**\n$$[5 \\quad 2] \\cdot \\begin{bmatrix} 1 \\\\ 3 \\end{bmatrix} = (5)(1) + (2)(3) = 5 + 6 = \\mathbf{11}$$"
+      },
+      {
+        "title": "Compute Top-Right Entry",
+        "description": "Entry $(1,2)$: **Row 1 of $A$** $\\cdot$ **Column 2 of $B$**\n$$[5 \\quad 2] \\cdot \\begin{bmatrix} 4 \\\\ 2 \\end{bmatrix} = (5)(4) + (2)(2) = 20 + 4 = \\mathbf{24}$$"
+      },
+      {
+        "title": "Compute Bottom-Left Entry",
+        "description": "Entry $(2,1)$: **Row 2 of $A$** $\\cdot$ **Column 1 of $B$**\n$$[0 \\quad 3] \\cdot \\begin{bmatrix} 1 \\\\ 3 \\end{bmatrix} = (0)(1) + (3)(3) = 0 + 9 = \\mathbf{9}$$"
+      },
+      {
+        "title": "Compute Bottom-Right Entry",
+        "description": "Entry $(2,2)$: **Row 2 of $A$** $\\cdot$ **Column 2 of $B$**\n$$[0 \\quad 3] \\cdot \\begin{bmatrix} 4 \\\\ 2 \\end{bmatrix} = (0)(4) + (3)(2) = 0 + 6 = \\mathbf{6}$$"
+      },
+      {
+        "title": "Assemble the Result",
+        "description": "Place the four computed entries back into the $2 \\times 2$ grid:\n$$AB = \\begin{pmatrix} 11 & 24 \\\\ 9 & 6 \\end{pmatrix}$$"
+      }
+    ],
+    "final_answer": "$AB = \\begin{pmatrix} 11 & 24 \\\\ 9 & 6 \\end{pmatrix}$",
+    "distractors": [
+      "$$\\begin{pmatrix} 11 & 24 \\\\ 9 & 8 \\end{pmatrix}$$",
+      "$$\\begin{pmatrix} 5 & 8 \\\\ 9 & 6 \\end{pmatrix}$$",
+      "$$\\begin{pmatrix} 11 & 6 \\\\ 9 & 24 \\end{pmatrix}$$"
+    ],
+    "difficulty": "easy",
+    "format": "frq",
+    "status": "pending",
+    "locked": false,
+    "source": "generated",
+    "parent_question_id": null,
+    "used_in": [],
+    "source_doc_ids": [
+      "6f8113f5-799c-48dc-ab36-eba1f7ed23a7"
+    ],
+    "generation_prompt": "Short cumulative review built from this worksheet. Produce exactly three problems, exam-style, increasing difficulty: (1) a MATRIX MULTIPLICATION problem that asks to compute the product AB of two conformable matrices; (2) a right-triangle trigonometry application WITH a diagram; (3) a multi-step linear equation with a clean numeric solution.",
+    "figure_spec": null,
+    "figure_svg": null,
+    "has_previous_version": false,
+    "chat_messages": [],
+    "chat_soft_cap": 20,
+    "created_at": "2026-07-03T00:24:55.821999+00:00",
+    "updated_at": "2026-07-03T00:24:55.821999+00:00"
+  }
+}
