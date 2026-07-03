@@ -658,6 +658,24 @@ async def main() -> None:
         await s.execute(text("update units set name='Unit 5' where id=:u"), {"u": UNIT})
         print("named the class 'General Math', the teacher 'Ms. Rivera', the unit 'Unit 5'")
 
+        # 1a′ ── collapse duplicate unit folders: keep ONLY the canonical
+        #         "Unit 5" (UNIT). An older seed left an empty second unit
+        #         ("Unit 5 - Matrices, Trig & Equations") holding stale pending
+        #         items — it surfaced in Materials as a second, empty folder.
+        #         Delete every non-canonical unit in the course (and its orphan
+        #         gen-jobs, docs, items) so Materials shows exactly one Unit 5.
+        stray_units = (await s.execute(text(
+            "select id from units where course_id=:c and id != :u"),
+            {"c": COURSE, "u": UNIT})).scalars().all()
+        if stray_units:
+            await s.execute(text("delete from question_bank_generation_jobs where unit_id = any(:ids)"),
+                            {"ids": stray_units})
+            await s.execute(text("delete from documents where unit_id = any(:ids)"), {"ids": stray_units})
+            await s.execute(text("delete from question_bank_items where unit_id = any(:ids)"),
+                            {"ids": stray_units})
+            await s.execute(text("delete from units where id = any(:ids)"), {"ids": stray_units})
+            print(f"collapsed {len(stray_units)} duplicate unit folder(s) → one 'Unit 5'")
+
         # 1a ── rename placeholder students ──────────────────────────
         renamed = 0
         for prefix, name in RENAMES.items():
