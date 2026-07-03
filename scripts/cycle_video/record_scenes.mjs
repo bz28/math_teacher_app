@@ -289,6 +289,33 @@ async function smoothScrollToFrac(page, frac, ms = 2000) {
       if (p < 1) requestAnimationFrame(step); else res(); } requestAnimationFrame(step); });
   }, [frac, ms]);
 }
+// Eased scroll of a scrollable CONTAINER (not the window) so its first
+// element matching `needle` lands aligned in view. Used by the Workshop
+// modal, whose artifact (question → solution steps → final answer) lives in
+// an inner overflow-y-auto left panel — the window never moves. Finds the
+// deepest element whose text matches, walks up to the nearest real scroll
+// parent, and eases that element's scrollTop. `align` 0=top .5=center 1=bottom.
+async function easeScrollContainerTo(page, needle, { ms = 1600, align = 0.5 } = {}) {
+  await page.evaluate(async ([needle, ms, align]) => {
+    const re = new RegExp(needle, 'i');
+    const matches = [...document.querySelectorAll('div,span,p,li,h1,h2,h3,strong,button')]
+      .filter((n) => re.test(n.textContent || '') && n.children.length < 14);
+    const target = matches[matches.length - 1] || matches[0];
+    if (!target) return;
+    let sc = target.parentElement;
+    while (sc && !(sc.scrollHeight > sc.clientHeight + 8 &&
+      /auto|scroll/.test(getComputedStyle(sc).overflowY))) sc = sc.parentElement;
+    if (!sc) sc = document.scrollingElement || document.documentElement;
+    const scR = sc.getBoundingClientRect(), tR = target.getBoundingClientRect();
+    const desired = sc.scrollTop + (tR.top - scR.top) - (sc.clientHeight - tR.height) * align;
+    const maxTop = Math.max(0, sc.scrollHeight - sc.clientHeight);
+    const to = Math.max(0, Math.min(maxTop, desired));
+    const start = sc.scrollTop, dist = to - start, t0 = performance.now();
+    await new Promise((res) => { function step(now) { const p = Math.min(1, (now - t0) / ms);
+      const e = p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; sc.scrollTop = start + dist * e;
+      if (p < 1) requestAnimationFrame(step); else res(); } requestAnimationFrame(step); });
+  }, [needle, ms, align]);
+}
 // Cold-open setup card, drawn on brand paper ABOVE the veil so it can hold
 // while the flagged review is framed underneath, then dissolve away.
 async function coldSetup(page) {
@@ -542,10 +569,23 @@ const CLIPS = {
     // Reveal the UPDATED SOLUTION (the conformability explanation), not just
     // the rewritten question.
     await go(page, page.getByRole('button', { name: /Show solution/i }).first(), { click: true }).catch(() => {});
-    await sleep(page, 1200);
-    await cap(page, 'It rewrites the question — and the solution: undefined, 2 ≠ 3.');
-    await page.mouse.wheel(0, 320); await sleep(page, 2800);
-    await capClear(page); await sleep(page, 400);
+    await sleep(page, 1100);
+    await cap(page, 'The whole solution — and the answer — rewrite themselves.');
+    await sleep(page, 1500);
+    // Scroll the modal's inner artifact panel (window never moves) down through
+    // the COMPLETE updated solution: the dimension set-up → the conformability
+    // rule (2 ≠ 3) → the conclusion. Eased, legible, one beat per landing.
+    await easeScrollContainerTo(page, 'Check the Conformability', { ms: 1700, align: 0.42 });
+    await sleep(page, 1900);
+    await easeScrollContainerTo(page, 'State the Conclusion', { ms: 1600, align: 0.4 });
+    await sleep(page, 1900);
+    // Land on the ANSWER changing — the "Final answer" box shows the old
+    // product matrix (the "Before" card) replaced by "undefined … 2 ≠ 3".
+    await easeScrollContainerTo(page, 'Final answer', { ms: 1600, align: 0.18 });
+    await sleep(page, 900);
+    await cap(page, 'The answer flips — from a product matrix to: undefined, 2 ≠ 3.');
+    await sleep(page, 3000);
+    await capClear(page); await sleep(page, 500);
   },
 
   // 4 · STUDENT (Aisha) — her screen: snap the work, turn it in.
