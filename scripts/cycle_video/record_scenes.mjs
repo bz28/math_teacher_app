@@ -430,13 +430,18 @@ const CLIPS = {
     await sleep(page, 350);
 
     // Step 2 · Problems — count 3, TYPE the focus, pick the worksheet source.
-    await cap(page, 'How many? Just three today.');
+    // Set the count to 3 FIRST (deselects the default "10" chip, custom reads
+    // 3) so the "just three" beat plays with the count already reading 3 — the
+    // preset chip never lingers highlighted against the caption.
     const countInput = dialog.locator('input[aria-label="Custom problem count"]').first();
     if (await countInput.count()) {
       await go(page, countInput, { click: true });
       await countInput.fill('3').catch(() => {});
-      await sleep(page, 550);
+      await countInput.blur().catch(() => {});
+      await sleep(page, 400);
     }
+    await cap(page, 'How many? Just three today.');
+    await sleep(page, 1400);
     await cap(page, 'Then aim it — matrices, trig, multi-step.');
     const focus = dialog.locator('input[placeholder*="word problems"], textarea[placeholder*="word problems"]').first();
     if (await focus.count()) {
