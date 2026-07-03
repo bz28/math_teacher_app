@@ -29,15 +29,16 @@ if (fs.existsSync(SRC)) {
 }
 
 // hand-written look (cursive-ish system fallback) on lined paper — the
-// student's Unit 5 work across the three problems.
+// student's Unit 5 work across the three problems (matrix mult, zip-line
+// trig, multi-step linear).
 const lines = [
-  '1)  2x + 5y = 16,   3x − y = 3',
-  '     A⁻¹ = (1/17)[ 1  5 ; 3  −2 ]',
-  '     x = 31/17 ,  y = 42/17',
-  '2)  sin 58° = h / 15',
-  '     h = 15 sin 58° ≈ 12.7 ft',
-  '3)  4(x − 2) + 3 = 2x + 5',
-  '     2x = 10  →  x = 5',
+  '1)  A = [ 5  2 ; 0  3 ] ,  B = [ 1  4 ; 3  2 ]',
+  '     AB = row·col each entry',
+  '     AB = [ 11  24 ; 9  6 ]',
+  '2)  sin 48° = h / 35',
+  '     h = 35 sin 48° ≈ 26.0 ft',
+  '3)  3(x−2)/4 − (x+1)/3 = 2',
+  '     9(x−2) − 4(x+1) = 24  →  x = 46/5',
 ];
 const rows = lines.map((ln, i) => {
   const y = 150 + i * 96;

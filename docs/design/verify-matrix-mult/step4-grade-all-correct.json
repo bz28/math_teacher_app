@@ -1,0 +1,34 @@
+{
+  "grades": [
+    {
+      "problem_position": 1,
+      "student_answer": "$AB=\\begin{pmatrix}11&24\\\\9&6\\end{pmatrix}$",
+      "score_status": "full",
+      "percent": 100,
+      "confidence": 1.0,
+      "reasoning": "The student's final answer matches the answer key exactly. All four entries are computed correctly with clear row-by-column dot products shown at each step, fully satisfying the 'Full credit' criterion.",
+      "student_feedback": "Perfect work \u2014 you correctly computed all four entries using row-by-column dot products and arrived at the right matrix.",
+      "deductions": []
+    },
+    {
+      "problem_position": 2,
+      "student_answer": "$26.0\\text{ ft}$",
+      "score_status": "full",
+      "percent": 100,
+      "confidence": 1.0,
+      "reasoning": "The student correctly identified the sine relationship (opposite/hypotenuse), set up h = 35\u00b7sin(48\u00b0), evaluated to 25.99, and rounded to 26.0 ft, matching the answer key exactly. The 'Full credit' criterion is fully met.",
+      "student_feedback": "Great job \u2014 you correctly identified the opposite-over-hypotenuse relationship, set up the equation, and rounded to the correct tenth of a foot.",
+      "deductions": []
+    },
+    {
+      "problem_position": 3,
+      "student_answer": "$x=\\dfrac{46}{5}$",
+      "score_status": "full",
+      "percent": 100,
+      "confidence": 0.9,
+      "reasoning": "The student's final answer matches the answer key. The common-denominator step and simplification lead correctly to 5x \u2212 22 = 24, giving x = 46/5. The path is unambiguous and satisfies the 'Full credit' criterion; the only minor note is that Step 2 skips the intermediate expansion (9x \u2212 18 \u2212 4x \u2212 4 = 24 \u2192 5x \u2212 22 = 24), but this is a routine mental step that doesn't constitute a non-obvious leap.",
+      "student_feedback": "Well done \u2014 your common-denominator setup and simplification are correct, and you arrived at the right answer. You could show the expansion step (9x \u2212 18 \u2212 4x \u2212 4) explicitly to make your work even clearer, but your reasoning is easy to follow.",
+      "deductions": []
+    }
+  ]
+}

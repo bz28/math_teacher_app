@@ -1,0 +1,161 @@
+[
+  {
+    "id": "e9ec4c70-50f7-4447-91af-9014e993c7a2",
+    "course_id": "c99b654b-7ef8-4b05-a1df-a57c47d98f6e",
+    "unit_id": "5895cd02-a4cf-4c6e-97d7-b09757bb61ba",
+    "title": "Matrix multiplication \u2014 2\u00d72 product AB",
+    "question": "**Matrix Multiplication.** Let $A = \\begin{bmatrix} 5 & 2 \\\\ 3 & 4 \\end{bmatrix}$ and $B = \\begin{bmatrix} 1 & 6 \\\\ 0 & 3 \\end{bmatrix}$.\n\nCompute the product $AB$ by finding each entry as a row-by-column dot product. Give the complete resulting $2 \\times 2$ matrix.",
+    "solution_steps": [
+      {
+        "title": "Understand the Setup",
+        "description": "Matrix multiplication works by pairing each **row of $A$** with each **column of $B$** and taking a dot product \u2014 meaning we multiply matching entries and add the results.\n\nFor two $2 \\times 2$ matrices, the result $AB$ is also a $2 \\times 2$ matrix where entry $(i, j)$ = (row $i$ of $A$) $\\cdot$ (column $j$ of $B$).\n\nThere are exactly **4 entries** to compute, one for each $(i,j)$ combination: $(1,1),\\ (1,2),\\ (2,1),\\ (2,2)$."
+      },
+      {
+        "title": "Entry $(1,1)$: Row 1 \u00b7 Col 1",
+        "description": "Take **row 1 of $A$** = $[5,\\ 2]$ and **column 1 of $B$** = $[1,\\ 0]$:\n$$5 \\cdot 1 + 2 \\cdot 0 = 5 + 0 = 5$$"
+      },
+      {
+        "title": "Entry $(1,2)$: Row 1 \u00b7 Col 2",
+        "description": "Take **row 1 of $A$** = $[5,\\ 2]$ and **column 2 of $B$** = $[6,\\ 3]$:\n$$5 \\cdot 6 + 2 \\cdot 3 = 30 + 6 = 36$$"
+      },
+      {
+        "title": "Entry $(2,1)$: Row 2 \u00b7 Col 1",
+        "description": "Take **row 2 of $A$** = $[3,\\ 4]$ and **column 1 of $B$** = $[1,\\ 0]$:\n$$3 \\cdot 1 + 4 \\cdot 0 = 3 + 0 = 3$$"
+      },
+      {
+        "title": "Entry $(2,2)$: Row 2 \u00b7 Col 2",
+        "description": "Take **row 2 of $A$** = $[3,\\ 4]$ and **column 2 of $B$** = $[6,\\ 3]$:\n$$3 \\cdot 6 + 4 \\cdot 3 = 18 + 12 = 30$$"
+      },
+      {
+        "title": "Assemble the Result",
+        "description": "Place the four computed entries into their correct positions:\n$$AB = \\begin{pmatrix} (1,1) & (1,2) \\\\ (2,1) & (2,2) \\end{pmatrix} = \\begin{pmatrix} 5 & 36 \\\\ 3 & 30 \\end{pmatrix}$$"
+      }
+    ],
+    "final_answer": "$AB = \\begin{pmatrix} 5 & 36 \\\\ 3 & 30 \\end{pmatrix}$",
+    "distractors": [
+      "$\\begin{pmatrix} 5 & 36 \\\\ 3 & 12 \\end{pmatrix}$",
+      "$\\begin{pmatrix} 5 & 16 \\\\ 3 & 30 \\end{pmatrix}$",
+      "$\\begin{pmatrix} 6 & 36 \\\\ 3 & 30 \\end{pmatrix}$"
+    ],
+    "difficulty": "easy",
+    "format": "frq",
+    "status": "pending",
+    "locked": false,
+    "source": "generated",
+    "parent_question_id": null,
+    "used_in": [],
+    "source_doc_ids": [
+      "6f8113f5-799c-48dc-ab36-eba1f7ed23a7"
+    ],
+    "generation_prompt": "Short cumulative review built from this worksheet. Produce exactly three problems, exam-style, increasing difficulty: (1) a MATRIX MULTIPLICATION problem that asks to compute the product AB of two conformable matrices, showing each entry as row-by-column dot products; (2) a right-triangle trigonometry application WITH a diagram; (3) a multi-step linear equation with a clean numeric solution.",
+    "figure_spec": null,
+    "figure_svg": null,
+    "has_previous_version": false,
+    "chat_messages": [],
+    "chat_soft_cap": 20,
+    "created_at": "2026-07-03T00:22:12.095318+00:00",
+    "updated_at": "2026-07-03T00:22:12.095318+00:00"
+  },
+  {
+    "id": "562a3bcd-9c80-409f-85af-bebd727d171f",
+    "course_id": "c99b654b-7ef8-4b05-a1df-a57c47d98f6e",
+    "unit_id": "5895cd02-a4cf-4c6e-97d7-b09757bb61ba",
+    "title": "Right-triangle trig \u2014 height from angle and hypotenuse",
+    "question": "**Right-Triangle Trigonometry.** A 35-ft wire is attached from the top of a vertical antenna straight down to a stake in the level ground, forming a $58\u00b0$ angle with the ground.\n\nTo the nearest tenth of a foot, how tall is the antenna? Show which trigonometric ratio you used and set up the equation before solving.",
+    "solution_steps": [
+      {
+        "title": "Understand the Setup",
+        "description": "A wire stretches from the **top of a vertical antenna** to a **stake in the ground**, making a $58\u00b0$ angle with the ground. This creates a right triangle where:\n- The **wire** (35 ft) is the **hypotenuse** \u2014 it's the longest side, stretching from stake to antenna top\n- The **antenna** is the **opposite side** \u2014 it's directly across from the $58\u00b0$ angle\n- The **ground** is the **adjacent side** \u2014 it runs along the bottom\n\nThe key question becomes: which trig ratio connects the **opposite** side and the **hypotenuse**?"
+      },
+      {
+        "title": "Choose the Trig Ratio",
+        "description": "**SOH\u2013CAH\u2013TOA** tells us:\n$$\\sin(\\theta) = \\frac{\\text{opposite}}{\\text{hypotenuse}}$$\n\nWith $\\theta = 58\u00b0$, the opposite side is the antenna height $h$, and the hypotenuse is the 35-ft wire \u2014 both pieces we need are connected by **sine**.\n\nSet up the equation:\n$$\\sin(58\u00b0) = \\frac{h}{35}$$"
+      },
+      {
+        "title": "Solve for h",
+        "description": "Multiply both sides by 35 to isolate $h$:\n$$h = 35 \\times \\sin(58\u00b0)$$\n\nEvaluating $\\sin(58\u00b0) \\approx 0.8480$:\n$$h = 35 \\times 0.8480 \\approx 29.68 \\text{ ft}$$\n\nRounded to the nearest tenth: $h \\approx 29.7$ ft."
+      }
+    ],
+    "final_answer": "$h = 35\\sin(58\u00b0) \\approx \\boxed{29.7 \\text{ ft}}$",
+    "distractors": [
+      "$h = 35\\cos(58\u00b0) \\approx 18.5 \\text{ ft}",
+      "$h = 35\\tan(58\u00b0) \\approx 56.0 \\text{ ft}",
+      "$h = \\frac{35}{\\sin(58\u00b0)} \\approx 41.2 \\text{ ft}"
+    ],
+    "difficulty": "medium",
+    "format": "frq",
+    "status": "pending",
+    "locked": false,
+    "source": "generated",
+    "parent_question_id": null,
+    "used_in": [],
+    "source_doc_ids": [
+      "6f8113f5-799c-48dc-ab36-eba1f7ed23a7"
+    ],
+    "generation_prompt": "Short cumulative review built from this worksheet. Produce exactly three problems, exam-style, increasing difficulty: (1) a MATRIX MULTIPLICATION problem that asks to compute the product AB of two conformable matrices, showing each entry as row-by-column dot products; (2) a right-triangle trigonometry application WITH a diagram; (3) a multi-step linear equation with a clean numeric solution.",
+    "figure_spec": null,
+    "figure_svg": null,
+    "has_previous_version": false,
+    "chat_messages": [],
+    "chat_soft_cap": 20,
+    "created_at": "2026-07-03T00:22:12.095318+00:00",
+    "updated_at": "2026-07-03T00:22:12.095318+00:00"
+  },
+  {
+    "id": "40d17214-ce00-4102-836d-f0bf7c9327b5",
+    "course_id": "c99b654b-7ef8-4b05-a1df-a57c47d98f6e",
+    "unit_id": "5895cd02-a4cf-4c6e-97d7-b09757bb61ba",
+    "title": "Multi-step linear equation with fractions",
+    "question": "**Multi-Step Linear Equation.** Solve for $x$:\n$$3(2x - 5) - 4(x + 1) = \\frac{x + 7}{2} + 1$$\nShow each step clearly and give your answer as a simplified fraction or integer.",
+    "solution_steps": [
+      {
+        "title": "Understand the Problem",
+        "description": "We have a linear equation with parentheses on the left and a fraction on the right. The game plan is:\\n1. **Expand** all parentheses to clear the grouping symbols.\\n2. **Simplify** each side independently.\\n3. **Eliminate the fraction** by multiplying through.\\n4. **Isolate** $x$.\\n\\nKey thing to watch: the subtraction sign in front of $-4(x+1)$ distributes to **both** terms inside \u2014 a common place to slip up."
+      },
+      {
+        "title": "Expand Left Side",
+        "description": "Distribute each coefficient into its parentheses:\\n$$3(2x - 5) = 6x - 15$$\\n$$-4(x + 1) = -4x - 4$$\\n\\nSo the left side becomes:\\n$$6x - 15 - 4x - 4$$\\n\\nCombining like terms ($6x - 4x$ and $-15 - 4$):\\n$$= 2x - 19$$"
+      },
+      {
+        "title": "Simplify Right Side",
+        "description": "Combine $\\frac{x+7}{2} + 1$ into a single fraction by writing $1 = \\frac{2}{2}$:\\n$$\\frac{x+7}{2} + \\frac{2}{2} = \\frac{x + 9}{2}$$\\n\\nThe equation now reads:\\n$$2x - 19 = \\frac{x + 9}{2}$$"
+      },
+      {
+        "title": "Eliminate the Fraction",
+        "description": "Multiply **every term** on both sides by $2$ to clear the denominator:\\n$$2 \\cdot (2x - 19) = 2 \\cdot \\frac{x+9}{2}$$\\n$$4x - 38 = x + 9$$"
+      },
+      {
+        "title": "Isolate $x$",
+        "description": "Subtract $x$ from both sides:\\n$$3x - 38 = 9$$\\n\\nAdd $38$ to both sides:\\n$$3x = 47$$\\n\\nDivide both sides by $3$:\\n$$x = \\frac{47}{3}$$\\n\\nSince $47$ and $3$ share no common factors, this fraction is already fully simplified."
+      },
+      {
+        "title": "Verify the Answer",
+        "description": "Substitute $x = \\frac{47}{3}$ back into the original equation to confirm.\\n\\n**Left side:**\\n$$3\\!\\left(2 \\cdot \\frac{47}{3} - 5\\right) - 4\\!\\left(\\frac{47}{3} + 1\\right)$$\\n$$= 3\\!\\left(\\frac{94}{3} - \\frac{15}{3}\\right) - 4\\!\\left(\\frac{50}{3}\\right)$$\\n$$= 3 \\cdot \\frac{79}{3} - \\frac{200}{3} = 79 - \\frac{200}{3} = \\frac{237 - 200}{3} = \\frac{37}{3}$$\\n\\n**Right side:**\\n$$\\frac{\\frac{47}{3} + 7}{2} + 1 = \\frac{\\frac{68}{3}}{2} + 1 = \\frac{68}{6} + 1 = \\frac{34}{3} + \\frac{3}{3} = \\frac{37}{3}$$\\n\\n\u2705 Both sides equal $\\dfrac{37}{3}$."
+      }
+    ],
+    "final_answer": "$x = \\dfrac{47}{3}$",
+    "distractors": [
+      "$x = \\frac{43}{3}$",
+      "$x = 16$",
+      "$x = \\frac{47}{4}$"
+    ],
+    "difficulty": "hard",
+    "format": "frq",
+    "status": "pending",
+    "locked": false,
+    "source": "generated",
+    "parent_question_id": null,
+    "used_in": [],
+    "source_doc_ids": [
+      "6f8113f5-799c-48dc-ab36-eba1f7ed23a7"
+    ],
+    "generation_prompt": "Short cumulative review built from this worksheet. Produce exactly three problems, exam-style, increasing difficulty: (1) a MATRIX MULTIPLICATION problem that asks to compute the product AB of two conformable matrices, showing each entry as row-by-column dot products; (2) a right-triangle trigonometry application WITH a diagram; (3) a multi-step linear equation with a clean numeric solution.",
+    "figure_spec": null,
+    "figure_svg": null,
+    "has_previous_version": false,
+    "chat_messages": [],
+    "chat_soft_cap": 20,
+    "created_at": "2026-07-03T00:22:12.095318+00:00",
+    "updated_at": "2026-07-03T00:22:12.095318+00:00"
+  }
+]

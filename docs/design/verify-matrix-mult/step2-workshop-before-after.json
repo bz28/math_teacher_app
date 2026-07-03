@@ -1,0 +1,53 @@
+{
+  "item_id": "e9ec4c70-50f7-4447-91af-9014e993c7a2",
+  "workshop_request": "Make this one undefined.",
+  "before": {
+    "question": "**Matrix Multiplication.** Let $A = \\begin{bmatrix} 5 & 2 \\\\ 3 & 4 \\end{bmatrix}$ and $B = \\begin{bmatrix} 1 & 6 \\\\ 0 & 3 \\end{bmatrix}$.\n\nCompute the product $AB$ by finding each entry as a row-by-column dot product. Give the complete resulting $2 \\times 2$ matrix.",
+    "final_answer": "$AB = \\begin{pmatrix} 5 & 36 \\\\ 3 & 30 \\end{pmatrix}$",
+    "solution_steps": [
+      {
+        "title": "Understand the Setup",
+        "description": "Matrix multiplication works by pairing each **row of $A$** with each **column of $B$** and taking a dot product \u2014 meaning we multiply matching entries and add the results.\n\nFor two $2 \\times 2$ matrices, the result $AB$ is also a $2 \\times 2$ matrix where entry $(i, j)$ = (row $i$ of $A$) $\\cdot$ (column $j$ of $B$).\n\nThere are exactly **4 entries** to compute, one for each $(i,j)$ combination: $(1,1),\\ (1,2),\\ (2,1),\\ (2,2)$."
+      },
+      {
+        "title": "Entry $(1,1)$: Row 1 \u00b7 Col 1",
+        "description": "Take **row 1 of $A$** = $[5,\\ 2]$ and **column 1 of $B$** = $[1,\\ 0]$:\n$$5 \\cdot 1 + 2 \\cdot 0 = 5 + 0 = 5$$"
+      },
+      {
+        "title": "Entry $(1,2)$: Row 1 \u00b7 Col 2",
+        "description": "Take **row 1 of $A$** = $[5,\\ 2]$ and **column 2 of $B$** = $[6,\\ 3]$:\n$$5 \\cdot 6 + 2 \\cdot 3 = 30 + 6 = 36$$"
+      },
+      {
+        "title": "Entry $(2,1)$: Row 2 \u00b7 Col 1",
+        "description": "Take **row 2 of $A$** = $[3,\\ 4]$ and **column 1 of $B$** = $[1,\\ 0]$:\n$$3 \\cdot 1 + 4 \\cdot 0 = 3 + 0 = 3$$"
+      },
+      {
+        "title": "Entry $(2,2)$: Row 2 \u00b7 Col 2",
+        "description": "Take **row 2 of $A$** = $[3,\\ 4]$ and **column 2 of $B$** = $[6,\\ 3]$:\n$$3 \\cdot 6 + 4 \\cdot 3 = 18 + 12 = 30$$"
+      },
+      {
+        "title": "Assemble the Result",
+        "description": "Place the four computed entries into their correct positions:\n$$AB = \\begin{pmatrix} (1,1) & (1,2) \\\\ (2,1) & (2,2) \\end{pmatrix} = \\begin{pmatrix} 5 & 36 \\\\ 3 & 30 \\end{pmatrix}$$"
+      }
+    ]
+  },
+  "ai_reply_text": "I've made the product undefined by changing B to a 3\u00d72 matrix \u2014 a 2\u00d72 matrix can't be multiplied by a 3\u00d72 matrix since the inner dimensions don't match (2 \u2260 3). The solution now explains why the product is undefined.",
+  "after": {
+    "question": "**Matrix Multiplication.** Let $A = \\begin{bmatrix} 5 & 2 \\\\ 3 & 4 \\end{bmatrix}$ and $B = \\begin{bmatrix} 1 & 6 \\\\ 0 & 3 \\\\ 2 & 5 \\end{bmatrix}$.\n\nCan the product $AB$ be computed? Explain why or why not by checking the dimensions of each matrix.",
+    "final_answer": "The product $AB$ is **undefined** because $A$ is $2 \\times 2$ and $B$ is $3 \\times 2$; the inner dimensions $2 \\neq 3$ so the matrices are not conformable for multiplication.",
+    "solution_steps": [
+      {
+        "title": "Identify the Dimensions",
+        "description": "First, state the size of each matrix.\n\n- Matrix $A$ has **2 rows and 2 columns** \u2192 it is a $2 \\times 2$ matrix.\n- Matrix $B$ has **3 rows and 2 columns** \u2192 it is a $3 \\times 2$ matrix."
+      },
+      {
+        "title": "Check the Conformability Rule",
+        "description": "For a product $AB$ to exist, the **number of columns in $A$** must equal the **number of rows in $B$**.\n\n$$\\underbrace{A}_{2 \\times \\mathbf{2}} \\times \\underbrace{B}_{\\mathbf{3} \\times 2}$$\n\nThe inner dimensions are **2 and 3**. Since $2 \\neq 3$, the matrices are **not conformable** for multiplication."
+      },
+      {
+        "title": "State the Conclusion",
+        "description": "Because the number of columns of $A$ (which is 2) does **not** equal the number of rows of $B$ (which is 3), the product $AB$ is **undefined**."
+      }
+    ]
+  }
+}
