@@ -1073,6 +1073,16 @@ function HomeworkSectionReview({
               </span>
             </p>
           )}
+          {roster !== null && totalRoster > 0 && submittedCount === 0 && (
+            <p className="mt-1.5 text-[12.5px] text-text-secondary">
+              <b className="font-bold text-text-primary">
+                0 of {totalRoster}
+              </b>{" "}
+              submitted · No submissions yet — waiting on{" "}
+              {totalRoster === 1 ? "this student" : "these students"} to turn in
+              work.
+            </p>
+          )}
         </div>
         {roster !== null && (
           <PublishButton
