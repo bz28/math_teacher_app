@@ -224,6 +224,11 @@ export function NewHomeworkModal({
   const isDirty =
     title.trim().length > 0 ||
     unitsChanged ||
+    // Step-1 details a teacher can set before typing a title — each is
+    // real work that would otherwise be discarded with no prompt.
+    dueAt.length > 0 ||
+    sectionIds.length > 0 ||
+    latePolicy !== "none" ||
     stagedFiles.length > 0 ||
     selectedDocs.size > 0 ||
     topicHint.trim().length > 0 ||
@@ -798,10 +803,16 @@ function DiscardConfirmDialog({
   const ref = useRef<HTMLDivElement>(null);
 
   // Move focus into the prompt on open, landing on the safe default
-  // ("Keep editing") so an accidental Enter can't discard the work.
+  // ("Keep editing") so an accidental Enter can't discard the work. On
+  // close we restore focus to whatever the teacher was on (the field they
+  // Escaped from, or the ✕ they clicked) — the standard dialog contract.
+  // On Discard the whole wizard unmounts and its own hook restores the
+  // pre-wizard focus, so this restore harmlessly no-ops there.
   useEffect(() => {
+    const trigger = document.activeElement as HTMLElement | null;
     const first = ref.current?.querySelector<HTMLElement>("button");
     first?.focus();
+    return () => trigger?.focus();
   }, []);
 
   useEffect(() => {
