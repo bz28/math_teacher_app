@@ -273,6 +273,12 @@ const yDigest = () => { const dl = [...document.querySelectorAll('dl')].find((d)
 const rFlag = () => { const el = [...document.querySelectorAll('*')].find((n) => /couldn.t explain/i.test(n.textContent || '') && n.children.length < 8); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
 const rRoster = () => { const el = [...document.querySelectorAll('*')].find((n) => /Jordan/i.test(n.textContent || '') && /100%/.test(n.textContent || '') && /Review/i.test(n.textContent || '') && n.children.length < 16 && n.getBoundingClientRect().width < 660 && n.getBoundingClientRect().height < 220); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
 const rDigest = () => { const dl = [...document.querySelectorAll('dl')].find((d) => /Tabbed out/i.test(d.textContent || '') && /Paste events/i.test(d.textContent || '')); const el = dl ? (dl.parentElement || dl) : null; if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
+// Maya's EXONERATION banner — the pass verdict ("Student understood their
+// own work" + the "in her own words" summary). Walk from the title <p> up
+// to the role=status banner container so the highlight frames verdict +
+// summary together. Self-contained (Playwright serializes only this fn).
+const rExon = () => { const p = [...document.querySelectorAll('p')].find((n) => /understood their own work/i.test(n.textContent || '')); if (!p) return null; let el = p; for (let k = 0; k < 5 && el.parentElement; k++) { if (el.getAttribute && el.getAttribute('role') === 'status') break; el = el.parentElement; } const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
+const yExon = () => { const p = [...document.querySelectorAll('p')].find((n) => /understood their own work/i.test(n.textContent || '')); if (!p) return null; let el = p; for (let k = 0; k < 5 && el.parentElement; k++) { if (el.getAttribute && el.getAttribute('role') === 'status') break; el = el.parentElement; } const se = document.scrollingElement || document.documentElement; const r = el.getBoundingClientRect(); return Math.max(0, se.scrollTop + r.top + r.height / 2 - window.innerHeight / 2); };
 // The one student-work step a receipt deduction anchors to — the app tags it
 // with id `work-<item>-step-<N>` and tints it. On Maya's grade that's the
 // matrix AB₂₂ slip (5, should be 6). Self-contained (Playwright serializes it).
@@ -344,22 +350,44 @@ async function coldSetup(page) {
 // the clicks. Full-bleed: the assembler shows each clip edge-to-edge and
 // pushes in (Ken-Burns) on the money shots; nothing floats.
 const CLIPS = {
-  // 0 · COLD OPEN — a setup card, then the catch, before the title. Open on
-  //     brand paper ("A student just earned a perfect score — on the hardest
-  //     problem"), then dissolve to the flagged review: zoomed on the flag +
-  //     the 100%, with the behavioral evidence (tabbed out 2×, paste 1)
-  //     highlighted. Jordan got the matrix product right but can't explain a
-  //     step. Hard hook the story later pays off.
+  // 0 · COLD OPEN — the CATCH, live, before the title. A setup card on brand
+  //     paper, then Jordan's OWN understanding-check chat plays turn-by-turn
+  //     from empty: the AI asks him to explain HOW he got a matrix entry, and
+  //     the "why" keeps coming up empty on a correct answer. One framing
+  //     caption names the mechanism. The teacher-side flag + behavioral
+  //     evidence is the PAYOFF later (4-verdict) — shown once, never here, so
+  //     no screen repeats. Recorded as Jordan (student), check in_progress.
   async '0-cold'(page) {
-    // Navigate UNDER the veil; keep the app hidden while the setup card holds.
+    // Navigate UNDER the veil to Jordan's live understanding-check; keep the
+    // app hidden while the setup card holds.
     await veilOn(page).catch(() => {});
-    await page.goto(WEB + `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}/sections/${ID.SEC}/review?student=${ID.JORDAN}`,
+    await page.goto(WEB + `/school/student/courses/${ID.ALG}/homework/${ID.UNIT5}`,
       { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
     await page.waitForLoadState('load', { timeout: 8000 }).catch(() => {});
     await veilOn(page).catch(() => {});
-    await setZoom(page, 1.22);
-    await page.locator('text=/couldn.t explain/i').first().waitFor({ state: 'visible', timeout: 9000 }).catch(() => {});
-    // Setup card (brand paper) above the veil — two beats.
+    await setZoom(page, 1.1);
+    await page.locator('text=/understanding check/i').first().waitFor({ state: 'visible', timeout: 9000 }).catch(() => {});
+    // Hide the chat bubbles so the conversation starts EMPTY and reveals
+    // turn-by-turn (no pre-flash). Finds the transcript container (the row
+    // with the most justify-start/end children), hides each row, and stashes
+    // them + the scroller on window for the reveal loop.
+    await page.evaluate(() => {
+      const bubbles = Array.from(document.querySelectorAll('div')).filter((d) =>
+        /\bjustify-(start|end)\b/.test(d.className) &&
+        d.parentElement && Array.from(d.parentElement.children).filter((c) =>
+          /\bjustify-(start|end)\b/.test(c.className)).length >= 3);
+      let cont = null, best = 0;
+      bubbles.forEach((b) => {
+        const n = Array.from(b.parentElement.children).filter((c) => /\bjustify-(start|end)\b/.test(c.className)).length;
+        if (n > best) { best = n; cont = b.parentElement; }
+      });
+      window.__rows = cont ? Array.from(cont.children).filter((c) => /\bjustify-(start|end)\b/.test(c.className)) : [];
+      [...window.__rows].forEach((el) => { if (el) { el.style.transition = 'opacity .45s ease, transform .45s ease'; el.style.opacity = '0'; el.style.transform = 'translateY(12px)'; } });
+      window.__scroller = cont;
+      while (window.__scroller && window.__scroller.scrollHeight <= window.__scroller.clientHeight + 10)
+        window.__scroller = window.__scroller.parentElement;
+    });
+    // Setup card (brand paper) above the veil — two beats (Option A copy).
     await coldSetup(page);
     await sleep(page, 250);
     await page.evaluate(() => { const e = document.getElementById('__su0'); if (e) e.style.opacity = '1'; });
@@ -367,31 +395,31 @@ const CLIPS = {
     await page.evaluate(() => { const e = document.getElementById('__su1'); if (e) { e.style.opacity = '1'; e.style.transform = 'none'; } });
     await sleep(page, 1600);
     await page.evaluate(() => { const e = document.getElementById('__su2'); if (e) { e.style.opacity = '1'; e.style.transform = 'none'; } });
-    await sleep(page, 2000);
-    // Frame the flagged screen underneath (top: roster shows Jordan · 100% ·
-    // Review; detail shows the flag banner), then dissolve the card away.
-    await page.evaluate(() => { const se = document.scrollingElement || document.documentElement; se.scrollTop = 0; });
+    await sleep(page, 2100);
+    // Dissolve the card away onto the empty chat.
     await veilOff(page);
     await page.evaluate(() => { const o = document.getElementById('__setup'); if (o) { o.style.transition = 'opacity .6s ease'; o.style.opacity = '0'; } });
-    await sleep(page, 720);
+    await sleep(page, 760);
     await page.evaluate(() => { const o = document.getElementById('__setup'); if (o) o.remove(); });
-    // Beat 1 — the perfect score + the flag, together.
-    await highlightFinder(page, rRoster);
-    await cap(page, 'A perfect score — quietly flagged.');
-    await sleep(page, 2400);
-    await clearHL(page);
-    // Beat 2 — the flag itself.
-    await highlightFinder(page, rFlag);
-    await cap(page, 'And he can’t explain a single step of it.');
+    // The mechanism, named once — then the chat plays it out.
+    await cap(page, 'Every answer gets an AI understanding check — right, but can’t explain it? Flagged.');
+    await sleep(page, 900);
+    // Reveal the conversation turn-by-turn from empty. Jordan got the matrix
+    // product right; the AI asks him to walk through a single entry and the
+    // "why" never lands.
+    const n = await page.evaluate(() => (window.__rows || []).length);
+    for (let i = 0; i < n; i++) {
+      await page.evaluate((idx) => {
+        const el = window.__rows[idx];
+        if (el) { el.style.opacity = '1'; el.style.transform = 'none'; el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+      }, i);
+      if (i === 5) { await cap(page, 'The answer’s right — the “why” keeps coming up empty.'); }
+      await sleep(page, i % 2 === 1 ? 1650 : 1250);
+    }
+    await sleep(page, 700);
+    await cap(page, 'A perfect answer he can’t explain — quietly flagged.');
     await sleep(page, 2600);
-    await clearHL(page);
-    // Beat 3 — the behavioral evidence (tabbed out 2×, paste 1).
-    await scrollToFinder(page, yDigest, 1300);
-    await sleep(page, 300);
-    await highlightFinder(page, rDigest);
-    await cap(page, 'Tabbed out twice. Pasted the answer once.');
-    await sleep(page, 2900);
-    await clearHL(page); await capClear(page); await sleep(page, 700);
+    await capClear(page); await sleep(page, 1100);
   },
 
   // 1 · TEACHER — spin up a class section.
@@ -615,48 +643,13 @@ const CLIPS = {
     await capClear(page); await sleep(page, 500);
   },
 
-  // 4b · STUDENT (Jordan) — the understanding check, revealed turn by turn.
-  //      He got the matrix RIGHT; the "why" keeps coming up empty. The AI
-  //      stays warm the whole way (the catch is surfaced to the teacher).
-  async '4-chat'(page) {
-    await gotoClean(page, `/school/student/courses/${ID.ALG}/homework/${ID.UNIT5}`,
-      { zoom: 1.1, waitMs: 1800, anchor: 'text=/understanding check/i',
-        beforeReveal: () => page.evaluate(() => {
-          const bubbles = Array.from(document.querySelectorAll('div')).filter((d) =>
-            /\bjustify-(start|end)\b/.test(d.className) &&
-            d.parentElement && Array.from(d.parentElement.children).filter((c) =>
-              /\bjustify-(start|end)\b/.test(c.className)).length >= 3);
-          let cont = null, best = 0;
-          bubbles.forEach((b) => {
-            const n = Array.from(b.parentElement.children).filter((c) => /\bjustify-(start|end)\b/.test(c.className)).length;
-            if (n > best) { best = n; cont = b.parentElement; }
-          });
-          window.__rows = cont ? Array.from(cont.children).filter((c) => /\bjustify-(start|end)\b/.test(c.className)) : [];
-          [...window.__rows].forEach((el) => { if (el) { el.style.transition = 'opacity .45s ease, transform .45s ease'; el.style.opacity = '0'; el.style.transform = 'translateY(12px)'; } });
-          window.__scroller = cont;
-          while (window.__scroller && window.__scroller.scrollHeight <= window.__scroller.clientHeight + 10)
-            window.__scroller = window.__scroller.parentElement;
-        }) });
-    await cap(page, 'Then a quick check — is the understanding really there?');
-    await sleep(page, 900);
-    const n = await page.evaluate(() => (window.__rows || []).length);
-    for (let i = 0; i < n; i++) {
-      await page.evaluate((idx) => {
-        const el = window.__rows[idx];
-        if (el) { el.style.opacity = '1'; el.style.transform = 'none'; el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
-      }, i);
-      if (i === 1) { await cap(page, 'Just explain your thinking, in your own words.'); }
-      if (i === 3) { await cap(page, 'The answer’s right — but the “why” keeps coming up empty.'); }
-      await sleep(page, i % 2 === 1 ? 1750 : 1300);
-    }
-    await sleep(page, 800);
-    await cap(page, 'Right answer — and not one step he can explain.');
-    await sleep(page, 2600);
-    await capClear(page); await sleep(page, 1400);
-  },
-
-  // 4c · TEACHER — the CATCH, on a perfect score. A right answer, quietly
-  //      flagged — the thing a grade can never do. Behavior corroborates.
+  // 4b · TEACHER — the PAYOFF of the cold-open catch, now on the teacher's
+  //      side: Jordan's flag ("correct work but couldn't explain it") + the
+  //      behavioral evidence (tabbed out 2×, paste 1) — the thing a grade can
+  //      never do. THEN the other half the cold-open can't cover: the same
+  //      check EXONERATES honest kids — Maya explained her method in her own
+  //      words → passed, no flag. Jordan's student chat is the cold-open; his
+  //      teacher review + Maya's exoneration live only here (no repeats).
   async '4-verdict'(page) {
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}/sections/${ID.SEC}/review?student=${ID.JORDAN}`,
       { zoom: 1.12, waitMs: 1700, anchor: 'text=/couldn.t explain/i' });
@@ -677,6 +670,19 @@ const CLIPS = {
     await cap(page, 'Warm to the student. Honest with you.');
     await sleep(page, 2100);
     await capClear(page); await sleep(page, 600);
+    // ── The other half the cold-open can't show: the SAME check clears the
+    //    honest kids. Maya explained her method in her own words → passed,
+    //    no flag. (Her grade is scene 5 — here it's purely the exoneration.)
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}/sections/${ID.SEC}/review?student=${ID.MAYA}`,
+      { zoom: 1.12, waitMs: 1700, anchor: 'text=/own words|understood their own work/i' });
+    await cap(page, 'And it clears the honest kids — automatically.');
+    await sleep(page, 1700);
+    await scrollToFinder(page, yExon, 700);
+    await sleep(page, 250);
+    await highlightFinder(page, rExon);
+    await cap(page, 'Maya explained her method, in her own words — passed, no flag.');
+    await sleep(page, 3000);
+    await clearHL(page); await capClear(page); await sleep(page, 700);
   },
 
   // 5 · TEACHER — ONE smooth, continuous scroll down Maya's grading. Problem
@@ -699,7 +705,8 @@ const CLIPS = {
     await cap(page, 'Grade the class — one page, one clear receipt.');
     await sleep(page, 1500);
     // A single, eased, top-to-bottom scroll — obviously one page moving.
-    await cap(page, 'Her understanding check came back clear.');
+    // (Maya's understanding-check exoneration is the integrity beat's payoff
+    //  now — here we go straight to the grade so no screen repeats.)
     await smoothScrollToFrac(page, 0.24, 2300); await sleep(page, 500);
     await cap(page, 'Matrix multiply — the set-up is perfect.');
     await smoothScrollToFrac(page, 0.44, 2300); await sleep(page, 600);
@@ -789,9 +796,9 @@ const CLIPS = {
 
 // ─────────────────────────────── runner ───────────────────────────────
 const WHO = {
-  '0-cold': 'teacher', '1-section': 'teacher', '2-materials': 'teacher',
+  '0-cold': 'jordan', '1-section': 'teacher', '2-materials': 'teacher',
   '3-generate': 'teacher', '3-figure': 'teacher', '3-workshop': 'teacher',
-  '4-submit': 'aisha', '4-chat': 'jordan', '4-verdict': 'teacher',
+  '4-submit': 'aisha', '4-verdict': 'teacher',
   '5-grade': 'teacher', '5-insights': 'teacher', '6-reteach': 'teacher',
   '7-practice': 'maya', '7-learn': 'maya',
 };

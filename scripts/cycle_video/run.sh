@@ -41,14 +41,14 @@ echo "==[2/7] seed published world + mint tokens=="
 WORKSHEET_ASSET=$ASSETS_OUT/worksheet.png PYTHONPATH=. $PY -m scripts.cycle_video_prep
 export TOKENS=$(PYTHONPATH=. $PY -m scripts.cycle_video.mint_tokens)
 
-echo "==[3/7] record the live understanding-check chat (Jordan in_progress)=="
+echo "==[3/7] record the COLD OPEN — Jordan's live understanding-check chat (in_progress)=="
 PYTHONPATH=. $PY -m scripts.cycle_video.set_jordan_inprogress
-node "$HERE/record_scenes.mjs" 4-chat
+node "$HERE/record_scenes.mjs" 0-cold
 echo "  · restore Jordan's resolved flag"
 WORKSHEET_ASSET=$ASSETS_OUT/worksheet.png PYTHONPATH=. $PY -m scripts.cycle_video_prep
 
-echo "==[4/7] record published-state scenes=="
-node "$HERE/record_scenes.mjs" 0-cold 1-section 2-materials 4-submit 4-verdict 5-grade 5-insights 6-reteach 7-practice 7-learn
+echo "==[4/7] record published-state scenes (teacher review flag + Maya exoneration, etc.)=="
+node "$HERE/record_scenes.mjs" 1-section 2-materials 4-submit 4-verdict 5-grade 5-insights 6-reteach 7-practice 7-learn
 
 echo "==[5/7] draft state → record generation family (workshop proposal pre-seeded)=="
 flip draft
