@@ -516,13 +516,23 @@ const CLIPS = {
     // Step 2 · Problems — count 3, TYPE the focus, pick the worksheet source.
     // Set the count to 3 FIRST (deselects the default "10" chip, custom reads
     // 3) so the "just three" beat plays with the count already reading 3 — the
-    // preset chip never lingers highlighted against the caption.
-    const countInput = dialog.locator('input[aria-label="Custom problem count"]').first();
+    // preset chip never lingers highlighted against the caption. Page-scoped
+    // locator (the dialog-scoped one matched 0), waited-for so the Step 2 input
+    // exists before we fill.
+    const countInput = page.getByLabel('Custom problem count');
+    await countInput.waitFor({ state: 'visible', timeout: 6000 }).catch(() => {});
     if (await countInput.count()) {
       await go(page, countInput, { click: true });
       await countInput.fill('3').catch(() => {});
       await countInput.blur().catch(() => {});
       await sleep(page, 220);
+      // Confirm the beat lands with 3 showing and NO preset chip highlighted.
+      const litChips = await page
+        .locator('button.bg-primary.text-white')
+        .allInnerTexts()
+        .catch(() => []);
+      const shown = await countInput.inputValue().catch(() => '');
+      console.log(`[3-generate] custom count reads "${shown}"; lit chips: ${JSON.stringify(litChips)}`);
     }
     await cap(page, 'How many? Just three today.');
     await sleep(page, 320);
