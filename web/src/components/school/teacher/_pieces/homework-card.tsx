@@ -125,16 +125,20 @@ export function HomeworkCard({
         {bucket === "needsGrading" &&
           hw.submitted > 0 &&
           ungraded === 0 &&
-          // Only fire when the whole class has actually submitted —
-          // otherwise this reads "all 3 graded — review & publish" on
-          // a 3-of-28-submitted HW, implying you're done when 25
-          // students still owe work. The bucket logic puts those rows
-          // here via `hasMissing`, not "ready to publish".
-          hw.submitted >= hw.total_students && (
+          // Everything submitted so far is graded. But "all graded" only
+          // means "done" if the whole class has actually submitted —
+          // otherwise it reads as class-complete on a 3-of-28 HW while 25
+          // students still owe work. Surface submitted-vs-enrolled so the
+          // teacher can tell a finished HW from a partial one at a glance.
+          (hw.submitted >= hw.total_students ? (
             <span className="ml-1 font-semibold text-text-secondary">
               · all {hw.submitted} graded — review &amp; publish
             </span>
-          )}
+          ) : (
+            <span className="ml-1 font-semibold text-text-secondary">
+              · {hw.submitted} of {hw.total_students} submitted · all graded
+            </span>
+          ))}
         {hw.pending_review > 0 && (
           <span className="ml-1 font-semibold text-[color:var(--color-warning-dark)] ">
             · {hw.pending_review} need{hw.pending_review === 1 ? "s" : ""} your approval
