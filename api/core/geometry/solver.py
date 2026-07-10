@@ -39,6 +39,15 @@ Point = tuple[float, float]
 _SIDE_REL_TOL = 0.05  # 5%
 _ANGLE_ABS_TOL_DEG = 1.5
 
+# How close an interior angle must be to 90° for the triangle to be
+# treated as right-angled and re-oriented to the textbook convention
+# (legs axis-aligned). Kept tight so ONLY genuine right triangles are
+# touched — a non-right triangle whose largest angle is merely nearby
+# (e.g. 88°) is left exactly as the solver placed it. Explicitly marked
+# right angles (right_angle_at / angles=90) are honored regardless of
+# this tolerance, since verification already guarantees they're ~90°.
+_RIGHT_ANGLE_DETECT_TOL_DEG = 0.5
+
 
 def _canonical_edge(a: str, b: str) -> str:
     """Edges are unordered — 'AB' and 'BA' resolve to the same key."""
@@ -115,8 +124,87 @@ def solve_triangle(spec: TriangleFigure) -> dict[str, Point]:
     # drawn WRONG with no error. Verify the solved triangle satisfies
     # every provided side and angle; the caller catches FigureSpecError
     # and drops just the figure, keeping the question intact.
+    #
+    # Re-orient right triangles to the textbook convention (legs
+    # axis-aligned, right angle bottom-left) BEFORE verifying — the
+    # orientation pass is a pure rotation, so verification runs on the
+    # exact coordinates that will be rendered.
+    coords = _orient_right_triangle(coords, spec.vertices, angles)
     _verify_constraints(spec, coords, angles)
     return coords
+
+
+def _orient_right_triangle(
+    coords: dict[str, Point], vertices: list[str], angles: dict[str, float],
+) -> dict[str, Point]:
+    """Rotate a right triangle so its two LEGS are axis-aligned.
+
+    The per-family solvers place a fixed edge (AB, or the SAS included
+    vertex's first arm) on the x-axis regardless of where the right
+    angle sits — so a right triangle the model named with its HYPOTENUSE
+    as that edge would draw the hypotenuse as a horizontal base, which
+    reads as wrong (textbook right triangles rest on a leg). This pass
+    fixes that independently of vertex naming: it finds the right-angle
+    vertex, then rigidly rotates the whole triangle so the right angle
+    sits at the bottom-left with one leg pointing along +x and the other
+    along +y.
+
+    A pure rotation preserves every length and angle, so the figure stays
+    geometrically identical — only its orientation on the page changes,
+    and `_verify_constraints` still passes. Non-right triangles are
+    returned untouched.
+    """
+    right_v = _right_angle_vertex(coords, vertices, angles)
+    if right_v is None:
+        return coords
+
+    others = [v for v in vertices if v != right_v]
+    rx, ry = coords[right_v]
+    # The two legs, as vectors from the right-angle vertex.
+    d1 = (coords[others[0]][0] - rx, coords[others[0]][1] - ry)
+    d2 = (coords[others[1]][0] - rx, coords[others[1]][1] - ry)
+
+    # Choose which leg becomes horizontal so the other lands on +y (not
+    # -y) — i.e. the right angle ends up bottom-left. That's the leg whose
+    # partner is 90° COUNTER-clockwise from it (positive cross product);
+    # picking it means a pure rotation suffices, no reflection (which would
+    # mirror the triangle and could flip labels).
+    cross = d1[0] * d2[1] - d1[1] * d2[0]
+    horiz = d1 if cross > 0 else d2
+
+    # Rotate every vertex by θ = -atan2(hy, hx) so `horiz` maps onto the
+    # positive x-axis; its perpendicular partner then maps onto +y.
+    theta = -math.atan2(horiz[1], horiz[0])
+    cos_t, sin_t = math.cos(theta), math.sin(theta)
+    return {
+        name: (px * cos_t - py * sin_t, px * sin_t + py * cos_t)
+        for name, (px, py) in coords.items()
+    }
+
+
+def _right_angle_vertex(
+    coords: dict[str, Point], vertices: list[str], angles: dict[str, float],
+) -> str | None:
+    """Name of the right-angle vertex, or None if the triangle isn't right.
+
+    Prefers an explicitly-declared right angle (`right_angle_at` folds
+    into `angles` as 90°, as does an explicit `angles[v]=90`) so a labeled
+    right angle is always honored. Falls back to detecting a ~90° interior
+    angle from the solved geometry, which catches right triangles the
+    model expressed purely via side lengths (e.g. an unlabeled 3-4-5).
+    """
+    for v, deg in angles.items():
+        if math.isclose(deg, 90.0, abs_tol=1e-6):
+            return v
+    for v in vertices:
+        others = [u for u in vertices if u != v]
+        if math.isclose(
+            _angle_at_vertex(coords, v, others),
+            90.0,
+            abs_tol=_RIGHT_ANGLE_DETECT_TOL_DEG,
+        ):
+            return v
+    return None
 
 
 def _angle_at_vertex(

@@ -59,6 +59,85 @@ def test_sss_triangle_inequality_rejected() -> None:
         solve_triangle(spec)
 
 
+# ── Solver: right-triangle orientation ───────────────────────────────
+
+
+def _axis_aligned(v: tuple[float, float]) -> bool:
+    """A vector lies on an axis when one component is ~0."""
+    return (
+        math.isclose(v[0], 0.0, abs_tol=1e-9)
+        or math.isclose(v[1], 0.0, abs_tol=1e-9)
+    )
+
+
+def test_right_triangle_legs_axis_aligned_when_hypotenuse_is_ab() -> None:
+    """Right angle at C, so the hypotenuse is AB. The per-family solver
+    naively places edge AB on the x-axis — which would draw the HYPOTENUSE
+    as the horizontal base. The orientation pass must instead rotate the
+    triangle so the two LEGS (CA, CB) are axis-aligned, the right angle
+    sits bottom-left, and the hypotenuse is NOT the base."""
+    spec = TriangleFigure(
+        vertices=["A", "B", "C"],
+        side_lengths={"CA": 3.0, "CB": 4.0, "AB": 5.0},
+        right_angle_at=["C"],
+    )
+    coords = solve_triangle(spec)
+    a, b, c = coords["A"], coords["B"], coords["C"]
+
+    leg_ca = (a[0] - c[0], a[1] - c[1])
+    leg_cb = (b[0] - c[0], b[1] - c[1])
+    # Both legs axis-aligned...
+    assert _axis_aligned(leg_ca), f"leg CA not axis-aligned: {leg_ca}"
+    assert _axis_aligned(leg_cb), f"leg CB not axis-aligned: {leg_cb}"
+    # ...one horizontal and one vertical (not both on the same axis).
+    horiz = [v for v in (leg_ca, leg_cb) if math.isclose(v[1], 0.0, abs_tol=1e-9)]
+    vert = [v for v in (leg_ca, leg_cb) if math.isclose(v[0], 0.0, abs_tol=1e-9)]
+    assert len(horiz) == 1 and len(vert) == 1
+    # Right angle bottom-left: the legs point +x (right) and +y (up).
+    assert horiz[0][0] > 0
+    assert vert[0][1] > 0
+    # The hypotenuse AB must NOT be the horizontal base.
+    hyp = (b[0] - a[0], b[1] - a[1])
+    assert not math.isclose(hyp[1], 0.0, abs_tol=1e-9), (
+        "hypotenuse AB is horizontal — it was drawn as the base"
+    )
+    # Sanity: rotation preserved the side lengths exactly.
+    assert math.isclose(math.hypot(*leg_ca), 3.0, abs_tol=1e-9)
+    assert math.isclose(math.hypot(*leg_cb), 4.0, abs_tol=1e-9)
+    assert math.isclose(math.hypot(*hyp), 5.0, abs_tol=1e-9)
+
+
+def test_right_triangle_orientation_detected_from_geometry() -> None:
+    """An unlabeled 3-4-5 (no right_angle_at) is still a right triangle;
+    the orientation pass detects the ~90° angle from the solved geometry
+    and aligns the legs, so the hypotenuse (here CA=5, opposite B) is not
+    left lying on the x-axis as the base."""
+    spec = TriangleFigure(
+        vertices=["A", "B", "C"],
+        side_lengths={"AB": 3.0, "BC": 4.0, "CA": 5.0},
+    )
+    coords = solve_triangle(spec)
+    a, b, c = coords["A"], coords["B"], coords["C"]
+    # Right angle is at B; its legs BA and BC must be axis-aligned.
+    leg_ba = (a[0] - b[0], a[1] - b[1])
+    leg_bc = (c[0] - b[0], c[1] - b[1])
+    assert _axis_aligned(leg_ba) and _axis_aligned(leg_bc)
+
+
+def test_non_right_triangle_orientation_unchanged() -> None:
+    """A scalene, non-right triangle (5-6-7) must be left exactly where
+    the solver placed it — the orientation pass only touches right
+    triangles, so edge AB stays on the x-axis (A at origin, B on +x)."""
+    spec = TriangleFigure(
+        vertices=["A", "B", "C"],
+        side_lengths={"AB": 5.0, "BC": 6.0, "CA": 7.0},
+    )
+    coords = solve_triangle(spec)
+    assert coords["A"] == pytest.approx((0.0, 0.0), abs=1e-9)
+    assert math.isclose(coords["B"][1], 0.0, abs_tol=1e-9)
+    assert coords["B"][0] > 0
+
+
 # ── Solver: SAS ──────────────────────────────────────────────────────
 
 
