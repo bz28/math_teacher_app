@@ -34,7 +34,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from api.core.grading_ai import grade_submission_with_ai
+from api.core.grading_ai import (
+    _bucket_steps_by_position,
+    _build_breakdown,
+    grade_submission_with_ai,
+)
 from tests.harness.probe import Probe
 from tests.harness.types import CheckResult, GeneratedItem, HarnessContext
 
@@ -376,6 +380,36 @@ class GradingProbe(Probe):
         out: list[GeneratedItem] = []
         for case in GOLDEN_CASES:
             status, result = await grade_case(case, reproducible=True)
+            # Run the model grades through the real persistence path
+            # (_build_breakdown) so the deterministic checks see the
+            # PERSISTED breakdown — including the step_ref range clamp —
+            # exactly as the review UI would consume it, not the raw model
+            # output. Step counts mirror what the grader saw per problem.
+            valid_positions = {p["position"] for p in case.problems}
+            steps_by_pos, _ = _bucket_steps_by_position(
+                case.extraction.get("steps", []) or [], valid_positions
+            )
+            pos_to_step_count = {
+                p["position"]: len(steps_by_pos.get(p["position"], []))
+                for p in case.problems
+            }
+            pos_to_bid = {p["position"]: f"bank-{p['position']}" for p in case.problems}
+            bid_to_count: dict[Any, int] = {
+                pos_to_bid[p["position"]]: pos_to_step_count[p["position"]]
+                for p in case.problems
+            }
+            breakdown, _ = _build_breakdown(
+                result.get("grades") or [],
+                pos_to_bid,
+                pos_to_step_count=pos_to_step_count,
+            )
+            persisted_deductions = [
+                {
+                    "step_count": bid_to_count.get(entry.get("problem_id"), 0),
+                    "deductions": entry.get("deductions") or [],
+                }
+                for entry in breakdown
+            ]
             out.append(
                 GeneratedItem(
                     id=case.name,
@@ -390,6 +424,7 @@ class GradingProbe(Probe):
                         "actual_status": status,
                         "rationale": case.rationale,
                         "grade": (result.get("grades") or [{}])[0],
+                        "persisted_deductions": persisted_deductions,
                     },
                 )
             )
@@ -452,4 +487,29 @@ class GradingProbe(Probe):
                     f"deductions={type(deductions).__name__}",
                 )
             )
+
+        # Every persisted deduction's step_ref is null or within
+        # 1..len(steps) for its problem. The review UI keys a step-highlight
+        # off step_ref (1-based over the student's written steps), so an
+        # out-of-range ref would anchor to a step that doesn't exist. The
+        # backend clamp (_reconcile_deductions) must have nulled any such ref.
+        offenders: list[str] = []
+        for pd in item.raw.get("persisted_deductions") or []:
+            count = pd.get("step_count", 0)
+            for d in pd.get("deductions") or []:
+                if not isinstance(d, dict):
+                    continue
+                sr = d.get("step_ref")
+                if sr is None:
+                    continue
+                if not isinstance(sr, int) or isinstance(sr, bool) or not (1 <= sr <= count):
+                    offenders.append(f"step_ref={sr!r} (valid 1..{count})")
+        step_ref_ok = not offenders
+        checks.append(
+            CheckResult(
+                "persisted deduction step_refs are null or in-range",
+                step_ref_ok,
+                "" if step_ref_ok else "; ".join(offenders),
+            )
+        )
         return checks

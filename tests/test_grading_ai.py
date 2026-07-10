@@ -122,6 +122,91 @@ class TestBuildBreakdownPercentClamp:
         assert ai_score is None
 
 
+class TestBuildBreakdownStepRefClamp:
+    """`_build_breakdown` nulls a deduction's `step_ref` when it points past
+    the student's written steps for that problem, so a review-UI highlight
+    can't anchor to a step that doesn't exist. The score math is untouched.
+    """
+
+    def test_out_of_range_step_ref_is_nulled_score_unchanged(self) -> None:
+        # The reported defect: a 2-step problem, but the model numbered the
+        # deduction against the 4 matrix entries → step_ref=4. It must be
+        # nulled, while points_off and the final score stay exactly as graded.
+        grades: list[dict[str, Any]] = [
+            {
+                "problem_position": 1,
+                "score_status": "partial",
+                "percent": 90,
+                "deductions": [{"points_off": 10, "step_ref": 4, "reason": "sign"}],
+            },
+        ]
+        breakdown, ai_score = _build_breakdown(
+            grades, _pos_to_bid(1), pos_to_step_count={1: 2},
+        )
+        assert breakdown[0]["deductions"][0]["step_ref"] is None
+        assert breakdown[0]["deductions"][0]["points_off"] == 10
+        assert breakdown[0]["percent"] == 90.0
+        assert ai_score == 90.0
+
+    def test_in_range_step_ref_is_preserved(self) -> None:
+        grades: list[dict[str, Any]] = [
+            {
+                "problem_position": 1,
+                "score_status": "partial",
+                "percent": 90,
+                "deductions": [{"points_off": 10, "step_ref": 2, "reason": "sign"}],
+            },
+        ]
+        breakdown, _ = _build_breakdown(
+            grades, _pos_to_bid(1), pos_to_step_count={1: 2},
+        )
+        assert breakdown[0]["deductions"][0]["step_ref"] == 2
+
+    def test_step_ref_zero_is_nulled(self) -> None:
+        # step_ref is 1-based; 0 is out of range regardless of step count.
+        grades: list[dict[str, Any]] = [
+            {
+                "problem_position": 1,
+                "score_status": "partial",
+                "percent": 90,
+                "deductions": [{"points_off": 10, "step_ref": 0, "reason": "x"}],
+            },
+        ]
+        breakdown, _ = _build_breakdown(
+            grades, _pos_to_bid(1), pos_to_step_count={1: 2},
+        )
+        assert breakdown[0]["deductions"][0]["step_ref"] is None
+
+    def test_step_ref_nulled_when_problem_has_no_steps(self) -> None:
+        # A stepless problem (count 0) can't host any anchor.
+        grades: list[dict[str, Any]] = [
+            {
+                "problem_position": 1,
+                "score_status": "partial",
+                "percent": 90,
+                "deductions": [{"points_off": 10, "step_ref": 1, "reason": "x"}],
+            },
+        ]
+        breakdown, _ = _build_breakdown(
+            grades, _pos_to_bid(1), pos_to_step_count={1: 0},
+        )
+        assert breakdown[0]["deductions"][0]["step_ref"] is None
+
+    def test_no_step_count_map_skips_range_check(self) -> None:
+        # Legacy/test path with no count supplied: keep the type-sanitized
+        # step_ref rather than nulling on unknown information.
+        grades: list[dict[str, Any]] = [
+            {
+                "problem_position": 1,
+                "score_status": "partial",
+                "percent": 90,
+                "deductions": [{"points_off": 10, "step_ref": 4, "reason": "x"}],
+            },
+        ]
+        breakdown, _ = _build_breakdown(grades, _pos_to_bid(1))
+        assert breakdown[0]["deductions"][0]["step_ref"] == 4
+
+
 class TestBuildUserMessageDelimiters:
     def _problems(self) -> list[dict[str, Any]]:
         return [
