@@ -11,6 +11,10 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    // Lets *.test.ts import sibling modules with an explicit ".ts" extension,
+    // which Node's native TS test runner requires. Safe with noEmit; this only
+    // permits extensions, it doesn't force them on other imports.
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "incremental": true,
     "plugins": [
