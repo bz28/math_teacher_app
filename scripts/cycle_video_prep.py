@@ -357,7 +357,7 @@ JORDAN_TURNS = [
      "Hey, welcome! I took a look at your work on the matrix multiplication problem — "
      "nice job getting all four entries right.\n\nI want to make sure the method clicked "
      "for you, not just the answer. Let's zoom in on one specific entry you computed.\n\n"
-     "Looking at your work, you got **11** as the bottom-left entry of *AB*. Can you walk "
+     "Looking at your work, you got **11** as the top-left entry of *AB*. Can you walk "
      "me through exactly how you got that number — which row and column did you use, and "
      "what did you actually multiply and add?"),
     ("student",
@@ -365,17 +365,17 @@ JORDAN_TURNS = [
     ("agent",
      "That's a good start — yes, the answer is right! But I want to hear a bit more about "
      "the *how*, since matrix multiplication has a specific process behind it.\n\nFor that "
-     "**11** in the bottom-left: which row from matrix *A* and which column from matrix *B* "
+     "**11** in the top-left: which row from matrix *A* and which column from matrix *B* "
      "did you combine to get it? And what were the actual multiplications you did?"),
     ("student",
      "Honestly I don't really remember the exact steps, I just did the multiplication like "
      "we always do."),
     ("agent",
      "Thanks for being upfront about that — I appreciate it! Let me just ask one more "
-     "specific thing, and then we'll move on.\n\nThe bottom-left entry of your result is 11. "
-     "That entry comes from row 2 of *A* (which is **3, 4**) and column 1 of *B* (which is "
-     "**1, 2**). The rule is: multiply the pairs and add them up.\n\nSo the question is: can "
-     "you tell me what **3×1 + 4×2** gives you, and does that match what you wrote?"),
+     "specific thing, and then we'll move on.\n\nThe top-left entry of your result is 11. "
+     "That entry comes from row 1 of *A* (which is **5, 2**) and column 1 of *B* (which is "
+     "**1, 3**). The rule is: multiply the pairs and add them up.\n\nSo the question is: can "
+     "you tell me what **5·1 + 2·3** gives you, and does that match what you wrote?"),
     ("student",
      "You kind of multiply the numbers across and add them up... I'm not really sure how to "
      "say it in words."),
@@ -383,7 +383,7 @@ JORDAN_TURNS = [
      "That's actually the right idea — \"multiply across and add\" is exactly the dot "
      "product rule! You've got the concept.\n\nLet me ask you one quick conceptual question "
      "to make sure it really clicked:\n\nIf the entry in row 2, column 1 of *B* changed from "
-     "**2 to 10**, would your bottom-left answer get bigger or smaller — and why?"),
+     "**3 to 10**, would your top-left answer get bigger or smaller — and why?"),
     ("student",
      "I don't know, I just followed what we did in class. The answer is correct though."),
     ("agent",
