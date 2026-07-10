@@ -15,21 +15,44 @@ const FOCUSABLE_SELECTOR =
  * also carry `role="dialog" aria-modal="true"`). Pass `dismissible:
  * false` (e.g. while a request is in flight) to suppress Escape without
  * tearing down the trap.
+ *
+ * Every dismiss path (Escape here, plus backdrop / ✕ in the host) should
+ * route through the returned `requestClose` so the guard lives in one
+ * place. When `confirmClose` returns true for an attempt, we call
+ * `onConfirmClose` instead of `onClose` — the hook for a "discard your
+ * unsaved work?" prompt before a dirty wizard tears itself down.
  */
 export function useDialogDismiss({
   onClose,
   dismissible = true,
+  confirmClose,
+  onConfirmClose,
 }: {
   onClose: () => void;
   dismissible?: boolean;
+  /** Return true to intercept a dismiss attempt (e.g. the form is dirty). */
+  confirmClose?: () => boolean;
+  /** Called in place of `onClose` when `confirmClose` returns true. */
+  onConfirmClose?: () => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
+  // The single dismiss decision: no-op while suppressed, hand off to the
+  // confirm prompt when the attempt is intercepted, otherwise close.
+  const requestClose = useCallback(() => {
+    if (!dismissible) return;
+    if (confirmClose?.()) {
+      onConfirmClose?.();
+      return;
+    }
+    onClose();
+  }, [dismissible, confirmClose, onConfirmClose, onClose]);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === "Escape" && dismissible) {
-        onClose();
+      if (e.key === "Escape") {
+        requestClose();
         return;
       }
       if (e.key === "Tab" && panelRef.current) {
@@ -46,7 +69,7 @@ export function useDialogDismiss({
         }
       }
     },
-    [onClose, dismissible],
+    [requestClose],
   );
 
   // Focus management — runs once on open/close. Initial focus is only
@@ -77,5 +100,5 @@ export function useDialogDismiss({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  return panelRef;
+  return { panelRef, requestClose };
 }
