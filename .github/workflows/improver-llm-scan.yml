@@ -119,6 +119,10 @@ jobs:
           git rm -rf --cached . >/dev/null 2>&1 || true
           find . -maxdepth 1 -not -name '.git' -not -name '.' -exec rm -rf {} + 2>/dev/null || true
           cp -f "$TMP"/*.json "$TMP"/*.txt . 2>/dev/null || true
+          # Opt this demo-less orphan branch out of Vercel (read from the pushed
+          # branch's demo/vercel.json) so it doesn't error + email every push.
+          mkdir -p demo
+          printf '%s\n' '{"$schema":"https://openapi.vercel.sh/vercel.json","git":{"deploymentEnabled":{"improver/*":false}}}' > demo/vercel.json
           git add -A
           git commit -m "improver state $(date -u +%FT%TZ)" >/dev/null 2>&1 || { echo "nothing to persist"; exit 0; }
           git push -f origin improver-state-tmp:improver/state
