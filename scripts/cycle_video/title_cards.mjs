@@ -28,7 +28,7 @@ const CARDS = [
   ['05-grade',    'story', 'Teacher', 5, 'Grade the whole class.', 'Every problem scored — with a receipt that adds up.'],
   ['06-reteach',  'story', 'Teacher', 6, 'Re-teach in one click.', 'Turn the class’s weakest spot into targeted practice.'],
   ['07-practice', 'story', 'Student', 7, 'Practice, and get better.', 'The loop closes — the student learns.'],
-  ['08-close',    'cta',   'Veradic', null, 'Generate. Check understanding.\nGrade. Re-teach.', 'For every class you teach.'],
+  ['08-close',    'cta',   'Veradic', null, 'Generate. Check understanding.\nGrade. Re-teach.', 'Now you see who truly understood it — and who just copied.'],
 ];
 const TOTAL = 7;
 
