@@ -9,6 +9,11 @@ import { loadDemoHub } from "../lib/demo-hub";
 
 const h = loadDemoHub();
 
+// The single source of truth for where every "Book a pilot" button points.
+// Swap this one constant to change the destination everywhere (header + close).
+// TODO(founder): wire real destination — mailto vs Calendly vs form.
+const PILOT_CTA_HREF = "mailto:hello@veradicai.com?subject=Veradic pilot";
+
 // The demo front door. A founder walks a head of education through it: the
 // overarching promise (hero), the end-to-end flow spine that shows the whole
 // platform is ONE simple connected workflow ("a day in your teacher's life"),
@@ -20,13 +25,18 @@ const h = loadDemoHub();
 export default function DemoHub() {
   return (
     <div className="it-demo it-page">
-      {/* Launch into the full-screen, sidebar-free presenter view used to
-          pitch a teacher live. The in-dashboard demo below stays as-is. */}
-      <div className="dh-present-launch">
-        <Link to="/present" className="dh-present-btn">
+      {/* Top-right actions. The buyer-facing ask ("Book a pilot") is the primary,
+          always one click away; Present is the muted internal launcher into the
+          full-screen, sidebar-free presenter view used to pitch a teacher live. */}
+      <div className="dh-hub-actions">
+        <Link to="/present" className="dh-present-btn dh-present-btn-muted">
           Present
           <span className="dh-present-btn-arrow" aria-hidden="true">▸</span>
         </Link>
+        {/* TODO(founder): wire real destination — mailto vs Calendly vs form. */}
+        <a className="dh-book-btn" href={PILOT_CTA_HREF}>
+          {h.cta.header}
+        </a>
       </div>
 
       <HeroBlock hero={h.hero} />
@@ -103,6 +113,16 @@ export default function DemoHub() {
             ))}
           </div>
           <p className="it-payoff-closing">{h.payoff.closing}</p>
+
+          {/* ── THE ASK — the buyer-facing pilot CTA that closes the page ─ */}
+          <div className="dh-close-cta">
+            {/* TODO(founder): wire real destination — mailto vs Calendly vs form. */}
+            <a className="dh-close-cta-btn" href={PILOT_CTA_HREF}>
+              {h.cta.close}
+              <span className="dh-close-cta-arrow" aria-hidden="true">→</span>
+            </a>
+            <p className="dh-close-cta-note">{h.cta.note}</p>
+          </div>
         </div>
       </section>
     </div>

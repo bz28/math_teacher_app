@@ -79,6 +79,13 @@ export type Payoff = {
   closing: string;
 };
 
+/** The pilot call-to-action copy — the buyer-facing ask, header + close. */
+export type Cta = {
+  header: string;
+  close: string;
+  note: string;
+};
+
 export type DemoHub = {
   meta: {
     framing: string;
@@ -91,6 +98,7 @@ export type DemoHub = {
   useCases: UseCases;
   roi: Roi;
   payoff: Payoff;
+  cta: Cta;
 };
 
 export function loadDemoHub(): DemoHub {

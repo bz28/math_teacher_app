@@ -2410,10 +2410,13 @@ h3 {
   padding: 36px 56px 0;
 }
 
-/* Entry button on the in-dashboard /demo hub. */
-.dh-present-launch {
+/* Top-right actions on the in-dashboard /demo hub. The buyer-facing "Book a
+   pilot" ask is the primary (sienna); Present is the muted internal launcher. */
+.dh-hub-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 8px;
 }
 .dh-present-btn {
@@ -2429,7 +2432,8 @@ h3 {
   background: var(--ink);
   border-radius: 999px;
   padding: 9px 20px;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease,
+    border-color 0.15s ease, transform 0.15s ease;
 }
 .dh-present-btn:hover {
   background: var(--accent);
@@ -2440,6 +2444,92 @@ h3 {
   font-size: 13px;
   line-height: 1;
   transform: translateY(0.5px);
+}
+/* Present demoted to a quiet, ghost secondary next to the pilot CTA. */
+.dh-present-btn-muted {
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  padding: 8px 18px;
+}
+.dh-present-btn-muted:hover {
+  color: var(--ink);
+  background: transparent;
+  border-color: var(--ink);
+}
+/* The always-visible pilot ask — burnt-sienna primary pill. */
+.dh-book-btn {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 9px 22px;
+  box-shadow: 0 1px 2px rgba(184, 67, 26, 0.25);
+  transition: background 0.15s ease, transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.dh-book-btn:hover {
+  color: var(--paper);
+  background: #a23a15;
+  text-decoration: none;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(184, 67, 26, 0.3);
+}
+
+/* The close-of-page ask, inside the full-bleed ink payoff band. */
+.dh-close-cta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 18px 28px;
+  margin-top: 44px;
+  padding-top: 40px;
+  border-top: 1px solid rgba(247, 245, 240, 0.18);
+}
+.dh-close-cta-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  flex-shrink: 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--paper);
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 15px 34px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  transition: background 0.15s ease, transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.dh-close-cta-btn:hover {
+  color: var(--paper);
+  background: #c9491d;
+  text-decoration: none;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.34);
+}
+.dh-close-cta-arrow {
+  font-size: 17px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.dh-close-cta-btn:hover .dh-close-cta-arrow {
+  transform: translateX(3px);
+}
+.dh-close-cta-note {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(247, 245, 240, 0.72);
+  max-width: 40ch;
 }
 
 @media (max-width: 860px) {
