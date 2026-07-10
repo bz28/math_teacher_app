@@ -10,8 +10,13 @@ import { averageScore } from "../utils/grades";
 import { scoreColor } from "../utils/scoreColor";
 import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
 
+interface Props {
+  /** Open the graded homework for a tapped grade row. */
+  onOpenGrade: (assignmentId: string) => void;
+}
+
 /** Every published grade across the student's enrolled courses, newest first. */
-export function GradesScreen() {
+export function GradesScreen({ onOpenGrade }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [grades, setGrades] = useState<SchoolGrade[]>([]);
@@ -89,7 +94,13 @@ export function GradesScreen() {
           }
         >
           {grades.map((g) => (
-            <View key={g.assignment_id} style={styles.row}>
+            <AnimatedPressable
+              key={g.assignment_id}
+              style={styles.row}
+              onPress={() => onOpenGrade(g.assignment_id)}
+              accessibilityRole="button"
+              accessibilityLabel={`${g.title}, ${Math.round(g.final_score)} percent. Open to review your graded work.`}
+            >
               <View style={styles.rowMain}>
                 <Text style={styles.rowTitle} numberOfLines={1}>{g.title}</Text>
                 <Text style={styles.rowMeta} numberOfLines={1}>
@@ -99,7 +110,8 @@ export function GradesScreen() {
               <Text style={[styles.score, { color: scoreColor(g.final_score, colors) }]}>
                 {Math.round(g.final_score)}%
               </Text>
-            </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            </AnimatedPressable>
           ))}
         </ScrollView>
       )}
