@@ -87,6 +87,18 @@ export function SubmissionPanel({
   const validCount = stagedFiles.filter((f) => !f.error && f.base64).length;
   const canSubmit = validCount > 0 && !submitting && !preparing;
 
+  // Why the submit CTA is disabled, in the student's words. Mirrors the
+  // `canSubmit` condition above so a student never stalls on a faded
+  // button with no explanation. `preparing`/`submitting` already have
+  // their own inline status, so we only speak to the "no readable file
+  // yet" cases here.
+  const submitHint =
+    canSubmit || submitting || preparing
+      ? null
+      : stagedFiles.length === 0
+        ? "Add at least one readable file to turn in."
+        : "None of these files can be turned in yet — fix or remove the ones flagged above, then add one that's ready.";
+
   const newRowId = () =>
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -307,12 +319,28 @@ export function SubmissionPanel({
 
         {stagedFiles.length > 0 && (
           <ul className="space-y-2" aria-label="Staged files">
-            {stagedFiles.map((f, i) => (
+            {stagedFiles.map((f, i) => {
+              // Page number reflects turn-in order among *valid* files, so
+              // an errored row in the middle doesn't leave a gap in the
+              // sequence the teacher actually receives.
+              const pageNumber = stagedFiles
+                .slice(0, i + 1)
+                .filter((s) => !s.error).length;
+              return (
               <li
                 key={f.id}
-                className="flex min-h-[44px] items-center gap-3 rounded-[--radius-md] border border-border bg-surface px-3 py-2"
+                className={cn(
+                  "flex min-h-[44px] items-center gap-3 rounded-[--radius-md] border px-3 py-2",
+                  f.error
+                    ? "border-error-border bg-error-light/50"
+                    : "border-border bg-surface",
+                )}
               >
-                {f.previewUrl ? (
+                {f.error ? (
+                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded bg-error/10 text-error">
+                    <AlertTriangleIcon className="h-5 w-5" strokeWidth={2} />
+                  </div>
+                ) : f.previewUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={f.previewUrl}
@@ -329,15 +357,24 @@ export function SubmissionPanel({
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-text-primary">
-                    Page {i + 1} · {f.filename}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-semibold text-text-primary">
+                      {f.error ? f.filename : `Page ${pageNumber} · ${f.filename}`}
+                    </p>
+                    {f.error && (
+                      <span className="inline-flex shrink-0 items-center rounded-full border border-error-border bg-error-light px-2 py-0.5 text-[0.625rem] font-bold uppercase tracking-wide text-error">
+                        Can&apos;t turn in
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-text-muted">
                     {formatFileSize(f.size)}
                     {f.mediaType === "application/pdf" ? " · PDF" : ""}
                   </p>
                   {f.error && (
-                    <p className="mt-0.5 text-xs text-error">{f.error}</p>
+                    <p className="mt-0.5 text-xs font-medium text-error">
+                      {f.error}
+                    </p>
                   )}
                 </div>
                 {/* Up / down reorder: page order matters because the
@@ -372,7 +409,8 @@ export function SubmissionPanel({
                   <XIcon className="h-4 w-4" />
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
         {stagedFiles.length > 0 && (
@@ -440,10 +478,24 @@ export function SubmissionPanel({
             </div>
           </motion.div>
         ) : (
-          <div key="cta" className="mt-6 flex justify-end">
+          <div
+            key="cta"
+            className="mt-6 flex flex-col-reverse items-end gap-2 sm:flex-row sm:items-center sm:justify-between"
+          >
+            {submitHint ? (
+              <p
+                id="submit-hint"
+                className="text-xs leading-relaxed text-text-muted"
+              >
+                {submitHint}
+              </p>
+            ) : (
+              <span aria-hidden className="hidden sm:block" />
+            )}
             <button
               onClick={() => setConfirming(true)}
               disabled={!canSubmit}
+              aria-describedby={submitHint ? "submit-hint" : undefined}
               className={cn(
                 "inline-flex min-h-[44px] items-center justify-center rounded-[--radius-sm] px-6 py-2 text-sm font-bold text-white shadow-sm transition-colors disabled:opacity-50",
                 isLate
