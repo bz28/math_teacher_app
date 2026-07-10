@@ -16,6 +16,7 @@ import { useSessionStore, type Subject } from "@/stores/learn";
 import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
 import { PageErrorState } from "@/components/ui";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
 import { SubmittedView } from "@/components/school/student/submitted-view";
 import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
@@ -179,7 +180,7 @@ export default function HomeworkPage() {
   }
 
   if (hw === null) {
-    return <div className="mx-auto max-w-2xl py-12 text-center text-text-muted">Loading…</div>;
+    return <HomeworkDetailSkeleton />;
   }
 
   if (mode.kind === "integrity_pending" && hw.submission_id && assignmentId) {
@@ -463,6 +464,55 @@ export default function HomeworkPage() {
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Loading placeholder that mirrors the homework-detail layout — back
+ * link, title + subtitle, timeline strip, a couple of problem cards, and
+ * the submission area — so the swap to real content lands in place
+ * instead of snapping from a bare "Loading…" line. Display-only; the
+ * page's routing (`hw === null`) decides when this shows.
+ */
+function HomeworkDetailSkeleton() {
+  return (
+    <div className="mx-auto max-w-3xl" role="status" aria-busy="true">
+      {/* Announce the load to assistive tech — matches the sr-only +
+          aria-busy pattern the teacher review/roster skeletons use so
+          screen-reader users still get a loading cue while the shimmer
+          shapes below are purely visual. */}
+      <span className="sr-only">Loading homework…</span>
+      {/* Back link */}
+      <Skeleton className="h-4 w-40" />
+      {/* Title + problem-count / due subtitle */}
+      <Skeleton className="mt-3 h-8 w-2/3" />
+      <Skeleton className="mt-1 h-4 w-2/5" />
+
+      {/* Timeline strip */}
+      <Skeleton className="mt-5 h-16 w-full rounded-[--radius-lg]" />
+
+      {/* Problem cards */}
+      <div className="mt-6 space-y-4">
+        {[0, 1].map((i) => (
+          <div
+            key={i}
+            className="rounded-[--radius-md] border border-border bg-surface p-6"
+          >
+            <div className="flex items-start gap-3">
+              <Skeleton className="mt-0.5 h-7 w-7 shrink-0 rounded-full" />
+              <div className="min-w-0 flex-1 space-y-3">
+                <Skeleton className="h-5 w-4/5" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/5" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Submission area */}
+      <Skeleton className="mt-6 h-40 w-full rounded-[--radius-lg]" />
     </div>
   );
 }
