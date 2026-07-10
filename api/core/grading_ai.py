@@ -210,6 +210,31 @@ def _format_final_answer(fa: dict[str, Any]) -> str:
     )
 
 
+def _bucket_steps_by_position(
+    steps: list[dict[str, Any]],
+    valid_positions: set[int],
+) -> tuple[dict[int, list[dict[str, Any]]], list[dict[str, Any]]]:
+    """Bucket extracted steps by `problem_position`, keeping only positions
+    that exist on this assignment; everything else (None, hallucinated
+    positions) lands in the trailing "unattributed" list.
+
+    This is the single definition of "which steps the grader saw for a given
+    problem". `_build_user_message` renders from it, and the step-count map
+    used to range-check each deduction's `step_ref` is derived from the same
+    buckets — so the count a `step_ref` is validated against always matches
+    the numbering the model saw. The two MUST NOT drift.
+    """
+    steps_by_pos: dict[int, list[dict[str, Any]]] = {}
+    unattributed: list[dict[str, Any]] = []
+    for s in steps:
+        pos = s.get("problem_position")
+        if isinstance(pos, int) and not isinstance(pos, bool) and pos in valid_positions:
+            steps_by_pos.setdefault(pos, []).append(s)
+        else:
+            unattributed.append(s)
+    return steps_by_pos, unattributed
+
+
 def _build_user_message(
     extraction: dict[str, Any],
     problems: list[dict[str, Any]],
@@ -240,14 +265,9 @@ def _build_user_message(
     # Bucket steps + final answers by problem_position. Integer keys
     # matching a problem on this assignment go per-problem; everything
     # else (None, hallucinated positions) falls into "Other work".
-    steps_by_pos: dict[int, list[dict[str, Any]]] = {}
-    unattributed_steps: list[dict[str, Any]] = []
-    for s in steps:
-        pos = s.get("problem_position")
-        if isinstance(pos, int) and not isinstance(pos, bool) and pos in valid_positions:
-            steps_by_pos.setdefault(pos, []).append(s)
-        else:
-            unattributed_steps.append(s)
+    steps_by_pos, unattributed_steps = _bucket_steps_by_position(
+        steps, valid_positions
+    )
 
     finals_by_pos: dict[int, list[dict[str, Any]]] = {}
     unattributed_finals: list[dict[str, Any]] = []
@@ -398,6 +418,7 @@ def _reconcile_deductions(
     fallback_reason: str | None,
     submission_id: str | None,
     problem_id: str,
+    step_count: int | None,
 ) -> list[dict[str, Any]]:
     """Sanitize the model's deduction ledger and make it reconcile to the
     authoritative `percent` — NEVER the other way around.
@@ -411,6 +432,16 @@ def _reconcile_deductions(
     and replace the ledger with a single catch-all entry that reconciles by
     construction (or `[]` for full credit). The persisted ledger therefore
     ALWAYS reconciles to the persisted percent.
+
+    `step_ref` is additionally range-checked: the model numbers it 1-based
+    against the student's written steps it saw for this problem, but it
+    sometimes numbers against finer logical units (e.g. the 4 entries of a
+    matrix on a 2-step problem → step_ref=4). A `step_ref` outside
+    `1..step_count` would anchor a review-UI highlight to a step that doesn't
+    exist, so we NULL it (never clamp-to-nearest — a wrong highlight is worse
+    than none). `points_off` and the score math are untouched. `step_count`
+    is None only when the caller can't supply the count (legacy/test path),
+    in which case the range check is skipped.
     """
     target = 100.0 - percent
     items: list[dict[str, Any]] = []
@@ -424,6 +455,16 @@ def _reconcile_deductions(
         po_int = max(0, int(round(po)))
         step_ref = d.get("step_ref")
         if not isinstance(step_ref, int) or isinstance(step_ref, bool):
+            step_ref = None
+        elif step_count is not None and not (1 <= step_ref <= step_count):
+            # Model numbered against something other than the written steps —
+            # drop the anchor so the review UI can't highlight a dead step.
+            logger.warning(
+                "deduction step_ref out of range (submission=%s problem=%s): "
+                "step_ref=%s, valid 1..%s — nulling anchor, points_off/score "
+                "unchanged",
+                submission_id, problem_id, step_ref, step_count,
+            )
             step_ref = None
         reason = d.get("reason")
         items.append({
@@ -458,6 +499,7 @@ def _build_breakdown(
     pos_to_bid: dict[Any, str],
     *,
     submission_id: str | None = None,
+    pos_to_step_count: dict[Any, int] | None = None,
 ) -> tuple[list[dict[str, Any]], float | None]:
     """Turn the model's raw per-problem grades into the actionable
     breakdown the teacher edits, plus the averaged `ai_score`.
@@ -477,8 +519,12 @@ def _build_breakdown(
     The per-problem `deductions` ledger is reconciled to the clamped
     `percent` via `_reconcile_deductions` so the persisted itemization is
     always a faithful receipt for the score; a ledger that doesn't add up
-    is replaced (the score, owned by `percent`, never moves). The raw model
-    ledger is preserved verbatim on `ai_breakdown` (the immutable snapshot).
+    is replaced (the score, owned by `percent`, never moves). Each
+    deduction's `step_ref` is range-checked against `pos_to_step_count`
+    (the count of student steps the grader saw for that problem) and nulled
+    when out of range, so a review-UI highlight can't anchor to a step that
+    doesn't exist. The raw model ledger is preserved verbatim on
+    `ai_breakdown` (the immutable snapshot).
     """
     for g in grades:
         raw_conf = g.get("confidence")
@@ -523,6 +569,11 @@ def _build_breakdown(
                 fallback_reason=g.get("reasoning"),
                 submission_id=submission_id,
                 problem_id=bid,
+                step_count=(
+                    pos_to_step_count.get(g.get("problem_position"))
+                    if pos_to_step_count is not None
+                    else None
+                ),
             ),
         })
         total_percent += percent
@@ -601,8 +652,21 @@ async def run_ai_grading_for_submission(
     # model's confidence (in place) and partial percents so a corrupt
     # value can't push ai_score outside [0, 100].
     pos_to_bid = {p["position"]: p["bank_item_id"] for p in problems}
+    # Per-problem count of the student steps the grader actually saw
+    # (same bucketing as the user message), so a deduction's `step_ref`
+    # can be range-checked against the real step count. Every problem gets
+    # an entry (0 for a problem with no attributed work) so a `step_ref`
+    # on a stepless problem is nulled, not skipped.
+    valid_positions = {p["position"] for p in problems}
+    steps_by_pos, _ = _bucket_steps_by_position(
+        extraction.get("steps", []) or [], valid_positions
+    )
+    pos_to_step_count = {
+        p["position"]: len(steps_by_pos.get(p["position"], [])) for p in problems
+    }
     breakdown, ai_score = _build_breakdown(
         grades, pos_to_bid, submission_id=str(submission_id),
+        pos_to_step_count=pos_to_step_count,
     )
 
     # Upsert the grade row (race-safe with teacher manual grading).

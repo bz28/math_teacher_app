@@ -3514,7 +3514,13 @@ function ProblemGradeRow({
   const anchorBaseId = `work-${problem.bank_item_id}`;
   const stepAnchors = new Map<number, StepAnchor>();
   (deductions ?? [])
-    .filter((d) => d.points_off > 0 && d.step_ref != null)
+    .filter(
+      (d) =>
+        d.points_off > 0 &&
+        d.step_ref != null &&
+        d.step_ref >= 1 &&
+        d.step_ref <= stepCount,
+    )
     .forEach((d, i) => {
       if (d.step_ref != null && !stepAnchors.has(d.step_ref)) {
         stepAnchors.set(d.step_ref, {
@@ -3819,6 +3825,7 @@ function ProblemGradeRow({
           status={current ?? "partial"}
           percent={entry?.percent ?? 0}
           aiConfidence={aiGrade?.confidence ?? null}
+          stepCount={stepCount}
           onAnchorClick={scrollToStep}
         />
       )}
@@ -3939,12 +3946,14 @@ function GradeReceipt({
   status,
   percent,
   aiConfidence,
+  stepCount,
   onAnchorClick,
 }: {
   deductions: GradeDeduction[];
   status: GradeStatus;
   percent: number;
   aiConfidence: number | null;
+  stepCount: number;
   onAnchorClick: (stepRef: number) => void;
 }) {
   const credits = deductions.filter((d) => d.points_off <= 0);
@@ -4049,7 +4058,12 @@ function GradeReceipt({
           </div>
         ))}
         {debits.map((d, i) => {
-          const anchored = d.step_ref != null;
+          // Belt-and-suspenders: the backend nulls out-of-range step_refs,
+          // but guard here too so a stale/dead anchor never renders a "↳ step
+          // N" link that scrolls to a step that doesn't exist. Source of
+          // truth is the backend clamp.
+          const anchored =
+            d.step_ref != null && d.step_ref >= 1 && d.step_ref <= stepCount;
           const tone = anchored ? ANCHOR_TONES[anchorN++ % ANCHOR_TONES.length] : null;
           const a = tone ? ANCHOR_STYLE[tone] : null;
           return (
