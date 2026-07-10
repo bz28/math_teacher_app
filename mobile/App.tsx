@@ -69,6 +69,9 @@ function AppRoot() {
   const [subject, setSubject] = useState("math");
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
   const [activeHomeworkId, setActiveHomeworkId] = useState<string | null>(null);
+  // Where the homework screen returns to on back — the tab the student opened
+  // it from (school-home for a pending assignment, grades for a graded one).
+  const [homeworkReturn, setHomeworkReturn] = useState<Screen>("school-home");
   const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null);
   const [activePracticeId, setActivePracticeId] = useState<string | null>(null);
   const [fromOnboarding, setFromOnboarding] = useState(false);
@@ -229,12 +232,21 @@ function AppRoot() {
           onJoinClass={() => setScreen("join-class")}
           onOpenAssignment={(id) => {
             setActiveHomeworkId(id);
+            setHomeworkReturn("school-home");
             setScreen("homework");
           }}
         />
       );
     } else if (screen === "grades") {
-      content = <GradesScreen />;
+      content = (
+        <GradesScreen
+          onOpenGrade={(id) => {
+            setActiveHomeworkId(id);
+            setHomeworkReturn("grades");
+            setScreen("homework");
+          }}
+        />
+      );
     } else if (screen === "practice") {
       content = (
         <PracticeListScreen
@@ -317,10 +329,10 @@ function AppRoot() {
   } else if (screen === "homework" && activeHomeworkId) {
     screenNode = (
       <SafeAreaProvider>
-        <ErrorBoundary onReset={() => setScreen("school-home")}>
+        <ErrorBoundary onReset={() => setScreen(homeworkReturn)}>
           <HomeworkScreen
             assignmentId={activeHomeworkId}
-            onBack={() => setScreen("school-home")}
+            onBack={() => setScreen(homeworkReturn)}
             onSubmitted={() => setScreen("extraction-confirm")}
           />
         </ErrorBoundary>
