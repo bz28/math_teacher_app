@@ -477,12 +477,17 @@ export default function HomeworkPage() {
  */
 function HomeworkDetailSkeleton() {
   return (
-    <div className="mx-auto max-w-3xl" aria-hidden>
+    <div className="mx-auto max-w-3xl" role="status" aria-busy="true">
+      {/* Announce the load to assistive tech — matches the sr-only +
+          aria-busy pattern the teacher review/roster skeletons use so
+          screen-reader users still get a loading cue while the shimmer
+          shapes below are purely visual. */}
+      <span className="sr-only">Loading homework…</span>
       {/* Back link */}
       <Skeleton className="h-4 w-40" />
       {/* Title + problem-count / due subtitle */}
       <Skeleton className="mt-3 h-8 w-2/3" />
-      <Skeleton className="mt-2 h-4 w-2/5" />
+      <Skeleton className="mt-1 h-4 w-2/5" />
 
       {/* Timeline strip */}
       <Skeleton className="mt-5 h-16 w-full rounded-[--radius-lg]" />
