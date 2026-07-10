@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { PRESENT_HOME, PRESENT_STORIES } from "../lib/present-stories";
 
@@ -136,7 +136,17 @@ export default function PresentLayout() {
       </header>
 
       <main className="present-content">
-        <Outlet />
+        {/* Each story page is a lazy chunk; keep the bar mounted and swap only
+            the content area while the next story streams in. */}
+        <Suspense
+          fallback={
+            <div className="present-fallback" role="status" aria-live="polite">
+              Loading…
+            </div>
+          }
+        >
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   );

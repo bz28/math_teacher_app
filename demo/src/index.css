@@ -2410,6 +2410,19 @@ h3 {
   padding: 36px 56px 0;
 }
 
+/* Quiet placeholder shown while a lazy present-mode chunk streams in. */
+.present-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40vh;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 /* Entry button on the in-dashboard /demo hub. */
 .dh-present-launch {
   display: flex;
