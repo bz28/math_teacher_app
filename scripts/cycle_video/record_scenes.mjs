@@ -492,26 +492,26 @@ const CLIPS = {
   //     type a focus, and point it at the worksheet. Then veil-cut to the
   //     three problems the focus pulled — and land the focus-control beat.
   async '3-generate'(page) {
-    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=homework`, { zoom: 1.13, waitMs: 900 });
+    await gotoClean(page, `/school/teacher/courses/${ID.ALG}?tab=homework`, { zoom: 1.13, waitMs: 700 });
     await cap(page, 'Now build the homework — from that same sheet.');
-    await sleep(page, 500);
+    await sleep(page, 200);
     await go(page, page.getByRole('button', { name: /new homework/i }).first());
     const dialog = page.getByRole('dialog', { name: /new homework/i });
     await dialog.waitFor({ state: 'visible', timeout: 9000 }).catch(() => {});
-    await sleep(page, 450);
+    await sleep(page, 250);
 
-    // Step 1 · Details.
+    // Step 1 · Details — BOILERPLATE: click through briskly, no lingering.
     await cap(page, 'Name it. Pick the unit.');
     const title = dialog.locator('input[placeholder*="Quadratics"], input[type="text"]').first();
     if (await title.count()) {
-      await go(page, title, { click: true });
-      await title.pressSequentially('Unit 5 Review', { delay: 20 }).catch(() => {});
+      await go(page, title, { click: true, settle: 180 });
+      await title.pressSequentially('Unit 5 Review', { delay: 8 }).catch(() => {});
     }
-    await sleep(page, 250);
-    await go(page, dialog.getByRole('button', { name: /^✓?\s*Unit 5$/ }).first(), { click: true }).catch(() => {});
-    await sleep(page, 350);
-    await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});
-    await sleep(page, 350);
+    await sleep(page, 90);
+    await go(page, dialog.getByRole('button', { name: /^✓?\s*Unit 5$/ }).first(), { click: true, settle: 130 }).catch(() => {});
+    await sleep(page, 100);
+    await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true, settle: 130 }).catch(() => {});
+    await sleep(page, 120);
 
     // Step 2 · Problems — count 3, TYPE the focus, pick the worksheet source.
     // Set the count to 3 FIRST (deselects the default "10" chip, custom reads
@@ -522,43 +522,44 @@ const CLIPS = {
       await go(page, countInput, { click: true });
       await countInput.fill('3').catch(() => {});
       await countInput.blur().catch(() => {});
-      await sleep(page, 400);
+      await sleep(page, 220);
     }
     await cap(page, 'How many? Just three today.');
-    await sleep(page, 1400);
+    await sleep(page, 320);
     await cap(page, 'Then aim it — matrices, trig, multi-step.');
     const focus = dialog.locator('input[placeholder*="word problems"], textarea[placeholder*="word problems"]').first();
     if (await focus.count()) {
       await go(page, focus, { click: true });
-      await focus.pressSequentially('matrix multiplication, right-triangle trig, multi-step equations', { delay: 16 }).catch(() => {});
-      await sleep(page, 500);
-    } else { await sleep(page, 500); }
+      await focus.pressSequentially('matrix multiplication, right-triangle trig, multi-step equations', { delay: 14 }).catch(() => {});
+      await sleep(page, 450);
+    } else { await sleep(page, 450); }
     await cap(page, 'And build from your own worksheet — one click.');
     const srcRow = dialog.getByText(REVIEW_SHEET, { exact: true }).first();
     await go(page, srcRow, { click: true }).catch(() => {});
-    await sleep(page, 850);
+    await sleep(page, 650);
     await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});
     await sleep(page, 350);
 
     // Step 3 · Grading (sensible defaults) → Step 4 · Review → create.
+    // BOILERPLATE: a quick glance, then straight through — no dwell.
     await cap(page, 'Grading rubric — sensible defaults, already in.');
-    await sleep(page, 850);
-    await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true }).catch(() => {});
-    await sleep(page, 350);
+    await sleep(page, 180);
+    await go(page, dialog.getByRole('button', { name: /Continue/i }).first(), { click: true, settle: 130 }).catch(() => {});
+    await sleep(page, 120);
     await cap(page, 'One last look, then build.');
-    await sleep(page, 950);
-    await go(page, dialog.getByRole('button', { name: /Create & generate/i }).first(), { click: false }).catch(() => {});
-    await sleep(page, 450);
-    await capClear(page); await sleep(page, 250);
+    await sleep(page, 220);
+    await go(page, dialog.getByRole('button', { name: /Create & generate/i }).first(), { click: false, settle: 180 }).catch(() => {});
+    await sleep(page, 250);
+    await capClear(page); await sleep(page, 150);
 
     // Reveal the three problems the focus pulled (land on a real line).
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}`,
-      { zoom: 1.15, waitMs: 1500, anchor: 'text=/matrix product|Matrix multiplication/i' });
-    await page.mouse.wheel(0, 260); await sleep(page, 500);
+      { zoom: 1.15, waitMs: 1200, anchor: 'text=/matrix product|Matrix multiplication/i' });
+    await page.mouse.wheel(0, 260); await sleep(page, 450);
     await cap(page, 'Three problems — exactly the topics you named.');
-    await sleep(page, 1900);
+    await sleep(page, 1650);
     await cap(page, 'The whole unit’s on the sheet — the focus pulled just these. No quadratics, no stats.');
-    await sleep(page, 3000);
+    await sleep(page, 2200);
     await capClear(page); await sleep(page, 300);
   },
 
