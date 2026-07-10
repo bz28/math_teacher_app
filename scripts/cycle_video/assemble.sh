@@ -153,8 +153,8 @@ pk 4-submit    0.70 photo
 pk 4-verdict   0.28 integrity-flag
 pk 4-verdict   0.50 activity-digest
 pk 4-verdict   0.90 maya-exoneration
-pk 5-grade     0.55 receipt
-pk 5-grade     0.90 integrity-verdict
+pk 5-grade     0.40 matrix-receipt
+pk 5-grade     0.90 linear-fullmarks
 pk 5-insights  0.45 struggle-list
 pk 5-insights  0.85 student-roster
 pk 6-reteach   0.80 reteach

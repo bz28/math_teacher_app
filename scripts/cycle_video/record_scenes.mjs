@@ -688,7 +688,8 @@ const CLIPS = {
   // 5 · TEACHER — ONE smooth, continuous scroll down Maya's grading. Problem
   //     by problem on a single page: the matrix set-up perfect but one honest
   //     slip (3×2 = 6, not 5) → itemized Partial 95%; the trig + the equation
-  //     full marks; her understanding check cleared. No cutting between pages.
+  //     full marks. Opens BELOW the integrity banner (her exoneration is the
+  //     integrity beat's payoff — never re-shown here). No cutting between pages.
   async '5-grade'(page) {
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}/sections/${ID.SEC}/review?student=${ID.MAYA}`,
       { zoom: 1.06, waitMs: 1800, anchor: 'text=/Maya/i' });
@@ -700,13 +701,20 @@ const CLIPS = {
       try { await b.click({ timeout: 2500 }); } catch {}
       await sleep(page, 450);
     }
-    await page.evaluate(() => { const se = document.scrollingElement || document.documentElement; se.scrollTop = 0; });
+    // Open on the GRADING, not Maya's integrity banner. Her exoneration is
+    // the integrity beat's payoff (4-verdict); re-showing it at the top here
+    // would repeat that screen. Jump just below the banner to the first
+    // problem so the scroll is purely the grading document.
+    await page.evaluate(() => {
+      const se = document.scrollingElement || document.documentElement;
+      const el = [...document.querySelectorAll('*')].find((n) => /Compute the matrix product/i.test(n.textContent || '') && n.children.length < 6);
+      if (el) { const r = el.getBoundingClientRect(); se.scrollTop = Math.max(0, se.scrollTop + r.top - 56); }
+      else { se.scrollTop = Math.min(se.scrollHeight, 320); }
+    });
     await sleep(page, 400);
     await cap(page, 'Grade the class — one page, one clear receipt.');
     await sleep(page, 1500);
-    // A single, eased, top-to-bottom scroll — obviously one page moving.
-    // (Maya's understanding-check exoneration is the integrity beat's payoff
-    //  now — here we go straight to the grade so no screen repeats.)
+    // A single, eased, top-to-bottom scroll of the grading — one page moving.
     await smoothScrollToFrac(page, 0.24, 2300); await sleep(page, 500);
     await cap(page, 'Matrix multiply — the set-up is perfect.');
     await smoothScrollToFrac(page, 0.44, 2300); await sleep(page, 600);
