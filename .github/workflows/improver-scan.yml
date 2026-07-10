@@ -200,8 +200,8 @@ jobs:
       # Publish the current run's surface screenshots so the issue can embed them.
       # A dedicated orphan branch (single force-pushed commit of only the current
       # PNGs, named <proposal_id>.png) that GitHub serves as raw images — it never
-      # grows unbounded, and demo/vercel.json's "improver/*": false keeps Vercel
-      # from trying to build it. Best-effort: an image-publish hiccup must not
+      # grows unbounded, and a demo/vercel.json written into the branch (below)
+      # opts it out of Vercel. Best-effort: an image-publish hiccup must not
       # sink the digest (the digest just omits missing images).
       - name: Stage + publish proposal screenshots
         if: success()
@@ -218,6 +218,11 @@ jobs:
             git -C "$TMP" config user.name "improver-bot"
             git -C "$TMP" config user.email "improver@users.noreply.github.com"
             git -C "$TMP" checkout -q -b improver-screenshots-tmp
+            # Vercel reads deploymentEnabled from the pushed branch's
+            # demo/vercel.json, so ship the opt-out here or Vercel errors on
+            # this demo-less branch and emails a failed deploy every push.
+            mkdir -p "$TMP/demo"
+            printf '%s\n' '{"$schema":"https://openapi.vercel.sh/vercel.json","git":{"deploymentEnabled":{"improver/*":false}}}' > "$TMP/demo/vercel.json"
             git -C "$TMP" add -A
             git -C "$TMP" commit -q -m "improver screenshots $(date -u +%FT%TZ)" || exit 0
             git -C "$TMP" push -f \
@@ -263,6 +268,10 @@ jobs:
           git rm -rf --cached . >/dev/null 2>&1 || true
           find . -maxdepth 1 -not -name '.git' -not -name '.' -exec rm -rf {} + 2>/dev/null || true
           cp -f "$TMP"/*.json . 2>/dev/null || true
+          # Opt this demo-less orphan branch out of Vercel (read from the pushed
+          # branch's demo/vercel.json) so it doesn't error + email every push.
+          mkdir -p demo
+          printf '%s\n' '{"$schema":"https://openapi.vercel.sh/vercel.json","git":{"deploymentEnabled":{"improver/*":false}}}' > demo/vercel.json
           git add -A
           git commit -m "improver state $(date -u +%FT%TZ)" >/dev/null 2>&1 || { echo "nothing to persist"; exit 0; }
           git push -f origin improver-state-tmp:improver/state

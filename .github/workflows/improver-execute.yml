@@ -135,5 +135,12 @@ jobs:
           git rm -rf --cached . >/dev/null 2>&1 || true
           find . -maxdepth 1 -not -name '.git' -not -name '.' -exec rm -rf {} + 2>/dev/null || true
           cp -f "$TMP"/*.json . 2>/dev/null || true
+          # Vercel deploys every pushed branch and the veradic-demo project
+          # builds from demo/. This orphan branch has no demo/, so Vercel errors
+          # ("Root Directory does not exist") and emails a failed deploy on every
+          # push. Vercel reads deploymentEnabled from the *pushed* branch's
+          # demo/vercel.json (not main's), so ship the opt-out on the branch.
+          mkdir -p demo
+          printf '%s\n' '{"$schema":"https://openapi.vercel.sh/vercel.json","git":{"deploymentEnabled":{"improver/*":false}}}' > demo/vercel.json
           git add -A && git commit -m "improver state $(date -u +%FT%TZ)" >/dev/null 2>&1 || exit 0
           git push -f origin improver-state-tmp:improver/state
