@@ -8,9 +8,12 @@ import { useRef, useState } from "react";
 // Editorial + premium to match the brand: sienna eyebrow, big serif headline,
 // and the film framed as a floating window (rounded corners, soft shadow) that
 // echoes the video's own aesthetic. Click-to-play with the poster (not
-// muted-autoplay) — this is a 4-minute narrative film with sound, not wallpaper.
-// A custom play affordance covers only the pristine poster state; once the film
-// has started, native controls take over fully.
+// muted-autoplay) — this is a deliberate ~4-minute film you sit and watch, not
+// wallpaper. It's silent by design: there's no narration or score — burned-in
+// captions carry the story, so it reads with the sound off (audio still routes
+// through the native controls if a future cut adds any). A custom play
+// affordance covers only the pristine poster state; once the film has started,
+// native controls take over fully.
 
 export default function VideoHero() {
   const videoRef = useRef<HTMLVideoElement>(null);
