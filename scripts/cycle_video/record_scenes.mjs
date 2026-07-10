@@ -691,8 +691,22 @@ const CLIPS = {
   //     full marks. Opens BELOW the integrity banner (her exoneration is the
   //     integrity beat's payoff — never re-shown here). No cutting between pages.
   async '5-grade'(page) {
+    // Hide Maya's integrity banner (her exoneration) WHILE veiled — it's the
+    // integrity beat's payoff (4-verdict); this scene is purely the grade, so
+    // the banner never repeats here. gotoClean reveals promptly onto the
+    // grading (no cream gap, banner already gone).
     await gotoClean(page, `/school/teacher/courses/${ID.ALG}/homework/${ID.UNIT5}/sections/${ID.SEC}/review?student=${ID.MAYA}`,
-      { zoom: 1.06, waitMs: 1800, anchor: 'text=/Maya/i' });
+      { zoom: 1.06, waitMs: 1800, anchor: 'text=/Maya/i',
+        beforeReveal: () => page.evaluate(() => {
+          const p = [...document.querySelectorAll('p')].find((n) => /understood their own work/i.test(n.textContent || ''));
+          if (!p) return;
+          let el = p;
+          for (let k = 0; k < 6 && el.parentElement; k++) { if (el.getAttribute && el.getAttribute('role') === 'status') break; el = el.parentElement; }
+          // el is the role=status banner; hide its outer wrapper (which also
+          // holds the ActivityDigest) so no empty gap is left behind.
+          const wrap = el.parentElement && /space-y/.test(el.parentElement.className || '') ? el.parentElement : el;
+          wrap.style.display = 'none';
+        }) });
     // Expand every AI-confident problem so each shows its steps + receipt,
     // making the page one tall, scrollable grading document.
     for (let k = 0; k < 3; k++) {
@@ -701,16 +715,7 @@ const CLIPS = {
       try { await b.click({ timeout: 2500 }); } catch {}
       await sleep(page, 450);
     }
-    // Open on the GRADING, not Maya's integrity banner. Her exoneration is
-    // the integrity beat's payoff (4-verdict); re-showing it at the top here
-    // would repeat that screen. Jump just below the banner to the first
-    // problem so the scroll is purely the grading document.
-    await page.evaluate(() => {
-      const se = document.scrollingElement || document.documentElement;
-      const el = [...document.querySelectorAll('*')].find((n) => /Compute the matrix product/i.test(n.textContent || '') && n.children.length < 6);
-      if (el) { const r = el.getBoundingClientRect(); se.scrollTop = Math.max(0, se.scrollTop + r.top - 56); }
-      else { se.scrollTop = Math.min(se.scrollHeight, 320); }
-    });
+    await page.evaluate(() => { const se = document.scrollingElement || document.documentElement; se.scrollTop = 0; });
     await sleep(page, 400);
     await cap(page, 'Grade the class — one page, one clear receipt.');
     await sleep(page, 1500);
