@@ -264,7 +264,10 @@ export function NewPracticeModal({
   const dismissible = !busy && !uploads.hasInflightUploads;
   // Suppress Escape-to-close while the upgrade prompt is stacked on top,
   // so Escape dismisses only the prompt — not the whole wizard.
-  const panelRef = useDialogDismiss({ onClose, dismissible: dismissible && !isUpgradeOpen });
+  const { panelRef, requestClose } = useDialogDismiss({
+    onClose,
+    dismissible: dismissible && !isUpgradeOpen,
+  });
 
   // Why the step-1 clone action is disabled, surfaced inline beside it.
   // Steps 2–3 validate on click (so their buttons aren't pre-disabled),
@@ -279,9 +282,9 @@ export function NewPracticeModal({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-[color:var(--color-overlay)] p-4 backdrop-blur-sm"
       onClick={() => {
-        // Same close-guard as the HW modal — block while an upload is
-        // in flight (failed rows are inert so they don't block).
-        if (dismissible) onClose();
+        // Same close-guard as the HW modal — `requestClose` no-ops while
+        // an upload is in flight (failed rows are inert so they don't block).
+        requestClose();
       }}
     >
       <div
@@ -308,7 +311,7 @@ export function NewPracticeModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={busy || uploads.hasInflightUploads}
             aria-label="Close"
             className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary disabled:opacity-50"

@@ -19,6 +19,7 @@ import { ImageResizeError, resizeImageForUpload } from "@/lib/image-resize";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useDocumentUploads } from "@/hooks/use-document-uploads";
 import { FileTextIcon, ImageIcon, UploadIcon, XIcon } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
 import {
   AssignmentDetailsStep,
   AssignmentProblemsStep,
@@ -128,6 +129,11 @@ export function NewHomeworkModal({
   const [step, setStep] = useState<Step>(1);
   const [mode, setMode] = useState<Mode>("generate");
 
+  // Whether the "discard unsaved work?" prompt is stacked over the wizard.
+  // While it's up the wizard itself is non-dismissible; the prompt owns
+  // its own Escape / backdrop handling.
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+
   // ── Step 1 — Details ──
   const [title, setTitle] = useState("");
   const [unitIds, setUnitIds] = useState<string[]>(defaultUnitIds);
@@ -206,6 +212,23 @@ export function NewHomeworkModal({
 
   const detailsValid = title.trim().length > 0 && unitIds.length > 0;
   const validStagedCount = stagedFiles.filter((f) => !f.error && f.base64).length;
+
+  // Has the teacher put real work into this wizard? Measured against the
+  // modal's *initial* state (units can arrive pre-selected via
+  // defaultUnitIds), so a pristine open is never "dirty" — we only prompt
+  // before discarding work the teacher would actually lose. `busy` is
+  // excluded: a mid-flight create routes away via onCreated, not a close.
+  const unitsChanged =
+    unitIds.length !== defaultUnitIds.length ||
+    unitIds.some((id) => !defaultUnitIds.includes(id));
+  const isDirty =
+    title.trim().length > 0 ||
+    unitsChanged ||
+    stagedFiles.length > 0 ||
+    selectedDocs.size > 0 ||
+    topicHint.trim().length > 0 ||
+    scopeHint.trim().length > 0 ||
+    Object.keys(normalizeRubric(rubric)).length > 0;
 
   // ── Rubric accumulation (mirrors the detail page, but buffered in
   //    memory until the draft exists rather than auto-saved). ──
@@ -463,10 +486,17 @@ export function NewHomeworkModal({
   // Backdrop / Escape are suppressed together while a create or upload is
   // mid-flight so a stray dismiss can't orphan an in-flight request.
   const dismissible = !busy && !uploads.hasInflightUploads;
-  // Suppress this wizard's Escape-to-close while the upgrade prompt is
-  // stacked on top, so Escape dismisses only the prompt — not the whole
-  // wizard (which would discard the teacher's entered title/units/files).
-  const panelRef = useDialogDismiss({ onClose, dismissible: dismissible && !isUpgradeOpen });
+  // Suppress this wizard's Escape-to-close while the upgrade prompt OR the
+  // discard-confirm is stacked on top, so a dismiss hits only the top
+  // layer — not the whole wizard (which would discard the teacher's work).
+  // When the form is dirty, a dismiss attempt raises the discard prompt
+  // instead of closing outright.
+  const { panelRef, requestClose } = useDialogDismiss({
+    onClose,
+    dismissible: dismissible && !isUpgradeOpen && !confirmingDiscard,
+    confirmClose: () => isDirty,
+    onConfirmClose: () => setConfirmingDiscard(true),
+  });
 
   // Why the forward / finish button is disabled, surfaced inline next to
   // it (the old modal left the dim button reasonless). Only the
@@ -488,8 +518,9 @@ export function NewHomeworkModal({
       <div
         className="fixed inset-0 z-50 flex items-center justify-center bg-[color:var(--color-overlay)] p-4 backdrop-blur-sm"
         onClick={() => {
-          // Block backdrop close while a create or upload is in flight.
-          if (dismissible) onClose();
+          // `requestClose` no-ops while a create/upload is in flight and
+          // raises the discard prompt when the form is dirty.
+          requestClose();
         }}
       >
         <div
@@ -512,7 +543,7 @@ export function NewHomeworkModal({
             </div>
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               disabled={busy || uploads.hasInflightUploads}
               aria-label="Close"
               className="rounded p-1 text-text-muted hover:bg-bg-subtle hover:text-text-primary disabled:opacity-50"
@@ -735,7 +766,104 @@ export function NewHomeworkModal({
         </div>
       </div>
       {UpgradeModal}
+      {confirmingDiscard && (
+        <DiscardConfirmDialog
+          onKeepEditing={() => setConfirmingDiscard(false)}
+          onDiscard={() => {
+            setConfirmingDiscard(false);
+            onClose();
+          }}
+        />
+      )}
     </>
+  );
+}
+
+// ── Discard-unsaved-work confirm ──
+//
+// A stacked alert that fronts a dismiss attempt on a dirty wizard, so a
+// stray Escape / backdrop click can't silently throw away a homework the
+// teacher spent minutes composing. Self-contained: it owns its own
+// Escape-to-cancel and a Tab focus-trap (capture phase so it beats the
+// wizard's document listener), and it never touches the wizard state
+// beyond the two callbacks. The wizard is held non-dismissible while this
+// is open, so the two dismiss layers never fight.
+function DiscardConfirmDialog({
+  onKeepEditing,
+  onDiscard,
+}: {
+  onKeepEditing: () => void;
+  onDiscard: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Move focus into the prompt on open, landing on the safe default
+  // ("Keep editing") so an accidental Enter can't discard the work.
+  useEffect(() => {
+    const first = ref.current?.querySelector<HTMLElement>("button");
+    first?.focus();
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onKeepEditing();
+        return;
+      }
+      if (e.key === "Tab" && ref.current) {
+        const focusable = ref.current.querySelectorAll<HTMLElement>("button");
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    // Capture phase: run before the wizard's bubble-phase keydown handler
+    // so our Escape/Tab wins while the prompt is up.
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [onKeepEditing]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-[color:var(--color-overlay)] p-4 backdrop-blur-sm"
+      onClick={onKeepEditing}
+    >
+      <div
+        ref={ref}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="hw-discard-title"
+        aria-describedby="hw-discard-body"
+        className="w-full max-w-sm rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          id="hw-discard-title"
+          className="font-serif text-lg leading-tight tracking-[-0.01em] text-text-primary"
+        >
+          Discard this homework?
+        </h2>
+        <p id="hw-discard-body" className="mt-2 text-sm text-text-secondary">
+          Your problems and settings will be lost.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={onKeepEditing}>
+            Keep editing
+          </Button>
+          <Button variant="danger" size="sm" onClick={onDiscard}>
+            Discard
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
