@@ -66,6 +66,14 @@
   --color-surface-alt: #F7F5F0;
   --color-surface-alt-2: #EFECE4;
 
+  /* Semantic app fills. --bg-subtle / --bg-base are a quiet paper tone a
+     step deeper than --color-bg, for inset panels and empty-state fills;
+     --surface-hover is the hover tint on interactive surfaces (rows,
+     list items, buttons). Sit between --color-bg and --surface-alt-2. */
+  --color-bg-subtle: #F2EFE8;
+  --color-bg-base: #F2EFE8;
+  --color-surface-hover: #EDEAE2;
+
   /* Invert (dark sections in marketing). Warm ink, not blue-black. */
   --color-invert: #1A1813;
   --color-invert-alt: #24221C;
@@ -150,6 +158,11 @@
 
   --color-surface-alt: #1A1813;
   --color-surface-alt-2: #24221C;
+
+  --color-bg-subtle: #1C1A15;
+  --color-bg-base: #1C1A15;
+  --color-surface-hover: #26241E;
+
   --color-invert: #050402;
   --color-invert-alt: #0E0D09;
   --color-invert-text: #F1EFE9;
@@ -239,6 +252,11 @@
   --color-surface: var(--color-surface);
   --color-surface-alt: var(--color-surface-alt);
   --color-surface-alt-2: var(--color-surface-alt-2);
+  --color-bg-subtle: var(--color-bg-subtle);
+  --color-bg-base: var(--color-bg-base);
+  --color-surface-hover: var(--color-surface-hover);
+  --color-surface-raised: var(--color-card);
+  --color-background: var(--color-bg);
   --color-invert: var(--color-invert);
   --color-invert-alt: var(--color-invert-alt);
   --color-invert-text: var(--color-invert-text);
