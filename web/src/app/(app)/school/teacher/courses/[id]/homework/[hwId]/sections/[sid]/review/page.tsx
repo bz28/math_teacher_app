@@ -2916,7 +2916,11 @@ function SubmissionDetailPanel({
               to Publish, so we surface an affirmative publish CTA in the same
               slot (reuses the header's publish gate: straight-through when
               everything's approved + unflagged, else opens the confirm).
-              When nothing's left to release, a quiet "all caught up" state. */}
+              When nothing's left to release, a quiet "all caught up" state —
+              but only claim that when THIS submission is itself released; if
+              it's the last one and still unpublished-because-ungraded (e.g. a
+              skipped-unreadable that needs hand-grading), a neutral terminal
+              label avoids contradicting the "grade this by hand" callout. */}
           {nextStudent ? (
             <button
               type="button"
@@ -2936,13 +2940,22 @@ function SubmissionDetailPanel({
               Last one — publish {toReleaseTotal}{" "}
               {toReleaseTotal === 1 ? "grade" : "grades"} →
             </button>
-          ) : (
+          ) : published ? (
             <span
+              role="status"
               className="inline-flex items-center gap-1.5 rounded-[--radius-md] border border-[color:var(--color-success)]/30 bg-[color:var(--color-success)]/10 px-3.5 py-1.5 text-xs font-bold text-[color:var(--color-success)]"
               title="Every submission reviewed and published"
             >
               <span aria-hidden>✓</span>
               All caught up
+            </span>
+          ) : (
+            <span
+              role="status"
+              className="inline-flex items-center gap-1.5 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)] px-3.5 py-1.5 text-xs font-bold text-text-muted"
+              title="No other students to review — grade this one to finish"
+            >
+              No more students
             </span>
           )}
         </div>
