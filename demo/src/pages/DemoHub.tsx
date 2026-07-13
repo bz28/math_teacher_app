@@ -11,8 +11,8 @@ const h = loadDemoHub();
 
 // The single source of truth for where every "Book a pilot" button points.
 // Swap this one constant to change the destination everywhere (header + close).
-// TODO(founder): wire real destination — mailto vs Calendly vs form.
-const PILOT_CTA_HREF = "mailto:hello@veradicai.com?subject=Veradic pilot";
+// TODO(founder): replace with the real Calendly booking URL before this goes live
+const PILOT_CTA_HREF = "https://calendly.com/veradicai/pilot";
 
 // The demo front door. A founder walks a head of education through it: the
 // overarching promise (hero), the end-to-end flow spine that shows the whole
@@ -33,8 +33,13 @@ export default function DemoHub() {
           Present
           <span className="dh-present-btn-arrow" aria-hidden="true">▸</span>
         </Link>
-        {/* TODO(founder): wire real destination — mailto vs Calendly vs form. */}
-        <a className="dh-book-btn" href={PILOT_CTA_HREF}>
+        {/* TODO(founder): replace with the real Calendly booking URL before this goes live */}
+        <a
+          className="dh-book-btn"
+          href={PILOT_CTA_HREF}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           {h.cta.header}
         </a>
       </div>
@@ -116,8 +121,13 @@ export default function DemoHub() {
 
           {/* ── THE ASK — the buyer-facing pilot CTA that closes the page ─ */}
           <div className="dh-close-cta">
-            {/* TODO(founder): wire real destination — mailto vs Calendly vs form. */}
-            <a className="dh-close-cta-btn" href={PILOT_CTA_HREF}>
+            {/* TODO(founder): replace with the real Calendly booking URL before this goes live */}
+            <a
+              className="dh-close-cta-btn"
+              href={PILOT_CTA_HREF}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               {h.cta.close}
               <span className="dh-close-cta-arrow" aria-hidden="true">→</span>
             </a>
