@@ -215,6 +215,18 @@ def _flagged_case() -> Any:
             ),
             1,
         ),
+        # AI grading was on but the photo was unreadable: a grade row exists
+        # with ai_grading_status='skipped_unreadable' and no final_score, and
+        # (integrity off ⇒) no integrity row to catch it above. Without this
+        # branch it sits ungraded indefinitely, invisible to the needs-
+        # attention count. The LEFT JOIN on SubmissionGrade already exists.
+        (
+            and_(
+                SubmissionGrade.ai_grading_status == "skipped_unreadable",
+                SubmissionGrade.final_score.is_(None),
+            ),
+            1,
+        ),
         (Submission.extraction_flagged_at.is_not(None), 1),
         else_=0,
     )

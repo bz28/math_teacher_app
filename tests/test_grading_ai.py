@@ -116,10 +116,104 @@ class TestBuildBreakdownPercentClamp:
         assert len(breakdown) == 1
         assert ai_score == 100.0
 
-    def test_empty_breakdown_yields_none_ai_score(self) -> None:
-        breakdown, ai_score = _build_breakdown([], _pos_to_bid(1))
+    def test_no_grades_and_no_problems_yields_none_ai_score(self) -> None:
+        # Truly nothing to grade (no problems in the set) → empty breakdown,
+        # None score. With problems present but ungraded, reconciliation adds
+        # zero rows instead — see TestBuildBreakdownDenominatorReconciliation.
+        breakdown, ai_score = _build_breakdown([], {})
         assert breakdown == []
         assert ai_score is None
+
+
+class TestBuildBreakdownDenominatorReconciliation:
+    """A problem the model returned no grade for (common for blanks) must not
+    drop out of the denominator — it's reconciled to an explicit zero-credit
+    row so the average divides by the real problem count AND the teacher sees
+    every problem on review."""
+
+    def test_omitted_problem_lowers_score_and_adds_visible_zero(self) -> None:
+        # Model graded 3 of 5 problems full; 2 were omitted entirely.
+        # Unweighted mean must be 60% (3 fulls over 5 problems), not 100%.
+        grades: list[dict[str, Any]] = [
+            {"problem_position": 1, "score_status": "full", "percent": 100},
+            {"problem_position": 2, "score_status": "full", "percent": 100},
+            {"problem_position": 3, "score_status": "full", "percent": 100},
+        ]
+        breakdown, ai_score = _build_breakdown(grades, _pos_to_bid(1, 2, 3, 4, 5))
+        assert ai_score == 60.0
+        assert len(breakdown) == 5
+        # The two omitted problems each appear as a visible zero row.
+        zeros = [e for e in breakdown if e["score_status"] == "zero"]
+        assert {e["problem_id"] for e in zeros} == {"bank-4", "bank-5"}
+        for e in zeros:
+            assert e["percent"] == 0.0
+            assert e["feedback"] == "No gradeable work found."
+            assert e["confidence"] is None
+            assert e["student_answer"] is None
+            # Deduction ledger reconciles to the zero (sums to 100).
+            assert sum(d["points_off"] for d in e["deductions"]) == 100
+
+    def test_reconciled_zeros_ordered_by_position(self) -> None:
+        grades: list[dict[str, Any]] = [
+            {"problem_position": 2, "score_status": "full", "percent": 100},
+        ]
+        breakdown, _ = _build_breakdown(grades, _pos_to_bid(1, 2, 3))
+        # Position 2 graded first (model order), then omitted 1 and 3 appended
+        # in ascending position order.
+        assert [e["problem_id"] for e in breakdown] == [
+            "bank-2", "bank-1", "bank-3",
+        ]
+
+    def test_all_problems_graded_appends_nothing(self) -> None:
+        grades: list[dict[str, Any]] = [
+            {"problem_position": 1, "score_status": "full", "percent": 100},
+            {"problem_position": 2, "score_status": "partial", "percent": 50},
+        ]
+        breakdown, ai_score = _build_breakdown(grades, _pos_to_bid(1, 2))
+        assert len(breakdown) == 2
+        assert ai_score == 75.0
+
+
+class TestBuildBreakdownStudentFeedback:
+    """Student-facing `feedback` never falls back to `reasoning` (teacher-voice,
+    names rubric criteria) — a neutral status-appropriate default is used when
+    the model omits `student_feedback`."""
+
+    def test_student_feedback_used_when_present(self) -> None:
+        grades: list[dict[str, Any]] = [
+            {
+                "problem_position": 1,
+                "score_status": "full",
+                "percent": 100,
+                "student_feedback": "Nice — you set the product up correctly.",
+                "reasoning": "Meets the Full credit criterion.",
+            },
+        ]
+        breakdown, _ = _build_breakdown(grades, _pos_to_bid(1))
+        assert breakdown[0]["feedback"] == "Nice — you set the product up correctly."
+
+    def test_missing_student_feedback_uses_neutral_default_not_reasoning(self) -> None:
+        grades: list[dict[str, Any]] = [
+            {
+                "problem_position": 1,
+                "score_status": "partial",
+                "percent": 60,
+                "reasoning": "Fails the Full credit criterion; sign flip.",
+            },
+        ]
+        breakdown, _ = _build_breakdown(grades, _pos_to_bid(1))
+        # Must NOT leak the teacher-voice reasoning to the student.
+        assert breakdown[0]["feedback"] != "Fails the Full credit criterion; sign flip."
+        assert breakdown[0]["feedback"] == "Partial credit — review the flagged step."
+
+    def test_neutral_default_matches_status(self) -> None:
+        grades: list[dict[str, Any]] = [
+            {"problem_position": 1, "score_status": "full", "percent": 100},
+            {"problem_position": 2, "score_status": "zero", "percent": 0},
+        ]
+        breakdown, _ = _build_breakdown(grades, _pos_to_bid(1, 2))
+        assert breakdown[0]["feedback"] == "Correct — nice work."
+        assert breakdown[1]["feedback"] == "This one needs another look."
 
 
 class TestBuildBreakdownStepRefClamp:

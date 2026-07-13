@@ -411,6 +411,20 @@ async def grade_submission_with_ai(
 _LEDGER_TOLERANCE = 1.0
 
 
+# Neutral, status-appropriate student-facing feedback, used ONLY when the
+# model omits `student_feedback` (schema-required, so rare). We deliberately
+# do NOT fall back to `reasoning`: that field is teacher-voice — it references
+# rubric criteria by name (see the "Rubric application" prompt block) — and
+# surfacing it to the student would leak grading jargon the student-voice rules
+# forbid. A neutral default keeps the published note student-safe; the teacher
+# edits it before publishing regardless.
+_DEFAULT_STUDENT_FEEDBACK = {
+    "full": "Correct — nice work.",
+    "partial": "Partial credit — review the flagged step.",
+    "zero": "This one needs another look.",
+}
+
+
 def _reconcile_deductions(
     raw_deductions: Any,
     percent: float,
@@ -548,18 +562,23 @@ def _build_breakdown(
         # `feedback` lands directly in the textarea the teacher edits
         # before publishing — it must be student-voice prose, not the
         # internal-grading explanation. We pull from `student_feedback`
-        # (second-person, constructive) and fall back to `reasoning`
-        # only if the model omitted it (defensive — the schema marks
-        # student_feedback required, so this should be rare).
-        # `reasoning` is still kept on `ai_breakdown` (the immutable
-        # AI snapshot) and powers the AI verdict card on the review
-        # page.
+        # (second-person, constructive). If the model omitted it
+        # (defensive — the schema marks student_feedback required, so
+        # this should be rare) we use a neutral, status-appropriate
+        # default rather than `reasoning`: `reasoning` is teacher-voice
+        # and names rubric criteria, which the student-voice rules
+        # forbid surfacing. `reasoning` is still kept on `ai_breakdown`
+        # (the immutable AI snapshot) and powers the AI verdict card on
+        # the review page.
         breakdown.append({
             "problem_id": bid,
             "score_status": status,
             "percent": percent,
             "confidence": g.get("confidence"),
-            "feedback": g.get("student_feedback") or g.get("reasoning"),
+            "feedback": (
+                g.get("student_feedback")
+                or _DEFAULT_STUDENT_FEEDBACK.get(status)
+            ),
             "student_answer": g.get("student_answer"),
             # Itemized partial-credit receipt, reconciled to `percent` (the
             # source of truth for the score) — see _reconcile_deductions.
@@ -577,6 +596,42 @@ def _build_breakdown(
             ),
         })
         total_percent += percent
+
+    # Reconcile the denominator against the REAL problem set. The model
+    # sometimes returns no grade for a problem (common for blanks) — without
+    # this it drops out of the average entirely, so a student who did 3 of 5
+    # problems could score 100% instead of 60%, and the teacher never sees the
+    # ungraded problem on review. For every HW problem with no returned grade,
+    # append an explicit zero-credit row (the prompt's "skipped = zero"
+    # intent): the average then divides by the true problem count AND every
+    # problem is visible on the review page. Ordered by position so the
+    # appended rows read in problem order.
+    graded_bids = {entry["problem_id"] for entry in breakdown}
+    for position, bid in sorted(pos_to_bid.items(), key=lambda kv: kv[0]):
+        if not bid or bid in graded_bids:
+            continue
+        breakdown.append({
+            "problem_id": bid,
+            "score_status": "zero",
+            "percent": 0.0,
+            "confidence": None,
+            "feedback": "No gradeable work found.",
+            "student_answer": None,
+            "deductions": _reconcile_deductions(
+                None,
+                0.0,
+                fallback_reason="No gradeable work found",
+                submission_id=submission_id,
+                problem_id=bid,
+                step_count=(
+                    pos_to_step_count.get(position)
+                    if pos_to_step_count is not None
+                    else None
+                ),
+            ),
+        })
+        # total_percent unchanged: the appended zeros add 0 to the numerator
+        # but raise len(breakdown), lowering the average correctly.
 
     ai_score = total_percent / len(breakdown) if breakdown else None
     return breakdown, ai_score
