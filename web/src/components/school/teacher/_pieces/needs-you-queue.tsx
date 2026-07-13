@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { teacher, type NeedsAttentionItem, type NeedsAttentionReason } from "@/lib/api";
@@ -76,25 +76,38 @@ export function NeedsYouQueue() {
   const [expanded, setExpanded] = useState(false);
   const reduceMotion = useReducedMotion();
 
-  useEffect(() => {
+  // Load (and reload on Retry) the triage queue. Resets to the skeleton
+  // state on each attempt so a retry reads as "trying again", not a
+  // frozen error. The resets live inside the nested async fn (not the
+  // effect/callback body) so the initial clear isn't a
+  // synchronous-setState-in-effect; the cancelled flag guards a late
+  // resolve after unmount.
+  const load = useCallback(() => {
     let cancelled = false;
-    teacher
-      .needsAttention()
-      .then((res) => {
+    const run = async () => {
+      setError(null);
+      setItems(null);
+      try {
+        const res = await teacher.needsAttention();
         if (!cancelled) setItems(res.items);
-      })
-      .catch((e) => {
+      } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
-      });
+      }
+    };
+    run();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // A failed fetch stays silent — the courses list below is the durable
-  // fallback, and a red error block above the page would be louder than
-  // the problem warrants for a supplementary surface.
-  if (error) return null;
+  useEffect(() => load(), [load]);
+
+  // A failed fetch renders a calm inline notice with Retry inside the
+  // section card (below) rather than vanishing the whole queue — a silent
+  // return null is indistinguishable from a genuine "all caught up" on
+  // this hero surface. The courses list below is still the durable
+  // fallback; this just tells the teacher the read failed and lets them
+  // retry in place.
 
   return (
     <motion.section
@@ -116,7 +129,9 @@ export function NeedsYouQueue() {
       </div>
 
       <div className="mt-3 overflow-hidden rounded-[--radius-md] border border-border bg-surface">
-        {items === null ? (
+        {error ? (
+          <QueueError onRetry={load} />
+        ) : items === null ? (
           <QueueSkeleton />
         ) : items.length === 0 ? (
           <CaughtUp />
@@ -222,6 +237,27 @@ function QueueRow({ item, first }: { item: NeedsAttentionItem; first: boolean })
         →
       </span>
     </Link>
+  );
+}
+
+/** Calm inline failure for the triage queue — one quiet line plus a small
+ *  Retry, sized to sit inside the section card. Deliberately understated:
+ *  a failed supplementary read shouldn't shout, but it shouldn't vanish
+ *  the whole queue either (which reads as a false "all caught up"). */
+function QueueError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 py-4">
+      <p className="text-[13px] text-text-secondary">
+        Couldn&rsquo;t load your queue.
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="shrink-0 rounded-[--radius-sm] border border-border-light px-2.5 py-1 text-[12px] font-semibold text-text-secondary transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      >
+        Retry
+      </button>
+    </div>
   );
 }
 

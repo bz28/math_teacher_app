@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   teacher,
@@ -12,6 +13,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { MathText } from "@/components/shared/math-text";
 import { percentTone } from "@/components/school/shared/percent-badge";
+import { NewPracticeModal } from "./new-practice-modal";
 
 /**
  * Per-assignment item analysis — "Where the class struggled on this
@@ -33,11 +35,18 @@ import { percentTone } from "@/components/school/shared/percent-badge";
  */
 export function GradesItemAnalysis({ courseId }: { courseId: string }) {
   const reduce = useReducedMotion();
+  const router = useRouter();
   const [assignments, setAssignments] = useState<TeacherAssignment[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<ItemAnalysisResponse | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
+  // The problem the teacher chose to re-teach — opens the new-practice
+  // modal pre-seeded on that item's text. Null = modal closed. Seeded by
+  // title + focus only; ItemAnalysisItem carries no bank_item_id, so the
+  // generate-similar path isn't available here — this authors a fresh
+  // targeted set from the problem's prompt.
+  const [reteach, setReteach] = useState<{ title: string; focus: string } | null>(null);
 
   // Load the course's assignments once, then keep only the graded ones —
   // item analysis is meaningless until there's scored work to read.
@@ -198,10 +207,35 @@ export function GradesItemAnalysis({ courseId }: { courseId: string }) {
                 item={item}
                 rank={i + 1}
                 reduce={!!reduce}
+                onReteach={() =>
+                  setReteach({
+                    title: `Re-teach: Problem ${item.problem_index + 1}`,
+                    focus: item.problem_text,
+                  })
+                }
               />
             ))}
           </ol>
         </div>
+      )}
+
+      {/* Re-teach → pre-seeded practice generation, mirroring the class
+          struggle panel. The chosen problem's text seeds the new-practice
+          modal's title + generation focus so the teacher lands ready to
+          generate a targeted set on exactly the item the class missed —
+          closing the grade→re-teach loop right where they finished grading. */}
+      {reteach !== null && (
+        <NewPracticeModal
+          courseId={courseId}
+          seed={reteach}
+          onClose={() => setReteach(null)}
+          onCreated={(newId) => {
+            setReteach(null);
+            router.push(
+              `/school/teacher/courses/${courseId}/homework/${newId}`,
+            );
+          }}
+        />
       )}
     </section>
   );
@@ -226,10 +260,12 @@ function ItemRow({
   item,
   rank,
   reduce,
+  onReteach,
 }: {
   item: ItemAnalysisItem;
   rank: number;
   reduce: boolean;
+  onReteach: () => void;
 }) {
   const total = item.full + item.partial + item.zero;
   // "Struggled" = anyone who didn't earn full credit (partial or zero) —
@@ -282,6 +318,31 @@ function ItemRow({
           <span className="font-semibold text-text-primary">{struggled}</span> of {total}{" "}
           struggled
         </span>
+        {/* Quiet trailing action — the bar names what the class missed, the
+            "Re-teach" link is the natural next step on it. Mirrors the
+            class struggle panel so the two re-teach reads share a language. */}
+        <button
+          type="button"
+          onClick={onReteach}
+          aria-label={`Re-teach Problem ${item.problem_index + 1} — start a targeted practice set`}
+          className="group/reteach inline-flex shrink-0 items-center gap-1 rounded-[--radius-sm] text-[11px] font-medium text-text-muted transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
+          Re-teach
+          <svg
+            aria-hidden
+            width="11"
+            height="11"
+            viewBox="0 0 14 14"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="transition-transform group-hover/reteach:translate-x-0.5"
+          >
+            <path d="M5 3l4 4-4 4" />
+          </svg>
+        </button>
       </div>
     </li>
   );

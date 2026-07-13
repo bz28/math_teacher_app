@@ -249,25 +249,26 @@ export function HomeworkTab({
         ) : homeworks.length === 0 ? (
           <EmptyState
             title="No homework yet"
-            description="First, create a unit and upload materials, then generate homework from it."
+            description="Generate a set in seconds — from scratch, or from your course materials for a closer match to how you teach."
             action={
-              onGoToMaterials ? (
-                <button
-                  type="button"
-                  onClick={onGoToMaterials}
-                  className="text-sm font-semibold text-primary hover:underline"
-                >
-                  Go to Materials →
-                </button>
-              ) : (
+              <div className="flex flex-col items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => setShowNew(true)}
-                  className="text-sm font-semibold text-primary hover:underline"
+                  className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-semibold tracking-[0.01em] text-white transition-colors hover:bg-primary-dark"
                 >
                   New homework →
                 </button>
-              )
+                {onGoToMaterials && (
+                  <button
+                    type="button"
+                    onClick={onGoToMaterials}
+                    className="text-[13px] font-medium text-text-secondary transition-colors hover:text-primary hover:underline"
+                  >
+                    Add course materials first
+                  </button>
+                )}
+              </div>
             }
           />
         ) : totalBucketed === 0 ? (
