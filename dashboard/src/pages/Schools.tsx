@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type SchoolListItem } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
@@ -9,12 +9,24 @@ import { useToast } from "../lib/toast";
 
 const AT_RISK_DAYS = 14;
 
+// Table filter tabs, mirroring the Leads all/active/stale pattern.
+type SchoolFilter = "all" | "active" | "at-risk";
+// Sortable columns. `null` key keeps the server's default ordering.
+type SortKey = "cost" | "teachers" | "activity";
+type SortDir = "asc" | "desc";
+
 export default function Schools() {
   const confirm = useConfirm();
   const toast = useToast();
   const navigate = useNavigate();
   const [schools, setSchools] = useState<SchoolListItem[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Table filter + column sort. Sort defaults to the server order
+  // (sortKey null); clicking a header selects it desc, then toggles.
+  const [filter, setFilter] = useState<SchoolFilter>("all");
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   // Create form
   const [showCreate, setShowCreate] = useState(false);
@@ -128,6 +140,30 @@ export default function Schools() {
     }
   };
 
+  // Click a header: select it (desc) or, if already selected, flip
+  // direction. Computed before the early return to keep hook order
+  // stable.
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
+  const visibleSchools = useMemo(() => {
+    const filtered = schools.filter((s) => {
+      if (filter === "active") return s.is_active;
+      if (filter === "at-risk") return s.is_active && isAtRisk(s.last_activity_at);
+      return true;
+    });
+    if (!sortKey) return filtered;
+    const dir = sortDir === "asc" ? 1 : -1;
+    // Copy before sort — never mutate the source array in place.
+    return [...filtered].sort((a, b) => dir * (sortValue(a, sortKey) - sortValue(b, sortKey)));
+  }, [schools, filter, sortKey, sortDir]);
+
   if (loading) return <p className="loading">Loading…</p>;
 
   // Aggregates over the (current) school list — all displayed numbers
@@ -160,8 +196,18 @@ export default function Schools() {
       </div>
 
       <div className="stat-grid">
-        <StatCard label="Total schools" value={totalSchools} />
-        <StatCard label="Active" value={activeSchools} />
+        <StatCard
+          label="Total schools"
+          value={totalSchools}
+          onClick={() => setFilter("all")}
+          active={filter === "all"}
+        />
+        <StatCard
+          label="Active"
+          value={activeSchools}
+          onClick={() => setFilter("active")}
+          active={filter === "active"}
+        />
         <StatCard
           label="Cost (30d)"
           value={`$${costThisWindow.toFixed(2)}`}
@@ -170,6 +216,8 @@ export default function Schools() {
         <StatCard
           label="At risk"
           value={atRiskCount}
+          onClick={() => setFilter("at-risk")}
+          active={filter === "at-risk"}
           sub={`no activity ${AT_RISK_DAYS}d`}
         />
       </div>
@@ -220,6 +268,33 @@ export default function Schools() {
 
       {/* ── Schools table ───────────────────────────────────────── */}
       <div className="table-card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h3 style={{ marginBottom: 0 }}>
+            {filter === "active" ? "Active schools" : filter === "at-risk" ? "At-risk schools" : "All schools"}
+            <span style={{ fontWeight: 400, color: "var(--muted-2)", marginLeft: 8 }}>({visibleSchools.length})</span>
+          </h3>
+          <div style={{ display: "flex", gap: 0, background: "var(--paper-2)", borderRadius: 3, padding: 2, border: "1px solid var(--rule)" }}>
+            {(["all", "active", "at-risk"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                style={{
+                  padding: "6px 14px", border: "none", borderRadius: 2, fontSize: 11, fontWeight: 600, cursor: "pointer",
+                  textTransform: "uppercase", letterSpacing: "1.2px",
+                  fontFamily: "var(--font-sans)",
+                  background: filter === f ? "var(--surface)" : "transparent",
+                  color: filter === f ? "var(--ink)" : "var(--muted)",
+                }}
+              >
+                {f === "all"
+                  ? `All (${totalSchools})`
+                  : f === "active"
+                    ? `Active (${activeSchools})`
+                    : `At risk (${atRiskCount})`}
+              </button>
+            ))}
+          </div>
+        </div>
         <table>
           <colgroup>
             <col style={{ width: "20%" }} />
@@ -235,10 +310,10 @@ export default function Schools() {
           <thead>
             <tr>
               <th>School</th>
-              <th>Teachers</th>
-              <th>Cost (30d)</th>
+              <SortableTh label="Teachers" col="teachers" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+              <SortableTh label="Cost (30d)" col="cost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <th>vs prev</th>
-              <th>Last activity</th>
+              <SortableTh label="Last activity" col="activity" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <th>Status</th>
               <th>Notes</th>
               <th>Added</th>
@@ -246,7 +321,7 @@ export default function Schools() {
             </tr>
           </thead>
           <tbody>
-            {schools.map((s) => {
+            {visibleSchools.map((s) => {
               const isDeleting = deletingId === s.id;
               return (
               <tr
@@ -344,12 +419,32 @@ export default function Schools() {
               </tr>
               );
             })}
-            {schools.length === 0 && (
+            {visibleSchools.length === 0 && (
               <tr>
                 <td colSpan={9}>
                   <div className="empty-state">
-                    <div className="empty-state-title">No schools yet.</div>
-                    <div className="empty-state-sub">Click "+ Add school" when you close your first deal.</div>
+                    {schools.length === 0 ? (
+                      <>
+                        <div className="empty-state-title">No schools yet.</div>
+                        <div className="empty-state-sub">Click "+ Add school" when you close your first deal.</div>
+                      </>
+                    ) : filter === "at-risk" ? (
+                      <>
+                        <div className="empty-state-title">Nothing at risk.</div>
+                        <div className="empty-state-sub">
+                          Every active school has been touched in the last {AT_RISK_DAYS} days.{" "}
+                          <button onClick={() => setFilter("all")} className="link-btn">View all schools</button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="empty-state-title">No active schools.</div>
+                        <div className="empty-state-sub">
+                          All schools are inactive.{" "}
+                          <button onClick={() => setFilter("all")} className="link-btn">View all schools</button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -362,7 +457,61 @@ export default function Schools() {
   );
 }
 
+/* ── Sortable header ───────────────────────────────────────────── */
+
+function SortableTh({
+  label,
+  col,
+  sortKey,
+  sortDir,
+  onSort,
+}: {
+  label: string;
+  col: SortKey;
+  sortKey: SortKey | null;
+  sortDir: SortDir;
+  onSort: (key: SortKey) => void;
+}) {
+  const active = sortKey === col;
+  return (
+    <th>
+      <button
+        type="button"
+        onClick={() => onSort(col)}
+        aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+          border: "none",
+          background: "transparent",
+          padding: 0,
+          font: "inherit",
+          color: active ? "var(--ink)" : "inherit",
+          cursor: "pointer",
+          letterSpacing: "inherit",
+          textTransform: "inherit",
+        }}
+      >
+        {label}
+        <span aria-hidden="true" style={{ fontSize: 9, color: active ? "var(--accent)" : "var(--muted-2)" }}>
+          {active ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
+        </span>
+      </button>
+    </th>
+  );
+}
+
 /* ── Helpers ───────────────────────────────────────────────────── */
+
+// Numeric sort key per column. `last_activity_at` maps to a timestamp
+// (null → 0, i.e. "never active" sorts as the stalest) so activity
+// asc surfaces the most at-risk schools first.
+function sortValue(s: SchoolListItem, key: SortKey): number {
+  if (key === "cost") return s.cost_30d;
+  if (key === "teachers") return s.teacher_count;
+  return s.last_activity_at ? new Date(s.last_activity_at).getTime() : 0;
+}
 
 function isAtRisk(lastActivityAt: string | null): boolean {
   if (!lastActivityAt) return true;

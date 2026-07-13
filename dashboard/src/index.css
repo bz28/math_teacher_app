@@ -322,6 +322,28 @@ h3 {
 .stat-card:last-child { border-right: none; padding-right: 0; }
 .stat-card::before { content: none; }
 
+/* Clickable stat card — acts as a one-tap filter toggle. */
+.stat-card-btn {
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  transition: background 0.12s ease;
+}
+.stat-card-btn:hover { background: var(--paper-2); }
+.stat-card-active { background: var(--paper-2); }
+.stat-card-active::before {
+  content: "";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 2px;
+  background: var(--accent);
+}
+
 /* Color accents in Overview's per-stat semantics — kept but expressed
    as a thin top bar in the accent palette instead of the old left
    gradient strip. */
