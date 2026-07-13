@@ -39,7 +39,7 @@ export function SchoolHomeScreen({ onJoinClass, onOpenAssignment }: Props) {
   // dashboard open doesn't come back to stale due dates / grades.
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next) => {
-      if (next === "active") load(true);
+      if (next === "active") load();
     });
     return () => sub.remove();
   }, [load]);
@@ -90,7 +90,7 @@ export function SchoolHomeScreen({ onJoinClass, onOpenAssignment }: Props) {
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                load(true);
+                load();
               }}
               tintColor={colors.primary}
             />

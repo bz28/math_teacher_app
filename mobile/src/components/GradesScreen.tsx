@@ -75,7 +75,7 @@ export function GradesScreen({ onOpenGrade }: Props) {
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                load(true);
+                load();
               }}
               tintColor={colors.primary}
             />

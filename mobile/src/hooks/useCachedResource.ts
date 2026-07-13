@@ -10,8 +10,8 @@ export interface CachedResource<T> {
   refreshing: boolean;
   /** True when a load failed AND there's no cached data to fall back on. */
   error: boolean;
-  /** (Re)fetch; pass true for a user-initiated refresh (skips the skeleton). */
-  load: (isRefresh?: boolean) => Promise<void>;
+  /** (Re)fetch. Shows the skeleton only when nothing is cached yet. */
+  load: () => Promise<void>;
   /** Toggle the refreshing flag (wire to RefreshControl's onRefresh). */
   setRefreshing: (v: boolean) => void;
 }
@@ -44,11 +44,14 @@ export function useCachedResource<T>(
   const [error, setError] = useState(false);
 
   const load = useCallback(
-    async (isRefresh = false) => {
+    async () => {
       // Read cached-ness fresh (not the closed-over render value) so the
-      // skeleton never reappears once anything is cached.
+      // skeleton never reappears once anything is cached — but always show it
+      // when there's nothing to display, even for a background refetch (e.g. an
+      // AppState foreground refresh after a failed first load), so the render
+      // never falls through to a content branch with no data.
       const cached = () => useSchoolCacheStore.getState().entries[key]?.loaded ?? false;
-      if (!isRefresh && !cached()) setLoading(true);
+      if (!cached()) setLoading(true);
       setError(false);
       try {
         setEntry(key, await loaderRef.current());
