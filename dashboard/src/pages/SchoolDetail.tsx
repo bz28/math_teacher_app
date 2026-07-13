@@ -12,6 +12,13 @@ import {
 import { formatRelativeDate } from "../lib/format";
 import { btnGhost, btnPrimary, btnSmall, inputStyle } from "../lib/styles";
 import { useConfirm } from "../lib/confirm";
+import { useToast } from "../lib/toast";
+import { Pagination } from "../components/Pagination";
+
+// Roster page size — the /admin/schools/:id/students endpoint accepts
+// limit/offset, so a >100-student school is now fully reachable via the
+// shared <Pagination> control instead of a hard "first 100" cap.
+const ROSTER_PAGE_SIZE = 50;
 
 // Dedicated per-school deep page. Lives at /schools/:schoolId. Two
 // API fetches in parallel:
@@ -33,12 +40,14 @@ interface EditForm {
 
 export default function SchoolDetail() {
   const confirm = useConfirm();
+  const toast = useToast();
   const { schoolId } = useParams<{ schoolId: string }>();
   const navigate = useNavigate();
 
   const [detail, setDetail] = useState<SchoolDetailData | null>(null);
   const [overview, setOverview] = useState<SchoolOverviewData | null>(null);
   const [students, setStudents] = useState<SchoolStudentsData | null>(null);
+  const [studentOffset, setStudentOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   // Edit (inline)
@@ -52,17 +61,19 @@ export default function SchoolDetail() {
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Detail + overview only — the roster is paginated on its own effect
+  // (keyed on schoolId + studentOffset) so paging doesn't refetch the
+  // header/cost blocks, and mutations that don't touch the roster
+  // (edit, invite) don't reset the current page.
   const reload = async () => {
     if (!schoolId) return;
     try {
-      const [d, o, st] = await Promise.all([
+      const [d, o] = await Promise.all([
         api.school(schoolId),
         api.schoolOverview(schoolId),
-        api.schoolStudents(schoolId),
       ]);
       setDetail(d);
       setOverview(o);
-      setStudents(st);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -77,6 +88,7 @@ export default function SchoolDetail() {
     setDetail(null);
     setOverview(null);
     setStudents(null);
+    setStudentOffset(0);
     setError(null);
     setEditing(false);
     setEditForm(null);
@@ -88,6 +100,22 @@ export default function SchoolDetail() {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId]);
+
+  // Paginated roster fetch. Runs on mount, when the school changes, and
+  // when the operator pages. A roster failure is non-fatal — the header
+  // and cost sections still render — so it doesn't set the page error.
+  useEffect(() => {
+    if (!schoolId) return;
+    let cancelled = false;
+    api
+      .schoolStudents(schoolId, {
+        limit: String(ROSTER_PAGE_SIZE),
+        offset: String(studentOffset),
+      })
+      .then((st) => { if (!cancelled) setStudents(st); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [schoolId, studentOffset]);
 
   const startEditing = () => {
     if (!detail) return;
@@ -118,7 +146,7 @@ export default function SchoolDetail() {
       setEditing(false);
       reload();
     } catch (err) {
-      alert((err as Error).message);
+      toast((err as Error).message);
     } finally {
       setSaving(false);
     }
@@ -139,7 +167,7 @@ export default function SchoolDetail() {
       await api.updateSchool(detail.id, { is_active: next });
       reload();
     } catch (err) {
-      alert((err as Error).message);
+      toast((err as Error).message);
     }
   };
 
@@ -154,7 +182,7 @@ export default function SchoolDetail() {
       await api.deleteSchool(detail.id);
       navigate("/schools");
     } catch (err) {
-      alert((err as Error).message);
+      toast((err as Error).message);
     }
   };
 
@@ -168,7 +196,7 @@ export default function SchoolDetail() {
       setInviteEmail("");
       reload();
     } catch (err) {
-      alert((err as Error).message);
+      toast((err as Error).message);
     } finally {
       setInviting(false);
     }
@@ -185,7 +213,7 @@ export default function SchoolDetail() {
       await api.cancelInvite(detail.id, inviteId);
       reload();
     } catch (err) {
-      alert((err as Error).message);
+      toast((err as Error).message);
     }
   };
 
@@ -657,11 +685,12 @@ export default function SchoolDetail() {
                 ))}
               </tbody>
             </table>
-            {students.students.length < students.total_students && (
-              <p style={{ marginTop: 12, color: "var(--muted)", fontSize: 12 }}>
-                Showing first {students.students.length} of {students.total_students}.
-              </p>
-            )}
+            <Pagination
+              offset={studentOffset}
+              limit={ROSTER_PAGE_SIZE}
+              total={students.total_students}
+              onChange={setStudentOffset}
+            />
           </div>
         )}
       </Section>

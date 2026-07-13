@@ -12,6 +12,7 @@ import { btnGhost } from "../lib/styles";
 import ConvertLeadModal from "../components/ConvertLeadModal";
 import { EditorialModal } from "../components/EditorialModal";
 import StatCard from "../components/StatCard";
+import { useToast } from "../lib/toast";
 
 const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
   { value: "new", label: "New" },
@@ -72,6 +73,7 @@ const isActive = (lead: ContactLeadData): boolean =>
 
 export default function Leads() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [leads, setLeads] = useState<ContactLeadData[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"active" | "stale" | "all">("active");
@@ -101,7 +103,7 @@ export default function Leads() {
       await api.updateLead(lead.id, { status: newStatus });
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      toast((e as Error).message);
     }
   };
 

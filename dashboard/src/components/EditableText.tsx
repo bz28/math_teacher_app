@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useToast } from "../lib/toast";
 
 /**
  * Click-to-edit text primitive. Shows `value` as plain text until the
@@ -28,6 +29,7 @@ export function EditableText({
   /** Styling for the inline input. */
   inputStyle?: CSSProperties;
 }) {
+  const toast = useToast();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [busy, setBusy] = useState(false);
@@ -64,10 +66,10 @@ export function EditableText({
       await onSave(next);
       setEditing(false);
     } catch (e) {
-      // Surface the failure (matches the alert pattern used by sibling
+      // Surface the failure via the themed toast (matches sibling
       // field handlers in LeadDetail); silently reverting hides 422s
       // like an invalid email from the operator.
-      alert((e as Error).message);
+      toast((e as Error).message);
       setDraft(value);
       setEditing(false);
     } finally {

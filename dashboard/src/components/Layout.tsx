@@ -18,6 +18,7 @@ const AUDIENCE_NAV: NavItem[] = [
 ];
 
 const DIAGNOSTIC_NAV: NavItem[] = [
+  { to: "/overview", label: "Platform health" },
   { to: "/audit-logs", label: "Audit logs" },
   { to: "/llm-calls", label: "LLM calls" },
   { to: "/harness-runs", label: "Harness runs" },
