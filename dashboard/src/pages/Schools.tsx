@@ -474,11 +474,10 @@ function SortableTh({
 }) {
   const active = sortKey === col;
   return (
-    <th>
+    <th aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
       <button
         type="button"
         onClick={() => onSort(col)}
-        aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
         style={{
           display: "inline-flex",
           alignItems: "center",
