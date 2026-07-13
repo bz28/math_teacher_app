@@ -1497,7 +1497,7 @@ function PublishConfirmDialog({
   // zero, so we don't show it.
   const offerReviewedOnly = reviewedToPublish > 0 && unreviewedToPublish > 0;
   return (
-    <Modal open={open} onClose={onClose} dismissible={!publishing}>
+    <Modal open={open} onClose={onClose} dismissible={!publishing} label="Confirm grade publishing">
       <h2 className="text-lg font-bold text-text-primary">
         {verb} {total} {total === 1 ? "grade" : "grades"}?
       </h2>
@@ -1709,7 +1709,7 @@ function RegradeConfirmDialog({
   const open = submissionId !== null;
   const published = !!row?.grade_published_at;
   return (
-    <Modal open={open} onClose={onClose} dismissible={!regrading}>
+    <Modal open={open} onClose={onClose} dismissible={!regrading} label="Regrade submission">
       <h2 className="text-lg font-bold text-text-primary">
         Regrade with current rubric?
       </h2>
@@ -4897,7 +4897,7 @@ function ConversationModal({
   }, [integrity.problems]);
 
   return (
-    <Modal open={open} onClose={onClose} className="max-w-3xl bg-surface p-0">
+    <Modal open={open} onClose={onClose} className="max-w-3xl bg-surface p-0" label="AI and student conversation">
       <div className="flex items-center justify-between border-b border-border-light px-5 py-3">
         <div>
           <h3 className="text-sm font-bold text-text-primary">
@@ -4991,7 +4991,7 @@ function WorkLightbox({
   onClose: () => void;
 }) {
   return (
-    <Modal open={open} onClose={onClose} className="max-w-4xl bg-surface p-3">
+    <Modal open={open} onClose={onClose} className="max-w-4xl bg-surface p-3" label="Student's work">
       <div className="flex items-center justify-between pb-2">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           Student&apos;s work

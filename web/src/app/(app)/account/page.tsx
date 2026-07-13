@@ -371,7 +371,7 @@ export default function AccountPage() {
 
       {/* MFA disable modal — re-verify password to prevent a hijacked
           live session from weakening the account. */}
-      <Modal open={showMfaDisableModal} onClose={() => { setShowMfaDisableModal(false); setMfaError(null); }}>
+      <Modal open={showMfaDisableModal} onClose={() => { setShowMfaDisableModal(false); setMfaError(null); }} label="Disable two-factor authentication">
         <div>
           <h2 className="text-lg font-bold text-text-primary">Disable two-factor?</h2>
           <p className="mt-3 text-sm leading-relaxed text-text-secondary">
@@ -436,7 +436,7 @@ export default function AccountPage() {
       </motion.div>
 
       {/* Step 1: Confirmation modal */}
-      <Modal open={showConfirm} onClose={() => setShowConfirm(false)}>
+      <Modal open={showConfirm} onClose={() => setShowConfirm(false)} label="Delete your account">
         <div className="text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-error-light">
             <TrashIcon className="h-6 w-6 text-error" />
@@ -474,6 +474,7 @@ export default function AccountPage() {
         open={showPasswordModal}
         onClose={() => !deleteLoading && setShowPasswordModal(false)}
         dismissible={!deleteLoading}
+        label="Verify your identity"
       >
         <div>
           <h2 className="text-lg font-bold text-text-primary">Verify Your Identity</h2>
