@@ -4,13 +4,9 @@ import { useState } from "react";
 import type { TeacherAssignment, TeacherUnit } from "@/lib/api";
 import { unitLabel as labelForUnit } from "@/lib/units";
 import { HomeworkCard, type HomeworkBucket } from "./homework-card";
+import type { BucketedHomeworks } from "./homework-buckets";
 
-export interface BucketedHomeworks {
-  needsGrading: TeacherAssignment[];
-  dueThisWeek: TeacherAssignment[];
-  upcoming: TeacherAssignment[];
-  completed: TeacherAssignment[];
-}
+export type { BucketedHomeworks };
 
 const SECTION_CONFIG: {
   key: keyof BucketedHomeworks;

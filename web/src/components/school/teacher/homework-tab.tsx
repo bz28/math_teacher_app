@@ -10,10 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SearchIcon } from "@/components/ui/icons";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { NewHomeworkModal } from "./_pieces/new-homework-modal";
-import {
-  HomeworkTimeline,
-  type BucketedHomeworks,
-} from "./_pieces/homework-timeline";
+import { HomeworkTimeline } from "./_pieces/homework-timeline";
+import { bucketHomeworks } from "./_pieces/homework-buckets";
 
 // ── Filter types ──
 
@@ -355,98 +353,6 @@ function AssignmentListSkeleton() {
       ))}
     </div>
   );
-}
-
-// ── Bucketing logic ──
-
-function bucketHomeworks(homeworks: TeacherAssignment[]): BucketedHomeworks {
-  const now = Date.now();
-  const weekFromNow = now + 7 * 24 * 60 * 60 * 1000;
-
-  const needsGrading: TeacherAssignment[] = [];
-  const dueThisWeek: TeacherAssignment[] = [];
-  const upcoming: TeacherAssignment[] = [];
-  const completed: TeacherAssignment[] = [];
-
-  for (const hw of homeworks) {
-    if (hw.status !== "published") {
-      // Drafts always go to upcoming
-      upcoming.push(hw);
-      continue;
-    }
-
-    const dueTime = hw.due_at ? new Date(hw.due_at).getTime() : null;
-    const isPastDue = dueTime !== null && dueTime < now;
-    const hasUngraded = hw.submitted > hw.graded;
-    const hasMissing = isPastDue && hw.submitted < hw.total_students;
-
-    // Completed: past due + all submitted are graded + graded > 0 +
-    // everyone submitted (no missing students)
-    if (
-      isPastDue &&
-      hw.graded > 0 &&
-      hw.submitted === hw.graded &&
-      hw.submitted >= hw.total_students
-    ) {
-      completed.push(hw);
-      continue;
-    }
-
-    // Needs grading: has ungraded submissions OR overdue with missing
-    if (hasUngraded || hasMissing) {
-      needsGrading.push(hw);
-      continue;
-    }
-
-    // Due this week: due within 7 days
-    if (dueTime !== null && dueTime >= now && dueTime <= weekFromNow) {
-      dueThisWeek.push(hw);
-      continue;
-    }
-
-    // Everything else → upcoming (due > 7 days, or no due date)
-    upcoming.push(hw);
-  }
-
-  // Sort within buckets
-  needsGrading.sort(sortByDueAsc);
-  dueThisWeek.sort(sortByDueAsc);
-  upcoming.sort(sortUpcoming);
-  completed.sort(sortByDueDesc);
-
-  return { needsGrading, dueThisWeek, upcoming, completed };
-}
-
-function sortByDueAsc(a: TeacherAssignment, b: TeacherAssignment): number {
-  if (a.due_at && b.due_at) {
-    const diff = new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
-    if (diff !== 0) return diff;
-  } else if (a.due_at) {
-    return -1;
-  } else if (b.due_at) {
-    return 1;
-  }
-  return a.title.localeCompare(b.title);
-}
-
-function sortByDueDesc(a: TeacherAssignment, b: TeacherAssignment): number {
-  if (a.due_at && b.due_at) {
-    const diff = new Date(b.due_at).getTime() - new Date(a.due_at).getTime();
-    if (diff !== 0) return diff;
-  } else if (a.due_at) {
-    return 1;
-  } else if (b.due_at) {
-    return -1;
-  }
-  return a.title.localeCompare(b.title);
-}
-
-/** Drafts first, then by due date ascending. */
-function sortUpcoming(a: TeacherAssignment, b: TeacherAssignment): number {
-  const aDraft = a.status !== "published" ? 0 : 1;
-  const bDraft = b.status !== "published" ? 0 : 1;
-  if (aDraft !== bDraft) return aDraft - bDraft;
-  return sortByDueAsc(a, b);
 }
 
 // ── Filter dropdown ──
