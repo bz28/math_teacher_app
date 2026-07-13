@@ -1494,14 +1494,24 @@ export const teacher = {
       body: JSON.stringify(data),
     });
   },
-  /** Stamp the submission reviewed. The sole writer of reviewed_at — a
-   *  grade save never marks review. The review page calls this only once
-   *  the teacher has addressed every problem (each confident grade
-   *  confirmed or each uncertain one graded). Requires an existing grade
-   *  — 400s on an ungraded / skipped-unreadable row. */
+  /** Approve the submission — stamp reviewed_at. The sole writer of the
+   *  review stamp; a grade save never marks review. The review page
+   *  calls this from the explicit "Approve" button, enabled only once
+   *  every problem has a grade. Requires an existing grade — 400s on an
+   *  ungraded / skipped-unreadable row. */
   markReviewed(submissionId: string) {
     return apiFetch<{ status: string; reviewed_at: string }>(
       `/teacher/submissions/${submissionId}/mark-reviewed`,
+      { method: "POST" },
+    );
+  },
+  /** Undo an approval — clear reviewed_at. The inverse of markReviewed;
+   *  the grade is untouched, only the review stamp is cleared, so the
+   *  submission drops back to "not reviewed". Idempotent (a no-op on an
+   *  already-unreviewed grade), so it always resolves reviewed_at: null. */
+  unmarkReviewed(submissionId: string) {
+    return apiFetch<{ status: string; reviewed_at: null }>(
+      `/teacher/submissions/${submissionId}/unmark-reviewed`,
       { method: "POST" },
     );
   },

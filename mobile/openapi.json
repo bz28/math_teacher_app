@@ -15191,6 +15191,57 @@
         ]
       }
     },
+    "/v1/teacher/submissions/{submission_id}/unmark-reviewed": {
+      "post": {
+        "description": "Undo an approval \u2014 clear `reviewed_at` / `reviewed_by`.\n\nThe manual inverse of mark-reviewed: the teacher approved a\nsubmission and wants to walk it back (spotted something to re-check\nbefore it's published, or approved the wrong row). The grade itself\nis untouched \u2014 only the review stamp is cleared, so the submission\ndrops back to \"not reviewed\" and \"publish only reviewed\" no longer\nreleases it.\n\nIdempotent: unmarking an already-unreviewed (or ungraded) grade is a\nno-op that still returns ok, so a double-click can't 400.",
+        "operationId": "unmark_submission_reviewed_v1_teacher_submissions__submission_id__unmark_reviewed_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Unmark Submission Reviewed V1 Teacher Submissions  Submission Id  Unmark Reviewed Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Unmark Submission Reviewed",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
     "/v1/weak-spots": {
       "get": {
         "description": "Return the user's most recent flagged problems for `subject`.\n\nJoins `work_submissions` against the parent `sessions` row to filter\nby subject, then groups by problem_text in Python so the most recent\nsubmission's summary wins and repeat attempts contribute to\n`issue_count` instead of polluting the list with duplicates.",

@@ -1762,6 +1762,42 @@ async def mark_submission_reviewed(
     return {"status": "ok", "reviewed_at": now.isoformat()}
 
 
+@router.post("/submissions/{submission_id}/unmark-reviewed")
+async def unmark_submission_reviewed(
+    submission_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Undo an approval — clear `reviewed_at` / `reviewed_by`.
+
+    The manual inverse of mark-reviewed: the teacher approved a
+    submission and wants to walk it back (spotted something to re-check
+    before it's published, or approved the wrong row). The grade itself
+    is untouched — only the review stamp is cleared, so the submission
+    drops back to "not reviewed" and "publish only reviewed" no longer
+    releases it.
+
+    Idempotent: unmarking an already-unreviewed (or ungraded) grade is a
+    no-op that still returns ok, so a double-click can't 400.
+    """
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
+
+    await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
+
+    grade = (await db.execute(
+        select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
+    )).scalar_one_or_none()
+    if grade is not None and grade.reviewed_at is not None:
+        grade.reviewed_by = None
+        grade.reviewed_at = None
+        await db.commit()
+    return {"status": "ok", "reviewed_at": None}
+
+
 @router.post("/submissions/{submission_id}/regrade")
 async def regrade_submission(
     submission_id: uuid.UUID,
