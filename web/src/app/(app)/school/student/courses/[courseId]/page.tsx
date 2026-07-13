@@ -10,6 +10,7 @@ import {
 } from "@/lib/api";
 import { PageErrorState } from "@/components/ui";
 import { SkeletonCard } from "@/components/ui/skeleton";
+import { formatDue } from "@/lib/utils";
 
 type TabKey = "homework" | "practice";
 const TABS: { key: TabKey; label: string }[] = [
@@ -151,9 +152,7 @@ function HomeworkList({ courseId }: { courseId: string }) {
               <div className="mt-1 text-sm text-text-secondary">
                 {hw.problem_count}{" "}
                 {hw.problem_count === 1 ? "problem" : "problems"}
-                {hw.due_at
-                  ? ` · Due ${new Date(hw.due_at).toLocaleDateString()}`
-                  : ""}
+                {hw.due_at ? ` · ${formatDue(hw.due_at)}` : ""}
               </div>
             </div>
             {hw.status === "submitted" ? (
