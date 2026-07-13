@@ -45,6 +45,13 @@ export interface PracticeResult {
   isCorrect: boolean;
 }
 
+/** The last generation request, stashed BEFORE the API call so a failed
+ *  fresh generation can be retried in place with the exact same input
+ *  instead of dead-ending back to Learn. */
+type PracticeGenerationRequest =
+  | { kind: "batch"; problem: string; subject: Subject; difficulty: Difficulty }
+  | { kind: "flagged"; problems: string[]; subject: Subject; difficulty: Difficulty };
+
 // ── Helpers ──
 
 function createPracticeBatch(
@@ -75,11 +82,13 @@ interface PracticeState {
   practiceBatch: PracticeBatch | null;
   phase: PracticePhase;
   error: string | null;
+  lastGeneration: PracticeGenerationRequest | null;
 
   startPracticeBatch: (problem: string, subject: Subject, difficulty?: Difficulty) => Promise<void>;
   beginPractice: () => void;
   startPracticeQueue: (problems: string[], subject: Subject) => Promise<void>;
   practiceFlaggedProblems: (flaggedProblems: string[], subject: Subject, difficulty?: Difficulty) => Promise<void>;
+  retryLastGeneration: () => Promise<void>;
   submitPracticeAnswer: (answer: string, subject: Subject) => Promise<void>;
   skipPracticeProblem: () => void;
   submitPracticeWork: (index: number, imageBase64: string, userAnswer: string, subject: Subject) => void;
@@ -92,6 +101,7 @@ const initialState = {
   practiceBatch: null as PracticeBatch | null,
   phase: "idle" as PracticePhase,
   error: null as string | null,
+  lastGeneration: null as PracticeGenerationRequest | null,
 };
 
 export const usePracticeStore = create<PracticeState>((set, get) => ({
@@ -108,7 +118,11 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
   async practiceFlaggedProblems(flaggedProblems, subject, difficulty: Difficulty = "same") {
     if (flaggedProblems.length === 0) return;
 
-    set({ ...initialState, phase: "loading" as PracticePhase });
+    set({
+      ...initialState,
+      phase: "loading" as PracticePhase,
+      lastGeneration: { kind: "flagged", problems: flaggedProblems, subject, difficulty },
+    });
     try {
       // Phase 1: batch generate similar question texts for all flagged problems
       const [{ problems: generated }, { id: sessionId }] = await Promise.all([
@@ -151,7 +165,11 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
   },
 
   async startPracticeBatch(problem, subject, difficulty: Difficulty = "same") {
-    set({ phase: "loading", error: null });
+    set({
+      phase: "loading",
+      error: null,
+      lastGeneration: { kind: "batch", problem, subject, difficulty },
+    });
     try {
       // Phase 1: generate a similar question text (not the original)
       const { problems: generated } = await practiceApi.generate({ problems: [problem], subject, difficulty });
@@ -185,6 +203,16 @@ export const usePracticeStore = create<PracticeState>((set, get) => ({
     } catch (err) {
       if (err instanceof EntitlementError) throw err;
       set({ phase: "error", error: (err as Error).message });
+    }
+  },
+
+  async retryLastGeneration() {
+    const { lastGeneration } = get();
+    if (!lastGeneration) return;
+    if (lastGeneration.kind === "batch") {
+      await get().startPracticeBatch(lastGeneration.problem, lastGeneration.subject, lastGeneration.difficulty);
+    } else {
+      await get().practiceFlaggedProblems(lastGeneration.problems, lastGeneration.subject, lastGeneration.difficulty);
     }
   },
 

@@ -183,7 +183,10 @@ export default function HomePage() {
                 accent={ACCENT[course.subject] ?? "#0E5238"}
                 title={course.name}
                 subtitle={`${course.teacher_name} · ${course.section_name}`}
-                modes={["Learn", "Practice", "Mock Test"]}
+                // Card routes to /learn, whose mode selector offers only
+                // Learn and Mock Test — Practice is not a top-level mode
+                // there, so advertising it was a false affordance.
+                modes={["Learn", "Mock Test"]}
                 onClick={() =>
                   router.push(`/learn?subject=${course.subject}&section=${course.section_id}`)
                 }

@@ -63,12 +63,26 @@ function createMockTest(
   };
 }
 
+/** The last exam config, stashed BEFORE the API call so a failed
+ *  generation can be retried in place with the exact same input instead
+ *  of dead-ending back to Learn. */
+interface MockTestConfig {
+  problems: string[];
+  generateCount: number;
+  timeLimitMinutes: number | null;
+  subject: Subject;
+  problemQueue: { text: string; image?: string }[];
+  multipleChoice: boolean;
+  difficulty: Difficulty;
+}
+
 // ── Store ──
 
 interface MockTestState {
   mockTest: MockTest | null;
   phase: MockTestPhase;
   error: string | null;
+  lastConfig: MockTestConfig | null;
 
   startMockTest: (
     problems: string[],
@@ -79,6 +93,7 @@ interface MockTestState {
     multipleChoice?: boolean,
     difficulty?: Difficulty,
   ) => Promise<void>;
+  retryLastGeneration: () => Promise<void>;
   beginMockTest: () => void;
   saveMockTestAnswer: (index: number, answer: string) => void;
   attachMockTestWork: (index: number, imageBase64: string) => void;
@@ -92,6 +107,7 @@ const initialState = {
   mockTest: null as MockTest | null,
   phase: "idle" as MockTestPhase,
   error: null as string | null,
+  lastConfig: null as MockTestConfig | null,
 };
 
 export const useMockTestStore = create<MockTestState>((set, get, store) => ({
@@ -99,7 +115,11 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
 
   async startMockTest(problems, generateCount, timeLimitMinutes, subject, problemQueue, multipleChoice = true, difficulty: Difficulty = "same") {
     const imageMap = new Map(problemQueue.map((p) => [p.text, p.image]));
-    set({ phase: "loading", error: null });
+    set({
+      phase: "loading",
+      error: null,
+      lastConfig: { problems, generateCount, timeLimitMinutes, subject, problemQueue, multipleChoice, difficulty },
+    });
     try {
       if (generateCount > 0) {
         // Phase 1: batch generate similar question texts (1 Claude call)
@@ -184,6 +204,15 @@ export const useMockTestStore = create<MockTestState>((set, get, store) => ({
       if (err instanceof EntitlementError) throw err;
       set({ phase: "error", error: (err as Error).message });
     }
+  },
+
+  async retryLastGeneration() {
+    const { lastConfig: c } = get();
+    if (!c) return;
+    await get().startMockTest(
+      c.problems, c.generateCount, c.timeLimitMinutes, c.subject,
+      c.problemQueue, c.multipleChoice, c.difficulty,
+    );
   },
 
   beginMockTest() {

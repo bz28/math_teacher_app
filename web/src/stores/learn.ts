@@ -47,6 +47,11 @@ interface SessionState {
   session: SessionResponse | null;
   /** Cropped image for the current session (client-side only) */
   sessionImage: string | null;
+  /** Last problem+image handed to startSession, stashed BEFORE the API
+   *  call so a failed generation can be retried in place with the exact
+   *  same input (sessionImage is only set on success, so it can't be the
+   *  retry source). */
+  lastStartInput: { problem: string; image?: string } | null;
   phase: SessionPhase;
   lastResponse: StepResponse | null;
   error: string | null;
@@ -100,6 +105,7 @@ interface SessionState {
 const initialState = {
   session: null,
   sessionImage: null,
+  lastStartInput: null as { problem: string; image?: string } | null,
   phase: "idle" as SessionPhase,
   lastResponse: null,
   error: null,
@@ -148,7 +154,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   async startSession(problem, image) {
     const { subject, sectionId } = get();
-    set({ phase: "loading", error: null });
+    set({ phase: "loading", error: null, lastStartInput: { problem, image } });
     try {
       const session = await sessionApi.create({
         problem,

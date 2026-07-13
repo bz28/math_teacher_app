@@ -15,6 +15,11 @@ interface PageErrorStateProps {
    *  generation surface that sends the student back to start over), so
    *  the button never promises something it doesn't do. */
   retryLabel?: string;
+  /** Optional secondary action, rendered as a quiet ghost link beneath the
+   *  primary button. Used on generation surfaces so "Try again" can stay
+   *  the primary recovery while "Back to Learn" remains an escape hatch. */
+  secondaryLabel?: string;
+  onSecondary?: () => void;
 }
 
 function AlertIcon() {
@@ -48,6 +53,8 @@ export function PageErrorState({
   onRetry,
   title = "We hit a snag",
   retryLabel = "Try again",
+  secondaryLabel,
+  onSecondary,
 }: PageErrorStateProps) {
   const reduce = useReducedMotion();
   return (
@@ -69,6 +76,11 @@ export function PageErrorState({
       <Button variant="secondary" size="sm" onClick={onRetry} className="mt-6">
         {retryLabel}
       </Button>
+      {secondaryLabel && onSecondary && (
+        <Button variant="ghost" size="sm" onClick={onSecondary} className="mt-2">
+          {secondaryLabel}
+        </Button>
+      )}
     </div>
   );
 }

@@ -31,6 +31,8 @@ export default function MockTestPage() {
     setMockTestIndex,
     attachMockTestWork,
     submitMockTest,
+    retryLastGeneration,
+    lastConfig,
     reset,
   } = useMockTestStore();
 
@@ -96,15 +98,18 @@ export default function MockTestPage() {
   // mockTest is still null, so a guard ordered ahead of this would trap
   // the student on a spinner/skeleton forever and never reach recovery.
   if (phase === "error") {
-    // Generation failed — no in-place retry for the original config, so
-    // the honest recovery is back to Learn. Branded surface only (the
-    // duplicate error toast was removed) so the failure shows once.
+    // Generation failed. Retry in place with the exact config that failed
+    // (stashed in lastConfig before the API call). "Back to Learn" stays as
+    // a secondary escape. Branded surface only (the duplicate error toast
+    // was removed) so the failure shows once.
     return (
       <PageErrorState
         title="That didn't generate"
-        message="We couldn't compose your exam just now. Head back to Learn and try again."
-        retryLabel="Back to Learn"
-        onRetry={() => router.push("/learn")}
+        message="We couldn't compose your exam just now. Try again, or head back to Learn to start over."
+        retryLabel={lastConfig ? "Try again" : "Back to Learn"}
+        onRetry={lastConfig ? () => { retryLastGeneration().catch(() => {}); } : () => router.push("/learn")}
+        secondaryLabel={lastConfig ? "Back to Learn" : undefined}
+        onSecondary={lastConfig ? () => router.push("/learn") : undefined}
       />
     );
   }
