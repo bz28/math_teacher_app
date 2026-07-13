@@ -73,9 +73,11 @@ export default function App() {
             element={<SubmissionTrace />}
           />
 
-          {/* Hidden but reachable by URL — kept so phase 2 can
-              decide whether to surface them. */}
+          {/* Platform health — now linked from the Diagnostic nav.
+              Landing stays on /leads (founder call for phase 2). */}
           <Route path="/overview" element={<Overview />} />
+          {/* Hidden but reachable by URL — kept so phase 2 can
+              decide whether to surface it. */}
           <Route path="/users" element={<Users />} />
 
           <Route path="*" element={<Navigate to="/leads" replace />} />
