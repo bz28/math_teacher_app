@@ -3243,6 +3243,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/submissions/{submission_id}/unmark-reviewed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unmark Submission Reviewed
+         * @description Undo an approval — clear `reviewed_at` / `reviewed_by`.
+         *
+         *     The manual inverse of mark-reviewed: the teacher approved a
+         *     submission and wants to walk it back (spotted something to re-check
+         *     before it's published, or approved the wrong row). The grade itself
+         *     is untouched — only the review stamp is cleared, so the submission
+         *     drops back to "not reviewed" and "publish only reviewed" no longer
+         *     releases it.
+         *
+         *     Idempotent: unmarking an already-unreviewed (or ungraded) grade is a
+         *     no-op that still returns ok, so a double-click can't 400.
+         */
+        post: operations["unmark_submission_reviewed_v1_teacher_submissions__submission_id__unmark_reviewed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/weak-spots": {
         parameters: {
             query?: never;
@@ -11077,6 +11107,39 @@ export interface operations {
         };
     };
     regrade_submission_v1_teacher_submissions__submission_id__regrade_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unmark_submission_reviewed_v1_teacher_submissions__submission_id__unmark_reviewed_post: {
         parameters: {
             query?: never;
             header?: never;
