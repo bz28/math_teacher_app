@@ -325,9 +325,16 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
             {previewLoading ? "Switching…" : "Try as Student"}
           </button>
 
-          {/* Re-enter the Field Guide tour anytime — never touches data. */}
+          {/* Re-enter the Field Guide tour anytime — never touches data.
+              Step one anchors the New-course button + handoff dialog that
+              exist only on /school/teacher, so navigate there first (from
+              wherever in the workspace the teacher opened the menu) before
+              starting, or the tour lands on a missing target. */}
           <button
-            onClick={() => tour.start("teacher")}
+            onClick={() => {
+              router.push("/school/teacher");
+              tour.start("teacher");
+            }}
             className="flex w-full items-center gap-3 px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary"
           >
             <CompassIcon />
