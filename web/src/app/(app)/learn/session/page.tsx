@@ -120,7 +120,10 @@ export default function LearnSessionPage() {
     const retry = resumeId
       ? () => { resumeSession(resumeId); }
       : lastStartInput
-        ? () => { startSession(lastStartInput.problem, lastStartInput.image).catch(() => {}); }
+        // A fresh EntitlementError on retry would otherwise be swallowed
+        // while phase sits at "loading" — stranding the student on the
+        // spinner. Route to /pricing so the retry can never dead-end.
+        ? () => { startSession(lastStartInput.problem, lastStartInput.image).catch((err) => { if (err instanceof EntitlementError) router.push("/pricing"); }); }
         : null;
     return (
       <PageErrorState

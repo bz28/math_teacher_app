@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
-import { session as sessionApi } from "@/lib/api";
+import { session as sessionApi, EntitlementError } from "@/lib/api";
 import { Button, Badge, Card, PageErrorState } from "@/components/ui";
 import { useRedirectOnIdle } from "@/hooks/use-session-effects";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
@@ -86,7 +86,13 @@ export default function PracticePage() {
         title="That didn't generate"
         message="We couldn't build your practice set just now. Try again, or head back to Learn to start over."
         retryLabel={lastGeneration ? "Try again" : "Back to Learn"}
-        onRetry={lastGeneration ? () => { retryLastGeneration().catch(() => {}); } : () => router.push("/learn")}
+        onRetry={lastGeneration
+          // On retry, a fresh EntitlementError would otherwise be swallowed
+          // while phase sits at "loading" — stranding the student on the
+          // spinner. Route to /pricing (matches Review's handler) so the
+          // retry can never dead-end.
+          ? () => { retryLastGeneration().catch((err) => { if (err instanceof EntitlementError) router.push("/pricing"); }); }
+          : () => router.push("/learn")}
         secondaryLabel={lastGeneration ? "Back to Learn" : undefined}
         onSecondary={lastGeneration ? () => router.push("/learn") : undefined}
       />

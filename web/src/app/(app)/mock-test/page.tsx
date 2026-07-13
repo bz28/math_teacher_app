@@ -7,6 +7,7 @@ import { useMockTestStore } from "@/stores/mock-test";
 import { useEntitlementStore } from "@/stores/entitlements";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { Button, Card, Badge, PageErrorState } from "@/components/ui";
+import { EntitlementError } from "@/lib/api";
 import { useRedirectOnIdle } from "@/hooks/use-session-effects";
 import { Input } from "@/components/ui/input";
 import { SkeletonStep } from "@/components/ui/skeleton";
@@ -107,7 +108,12 @@ export default function MockTestPage() {
         title="That didn't generate"
         message="We couldn't compose your exam just now. Try again, or head back to Learn to start over."
         retryLabel={lastConfig ? "Try again" : "Back to Learn"}
-        onRetry={lastConfig ? () => { retryLastGeneration().catch(() => {}); } : () => router.push("/learn")}
+        onRetry={lastConfig
+          // On retry, a fresh EntitlementError would otherwise be swallowed
+          // while phase sits at "loading" — stranding the student on the
+          // spinner. Route to /pricing so the retry can never dead-end.
+          ? () => { retryLastGeneration().catch((err) => { if (err instanceof EntitlementError) router.push("/pricing"); }); }
+          : () => router.push("/learn")}
         secondaryLabel={lastConfig ? "Back to Learn" : undefined}
         onSecondary={lastConfig ? () => router.push("/learn") : undefined}
       />
