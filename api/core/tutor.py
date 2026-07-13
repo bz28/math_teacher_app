@@ -146,7 +146,7 @@ async def completed_chat(
     """Answer follow-up questions on a completed problem."""
     steps_text = "\n".join(
         f"  Step {i}: {s['description']}"
-        for i, s in enumerate(steps)
+        for i, s in enumerate(steps, start=1)
     )
     history_text = "\n".join(
         f"  {e['role']}: {e['content']}"
