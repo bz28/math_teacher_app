@@ -1074,6 +1074,15 @@ function HomeworkSectionReview({
   // grade until the teacher republishes. Closes the confirm dialog,
   // mirrors the fresh grade back onto roster + detail so the UI flips
   // out of the drifted state immediately.
+  //
+  // A regrade REVOKES any prior approval — same rationale as an edit: the
+  // approval vouched for the grade that just got replaced. The server does
+  // this unconditionally on force regrade (grading_ai.run_ai_grading_for_
+  // submission clears reviewed_by/reviewed_at), so we mirror reviewed_at →
+  // null optimistically here — otherwise a stale "Approved ✓" pill would sit
+  // over a freshly-changed grade until a refetch. Approve/Undo are disabled
+  // for this row while `regrading` is set (see SubmissionDetailPanel), which
+  // closes the TOCTOU window where a teacher could approve mid-regrade.
   const handleRegrade = useCallback(
     async (submissionId: string) => {
       setRegradingSubmissionId(submissionId);
@@ -1094,6 +1103,9 @@ function HomeworkSectionReview({
                         breakdown: res.breakdown,
                         rubric_snapshot: res.rubric_snapshot,
                         grade_dirty: res.grade_dirty,
+                        // Regrade replaced the grade — the server cleared the
+                        // approval, so drop it locally too.
+                        reviewed_at: null,
                       },
                     }
                   : e,
@@ -1108,6 +1120,7 @@ function HomeworkSectionReview({
                 ai_breakdown: res.ai_breakdown,
                 final_score: res.final_score,
                 grade_dirty: res.grade_dirty,
+                reviewed_at: null,
               }
             : d,
         );
@@ -1294,6 +1307,8 @@ function HomeworkSectionReview({
                 onSelectNext={() => {
                   if (nextStudent) setSelectedStudentId(nextStudent.student_id);
                 }}
+                toReleaseTotal={toReleaseTotal}
+                onPublish={onPublishClick}
                 onGradeProblem={setProblemGrade}
                 onFeedbackChange={setProblemFeedback}
                 onIntegrityResolved={handleIntegrityResolved}
@@ -2331,6 +2346,8 @@ function SubmissionDetailPanel({
   saveError,
   nextStudent,
   onSelectNext,
+  toReleaseTotal,
+  onPublish,
   onGradeProblem,
   onFeedbackChange,
   onIntegrityResolved,
@@ -2351,6 +2368,10 @@ function SubmissionDetailPanel({
   saveError: string | null;
   nextStudent: RosterEntry | null;
   onSelectNext: () => void;
+  // Grades still awaiting release across the whole HW (pending + dirty).
+  // Drives the end-of-stack publish CTA below.
+  toReleaseTotal: number;
+  onPublish: () => void;
   onGradeProblem: (problemId: string, status: GradeStatus, partialPercent?: number) => void;
   onFeedbackChange: (problemId: string, text: string) => void;
   onIntegrityResolved: (
@@ -2849,13 +2870,15 @@ function SubmissionDetailPanel({
               <button
                 type="button"
                 onClick={onMarkReviewed}
-                disabled={marking || savingGrade || !allGraded}
+                disabled={marking || savingGrade || regrading || !allGraded}
                 title={
-                  savingGrade
-                    ? "Saving your grade edit — approve once it finishes"
-                    : allGraded
-                      ? "Approve — mark this submission reviewed"
-                      : `Grade every problem first (${gradedProblemCount} of ${totalProblems} graded)`
+                  regrading
+                    ? "Regrading — approve once the new grade lands"
+                    : savingGrade
+                      ? "Saving your grade edit — approve once it finishes"
+                      : allGraded
+                        ? "Approve — mark this submission reviewed"
+                        : `Grade every problem first (${gradedProblemCount} of ${totalProblems} graded)`
                 }
                 className="rounded-[--radius-md] border border-[color:var(--color-success)]/40 bg-[color:var(--color-success)]/10 px-3.5 py-1.5 text-xs font-bold text-[color:var(--color-success)] transition-colors hover:border-[color:var(--color-success)]/60 disabled:cursor-not-allowed disabled:opacity-45"
               >
@@ -2872,11 +2895,13 @@ function SubmissionDetailPanel({
               <button
                 type="button"
                 onClick={onUnmarkReviewed}
-                disabled={marking || savingGrade}
+                disabled={marking || savingGrade || regrading}
                 title={
-                  savingGrade
-                    ? "Saving your grade edit — the approval will clear when it finishes"
-                    : "Undo approval — return this submission to not reviewed"
+                  regrading
+                    ? "Regrading — the approval will clear when the new grade lands"
+                    : savingGrade
+                      ? "Saving your grade edit — the approval will clear when it finishes"
+                      : "Undo approval — return this submission to not reviewed"
                 }
                 className="rounded-[--radius-md] border border-border-light bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary transition-colors hover:border-primary/40 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -2884,15 +2909,55 @@ function SubmissionDetailPanel({
               </button>
             </>
           )}
-          <button
-            type="button"
-            onClick={onSelectNext}
-            disabled={!nextStudent}
-            title={!nextStudent ? "No more students to review" : undefined}
-            className="rounded-[--radius-md] border border-primary/30 bg-primary-bg px-3.5 py-1.5 text-xs font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-border-light disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted"
-          >
-            {nextStudent ? "Next student →" : "No more students"}
-          </button>
+          {/* Advance-or-publish. While there's a next unreleased submitter,
+              this is the rapid "Next student →" advance. On the LAST one —
+              nextStudent null but grades still unreleased HW-wide — the dead
+              "No more students" button was the exact moment the teacher wants
+              to Publish, so we surface an affirmative publish CTA in the same
+              slot (reuses the header's publish gate: straight-through when
+              everything's approved + unflagged, else opens the confirm).
+              When nothing's left to release, a quiet "all caught up" state —
+              but only claim that when THIS submission is itself released; if
+              it's the last one and still unpublished-because-ungraded (e.g. a
+              skipped-unreadable that needs hand-grading), a neutral terminal
+              label avoids contradicting the "grade this by hand" callout. */}
+          {nextStudent ? (
+            <button
+              type="button"
+              onClick={onSelectNext}
+              className="rounded-[--radius-md] border border-primary/30 bg-primary-bg px-3.5 py-1.5 text-xs font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10"
+            >
+              Next student →
+            </button>
+          ) : toReleaseTotal > 0 ? (
+            <button
+              type="button"
+              onClick={onPublish}
+              title={`You're on the last student — publish ${toReleaseTotal} ${toReleaseTotal === 1 ? "grade" : "grades"}`}
+              className="inline-flex items-center gap-1.5 rounded-[--radius-md] bg-primary px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-primary-dark"
+            >
+              <span aria-hidden>✓</span>
+              Last one — publish {toReleaseTotal}{" "}
+              {toReleaseTotal === 1 ? "grade" : "grades"} →
+            </button>
+          ) : published ? (
+            <span
+              role="status"
+              className="inline-flex items-center gap-1.5 rounded-[--radius-md] border border-[color:var(--color-success)]/30 bg-[color:var(--color-success)]/10 px-3.5 py-1.5 text-xs font-bold text-[color:var(--color-success)]"
+              title="Every submission reviewed and published"
+            >
+              <span aria-hidden>✓</span>
+              All caught up
+            </span>
+          ) : (
+            <span
+              role="status"
+              className="inline-flex items-center gap-1.5 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)] px-3.5 py-1.5 text-xs font-bold text-text-muted"
+              title="No other students to review — grade this one to finish"
+            >
+              No more students
+            </span>
+          )}
         </div>
       </div>
 
