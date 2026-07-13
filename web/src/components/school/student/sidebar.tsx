@@ -42,14 +42,35 @@ export function MobileSidebarDrawer({
   const asideRef = useRef<HTMLElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
-  // ESC + body-scroll lock + focus management. As an aria-modal dialog,
-  // the drawer must trap Tab inside itself, move focus in on open, and
-  // restore it to the trigger on close — same contract as ui/modal.tsx
-  // and sidebar-join-modal.tsx.
+  // Focus management + scroll lock — keyed on `open` ONLY, so it runs once
+  // per open/close and never on a parent re-render. As an aria-modal dialog
+  // the drawer moves focus in on open and restores it to the trigger on
+  // close (same contract as ui/modal.tsx, which likewise splits focus from
+  // the key handler so an unstable `onClose` can't yank focus back).
   useEffect(() => {
     if (!open) return;
 
     previousFocusRef.current = document.activeElement as HTMLElement | null;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    requestAnimationFrame(() => {
+      const first = asideRef.current?.querySelector<HTMLElement>(
+        DRAWER_FOCUSABLE_SELECTOR,
+      );
+      first?.focus();
+    });
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      previousFocusRef.current?.focus();
+    };
+  }, [open]);
+
+  // ESC to close + Tab-cycle trap. Separate effect so it can depend on the
+  // (possibly re-created) `onClose` without re-running the focus effect.
+  useEffect(() => {
+    if (!open) return;
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -73,21 +94,7 @@ export function MobileSidebarDrawer({
     };
 
     window.addEventListener("keydown", onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    requestAnimationFrame(() => {
-      const first = asideRef.current?.querySelector<HTMLElement>(
-        DRAWER_FOCUSABLE_SELECTOR,
-      );
-      first?.focus();
-    });
-
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
-      previousFocusRef.current?.focus();
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
   if (!open) return null;
