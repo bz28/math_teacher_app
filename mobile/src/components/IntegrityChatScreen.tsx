@@ -21,7 +21,6 @@ import {
   getIntegrityState,
   postIntegrityTurn,
   MIN_INTEGRITY_MESSAGE_CHARS,
-  type Extraction,
   type IntegrityState,
 } from "../services/api";
 import { groupExtraction } from "../utils/extraction";
@@ -287,10 +286,9 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
   ).length;
   const progressPct = totalProblems > 0 ? (problemsVerdicted / totalProblems) * 100 : 0;
   // The student's own extracted work, surfaced as a reference so a kid asked
-  // "walk me through step 3" can actually see step 3. The wire type is loose
-  // (Record) on the integrity payload; it carries the same shape as the
-  // confirm screen's Extraction, so we narrow it here.
-  const extraction = (state.extraction as unknown as Extraction | null) ?? null;
+  // "walk me through step 3" can actually see step 3. Now typed as Extraction
+  // straight off the integrity payload (IntegrityStateResponse.extraction).
+  const extraction = state.extraction ?? null;
   const extractionGroups =
     extraction && Array.isArray(extraction.steps)
       ? groupExtraction({
