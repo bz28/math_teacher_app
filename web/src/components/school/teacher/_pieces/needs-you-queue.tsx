@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { teacher, type NeedsAttentionItem, type NeedsAttentionReason } from "@/lib/api";
@@ -76,31 +76,41 @@ export function NeedsYouQueue() {
   const [expanded, setExpanded] = useState(false);
   const reduceMotion = useReducedMotion();
 
+  // Monotonic request id: only the newest attempt is allowed to write
+  // state. Guards both the mount fetch and every Retry with one
+  // mechanism — a stale resolve after unmount, or an older attempt a
+  // rapid Retry superseded, is ignored rather than clobbering the
+  // current queue.
+  const reqId = useRef(0);
+
   // Load (and reload on Retry) the triage queue. Resets to the skeleton
   // state on each attempt so a retry reads as "trying again", not a
   // frozen error. The resets live inside the nested async fn (not the
   // effect/callback body) so the initial clear isn't a
-  // synchronous-setState-in-effect; the cancelled flag guards a late
-  // resolve after unmount.
+  // synchronous-setState-in-effect.
   const load = useCallback(() => {
-    let cancelled = false;
+    const id = ++reqId.current;
     const run = async () => {
       setError(null);
       setItems(null);
       try {
         const res = await teacher.needsAttention();
-        if (!cancelled) setItems(res.items);
+        if (reqId.current === id) setItems(res.items);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+        if (reqId.current === id) setError(e instanceof Error ? e.message : "Failed to load");
       }
     };
     run();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
-  useEffect(() => load(), [load]);
+  useEffect(() => {
+    const ref = reqId; // capture the ref object for the cleanup closure
+    load();
+    // Invalidate any in-flight fetch on unmount so a late resolve no-ops.
+    return () => {
+      ref.current += 1;
+    };
+  }, [load]);
 
   // A failed fetch renders a calm inline notice with Retry inside the
   // section card (below) rather than vanishing the whole queue — a silent
