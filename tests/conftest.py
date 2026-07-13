@@ -90,10 +90,16 @@ def auth_headers(token: str) -> dict[str, str]:
 # Scoped to every test via autouse so we never accidentally make
 # real API calls from CI.
 
+# Mirrors the real producer shape (INTEGRITY_EXTRACT_SCHEMA): every step
+# carries problem_position (nullable), and final_answers is always present.
+# Kept as an unattributed step + empty final_answers so the pipeline reads
+# "work present, no final answer extracted" (no answer → no equivalence LLM
+# call), matching the behavior tests were written against.
 _MOCK_EXTRACTION = {
     "steps": [
-        {"step_num": 1, "latex": "mock", "plain_english": "mocked extraction"},
+        {"step_num": 1, "problem_position": None, "latex": "mock", "plain_english": "mocked extraction"},
     ],
+    "final_answers": [],
     "confidence": 0.9,
 }
 

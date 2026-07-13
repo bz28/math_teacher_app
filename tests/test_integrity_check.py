@@ -319,7 +319,7 @@ async def test_unreadable_gate_skips_entire_check(
     """When extraction confidence is below the threshold, the whole
     check is marked skipped_unreadable and no conversation is
     started."""
-    low_conf = {"steps": [], "confidence": 0.05}
+    low_conf = {"steps": [], "final_answers": [], "confidence": 0.05}
     with patch(
         "api.core.integrity_ai.extract_student_work",
         return_value=low_conf,

@@ -61,6 +61,7 @@ from api.models.question_bank import FORMAT_MCQ, BankConsumption, QuestionBankIt
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
+from api.schemas.extraction import ExtractionOut, SubmissionFileOut
 from api.services.bank import problem_ids_in_content
 
 logger = logging.getLogger(__name__)
@@ -485,13 +486,13 @@ class StudentSubmissionDetail(BaseModel):
     # List of {data, media_type} the student submitted. Null only when
     # the row pre-dates the multi-file column (no real users yet so
     # this is more about graceful read than a real branch).
-    files: list[dict[str, str]] | None
+    files: list[SubmissionFileOut] | None
     final_answers: dict[str, str]
     # Full Vision extraction (steps + final_answers + confidence).
     # Null when extraction hasn't run yet, failed, or the HW has both
     # integrity and AI grading disabled (no extraction to run). The
     # student confirm screen groups this by problem_position.
-    extraction: dict[str, Any] | None
+    extraction: ExtractionOut | None
     # Mutually-exclusive terminal signals from the confirm screen.
     # Both null = "student still on confirm screen".
     #   confirmed  → AI grading + integrity kicked off.
