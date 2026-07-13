@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -11,6 +11,7 @@ import {
   type PracticeSet,
   type StudentClass,
 } from "../services/api";
+import { useCachedResource } from "../hooks/useCachedResource";
 import { uniqueCourses } from "../utils/practiceCheck";
 import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
 
@@ -23,6 +24,17 @@ interface CourseGroup {
   sets: PracticeSet[];
 }
 
+const NO_GROUPS: CourseGroup[] = [];
+
+/** Teacher-assigned practice grouped by course; courses with no sets drop out. */
+async function loadPracticeGroups(): Promise<CourseGroup[]> {
+  const courses = uniqueCourses(await getStudentClasses());
+  // allSettled so one course's failed fetch doesn't blank the whole list.
+  const settled = await Promise.allSettled(courses.map((c) => getCoursePractice(c.course_id)));
+  const sets = settled.map((r) => (r.status === "fulfilled" ? r.value : []));
+  return courses.map((course, i) => ({ course, sets: sets[i] })).filter((g) => g.sets.length > 0);
+}
+
 /**
  * The school student's "Practice" tab — teacher-assigned, ungraded practice
  * sets across their courses. This is the sanctioned practice surface that
@@ -31,31 +43,11 @@ interface CourseGroup {
 export function PracticeListScreen({ onOpenPractice }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [groups, setGroups] = useState<CourseGroup[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(false);
-
-  const load = useCallback(async (isRefresh = false) => {
-    if (!isRefresh) setLoading(true);
-    setError(false);
-    try {
-      const courses = uniqueCourses(await getStudentClasses());
-      // allSettled so one course's failed fetch doesn't blank the whole list.
-      const settled = await Promise.allSettled(courses.map((c) => getCoursePractice(c.course_id)));
-      const sets = settled.map((r) => (r.status === "fulfilled" ? r.value : []));
-      setGroups(courses.map((course, i) => ({ course, sets: sets[i] })).filter((g) => g.sets.length > 0));
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { data, loading, refreshing, error, load, setRefreshing } = useCachedResource(
+    "school-practice",
+    loadPracticeGroups,
+  );
+  const groups = data ?? NO_GROUPS;
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
@@ -90,7 +82,7 @@ export function PracticeListScreen({ onOpenPractice }: Props) {
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                load(true);
+                load();
               }}
               tintColor={colors.primary}
             />

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { AppState, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -8,9 +8,9 @@ import { ListSkeleton } from "./SkeletonLoader";
 import {
   getSchoolDashboard,
   type SchoolAssignment,
-  type SchoolDashboard,
   type SchoolGrade,
 } from "../services/api";
+import { useCachedResource } from "../hooks/useCachedResource";
 import { scoreColor } from "../utils/scoreColor";
 import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
 
@@ -30,33 +30,16 @@ interface Props {
 export function SchoolHomeScreen({ onJoinClass, onOpenAssignment }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [data, setData] = useState<SchoolDashboard | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(false);
-
-  const load = useCallback(async (isRefresh = false) => {
-    if (!isRefresh) setLoading(true);
-    setError(false);
-    try {
-      setData(await getSchoolDashboard());
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { data, loading, refreshing, error, load, setRefreshing } = useCachedResource(
+    "school-dashboard",
+    getSchoolDashboard,
+  );
 
   // Refetch when the app returns to the foreground so a student who left the
   // dashboard open doesn't come back to stale due dates / grades.
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next) => {
-      if (next === "active") load(true);
+      if (next === "active") load();
     });
     return () => sub.remove();
   }, [load]);
@@ -107,7 +90,7 @@ export function SchoolHomeScreen({ onJoinClass, onOpenAssignment }: Props) {
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                load(true);
+                load();
               }}
               tintColor={colors.primary}
             />

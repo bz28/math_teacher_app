@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from "@testing-library/react-native";
 import { GradesScreen } from "./GradesScreen";
 import { waitForText } from "../test-utils";
 import * as api from "../services/api";
+import { useSchoolCacheStore } from "../stores/schoolCache";
 
 jest.mock("../services/api", () => ({ getSchoolGrades: jest.fn() }));
 const mockedApi = api as jest.Mocked<typeof api>;
@@ -19,7 +20,10 @@ const GRADES = [
 ];
 
 describe("GradesScreen", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useSchoolCacheStore.setState({ entries: {} });
+  });
 
   it("opens the graded homework when a grade row is tapped", async () => {
     mockedApi.getSchoolGrades.mockResolvedValue({ grades: GRADES } as never);
