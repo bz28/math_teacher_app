@@ -21,6 +21,27 @@ export interface BucketedHomeworks {
  * COMPLETED. Active (not-past-due) homeworks route purely by due date —
  * students are still working, so we never nag "needs grading" early.
  */
+/**
+ * A homework is "Completed" only once it's past due, the whole class has
+ * submitted, and every one of those grades is PUBLISHED to students
+ * (`published`, set by "Publish grades" — not `graded`, which AI grading
+ * sets on submit). Single source of truth shared by the timeline
+ * bucketing and the "Completed" status filter so the two can't drift.
+ */
+export function isHomeworkCompleted(
+  hw: TeacherAssignment,
+  now: number = Date.now(),
+): boolean {
+  if (hw.status !== "published" || !hw.due_at) return false;
+  const isPastDue = new Date(hw.due_at).getTime() < now;
+  return (
+    isPastDue &&
+    hw.submitted > 0 &&
+    hw.published === hw.submitted &&
+    hw.submitted >= hw.total_students
+  );
+}
+
 export function bucketHomeworks(
   homeworks: TeacherAssignment[],
   now: number = Date.now(),
@@ -45,11 +66,7 @@ export function bucketHomeworks(
     if (isPastDue) {
       // Completed: whole class submitted AND every submitted grade is
       // published. `published` (not `graded`) is the real "done" signal.
-      if (
-        hw.submitted > 0 &&
-        hw.published === hw.submitted &&
-        hw.submitted >= hw.total_students
-      ) {
+      if (isHomeworkCompleted(hw, now)) {
         completed.push(hw);
         continue;
       }

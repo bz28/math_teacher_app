@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TeacherAssignment } from "@/lib/api";
-import { bucketHomeworks } from "./homework-buckets.ts";
+import { bucketHomeworks, isHomeworkCompleted } from "./homework-buckets.ts";
 
 const NOW = new Date("2026-06-22T12:00:00.000Z").getTime();
 const DAY = 86_400_000;
@@ -118,6 +118,48 @@ test("draft (non-published status) → upcoming regardless of due", () => {
   assert.equal(
     bucketOf({ status: "draft", due_at: at(-1 * DAY), submitted: 10, published: 10 }),
     "upcoming",
+  );
+});
+
+// The "Completed" status filter shares isHomeworkCompleted with the
+// timeline bucket, so these lock the filter to the same definition.
+test("isHomeworkCompleted: past due + fully submitted + all published", () => {
+  assert.equal(
+    isHomeworkCompleted(
+      hw({ due_at: at(-1 * DAY), total_students: 10, submitted: 10, published: 10 }),
+      NOW,
+    ),
+    true,
+  );
+});
+
+test("isHomeworkCompleted: all graded but unpublished is NOT completed", () => {
+  assert.equal(
+    isHomeworkCompleted(
+      hw({ due_at: at(-1 * DAY), total_students: 10, submitted: 10, graded: 10, published: 0 }),
+      NOW,
+    ),
+    false,
+  );
+});
+
+test("isHomeworkCompleted: active (future due) is never completed", () => {
+  assert.equal(
+    isHomeworkCompleted(
+      hw({ due_at: at(2 * DAY), total_students: 10, submitted: 10, published: 10 }),
+      NOW,
+    ),
+    false,
+  );
+});
+
+test("isHomeworkCompleted: draft is never completed", () => {
+  assert.equal(
+    isHomeworkCompleted(
+      hw({ status: "draft", due_at: at(-1 * DAY), submitted: 5, published: 5, total_students: 5 }),
+      NOW,
+    ),
+    false,
   );
 });
 

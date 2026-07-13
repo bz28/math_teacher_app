@@ -11,7 +11,7 @@ import { SearchIcon } from "@/components/ui/icons";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { NewHomeworkModal } from "./_pieces/new-homework-modal";
 import { HomeworkTimeline } from "./_pieces/homework-timeline";
-import { bucketHomeworks } from "./_pieces/homework-buckets";
+import { bucketHomeworks, isHomeworkCompleted } from "./_pieces/homework-buckets";
 
 // ── Filter types ──
 
@@ -103,15 +103,9 @@ export function HomeworkTab({
     } else if (filters.status === "published") {
       out = out.filter((hw) => hw.status === "published");
     } else if (filters.status === "completed") {
-      out = out.filter(
-        (hw) =>
-          hw.status === "published" &&
-          hw.due_at !== null &&
-          new Date(hw.due_at).getTime() < Date.now() &&
-          hw.graded > 0 &&
-          hw.submitted === hw.graded &&
-          hw.submitted >= hw.total_students,
-      );
+      // Same "Completed = all grades published" definition as the timeline
+      // Completed bucket (shared predicate keeps the two in sync).
+      out = out.filter((hw) => isHomeworkCompleted(hw));
     }
 
     // Section filter
