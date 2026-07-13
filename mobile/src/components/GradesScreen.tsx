@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -6,9 +6,14 @@ import { AnimatedPressable } from "./AnimatedPressable";
 import { Eyebrow } from "./Eyebrow";
 import { ListSkeleton } from "./SkeletonLoader";
 import { getSchoolGrades, type SchoolGrade } from "../services/api";
+import { useCachedResource } from "../hooks/useCachedResource";
 import { averageScore } from "../utils/grades";
 import { scoreColor } from "../utils/scoreColor";
 import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
+
+// Stable empty reference so the `average` memo doesn't recompute every render
+// while the cache is still cold.
+const NO_GRADES: SchoolGrade[] = [];
 
 interface Props {
   /** Open the graded homework for a tapped grade row. */
@@ -19,28 +24,11 @@ interface Props {
 export function GradesScreen({ onOpenGrade }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [grades, setGrades] = useState<SchoolGrade[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(false);
-
-  const load = useCallback(async (isRefresh = false) => {
-    if (!isRefresh) setLoading(true);
-    setError(false);
-    try {
-      const res = await getSchoolGrades();
-      setGrades(res.grades);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { data, loading, refreshing, error, load, setRefreshing } = useCachedResource(
+    "school-grades",
+    async () => (await getSchoolGrades()).grades,
+  );
+  const grades = data ?? NO_GRADES;
 
   const average = useMemo(() => averageScore(grades.map((g) => g.final_score)), [grades]);
 
