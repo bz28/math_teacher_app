@@ -303,15 +303,32 @@ async function _fetchWithRefresh(url: string, init: RequestInit, timeoutMs = DEF
       _onSessionExpired?.();
     }
   }
+  // Entitlement 403s carry a structured body ({ error: "entitlement_required",
+  // entitlement, message, is_limit }). Convert here — in the shared path — so
+  // every verb (POST/GET/DELETE) surfaces an EntitlementError identically. Read
+  // a clone so a non-entitlement 403 still lets the caller read resp.json().
+  if (resp.status === 403) {
+    const data = await resp.clone().json().catch(() => null);
+    if (data?.error === "entitlement_required") {
+      throw new EntitlementError(
+        typeof data.message === "string" ? data.message : "Feature requires Pro subscription",
+        typeof data.entitlement === "string" ? data.entitlement : "",
+        data.is_limit === true,
+      );
+    }
+  }
   return resp;
 }
 
 export class EntitlementError extends Error {
   public entitlement: string;
-  constructor(message: string, entitlement: string) {
+  /** True when the 403 was a usage-limit hit; false when it's a Pro-only gate. */
+  public isLimit: boolean;
+  constructor(message: string, entitlement: string, isLimit = false) {
     super(message);
     this.name = "EntitlementError";
     this.entitlement = entitlement;
+    this.isLimit = isLimit;
   }
 }
 
@@ -323,12 +340,6 @@ async function apiPost<T>(path: string, body: object, timeoutMs = DEFAULT_TIMEOU
   }, timeoutMs);
   if (!resp.ok) {
     const data = await resp.json().catch(() => null);
-    if (resp.status === 403 && data?.error === "entitlement_required") {
-      throw new EntitlementError(
-        typeof data.message === "string" ? data.message : "Feature requires Pro subscription",
-        typeof data.entitlement === "string" ? data.entitlement : "",
-      );
-    }
     throw new Error(extractError(data, resp.status));
   }
   return resp.json();
