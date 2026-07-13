@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, getUserRole, setToken, NetworkError } from "../lib/api";
+import { api, getUserRole, setToken } from "../lib/api";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -30,18 +30,11 @@ export default function Login() {
       }
       navigate("/");
     } catch (err) {
-      // Only a rejected credential should read as "invalid credentials".
-      // Timeouts / 5xx / unreachable-server carry their own message so the
-      // operator isn't misled into re-typing a correct password.
-      if (err instanceof NetworkError) {
-        setError(
-          err.message === "timeout"
-            ? "The server took too long to respond. Please try again."
-            : "Can't reach the server. Check your connection and try again.",
-        );
-      } else {
-        setError(err instanceof Error && err.message ? err.message : "Sign-in failed. Please try again.");
-      }
+      // Surface the real failure instead of blaming the operator's
+      // password for everything: api.login throws "Invalid credentials."
+      // only for a rejected 401 and a descriptive message for 5xx, and
+      // NetworkError already carries friendly timeout / unreachable copy.
+      setError(err instanceof Error && err.message ? err.message : "Sign-in failed. Please try again.");
     }
   }
 
