@@ -46,9 +46,20 @@ interface Props {
   /** The course the HW belongs to. Only used to build the target
    *  URL for the Go-to-Practice CTA. */
   courseId: string;
-  /** Called when the chat reaches the done state OR the kid taps
-   *  Exit. The parent re-fetches state on close. */
+  /** Called when the chat reaches a TERMINAL state (complete /
+   *  skipped_unreadable) and the kid taps "Back to homework". The
+   *  parent re-fetches state and stays on the homework view. Wrong
+   *  for a mid-check exit — re-fetching integrity state there just
+   *  routes the student straight back into the chat. Use `onLeave`
+   *  for that. */
   onDone: () => void;
+  /** Called when the kid taps "Leave & come back later" mid-check (or
+   *  bails from the load-error state). Unlike `onDone`, this must
+   *  *navigate away* from the homework route — re-fetching in place
+   *  would re-detect the in-progress check and bounce them back into
+   *  the chat. Their progress is saved server-side, so returning to
+   *  the homework re-hydrates the transcript and resumes. */
+  onLeave: () => void;
 }
 
 const MIN_MESSAGE_CHARS = 5;
@@ -77,6 +88,7 @@ export function IntegrityCheckChat({
   assignmentId,
   courseId,
   onDone,
+  onLeave,
 }: Props) {
   const [state, setState] = useState<IntegrityStateResponse | null>(null);
   const [pendingStudentMessage, setPendingStudentMessage] =
@@ -284,11 +296,7 @@ export function IntegrityCheckChat({
   }
 
   if (state === null && error === null) {
-    return (
-      <div className="mx-auto max-w-2xl py-12 text-center text-text-muted">
-        Loading…
-      </div>
-    );
+    return <ChatLoadingSkeleton />;
   }
 
   if (state === null) {
@@ -296,7 +304,7 @@ export function IntegrityCheckChat({
       <div className="mx-auto max-w-2xl py-12 text-center">
         <p className="text-error">{error}</p>
         <button
-          onClick={onDone}
+          onClick={onLeave}
           className="mt-4 rounded-[--radius-sm] border border-border px-4 py-2 text-sm hover:border-primary"
         >
           Back to homework
@@ -389,15 +397,16 @@ export function IntegrityCheckChat({
                   {problemsVerdicted} of {totalProblems}
                 </div>
               )}
-              {/* Pause / leave-and-resume. Reuses the same exit path
-                  (onDone) the error and complete states already use —
-                  it just navigates out, never auto-submits or finalizes.
-                  The transcript re-hydrates from the server on remount,
-                  so leaving mid-chat is safe and resumable. */}
+              {/* Pause / leave-and-resume. Uses onLeave (a real route
+                  navigation), NOT onDone: re-fetching integrity state
+                  in place would re-detect the in-progress check and
+                  bounce the student straight back into this chat. The
+                  transcript re-hydrates from the server on return, so
+                  leaving mid-chat is safe and resumable. */}
               {!isComplete && (
                 <button
                   type="button"
-                  onClick={onDone}
+                  onClick={onLeave}
                   title="Your progress is saved — you can finish this later."
                   className="rounded-[--radius-sm] px-2 py-1 text-xs font-medium text-text-muted hover:text-text-secondary"
                 >
@@ -654,6 +663,53 @@ export function IntegrityCheckChat({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Loading skeleton — shown while the transcript hydrates on mount.
+// A couple of shimmer bubbles (agent left, student right) stand in for
+// the chat so the student sees the shape of what's coming instead of a
+// bare "Loading…" line. Motion-reduce users get a static placeholder.
+// ────────────────────────────────────────────────────────────────────
+
+function ChatLoadingSkeleton() {
+  return (
+    <div
+      className="mx-auto flex h-[calc(100dvh-4rem)] w-full max-w-2xl flex-col"
+      role="status"
+      aria-label="Loading your understanding check"
+    >
+      <div className="border-b border-border-light px-2 py-3">
+        <div className="h-3 w-40 animate-pulse rounded-full bg-border-light motion-reduce:animate-none" />
+      </div>
+      <div className="min-h-0 flex-1 space-y-3 px-2 py-4">
+        <SkeletonBubble side="left" widthClass="w-3/4" />
+        <SkeletonBubble side="right" widthClass="w-1/2" />
+        <SkeletonBubble side="left" widthClass="w-2/3" />
+      </div>
+      <span className="sr-only">Loading…</span>
+    </div>
+  );
+}
+
+function SkeletonBubble({
+  side,
+  widthClass,
+}: {
+  side: "left" | "right";
+  widthClass: string;
+}) {
+  return (
+    <div className={cn("flex", side === "right" ? "justify-end" : "justify-start")}>
+      <div
+        className={cn(
+          "h-12 animate-pulse rounded-[--radius-md] motion-reduce:animate-none",
+          widthClass,
+          side === "right" ? "bg-primary/15" : "bg-border-light",
+        )}
+      />
     </div>
   );
 }
