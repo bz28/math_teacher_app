@@ -56,6 +56,15 @@ export function HomeworkCard({
   // title row so a teacher can scan a stack of cards and pick the one
   // with the largest queue without clicking in.
   const ungraded = Math.max(0, hw.submitted - hw.graded);
+  // Submitted-vs-enrolled context, shown ahead of every review/publish
+  // state so "ready to publish" or a published pill never reads as
+  // class-complete while students still owe work (a 3-of-28 HW is not
+  // "done"). In needsGrading a fully-published HW is always partial — a
+  // complete one is routed to the completed bucket.
+  const submittedLabel =
+    hw.submitted >= hw.total_students
+      ? `all ${hw.submitted} submitted`
+      : `${hw.submitted} of ${hw.total_students} submitted`;
 
   return (
     <button
@@ -122,23 +131,32 @@ export function HomeworkCard({
           stay one-liners so the card doesn't balloon. */}
       <div className="mt-1 text-[11px] text-text-muted">
         {hw.problem_count} {hw.problem_count === 1 ? "problem" : "problems"}
-        {bucket === "needsGrading" &&
-          hw.submitted > 0 &&
-          ungraded === 0 &&
-          // Everything submitted so far is graded. But "all graded" only
-          // means "done" if the whole class has actually submitted —
-          // otherwise it reads as class-complete on a 3-of-28 HW while 25
-          // students still owe work. Surface submitted-vs-enrolled so the
-          // teacher can tell a finished HW from a partial one at a glance.
-          (hw.submitted >= hw.total_students ? (
-            <span className="ml-1 font-semibold text-text-secondary">
-              · all {hw.submitted} graded — review &amp; publish
-            </span>
-          ) : (
-            <span className="ml-1 font-semibold text-text-secondary">
-              · {hw.submitted} of {hw.total_students} submitted · all graded
-            </span>
-          ))}
+        {/* Review/publish progress — the honest teacher-workload signal.
+            AI grading auto-sets final_score on submit, so "graded" is
+            near-always true and useless here; we key off the direct
+            SubmissionGrade lifecycle flags instead. Every branch leads
+            with submitted-vs-enrolled so a partial HW never reads as
+            class-complete:
+              - published === submitted → all grades released to students
+                ("Grades published" pill).
+              - to_review > 0 → submissions still awaiting the teacher's
+                review (reviewed_at IS NULL).
+              - else → everything reviewed, ready for the teacher to
+                publish. */}
+        {bucket === "needsGrading" && hw.submitted > 0 && (
+          <span className="ml-1 font-semibold text-text-secondary">
+            · {submittedLabel}
+            {hw.published === hw.submitted ? (
+              <span className="ml-1.5 align-middle">
+                <StatusPill tone="green" label="Grades published" />
+              </span>
+            ) : hw.to_review > 0 ? (
+              <> · {hw.to_review} to review</>
+            ) : (
+              <> · ready to publish</>
+            )}
+          </span>
+        )}
         {hw.pending_review > 0 && (
           <span className="ml-1 font-semibold text-[color:var(--color-warning-dark)] ">
             · {hw.pending_review} need{hw.pending_review === 1 ? "s" : ""} your approval
