@@ -80,6 +80,11 @@ export function PracticeStrugglePanel({ courseId }: { courseId: string }) {
     let cancelled = false;
     const load = async () => {
       setLoading(true);
+      // Clear any prior error so switching to a healthy section escapes
+      // the error card — otherwise a failed load on one section would
+      // wall off every later section behind a stale error (the error
+      // branch wins the render ternary even once new data arrives).
+      setError(null);
       try {
         const res = await teacher.practiceInsights(courseId, activeSection);
         if (!cancelled) setInsights(res);

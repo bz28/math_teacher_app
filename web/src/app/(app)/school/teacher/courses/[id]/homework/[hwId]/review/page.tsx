@@ -38,7 +38,7 @@ type Phase =
   | { kind: "loading" }
   | { kind: "ready"; items: BankItem[] }
   | { kind: "empty" }
-  | { kind: "error"; message: string };
+  | { kind: "error" };
 
 export default function HomeworkReviewPage({
   params,
@@ -52,6 +52,12 @@ export default function HomeworkReviewPage({
 
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [hwTitle, setHwTitle] = useState<string>("");
+  // Bump to re-fire the initial load (the Retry affordance on the error
+  // state). Driving retry through the effect — rather than calling
+  // load() straight from the handler — keeps the fetch's cancel handle
+  // wired, so a Back-nav or a double-tap can't strand an uncancellable
+  // in-flight request.
+  const [reloadKey, setReloadKey] = useState(0);
   // Cached so the auto-append polling effect can re-run fetchPending
   // without re-fetching the assignment each tick.
   const [assignmentType, setAssignmentType] = useState<string | null>(null);
@@ -96,19 +102,16 @@ export default function HomeworkReviewPage({
         if (cancelled) return;
         setPhase(items.length > 0 ? { kind: "ready", items } : { kind: "empty" });
       })
-      .catch((e) => {
+      .catch(() => {
         if (cancelled) return;
-        setPhase({
-          kind: "error",
-          message: e instanceof Error ? e.message : "Failed to load queue",
-        });
+        setPhase({ kind: "error" });
       });
     return () => {
       cancelled = true;
     };
   }, [assignmentId, fetchPending]);
 
-  useEffect(() => load(), [load]);
+  useEffect(() => load(), [load, reloadKey]);
 
   // Auto-append: while a gen job seeded by the wizard is still in
   // flight, poll pending and feed any new items to WorkshopModal so
@@ -194,7 +197,7 @@ export default function HomeworkReviewPage({
             message="We couldn't load this right now."
             onRetry={() => {
               setPhase({ kind: "loading" });
-              load();
+              setReloadKey((k) => k + 1);
             }}
           />
         </div>
