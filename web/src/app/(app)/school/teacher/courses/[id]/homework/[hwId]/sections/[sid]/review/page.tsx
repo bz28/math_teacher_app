@@ -3531,10 +3531,10 @@ function ProblemGradeRow({
     // displayed default as a phantom "edit" and, on an approved row,
     // silently revoke the approval server-side. So only commit a value
     // the teacher actually typed, and only when it differs from the
-    // effective current value shown in the field (stored feedback, or
-    // the empty/AI default when none is stored). Re-committing the
-    // unchanged default is a no-op — no PATCH, no revoke. Genuine edits
-    // (buffer differs from the effective value) still persist and revoke.
+    // effective current value shown in the field (the stored feedback,
+    // or "" when none is stored). Re-committing the unchanged value is a
+    // no-op — no PATCH, no revoke. Genuine edits (buffer differs from the
+    // effective value) still persist and revoke.
     if (feedbackBuffer === null) return;
     const committed = feedbackBuffer;
     setFeedbackBuffer(null);
