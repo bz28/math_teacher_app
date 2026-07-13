@@ -8,6 +8,7 @@ import { formatRelativeDate } from "../lib/format";
 import StatCard from "../components/StatCard";
 import { Checkbox } from "../components/Checkbox";
 import { Pagination } from "../components/Pagination";
+import ErrorState from "../components/ErrorState";
 
 const PAGE_SIZE = 25;
 
@@ -31,6 +32,8 @@ function ScoreBadge({ score }: { score: number }) {
 
 export default function Quality() {
   const [data, setData] = useState<QualityData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [hours, setHours] = useState("168");
   const [onlyFailed, setOnlyFailed] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -44,13 +47,16 @@ export default function Quality() {
         limit: String(PAGE_SIZE),
         offset: String(offset),
       })
-      .then(setData)
-      .catch((e) => console.error("Quality API error:", e));
-  }, [hours, onlyFailed, offset]);
+      .then((d) => { setData(d); setError(null); })
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load solution quality."));
+  }, [hours, onlyFailed, offset, reloadKey]);
 
   const handleHoursChange = (v: string) => { setHours(v); setOffset(0); };
   const handleFailedToggle = (v: boolean) => { setOnlyFailed(v); setOffset(0); };
 
+  if (!data && error) {
+    return <ErrorState message={error} onRetry={() => { setError(null); setReloadKey((k) => k + 1); }} />;
+  }
   if (!data) return <p className="loading">Loading…</p>;
 
   const { summary } = data;

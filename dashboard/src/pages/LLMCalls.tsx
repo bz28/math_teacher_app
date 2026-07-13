@@ -10,6 +10,7 @@ import { formatRelativeDate, shortModel } from "../lib/format";
 import StatCard from "../components/StatCard";
 import MetadataChips from "../components/MetadataChips";
 import { Pagination } from "../components/Pagination";
+import ErrorState from "../components/ErrorState";
 
 const COLORS = ["#14130f", "#4a6b3a", "#b8431a", "#3d5a78", "#a66b15", "#6b21a8"];
 
@@ -44,6 +45,8 @@ export default function LLMCalls() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [debugState, setDebugState] = useState<Record<string, string>>({});
   const [offset, setOffset] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   // Schools list used to populate the School dropdown. Loaded once
   // on mount — cheap query and rarely changes. If it fails the
   // dropdown just hides; the URL filter still works.
@@ -69,9 +72,11 @@ export default function LLMCalls() {
       ...(tab === "failures" ? { success: "false" } : {}),
       limit: String(PAGE_SIZE),
       offset: String(offset),
-    }).then((d) => { if (!cancelled) setData(d); });
+    })
+      .then((d) => { if (!cancelled) { setData(d); setError(null); } })
+      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load LLM calls."); });
     return () => { cancelled = true; };
-  }, [hours, fnFilter, userFilter, submissionFilter, schoolFilter, tab, offset]);
+  }, [hours, fnFilter, userFilter, submissionFilter, schoolFilter, tab, offset, reloadKey]);
 
   // Reset offset whenever any non-pagination filter changes so a deep
   // link (?submission=…, ?user=…) or a scope flip never lands past the
@@ -132,6 +137,9 @@ export default function LLMCalls() {
     }
   };
 
+  if (!data && error) {
+    return <ErrorState message={error} onRetry={() => { setError(null); setReloadKey((k) => k + 1); }} />;
+  }
   if (!data) return <p className="loading">Loading…</p>;
 
   const totalCalls = data.by_function.reduce((s, r) => s + r.count, 0);

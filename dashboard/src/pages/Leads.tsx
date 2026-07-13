@@ -13,6 +13,7 @@ import ConvertLeadModal from "../components/ConvertLeadModal";
 import { EditorialModal } from "../components/EditorialModal";
 import StatCard from "../components/StatCard";
 import { useToast } from "../lib/toast";
+import ErrorState from "../components/ErrorState";
 
 const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
   { value: "new", label: "New" },
@@ -76,20 +77,25 @@ export default function Leads() {
   const toast = useToast();
   const [leads, setLeads] = useState<ContactLeadData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"active" | "stale" | "all">("active");
   const [showAdd, setShowAdd] = useState(false);
   const [convertLead, setConvertLead] = useState<ContactLeadData | null>(null);
 
   const reload = () => {
     setLoading(true);
-    api.leads().then((d) => setLeads(d.leads)).finally(() => setLoading(false));
+    setLoadError(null);
+    api.leads()
+      .then((d) => setLeads(d.leads))
+      .catch((e) => setLoadError(e instanceof Error ? e.message : "Failed to load leads."))
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
     let cancelled = false;
     api.leads()
-      .then((d) => { if (!cancelled) setLeads(d.leads); })
-      .catch(() => {})
+      .then((d) => { if (!cancelled) { setLeads(d.leads); setLoadError(null); } })
+      .catch((e) => { if (!cancelled) setLoadError(e instanceof Error ? e.message : "Failed to load leads."); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
@@ -134,6 +140,7 @@ export default function Leads() {
   );
 
   if (loading) return <p className="loading">Loading…</p>;
+  if (loadError) return <ErrorState message={loadError} onRetry={reload} />;
 
   return (
     <div>
