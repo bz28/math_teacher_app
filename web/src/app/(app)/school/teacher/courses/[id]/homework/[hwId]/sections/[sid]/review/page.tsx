@@ -330,6 +330,16 @@ function HomeworkSectionReview({
   // Submission currently being marked reviewed via the explicit no-edit
   // affordance. Single slot — only one student is open at a time.
   const [markingReviewedId, setMarkingReviewedId] = useState<string | null>(null);
+  // Submissions with a grade-save PATCH in flight. A grade save revokes
+  // approval server-side, so we must NOT let the teacher click Approve
+  // (or Undo) mid-save — the stamp would land against a version the save
+  // is about to change, leaving the row DB-unapproved while the UI reads
+  // "Approved ✓". Disabling those controls while the save is in flight
+  // closes that TOCTOU window. A Set so concurrent per-submission saves
+  // are tracked independently.
+  const [savingGradeIds, setSavingGradeIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   // Whether the pinned work rail (wide layout) shows the photo inline.
   // A session preference — lifted here so it persists across students.
   const [photoPinned, setPhotoPinned] = useState(true);
@@ -690,6 +700,12 @@ function HomeworkSectionReview({
         prev?.forSubmissionId === submissionId ? null : prev,
       );
       s.inFlight = true;
+      setSavingGradeIds((prev) => {
+        if (prev.has(submissionId)) return prev;
+        const next = new Set(prev);
+        next.add(submissionId);
+        return next;
+      });
       try {
         while (s.latest) {
           const toSave = s.latest;
@@ -723,6 +739,12 @@ function HomeworkSectionReview({
         s.latest = null;
       } finally {
         s.inFlight = false;
+        setSavingGradeIds((prev) => {
+          if (!prev.has(submissionId)) return prev;
+          const next = new Set(prev);
+          next.delete(submissionId);
+          return next;
+        });
       }
     },
     [applyGradeToRoster],
@@ -1282,6 +1304,7 @@ function HomeworkSectionReview({
                   void handleUnmarkReviewed(selectedEntry.submission!.id)
                 }
                 marking={markingReviewedId === selectedEntry.submission.id}
+                savingGrade={savingGradeIds.has(selectedEntry.submission.id)}
                 regrading={regradingSubmissionId === selectedEntry.submission.id}
                 regradeError={
                   regradeError?.forSubmissionId === selectedEntry.submission.id
@@ -2314,6 +2337,7 @@ function SubmissionDetailPanel({
   onMarkReviewed,
   onUnmarkReviewed,
   marking,
+  savingGrade,
   regrading,
   regradeError,
   onRegradeRequest,
@@ -2336,6 +2360,7 @@ function SubmissionDetailPanel({
   onMarkReviewed: () => void;
   onUnmarkReviewed: () => void;
   marking: boolean;
+  savingGrade: boolean;
   regrading: boolean;
   regradeError: string | null;
   onRegradeRequest: () => void;
@@ -2824,11 +2849,13 @@ function SubmissionDetailPanel({
               <button
                 type="button"
                 onClick={onMarkReviewed}
-                disabled={marking || !allGraded}
+                disabled={marking || savingGrade || !allGraded}
                 title={
-                  allGraded
-                    ? "Approve — mark this submission reviewed"
-                    : `Grade every problem first (${gradedProblemCount} of ${totalProblems} graded)`
+                  savingGrade
+                    ? "Saving your grade edit — approve once it finishes"
+                    : allGraded
+                      ? "Approve — mark this submission reviewed"
+                      : `Grade every problem first (${gradedProblemCount} of ${totalProblems} graded)`
                 }
                 className="rounded-[--radius-md] border border-[color:var(--color-success)]/40 bg-[color:var(--color-success)]/10 px-3.5 py-1.5 text-xs font-bold text-[color:var(--color-success)] transition-colors hover:border-[color:var(--color-success)]/60 disabled:cursor-not-allowed disabled:opacity-45"
               >
@@ -2845,8 +2872,12 @@ function SubmissionDetailPanel({
               <button
                 type="button"
                 onClick={onUnmarkReviewed}
-                disabled={marking}
-                title="Undo approval — return this submission to not reviewed"
+                disabled={marking || savingGrade}
+                title={
+                  savingGrade
+                    ? "Saving your grade edit — the approval will clear when it finishes"
+                    : "Undo approval — return this submission to not reviewed"
+                }
                 className="rounded-[--radius-md] border border-border-light bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary transition-colors hover:border-primary/40 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {marking ? "Undoing…" : "Undo"}
@@ -3495,12 +3526,19 @@ function ProblemGradeRow({
   const feedbackDisabled = entry === null;
 
   const commitFeedback = () => {
-    // Always commit the displayed value — that way an un-edited blur
-    // still saves the AI-reasoning default when the stored feedback is
-    // null. The parent's setProblemFeedback dedupes against what's
-    // already persisted, so no-op blurs don't false-dirty the row.
-    const committed = feedbackBuffer ?? externalFeedback;
+    // A bare focus→blur (the teacher clicked in and out without typing)
+    // leaves `feedbackBuffer` null — committing then would persist the
+    // displayed default as a phantom "edit" and, on an approved row,
+    // silently revoke the approval server-side. So only commit a value
+    // the teacher actually typed, and only when it differs from the
+    // effective current value shown in the field (stored feedback, or
+    // the empty/AI default when none is stored). Re-committing the
+    // unchanged default is a no-op — no PATCH, no revoke. Genuine edits
+    // (buffer differs from the effective value) still persist and revoke.
+    if (feedbackBuffer === null) return;
+    const committed = feedbackBuffer;
     setFeedbackBuffer(null);
+    if (committed === externalFeedback) return;
     onFeedbackChange(committed);
   };
 

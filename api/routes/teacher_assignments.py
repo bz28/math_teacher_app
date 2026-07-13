@@ -1907,10 +1907,11 @@ async def regrade_submission(
 
 class PublishGradesRequest(BaseModel):
     # When True, only grades the teacher has explicitly vetted
-    # (reviewed_at IS NOT NULL — set by editing any score or clicking
-    # "Mark reviewed") are released. The "publish only what I've
-    # checked" path the review-page dialog offers alongside "Publish
-    # all". Default False preserves the publish-everything behaviour.
+    # (reviewed_at IS NOT NULL — stamped solely by the explicit Approve
+    # action via POST /mark-reviewed; editing any score REVOKES it) are
+    # released. The "publish only what I've checked" path the review-page
+    # dialog offers alongside "Publish all". Default False preserves the
+    # publish-everything behaviour.
     reviewed_only: bool = False
 
 
