@@ -2418,13 +2418,19 @@ function SubmissionDetailPanel({
   // Approval (stamping reviewed_at) is a deliberate teacher action, not
   // an automatic side effect of grading. The "Approve" button is enabled
   // only once EVERY problem on the submission carries a grade — you can't
-  // vouch for a half-graded submission. `gradedCount` is the durable,
-  // server-backed count (breakdown entries, live via optimistic grade
-  // saves), so the gate survives a reload — unlike the old session-only
-  // "addressed" tracking. A confident AI submission arrives fully graded,
-  // so Approve is immediately available; the teacher still chooses to
-  // click it, which IS the vouch.
-  const allGraded = totalProblems > 0 && gradedCount === totalProblems;
+  // vouch for a half-graded submission. We check per-problem coverage
+  // (each current problem has a breakdown entry) rather than a raw count,
+  // so a stale/extra breakdown row can't let the count match while a real
+  // problem is still ungraded. It's server-backed and live via optimistic
+  // grade saves, so the gate survives a reload — unlike the old
+  // session-only "addressed" tracking. A confident AI submission arrives
+  // fully graded, so Approve is immediately available; the teacher still
+  // chooses to click it, which IS the vouch.
+  const gradedProblemCount = detail.problems.filter((p) =>
+    breakdownByProblem.has(p.bank_item_id),
+  ).length;
+  const allGraded =
+    totalProblems > 0 && gradedProblemCount === totalProblems;
   const toggleExpand = useCallback(
     (id: string) => {
       setExpandState((s) => {
@@ -2786,7 +2792,7 @@ function SubmissionDetailPanel({
               >
                 {allGraded
                   ? "Not reviewed"
-                  : `Not reviewed · ${gradedCount}/${totalProblems} graded`}
+                  : `Not reviewed · ${gradedProblemCount}/${totalProblems} graded`}
               </span>
               <button
                 type="button"
@@ -2795,7 +2801,7 @@ function SubmissionDetailPanel({
                 title={
                   allGraded
                     ? "Approve — mark this submission reviewed"
-                    : `Grade every problem first (${gradedCount} of ${totalProblems} graded)`
+                    : `Grade every problem first (${gradedProblemCount} of ${totalProblems} graded)`
                 }
                 className="rounded-[--radius-md] border border-[color:var(--color-success)]/40 bg-[color:var(--color-success)]/10 px-3.5 py-1.5 text-xs font-bold text-[color:var(--color-success)] transition-colors hover:border-[color:var(--color-success)]/60 disabled:cursor-not-allowed disabled:opacity-45"
               >
