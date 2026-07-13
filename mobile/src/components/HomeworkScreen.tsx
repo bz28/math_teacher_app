@@ -16,6 +16,7 @@ import {
   getSubmission,
   submitHomework,
   type HomeworkDetail,
+  type HomeworkGradeBreakdown,
   type HomeworkProblem,
   type SubmissionFile,
 } from "../services/api";
@@ -336,6 +337,18 @@ function SubmittedStatus({
   colors: ColorPalette;
 }) {
   const graded = hw.grade_published_at != null && hw.final_score != null;
+  // Join each feedback row to its problem by problem_id (== bank_item_id) so the
+  // label carries the problem's real position, not its index in a payload the
+  // backend may reorder or drop rows from. Matched rows read in assignment order;
+  // an entry whose problem was since removed sinks to the end with a neutral label.
+  const positionById = new Map(hw.problems.map((p) => [p.bank_item_id, p.position]));
+  const breakdownRows = (hw.breakdown ?? [])
+    .map((b) => ({ ...b, position: positionById.get(b.problem_id) ?? null }))
+    .sort((a, z) => {
+      if (a.position == null) return z.position == null ? 0 : 1;
+      if (z.position == null) return -1;
+      return a.position - z.position;
+    });
   return (
     <View style={styles.statusBlock}>
       {graded ? (
@@ -347,10 +360,14 @@ function SubmittedStatus({
               {Math.round(hw.final_score!)}%
             </Text>
           </View>
-          {hw.breakdown?.map((b, i) => (
+          {breakdownRows.map((b) => (
             <View key={b.problem_id} style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Problem {i + 1}</Text>
-              <Text style={styles.breakdownPct}>{Math.round(b.percent)}%</Text>
+              <Text style={styles.breakdownLabel}>
+                {b.position != null ? `Problem ${b.position}` : "Additional feedback"}
+              </Text>
+              <Text style={[styles.breakdownPct, { color: statusColor(b.score_status, colors) }]}>
+                {Math.round(b.percent)}%
+              </Text>
               {b.feedback ? <Text style={styles.breakdownFeedback}>{b.feedback}</Text> : null}
             </View>
           ))}
@@ -397,6 +414,17 @@ function SubmittedStatus({
       )}
     </View>
   );
+}
+
+/**
+ * Per-problem percent color, keyed on the canonical full/partial/zero judgment
+ * rather than re-banding the raw percent — mirrors scoreColor's palette so a
+ * problem row reads consistently with the overall score above it.
+ */
+function statusColor(status: HomeworkGradeBreakdown["score_status"], colors: ColorPalette): string {
+  if (status === "full") return colors.success;
+  if (status === "partial") return colors.textSecondary;
+  return colors.error;
 }
 
 function formatDue(iso: string): string {
@@ -503,7 +531,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   statusScore: { ...typography.bodyBold, fontSize: 18 },
   breakdownRow: { gap: 2, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.borderLight },
   breakdownLabel: { ...typography.label, fontSize: 12, color: colors.textSecondary },
-  breakdownPct: { ...typography.bodyBold, fontSize: 14, color: colors.text },
+  breakdownPct: { ...typography.bodyBold, fontSize: 14 },
   breakdownFeedback: { ...typography.caption, color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
 
   gallery: { gap: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.borderLight },
