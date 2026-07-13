@@ -9,6 +9,7 @@ import { formatDueShort } from "@/lib/utils";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { Select } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageErrorState } from "@/components/ui/page-error-state";
 import { SearchIcon } from "@/components/ui/icons";
 import { ProgressBar } from "./_pieces/progress-bar";
 import { StatusPill } from "./_pieces/status-pill";
@@ -41,6 +42,15 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [sectionId, setSectionId] = useState<string>("all");
   const [search, setSearch] = useState("");
+  // Bump to re-fire the inbox fetch (the retry affordance on the error
+  // state). The retry handler clears rows/error so the skeleton shows
+  // while the refetch is in flight.
+  const [reloadKey, setReloadKey] = useState(0);
+  const retry = () => {
+    setRows(null);
+    setError(null);
+    setReloadKey((k) => k + 1);
+  };
 
   const load = useCallback(async () => {
     const res = await teacher.submissionsInbox(courseId);
@@ -61,7 +71,7 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [load]);
+  }, [load, reloadKey]);
 
   const sections = useMemo(() => {
     if (!rows) return [];
@@ -99,7 +109,12 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
   const dirtyBatch = useMemo(() => collectDirtyBatch(rows ?? []), [rows]);
 
   if (error) {
-    return <p className="mt-6 text-sm text-[color:var(--color-error)]">{error}</p>;
+    return (
+      <PageErrorState
+        message="We couldn't load this right now."
+        onRetry={retry}
+      />
+    );
   }
 
   if (rows === null) {

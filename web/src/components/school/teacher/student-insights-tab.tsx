@@ -14,6 +14,7 @@ import {
 } from "@/lib/api";
 import { formatRelativeDate } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageErrorState } from "@/components/ui/page-error-state";
 import { MeasuredKey } from "./_pieces/measured-key";
 import { PracticeStrugglePanel } from "./practice-struggle-panel";
 
@@ -98,6 +99,17 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("attention");
   const [filter, setFilter] = useState<StatusFilter>("all");
+  // Retry counters — one per fetch. The retry affordance re-fires
+  // whichever load failed: the section list (if we never got a section)
+  // or the per-section insights read.
+  const [sectionsReloadKey, setSectionsReloadKey] = useState(0);
+  const [insightsReloadKey, setInsightsReloadKey] = useState(0);
+
+  const retry = () => {
+    setError(null);
+    if (activeSection) setInsightsReloadKey((k) => k + 1);
+    else setSectionsReloadKey((k) => k + 1);
+  };
 
   // Load the section list once — drives the pivot and scopes the read.
   useEffect(() => {
@@ -118,7 +130,7 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [courseId]);
+  }, [courseId, sectionsReloadKey]);
 
   // (Re)load the roster whenever the active section changes.
   useEffect(() => {
@@ -145,7 +157,7 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [courseId, activeSection]);
+  }, [courseId, activeSection, insightsReloadKey]);
 
   const students = data?.students ?? null;
 
@@ -248,7 +260,10 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
         )}
 
         {error ? (
-          <p className="mt-6 text-sm text-[color:var(--color-error)]">{error}</p>
+          <PageErrorState
+            message="We couldn't load this right now."
+            onRetry={retry}
+          />
         ) : noSections ? (
           <RosterEmpty
             title="No sections yet"

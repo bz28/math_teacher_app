@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { teacher, type GradesRosterResponse, type GradesRosterRow } from "@/lib/api";
 import { EmptyState } from "@/components/school/shared/empty-state";
+import { PageErrorState } from "@/components/ui/page-error-state";
 import {
   PercentBadge,
   percentTone,
@@ -59,6 +60,15 @@ export function GradesTab({ courseId }: { courseId: string }) {
   // download matches what the teacher's currently looking at.
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  // Bump to re-fire the roster fetch (the retry affordance on the
+  // error state). The retry handler clears data/error so the skeleton
+  // shows while the refetch is in flight.
+  const [reloadKey, setReloadKey] = useState(0);
+  const retry = () => {
+    setData(null);
+    setError(null);
+    setReloadKey((k) => k + 1);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -75,7 +85,7 @@ export function GradesTab({ courseId }: { courseId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [courseId]);
+  }, [courseId, reloadKey]);
 
   // Section-filtered roster — the canonical "what the teacher's
   // looking at right now" subset. Drives both the table and every
@@ -153,7 +163,12 @@ export function GradesTab({ courseId }: { courseId: string }) {
   }, [sectionScoped, search, sort, filterMode]);
 
   if (error) {
-    return <p className="mt-6 text-sm text-[color:var(--color-error)]">{error}</p>;
+    return (
+      <PageErrorState
+        message="We couldn't load this right now."
+        onRetry={retry}
+      />
+    );
   }
 
   if (data === null) {

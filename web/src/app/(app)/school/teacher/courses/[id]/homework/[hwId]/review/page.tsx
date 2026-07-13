@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { teacher, type BankItem } from "@/lib/api";
 import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
+import { PageErrorState } from "@/components/ui/page-error-state";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /**
  * Full-page approval queue for a homework's generated problems.
@@ -78,7 +80,11 @@ export default function HomeworkReviewPage({
   // the assignment first so the pending query knows which filter to
   // apply; otherwise a practice clone would get an empty list on
   // first load (the type=null branch would drop every variation).
-  useEffect(() => {
+  // Extracted into a callable so the error state can offer Retry
+  // without a full page refresh. The caller sets phase back to
+  // "loading" (the retry handler does; the mount phase already starts
+  // there) — keeping setState out of the effect body.
+  const load = useCallback(() => {
     let cancelled = false;
     teacher
       .assignment(assignmentId)
@@ -101,6 +107,8 @@ export default function HomeworkReviewPage({
       cancelled = true;
     };
   }, [assignmentId, fetchPending]);
+
+  useEffect(() => load(), [load]);
 
   // Auto-append: while a gen job seeded by the wizard is still in
   // flight, poll pending and feed any new items to WorkshopModal so
@@ -178,16 +186,18 @@ export default function HomeworkReviewPage({
         )}
       </div>
 
-      {phase.kind === "loading" && (
-        <p className="mx-auto mt-8 max-w-6xl px-4 text-sm text-text-muted">
-          Loading queue…
-        </p>
-      )}
+      {phase.kind === "loading" && <QueueSkeleton />}
 
       {phase.kind === "error" && (
-        <p className="mx-auto mt-8 max-w-6xl px-4 text-sm text-[color:var(--color-error)]">
-          {phase.message}
-        </p>
+        <div className="mx-auto mt-8 max-w-6xl px-4">
+          <PageErrorState
+            message="We couldn't load this right now."
+            onRetry={() => {
+              setPhase({ kind: "loading" });
+              load();
+            }}
+          />
+        </div>
       )}
 
       {phase.kind === "empty" && (
@@ -223,6 +233,65 @@ export default function HomeworkReviewPage({
           />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Initial-load placeholder for the review queue. Mirrors THIS page's
+ * settled layout — the WorkshopModal `renderAsPage` full-width work
+ * pane (header row → thin progress bar → single work column → mode-line
+ * footer), NOT the two-column sections layout — so the page settles in
+ * place rather than popping when the first item lands.
+ */
+function QueueSkeleton() {
+  return (
+    <div
+      className="mt-3"
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+    >
+      <div className="mx-auto max-w-6xl px-4 pb-10">
+        <div className="flex w-full flex-col overflow-hidden rounded-[--radius-xl] border border-border-light bg-surface shadow-sm">
+          {/* Header row — title + queue counter + status badge · action */}
+          <div className="flex items-center justify-between gap-3 border-b border-border-light px-6 py-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <Skeleton className="h-5 w-52" />
+              <Skeleton className="h-4 w-10" />
+              <Skeleton className="h-4 w-16 rounded-[--radius-pill]" />
+            </div>
+            <Skeleton className="h-8 w-28 rounded-[--radius-md]" />
+          </div>
+          {/* Thin progress bar */}
+          <div className="h-1 bg-bg-subtle">
+            <div className="h-full w-1/4 bg-primary/30" />
+          </div>
+          {/* Single work column — question card + solution toggle */}
+          <div className="flex flex-1 flex-col md:flex-row">
+            <div className="flex-1 px-6 py-5">
+              <div className="rounded-[--radius-lg] border border-border-light bg-surface p-5">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="mt-4 h-5 w-full" />
+                <Skeleton className="mt-2.5 h-5 w-11/12" />
+                <Skeleton className="mt-2.5 h-5 w-2/3" />
+              </div>
+              <div className="mt-6">
+                <Skeleton className="h-3 w-28" />
+              </div>
+            </div>
+          </div>
+          {/* Mode-line footer — status text + action buttons */}
+          <div className="flex items-center justify-between gap-3 border-t border-border-light px-6 py-3">
+            <Skeleton className="h-4 w-44" />
+            <div className="flex gap-2">
+              <Skeleton className="h-9 w-24 rounded-[--radius-md]" />
+              <Skeleton className="h-9 w-24 rounded-[--radius-md]" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <span className="sr-only">Loading review queue…</span>
     </div>
   );
 }
