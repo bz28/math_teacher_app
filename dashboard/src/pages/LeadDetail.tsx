@@ -14,6 +14,7 @@ import { btnGhost, btnPrimary, btnSmall, inputStyle } from "../lib/styles";
 import { Checkbox } from "../components/Checkbox";
 import { EditorialModal } from "../components/EditorialModal";
 import { useConfirm } from "../lib/confirm";
+import { useToast } from "../lib/toast";
 import { EditableText } from "../components/EditableText";
 import ConvertLeadModal from "../components/ConvertLeadModal";
 
@@ -103,6 +104,7 @@ export default function LeadDetail() {
   const [editingNote, setEditingNote] = useState<LeadNote | null>(null);
   const [showConvert, setShowConvert] = useState(false);
   const confirm = useConfirm();
+  const toast = useToast();
 
   const reload = async () => {
     try {
@@ -142,7 +144,7 @@ export default function LeadDetail() {
       await api.updateLead(lead.id, { status: s });
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      toast((e as Error).message);
     }
   };
 
@@ -151,7 +153,7 @@ export default function LeadDetail() {
       await api.updateLead(lead.id, { approx_students: n });
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      toast((e as Error).message);
     }
   };
 
@@ -165,7 +167,7 @@ export default function LeadDetail() {
       await api.deleteLead(lead.id);
       navigate("/leads");
     } catch (e) {
-      alert((e as Error).message);
+      toast((e as Error).message);
     }
   };
 

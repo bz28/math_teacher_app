@@ -5,6 +5,7 @@ import { formatRelativeDate } from "../lib/format";
 import StatCard from "./StatCard";
 import { Pagination, SearchInput } from "./Pagination";
 import { useConfirm } from "../lib/confirm";
+import { useToast } from "../lib/toast";
 
 // Shared user-listing surface for the per-audience pages
 // (Independent students, Independent teachers). Wraps the
@@ -71,6 +72,7 @@ export default function UserScopePanel({
 }: UserScopePanelProps) {
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const toast = useToast();
   const [data, setData] = useState<UsersData | null>(null);
   const [hours, setHours] = useState("720");
   const [sortBy, setSortBy] = useState<SortKey>("total_cost");
@@ -175,7 +177,7 @@ export default function UserScopePanel({
       );
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      toast((e as Error).message);
     }
   };
 
@@ -190,7 +192,7 @@ export default function UserScopePanel({
       await api.resetDailyLimit(userId);
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      toast((e as Error).message);
     }
   };
 
@@ -204,7 +206,7 @@ export default function UserScopePanel({
       await api.deleteUser(userId);
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      toast((e as Error).message);
     }
   };
 

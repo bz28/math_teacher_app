@@ -6,6 +6,7 @@ import StatCard from "../components/StatCard";
 import { Pagination, SearchInput } from "../components/Pagination";
 import { InviteAdminForm } from "../components/InviteAdminForm";
 import { useConfirm } from "../lib/confirm";
+import { useToast } from "../lib/toast";
 
 type SortKey = "total_cost" | "session_count" | "last_active" | "name";
 const PAGE_SIZE = 25;
@@ -13,6 +14,7 @@ const PAGE_SIZE = 25;
 export default function Users() {
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const toast = useToast();
   const [data, setData] = useState<UsersData | null>(null);
   const [hours, setHours] = useState("720");
   const [sortBy, setSortBy] = useState<SortKey>("total_cost");
@@ -88,7 +90,7 @@ export default function Users() {
       await api.updateUserRole(userId, newRole);
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      toast((e as Error).message);
     }
   };
 
@@ -111,7 +113,7 @@ export default function Users() {
       );
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      toast((e as Error).message);
     }
   };
 
@@ -126,7 +128,7 @@ export default function Users() {
       await api.resetDailyLimit(userId);
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      toast((e as Error).message);
     }
   };
 
@@ -140,7 +142,7 @@ export default function Users() {
       await api.deleteUser(userId);
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      toast((e as Error).message);
     }
   };
 

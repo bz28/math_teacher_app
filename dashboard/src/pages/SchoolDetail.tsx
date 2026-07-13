@@ -12,6 +12,7 @@ import {
 import { formatRelativeDate } from "../lib/format";
 import { btnGhost, btnPrimary, btnSmall, inputStyle } from "../lib/styles";
 import { useConfirm } from "../lib/confirm";
+import { useToast } from "../lib/toast";
 
 // Dedicated per-school deep page. Lives at /schools/:schoolId. Two
 // API fetches in parallel:
@@ -33,6 +34,7 @@ interface EditForm {
 
 export default function SchoolDetail() {
   const confirm = useConfirm();
+  const toast = useToast();
   const { schoolId } = useParams<{ schoolId: string }>();
   const navigate = useNavigate();
 
@@ -118,7 +120,7 @@ export default function SchoolDetail() {
       setEditing(false);
       reload();
     } catch (err) {
-      alert((err as Error).message);
+      toast((err as Error).message);
     } finally {
       setSaving(false);
     }
@@ -139,7 +141,7 @@ export default function SchoolDetail() {
       await api.updateSchool(detail.id, { is_active: next });
       reload();
     } catch (err) {
-      alert((err as Error).message);
+      toast((err as Error).message);
     }
   };
 
@@ -154,7 +156,7 @@ export default function SchoolDetail() {
       await api.deleteSchool(detail.id);
       navigate("/schools");
     } catch (err) {
-      alert((err as Error).message);
+      toast((err as Error).message);
     }
   };
 
@@ -168,7 +170,7 @@ export default function SchoolDetail() {
       setInviteEmail("");
       reload();
     } catch (err) {
-      alert((err as Error).message);
+      toast((err as Error).message);
     } finally {
       setInviting(false);
     }
@@ -185,7 +187,7 @@ export default function SchoolDetail() {
       await api.cancelInvite(detail.id, inviteId);
       reload();
     } catch (err) {
-      alert((err as Error).message);
+      toast((err as Error).message);
     }
   };
 

@@ -5,11 +5,13 @@ import { formatRelativeDate } from "../lib/format";
 import { btnGhost, btnPrimary, inputStyle } from "../lib/styles";
 import StatCard from "../components/StatCard";
 import { useConfirm } from "../lib/confirm";
+import { useToast } from "../lib/toast";
 
 const AT_RISK_DAYS = 14;
 
 export default function Schools() {
   const confirm = useConfirm();
+  const toast = useToast();
   const navigate = useNavigate();
   const [schools, setSchools] = useState<SchoolListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +101,7 @@ export default function Schools() {
       await api.updateSchool(school.id, { is_active: !school.is_active });
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      toast((e as Error).message);
     }
   };
 
@@ -120,7 +122,7 @@ export default function Schools() {
       await api.deleteSchool(school.id);
       reload();
     } catch (e) {
-      alert((e as Error).message);
+      toast((e as Error).message);
     } finally {
       setDeletingId(null);
     }

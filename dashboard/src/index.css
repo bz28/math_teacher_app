@@ -1667,3 +1667,13 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 @media (max-width: 640px) {
   .gs-grid { grid-template-columns: 1fr; }
 }
+
+/* Toast entrance — subtle slide-up + fade, respects reduced motion. */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.toast-card { animation: toast-in 0.18s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .toast-card { animation: none; }
+}

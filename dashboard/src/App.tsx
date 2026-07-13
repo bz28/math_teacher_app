@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { getToken } from "./lib/api";
 import Layout from "./components/Layout";
 import { ConfirmProvider } from "./components/ConfirmProvider";
+import { ToastProvider } from "./components/ToastProvider";
 import ServiceStatusBanner from "./components/ServiceStatusBanner";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
@@ -32,6 +33,7 @@ export default function App() {
     <BrowserRouter>
       <ServiceStatusBanner />
       <ConfirmProvider>
+      <ToastProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
 
@@ -79,6 +81,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/leads" replace />} />
         </Route>
       </Routes>
+      </ToastProvider>
       </ConfirmProvider>
     </BrowserRouter>
   );
