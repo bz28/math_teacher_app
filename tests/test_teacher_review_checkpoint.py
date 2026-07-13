@@ -10,7 +10,10 @@ Covers three contracts:
   • PATCH /teacher/submissions/{id}/grade records the grade (final_score +
     graded_at) but NEVER stamps reviewed_at — saving one problem's grade
     does not mean the whole submission is reviewed. An un-grade (empty
-    breakdown) clears every grade field, including any prior stamp.
+    breakdown) clears every grade field, including any prior stamp. And
+    editing an ALREADY-approved grade REVOKES the approval (clears
+    reviewed_at/reviewed_by) so a changed grade can't publish under a stale
+    approval — the teacher must re-approve the version they just changed.
   • POST /teacher/assignments/{id}/publish-grades with reviewed_only=True
     releases only the vetted grades, leaving unopened AI suggestions
     unpublished.
@@ -246,6 +249,65 @@ async def test_edit_grade_does_not_stamp_review(client: AsyncClient) -> None:
     assert grade.reviewed_by is None
 
 
+async def test_edit_after_approval_revokes_it(client: AsyncClient) -> None:
+    """Editing a grade AFTER it was approved REVOKES the approval — approval
+    means "I vouched for THIS grade," so a change invalidates it. The row
+    returns to "not reviewed" (reviewed_at/reviewed_by null) and a
+    publish-reviewed-only excludes it until the teacher re-approves. This is
+    the guard that a changed grade can't ship under a stale approval."""
+    world = await _seed_hw()
+    sub_id = world["submission_ids"][0]
+    hdr = _auth(world["teacher_token"])
+
+    # Grade the problem, then approve it via the sole review writer.
+    r = await client.patch(
+        f"/v1/teacher/submissions/{sub_id}/grade",
+        headers=hdr,
+        json={"breakdown": [
+            {"problem_id": world["bank_item_id"], "score_status": "full"},
+        ]},
+    )
+    assert r.status_code == 200, r.text
+    r = await client.post(
+        f"/v1/teacher/submissions/{sub_id}/mark-reviewed", headers=hdr,
+    )
+    assert r.status_code == 200, r.text
+    grade = await _get_grade(sub_id)
+    assert grade.reviewed_at is not None
+    assert grade.reviewed_by is not None
+    assert grade.final_score == 100.0
+
+    # Now EDIT the grade (full -> zero). The edit revokes the approval.
+    r = await client.patch(
+        f"/v1/teacher/submissions/{sub_id}/grade",
+        headers=hdr,
+        json={"breakdown": [
+            {"problem_id": world["bank_item_id"], "score_status": "zero"},
+        ]},
+    )
+    assert r.status_code == 200, r.text
+    # The response reflects the now-unreviewed state so the client can revert.
+    assert r.json()["reviewed_at"] is None
+    assert r.json()["final_score"] == 0.0
+
+    grade = await _get_grade(sub_id)
+    assert grade.reviewed_at is None
+    assert grade.reviewed_by is None
+    # The edited grade itself is intact — only the approval was revoked.
+    assert grade.final_score == 0.0
+    assert grade.graded_at is not None
+
+    # "Publish only approved" now excludes it — the stale approval is gone.
+    r = await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
+        headers=hdr,
+        json={"reviewed_only": True},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["published_count"] == 0
+    assert (await _get_grade(sub_id)).grade_published_at is None
+
+
 async def test_reviewed_only_after_all_problems_addressed(
     client: AsyncClient,
 ) -> None:
@@ -330,6 +392,73 @@ async def test_publish_reviewed_only_releases_vetted_grades(
     assert r.status_code == 200, r.text
     assert r.json()["published_count"] == 1
     assert (await _get_grade(unreviewed_sub)).grade_published_at is not None
+
+
+async def test_unmark_reviewed_clears_stamp(client: AsyncClient) -> None:
+    """The manual "Undo approval" path: unmark-reviewed clears reviewed_at
+    /reviewed_by on an approved grade without touching the score, so it
+    drops back to "not reviewed"."""
+    world = await _seed_hw()
+    sub_id = world["submission_ids"][0]
+    await _add_grade(sub_id, final_score=88.0, reviewed=True)
+
+    r = await client.post(
+        f"/v1/teacher/submissions/{sub_id}/unmark-reviewed",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["reviewed_at"] is None
+
+    grade = await _get_grade(sub_id)
+    assert grade.reviewed_at is None
+    assert grade.reviewed_by is None
+    # The grade itself is untouched.
+    assert grade.final_score == 88.0
+
+
+async def test_unmark_reviewed_idempotent_on_unreviewed(
+    client: AsyncClient,
+) -> None:
+    """Unmarking an already-unreviewed grade is a no-op that still 200s —
+    a double-click (or undo of a never-approved grade) can't 400."""
+    world = await _seed_hw()
+    sub_id = world["submission_ids"][0]
+    await _add_grade(sub_id, final_score=70.0, reviewed=False)
+
+    r = await client.post(
+        f"/v1/teacher/submissions/{sub_id}/unmark-reviewed",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["reviewed_at"] is None
+    assert (await _get_grade(sub_id)).reviewed_at is None
+
+
+async def test_unmark_then_publish_reviewed_only_holds_it_back(
+    client: AsyncClient,
+) -> None:
+    """Undoing an approval removes the grade from the "publish only
+    approved" set — the end-to-end point of the undo path."""
+    world = await _seed_hw()
+    sub_id = world["submission_ids"][0]
+    await _add_grade(sub_id, final_score=90.0, reviewed=True)
+
+    # Walk the approval back.
+    r = await client.post(
+        f"/v1/teacher/submissions/{sub_id}/unmark-reviewed",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+
+    # "Publish only approved" now releases nothing.
+    r = await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
+        headers=_auth(world["teacher_token"]),
+        json={"reviewed_only": True},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["published_count"] == 0
+    assert (await _get_grade(sub_id)).grade_published_at is None
 
 
 async def test_publish_defaults_to_all_without_body(

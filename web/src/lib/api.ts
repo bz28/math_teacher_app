@@ -1494,23 +1494,35 @@ export const teacher = {
       final_score: number | null;
       grade_published_at: string | null;
       grade_dirty: boolean;
-      /** Current review state — a grade save NEVER stamps it (that's
-       *  mark-reviewed's job). Stays whatever it was; null after an
-       *  un-grade (empty breakdown), which clears the stamp. */
+      /** Current review state after the save. A grade save NEVER stamps it
+       *  (that's mark-reviewed's job), but editing an already-approved grade
+       *  REVOKES the stamp — approval means "I vouched for THIS grade," so a
+       *  change invalidates it. Also null after an un-grade (empty breakdown).
+       *  Mirror this back so the "Approved ✓" pill reverts to "Not reviewed". */
       reviewed_at: string | null;
     }>(`/teacher/submissions/${submissionId}/grade`, {
       method: "PATCH",
       body: JSON.stringify(data),
     });
   },
-  /** Stamp the submission reviewed. The sole writer of reviewed_at — a
-   *  grade save never marks review. The review page calls this only once
-   *  the teacher has addressed every problem (each confident grade
-   *  confirmed or each uncertain one graded). Requires an existing grade
-   *  — 400s on an ungraded / skipped-unreadable row. */
+  /** Approve the submission — stamp reviewed_at. The sole writer of the
+   *  review stamp; a grade save never marks review. The review page
+   *  calls this from the explicit "Approve" button, enabled only once
+   *  every problem has a grade. Requires an existing grade — 400s on an
+   *  ungraded / skipped-unreadable row. */
   markReviewed(submissionId: string) {
     return apiFetch<{ status: string; reviewed_at: string }>(
       `/teacher/submissions/${submissionId}/mark-reviewed`,
+      { method: "POST" },
+    );
+  },
+  /** Undo an approval — clear reviewed_at. The inverse of markReviewed;
+   *  the grade is untouched, only the review stamp is cleared, so the
+   *  submission drops back to "not reviewed". Idempotent (a no-op on an
+   *  already-unreviewed grade), so it always resolves reviewed_at: null. */
+  unmarkReviewed(submissionId: string) {
+    return apiFetch<{ status: string; reviewed_at: null }>(
+      `/teacher/submissions/${submissionId}/unmark-reviewed`,
       { method: "POST" },
     );
   },
