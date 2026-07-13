@@ -200,6 +200,8 @@ _EMPTY_STATS: dict[str, Any] = {
     "total_students": 0,
     "submitted": 0,
     "graded": 0,
+    "to_review": 0,
+    "published": 0,
     "pending_review": 0,
     "approved_count": 0,
     "avg_score": None,
@@ -271,9 +273,12 @@ async def bulk_assignment_stats(
     # is the direct signal that grading happened. We used to proxy this
     # via Submission.status == "teacher_reviewed", but status now
     # tracks only the upload lifecycle; final_score is the honest
-    # grading signal (written by teacher today, by AI in a future PR).
-    # Same SectionEnrollment guard as `submitted` above so the
-    # numerator stays in scope with `total_students`.
+    # grading signal. AI grading auto-sets it on submit whenever the
+    # assignment has ai_grading_enabled (default true), so `graded` is
+    # near-always true and no longer a useful progress signal on its
+    # own — hence the to_review/published counts below. Same
+    # SectionEnrollment guard as `submitted` above so the numerator
+    # stays in scope with `total_students`.
     graded_rows = (await db.execute(
         select(Submission.assignment_id, func.count().label("c"))
         .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
