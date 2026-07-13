@@ -67,9 +67,9 @@
   --color-surface-alt-2: #EFECE4;
 
   /* Semantic app fills. --bg-subtle / --bg-base are a quiet paper tone a
-     step deeper than --color-bg, for inset panels and empty-state fills;
-     --surface-hover is the hover tint on interactive surfaces (rows,
-     list items, buttons). Sit between --color-bg and --surface-alt-2. */
+     step deeper than --color-bg (sits between --color-bg and --surface-alt-2),
+     for inset panels and empty-state fills; --surface-hover is a slightly
+     deeper hover tint on interactive surfaces (rows, list items, buttons). */
   --color-bg-subtle: #F2EFE8;
   --color-bg-base: #F2EFE8;
   --color-surface-hover: #EDEAE2;
