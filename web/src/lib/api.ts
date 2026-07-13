@@ -884,6 +884,15 @@ export interface TeacherAssignment {
   total_students: number;
   submitted: number;
   graded: number;
+  /** Submitted (non-preview) submissions the teacher hasn't marked
+   *  reviewed yet — reviewed_at IS NULL, written only by /mark-reviewed
+   *  once every problem on the submission is addressed. A submission
+   *  with no grade row yet counts too. The honest "owes review" signal,
+   *  unlike `graded` (final_score, set automatically on submit). */
+  to_review: number;
+  /** Submissions whose grade has been released to the student view
+   *  (grade_published_at set by "Publish grades"). */
+  published: number;
   /** AI-generated problems originated by this HW that are still
    *  awaiting the teacher's approve/reject decision before they can
    *  join the problem list. Mirrors the "N problems need your review"

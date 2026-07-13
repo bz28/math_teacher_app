@@ -122,21 +122,29 @@ export function HomeworkCard({
           stay one-liners so the card doesn't balloon. */}
       <div className="mt-1 text-[11px] text-text-muted">
         {hw.problem_count} {hw.problem_count === 1 ? "problem" : "problems"}
+        {/* Review/publish progress — the honest teacher-workload signal.
+            AI grading auto-sets final_score on submit, so "graded" is
+            near-always true and useless here; we key off the direct
+            SubmissionGrade lifecycle flags instead:
+              - published === submitted → all grades released to students.
+              - to_review > 0 → submissions still awaiting the teacher's
+                review (reviewed_at IS NULL), shown against submitted-vs-
+                enrolled so a partial HW doesn't read as class-complete.
+              - else → everything reviewed, ready for the teacher to
+                publish. */}
         {bucket === "needsGrading" &&
           hw.submitted > 0 &&
-          ungraded === 0 &&
-          // Everything submitted so far is graded. But "all graded" only
-          // means "done" if the whole class has actually submitted —
-          // otherwise it reads as class-complete on a 3-of-28 HW while 25
-          // students still owe work. Surface submitted-vs-enrolled so the
-          // teacher can tell a finished HW from a partial one at a glance.
-          (hw.submitted >= hw.total_students ? (
+          (hw.published === hw.submitted ? (
+            <span className="ml-2 align-middle">
+              <StatusPill tone="green" label="Grades published" />
+            </span>
+          ) : hw.to_review > 0 ? (
             <span className="ml-1 font-semibold text-text-secondary">
-              · all {hw.submitted} graded — review &amp; publish
+              · {hw.submitted} of {hw.total_students} submitted · {hw.to_review} to review
             </span>
           ) : (
             <span className="ml-1 font-semibold text-text-secondary">
-              · {hw.submitted} of {hw.total_students} submitted · all graded
+              · ready to publish
             </span>
           ))}
         {hw.pending_review > 0 && (
