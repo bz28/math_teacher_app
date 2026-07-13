@@ -332,6 +332,73 @@ async def test_publish_reviewed_only_releases_vetted_grades(
     assert (await _get_grade(unreviewed_sub)).grade_published_at is not None
 
 
+async def test_unmark_reviewed_clears_stamp(client: AsyncClient) -> None:
+    """The manual "Undo approval" path: unmark-reviewed clears reviewed_at
+    /reviewed_by on an approved grade without touching the score, so it
+    drops back to "not reviewed"."""
+    world = await _seed_hw()
+    sub_id = world["submission_ids"][0]
+    await _add_grade(sub_id, final_score=88.0, reviewed=True)
+
+    r = await client.post(
+        f"/v1/teacher/submissions/{sub_id}/unmark-reviewed",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["reviewed_at"] is None
+
+    grade = await _get_grade(sub_id)
+    assert grade.reviewed_at is None
+    assert grade.reviewed_by is None
+    # The grade itself is untouched.
+    assert grade.final_score == 88.0
+
+
+async def test_unmark_reviewed_idempotent_on_unreviewed(
+    client: AsyncClient,
+) -> None:
+    """Unmarking an already-unreviewed grade is a no-op that still 200s —
+    a double-click (or undo of a never-approved grade) can't 400."""
+    world = await _seed_hw()
+    sub_id = world["submission_ids"][0]
+    await _add_grade(sub_id, final_score=70.0, reviewed=False)
+
+    r = await client.post(
+        f"/v1/teacher/submissions/{sub_id}/unmark-reviewed",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["reviewed_at"] is None
+    assert (await _get_grade(sub_id)).reviewed_at is None
+
+
+async def test_unmark_then_publish_reviewed_only_holds_it_back(
+    client: AsyncClient,
+) -> None:
+    """Undoing an approval removes the grade from the "publish only
+    approved" set — the end-to-end point of the undo path."""
+    world = await _seed_hw()
+    sub_id = world["submission_ids"][0]
+    await _add_grade(sub_id, final_score=90.0, reviewed=True)
+
+    # Walk the approval back.
+    r = await client.post(
+        f"/v1/teacher/submissions/{sub_id}/unmark-reviewed",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+
+    # "Publish only approved" now releases nothing.
+    r = await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
+        headers=_auth(world["teacher_token"]),
+        json={"reviewed_only": True},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["published_count"] == 0
+    assert (await _get_grade(sub_id)).grade_published_at is None
+
+
 async def test_publish_defaults_to_all_without_body(
     client: AsyncClient,
 ) -> None:
