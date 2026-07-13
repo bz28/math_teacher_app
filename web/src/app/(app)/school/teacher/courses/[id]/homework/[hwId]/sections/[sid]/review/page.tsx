@@ -656,6 +656,33 @@ function HomeworkSectionReview({
       }
       // Always remember the most recent snapshot to be saved.
       s.latest = breakdown;
+
+      // Editing an approved grade REVOKES the approval — approval means "I
+      // vouched for THIS grade," so changing it invalidates the stamp. The
+      // server does this unconditionally on every grade-save (revoke-if-set,
+      // else no-op; an un-grade clears it too), so a grade-save always leaves
+      // reviewed_at null. We mirror that optimistically here — the choke point
+      // every edit path flows through — so the "Approved ✓" pill flips back to
+      // "Not reviewed" instantly, without waiting on (or racing) the response.
+      // Clearing a null is a no-op, so first-grade saves are unaffected. We
+      // intentionally do NOT thread the save RESPONSE's reviewed_at back: a
+      // stale null landing after a fresh Approve click could clobber it, and
+      // this optimistic clear already matches the server exactly.
+      setDetail((d) =>
+        d && d.submission_id === submissionId && d.reviewed_at
+          ? { ...d, reviewed_at: null }
+          : d,
+      );
+      setRoster((prev) =>
+        prev
+          ? prev.map((e) =>
+              e.submission?.id === submissionId && e.submission?.reviewed_at
+                ? { ...e, submission: { ...e.submission, reviewed_at: null } }
+                : e,
+            )
+          : prev,
+      );
+
       // A save is already running — it will pick up `latest` when it drains.
       if (s.inFlight) return;
 
@@ -674,11 +701,11 @@ function HomeworkSectionReview({
             final_score: res.final_score,
             breakdown: toSave,
             grade_dirty: res.grade_dirty,
-            // reviewed_at is intentionally NOT touched here. A grade save
-            // never changes review state — "reviewed" is stamped only once
-            // every problem is addressed (the SubmissionDetailPanel's
-            // all-addressed effect calls mark-reviewed). Threading it back
-            // would race with and clobber that optimistic stamp.
+            // reviewed_at is handled by the optimistic clear above, NOT
+            // threaded from `res` — a grade-save always revokes any approval
+            // server-side, and mirroring that at edit time avoids a stale
+            // response clobbering a fresh Approve. See the note at the top of
+            // persistBreakdown.
           });
           setDetail((d) =>
             d && d.submission_id === submissionId

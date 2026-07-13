@@ -10,7 +10,10 @@ Covers three contracts:
   • PATCH /teacher/submissions/{id}/grade records the grade (final_score +
     graded_at) but NEVER stamps reviewed_at — saving one problem's grade
     does not mean the whole submission is reviewed. An un-grade (empty
-    breakdown) clears every grade field, including any prior stamp.
+    breakdown) clears every grade field, including any prior stamp. And
+    editing an ALREADY-approved grade REVOKES the approval (clears
+    reviewed_at/reviewed_by) so a changed grade can't publish under a stale
+    approval — the teacher must re-approve the version they just changed.
   • POST /teacher/assignments/{id}/publish-grades with reviewed_only=True
     releases only the vetted grades, leaving unopened AI suggestions
     unpublished.
@@ -244,6 +247,65 @@ async def test_edit_grade_does_not_stamp_review(client: AsyncClient) -> None:
     assert grade.graded_at is None
     assert grade.reviewed_at is None
     assert grade.reviewed_by is None
+
+
+async def test_edit_after_approval_revokes_it(client: AsyncClient) -> None:
+    """Editing a grade AFTER it was approved REVOKES the approval — approval
+    means "I vouched for THIS grade," so a change invalidates it. The row
+    returns to "not reviewed" (reviewed_at/reviewed_by null) and a
+    publish-reviewed-only excludes it until the teacher re-approves. This is
+    the guard that a changed grade can't ship under a stale approval."""
+    world = await _seed_hw()
+    sub_id = world["submission_ids"][0]
+    hdr = _auth(world["teacher_token"])
+
+    # Grade the problem, then approve it via the sole review writer.
+    r = await client.patch(
+        f"/v1/teacher/submissions/{sub_id}/grade",
+        headers=hdr,
+        json={"breakdown": [
+            {"problem_id": world["bank_item_id"], "score_status": "full"},
+        ]},
+    )
+    assert r.status_code == 200, r.text
+    r = await client.post(
+        f"/v1/teacher/submissions/{sub_id}/mark-reviewed", headers=hdr,
+    )
+    assert r.status_code == 200, r.text
+    grade = await _get_grade(sub_id)
+    assert grade.reviewed_at is not None
+    assert grade.reviewed_by is not None
+    assert grade.final_score == 100.0
+
+    # Now EDIT the grade (full -> zero). The edit revokes the approval.
+    r = await client.patch(
+        f"/v1/teacher/submissions/{sub_id}/grade",
+        headers=hdr,
+        json={"breakdown": [
+            {"problem_id": world["bank_item_id"], "score_status": "zero"},
+        ]},
+    )
+    assert r.status_code == 200, r.text
+    # The response reflects the now-unreviewed state so the client can revert.
+    assert r.json()["reviewed_at"] is None
+    assert r.json()["final_score"] == 0.0
+
+    grade = await _get_grade(sub_id)
+    assert grade.reviewed_at is None
+    assert grade.reviewed_by is None
+    # The edited grade itself is intact — only the approval was revoked.
+    assert grade.final_score == 0.0
+    assert grade.graded_at is not None
+
+    # "Publish only approved" now excludes it — the stale approval is gone.
+    r = await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
+        headers=hdr,
+        json={"reviewed_only": True},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["published_count"] == 0
+    assert (await _get_grade(sub_id)).grade_published_at is None
 
 
 async def test_reviewed_only_after_all_problems_addressed(

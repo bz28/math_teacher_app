@@ -1672,15 +1672,23 @@ async def grade_submission(
         if normalized:
             grade.final_score = sum(e["percent"] for e in normalized) / len(normalized)
             grade.graded_at = now
-            # `reviewed_at` / `reviewed_by` are deliberately NOT stamped on a
-            # grade save. Saving a grade records THE GRADE — it does not mean
-            # the teacher has vetted the whole submission. "Reviewed" means
-            # every problem has been addressed (each confident grade confirmed
-            # or each uncertain one graded); the frontend tracks that and calls
-            # POST /mark-reviewed only once the set is complete. Stamping here
-            # would let "publish only reviewed" release a submission the moment
-            # the teacher touched a single problem — leaking the still-unvetted
-            # rest. The explicit mark-reviewed endpoint is the sole writer.
+            # A grade save NEVER auto-stamps `reviewed_at` / `reviewed_by`.
+            # Saving a grade records THE GRADE — it does not mean the teacher
+            # has vetted the whole submission. "Reviewed" means every problem
+            # has been addressed; the frontend tracks that and calls POST
+            # /mark-reviewed (the sole writer of the stamp) only once the set is
+            # complete. Auto-stamping here would let "publish only reviewed"
+            # release a submission the moment the teacher touched one problem.
+            #
+            # But editing an ALREADY-approved grade REVOKES the approval:
+            # approval means "I vouched for THIS grade," so changing the grade
+            # invalidates it. Clear the stamp so the row returns to "Not
+            # reviewed" and the teacher must re-approve the version they just
+            # changed — otherwise "publish only reviewed" would release a
+            # changed grade under a stale approval.
+            if grade.reviewed_at is not None:
+                grade.reviewed_at = None
+                grade.reviewed_by = None
         else:
             # Un-grade: clear every grade-state field so the row honestly
             # reflects "not graded" — including the review stamp, since there
@@ -1710,10 +1718,11 @@ async def grade_submission(
         "final_score": grade.final_score,
         "grade_published_at": grade.grade_published_at.isoformat() if grade.grade_published_at else None,
         "grade_dirty": _is_grade_dirty(grade),
-        # Current review state — NOT changed by this save (a grade save never
-        # stamps review; that's the mark-reviewed endpoint's job). Surfaced so
-        # the frontend can reconcile: stays whatever it was, and is null after
-        # an un-grade (empty breakdown), which clears the stamp above.
+        # Current review state after this save. A grade save never STAMPS
+        # review (that's the mark-reviewed endpoint's job), but editing an
+        # already-approved grade REVOKES the stamp (and an un-grade clears it),
+        # so this can go from set → null on save. Surfaced so the frontend can
+        # reconcile the "Approved ✓" → "Not reviewed" revert without a refresh.
         "reviewed_at": grade.reviewed_at.isoformat() if grade.reviewed_at else None,
     }
 
