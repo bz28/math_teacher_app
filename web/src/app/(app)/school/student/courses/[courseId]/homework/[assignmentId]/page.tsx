@@ -276,6 +276,10 @@ export default function HomeworkPage() {
         courseId={courseId}
         onDone={async () => {
           setMode({ kind: "homework" });
+          // Landing on the submitted view after finishing the check is
+          // not a fresh submit — clear the flag so its entrance
+          // animation doesn't replay here.
+          setJustSubmitted(false);
           if (assignmentId) await loadAll(assignmentId);
         }}
         onLeave={() => {

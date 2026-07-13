@@ -47,18 +47,20 @@ interface Props {
    *  URL for the Go-to-Practice CTA. */
   courseId: string;
   /** Called when the chat reaches a TERMINAL state (complete /
-   *  skipped_unreadable) and the kid taps "Back to homework". The
-   *  parent re-fetches state and stays on the homework view. Wrong
-   *  for a mid-check exit — re-fetching integrity state there just
-   *  routes the student straight back into the chat. Use `onLeave`
-   *  for that. */
+   *  skipped_unreadable) and the kid taps "Back to homework", AND for
+   *  the load-error recovery button — both want an in-place re-fetch
+   *  (`setMode(homework)` + `loadAll`). For a transient load failure
+   *  that re-fetch re-routes back into the now-working chat, i.e. it's
+   *  the retry. Wrong for a *deliberate* mid-check exit, where the
+   *  re-fetch just re-detects the in-progress check and bounces the
+   *  student back in — use `onLeave` for that. */
   onDone: () => void;
-  /** Called when the kid taps "Leave & come back later" mid-check (or
-   *  bails from the load-error state). Unlike `onDone`, this must
-   *  *navigate away* from the homework route — re-fetching in place
-   *  would re-detect the in-progress check and bounce them back into
-   *  the chat. Their progress is saved server-side, so returning to
-   *  the homework re-hydrates the transcript and resumes. */
+  /** Called when the kid taps "Leave & come back later" mid-check.
+   *  Unlike `onDone`, this must *navigate away* from the homework
+   *  route — re-fetching in place would re-detect the in-progress
+   *  check and bounce them back into the chat. Their progress is saved
+   *  server-side, so returning to the homework re-hydrates the
+   *  transcript and resumes. */
   onLeave: () => void;
 }
 
@@ -304,7 +306,7 @@ export function IntegrityCheckChat({
       <div className="mx-auto max-w-2xl py-12 text-center">
         <p className="text-error">{error}</p>
         <button
-          onClick={onLeave}
+          onClick={onDone}
           className="mt-4 rounded-[--radius-sm] border border-border px-4 py-2 text-sm hover:border-primary"
         >
           Back to homework
