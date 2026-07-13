@@ -23,10 +23,21 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 from httpx import AsyncClient
 
 from api.core.auth import create_access_token, hash_password
+
+# Bound at import time — BEFORE conftest's autouse `_mock_integrity_ai`
+# fixture patches `api.core.grading_ai.run_ai_grading_for_submission` to a
+# no-op. `patch` rebinds the module ATTRIBUTE, not this already-captured
+# name, so `_real_run_ai_grading` stays the genuine implementation and the
+# force-regrade test can exercise the real reviewed_at-clearing logic while
+# the grader LLM call underneath stays mocked.
+from api.core.grading_ai import (
+    run_ai_grading_for_submission as _real_run_ai_grading,
+)
 from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.course import Course
@@ -296,6 +307,71 @@ async def test_edit_after_approval_revokes_it(client: AsyncClient) -> None:
     # The edited grade itself is intact — only the approval was revoked.
     assert grade.final_score == 0.0
     assert grade.graded_at is not None
+
+    # "Publish only approved" now excludes it — the stale approval is gone.
+    r = await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
+        headers=hdr,
+        json={"reviewed_only": True},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["published_count"] == 0
+    assert (await _get_grade(sub_id)).grade_published_at is None
+
+
+async def test_regrade_after_approval_revokes_it(client: AsyncClient) -> None:
+    """A force-regrade AFTER approval REVOKES the approval — same rationale as
+    an edit: the regrade replaces the grade the approval vouched for. The row
+    returns to "not reviewed" (reviewed_at/reviewed_by null) and a
+    publish-reviewed-only excludes it until the teacher re-approves. Guards the
+    server half of the review-page regrade-coherence fix (the client mirrors
+    this optimistically). Drives the real grading path with the grader LLM
+    call mocked, so no real Claude call is made."""
+    world = await _seed_hw()
+    sub_id = world["submission_ids"][0]
+    hdr = _auth(world["teacher_token"])
+
+    # Grade the problem, then approve it via the sole review writer.
+    r = await client.patch(
+        f"/v1/teacher/submissions/{sub_id}/grade",
+        headers=hdr,
+        json={"breakdown": [
+            {"problem_id": world["bank_item_id"], "score_status": "full"},
+        ]},
+    )
+    assert r.status_code == 200, r.text
+    r = await client.post(
+        f"/v1/teacher/submissions/{sub_id}/mark-reviewed", headers=hdr,
+    )
+    assert r.status_code == 200, r.text
+    grade = await _get_grade(sub_id)
+    assert grade.reviewed_at is not None
+    assert grade.reviewed_by is not None
+
+    # Force-regrade with the grader LLM mocked to return a fresh full grade
+    # on problem position 1 (maps to bank_item_ids[0]).
+    fresh = {"grades": [{
+        "problem_position": 1,
+        "score_status": "full",
+        "confidence": 0.9,
+        "student_feedback": "Correct — nice work.",
+        "reasoning": "matches the key",
+    }]}
+    with patch(
+        "api.core.grading_ai.grade_submission_with_ai",
+        new=AsyncMock(return_value=fresh),
+    ):
+        async with get_session_factory()() as s:
+            await _real_run_ai_grading(
+                sub_id, {"steps": [], "confidence": 0.9}, s, force=True,
+            )
+            await s.commit()
+
+    # The regrade wrote a fresh grade AND cleared the stale approval.
+    grade = await _get_grade(sub_id)
+    assert grade.final_score == 100.0
+    assert grade.reviewed_at is None
+    assert grade.reviewed_by is None
 
     # "Publish only approved" now excludes it — the stale approval is gone.
     r = await client.post(
