@@ -455,7 +455,11 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       {loading ? (
         <LoadingSkeleton />
       ) : units.length === 0 && docs.length === 0 ? (
-        <FirstTimeDropzone busy={busy} onDropTree={handleImport} />
+        <FirstTimeDropzone
+          busy={busy}
+          onDropTree={handleImport}
+          onFiles={handleLooseFiles}
+        />
       ) : (
         <div className="mt-4 grid gap-4 md:grid-cols-[280px_1fr]">
           <FolderTree
@@ -610,15 +614,19 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
 /**
  * First-time experience for a brand-new course with zero units and
  * zero documents. Wraps the shared UploadDropzone so drag-and-drop
- * works here too, and leads with a large friendly CTA that tells
- * teachers they can drop a folder to create their first unit.
+ * still works here too, but leads with a click-to-upload button — the
+ * obvious path for a non-technical teacher — and explains what to
+ * upload and why. Drag-and-drop is kept as a secondary affordance for
+ * power users (and stays out of the way on touch devices).
  */
 function FirstTimeDropzone({
   busy,
   onDropTree,
+  onFiles,
 }: {
   busy: boolean;
   onDropTree: (tree: DroppedTree) => void;
+  onFiles: (files: File[]) => void;
 }) {
   return (
     <div className="mt-4">
@@ -632,27 +640,48 @@ function FirstTimeDropzone({
           </span>
           <div className="max-w-md">
             <h3 className="text-xl font-bold tracking-tight text-text-primary">
-              <span className="[@media(hover:none)]:hidden">
-                Drop files or a folder to get started
-              </span>
-              <span className="hidden [@media(hover:none)]:inline">
-                Upload files to get started
-              </span>
+              Add your teaching materials
             </h3>
             <p className="mt-2 text-sm text-text-muted">
-              <span className="[@media(hover:none)]:hidden">
-                Drag a whole folder from Finder to create a unit with all of
-                its contents in one go — or drop individual PDFs and images.
-              </span>
-              <span className="hidden [@media(hover:none)]:inline">
-                Tap Upload to add PDFs or images, or create a unit with the
-                New Unit button.
-              </span>
+              Upload your notes, a worksheet, or a textbook page — anything you
+              teach from. It helps the app generate problems that match your
+              class. A clear photo or scan works too.
+            </p>
+            <p className="mt-1.5 text-sm text-text-muted">
+              Optional — you can also create homework without it.
             </p>
           </div>
+
+          <label
+            className={`inline-flex min-h-[44px] cursor-pointer items-center gap-2 rounded-[--radius-md] bg-primary px-5 py-2.5 text-sm font-bold text-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:bg-primary-dark hover:shadow-md focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 ${
+              busy ? "pointer-events-none opacity-60" : ""
+            }`}
+          >
+            <UploadIcon className="h-4 w-4" strokeWidth={2.25} />
+            Upload files
+            <input
+              type="file"
+              multiple
+              accept=".pdf,.png,.jpg,.jpeg"
+              onChange={(e) => {
+                const files = e.target.files ? Array.from(e.target.files) : [];
+                e.target.value = "";
+                onFiles(files);
+              }}
+              className="hidden"
+              disabled={busy}
+            />
+          </label>
+
+          {/* Drag-and-drop: secondary, and hidden on touch devices where
+              there's no drag gesture. */}
+          <p className="text-xs text-text-muted [@media(hover:none)]:hidden">
+            or drag files here — drop a folder to create a unit from its
+            contents
+          </p>
+
           <p className="text-[11px] font-medium text-text-muted">
-            PDF, PNG, JPG up to 25 MB · Drop multiple folders to create several
-            units at once
+            PDF, PNG, JPG up to 25 MB
           </p>
         </div>
       </UploadDropzone>
