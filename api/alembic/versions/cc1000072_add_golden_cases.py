@@ -5,8 +5,8 @@ eval outcome, surfaced in the admin dashboard's "Generation QA" tab. The
 harness upserts these rows into the main app DB after each corpus run so the
 dashboard shows live per-case pass/fail and catches regressions.
 
-Revision ID: cb1000071
-Revises: ca1000070
+Revision ID: cc1000072
+Revises: cb1000071
 """
 from collections.abc import Sequence
 
@@ -14,8 +14,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "cb1000071"
-down_revision: str | None = "ca1000070"
+revision: str = "cc1000072"
+down_revision: str | None = "cb1000071"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
