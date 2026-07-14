@@ -1,5 +1,8 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import * as pdfjsLib from "pdfjs-dist";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import "katex/dist/katex.min.css";
 import {
   api,
   type ActivityLogData,
@@ -11,7 +14,13 @@ import {
   type GenerationJobsData,
 } from "../lib/api";
 import { fmtCost, formatRelativeDate } from "../lib/format";
+import MathText from "./MathText";
 import { Pagination } from "./Pagination";
+
+// Wire pdf.js to its bundled worker. Vite fingerprints the worker via the
+// `?url` import and serves it as a real asset, so the classic "fake worker"
+// / worker-not-found breakage doesn't happen. Set once at module load.
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 // The teacher observability hub, rendered inside TeacherDetail. Two
 // panels off one teacher id: the unified action timeline (what they DO)
@@ -328,7 +337,9 @@ function GenerationDrillIn({ jobId, summary }: { jobId: string; summary: Generat
       {summary.constraint && (
         <div>
           <SubLabel>Focus</SubLabel>
-          <div style={{ fontSize: 14 }}>{summary.constraint}</div>
+          <div style={{ fontSize: 14 }}>
+            <MathText>{summary.constraint}</MathText>
+          </div>
         </div>
       )}
       {detail.job.error_message && (
@@ -386,7 +397,9 @@ function GenerationDrillIn({ jobId, summary }: { jobId: string; summary: Generat
                 </span>
                 <span className="badge" style={statusBadgeStyle(it.status)}>{it.status}</span>
               </div>
-              <div style={{ fontSize: 13, marginBottom: 6 }}>{it.question}</div>
+              <div style={{ fontSize: 13, marginBottom: 6 }}>
+                <MathText>{it.question}</MathText>
+              </div>
               {it.figure_svg && (
                 <div
                   style={{ maxWidth: 220, margin: "6px 0" }}
@@ -397,7 +410,7 @@ function GenerationDrillIn({ jobId, summary }: { jobId: string; summary: Generat
               )}
               {it.final_answer && (
                 <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                  Answer: <span style={{ fontFamily: "var(--font-mono)" }}>{it.final_answer}</span>
+                  Answer: <MathText>{it.final_answer}</MathText>
                 </div>
               )}
             </div>
@@ -510,10 +523,119 @@ function DocumentThumb({ docId, filename, fileType }: { docId: string; filename:
 
   if (error) return <div style={placeholderStyle}>{filename} (unavailable)</div>;
   if (!doc) return <div style={placeholderStyle}>Loading…</div>;
-  if (!doc.image_data || !fileType.startsWith("image/")) {
+  if (!doc.image_data) {
     return <div style={placeholderStyle}>{filename} ({fileType})</div>;
   }
-  return <ImageThumb src={`data:${doc.file_type};base64,${doc.image_data}`} label={filename} />;
+  if (fileType.startsWith("image/")) {
+    return <ImageThumb src={`data:${doc.file_type};base64,${doc.image_data}`} label={filename} />;
+  }
+  if (fileType === "application/pdf") {
+    return <PdfThumb b64={doc.image_data} label={filename} />;
+  }
+  return <div style={placeholderStyle}>{filename} ({fileType})</div>;
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+// Render the first page of a stored PDF to a canvas thumbnail via pdf.js.
+// Click opens the full document (data URI) in a new tab — the browser's
+// native PDF viewer gives the click-to-expand view for free, mirroring how
+// ImageThumb links to its own full-size source.
+function PdfThumb({ b64, label }: { b64: string; label: string }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [error, setError] = useState(false);
+  const [rendering, setRendering] = useState(true);
+  // Decode once per b64. atob() throws synchronously on malformed base64;
+  // catching here (returning null) keeps the failure out of the effect so we
+  // never call setState synchronously in it — the error is derived at render.
+  const bytes = useMemo(() => {
+    try {
+      return base64ToBytes(b64);
+    } catch {
+      return null;
+    }
+  }, [b64]);
+
+  useEffect(() => {
+    if (!bytes) return;
+    let cancelled = false;
+    // pdf.js transfers ownership of the buffer to its worker, so hand it a
+    // fresh copy each run — otherwise a re-run (e.g. StrictMode double-mount)
+    // would get a detached buffer.
+    const task = pdfjsLib.getDocument({ data: bytes.slice() });
+    task.promise
+      .then(async (pdf) => {
+        const page = await pdf.getPage(1);
+        const canvas = canvasRef.current;
+        if (cancelled || !canvas) return;
+        const base = page.getViewport({ scale: 1 });
+        // Fit the first page into a ~200px-wide thumbnail, then upscale for
+        // crisp rendering on high-DPI screens.
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const scale = (200 / base.width) * dpr;
+        const viewport = page.getViewport({ scale });
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        canvas.style.width = `${viewport.width / dpr}px`;
+        canvas.style.height = `${viewport.height / dpr}px`;
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        if (!cancelled) setRendering(false);
+      })
+      .catch(() => !cancelled && setError(true));
+    return () => {
+      cancelled = true;
+      task.destroy();
+    };
+  }, [bytes]);
+
+  if (error || bytes === null)
+    return <div style={placeholderStyle}>{label} (PDF preview failed)</div>;
+
+  return (
+    <a
+      href={`data:application/pdf;base64,${b64}`}
+      target="_blank"
+      rel="noreferrer"
+      style={{ display: "inline-block" }}
+    >
+      <div
+        style={{
+          position: "relative",
+          minWidth: rendering ? 200 : undefined,
+          minHeight: rendering ? 120 : undefined,
+          border: "1px solid var(--rule)",
+          borderRadius: 4,
+          background: "var(--surface)",
+          overflow: "hidden",
+        }}
+      >
+        {rendering && (
+          <span
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 12,
+              color: "var(--muted-2)",
+            }}
+          >
+            Rendering PDF…
+          </span>
+        )}
+        <canvas ref={canvasRef} style={{ display: "block" }} />
+      </div>
+      <span style={{ fontSize: 11, color: "var(--muted-2)" }}>{label} (PDF)</span>
+    </a>
+  );
 }
 
 function ImageThumb({ src, label }: { src: string; label: string }) {
