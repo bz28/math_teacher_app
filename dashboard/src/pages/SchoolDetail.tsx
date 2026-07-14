@@ -9,11 +9,19 @@ import {
   type SchoolOverviewData,
   type SchoolStudentsData,
 } from "../lib/api";
-import { formatRelativeDate } from "../lib/format";
+import { formatRelativeDate, fmtCost } from "../lib/format";
 import { btnGhost, btnPrimary, btnSmall, inputStyle } from "../lib/styles";
 import { useConfirm } from "../lib/confirm";
 import { useToast } from "../lib/toast";
 import { Pagination } from "../components/Pagination";
+import StatTile from "../components/StatTile";
+import StatusPill from "../components/StatusPill";
+import {
+  activityPill,
+  activityStatus,
+  costWindowLabel,
+  isAtRisk,
+} from "../lib/definitions";
 
 // Roster page size — the /admin/schools/:id/students endpoint accepts
 // limit/offset, so a >100-student school is now fully reachable via the
@@ -259,6 +267,28 @@ export default function SchoolDetail() {
         100
       : null;
 
+  // Rolling-30d cost delta for the KPI strip — same window the Schools
+  // list shows, so the number matches what the operator clicked in on.
+  const cost30dDeltaPct =
+    overview.cost.cost_prev_30d > 0
+      ? ((overview.cost.cost_30d - overview.cost.cost_prev_30d) /
+          overview.cost.cost_prev_30d) *
+        100
+      : null;
+
+  // Unit economics — cost per active seat. Cheap, and the first thing a
+  // buyer-facing founder wants for pricing. Guard divide-by-zero.
+  const teacherCount = detail.teachers.length;
+  const studentCount = students?.total_students ?? 0;
+  const costPerStudent = studentCount > 0 ? overview.cost.cost_30d / studentCount : null;
+  const costPerTeacher = teacherCount > 0 ? overview.cost.cost_30d / teacherCount : null;
+
+  const statusPill = detail.is_active
+    ? activityPill(activityStatus(overview.last_activity_at))
+    : { tone: "neutral" as const, label: "INACTIVE" };
+  const lastActivityAtRisk =
+    detail.is_active && isAtRisk({ lastActiveAt: overview.last_activity_at, failedCalls: overview.failed_calls_24h });
+
   return (
     <div>
       {/* Back trail */}
@@ -320,9 +350,65 @@ export default function SchoolDetail() {
         </div>
       )}
 
-      {/* ── 01 — COST ───────────────────────────────────────────── */}
+      {/* ── KPI strip — "is this pilot healthy?" in 3 seconds ────── */}
+      <div className="tile-grid" style={{ marginBottom: 44 }}>
+        <StatTile label="Status" value={<StatusPill {...statusPill} />} />
+        <StatTile label="Teachers" value={teacherCount} />
+        <StatTile
+          label="Students"
+          value={students ? studentCount.toLocaleString() : "…"}
+        />
+        <StatTile
+          label={`Cost · ${costWindowLabel()}`}
+          value={fmtCost(overview.cost.cost_30d)}
+          delta={cost30dDeltaPct === null ? undefined : { pct: cost30dDeltaPct, goodWhen: "down", note: "vs prev 30d" }}
+        />
+        <StatTile
+          label="Last activity"
+          tone={lastActivityAtRisk ? "warn" : "default"}
+          value={overview.last_activity_at ? formatRelativeDate(overview.last_activity_at) : "none yet"}
+        />
+        <StatTile
+          label="Failed · 24h"
+          tone={overview.failed_calls_24h > 0 ? "danger" : "default"}
+          value={overview.failed_calls_24h}
+        />
+      </div>
+
+      {/* ── 01 — ACTIVITY (adoption is the headline) ────────────── */}
+      {!overview.is_internal && (
+        <Section number="01" label="Activity (this week vs last)">
+          <ActivityRow
+            label="Active classes"
+            curr={overview.activity.this_week.active_classes}
+            prev={overview.activity.last_week.active_classes}
+          />
+          <ActivityRow
+            label="Active teachers"
+            curr={overview.activity.this_week.active_teachers}
+            prev={overview.activity.last_week.active_teachers}
+          />
+          <ActivityRow
+            label="Active students"
+            curr={overview.activity.this_week.active_students}
+            prev={overview.activity.last_week.active_students}
+          />
+          <ActivityRow
+            label="HWs published"
+            curr={overview.activity.this_week.hws_published}
+            prev={overview.activity.last_week.hws_published}
+          />
+          <ActivityRow
+            label="Submissions"
+            curr={overview.activity.this_week.submissions}
+            prev={overview.activity.last_week.submissions}
+          />
+        </Section>
+      )}
+
+      {/* ── 02 — COST ───────────────────────────────────────────── */}
       <Section
-        number="01"
+        number="02"
         label="Cost"
         action={
           <Link
@@ -364,6 +450,18 @@ export default function SchoolDetail() {
           />
         </div>
 
+        {/* Unit economics — cost per active seat over the rolling 30d. */}
+        {(costPerStudent !== null || costPerTeacher !== null) && (
+          <div style={{ display: "flex", gap: 40, flexWrap: "wrap", borderTop: "1px solid var(--rule)", paddingTop: 18, marginBottom: trendChartData.length > 1 ? 28 : 0 }}>
+            {costPerStudent !== null && (
+              <UnitEcon label={`Cost / student · ${costWindowLabel()}`} value={fmtCost(costPerStudent)} sub={`${studentCount.toLocaleString()} enrolled`} />
+            )}
+            {costPerTeacher !== null && (
+              <UnitEcon label={`Cost / teacher · ${costWindowLabel()}`} value={fmtCost(costPerTeacher)} sub={`${teacherCount} teacher${teacherCount === 1 ? "" : "s"}`} />
+            )}
+          </div>
+        )}
+
         {trendChartData.length > 1 && (
           <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 18 }}>
             <h3 style={{ marginBottom: 10 }}>12-week trend</h3>
@@ -387,37 +485,6 @@ export default function SchoolDetail() {
           </div>
         )}
       </Section>
-
-      {/* ── 02 — ACTIVITY ───────────────────────────────────────── */}
-      {!overview.is_internal && (
-        <Section number="02" label="Activity (this week vs last)">
-          <ActivityRow
-            label="Active classes"
-            curr={overview.activity.this_week.active_classes}
-            prev={overview.activity.last_week.active_classes}
-          />
-          <ActivityRow
-            label="Active teachers"
-            curr={overview.activity.this_week.active_teachers}
-            prev={overview.activity.last_week.active_teachers}
-          />
-          <ActivityRow
-            label="Active students"
-            curr={overview.activity.this_week.active_students}
-            prev={overview.activity.last_week.active_students}
-          />
-          <ActivityRow
-            label="HWs published"
-            curr={overview.activity.this_week.hws_published}
-            prev={overview.activity.last_week.hws_published}
-          />
-          <ActivityRow
-            label="Submissions"
-            curr={overview.activity.this_week.submissions}
-            prev={overview.activity.last_week.submissions}
-          />
-        </Section>
-      )}
 
       {/* ── 03 — HEALTH ─────────────────────────────────────────── */}
       <Section number="03" label="Health">
@@ -457,6 +524,40 @@ export default function SchoolDetail() {
           ) : undefined
         }
       >
+        {/* Invite CTA — first, because growing the roster is the
+            action an operator comes here to take. */}
+        <div style={{ paddingBottom: 18, marginBottom: 24, borderBottom: "1px solid var(--rule)" }}>
+          <h3 style={{ marginBottom: 12 }}>Invite a teacher</h3>
+          <form onSubmit={handleInvite} style={{ display: "flex", gap: 8 }}>
+            <input
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="teacher@school.edu"
+              required
+              style={{ ...inputStyle, flex: 1 }}
+            />
+            <button type="submit" disabled={inviting} style={{ ...btnPrimary, opacity: inviting ? 0.6 : 1, whiteSpace: "nowrap" }}>
+              {inviting ? "Sending…" : "Send invite"}
+            </button>
+          </form>
+          {inviteUrl && (
+            <div style={{ marginTop: 14, padding: "12px 14px", background: "var(--ok-soft)", border: "1px solid rgba(74, 107, 58, 0.3)", borderRadius: 3 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ok)", marginBottom: 6, letterSpacing: 1.2, textTransform: "uppercase" }}>
+                Invite created
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <code style={{ fontSize: 12, color: "var(--ink-soft)", flex: 1, wordBreak: "break-all", fontFamily: "var(--font-mono)" }}>
+                  {inviteUrl}
+                </code>
+                <button onClick={handleCopyInvite} style={{ ...btnSmall, color: copied ? "var(--ok)" : "var(--accent)" }}>
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {detail.teachers.length > 0 ? (
           <div className="list" style={{ marginBottom: 24 }}>
             {detail.teachers.map((t) => (
@@ -506,7 +607,7 @@ export default function SchoolDetail() {
                       lineHeight: 1.2,
                     }}
                   >
-                    ${t.total_cost_30d.toFixed(4)}
+                    {fmtCost(t.total_cost_30d)}
                   </div>
                   <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
                     {t.call_count_30d.toLocaleString()} call{t.call_count_30d === 1 ? "" : "s"} · 30d
@@ -525,7 +626,7 @@ export default function SchoolDetail() {
           </div>
         ) : (
           <p style={{ color: "var(--muted)", fontStyle: "italic", marginBottom: 24 }}>
-            No teachers yet. Send an invite below.
+            No teachers yet. Send an invite above.
           </p>
         )}
 
@@ -561,39 +662,6 @@ export default function SchoolDetail() {
             </div>
           </div>
         )}
-
-        {/* Invite form */}
-        <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 18 }}>
-          <h3 style={{ marginBottom: 12 }}>Invite a teacher</h3>
-          <form onSubmit={handleInvite} style={{ display: "flex", gap: 8 }}>
-            <input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="teacher@school.edu"
-              required
-              style={{ ...inputStyle, flex: 1 }}
-            />
-            <button type="submit" disabled={inviting} style={{ ...btnPrimary, opacity: inviting ? 0.6 : 1, whiteSpace: "nowrap" }}>
-              {inviting ? "Sending…" : "Send invite"}
-            </button>
-          </form>
-          {inviteUrl && (
-            <div style={{ marginTop: 14, padding: "12px 14px", background: "var(--ok-soft)", border: "1px solid rgba(74, 107, 58, 0.3)", borderRadius: 3 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ok)", marginBottom: 6, letterSpacing: 1.2, textTransform: "uppercase" }}>
-                Invite created
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <code style={{ fontSize: 12, color: "var(--ink-soft)", flex: 1, wordBreak: "break-all", fontFamily: "var(--font-mono)" }}>
-                  {inviteUrl}
-                </code>
-                <button onClick={handleCopyInvite} style={{ ...btnSmall, color: copied ? "var(--ok)" : "var(--accent)" }}>
-                  {copied ? "Copied" : "Copy"}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
       </Section>
 
       {/* ── 05 — STUDENTS ─────────────────────────────────────────── */}
@@ -664,6 +732,14 @@ export default function SchoolDetail() {
                       >
                         {s.subscription_tier === "pro" ? "Pro" : "Free"}
                       </span>
+                      {s.subscription_status && s.subscription_status !== "active" && (
+                        <div
+                          style={{ fontSize: 10.5, color: "var(--accent)", marginTop: 4, textTransform: "uppercase", letterSpacing: 0.6 }}
+                          title="Subscription status"
+                        >
+                          {s.subscription_status.replace(/_/g, " ")}
+                        </div>
+                      )}
                     </td>
                     <td style={{ fontSize: 12, color: "var(--ink-soft)" }}>
                       {s.grade_level > 0 ? gradeLabel(s.grade_level) : "—"}
@@ -808,6 +884,22 @@ function DataBlock({
           {sub}
         </div>
       )}
+    </div>
+  );
+}
+
+function UnitEcon({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div>
+      <div style={{ fontFamily: "var(--font-sans)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.4, color: "var(--muted)", marginBottom: 8 }}>
+        {label}
+      </div>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, color: "var(--ink)", letterSpacing: -0.3, lineHeight: 1 }}>
+        {value}
+      </div>
+      <div style={{ fontFamily: "var(--font-sans)", fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>
+        {sub}
+      </div>
     </div>
   );
 }
