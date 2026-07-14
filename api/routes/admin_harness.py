@@ -97,10 +97,13 @@ async def _probe_health(db: AsyncSession) -> list[dict[str, Any]]:
         recent_judge = next(
             (g.judge_mean for g in group if g.judge_mean is not None), None,
         )
-        # Sparkline: deterministic pass-rate per run, oldest→newest.
+        # Sparkline: deterministic pass-rate per run, oldest→newest. Runs with
+        # no deterministic checks are "no data" (mirrors detRate() → null on the
+        # client) and are omitted, never plotted as a fake 0% dip.
         spark = [
-            round(g.det_pass / g.det_total, 4) if g.det_total else 0.0
+            round(g.det_pass / g.det_total, 4)
             for g in reversed(group)
+            if g.det_total
         ]
         health.append({
             "probe": probe,

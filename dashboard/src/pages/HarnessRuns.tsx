@@ -301,7 +301,7 @@ export default function HarnessRuns() {
 
       {/* ── Top-line alarm ─────────────────────────────────────────────── */}
       {summary && (
-        <div className={`probe-alarm${summary.recent_failing > 0 || ciStale ? " probe-alarm-hot" : ""}`}>
+        <div className={`probe-alarm${summary.recent_window > 0 && (summary.recent_failing > 0 || ciStale) ? " probe-alarm-hot" : ""}`}>
           <div className="probe-alarm-line">
             {summary.recent_window === 0 ? (
               <>
@@ -311,9 +311,13 @@ export default function HarnessRuns() {
             ) : summary.recent_failing > 0 ? (
               <>
                 <StatusPill tone="danger" label="ATTENTION" />
+                {/* Two distinct facts, kept separate: recent instability
+                    (run-based, last-N window) and how many probes are red on
+                    their latest run right now (frontier). Gluing them with
+                    "across" would falsely imply the N runs span those probes. */}
                 <span>
-                  <b>{summary.recent_failing}</b> of the last {summary.recent_window} runs failing
-                  {failingProbes > 0 && <> across <b>{failingProbes}</b> probe{failingProbes === 1 ? "" : "s"}</>}.
+                  <b>{summary.recent_failing}</b> of the last {summary.recent_window} runs failed
+                  {failingProbes > 0 && <> · <b>{failingProbes}</b> probe{failingProbes === 1 ? "" : "s"} red now</>}.
                 </span>
               </>
             ) : (
