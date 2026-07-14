@@ -5,15 +5,18 @@ problems they produced, plus the stored source-document image so the
 founder can see exactly what a pilot teacher fed the model and what came
 out of it.
 
-There is no FK from a job to its LLM calls or its produced items, so
-both are correlated after the fact:
-- LLM cost: `LLMCall` rows for the job's creator, with a generation
-  `function`, whose `created_at` falls inside the job's run window.
-- Produced items: `QuestionBankItem` rows sharing the job's assignment,
-  unit, creator (and parent, for "generate similar") created inside the
-  same window.
+LLM cost is now linked EXACTLY: every call made in service of a job
+(the question call plus its per-problem `decompose` solutions and
+`practice_eval` distractors) carries the job's id in
+`LLMCall.generation_job_id`, so cost is summed by that FK. Old rows
+predating the FK fall back to the legacy time-window heuristic (calls
+for the job's creator, with a generation `function`, whose `created_at`
+falls inside the job's run window).
 
-The correlation is exact in the normal single-job-at-a-time case; only
+Produced items still have no FK, so they're correlated after the fact:
+`QuestionBankItem` rows sharing the job's assignment, unit, creator (and
+parent, for "generate similar") created inside the job's run window. That
+item correlation is exact in the normal single-job-at-a-time case; only
 two concurrent jobs on the identical assignment+unit could blur it,
 which is acceptable for an internal observability surface.
 """
@@ -24,7 +27,7 @@ from datetime import timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
@@ -182,10 +185,18 @@ async def generation_job_detail(
         await db.execute(
             select(LLMCall)
             .where(
-                LLMCall.user_id == job.created_by_id,
                 LLMCall.function.in_(_GENERATION_FUNCTIONS),
-                LLMCall.created_at >= start,
-                LLMCall.created_at <= end,
+                # Exact FK link when present; otherwise the legacy
+                # time-window heuristic for old, unlinked calls.
+                or_(
+                    LLMCall.generation_job_id == job.id,
+                    and_(
+                        LLMCall.generation_job_id.is_(None),
+                        LLMCall.user_id == job.created_by_id,
+                        LLMCall.created_at >= start,
+                        LLMCall.created_at <= end,
+                    ),
+                ),
             )
             .order_by(LLMCall.created_at.asc())
         )
@@ -332,12 +343,18 @@ async def _name_lookup(
 async def _correlate_costs(
     db: AsyncSession, jobs: Sequence[QuestionBankGenerationJob]
 ) -> dict[uuid.UUID, tuple[float, int]]:
-    """Map job_id -> (total_cost_usd, call_count) by bucketing each
-    creator's generation LLM calls into the job whose run window contains
-    it. One query across the whole page, bucketed in Python."""
+    """Map job_id -> (total_cost_usd, call_count).
+
+    A call carrying an explicit `generation_job_id` is attributed to that
+    job EXACTLY (no ambiguity even when two jobs overlap in time). A call
+    with no link (old rows predating the FK) falls back to the legacy
+    time-window heuristic: it lands in the latest job whose run window
+    already contains it. One query across the whole page, bucketed in
+    Python."""
     if not jobs:
         return {}
 
+    job_ids = {j.id for j in jobs}
     creator_ids = {j.created_by_id for j in jobs}
     overall_start = min(j.created_at for j in jobs)
     overall_end = max(_job_window(j)[1] for j in jobs)
@@ -345,12 +362,23 @@ async def _correlate_costs(
     calls = (
         await db.execute(
             select(
-                LLMCall.user_id, LLMCall.created_at, LLMCall.cost_usd
+                LLMCall.user_id,
+                LLMCall.created_at,
+                LLMCall.cost_usd,
+                LLMCall.generation_job_id,
             ).where(
-                LLMCall.user_id.in_(creator_ids),
                 LLMCall.function.in_(_GENERATION_FUNCTIONS),
-                LLMCall.created_at >= overall_start,
-                LLMCall.created_at <= overall_end,
+                # Either explicitly linked to one of this page's jobs, or an
+                # unlinked call in a creator's window (time-window fallback).
+                or_(
+                    LLMCall.generation_job_id.in_(job_ids),
+                    and_(
+                        LLMCall.generation_job_id.is_(None),
+                        LLMCall.user_id.in_(creator_ids),
+                        LLMCall.created_at >= overall_start,
+                        LLMCall.created_at <= overall_end,
+                    ),
+                ),
             )
         )
     ).all()
@@ -364,16 +392,23 @@ async def _correlate_costs(
         lst.sort(key=lambda j: j.created_at)
 
     result: dict[uuid.UUID, tuple[float, int]] = {}
-    for user_id, created_at, cost_usd in calls:
-        owner: QuestionBankGenerationJob | None = None
-        for j in jobs_by_creator.get(user_id, []):
-            start, end = _job_window(j)
-            if start <= created_at <= end:
-                owner = j  # keep last (latest-started) match
-        if owner is None:
+    for user_id, created_at, cost_usd, gen_job_id in calls:
+        owner_id: uuid.UUID | None = None
+        if gen_job_id is not None:
+            # Exact FK link. Only attribute to jobs on this page; a call
+            # linked to some other job is never re-bucketed by time.
+            owner_id = gen_job_id if gen_job_id in job_ids else None
+        else:
+            owner: QuestionBankGenerationJob | None = None
+            for j in jobs_by_creator.get(user_id, []):
+                start, end = _job_window(j)
+                if start <= created_at <= end:
+                    owner = j  # keep last (latest-started) match
+            owner_id = owner.id if owner else None
+        if owner_id is None:
             continue
-        prev_cost, prev_count = result.get(owner.id, (0.0, 0))
-        result[owner.id] = (prev_cost + (cost_usd or 0.0), prev_count + 1)
+        prev_cost, prev_count = result.get(owner_id, (0.0, 0))
+        result[owner_id] = (prev_cost + (cost_usd or 0.0), prev_count + 1)
     return result
 
 
