@@ -45,18 +45,32 @@ graph definitions (wrong functions, shifted curves, etc.)
 
 
 # Defense in depth for the rule above: even with the explicit instruction,
-# the LLM occasionally appends "(sign error)" / "(forgot a step)" to a
-# distractor. Strip a trailing parenthetical only when its content contains a
-# tell-tale "explanation" word — this avoids stripping legitimate math like
-# $\sin(\theta)$, ordered pairs $(0, 1)$, or expressions like $(x+1)$.
+# the LLM occasionally appends a give-away tell like "(sign error)" /
+# "forgot a step" to a distractor. Strip a trailing tell only when it is
+# introduced by a delimiter AND its content contains a tell-tale
+# "explanation" keyword. The keyword anchor is what makes this safe: it lets
+# us leave legitimate math untouched — $\sin(\theta)$, ordered pairs $(0, 1)$,
+# intervals $[0, 1]$, and expressions like $(x+1)$ never contain a keyword,
+# so they are never stripped.
 _LEAK_KEYWORDS = (
     r"error|mistake|wrong|forgot|forgets|forgotten|missed|missing|"
     r"swap(?:ped|s)?|reversed?|off[- ]by[- ]?one|partial|incorrect|"
     r"confused?|sign(?: flip| change| error)?|dropped|omit(?:ted)?|"
     r"skipped|neglect(?:ed)?|miscalculat(?:ed|ion)|misread"
 )
+# Match a trailing tell in any of these shapes, each guarded so a leak keyword
+# must appear inside it:
+#   - "(sign error)"                         parenthetical
+#   - "[forgot to subtract]"                 bracketed
+#   - ", sign error"  /  " — off by one"     comma- or dash-introduced
+# The comma / em-dash / en-dash cases consume everything to end-of-string once
+# a keyword is confirmed to follow the delimiter.
 _LEAK_RE = re.compile(
-    rf"\s*\((?=[^)]*\b(?:{_LEAK_KEYWORDS})\b)[^)]*\)\s*$",
+    rf"\s*(?:"
+    rf"\((?=[^)]*\b(?:{_LEAK_KEYWORDS})\b)[^)]*\)"
+    rf"|\[(?=[^\]]*\b(?:{_LEAK_KEYWORDS})\b)[^\]]*\]"
+    rf"|[,—–](?=[^,]*\b(?:{_LEAK_KEYWORDS})\b).*"
+    rf")\s*$",
     re.IGNORECASE,
 )
 
@@ -220,7 +234,12 @@ async def generate_similar_questions(
             )
         return results
 
-    has_diagram = any("[" in p for p in problems)
+    # Key on the ACTUAL diagram encodings, not any "[" — interval notation
+    # like [0, 10] or matrix literals would otherwise trip this, switch the
+    # model to reasoning, and (via the mandate below) push the model to
+    # fabricate a diagram for plain algebra. The only real markers are the
+    # structured @@{...}@@ block (see step_decomposition.py) and raw <svg>.
+    has_diagram = any("@@{" in p or "<svg" in p for p in problems)
 
     if len(problems) == 1:
         user_msg = f"{problems[0]}\n\nGenerate 1 similar problem (do not include the original)."
@@ -237,8 +256,9 @@ async def generate_similar_questions(
 
     if has_diagram:
         user_msg += (
-            "\n\nIMPORTANT: Any problem that included a diagram requires a diagram in its "
-            "generated version, using structured notation:\n"
+            "\n\nIMPORTANT: Preserve a diagram ONLY if the source problem had one. "
+            "For a source problem that included a diagram, give its generated version "
+            "a diagram too, using structured notation:\n"
             '- Chemistry: @@{"diagram_type": "smiles", "smiles": "SMILES_STRING", "label": "description"}@@\n'
             '- Math graphs: @@{"diagram_type": "graph", "functions": [...], "xRange": [...], "yRange": [...]}@@\n'
             "- Physics/other: use <svg> blocks"
@@ -262,13 +282,18 @@ async def generate_similar_questions(
         if not questions:
             raise RuntimeError("No valid questions generated")
 
-        # If Claude returned fewer than expected, pad with source problems as fallback
+        # If Claude returned fewer than expected, return the shorter list of
+        # genuinely-generated questions rather than padding with the verbatim
+        # source problems — echoing the originals contradicts the "do not
+        # repeat the originals" mandate and, in the integrity remediation flow,
+        # would hand the student back the exact problems they just did. Every
+        # caller iterates a variable-length list (practice.py, session.py,
+        # integrity_pipeline.py), so a short list is safe.
         if len(questions) < len(problems):
             logger.warning(
-                "Batch generation returned %d problems, expected %d — padding with sources",
+                "Batch generation returned %d problems, expected %d — returning the shorter list",
                 len(questions), len(problems),
             )
-            questions += problems[len(questions):]
 
         return questions
     except (anthropic.APIError, anthropic.APITimeoutError, RuntimeError):
