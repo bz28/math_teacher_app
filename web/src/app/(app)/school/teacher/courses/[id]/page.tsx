@@ -21,6 +21,7 @@ import { StudentInsightsTab } from "@/components/school/teacher/student-insights
 import { SubmissionsTab } from "@/components/school/teacher/submissions-tab";
 import { GradesTab } from "@/components/school/teacher/grades-tab";
 import { SettingsTab } from "@/components/school/teacher/settings-tab";
+import { ErrorBoundary } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type TabKey =
@@ -350,7 +351,13 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
         ))}
       </div>
 
+      {/* Per-tab error boundary — a render throw in one tab (bad payload,
+          unexpected null) shows the branded retry surface for that tab
+          instead of unmounting the whole workspace. Keyed by tab so
+          switching tabs remounts the boundary and clears any latched
+          error, letting the teacher move on to a healthy tab. */}
       <div className="mt-6">
+        <ErrorBoundary key={tab}>
         {tab === "sections" && (
           <SectionsTab
             courseId={course.id}
@@ -399,6 +406,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
         {tab === "submissions" && <SubmissionsTab courseId={course.id} />}
         {tab === "grades" && <GradesTab courseId={course.id} />}
         {tab === "settings" && <SettingsTab course={course} onChanged={reloadCourse} />}
+        </ErrorBoundary>
       </div>
     </div>
   );

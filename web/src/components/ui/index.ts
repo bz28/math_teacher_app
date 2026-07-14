@@ -15,3 +15,4 @@ export { AnimatedCounter } from "./animated-counter";
 export { TypingIndicator } from "./typing-indicator";
 export { EmptyState } from "./empty-state";
 export { PageErrorState } from "./page-error-state";
+export { ErrorBoundary } from "./error-boundary";
