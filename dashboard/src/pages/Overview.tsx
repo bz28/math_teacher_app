@@ -63,7 +63,7 @@ export default function Overview() {
       api.schools()
         .then((r) => { if (!cancelled) setSchools(r.schools); })
         .catch(() => {});
-      api.harnessRuns()
+      api.harnessRuns({ limit: "200" })
         .then((r) => {
           if (cancelled) return;
           const cutoff = Date.now() - HARNESS_WINDOW_DAYS * 86_400_000;
@@ -204,7 +204,10 @@ export default function Overview() {
             <div className="attention-title">
               {attention.length} thing{attention.length === 1 ? "" : "s"} need you
             </div>
-            <span className="attention-count">{win} window</span>
+            {/* No aggregate window label here: items span different
+                windows (error 24h, at-risk 14d, harness 7d) and each
+                carries its own inline. */}
+            <span className="attention-count">sorted by severity</span>
           </div>
           <ul className="attention-list">
             {attention.map((item) => (
