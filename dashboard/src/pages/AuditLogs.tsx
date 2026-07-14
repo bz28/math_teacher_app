@@ -222,7 +222,11 @@ export default function AuditLogs() {
         className="filters"
         style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}
       >
-        <select value={hours} onChange={(e) => setParam("hours", e.target.value)}>
+        <select
+          aria-label="Date range"
+          value={hours}
+          onChange={(e) => setParam("hours", e.target.value)}
+        >
           {RANGES.map((r) => (
             <option key={r.value || "all"} value={r.value}>
               {r.label}
@@ -233,8 +237,13 @@ export default function AuditLogs() {
           value={q}
           onChange={(v) => setParam("q", v.trim())}
           placeholder="Actor or student — name / email"
+          ariaLabel="Search by actor or student name or email"
         />
-        <select value={schoolId} onChange={(e) => setParam("school_id", e.target.value)}>
+        <select
+          aria-label="School"
+          value={schoolId}
+          onChange={(e) => setParam("school_id", e.target.value)}
+        >
           <option value="">All schools</option>
           {schools.map((s) => (
             <option key={s.id} value={s.id}>
@@ -242,7 +251,11 @@ export default function AuditLogs() {
             </option>
           ))}
         </select>
-        <select value={facet} onChange={(e) => setParam("facet", e.target.value)}>
+        <select
+          aria-label="Event kind"
+          value={facet}
+          onChange={(e) => setParam("facet", e.target.value)}
+        >
           <option value="">All events</option>
           <option value="access">Record access</option>
           <option value="write">Writes</option>
@@ -251,6 +264,7 @@ export default function AuditLogs() {
           value={typeFilter}
           onChange={(v) => setParam("type", v.trim())}
           placeholder="Action / record type"
+          ariaLabel="Filter by action or record type"
         />
         <button
           type="button"

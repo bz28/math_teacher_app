@@ -322,3 +322,37 @@ async def test_timeline_is_admin_only(
         "/v1/admin/audit-logs/timeline", headers=auth_headers(teacher_token)
     )
     assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_timeline_csv_neutralizes_formula_injection(
+    client: AsyncClient,
+) -> None:
+    """A user named "=cmd()" must not export as a live spreadsheet formula."""
+    async with get_session_factory()() as s:
+        admin = User(email=f"csv_admin_{uuid.uuid4().hex[:6]}@t.com",
+                     password_hash=hash_password("x"), grade_level=0,
+                     role="admin", name="Admin")
+        evil = User(email=f"csv_evil_{uuid.uuid4().hex[:6]}@t.com",
+                    password_hash=hash_password("x"), grade_level=0,
+                    role="admin", name="=SUM(1+1)")
+        s.add_all([admin, evil])
+        await s.flush()
+        s.add(ActivityLog(
+            actor_user_id=evil.id, actor_role="admin", action="user.delete",
+            target_type="user", target_id=uuid.uuid4(),
+            performed_at=datetime.now(UTC),
+        ))
+        await s.commit()
+        admin_id, evil_name = admin.id, evil.name
+
+    token = create_access_token(str(admin_id), "admin")
+    r = await client.get(
+        "/v1/admin/audit-logs/timeline/export.csv",
+        params={"q": evil_name},
+        headers=auth_headers(token),
+    )
+    assert r.status_code == 200, r.text
+    # The dangerous name appears prefixed with an apostrophe, never raw.
+    assert "'=SUM(1+1)" in r.text
+    assert ",=SUM(1+1)" not in r.text

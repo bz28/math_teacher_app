@@ -232,6 +232,16 @@ _ACCESS = "access"
 _WRITE = "write"
 _CSV_ROW_CAP = 100_000
 
+# Spreadsheet apps (Excel/Sheets) execute a cell that starts with one of
+# these as a formula. This export is handed to districts, and the only
+# free-text cells are user-controlled names/emails, so neutralize the
+# formula triggers with a leading apostrophe (CSV injection hardening).
+_CSV_FORMULA_LEAD = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value: str) -> str:
+    return "'" + value if value and value[0] in _CSV_FORMULA_LEAD else value
+
 
 class TimelineFilters:
     """Shared query params for the merged timeline and its CSV export.
@@ -365,7 +375,10 @@ async def _build_timeline_subquery(
         if f.school_id is not None:
             conds.append(w.school_id == f.school_id)
         if q_ids is not None:
-            conds.append(w.actor_user_id.in_(q_ids))
+            # Match the actor OR a write that targets the searched user
+            # (e.g. a role change ON that student) so a name search keeps
+            # the "actor OR target" promise the access branch makes.
+            conds.append(or_(w.actor_user_id.in_(q_ids), w.target_id.in_(q_ids)))
         if prefix:
             conds.append(w.action.ilike(f"{prefix}%"))
         if f.target_id is not None:
@@ -450,7 +463,10 @@ async def audit_timeline(
 
     rows = (
         await db.execute(
-            select(sub).order_by(sub.c.at.desc()).limit(limit).offset(offset)
+            select(sub)
+            .order_by(sub.c.at.desc(), sub.c.id.desc())
+            .limit(limit)
+            .offset(offset)
         )
     ).all()
 
@@ -495,7 +511,7 @@ async def audit_timeline_csv(
     sub = await _build_timeline_subquery(db, filters)
     rows = (
         await db.execute(
-            select(sub).order_by(sub.c.at.desc()).limit(_CSV_ROW_CAP)
+            select(sub).order_by(sub.c.at.desc(), sub.c.id.desc()).limit(_CSV_ROW_CAP)
         )
     ).all()
 
@@ -510,7 +526,7 @@ async def audit_timeline_csv(
     def _field(uid: uuid.UUID | None, key: str) -> str:
         if uid is None:
             return ""
-        return names.get(str(uid), {}).get(key) or ""
+        return _csv_safe(names.get(str(uid), {}).get(key) or "")
 
     output = io.StringIO()
     writer = csv.writer(output)
