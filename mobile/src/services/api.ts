@@ -599,7 +599,6 @@ export interface EntitlementLimits {
   daily_scans_limit: number | null;
   daily_chats_used: number;
   daily_chats_limit: number | null;
-  history_limit: number | null;
 }
 
 export interface EntitlementsData {
