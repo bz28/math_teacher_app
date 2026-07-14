@@ -17,7 +17,10 @@ from api.config import settings
 from api.core.llm_client import _CORRUPTION_CHARS
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user, require_admin
+from api.models.assignment import Assignment, Submission, SubmissionGrade
+from api.models.integrity_check import IntegrityCheckSubmission
 from api.models.llm_call import LLMCall
+from api.models.school import School
 from api.models.user import User
 from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL, time_range
 
@@ -87,9 +90,11 @@ async def llm_calls(
         # place. Indexed on submission_id, instant.
         base_filters.append(LLMCall.submission_id == submission_id)
     if session_id:
-        # Session scope — pulls every call in one conversation/session so
-        # the "session link" in a row's detail can surface the whole
-        # exchange (understanding-check turns, tutoring, etc.).
+        # Session scope — pulls every call sharing one conversational
+        # session (understanding-check turns, tutoring, learn/practice/
+        # integrity chat) across submissions. Powers both the "session
+        # link" in a row's detail and the "view the whole session" jump
+        # from the submission trace. Indexed on session_id, instant.
         base_filters.append(LLMCall.session_id == session_id)
     if school_id == INTERNAL_SCHOOL_SENTINEL:
         # The "Internal" pseudo-school — LLMCall rows with school_id
@@ -187,6 +192,70 @@ async def llm_calls(
     total_count = (await db.execute(
         select(func.count()).select_from(LLMCall).where(*base_filters, *row_filters)
     )).scalar() or 0
+
+    # Submission case-file identity + outcome. Only materialized when the
+    # caller scopes to a single submission (the SubmissionTrace drill-in) —
+    # a one-row join that turns a raw UUID into "who / which HW / what the
+    # AI grade + integrity check + teacher decided". Null on the general
+    # LLM-calls list (no submission_id), so that view pays nothing for it.
+    submission_summary: dict[str, Any] | None = None
+    if submission_id:
+        srow = (await db.execute(
+            select(
+                Submission.id,
+                Submission.status,
+                Submission.student_id,
+                Assignment.title.label("assignment_title"),
+                Assignment.type.label("assignment_type"),
+                User.name.label("student_name"),
+                User.school_id.label("school_id"),
+                School.name.label("school_name"),
+                SubmissionGrade.ai_score,
+                SubmissionGrade.final_score,
+                SubmissionGrade.ai_grading_status,
+                SubmissionGrade.graded_at,
+                SubmissionGrade.reviewed_at,
+                SubmissionGrade.grade_published_at,
+                IntegrityCheckSubmission.disposition.label("integrity_disposition"),
+                IntegrityCheckSubmission.headline.label("integrity_headline"),
+                IntegrityCheckSubmission.status.label("integrity_status"),
+                IntegrityCheckSubmission.resolution.label("integrity_resolution"),
+            )
+            .select_from(Submission)
+            .outerjoin(Assignment, Assignment.id == Submission.assignment_id)
+            .outerjoin(User, User.id == Submission.student_id)
+            .outerjoin(School, School.id == User.school_id)
+            .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+            .outerjoin(
+                IntegrityCheckSubmission,
+                IntegrityCheckSubmission.submission_id == Submission.id,
+            )
+            .where(Submission.id == submission_id)
+        )).first()
+        if srow is not None:
+            submission_summary = {
+                "id": str(srow.id),
+                "status": srow.status,
+                "student_id": str(srow.student_id) if srow.student_id else None,
+                "student_name": srow.student_name,
+                "school_id": str(srow.school_id) if srow.school_id else None,
+                "school_name": srow.school_name,
+                "assignment_title": srow.assignment_title,
+                "assignment_type": srow.assignment_type,
+                "ai_score": srow.ai_score,
+                "final_score": srow.final_score,
+                "ai_grading_status": srow.ai_grading_status,
+                "graded_at": srow.graded_at.isoformat() if srow.graded_at else None,
+                "reviewed_at": srow.reviewed_at.isoformat() if srow.reviewed_at else None,
+                "grade_published_at": (
+                    srow.grade_published_at.isoformat()
+                    if srow.grade_published_at else None
+                ),
+                "integrity_disposition": srow.integrity_disposition,
+                "integrity_headline": srow.integrity_headline,
+                "integrity_status": srow.integrity_status,
+                "integrity_resolution": srow.integrity_resolution,
+            }
 
     # Failure analysis
     failure_filters = [*base_filters, LLMCall.success.is_(False)]
@@ -305,6 +374,9 @@ async def llm_calls(
             for c, user_email, user_name in calls
         ],
         "total_count": total_count,
+        # Case-file identity for the single-submission trace view. Null on the
+        # general list. See submission_summary above.
+        "submission": submission_summary,
         "users": [
             {"id": str(r.id), "email": r.email}
             for r in user_rows
