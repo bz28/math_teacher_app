@@ -178,11 +178,16 @@ async def quality_scores(
             "prior_pass_rate": prior_pass_rate,
             "prior_total": prior_total,
             "total_sessions": total_sessions,
-            "coverage_pct": _pass_rate(total, total_sessions),
-            "avg_correctness": round(agg.avg_correctness or 0, 2),
-            "avg_optimality": round(agg.avg_optimality or 0, 2),
-            "avg_clarity": round(agg.avg_clarity or 0, 2),
-            "avg_flow": round(agg.avg_flow or 0, 2),
+            # Clamp: async/backfilled judging can score a session created
+            # just before the window, nudging the numerator past 100%.
+            "coverage_pct": min(_pass_rate(total, total_sessions), 100.0),
+            # Cast the Decimal averages to float so they serialize as JSON
+            # numbers (a raw Decimal serializes as a string and breaks the
+            # dashboard's .toFixed()).
+            "avg_correctness": round(float(agg.avg_correctness or 0), 2),
+            "avg_optimality": round(float(agg.avg_optimality or 0), 2),
+            "avg_clarity": round(float(agg.avg_clarity or 0), 2),
+            "avg_flow": round(float(agg.avg_flow or 0), 2),
         },
         "trend": trend,
         "by_subject": by_subject,

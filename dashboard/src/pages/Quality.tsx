@@ -114,6 +114,9 @@ export default function Quality() {
   const [offset, setOffset] = useState(0);
 
   useEffect(() => {
+    // Guard against a slow earlier request resolving after a newer one
+    // and overwriting the view with data for a stale filter/page.
+    let cancelled = false;
     api
       .quality({
         hours,
@@ -121,8 +124,9 @@ export default function Quality() {
         limit: String(PAGE_SIZE),
         offset: String(offset),
       })
-      .then((d) => { setData(d); setError(null); })
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load solution quality."));
+      .then((d) => { if (!cancelled) { setData(d); setError(null); } })
+      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load solution quality."); });
+    return () => { cancelled = true; };
   }, [hours, onlyFailed, offset, reloadKey]);
 
   const handleHoursChange = (v: string) => { setHours(v); setOffset(0); };
@@ -136,8 +140,9 @@ export default function Quality() {
   const { summary } = data;
   const win = windowLabel(Number(hours));
 
-  // Delta vs the prior equal-length window. Relative % change of the
-  // pass rate — omitted when there's no prior data to compare against.
+  // Delta vs the prior equal-length window — relative % change of the
+  // pass rate, so the tile's "%" reads correctly. Omitted when the prior
+  // window had no passes (the ratio is undefined) or no data at all.
   const delta = summary.prior_total > 0 && summary.prior_pass_rate > 0
     ? {
         pct: ((summary.pass_rate - summary.prior_pass_rate) / summary.prior_pass_rate) * 100,
