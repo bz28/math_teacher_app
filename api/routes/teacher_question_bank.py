@@ -14,6 +14,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.audit_log import record_activity
 from api.core.constants import SOLUTION_FAILED_SENTINEL_PREFIX
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.image_utils import validate_and_decode_upload
@@ -378,6 +379,11 @@ async def generate_bank_questions(
         params=body.params.model_dump() if body.params else None,
     )
     db.add(job)
+    await db.flush()
+    await record_activity(
+        db, current_user, "generation.start", "generation_job", job.id,
+        {"mode": "generate", "requested_count": body.count},
+    )
     await db.commit()
     await db.refresh(job)
 
@@ -448,6 +454,11 @@ async def upload_worksheet(
         uploaded_images=validated_files,
     )
     db.add(job)
+    await db.flush()
+    await record_activity(
+        db, current_user, "generation.start", "generation_job", job.id,
+        {"mode": "upload", "page_count": len(validated_files)},
+    )
     await db.commit()
     await db.refresh(job)
 
@@ -631,6 +642,10 @@ async def approve_bank_item(
             await db.flush()
             a.content = await snapshot_bank_items(db, a.course_id, existing_ids)
 
+    await record_activity(
+        db, current_user, "bank_item.approve", "bank_item", item.id,
+        {"title": item.title},
+    )
     await db.commit()
     return {"status": "ok"}
 
@@ -638,10 +653,15 @@ async def approve_bank_item(
 @router.post("/question-bank/{item_id}/reject")
 async def reject_bank_item(
     item: QuestionBankItem = Depends(get_bank_item),
+    current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     _ensure_unlocked(item)
     item.status = "rejected"
+    await record_activity(
+        db, current_user, "bank_item.reject", "bank_item", item.id,
+        {"title": item.title},
+    )
     await db.commit()
     return {"status": "ok"}
 
@@ -713,6 +733,11 @@ async def generate_similar_bank_questions(
         parent_question_id=parent.id,
     )
     db.add(job)
+    await db.flush()
+    await record_activity(
+        db, current_user, "generation.start", "generation_job", job.id,
+        {"mode": "similar", "requested_count": body.count, "parent_id": str(parent.id)},
+    )
     await db.commit()
     await db.refresh(job)
 
