@@ -421,8 +421,9 @@ function GenerationDrillIn({ jobId, summary }: { jobId: string; summary: Generat
 }
 
 // "Using M of N attached documents" — honest about what the model
-// actually saw. When the MAX_VISION_IMAGES cap (or a non-image doc)
-// dropped some of the teacher's selection, M < N and this warns.
+// actually saw. When M < N some of the teacher's selection never
+// reached the model — either the MAX_VISION_IMAGES cap truncated it
+// or a doc wasn't a supported image (PDFs are filtered) — so warn.
 function AttachmentUsage({ attachments }: { attachments: GenerationAttachments }) {
   const { used, selected, filenames } = attachments;
   const truncated = used < selected;
@@ -444,7 +445,7 @@ function AttachmentUsage({ attachments }: { attachments: GenerationAttachments }
       </span>
       {truncated && (
         <span style={{ color: "var(--danger)" }}>
-          — {selected - used} dropped by the vision-image cap
+          — {selected - used} not sent (over the image cap or not a supported image)
         </span>
       )}
       {filenames.length > 0 && (
