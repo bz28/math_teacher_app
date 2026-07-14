@@ -61,9 +61,17 @@ async def overview(
         select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(*llm_filters)
     )).scalar() or 0.0
 
-    # Avg latency in period
+    # Latency in period. p95 leads the tile (an average hides the slow
+    # tail that actually hurts users); avg is kept as a secondary
+    # reference. Both are computed over the SAME population —
+    # successful calls in the window — so they're directly comparable.
+    latency_pop = [*llm_filters, LLMCall.success.is_(True)]
     avg_latency = (await db.execute(
-        select(func.avg(LLMCall.latency_ms)).where(*llm_filters, LLMCall.success.is_(True))
+        select(func.avg(LLMCall.latency_ms)).where(*latency_pop)
+    )).scalar() or 0.0
+    p95_latency = (await db.execute(
+        select(func.percentile_cont(0.95).within_group(LLMCall.latency_ms.asc()))
+        .where(*latency_pop)
     )).scalar() or 0.0
 
     # Error rate in period
@@ -150,6 +158,7 @@ async def overview(
         "failed_calls": failed_calls,
         "error_rate": error_rate,
         "avg_latency_ms": round(avg_latency, 0),
+        "p95_latency_ms": round(p95_latency, 0),
         "by_mode": [{"mode": r.mode, "count": r.count} for r in by_mode],
         "by_subject": [{"subject": r.subject, "count": r.count} for r in by_subject],
         "sessions_by_day": [{"day": str(r.day), "count": r.count} for r in sessions_by_day],

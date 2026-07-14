@@ -17,6 +17,7 @@ from api.config import settings
 from api.core.email import send_email
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
+from api.models.activity_log import ActivityLog
 from api.models.assignment import Submission
 from api.models.course import Course
 from api.models.llm_call import LLMCall
@@ -26,6 +27,7 @@ from api.models.section_enrollment import SectionEnrollment
 from api.models.session import Session
 from api.models.teacher_invite import TeacherInvite
 from api.models.user import User
+from api.routes.admin_helpers import activity_last_action_sq
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +130,11 @@ async def list_schools(
         .subquery()
     )
 
+    # Last logged ActivityLog action per school — all-time to match the
+    # (unwindowed) submission recency above. Folds teacher writes with
+    # no student submission (grade/publish) into the school's activity.
+    school_activity = activity_last_action_sq(ActivityLog.school_id)
+
     # Filter out kind='individual' schools — those are synthetic
     # personal containers auto-created for indie teachers (one per
     # teacher). They aren't real partner schools and would otherwise
@@ -139,11 +146,15 @@ async def list_schools(
             func.coalesce(cost_30d_q.c.cost_30d, 0.0).label("cost_30d"),
             func.coalesce(cost_prev_30d_q.c.cost_prev_30d, 0.0).label("cost_prev_30d"),
             last_activity_q.c.last_activity_at,
+            func.greatest(
+                last_activity_q.c.last_activity_at, school_activity.c.last_action_at
+            ).label("last_active_at"),
         )
         .outerjoin(teacher_counts, teacher_counts.c.school_id == School.id)
         .outerjoin(cost_30d_q, cost_30d_q.c.school_id == School.id)
         .outerjoin(cost_prev_30d_q, cost_prev_30d_q.c.school_id == School.id)
         .outerjoin(last_activity_q, last_activity_q.c.school_id == School.id)
+        .outerjoin(school_activity, school_activity.c.gid == School.id)
         .where(School.kind == SCHOOL_KIND_INSTITUTIONAL)
         .order_by(School.created_at.desc())
     )).all()
@@ -162,12 +173,19 @@ async def list_schools(
                 "cost_30d": round(c30, 4),
                 "cost_prev_30d": round(c60, 4),
                 "last_activity_at": la.isoformat() if la else None,
+                # Unified recency: max(last submission, last ActivityLog
+                # action). Prefer this over `last_activity_at` for
+                # active/stale/dormant — it catches a school whose only
+                # recent activity is a teacher grading/publishing (no
+                # student submission). `last_activity_at` is kept for
+                # the parallel Schools-tab PR mid-migration.
+                "last_active_at": laa.isoformat() if laa else None,
                 "notes": s.notes,
                 "created_at": s.created_at.isoformat(),
                 "updated_at": s.updated_at.isoformat() if s.updated_at else None,
                 "updated_by": s.updated_by_name,
             }
-            for s, tc, c30, c60, la in rows
+            for s, tc, c30, c60, la, laa in rows
         ]
     }
 

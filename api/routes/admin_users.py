@@ -25,6 +25,7 @@ from api.core.entitlements import (
 )
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
+from api.models.activity_log import ActivityLog
 from api.models.assignment import Assignment, Submission
 from api.models.course import CourseTeacher
 from api.models.llm_call import LLMCall
@@ -33,7 +34,7 @@ from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.session import Session
 from api.models.user import User
-from api.routes.admin_helpers import time_range
+from api.routes.admin_helpers import activity_last_action_sq, time_range
 
 INVITE_TOKEN_EXPIRY_HOURS = 48
 
@@ -170,6 +171,19 @@ async def users(
         .subquery()
     )
 
+    # Per-user last ActivityLog action (bounded to the same window as
+    # sessions so the two recency signals are comparable). Folds
+    # teacher writes with no session — grade/publish — into last-active.
+    user_activity = activity_last_action_sq(ActivityLog.actor_user_id, since)
+
+    # Unified last-active = the later of {last session, last logged
+    # action}. GREATEST ignores NULLs, so a teacher who only ever
+    # graded (no session) still gets their action timestamp, and a
+    # user with neither stays NULL.
+    last_active_at = func.greatest(
+        user_sessions.c.last_active, user_activity.c.last_action_at
+    )
+
     # Daily usage subqueries (today)
     today = today_start()
 
@@ -256,7 +270,7 @@ async def users(
     sort_columns = {
         "total_cost": func.coalesce(user_cost.c.total_cost, 0.0).desc(),
         "session_count": func.coalesce(user_sessions.c.session_count, 0).desc(),
-        "last_active": func.coalesce(user_sessions.c.last_active, User.created_at).desc(),
+        "last_active": func.coalesce(last_active_at, User.created_at).desc(),
         "name": User.name.asc(),
     }
 
@@ -395,6 +409,7 @@ async def users(
             func.coalesce(user_cost.c.total_cost, 0.0).label("total_cost"),
             func.coalesce(user_cost.c.llm_call_count, 0).label("llm_call_count"),
             user_sessions.c.last_active,
+            last_active_at.label("last_active_at"),
             User.subscription_tier,
             User.subscription_status,
             func.coalesce(daily_sessions.c.daily_sessions, 0).label("daily_sessions"),
@@ -406,6 +421,7 @@ async def users(
         )
         .outerjoin(user_cost, user_cost.c.user_id == User.id)
         .outerjoin(user_sessions, user_sessions.c.user_id == User.id)
+        .outerjoin(user_activity, user_activity.c.gid == User.id)
         .outerjoin(daily_sessions, daily_sessions.c.user_id == User.id)
         .outerjoin(daily_chats, daily_chats.c.user_id == User.id)
         .outerjoin(daily_scans, daily_scans.c.user_id == User.id)
@@ -443,6 +459,12 @@ async def users(
                 "llm_call_count": r.llm_call_count,
                 "avg_cost_per_session": round(r.total_cost / r.session_count, 4) if r.session_count else 0.0,
                 "last_active": r.last_active.isoformat() if r.last_active else None,
+                # Unified recency: max(last session, last ActivityLog
+                # action). Prefer this over `last_active` for
+                # active/stale/dormant — it catches teachers who only
+                # graded/published (no session). `last_active` is kept
+                # for the parallel tab PRs mid-migration.
+                "last_active_at": r.last_active_at.isoformat() if r.last_active_at else None,
                 "registered": r.created_at.isoformat(),
                 "subscription_tier": r.subscription_tier,
                 "subscription_status": r.subscription_status,
