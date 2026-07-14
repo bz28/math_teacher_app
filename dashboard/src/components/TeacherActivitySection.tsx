@@ -5,6 +5,7 @@ import {
   type ActivityLogData,
   type ActivityLogEntry,
   type DocumentContent,
+  type GenerationAttachments,
   type GenerationJobDetail,
   type GenerationJobSummary,
   type GenerationJobsData,
@@ -339,6 +340,9 @@ function GenerationDrillIn({ jobId, summary }: { jobId: string; summary: Generat
       {(detail.source_documents.length > 0 || detail.uploaded_images.length > 0) && (
         <div>
           <SubLabel>Source worksheet</SubLabel>
+          {detail.attachments && detail.attachments.selected > 0 && (
+            <AttachmentUsage attachments={detail.attachments} />
+          )}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 8 }}>
             {detail.source_documents.map((d) => (
               <DocumentThumb key={d.id} docId={d.id} filename={d.filename} fileType={d.file_type} />
@@ -412,6 +416,42 @@ function GenerationDrillIn({ jobId, summary }: { jobId: string; summary: Generat
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// "Using M of N attached documents" — honest about what the model
+// actually saw. When the MAX_VISION_IMAGES cap (or a non-image doc)
+// dropped some of the teacher's selection, M < N and this warns.
+function AttachmentUsage({ attachments }: { attachments: GenerationAttachments }) {
+  const { used, selected, filenames } = attachments;
+  const truncated = used < selected;
+  return (
+    <div
+      style={{
+        marginTop: 6,
+        fontSize: 12,
+        display: "flex",
+        alignItems: "baseline",
+        gap: 8,
+        flexWrap: "wrap",
+        color: truncated ? "var(--danger)" : "var(--muted)",
+      }}
+    >
+      <span style={{ fontWeight: 600 }}>
+        {truncated && "⚠ "}Using {used} of {selected} attached document
+        {selected === 1 ? "" : "s"}
+      </span>
+      {truncated && (
+        <span style={{ color: "var(--danger)" }}>
+          — {selected - used} dropped by the vision-image cap
+        </span>
+      )}
+      {filenames.length > 0 && (
+        <span style={{ color: "var(--muted-2)", fontFamily: "var(--font-mono)", fontSize: 11 }}>
+          {filenames.join(", ")}
+        </span>
+      )}
     </div>
   );
 }

@@ -856,12 +856,23 @@ export interface GenerationUploadedImage {
   image_data: string | null;
 }
 
+export interface GenerationAttachments {
+  /** How many documents the teacher selected (N). */
+  selected: number;
+  /** How many actually reached the model after the vision-image cap (M). */
+  used: number;
+  /** Filenames of the documents actually sent to the model. */
+  filenames: string[];
+}
+
 export interface GenerationJobDetail {
   job: GenerationJobSummary & {
     params: Record<string, unknown> | null;
     source_doc_ids: string[];
     error_message: string | null;
   };
+  /** Attached-doc provenance from the generation call, or null if none. */
+  attachments: GenerationAttachments | null;
   source_documents: GenerationSourceDoc[];
   uploaded_images: GenerationUploadedImage[];
   items: GenerationItem[];

@@ -58,6 +58,32 @@ async def fetch_document_images(
     return images
 
 
+def build_attachment_metadata(
+    selected_count: int,
+    used_images: list[dict[str, str]],
+) -> dict[str, Any]:
+    """Structured provenance of the source docs fed to a generation call.
+
+    Records the filenames actually sent to the model, how many documents
+    the teacher selected (N), and how many survived the media-type filter
+    + MAX_VISION_IMAGES cap and were actually sent (M). Logged ONLY as
+    call_metadata on the LLM call — never added to the model prompt — so
+    the admin observability can show "using M of N attached documents"
+    and warning-flag a run the cap silently truncated (M < N).
+
+    `used_images` is the post-cap list from `fetch_document_images`
+    (each carries a "filename"); upload-mode pages carry no filename, so
+    filenames are collected defensively.
+    """
+    return {
+        "attached_doc_filenames": [
+            img["filename"] for img in used_images if img.get("filename")
+        ],
+        "attached_docs_selected": selected_count,
+        "attached_docs_used": len(used_images),
+    }
+
+
 def build_vision_content(
     images: list[dict[str, str]],
     text_prompt: str,

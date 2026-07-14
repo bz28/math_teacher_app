@@ -229,6 +229,11 @@ async def generation_job_detail(
             "source_doc_ids": [str(d) for d in (job.source_doc_ids or [])],
             "error_message": job.error_message,
         },
+        # Which attached docs actually reached the model, read straight
+        # from the generation call's logged provenance (source of truth —
+        # reflects the MAX_VISION_IMAGES cap at run time, not a re-derived
+        # guess). None when the job attached no documents.
+        "attachments": _attachments_from_calls(calls),
         "source_documents": source_docs,
         "uploaded_images": uploaded_images,
         "items": [
@@ -294,6 +299,23 @@ async def document_content(
         # Data-URI-ready base64 (or None if the row never stored bytes).
         "image_data": doc.image_data,
     }
+
+
+def _attachments_from_calls(
+    calls: Sequence[LLMCall],
+) -> dict[str, Any] | None:
+    """Pull attached-document provenance off whichever generation call
+    recorded it (build_attachment_metadata stamps the question call).
+    Returns {selected, used, filenames} or None if no call carried it."""
+    for c in calls:
+        meta = c.call_metadata or {}
+        if "attached_docs_selected" in meta:
+            return {
+                "selected": meta.get("attached_docs_selected") or 0,
+                "used": meta.get("attached_docs_used") or 0,
+                "filenames": meta.get("attached_doc_filenames") or [],
+            }
+    return None
 
 
 async def _name_lookup(
