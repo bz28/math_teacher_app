@@ -35,6 +35,8 @@ export default function LearnSessionPage() {
     finishAsking,
     toggleLearnFlag,
     resumeSession,
+    startSession,
+    lastStartInput,
     sessionImage,
     subject,
     reset,
@@ -109,16 +111,28 @@ export default function LearnSessionPage() {
   // still null, so a loading-first guard would trap the student on the
   // "Building…" state forever and never reach this recovery surface.
   if (phase === "error") {
-    // Generation failed — there's no in-place retry for the original
-    // input, so the honest recovery is back to Learn to start over.
-    // Branded surface only (the duplicate error toast was removed) so
-    // the failure shows exactly once.
+    // Generation failed. Retry in place with the exact input that failed —
+    // a resume re-fetches by id, a fresh walkthrough re-runs startSession
+    // with the stashed problem+image (sessionImage is only set on success,
+    // so lastStartInput is the retry source). "Back to Learn" stays as a
+    // secondary escape. Branded surface only (the duplicate error toast was
+    // removed) so the failure shows exactly once.
+    const retry = resumeId
+      ? () => { resumeSession(resumeId); }
+      : lastStartInput
+        // A fresh EntitlementError on retry would otherwise be swallowed
+        // while phase sits at "loading" — stranding the student on the
+        // spinner. Route to /pricing so the retry can never dead-end.
+        ? () => { startSession(lastStartInput.problem, lastStartInput.image).catch((err) => { if (err instanceof EntitlementError) router.push("/pricing"); }); }
+        : null;
     return (
       <PageErrorState
         title="That didn't generate"
-        message="We couldn't build this walkthrough just now. Head back to Learn and try again."
-        retryLabel="Back to Learn"
-        onRetry={() => router.push("/learn")}
+        message="We couldn't build this walkthrough just now. Try again, or head back to Learn to start over."
+        retryLabel={retry ? "Try again" : "Back to Learn"}
+        onRetry={retry ?? (() => router.push("/learn"))}
+        secondaryLabel={retry ? "Back to Learn" : undefined}
+        onSecondary={retry ? () => router.push("/learn") : undefined}
       />
     );
   }

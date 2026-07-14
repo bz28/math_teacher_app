@@ -4,8 +4,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useSessionStore } from "@/stores/learn";
 import { usePracticeStore } from "@/stores/practice";
-import { session as sessionApi } from "@/lib/api";
-import { Button, Badge, PageErrorState } from "@/components/ui";
+import { session as sessionApi, EntitlementError } from "@/lib/api";
+import { Button, Badge, Card, PageErrorState } from "@/components/ui";
 import { useRedirectOnIdle } from "@/hooks/use-session-effects";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { GeneratingState } from "@/components/shared/generating-state";
@@ -26,6 +26,8 @@ export default function PracticePage() {
     skipPracticeProblem,
     nextPracticeProblem,
     togglePracticeFlag,
+    retryLastGeneration,
+    lastGeneration,
     reset,
   } = usePracticeStore();
 
@@ -75,15 +77,24 @@ export default function PracticePage() {
   // practiceBatch is still null, so a loading-first guard would trap the
   // student on the "Building…" state forever and never reach recovery.
   if (phase === "error") {
-    // Generation failed — no in-place retry for the original seed, so
-    // the honest recovery is back to Learn. Branded surface only (the
-    // duplicate error toast was removed) so the failure shows once.
+    // Generation failed. Retry in place with the exact seed that failed
+    // (stashed in lastGeneration before the API call). "Back to Learn"
+    // stays as a secondary escape. Branded surface only (the duplicate
+    // error toast was removed) so the failure shows once.
     return (
       <PageErrorState
         title="That didn't generate"
-        message="We couldn't build your practice set just now. Head back to Learn and try again."
-        retryLabel="Back to Learn"
-        onRetry={() => router.push("/learn")}
+        message="We couldn't build your practice set just now. Try again, or head back to Learn to start over."
+        retryLabel={lastGeneration ? "Try again" : "Back to Learn"}
+        onRetry={lastGeneration
+          // On retry, a fresh EntitlementError would otherwise be swallowed
+          // while phase sits at "loading" — stranding the student on the
+          // spinner. Route to /pricing (matches Review's handler) so the
+          // retry can never dead-end.
+          ? () => { retryLastGeneration().catch((err) => { if (err instanceof EntitlementError) router.push("/pricing"); }); }
+          : () => router.push("/learn")}
+        secondaryLabel={lastGeneration ? "Back to Learn" : undefined}
+        onSecondary={lastGeneration ? () => router.push("/learn") : undefined}
       />
     );
   }
@@ -167,6 +178,21 @@ export default function PracticePage() {
   const progress = (practiceBatch.currentIndex / practiceBatch.problems.length) * 100;
   const isLast = practiceBatch.currentIndex >= practiceBatch.problems.length - 1;
 
+  // Terminal-empty distractor case: the answer resolved but the backend
+  // returned no usable distractors (an exception, or dedup collapsed them
+  // all — practice.py returns []), so no multiple-choice can be built. An
+  // empty `choices` while the answer is still resolving is a legitimate
+  // loading state and must NOT trip this — gate on the answer being ready.
+  const answerReady = current.answer !== "";
+  const noChoices = answerReady && choices.length === 0;
+
+  function skipUnbuildable() {
+    // Advance without recording a wrong result — an unanswerable problem
+    // shouldn't count against the student or get them flagged.
+    setSelectedChoice(null);
+    nextPracticeProblem();
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
@@ -178,28 +204,53 @@ export default function PracticePage() {
 
       <ProgressBar value={progress} />
 
-      <MCQCard
-        question={current.question}
-        choices={choices}
-        selectedChoice={selectedChoice}
-        feedback={feedback}
-        isThinking={isThinking}
-        onSelectChoice={handleChoiceSelect}
-        onAdvance={() => {
-          setSelectedChoice(null);
-          nextPracticeProblem();
-        }}
-        advanceLabel={isLast ? "See Results" : "Next Problem"}
-        belowChoices={
-          <button
-            onClick={skipPracticeProblem}
-            disabled={isThinking}
-            className="text-xs font-medium text-text-muted hover:text-text-secondary transition-colors"
-          >
-            Skip this problem
-          </button>
-        }
-      />
+      {noChoices ? (
+        <Card variant="elevated" className="space-y-4">
+          <div className="text-base font-medium text-text-primary">
+            <MathText text={current.question} />
+          </div>
+          <div className="rounded-[--radius-md] border border-border bg-input-bg/60 p-4 text-center">
+            <p className="text-sm font-semibold text-text-primary">
+              We couldn&apos;t build answer choices for this one
+            </p>
+            <p className="mt-1 text-sm text-text-secondary">
+              Something went wrong generating the options. Skip ahead — this
+              one won&apos;t count against you.
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={skipUnbuildable}
+              className="mt-4"
+            >
+              {isLast ? "See Results" : "Skip to next problem"}
+            </Button>
+          </div>
+        </Card>
+      ) : (
+        <MCQCard
+          question={current.question}
+          choices={choices}
+          selectedChoice={selectedChoice}
+          feedback={feedback}
+          isThinking={isThinking}
+          onSelectChoice={handleChoiceSelect}
+          onAdvance={() => {
+            setSelectedChoice(null);
+            nextPracticeProblem();
+          }}
+          advanceLabel={isLast ? "See Results" : "Next Problem"}
+          belowChoices={
+            <button
+              onClick={skipPracticeProblem}
+              disabled={isThinking}
+              className="text-xs font-medium text-text-muted hover:text-text-secondary transition-colors"
+            >
+              Skip this problem
+            </button>
+          }
+        />
+      )}
       {UpgradeModal}
     </div>
   );
