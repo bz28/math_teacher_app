@@ -239,6 +239,38 @@ async function mutate<T>(path: string, method: string, body?: object): Promise<T
   );
 }
 
+// Authed file download — same 401→refresh path as `request`, but pulls
+// the body as a Blob and reads the server's filename off the
+// Content-Disposition so a CSV export saves with the right name.
+async function download(path: string, params?: Record<string, string>): Promise<void> {
+  const { blob, filename } = await withAuth(
+    (token) => {
+      const url = new URL(`${API_BASE}${path}`);
+      if (params) {
+        for (const [k, v] of Object.entries(params)) {
+          if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, v);
+        }
+      }
+      return trackedFetch(url.toString(), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+    },
+    async (res) => {
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const match = /filename="?([^"]+)"?/.exec(cd);
+      return { blob: await res.blob(), filename: match?.[1] ?? "export.csv" };
+    },
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export interface HarnessRun {
   id: string;
   probe: string;
@@ -275,6 +307,10 @@ export const api = {
     request<StudentAccessLogData>("/admin/audit-logs/student-access", params),
   activityLog: (params?: Record<string, string>) =>
     request<ActivityLogData>("/admin/activity", params),
+  auditTimeline: (params?: Record<string, string>) =>
+    request<TimelineData>("/admin/audit-logs/timeline", params),
+  downloadAuditTimelineCsv: (params?: Record<string, string>) =>
+    download("/admin/audit-logs/timeline/export.csv", params),
   generationJobs: (params?: Record<string, string>) =>
     request<GenerationJobsData>("/admin/generation/jobs", params),
   generationJob: (id: string) =>
@@ -795,6 +831,49 @@ export interface ActivityLogData {
   limit: number;
   offset: number;
   entries: ActivityLogEntry[];
+}
+
+// ── Merged audit timeline (access ∪ write) ──
+
+export type TimelineFacet = "access" | "write";
+
+export interface TimelineEntry {
+  id: string;
+  facet: TimelineFacet;
+  at: string;
+  actor_user_id: string | null;
+  actor_name: string | null;
+  actor_email: string | null;
+  actor_role: string;
+  school_id: string | null;
+  /** Set on write rows — the "<entity>.<verb>" action string. */
+  action: string | null;
+  /** Set on access rows — the record category that was read. */
+  record_type: string | null;
+  /** Set on write rows — the mutated entity type. */
+  target_type: string | null;
+  target_id: string | null;
+  target_student_id: string | null;
+  target_student_name: string | null;
+  ip_address: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface TimelineSummary {
+  total: number;
+  distinct_actors: number;
+  distinct_students: number;
+  top_action: string | null;
+  top_action_count: number;
+  by_day: { day: string; count: number }[];
+}
+
+export interface TimelineData {
+  total: number;
+  limit: number;
+  offset: number;
+  summary: TimelineSummary;
+  entries: TimelineEntry[];
 }
 
 // ── Generation observability ──
