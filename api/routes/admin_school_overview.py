@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
+from api.models.activity_log import ActivityLog
 from api.models.assignment import Assignment, AssignmentSection, Submission
 from api.models.course import Course
 from api.models.llm_call import LLMCall
@@ -198,6 +199,7 @@ async def school_overview(
     # strip, mirroring the Schools list's last_activity_at. Internal
     # scope has no school submissions, so it stays null.
     last_activity_at: datetime | None = None
+    last_active_at: datetime | None = None
     if not is_internal:
         last_activity_at = (await db.execute(
             select(func.max(Submission.submitted_at))
@@ -205,6 +207,16 @@ async def school_overview(
             .join(Course, Course.id == Section.course_id)
             .where(Course.school_id == school_id)
         )).scalar()
+        # Unified recency = max(last submission, last ActivityLog action)
+        # for this school. Folds in teacher grade/publish actions that
+        # leave no student submission, so the KPI strip's active/at-risk
+        # reflects teacher activity too — not just student submissions.
+        last_action_at = (await db.execute(
+            select(func.max(ActivityLog.performed_at))
+            .where(ActivityLog.school_id == school_id)
+        )).scalar()
+        candidates = [t for t in (last_activity_at, last_action_at) if t is not None]
+        last_active_at = max(candidates) if candidates else None
 
     return {
         "school_id": school_id,
@@ -212,6 +224,9 @@ async def school_overview(
         "is_internal": is_internal,
         "generated_at": now.isoformat(),
         "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
+        # Prefer over last_activity_at for active/stale/dormant — folds in
+        # teacher grade/publish actions that leave no student submission.
+        "last_active_at": last_active_at.isoformat() if last_active_at else None,
         "cost": {
             "this_month": round(this_month_cost, 4),
             "last_month": round(last_month_cost, 4),

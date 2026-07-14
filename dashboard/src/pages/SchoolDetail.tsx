@@ -283,10 +283,10 @@ export default function SchoolDetail() {
   const costPerTeacher = teacherCount > 0 ? overview.cost.cost_30d / teacherCount : null;
 
   const statusPill = detail.is_active
-    ? activityPill(activityStatus(overview.last_activity_at))
+    ? activityPill(activityStatus(overview.last_active_at))
     : { tone: "neutral" as const, label: "INACTIVE" };
   const lastActivityAtRisk =
-    detail.is_active && isAtRisk({ lastActiveAt: overview.last_activity_at, failedCalls: overview.failed_calls_24h });
+    detail.is_active && isAtRisk({ lastActiveAt: overview.last_active_at, failedCalls: overview.failed_calls_24h });
 
   return (
     <div>
@@ -363,7 +363,7 @@ export default function SchoolDetail() {
         <StatTile
           label="Last activity"
           tone={lastActivityAtRisk ? "warn" : "default"}
-          value={overview.last_activity_at ? formatRelativeDate(overview.last_activity_at) : "none yet"}
+          value={overview.last_active_at ? formatRelativeDate(overview.last_active_at) : "none yet"}
         />
         <StatTile
           label="Failed · 24h"

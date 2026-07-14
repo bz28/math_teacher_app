@@ -27,7 +27,7 @@ type SchoolFilter = "all" | "active" | "at-risk";
 function riskRank(s: SchoolListItem): number {
   if (!s.is_active) return -1;
   if (s.failed_calls_24h > 0) return 2;
-  if (isAtRisk({ lastActiveAt: s.last_activity_at })) return 1;
+  if (isAtRisk({ lastActiveAt: s.last_active_at })) return 1;
   return 0;
 }
 
@@ -110,7 +110,7 @@ export default function Schools() {
       sortValue: (s) => s.name.toLowerCase(),
       render: (s) => {
         const pill = s.is_active
-          ? activityPill(activityStatus(s.last_activity_at))
+          ? activityPill(activityStatus(s.last_active_at))
           : { tone: "neutral" as const, label: "INACTIVE" };
         return (
           <div style={{ minWidth: 0, opacity: s.is_active ? 1 : 0.6 }}>
@@ -155,13 +155,13 @@ export default function Schools() {
     },
     {
       key: "activity", header: "Last activity", width: "13%",
-      sortValue: (s) => (s.last_activity_at ? new Date(s.last_activity_at).getTime() : 0),
+      sortValue: (s) => (s.last_active_at ? new Date(s.last_active_at).getTime() : 0),
       render: (s) => {
-        if (!s.last_activity_at) return <span style={{ color: "var(--muted-2)", fontSize: 12 }}>none yet</span>;
-        const atRisk = s.is_active && isAtRisk({ lastActiveAt: s.last_activity_at });
+        if (!s.last_active_at) return <span style={{ color: "var(--muted-2)", fontSize: 12 }}>none yet</span>;
+        const atRisk = s.is_active && isAtRisk({ lastActiveAt: s.last_active_at });
         return (
           <span style={{ fontSize: 12, color: atRisk ? "var(--accent)" : "var(--ink-soft)" }}>
-            {formatRelativeDate(s.last_activity_at)}
+            {formatRelativeDate(s.last_active_at)}
           </span>
         );
       },
@@ -321,7 +321,7 @@ export default function Schools() {
           rowStatus={(s) =>
             s.failed_calls_24h > 0
               ? "var(--danger)"
-              : s.is_active && isAtRisk({ lastActiveAt: s.last_activity_at })
+              : s.is_active && isAtRisk({ lastActiveAt: s.last_active_at })
                 ? "var(--accent)"
                 : undefined
           }

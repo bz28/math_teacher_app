@@ -840,6 +840,10 @@ export interface SchoolOverviewData {
   is_internal: boolean;
   generated_at: string;
   last_activity_at: string | null;
+  // Unified recency = max(last submission, last ActivityLog action).
+  // Prefer over last_activity_at for active/stale/dormant — folds in
+  // teacher grade/publish actions that leave no student submission.
+  last_active_at: string | null;
   cost: {
     this_month: number;
     last_month: number;
