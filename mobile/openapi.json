@@ -8424,6 +8424,7 @@
         ]
       },
       "get": {
+        "description": "School deep page: the teacher \u2192 section \u2192 student hierarchy.\n\nThe unit is teacher\u2192class, not a flat school-wide roster. We return\nevery teacher, their sections (class periods), and each section's\nenrolled students \u2014 with cost rolled up to the level where it's\nunambiguously attributable:\n\n  * Per-submission AI (Vision extraction + integrity + AI grading,\n    and grading of assigned practice) is attributable via\n    LLMCall.submission_id \u2192 submission \u2192 section, so it rolls up to\n    the **section**.\n  * A teacher's authoring/generation spend has no submission, so it\n    can't be pinned to one section \u2014 it stays at the **teacher**\n    level (LLMCall.user_id = teacher, submission_id IS NULL).\n\nAll aggregation is done with grouped subqueries assembled in Python\n(no per-teacher / per-section follow-up queries), so a large school\nstill resolves in a fixed number of round trips.",
         "operationId": "get_school_v1_admin_schools__school_id__get",
         "parameters": [
           {
@@ -8702,80 +8703,6 @@
           }
         ],
         "summary": "School Overview",
-        "tags": [
-          "admin"
-        ]
-      }
-    },
-    "/v1/admin/schools/{school_id}/students": {
-      "get": {
-        "description": "Roster of every student enrolled in any of the school's courses.\n\nOne pass over courses \u2192 sections \u2192 section_enrollments \u2192 users\nso a school with many teachers doesn't N+1 across the per-teacher\nendpoint. Same row shape as `/admin/users/{teacher_id}/students`\nminus per-section context (a student may sit across several\nteachers within the same school; surfacing each enrollment would\nbloat the table for no obvious operator value).",
-        "operationId": "school_students_v1_admin_schools__school_id__students_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "school_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "School Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 100,
-              "maximum": 500,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response School Students V1 Admin Schools  School Id  Students Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "School Students",
         "tags": [
           "admin"
         ]

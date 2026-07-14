@@ -582,7 +582,27 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get School */
+        /**
+         * Get School
+         * @description School deep page: the teacher → section → student hierarchy.
+         *
+         *     The unit is teacher→class, not a flat school-wide roster. We return
+         *     every teacher, their sections (class periods), and each section's
+         *     enrolled students — with cost rolled up to the level where it's
+         *     unambiguously attributable:
+         *
+         *       * Per-submission AI (Vision extraction + integrity + AI grading,
+         *         and grading of assigned practice) is attributable via
+         *         LLMCall.submission_id → submission → section, so it rolls up to
+         *         the **section**.
+         *       * A teacher's authoring/generation spend has no submission, so it
+         *         can't be pinned to one section — it stays at the **teacher**
+         *         level (LLMCall.user_id = teacher, submission_id IS NULL).
+         *
+         *     All aggregation is done with grouped subqueries assembled in Python
+         *     (no per-teacher / per-section follow-up queries), so a large school
+         *     still resolves in a fixed number of round trips.
+         */
         get: operations["get_school_v1_admin_schools__school_id__get"];
         put?: never;
         post?: never;
@@ -637,33 +657,6 @@ export interface paths {
         };
         /** School Overview */
         get: operations["school_overview_v1_admin_schools__school_id__overview_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/schools/{school_id}/students": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * School Students
-         * @description Roster of every student enrolled in any of the school's courses.
-         *
-         *     One pass over courses → sections → section_enrollments → users
-         *     so a school with many teachers doesn't N+1 across the per-teacher
-         *     endpoint. Same row shape as `/admin/users/{teacher_id}/students`
-         *     minus per-section context (a student may sit across several
-         *     teachers within the same school; surfacing each enrollment would
-         *     bloat the table for no obvious operator value).
-         */
-        get: operations["school_students_v1_admin_schools__school_id__students_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7166,42 +7159,6 @@ export interface operations {
             header?: never;
             path: {
                 /** @description School UUID or 'internal' */
-                school_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    school_students_v1_admin_schools__school_id__students_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path: {
                 school_id: string;
             };
             cookie?: never;

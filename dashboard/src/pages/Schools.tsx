@@ -1,32 +1,42 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, type SchoolListItem } from "../lib/api";
-import { formatRelativeDate } from "../lib/format";
+import { formatRelativeDate, fmtCost } from "../lib/format";
 import { btnGhost, btnPrimary, inputStyle } from "../lib/styles";
-import StatCard from "../components/StatCard";
-import { useConfirm } from "../lib/confirm";
-import { useToast } from "../lib/toast";
+import {
+  STALE_AFTER_DAYS,
+  activityPill,
+  activityStatus,
+  costWindowLabel,
+  isAtRisk,
+} from "../lib/definitions";
+import StatTile from "../components/StatTile";
+import StatusPill from "../components/StatusPill";
+import DataTable, { type Column } from "../components/DataTable";
+import ErrorState from "../components/ErrorState";
 
-const AT_RISK_DAYS = 14;
+const USAGE_WINDOW = "7d";
 
 // Table filter tabs, mirroring the Leads all/active/stale pattern.
 type SchoolFilter = "all" | "active" | "at-risk";
-// Sortable columns. `null` key keeps the server's default ordering.
-type SortKey = "cost" | "teachers" | "activity";
-type SortDir = "asc" | "desc";
+
+// Per-school risk rank for the default ordering — the whole point of
+// the tab is to surface an at-risk-yet-valuable pilot in 3 seconds.
+// Failing (2) outranks merely stale (1); deactivated schools sink
+// below everything (-1) since we turned them off deliberately.
+function riskRank(s: SchoolListItem): number {
+  if (!s.is_active) return -1;
+  if (s.failed_calls_24h > 0) return 2;
+  if (isAtRisk({ lastActiveAt: s.last_active_at })) return 1;
+  return 0;
+}
 
 export default function Schools() {
-  const confirm = useConfirm();
-  const toast = useToast();
   const navigate = useNavigate();
   const [schools, setSchools] = useState<SchoolListItem[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Table filter + column sort. Sort defaults to the server order
-  // (sortKey null); clicking a header selects it desc, then toggles.
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<SchoolFilter>("all");
-  const [sortKey, setSortKey] = useState<SortKey | null>(null);
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   // Create form
   const [showCreate, setShowCreate] = useState(false);
@@ -34,47 +44,15 @@ export default function Schools() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
-  const menuToggleRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-
-  // Row id currently being deleted — drives the in-flight "Deleting…"
-  // affordance after the confirm modal closes but before reload() lands.
-  // Without this, a slow delete leaves the row visually idle while the
-  // network is in motion, inviting a double-click.
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-
   const reload = () => {
     setLoading(true);
-    api.schools().then((d) => setSchools(d.schools)).finally(() => setLoading(false));
+    api.schools()
+      .then((d) => { setSchools(d.schools); setError(null); })
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load schools."))
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => { reload(); }, []);
-
-  function openMenuFor(schoolId: string) {
-    if (openMenu === schoolId) { setOpenMenu(null); return; }
-    const btn = menuToggleRefs.current[schoolId];
-    if (!btn) return;
-    const rect = btn.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    if (spaceBelow < 160) {
-      setMenuPos({ bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right });
-    } else {
-      setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-    }
-    setOpenMenu(schoolId);
-  }
-
-  useEffect(() => {
-    if (!openMenu) return;
-    const close = () => setOpenMenu(null);
-    document.addEventListener("click", close);
-    document.addEventListener("scroll", close, true);
-    return () => {
-      document.removeEventListener("click", close);
-      document.removeEventListener("scroll", close, true);
-    };
-  }, [openMenu]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,82 +77,116 @@ export default function Schools() {
     }
   };
 
-  const handleToggleActive = async (school: SchoolListItem) => {
-    const action = school.is_active ? "Deactivate" : "Activate";
-    if (!(await confirm({
-      title: `${action} ${school.name}?`,
-      message: school.is_active
-        ? "All teachers and students will lose access until the school is reactivated."
-        : "Teachers and students will regain access on their next sign-in.",
-      confirmLabel: action,
-      variant: school.is_active ? "danger" : "primary",
-    }))) return;
-    try {
-      await api.updateSchool(school.id, { is_active: !school.is_active });
-      reload();
-    } catch (e) {
-      toast((e as Error).message);
-    }
-  };
+  // Aggregates over the full list — every headline number comes from
+  // the same payload so the tiles and table can't disagree.
+  const totalSchools = schools.length;
+  const activeSchools = schools.filter((s) => s.is_active).length;
+  const totalStudents = schools.reduce((n, s) => n + s.student_count, 0);
+  const costThisWindow = schools.reduce((n, s) => n + s.cost_30d, 0);
+  const costPrevWindow = schools.reduce((n, s) => n + s.cost_prev_30d, 0);
+  const atRiskCount = schools.filter((s) => riskRank(s) > 0).length;
+  const costDeltaPct = costPrevWindow > 0
+    ? ((costThisWindow - costPrevWindow) / costPrevWindow) * 100
+    : null;
 
-  const handleDelete = async (school: SchoolListItem) => {
-    if (!(await confirm({
-      title: `Delete ${school.name}?`,
-      message: (
-        <>
-          <strong>{school.teacher_count}</strong> teacher{school.teacher_count !== 1 ? "s" : ""} will be unlinked,
-          all pending invites will be cancelled, and this can&apos;t be undone.
-          {" "}If this school was converted from a lead, remember to update the lead status in the Leads tab.
-        </>
-      ),
-      confirmLabel: "Delete school",
-    }))) return;
-    setDeletingId(school.id);
-    try {
-      await api.deleteSchool(school.id);
-      reload();
-    } catch (e) {
-      toast((e as Error).message);
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  // Click a header: select it (desc) or, if already selected, flip
-  // direction. Computed before the early return to keep hook order
-  // stable.
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
-    } else {
-      setSortKey(key);
-      setSortDir("desc");
-    }
-  };
-
+  // Filter, then rank so at-risk × high-value leads. Default order is
+  // risk desc, then cost desc; clicking any header hands sorting to
+  // DataTable (which reads the column's sortValue).
   const visibleSchools = useMemo(() => {
     const filtered = schools.filter((s) => {
       if (filter === "active") return s.is_active;
-      if (filter === "at-risk") return s.is_active && isAtRisk(s.last_activity_at);
+      if (filter === "at-risk") return riskRank(s) > 0;
       return true;
     });
-    if (!sortKey) return filtered;
-    const dir = sortDir === "asc" ? 1 : -1;
-    // Copy before sort — never mutate the source array in place.
-    return [...filtered].sort((a, b) => dir * (sortValue(a, sortKey) - sortValue(b, sortKey)));
-  }, [schools, filter, sortKey, sortDir]);
+    return [...filtered].sort((a, b) => {
+      const r = riskRank(b) - riskRank(a);
+      return r !== 0 ? r : b.cost_30d - a.cost_30d;
+    });
+  }, [schools, filter]);
 
-  if (loading) return <p className="loading">Loading…</p>;
+  const columns: Column<SchoolListItem>[] = [
+    {
+      key: "school", header: "School", width: "24%",
+      sortValue: (s) => s.name.toLowerCase(),
+      render: (s) => {
+        const pill = s.is_active
+          ? activityPill(activityStatus(s.last_active_at))
+          : { tone: "neutral" as const, label: "INACTIVE" };
+        return (
+          <div style={{ minWidth: 0, opacity: s.is_active ? 1 : 0.6 }}>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {s.name}
+            </div>
+            <div style={{ marginTop: 4 }}>
+              <StatusPill {...pill} />
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: "teachers", header: "Teachers", numeric: true, width: "9%",
+      sortValue: (s) => s.teacher_count,
+      render: (s) => <span style={{ color: s.teacher_count > 0 ? "var(--ink)" : "var(--muted-2)" }}>{s.teacher_count}</span>,
+    },
+    {
+      key: "students", header: "Students", numeric: true, width: "9%",
+      sortValue: (s) => s.student_count,
+      render: (s) => <span style={{ color: s.student_count > 0 ? "var(--ink)" : "var(--muted-2)" }}>{s.student_count}</span>,
+    },
+    {
+      key: "usage", header: `Usage · ${USAGE_WINDOW}`, numeric: true, width: "11%",
+      sortValue: (s) => s.submissions_7d,
+      render: (s) => (
+        <span title="Submissions in the last 7 days" style={{ color: s.submissions_7d > 0 ? "var(--ink)" : "var(--muted-2)" }}>
+          {s.submissions_7d}
+        </span>
+      ),
+    },
+    {
+      key: "cost", header: `Cost · ${costWindowLabel()}`, numeric: true, width: "16%",
+      sortValue: (s) => s.cost_30d,
+      render: (s) => (
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 8, justifyContent: "flex-end" }}>
+          <span style={{ color: s.cost_30d > 0 ? "var(--ink)" : "var(--muted-2)", fontWeight: 600 }}>{fmtCost(s.cost_30d)}</span>
+          {deltaInline(s.cost_30d, s.cost_prev_30d)}
+        </span>
+      ),
+    },
+    {
+      key: "activity", header: "Last activity", width: "13%",
+      sortValue: (s) => (s.last_active_at ? new Date(s.last_active_at).getTime() : 0),
+      render: (s) => {
+        if (!s.last_active_at) return <span style={{ color: "var(--muted-2)", fontSize: 12 }}>none yet</span>;
+        const atRisk = s.is_active && isAtRisk({ lastActiveAt: s.last_active_at });
+        return (
+          <span style={{ fontSize: 12, color: atRisk ? "var(--accent)" : "var(--ink-soft)" }}>
+            {formatRelativeDate(s.last_active_at)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "health", header: "Health", numeric: true, width: "9%",
+      sortValue: (s) => s.failed_calls_24h,
+      render: (s) =>
+        s.failed_calls_24h > 0 ? (
+          <span
+            title={`${s.failed_calls_24h} AI call${s.failed_calls_24h === 1 ? "" : "s"} failing in the last 24h`}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "flex-end", color: "var(--danger)", fontWeight: 600 }}
+          >
+            <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--danger)" }} />
+            {s.failed_calls_24h}
+          </span>
+        ) : (
+          <span aria-hidden="true" title="No failing calls in the last 24h" style={{ color: "var(--muted-2)" }}>·</span>
+        ),
+    },
+  ];
 
-  // Aggregates over the (current) school list — all displayed numbers
-  // come from the same payload so the band is internally consistent.
-  const totalSchools = schools.length;
-  const activeSchools = schools.filter((s) => s.is_active).length;
-  const costThisWindow = schools.reduce((s, x) => s + x.cost_30d, 0);
-  const costPrevWindow = schools.reduce((s, x) => s + x.cost_prev_30d, 0);
-  const atRiskCount = schools.filter((s) =>
-    s.is_active && isAtRisk(s.last_activity_at),
-  ).length;
+  if (error && schools.length === 0) {
+    return <ErrorState message={error} onRetry={reload} />;
+  }
 
   return (
     <div>
@@ -195,30 +207,38 @@ export default function Schools() {
         )}
       </div>
 
-      <div className="stat-grid">
-        <StatCard
+      {/* ── Headline tiles — clickable ones drive the table filter ── */}
+      <div className="tile-grid">
+        <StatTile
           label="Total schools"
           value={totalSchools}
           onClick={() => setFilter("all")}
           active={filter === "all"}
         />
-        <StatCard
+        <StatTile
           label="Active"
           value={activeSchools}
+          sub={`${totalSchools - activeSchools} inactive`}
           onClick={() => setFilter("active")}
           active={filter === "active"}
         />
-        <StatCard
-          label="Cost (30d)"
-          value={`$${costThisWindow.toFixed(2)}`}
-          sub={costPrevWindow > 0 ? deltaSub(costThisWindow, costPrevWindow) : "no prior data"}
+        <StatTile
+          label="Students"
+          value={totalStudents.toLocaleString()}
+          sub="enrolled across all schools"
         />
-        <StatCard
+        <StatTile
+          label={`Cost · ${costWindowLabel()}`}
+          value={fmtCost(costThisWindow)}
+          delta={costDeltaPct === null ? undefined : { pct: costDeltaPct, goodWhen: "down", note: "vs prev 30d" }}
+        />
+        <StatTile
           label="At risk"
+          tone={atRiskCount > 0 ? "danger" : "default"}
           value={atRiskCount}
+          sub={`failing, or quiet ${STALE_AFTER_DAYS}d+`}
           onClick={() => setFilter("at-risk")}
           active={filter === "at-risk"}
-          sub={`no activity ${AT_RISK_DAYS}d`}
         />
       </div>
 
@@ -273,270 +293,83 @@ export default function Schools() {
             {filter === "active" ? "Active schools" : filter === "at-risk" ? "At-risk schools" : "All schools"}
             <span style={{ fontWeight: 400, color: "var(--muted-2)", marginLeft: 8 }}>({visibleSchools.length})</span>
           </h3>
-          <div style={{ display: "flex", gap: 0, background: "var(--paper-2)", borderRadius: 3, padding: 2, border: "1px solid var(--rule)" }}>
+          <div style={{ display: "flex", background: "var(--paper-2)", borderRadius: 3, padding: 2, border: "1px solid var(--rule)" }}>
             {(["all", "active", "at-risk"] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
                 style={{
                   padding: "6px 14px", border: "none", borderRadius: 2, fontSize: 11, fontWeight: 600, cursor: "pointer",
-                  textTransform: "uppercase", letterSpacing: "1.2px",
-                  fontFamily: "var(--font-sans)",
+                  textTransform: "uppercase", letterSpacing: "1.2px", fontFamily: "var(--font-sans)",
                   background: filter === f ? "var(--surface)" : "transparent",
                   color: filter === f ? "var(--ink)" : "var(--muted)",
                 }}
               >
-                {f === "all"
-                  ? `All (${totalSchools})`
-                  : f === "active"
-                    ? `Active (${activeSchools})`
-                    : `At risk (${atRiskCount})`}
+                {f === "all" ? `All (${totalSchools})` : f === "active" ? `Active (${activeSchools})` : `At risk (${atRiskCount})`}
               </button>
             ))}
           </div>
         </div>
-        <table>
-          <colgroup>
-            <col style={{ width: "20%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "11%" }} />
-            <col style={{ width: "11%" }} />
-            <col style={{ width: "12%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "12%" }} />
-            <col style={{ width: "9%" }} />
-            <col style={{ width: "5%" }} />
-          </colgroup>
-          <thead>
-            <tr>
-              <th>School</th>
-              <SortableTh label="Teachers" col="teachers" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <SortableTh label="Cost (30d)" col="cost" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <th>vs prev</th>
-              <SortableTh label="Last activity" col="activity" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-              <th>Status</th>
-              <th>Notes</th>
-              <th>Added</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {visibleSchools.map((s) => {
-              const isDeleting = deletingId === s.id;
-              return (
-              <tr
-                key={s.id}
-                className="clickable"
-                style={{ opacity: isDeleting ? 0.4 : s.is_active ? 1 : 0.55, pointerEvents: isDeleting ? "none" : undefined }}
-                onClick={() => navigate(`/schools/${s.id}`)}
-              >
-                <td>
-                  <div>
-                    <Link
-                      to={`/schools/${s.id}`}
-                      style={{
-                        color: "var(--ink)",
-                        fontFamily: "var(--font-display)",
-                        fontSize: 17,
-                        textDecoration: "none",
-                      }}
-                    >
-                      {s.name}
-                    </Link>
-                    <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>
-                      {s.contact_name} · {s.contact_email}
-                    </div>
-                    {(s.city || s.state) && (
-                      <div style={{ fontSize: 11, color: "var(--muted-2)" }}>
-                        {[s.city, s.state].filter(Boolean).join(", ")}
-                      </div>
-                    )}
-                  </div>
-                </td>
-                <td className="num">{s.teacher_count}</td>
-                <td className="num" style={{ color: s.cost_30d > 0 ? "var(--ink)" : "var(--muted-2)" }}>
-                  ${s.cost_30d.toFixed(2)}
-                </td>
-                <td className="num" style={{ fontSize: 12 }}>
-                  {s.cost_prev_30d > 0 ? deltaInline(s.cost_30d, s.cost_prev_30d) : <span style={{ color: "var(--muted-2)" }}>—</span>}
-                </td>
-                <td style={{ fontSize: 12 }}>
-                  {s.last_activity_at ? (
-                    <span style={{ color: isAtRisk(s.last_activity_at) ? "var(--accent)" : "var(--ink-soft)" }}>
-                      {formatRelativeDate(s.last_activity_at)}
-                    </span>
-                  ) : (
-                    <span style={{ color: "var(--muted-2)" }}>none yet</span>
-                  )}
-                </td>
-                <td>
-                  <span className="list-row-status">
-                    <span aria-hidden="true" className={`dot ${s.is_active ? "dot-ok" : "dot-muted"}`}>●</span>
-                    {s.is_active ? "Active" : "Inactive"}
-                  </span>
-                </td>
-                <td>
-                  {s.notes ? (
-                    <div style={{ fontSize: 12, color: "var(--ink-soft)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={s.notes}>
-                      {s.notes}
-                    </div>
-                  ) : (
-                    <span style={{ color: "var(--muted-2)", fontSize: 12 }}>—</span>
-                  )}
-                </td>
-                <td style={{ fontSize: 12, color: "var(--muted)" }}>{formatRelativeDate(s.created_at)}</td>
-                <td onClick={(e) => e.stopPropagation()}>
-                  <button
-                    ref={(el) => { menuToggleRefs.current[s.id] = el; }}
-                    className="action-toggle"
-                    disabled={isDeleting}
-                    onClick={(e) => { e.stopPropagation(); openMenuFor(s.id); }}
-                  >
-                    {isDeleting ? "Deleting…" : "…"}
-                  </button>
-                  {openMenu === s.id && (
-                    <div
-                      className="action-dropdown"
-                      style={{
-                        ...(menuPos.top != null ? { top: menuPos.top } : {}),
-                        ...(menuPos.bottom != null ? { bottom: menuPos.bottom } : {}),
-                        right: menuPos.right,
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button onClick={() => { setOpenMenu(null); navigate(`/schools/${s.id}`); }}>
-                        View details
-                      </button>
-                      <button onClick={() => { setOpenMenu(null); handleToggleActive(s); }}>
-                        {s.is_active ? "Deactivate" : "Activate"}
-                      </button>
-                      <button className="danger" onClick={() => { setOpenMenu(null); handleDelete(s); }}>
-                        Delete school
-                      </button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-              );
-            })}
-            {visibleSchools.length === 0 && (
-              <tr>
-                <td colSpan={9}>
-                  <div className="empty-state">
-                    {schools.length === 0 ? (
-                      <>
-                        <div className="empty-state-title">No schools yet.</div>
-                        <div className="empty-state-sub">Click "+ Add school" when you close your first deal.</div>
-                      </>
-                    ) : filter === "at-risk" ? (
-                      <>
-                        <div className="empty-state-title">Nothing at risk.</div>
-                        <div className="empty-state-sub">
-                          Every active school has been touched in the last {AT_RISK_DAYS} days.{" "}
-                          <button onClick={() => setFilter("all")} className="link-btn">View all schools</button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="empty-state-title">No active schools.</div>
-                        <div className="empty-state-sub">
-                          All schools are inactive.{" "}
-                          <button onClick={() => setFilter("all")} className="link-btn">View all schools</button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+        <DataTable
+          columns={columns}
+          rows={visibleSchools}
+          rowKey={(s) => s.id}
+          onRowClick={(s) => navigate(`/schools/${s.id}`)}
+          drill
+          loading={loading}
+          minWidth={860}
+          rowStatus={(s) =>
+            s.failed_calls_24h > 0
+              ? "var(--danger)"
+              : s.is_active && isAtRisk({ lastActiveAt: s.last_active_at })
+                ? "var(--accent)"
+                : undefined
+          }
+          empty={
+            schools.length === 0 ? (
+              <div>
+                <div className="dt-state-title">No schools yet.</div>
+                <div className="dt-state-sub">Click "+ Add school" when you close your first deal.</div>
+              </div>
+            ) : filter === "at-risk" ? (
+              <div>
+                <div className="dt-state-title">Nothing at risk.</div>
+                <div className="dt-state-sub">
+                  Every active school is healthy and touched within {STALE_AFTER_DAYS} days.{" "}
+                  <button onClick={() => setFilter("all")} className="link-btn">View all schools</button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="dt-state-title">No active schools.</div>
+                <div className="dt-state-sub">
+                  All schools are inactive.{" "}
+                  <button onClick={() => setFilter("all")} className="link-btn">View all schools</button>
+                </div>
+              </div>
+            )
+          }
+        />
       </div>
-
     </div>
-  );
-}
-
-/* ── Sortable header ───────────────────────────────────────────── */
-
-function SortableTh({
-  label,
-  col,
-  sortKey,
-  sortDir,
-  onSort,
-}: {
-  label: string;
-  col: SortKey;
-  sortKey: SortKey | null;
-  sortDir: SortDir;
-  onSort: (key: SortKey) => void;
-}) {
-  const active = sortKey === col;
-  return (
-    <th aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
-      <button
-        type="button"
-        onClick={() => onSort(col)}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 4,
-          border: "none",
-          background: "transparent",
-          padding: 0,
-          font: "inherit",
-          color: active ? "var(--ink)" : "inherit",
-          cursor: "pointer",
-          letterSpacing: "inherit",
-          textTransform: "inherit",
-        }}
-      >
-        {label}
-        <span aria-hidden="true" style={{ fontSize: 9, color: active ? "var(--accent)" : "var(--muted-2)" }}>
-          {active ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
-        </span>
-      </button>
-    </th>
   );
 }
 
 /* ── Helpers ───────────────────────────────────────────────────── */
 
-// Numeric sort key per column. `last_activity_at` maps to a timestamp
-// (null → 0, i.e. "never active" sorts as the stalest) so activity
-// asc surfaces the most at-risk schools first.
-function sortValue(s: SchoolListItem, key: SortKey): number {
-  if (key === "cost") return s.cost_30d;
-  if (key === "teachers") return s.teacher_count;
-  return s.last_activity_at ? new Date(s.last_activity_at).getTime() : 0;
-}
-
-function isAtRisk(lastActivityAt: string | null): boolean {
-  if (!lastActivityAt) return true;
-  const age = Date.now() - new Date(lastActivityAt).getTime();
-  return age > AT_RISK_DAYS * 24 * 60 * 60 * 1000;
-}
-
-function deltaSub(curr: number, prev: number): string {
-  if (prev === 0) return "no prior data";
-  const pct = ((curr - prev) / prev) * 100;
-  const arrow = pct > 0 ? "↑" : pct < 0 ? "↓" : "→";
-  return `${arrow} ${Math.abs(pct).toFixed(0)}% vs prev`;
-}
-
+// Inline cost trend vs the prior 30d window. Up (spending more) reads
+// sienna, down reads moss — matches the tile delta convention.
 function deltaInline(curr: number, prev: number) {
-  if (prev === 0) return <span style={{ color: "var(--muted-2)" }}>—</span>;
+  if (prev <= 0) return null;
   const pct = ((curr - prev) / prev) * 100;
+  if (Math.round(pct) === 0) return <span style={{ color: "var(--muted-2)", fontSize: 11 }}>→ 0%</span>;
   const up = pct > 0;
   return (
-    <span style={{ color: up ? "var(--accent)" : pct < 0 ? "var(--ok)" : "var(--muted)" }}>
-      {up ? "↑" : pct < 0 ? "↓" : "→"} {Math.abs(pct).toFixed(0)}%
+    <span style={{ color: up ? "var(--accent)" : "var(--ok)", fontSize: 11, fontWeight: 500 }}>
+      {up ? "▲" : "▼"} {Math.abs(pct).toFixed(0)}%
     </span>
   );
 }
-
-/* ── Shared sub-components ──────────────────────────────────────── */
 
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -548,4 +381,3 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
     </div>
   );
 }
-

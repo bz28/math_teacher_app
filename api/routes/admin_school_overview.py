@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
+from api.models.activity_log import ActivityLog
 from api.models.assignment import Assignment, AssignmentSection, Submission
 from api.models.course import Course
 from api.models.llm_call import LLMCall
@@ -124,6 +125,25 @@ async def school_overview(
         )
     )).scalar() or 0.0
 
+    # Rolling 30d cost (+ prior 30d) — the SAME window the Schools list
+    # shows, so a school's KPI strip matches the number the operator
+    # clicked in from. Distinct from the calendar-month breakdown below.
+    cost_30d_start = now - timedelta(days=30)
+    cost_60d_start = now - timedelta(days=60)
+    cost_30d = (await db.execute(
+        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(
+            llm_school,
+            LLMCall.created_at >= cost_30d_start,
+        )
+    )).scalar() or 0.0
+    cost_prev_30d = (await db.execute(
+        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(
+            llm_school,
+            LLMCall.created_at >= cost_60d_start,
+            LLMCall.created_at < cost_30d_start,
+        )
+    )).scalar() or 0.0
+
     # Linear projection — this-month / days-elapsed × days-in-month.
     # Crude on day 1; the dashboard reads it as "if usage stays flat
     # for the rest of the month".
@@ -175,14 +195,43 @@ async def school_overview(
         db, school_id, last_week_start, week_start, is_internal,
     )
 
+    # Last student-submission timestamp — the recency signal for the KPI
+    # strip, mirroring the Schools list's last_activity_at. Internal
+    # scope has no school submissions, so it stays null.
+    last_activity_at: datetime | None = None
+    last_active_at: datetime | None = None
+    if not is_internal:
+        last_activity_at = (await db.execute(
+            select(func.max(Submission.submitted_at))
+            .join(Section, Section.id == Submission.section_id)
+            .join(Course, Course.id == Section.course_id)
+            .where(Course.school_id == school_id)
+        )).scalar()
+        # Unified recency = max(last submission, last ActivityLog action)
+        # for this school. Folds in teacher grade/publish actions that
+        # leave no student submission, so the KPI strip's active/at-risk
+        # reflects teacher activity too — not just student submissions.
+        last_action_at = (await db.execute(
+            select(func.max(ActivityLog.performed_at))
+            .where(ActivityLog.school_id == school_id)
+        )).scalar()
+        candidates = [t for t in (last_activity_at, last_action_at) if t is not None]
+        last_active_at = max(candidates) if candidates else None
+
     return {
         "school_id": school_id,
         "school_name": school_name,
         "is_internal": is_internal,
         "generated_at": now.isoformat(),
+        "last_activity_at": last_activity_at.isoformat() if last_activity_at else None,
+        # Prefer over last_activity_at for active/stale/dormant — folds in
+        # teacher grade/publish actions that leave no student submission.
+        "last_active_at": last_active_at.isoformat() if last_active_at else None,
         "cost": {
             "this_month": round(this_month_cost, 4),
             "last_month": round(last_month_cost, 4),
+            "cost_30d": round(cost_30d, 4),
+            "cost_prev_30d": round(cost_prev_30d, 4),
             "projected_month_end": round(projected_month_end, 4),
             "trend_12_weeks": [
                 {

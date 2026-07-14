@@ -29,6 +29,7 @@ from sqlalchemy import text
 
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
+from api.models.activity_log import ActivityLog
 from api.models.assignment import Assignment, AssignmentSection, Submission
 from api.models.course import Course
 from api.models.llm_call import LLMCall
@@ -44,9 +45,9 @@ async def _wipe() -> None:
     (sections → submissions → llm_calls etc)."""
     async with get_session_factory()() as s:
         await s.execute(text(
-            "TRUNCATE TABLE llm_calls, submission_grades, submissions, "
-            "assignment_sections, assignments, sections, units, courses, "
-            "schools, users RESTART IDENTITY CASCADE"
+            "TRUNCATE TABLE activity_log, llm_calls, submission_grades, "
+            "submissions, assignment_sections, assignments, sections, units, "
+            "courses, schools, users RESTART IDENTITY CASCADE"
         ))
         await s.commit()
 
@@ -243,6 +244,20 @@ async def seeded() -> dict[str, Any]:
                 cost=0.10, created_at=in_window,
             ))
 
+        # ── ActivityLog: a teacher grade.save AFTER the last submission.
+        # This leaves no student submission, so it only shows up in the
+        # unified last_active_at recency (not last_activity_at). +5min
+        # keeps it strictly later than in_window even at a week boundary.
+        s.add(ActivityLog(
+            actor_user_id=teacher_a.id,
+            actor_role="teacher",
+            school_id=school_a.id,
+            action="grade.save",
+            target_type="submission",
+            target_id=sub_a.id,
+            performed_at=in_window + timedelta(minutes=5),
+        ))
+
         await s.commit()
 
         return {
@@ -271,8 +286,13 @@ async def test_school_a_overview_reflects_seeded_data(
     assert data["school_name"] == "School A"
     assert data["is_internal"] is False
 
-    # 5 calls × $1.00 = $5.00 this month.
+    # 5 calls × $1.00 = $5.00 this month. The rolling-30d window (shown
+    # in the KPI strip, matching the Schools list) sees the same spend.
     assert data["cost"]["this_month"] == pytest.approx(5.0)
+    assert data["cost"]["cost_30d"] == pytest.approx(5.0)
+
+    # A submission was seeded this week, so last-activity is populated.
+    assert data["last_activity_at"] is not None
 
     # 1 of the 5 calls was failed; counts hit both 24h and 7d windows.
     assert data["failed_calls_24h"] == 1
@@ -288,6 +308,29 @@ async def test_school_a_overview_reflects_seeded_data(
         "hws_published": 1,
         "submissions": 1,
     }
+
+
+async def test_last_active_at_folds_in_activity_log(
+    client: AsyncClient, seeded: dict[str, Any],
+) -> None:
+    """`last_active_at` = max(last submission, last ActivityLog action).
+
+    School A's seed has a teacher `grade.save` action stamped 5 minutes
+    after its last submission — a teacher write that leaves no student
+    submission. So `last_active_at` must be strictly newer than
+    `last_activity_at` (submission-only), which is what makes the KPI
+    strip's active/at-risk reflect teacher activity, not just students.
+    """
+    r = await client.get(
+        f"/v1/admin/schools/{seeded['school_a_id']}/overview",
+        headers=auth_headers(seeded["admin_token"]),
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["last_activity_at"] is not None
+    assert data["last_active_at"] is not None
+    # ISO-8601 timestamps sort lexicographically, so > compares chronology.
+    assert data["last_active_at"] > data["last_activity_at"]
 
 
 async def test_cross_school_isolation(
