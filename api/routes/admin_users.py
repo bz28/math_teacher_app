@@ -5,6 +5,7 @@ import hashlib
 import logging
 import secrets
 import uuid
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -26,15 +27,17 @@ from api.core.entitlements import (
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.activity_log import ActivityLog
-from api.models.assignment import Assignment, Submission
+from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.course import CourseTeacher
 from api.models.llm_call import LLMCall
+from api.models.question_bank import QuestionBankGenerationJob
 from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.session import Session
 from api.models.user import User
 from api.routes.admin_helpers import activity_last_action_sq, time_range
+from api.services.bank import problem_ids_in_content
 
 INVITE_TOKEN_EXPIRY_HOURS = 48
 
@@ -275,6 +278,21 @@ async def users(
         .subquery()
     )
 
+    # Homeworks created (all-time) per teacher. The founder scans the
+    # Independent Teachers list for who's actually building homework —
+    # the strongest "this teacher is really using the product" signal —
+    # so it headlines the teacher rows alongside active + cost. Zero for
+    # students (no assignments), same as the other teacher aggregates.
+    teacher_homeworks = (
+        select(
+            Assignment.teacher_id.label("user_id"),
+            func.count(Assignment.id).label("homework_count"),
+        )
+        .where(Assignment.type == "homework")
+        .group_by(Assignment.teacher_id)
+        .subquery()
+    )
+
     # Sort column mapping
     sort_columns = {
         "total_cost": func.coalesce(user_cost.c.total_cost, 0.0).desc(),
@@ -427,6 +445,7 @@ async def users(
             func.coalesce(teacher_sections.c.section_count, 0).label("section_count"),
             func.coalesce(teacher_students.c.student_count, 0).label("student_count"),
             func.coalesce(teacher_submissions_30d.c.submissions_30d, 0).label("submissions_30d"),
+            func.coalesce(teacher_homeworks.c.homework_count, 0).label("homework_count"),
         )
         .outerjoin(user_cost, user_cost.c.user_id == User.id)
         .outerjoin(user_sessions, user_sessions.c.user_id == User.id)
@@ -437,6 +456,7 @@ async def users(
         .outerjoin(teacher_sections, teacher_sections.c.user_id == User.id)
         .outerjoin(teacher_students, teacher_students.c.user_id == User.id)
         .outerjoin(teacher_submissions_30d, teacher_submissions_30d.c.user_id == User.id)
+        .outerjoin(teacher_homeworks, teacher_homeworks.c.user_id == User.id)
         .where(*search_filters)
     )
     users_query = (
@@ -490,6 +510,7 @@ async def users(
                     "sections": r.section_count,
                     "students": r.student_count,
                     "submissions_30d": r.submissions_30d,
+                    "homeworks": r.homework_count,
                 },
             }
             for r in all_users
@@ -725,6 +746,90 @@ async def delete_user(
     return {"status": "ok"}
 
 
+async def _teacher_usage(db: AsyncSession, teacher_id: uuid.UUID) -> dict[str, Any]:
+    """Rich "what is this teacher actually doing" rollup for the header
+    KPI strip on TeacherDetail. Aggregates the teacher's own creation +
+    grading footprint from Assignment / Submission / SubmissionGrade /
+    QuestionBankGenerationJob records:
+
+      - homeworks_created / practice_sets — Assignment.type counts
+      - problems_per_homework — avg problems across their homeworks
+      - published — assignments they pushed live
+      - creation cadence — homeworks/week + last-created timestamp
+      - submissions_received / graded — inbound work + what they graded
+      - students_reached — distinct students who submitted to them
+      - generations — question-bank generation jobs they ran
+
+    Everything is all-time (the page is a per-teacher deep dive, not a
+    windowed dashboard); cost stays 30d in the header via the existing
+    LLM stats. Assignment-derived counts are computed in Python so the
+    JSON `content` problem count is dialect-independent.
+    """
+    assignments = (await db.execute(
+        select(
+            Assignment.type,
+            Assignment.status,
+            Assignment.content,
+            Assignment.created_at,
+        ).where(Assignment.teacher_id == teacher_id)
+    )).all()
+
+    homeworks = [a for a in assignments if a.type == "homework"]
+    practice_sets = sum(1 for a in assignments if a.type == "practice")
+    published = sum(1 for a in assignments if a.status == "published")
+
+    hw_problem_counts = [len(problem_ids_in_content(a.content)) for a in homeworks]
+    problems_per_homework = (
+        round(sum(hw_problem_counts) / len(hw_problem_counts), 1)
+        if hw_problem_counts else None
+    )
+
+    last_created_at = max((a.created_at for a in assignments), default=None)
+    homeworks_per_week: float | None = None
+    if homeworks:
+        first = min(a.created_at for a in homeworks)
+        span_weeks = max((datetime.now(UTC) - first).total_seconds() / (7 * 86400), 1.0)
+        homeworks_per_week = round(len(homeworks) / span_weeks, 2)
+
+    # Inbound work + reach — one pass over this teacher's submissions.
+    sub_stats = (await db.execute(
+        select(
+            func.count(Submission.id),
+            func.count(func.distinct(Submission.student_id)),
+        )
+        .join(Assignment, Assignment.id == Submission.assignment_id)
+        .where(Assignment.teacher_id == teacher_id)
+    )).one()
+
+    graded = (await db.execute(
+        select(func.count(SubmissionGrade.id))
+        .join(Submission, Submission.id == SubmissionGrade.submission_id)
+        .join(Assignment, Assignment.id == Submission.assignment_id)
+        .where(
+            Assignment.teacher_id == teacher_id,
+            SubmissionGrade.graded_at.isnot(None),
+        )
+    )).scalar() or 0
+
+    generations = (await db.execute(
+        select(func.count(QuestionBankGenerationJob.id))
+        .where(QuestionBankGenerationJob.created_by_id == teacher_id)
+    )).scalar() or 0
+
+    return {
+        "homeworks_created": len(homeworks),
+        "practice_sets": practice_sets,
+        "problems_per_homework": problems_per_homework,
+        "published": published,
+        "homeworks_per_week": homeworks_per_week,
+        "last_created_at": last_created_at.isoformat() if last_created_at else None,
+        "submissions_received": int(sub_stats[0]),
+        "graded": int(graded),
+        "students_reached": int(sub_stats[1]),
+        "generations": int(generations),
+    }
+
+
 @router.get("/users/{teacher_id}/students")
 async def teacher_students(
     teacher_id: uuid.UUID,
@@ -763,11 +868,51 @@ async def teacher_students(
         .order_by(Section.name.asc())
     )
     section_rows = (await db.execute(sections_q)).all()
+    section_ids = [s.id for s in section_rows]
+
+    # Per-section enrichment: how many students are enrolled and when
+    # the section last saw a submission. Turns the bare name-only list
+    # into a scannable "which class is alive" table. Two grouped reads
+    # over the teacher's section ids (empty-safe).
+    section_student_counts: dict[uuid.UUID, int] = {}
+    section_last_activity: dict[uuid.UUID, datetime] = {}
+    student_section_ids: dict[str, list[str]] = defaultdict(list)
+    if section_ids:
+        section_student_counts = {
+            sid: count
+            for sid, count in (await db.execute(
+                select(
+                    SectionEnrollment.section_id,
+                    func.count(func.distinct(SectionEnrollment.student_id)),
+                )
+                .where(SectionEnrollment.section_id.in_(section_ids))
+                .group_by(SectionEnrollment.section_id)
+            )).all()
+        }
+        section_last_activity = {
+            sid: ts
+            for sid, ts in (await db.execute(
+                select(Submission.section_id, func.max(Submission.submitted_at))
+                .where(Submission.section_id.in_(section_ids))
+                .group_by(Submission.section_id)
+            )).all()
+        }
+        for stu_id, sec_id in (await db.execute(
+            select(SectionEnrollment.student_id, SectionEnrollment.section_id)
+            .where(SectionEnrollment.section_id.in_(section_ids))
+        )).all():
+            student_section_ids[str(stu_id)].append(str(sec_id))
+
     section_summary = [
         {
             "id": str(s.id),
             "name": s.name,
             "course_id": str(s.course_id),
+            "student_count": section_student_counts.get(s.id, 0),
+            "last_activity_at": (
+                section_last_activity[s.id].isoformat()
+                if section_last_activity.get(s.id) else None
+            ),
         }
         for s in section_rows
     ]
@@ -832,6 +977,30 @@ async def teacher_students(
         )
     )).one()
 
+    # School context for the header breadcrumb. `kind` disambiguates the
+    # back-link: an `institutional` teacher links to their School page,
+    # an `individual` (indie) one back to the Independent Teachers list.
+    school: dict[str, str] | None = None
+    if teacher.school_id:
+        srow = (await db.execute(
+            select(School.id, School.name, School.kind).where(
+                School.id == teacher.school_id
+            )
+        )).one_or_none()
+        if srow:
+            school = {"id": str(srow.id), "name": srow.name, "kind": srow.kind}
+
+    # Teacher's own recency. Sessions are a student concept; a teacher's
+    # footprint lives in ActivityLog (create / publish / grade), so that's
+    # the honest "last active" signal driving the header health verdict.
+    last_active_at = (await db.execute(
+        select(func.max(ActivityLog.performed_at)).where(
+            ActivityLog.actor_user_id == teacher.id
+        )
+    )).scalar()
+
+    usage = await _teacher_usage(db, teacher.id)
+
     return {
         "teacher": {
             "id": str(teacher.id),
@@ -840,9 +1009,12 @@ async def teacher_students(
             "subscription_tier": teacher.subscription_tier,
             "subscription_status": teacher.subscription_status,
             "school_id": str(teacher.school_id) if teacher.school_id else None,
+            "school": school,
+            "last_active_at": last_active_at.isoformat() if last_active_at else None,
             "call_count_30d": int(llm_stats.call_count),
             "total_cost_30d": round(float(llm_stats.total_cost), 6),
         },
+        "usage": usage,
         "sections": section_summary,
         "total_students": total,
         "students": [
@@ -855,6 +1027,7 @@ async def teacher_students(
                 "last_active": r.last_active.isoformat() if r.last_active else None,
                 "subscription_tier": r.subscription_tier,
                 "subscription_status": r.subscription_status,
+                "section_ids": student_section_ids.get(str(r.id), []),
             }
             for r in rows
         ],

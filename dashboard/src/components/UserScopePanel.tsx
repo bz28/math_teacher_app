@@ -567,19 +567,26 @@ function ClassroomCell({
   classroom,
   teacherId,
 }: {
-  classroom: { sections: number; students: number; submissions_30d: number };
+  classroom: { sections: number; students: number; submissions_30d: number; homeworks: number };
   teacherId: string;
 }) {
-  const empty = classroom.sections === 0 && classroom.students === 0;
+  const empty =
+    classroom.sections === 0 && classroom.students === 0 && classroom.homeworks === 0;
   if (empty) {
     return <span style={{ color: "var(--muted-2)", fontSize: 12 }}>—</span>;
   }
-  // Student count is a link into the per-teacher roster; sections +
-  // 30d submissions stay as plain text since the roster page is the
-  // student drill-in.
+  // Homeworks headline the row — the strongest "really using the product"
+  // signal — then sections + a student-count link into the roster, then
+  // 30d submissions. Sections + submissions stay plain text; the roster
+  // page is the drill-in.
   return (
     <div style={{ fontFamily: "var(--font-mono)", fontSize: 12.5, color: "var(--ink-soft)", lineHeight: 1.6 }}>
       <div>
+        <span style={{ color: classroom.homeworks > 0 ? "var(--ink)" : "var(--muted-2)" }}>
+          {classroom.homeworks.toLocaleString()}
+        </span>{" "}
+        <span style={{ color: "var(--muted)" }}>homework{classroom.homeworks === 1 ? "" : "s"}</span>
+        {" · "}
         <span style={{ color: "var(--ink)" }}>{classroom.sections}</span>{" "}
         <span style={{ color: "var(--muted)" }}>section{classroom.sections === 1 ? "" : "s"}</span>
         {" · "}
