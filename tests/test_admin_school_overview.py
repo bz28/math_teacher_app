@@ -271,8 +271,13 @@ async def test_school_a_overview_reflects_seeded_data(
     assert data["school_name"] == "School A"
     assert data["is_internal"] is False
 
-    # 5 calls × $1.00 = $5.00 this month.
+    # 5 calls × $1.00 = $5.00 this month. The rolling-30d window (shown
+    # in the KPI strip, matching the Schools list) sees the same spend.
     assert data["cost"]["this_month"] == pytest.approx(5.0)
+    assert data["cost"]["cost_30d"] == pytest.approx(5.0)
+
+    # A submission was seeded this week, so last-activity is populated.
+    assert data["last_activity_at"] is not None
 
     # 1 of the 5 calls was failed; counts hit both 24h and 7d windows.
     assert data["failed_calls_24h"] == 1

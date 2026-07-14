@@ -73,12 +73,65 @@ async def list_schools(
     now = datetime.now(UTC)
     cost_30d_start = now - timedelta(days=30)
     cost_60d_start = now - timedelta(days=60)
+    submissions_7d_start = now - timedelta(days=7)
+    failed_24h_start = now - timedelta(hours=24)
 
     # Teacher count per school
     teacher_counts = (
         select(User.school_id, func.count().label("teacher_count"))
         .where(User.school_id.isnot(None), User.role == "teacher")
         .group_by(User.school_id)
+        .subquery()
+    )
+
+    # Distinct enrolled-student count per school. Mirrors the roster
+    # query on /schools/{id}/students (SectionEnrollment → Course), so
+    # the list's "Students" column matches the detail page's roster
+    # total. Distinct because a student can enroll across several of
+    # the school's sections/teachers.
+    student_counts = (
+        select(
+            Course.school_id,
+            func.count(func.distinct(SectionEnrollment.student_id)).label("student_count"),
+        )
+        .join(Course, Course.id == SectionEnrollment.course_id)
+        .where(Course.school_id.isnot(None))
+        .group_by(Course.school_id)
+        .subquery()
+    )
+
+    # Submissions in the last 7 days per school — the "are they actually
+    # using it" usage pulse (Submission → Section → Course), distinct
+    # from the recency-only last_activity signal.
+    submissions_7d_q = (
+        select(
+            Course.school_id,
+            func.count().label("submissions_7d"),
+        )
+        .select_from(Submission)
+        .join(Section, Section.id == Submission.section_id)
+        .join(Course, Course.id == Section.course_id)
+        .where(
+            Course.school_id.isnot(None),
+            Submission.submitted_at >= submissions_7d_start,
+        )
+        .group_by(Course.school_id)
+        .subquery()
+    )
+
+    # Failed AI calls in the last 24h per school — the health "danger
+    # dot". Same denormalized LLMCall.school_id used for cost.
+    failed_24h_q = (
+        select(
+            LLMCall.school_id,
+            func.count().label("failed_24h"),
+        )
+        .where(
+            LLMCall.school_id.isnot(None),
+            LLMCall.success.is_(False),
+            LLMCall.created_at >= failed_24h_start,
+        )
+        .group_by(LLMCall.school_id)
         .subquery()
     )
 
@@ -143,16 +196,22 @@ async def list_schools(
         select(
             School,
             func.coalesce(teacher_counts.c.teacher_count, 0).label("teacher_count"),
+            func.coalesce(student_counts.c.student_count, 0).label("student_count"),
             func.coalesce(cost_30d_q.c.cost_30d, 0.0).label("cost_30d"),
             func.coalesce(cost_prev_30d_q.c.cost_prev_30d, 0.0).label("cost_prev_30d"),
+            func.coalesce(submissions_7d_q.c.submissions_7d, 0).label("submissions_7d"),
+            func.coalesce(failed_24h_q.c.failed_24h, 0).label("failed_calls_24h"),
             last_activity_q.c.last_activity_at,
             func.greatest(
                 last_activity_q.c.last_activity_at, school_activity.c.last_action_at
             ).label("last_active_at"),
         )
         .outerjoin(teacher_counts, teacher_counts.c.school_id == School.id)
+        .outerjoin(student_counts, student_counts.c.school_id == School.id)
         .outerjoin(cost_30d_q, cost_30d_q.c.school_id == School.id)
         .outerjoin(cost_prev_30d_q, cost_prev_30d_q.c.school_id == School.id)
+        .outerjoin(submissions_7d_q, submissions_7d_q.c.school_id == School.id)
+        .outerjoin(failed_24h_q, failed_24h_q.c.school_id == School.id)
         .outerjoin(last_activity_q, last_activity_q.c.school_id == School.id)
         .outerjoin(school_activity, school_activity.c.gid == School.id)
         .where(School.kind == SCHOOL_KIND_INSTITUTIONAL)
@@ -170,8 +229,11 @@ async def list_schools(
                 "contact_email": s.contact_email,
                 "is_active": s.is_active,
                 "teacher_count": int(tc),
+                "student_count": int(sc),
                 "cost_30d": round(c30, 4),
                 "cost_prev_30d": round(c60, 4),
+                "submissions_7d": int(sub7),
+                "failed_calls_24h": int(f24),
                 "last_activity_at": la.isoformat() if la else None,
                 # Unified recency: max(last submission, last ActivityLog
                 # action). Prefer this over `last_activity_at` for
@@ -185,7 +247,7 @@ async def list_schools(
                 "updated_at": s.updated_at.isoformat() if s.updated_at else None,
                 "updated_by": s.updated_by_name,
             }
-            for s, tc, c30, c60, la, laa in rows
+            for s, tc, sc, c30, c60, sub7, f24, la, laa in rows
         ]
     }
 
