@@ -9,6 +9,7 @@ feature was dead code). These tests prove:
 3. The endpoint is admin-only.
 """
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -161,3 +162,197 @@ async def test_admin_role_change_writes_activity_row(
     )
     assert surfaced.status_code == 200, surfaced.text
     assert surfaced.json()["total"] >= 1
+
+
+# ── Merged timeline (access ∪ write) ───────────────────────────────
+
+
+@pytest.fixture
+async def timeline_world() -> dict[str, uuid.UUID]:
+    """Seed both log tables directly so timeline tests own their rows:
+    a fresh access-read + write by one teacher on one student, plus an
+    old write (100 days back) to exercise the date-range window."""
+    async with get_session_factory()() as s:
+        teacher = User(email=f"tl_alice_{uuid.uuid4().hex[:6]}@t.com",
+                       password_hash=hash_password("x"), grade_level=12,
+                       role="teacher", name="Alice Timeline")
+        student = User(email=f"tl_bob_{uuid.uuid4().hex[:6]}@t.com",
+                       password_hash=hash_password("x"), grade_level=8,
+                       role="student", name="Bob Pupil")
+        admin = User(email=f"tl_admin_{uuid.uuid4().hex[:6]}@t.com",
+                     password_hash=hash_password("x"), grade_level=0,
+                     role="admin", name="Admin")
+        s.add_all([teacher, student, admin])
+        await s.flush()
+
+        now = datetime.now(UTC)
+        submission_id = uuid.uuid4()
+        s.add(StudentRecordAccessLog(
+            accessor_user_id=teacher.id, accessor_role="teacher",
+            target_student_id=student.id, record_type="grades",
+            record_id=submission_id, ip_address="10.0.0.1", accessed_at=now,
+        ))
+        s.add(ActivityLog(
+            actor_user_id=teacher.id, actor_role="teacher",
+            action="grade.publish", target_type="submission",
+            target_id=submission_id, ip_address="10.0.0.2", performed_at=now,
+        ))
+        s.add(ActivityLog(
+            actor_user_id=teacher.id, actor_role="teacher",
+            action="assignment.publish", target_type="assignment",
+            target_id=uuid.uuid4(), performed_at=now - timedelta(days=100),
+        ))
+        await s.commit()
+
+        return {
+            "teacher_id": teacher.id,
+            "student_id": student.id,
+            "admin_id": admin.id,
+            "submission_id": submission_id,
+        }
+
+
+@pytest.mark.asyncio
+async def test_timeline_merges_access_and_write(
+    client: AsyncClient, timeline_world: dict[str, uuid.UUID]
+) -> None:
+    """One stream carries both an access read and a write, each tagged
+    with its facet, and the summary rolls the scope up."""
+    token = create_access_token(str(timeline_world["admin_id"]), "admin")
+    r = await client.get(
+        "/v1/admin/audit-logs/timeline",
+        params={"q": "Alice Timeline"},
+        headers=auth_headers(token),
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    facets = {e["facet"] for e in data["entries"]}
+    assert facets == {"access", "write"}
+    assert data["summary"]["distinct_actors"] == 1
+    assert data["summary"]["distinct_students"] == 1
+    assert data["summary"]["top_action_count"] >= 1
+    # Newest-first ordering.
+    times = [e["at"] for e in data["entries"]]
+    assert times == sorted(times, reverse=True)
+
+
+@pytest.mark.asyncio
+async def test_timeline_date_range_excludes_old_events(
+    client: AsyncClient, timeline_world: dict[str, uuid.UUID]
+) -> None:
+    token = create_access_token(str(timeline_world["admin_id"]), "admin")
+    r = await client.get(
+        "/v1/admin/audit-logs/timeline",
+        params={"q": "Alice Timeline", "hours": "24"},
+        headers=auth_headers(token),
+    )
+    assert r.status_code == 200, r.text
+    actions = {e["action"] for e in r.json()["entries"]}
+    assert "grade.publish" in actions
+    # The 100-day-old assignment.publish is outside the 24h window.
+    assert "assignment.publish" not in actions
+
+
+@pytest.mark.asyncio
+async def test_timeline_facet_and_type_filters(
+    client: AsyncClient, timeline_world: dict[str, uuid.UUID]
+) -> None:
+    token = create_access_token(str(timeline_world["admin_id"]), "admin")
+    access_only = await client.get(
+        "/v1/admin/audit-logs/timeline",
+        params={"q": "Alice Timeline", "facet": "access"},
+        headers=auth_headers(token),
+    )
+    assert {e["facet"] for e in access_only.json()["entries"]} == {"access"}
+
+    # "grade" prefix matches the grade.publish write AND the "grades" read.
+    typed = await client.get(
+        "/v1/admin/audit-logs/timeline",
+        params={"q": "Alice Timeline", "type": "grade"},
+        headers=auth_headers(token),
+    )
+    labels = {(e["facet"], e["action"], e["record_type"]) for e in typed.json()["entries"]}
+    assert ("write", "grade.publish", None) in labels
+    assert ("access", None, "grades") in labels
+
+
+@pytest.mark.asyncio
+async def test_timeline_pivot_by_target_student(
+    client: AsyncClient, timeline_world: dict[str, uuid.UUID]
+) -> None:
+    """Clicking a student pivots to every event touching that student."""
+    token = create_access_token(str(timeline_world["admin_id"]), "admin")
+    r = await client.get(
+        "/v1/admin/audit-logs/timeline",
+        params={"target_id": str(timeline_world["student_id"])},
+        headers=auth_headers(token),
+    )
+    assert r.status_code == 200, r.text
+    entries = r.json()["entries"]
+    assert entries and all(
+        e["target_student_id"] == str(timeline_world["student_id"]) for e in entries
+    )
+
+
+@pytest.mark.asyncio
+async def test_timeline_csv_export(
+    client: AsyncClient, timeline_world: dict[str, uuid.UUID]
+) -> None:
+    token = create_access_token(str(timeline_world["admin_id"]), "admin")
+    r = await client.get(
+        "/v1/admin/audit-logs/timeline/export.csv",
+        params={"q": "Alice Timeline"},
+        headers=auth_headers(token),
+    )
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("text/csv")
+    assert "attachment; filename=" in r.headers["content-disposition"]
+    body = r.text
+    assert "Action / record type" in body  # header row
+    assert "grade.publish" in body
+    assert "Alice Timeline" in body
+
+
+@pytest.mark.asyncio
+async def test_timeline_is_admin_only(
+    client: AsyncClient, timeline_world: dict[str, uuid.UUID]
+) -> None:
+    teacher_token = create_access_token(str(timeline_world["teacher_id"]), "teacher")
+    r = await client.get(
+        "/v1/admin/audit-logs/timeline", headers=auth_headers(teacher_token)
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_timeline_csv_neutralizes_formula_injection(
+    client: AsyncClient,
+) -> None:
+    """A user named "=cmd()" must not export as a live spreadsheet formula."""
+    async with get_session_factory()() as s:
+        admin = User(email=f"csv_admin_{uuid.uuid4().hex[:6]}@t.com",
+                     password_hash=hash_password("x"), grade_level=0,
+                     role="admin", name="Admin")
+        evil = User(email=f"csv_evil_{uuid.uuid4().hex[:6]}@t.com",
+                    password_hash=hash_password("x"), grade_level=0,
+                    role="admin", name="=SUM(1+1)")
+        s.add_all([admin, evil])
+        await s.flush()
+        s.add(ActivityLog(
+            actor_user_id=evil.id, actor_role="admin", action="user.delete",
+            target_type="user", target_id=uuid.uuid4(),
+            performed_at=datetime.now(UTC),
+        ))
+        await s.commit()
+        admin_id, evil_name = admin.id, evil.name
+
+    token = create_access_token(str(admin_id), "admin")
+    r = await client.get(
+        "/v1/admin/audit-logs/timeline/export.csv",
+        params={"q": evil_name},
+        headers=auth_headers(token),
+    )
+    assert r.status_code == 200, r.text
+    # The dangerous name appears prefixed with an apostrophe, never raw.
+    assert "'=SUM(1+1)" in r.text
+    assert ",=SUM(1+1)" not in r.text

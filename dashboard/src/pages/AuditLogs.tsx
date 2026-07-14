@@ -1,362 +1,459 @@
-import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   api,
-  type ActivityLogData,
-  type StudentAccessLogData,
+  type SchoolListItem,
+  type TimelineData,
+  type TimelineEntry,
 } from "../lib/api";
-import { Pagination } from "../components/Pagination";
+import { renderChipValue, shortId } from "../lib/format";
+import { windowLabel } from "../lib/definitions";
+import StatTile from "../components/StatTile";
+import StatusPill from "../components/StatusPill";
+import DataTable, { type Column } from "../components/DataTable";
+import { Pagination, SearchInput } from "../components/Pagination";
 
 /**
- * Audit log viewer for the two compliance trails:
- *  - FERPA student-record access (teacher/admin reads)
- *  - Activity (writes — admin AND teacher: role changes, assignment
- *    publishes, generation starts, grade saves, etc.)
- *
- * Single page, two tabs. URL-driven filters for deep links
- * (e.g. /audit-logs?tab=activity&action=grade.*). Pagination is
- * offset-based to match the backend; the visible page size matches
- * other operational pages.
+ * Audit log — the compliance/forensic surface. One chronological
+ * timeline merges the two trails that used to live in separate tabs:
+ *  - Record access (FERPA reads: a teacher/admin opening a student's
+ *    grades, submissions, integrity flags, sessions).
+ *  - Writes (actions: publishes, generation starts, grade saves, role
+ *    changes, deletes).
+ * Merging them onto one clock lets an operator see a record-read and
+ * the write that caused it side by side — and answer the two questions
+ * districts actually ask: "who touched student X's records?" and "who
+ * did what, when?" Everything is URL-driven so a filtered view is a
+ * shareable deep link, and the same filter drives the CSV export.
  */
 
-type Tab = "student-access" | "activity";
 const PAGE_SIZE = 50;
+
+// Date-range presets → the backend `hours` window. "" = all-time.
+const RANGES: { value: string; label: string }[] = [
+  { value: "24", label: "Last 24 hours" },
+  { value: "168", label: "Last 7 days" },
+  { value: "720", label: "Last 30 days" },
+  { value: "", label: "All time" },
+];
+
+const DEFAULT_HOURS = "168";
+
+function actionLabel(e: TimelineEntry): string {
+  if (e.action) return e.action;
+  if (e.record_type) return `read · ${e.record_type}`;
+  return "—";
+}
 
 export default function AuditLogs() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab: Tab =
-    searchParams.get("tab") === "activity" ? "activity" : "student-access";
+  const [data, setData] = useState<TimelineData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [schools, setSchools] = useState<SchoolListItem[]>([]);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const setTab = (next: Tab) => {
+  const hours = searchParams.get("hours") ?? DEFAULT_HOURS;
+  const q = searchParams.get("q") ?? "";
+  const schoolId = searchParams.get("school_id") ?? "";
+  const facet = searchParams.get("facet") ?? "";
+  const typeFilter = searchParams.get("type") ?? "";
+  const target = searchParams.get("target") ?? "";
+  const offset = Number(searchParams.get("offset") ?? "0");
+
+  // The filter fields, minus pagination — shared by the fetch and the
+  // CSV export so the download is always exactly what's on screen.
+  const filterParams = useMemo(() => {
+    const p: Record<string, string> = {};
+    if (hours) p.hours = hours;
+    if (q) p.q = q;
+    if (schoolId) p.school_id = schoolId;
+    if (facet) p.facet = facet;
+    if (typeFilter) p.type = typeFilter;
+    if (target) p.target_id = target;
+    return p;
+  }, [hours, q, schoolId, facet, typeFilter, target]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .auditTimeline({ ...filterParams, limit: String(PAGE_SIZE), offset: String(offset) })
+      .then((d) => {
+        if (!cancelled) {
+          setData(d);
+          setError(null);
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filterParams, offset, reloadKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .schools()
+      .then((r) => {
+        if (!cancelled) setSchools(r.schools);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function setParam(key: string, value: string) {
     const params = new URLSearchParams(searchParams);
-    if (next === "activity") params.set("tab", "activity");
-    else params.delete("tab");
+    if (value) params.set(key, value);
+    else params.delete(key);
     params.delete("offset");
     setSearchParams(params);
-  };
+  }
+
+  function updateOffset(next: number) {
+    const params = new URLSearchParams(searchParams);
+    if (next > 0) params.set("offset", String(next));
+    else params.delete("offset");
+    setSearchParams(params);
+  }
+
+  async function exportCsv() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await api.downloadAuditTimelineCsv(filterParams);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const summary = data?.summary;
+  const win = hours ? windowLabel(Number(hours)) : "all-time";
+  const byDay = summary?.by_day ?? [];
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayCount = byDay.find((d) => d.day === todayISO)?.count ?? 0;
+
+  const columns: Column<TimelineEntry>[] = [
+    {
+      key: "at",
+      header: "When",
+      width: "160px",
+      sortValue: (e) => e.at,
+      render: (e) => (
+        <span title={new Date(e.at).toISOString()}>{new Date(e.at).toLocaleString()}</span>
+      ),
+    },
+    {
+      key: "facet",
+      header: "Kind",
+      width: "92px",
+      render: (e) => (
+        <StatusPill
+          tone={e.facet === "access" ? "info" : "neutral"}
+          label={e.facet === "access" ? "READ" : "WRITE"}
+        />
+      ),
+    },
+    {
+      key: "actor",
+      header: "Actor",
+      render: (e) => (
+        <div style={{ minWidth: 0 }}>
+          <div style={{ color: "var(--ink)", fontWeight: 500 }}>{e.actor_name ?? "—"}</div>
+          <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
+            {e.actor_email ?? (e.actor_user_id ? shortId(e.actor_user_id) : "")}
+            {e.actor_role ? ` · ${e.actor_role}` : ""}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "action",
+      header: "Action",
+      sortValue: (e) => actionLabel(e),
+      render: (e) => (
+        <span className="mono" style={{ fontSize: 12 }}>
+          {actionLabel(e)}
+        </span>
+      ),
+    },
+    {
+      key: "target",
+      header: "Target",
+      render: (e) => <TargetCell e={e} onPivot={(id) => setParam("target", id)} />,
+    },
+    {
+      key: "ip",
+      header: "IP",
+      width: "128px",
+      render: (e) => (
+        <span className="mono" style={{ fontSize: 11.5, color: "var(--muted)" }}>
+          {e.ip_address ?? "—"}
+        </span>
+      ),
+    },
+    {
+      key: "meta",
+      header: "Details",
+      render: (e) => <MetadataCell e={e} />,
+    },
+  ];
 
   return (
     <div>
       <div className="page-header">
         <span className="eyebrow">Compliance</span>
-        <h1>Audit logs</h1>
+        <h1>Audit log</h1>
         <p>
-          FERPA disclosure tracking and admin action history. Surface
-          to districts on request as part of compliance reviews.
+          One trail of every record access and action — who touched a
+          student&apos;s records, and who did what, when. Filter it down and
+          hand a district a clean export.
         </p>
       </div>
 
-      <div className="filters" style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <button
-          type="button"
-          className={tab === "student-access" ? "btn-primary" : "btn-secondary"}
-          onClick={() => setTab("student-access")}
+      {/* ── Filter bar ─────────────────────────────────────────────── */}
+      <div
+        className="filters"
+        style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}
+      >
+        <select
+          aria-label="Date range"
+          value={hours}
+          onChange={(e) => setParam("hours", e.target.value)}
         >
-          Student record access
-        </button>
-        <button
-          type="button"
-          className={tab === "activity" ? "btn-primary" : "btn-secondary"}
-          onClick={() => setTab("activity")}
-        >
-          Activity
-        </button>
-      </div>
-
-      {tab === "student-access" ? <StudentAccessTab /> : <ActivityTab />}
-    </div>
-  );
-}
-
-function StudentAccessTab() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [data, setData] = useState<StudentAccessLogData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const targetStudentId = searchParams.get("target_student_id") ?? "";
-  const accessorUserId = searchParams.get("accessor_user_id") ?? "";
-  const recordType = searchParams.get("record_type") ?? "";
-  const offset = Number(searchParams.get("offset") ?? "0");
-
-  useEffect(() => {
-    let cancelled = false;
-    // No setData(null) reset here — eslint rule
-    // react-hooks/set-state-in-effect catches the cascade. Stale data
-    // stays visible until the new fetch resolves, which is fine for an
-    // admin tool and avoids a flicker.
-    api
-      .studentAccessLog({
-        target_student_id: targetStudentId,
-        accessor_user_id: accessorUserId,
-        record_type: recordType,
-        limit: String(PAGE_SIZE),
-        offset: String(offset),
-      })
-      .then((d) => {
-        if (!cancelled) {
-          setData(d);
-          setError(null);
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [targetStudentId, accessorUserId, recordType, offset]);
-
-  function updateFilter(key: string, value: string) {
-    const params = new URLSearchParams(searchParams);
-    if (value) params.set(key, value);
-    else params.delete(key);
-    params.delete("offset");
-    setSearchParams(params);
-  }
-
-  function updateOffset(next: number) {
-    const params = new URLSearchParams(searchParams);
-    if (next > 0) params.set("offset", String(next));
-    else params.delete("offset");
-    setSearchParams(params);
-  }
-
-  return (
-    <div>
-      <div className="filters" style={{ display: "flex", gap: 12, marginTop: 16 }}>
-        <input
-          placeholder="Target student ID (UUID)"
-          value={targetStudentId}
-          onChange={(e) => updateFilter("target_student_id", e.target.value.trim())}
-          style={{ minWidth: 320 }}
-        />
-        <input
-          placeholder="Accessor user ID (UUID)"
-          value={accessorUserId}
-          onChange={(e) => updateFilter("accessor_user_id", e.target.value.trim())}
-          style={{ minWidth: 320 }}
-        />
-        <input
-          placeholder="Record type"
-          value={recordType}
-          onChange={(e) => updateFilter("record_type", e.target.value.trim())}
-          style={{ minWidth: 200 }}
-        />
-      </div>
-
-      {error && <p className="error">{error}</p>}
-      {!data && !error && <p className="loading">Loading…</p>}
-
-      {data && (
-        <div className="table-card" style={{ marginTop: 16 }}>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th>Accessor</th>
-                  <th>Role</th>
-                  <th>Target student</th>
-                  <th>Record type</th>
-                  <th>Record ID</th>
-                  <th>IP</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.entries.map((e) => (
-                  <tr key={e.id}>
-                    <td>{new Date(e.accessed_at).toLocaleString()}</td>
-                    <td>
-                      <div>{e.accessor_name ?? "—"}</div>
-                      <div style={{ fontSize: 11, color: "#888" }}>
-                        {e.accessor_email ?? e.accessor_user_id ?? ""}
-                      </div>
-                    </td>
-                    <td>{e.accessor_role}</td>
-                    <td>
-                      <div>{e.target_student_name ?? "—"}</div>
-                      <div style={{ fontSize: 11, color: "#888" }}>{e.target_student_id ?? ""}</div>
-                    </td>
-                    <td>{e.record_type}</td>
-                    <td style={{ fontFamily: "monospace", fontSize: 11, color: "#888" }}>
-                      {e.record_id ?? "—"}
-                    </td>
-                    <td style={{ fontFamily: "monospace", fontSize: 11, color: "#888" }}>
-                      {e.ip_address ?? "—"}
-                    </td>
-                  </tr>
-                ))}
-                {data.entries.length === 0 && (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: "center", padding: 24, color: "#888" }}>
-                      No access records match the current filters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          <Pagination
-            total={data.total}
-            limit={data.limit}
-            offset={data.offset}
-            onChange={updateOffset}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ActivityTab() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [data, setData] = useState<ActivityLogData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const actorUserId = searchParams.get("actor_user_id") ?? "";
-  const actorRole = searchParams.get("actor_role") ?? "";
-  const action = searchParams.get("action") ?? "";
-  const targetType = searchParams.get("target_type") ?? "";
-  const offset = Number(searchParams.get("offset") ?? "0");
-
-  useEffect(() => {
-    let cancelled = false;
-    // No setData(null) reset — see StudentAccessTab for rationale.
-    api
-      .activityLog({
-        actor_user_id: actorUserId,
-        actor_role: actorRole,
-        action,
-        target_type: targetType,
-        limit: String(PAGE_SIZE),
-        offset: String(offset),
-      })
-      .then((d) => {
-        if (!cancelled) {
-          setData(d);
-          setError(null);
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [actorUserId, actorRole, action, targetType, offset]);
-
-  function updateFilter(key: string, value: string) {
-    const params = new URLSearchParams(searchParams);
-    if (value) params.set(key, value);
-    else params.delete(key);
-    params.delete("offset");
-    setSearchParams(params);
-  }
-
-  function updateOffset(next: number) {
-    const params = new URLSearchParams(searchParams);
-    if (next > 0) params.set("offset", String(next));
-    else params.delete("offset");
-    setSearchParams(params);
-  }
-
-  return (
-    <div>
-      <div className="filters" style={{ display: "flex", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
-        <input
-          placeholder="Actor user ID (UUID)"
-          value={actorUserId}
-          onChange={(e) => updateFilter("actor_user_id", e.target.value.trim())}
-          style={{ minWidth: 320 }}
+          {RANGES.map((r) => (
+            <option key={r.value || "all"} value={r.value}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+        <SearchInput
+          value={q}
+          onChange={(v) => setParam("q", v.trim())}
+          placeholder="Actor or student — name / email"
+          ariaLabel="Search by actor or student name or email"
         />
         <select
-          value={actorRole}
-          onChange={(e) => updateFilter("actor_role", e.target.value)}
+          aria-label="School"
+          value={schoolId}
+          onChange={(e) => setParam("school_id", e.target.value)}
         >
-          <option value="">All roles</option>
-          <option value="teacher">Teacher</option>
-          <option value="admin">Admin</option>
+          <option value="">All schools</option>
+          {schools.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
         </select>
-        <input
-          placeholder='Action (e.g. "grade.publish" or "grade.*")'
-          value={action}
-          onChange={(e) => updateFilter("action", e.target.value.trim())}
-          style={{ minWidth: 260 }}
+        <select
+          aria-label="Event kind"
+          value={facet}
+          onChange={(e) => setParam("facet", e.target.value)}
+        >
+          <option value="">All events</option>
+          <option value="access">Record access</option>
+          <option value="write">Writes</option>
+        </select>
+        <SearchInput
+          value={typeFilter}
+          onChange={(v) => setParam("type", v.trim())}
+          placeholder="Action / record type"
+          ariaLabel="Filter by action or record type"
         />
-        <input
-          placeholder="Target type (assignment, submission, etc.)"
-          value={targetType}
-          onChange={(e) => updateFilter("target_type", e.target.value.trim())}
-          style={{ minWidth: 220 }}
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={exportCsv}
+          disabled={exporting}
+          title="Download the current filtered trail as CSV"
+        >
+          {exporting ? "Exporting…" : "Export CSV"}
+        </button>
+        {target && (
+          <button
+            type="button"
+            className="filter-badge"
+            onClick={() => setParam("target", "")}
+            style={{ cursor: "pointer", border: "none" }}
+            title="Clear the target pivot"
+          >
+            Pivoted to {shortId(target)} ✕
+          </button>
+        )}
+      </div>
+      {exportError && <p className="error">{exportError}</p>}
+
+      {/* ── Scope summary ──────────────────────────────────────────── */}
+      <div className="tile-grid">
+        <StatTile
+          label="Total events"
+          value={(summary?.total ?? 0).toLocaleString()}
+          sub={`in scope · ${win}`}
+        />
+        <StatTile
+          label="Distinct actors"
+          value={(summary?.distinct_actors ?? 0).toLocaleString()}
+          sub="people who touched records"
+        />
+        <StatTile
+          label="Top action"
+          value={
+            <span style={{ fontSize: 17, fontFamily: "var(--font-mono)" }}>
+              {summary?.top_action ?? "—"}
+            </span>
+          }
+          sub={
+            summary?.top_action ? `×${summary.top_action_count.toLocaleString()}` : "no events"
+          }
+        />
+        <StatTile
+          label="Events today"
+          value={todayCount.toLocaleString()}
+          sub="daily trend →"
+          spark={byDay.map((d) => d.count)}
+        />
+        <StatTile
+          label="Students accessed"
+          value={(summary?.distinct_students ?? 0).toLocaleString()}
+          sub="distinct FERPA records read"
         />
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {!data && !error && <p className="loading">Loading…</p>}
-
-      {data && (
-        <div className="table-card" style={{ marginTop: 16 }}>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th>Actor</th>
-                  <th>Role</th>
-                  <th>Action</th>
-                  <th>Target</th>
-                  <th>Metadata</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.entries.map((e) => (
-                  <tr key={e.id}>
-                    <td>{new Date(e.performed_at).toLocaleString()}</td>
-                    <td>
-                      <div>{e.actor_name ?? "—"}</div>
-                      <div style={{ fontSize: 11, color: "#888" }}>
-                        {e.actor_email ?? e.actor_user_id ?? ""}
-                      </div>
-                    </td>
-                    <td style={{ fontSize: 12, color: "var(--muted)" }}>{e.actor_role}</td>
-                    <td style={{ fontFamily: "monospace" }}>{e.action}</td>
-                    <td>
-                      <div>{e.target_type}</div>
-                      <div style={{ fontFamily: "monospace", fontSize: 11, color: "#888" }}>
-                        {e.target_id ?? "—"}
-                      </div>
-                    </td>
-                    <td
-                      style={{
-                        fontFamily: "monospace",
-                        fontSize: 11,
-                        color: "#888",
-                        maxWidth: 320,
-                        overflowWrap: "anywhere",
-                      }}
-                    >
-                      {e.metadata ? JSON.stringify(e.metadata) : "—"}
-                    </td>
-                  </tr>
-                ))}
-                {data.entries.length === 0 && (
-                  <tr>
-                    <td colSpan={6} style={{ textAlign: "center", padding: 24, color: "#888" }}>
-                      No activity matches the current filters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+      {/* ── Timeline ───────────────────────────────────────────────── */}
+      <div className="table-card" style={{ marginTop: 8 }}>
+        <DataTable
+          columns={columns}
+          rows={data?.entries ?? []}
+          rowKey={(e) => `${e.facet}:${e.id}`}
+          loading={!data && !error}
+          error={error}
+          onRetry={() => {
+            setError(null);
+            setReloadKey((k) => k + 1);
+          }}
+          defaultSort={{ key: "at", dir: "desc" }}
+          rowStatus={(e) => (e.facet === "access" ? "var(--info)" : "var(--accent)")}
+          empty={<span className="dt-state-title">No audit events match the current filter.</span>}
+          minWidth={940}
+        />
+        {data && (
           <Pagination
             total={data.total}
             limit={data.limit}
             offset={data.offset}
             onChange={updateOffset}
           />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Target cell — never a dead UUID. For an access row the compliance
+ * subject is the student, so it pivots the whole timeline to that
+ * student ("every event touching them"). For a write it pivots to the
+ * mutated entity, and a submission additionally deep-links to its trace.
+ */
+function TargetCell({ e, onPivot }: { e: TimelineEntry; onPivot: (id: string) => void }) {
+  if (e.facet === "access") {
+    return (
+      <div style={{ minWidth: 0 }}>
+        <button
+          type="button"
+          className="link-btn"
+          disabled={!e.target_student_id}
+          onClick={() => e.target_student_id && onPivot(e.target_student_id)}
+          title="Show every event for this student"
+        >
+          {e.target_student_name ?? "student"}
+        </button>
+        <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
+          {e.record_type}
+          {e.target_id ? ` · ${shortId(e.target_id)}` : ""}
+        </div>
+      </div>
+    );
+  }
+
+  const isSubmission = e.target_type === "submission" && e.target_id;
+  return (
+    <div style={{ minWidth: 0 }}>
+      {isSubmission ? (
+        <Link className="link-btn" to={`/submissions/${e.target_id}/trace`}>
+          {e.target_type} ↗
+        </Link>
+      ) : (
+        <button
+          type="button"
+          className="link-btn"
+          disabled={!e.target_id}
+          onClick={() => e.target_id && onPivot(e.target_id)}
+          title="Show every event on this target"
+        >
+          {e.target_type ?? "—"}
+        </button>
+      )}
+      <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
+        {e.target_id ? shortId(e.target_id) : "—"}
+      </div>
+    </div>
+  );
+}
+
+/** Metadata — a one-line key:value summary that expands to full JSON. */
+function MetadataCell({ e }: { e: TimelineEntry }) {
+  const [open, setOpen] = useState(false);
+  const meta = e.metadata;
+  if (!meta || Object.keys(meta).length === 0) {
+    return <span style={{ color: "var(--muted-2)" }}>—</span>;
+  }
+  const summary = Object.entries(meta)
+    .map(([k, v]) => `${k}: ${renderChipValue(v)}`)
+    .join(" · ");
+  return (
+    <div style={{ maxWidth: 320, minWidth: 0 }}>
+      {open ? (
+        <pre
+          className="mono"
+          style={{
+            margin: 0,
+            fontSize: 11.5,
+            color: "var(--ink-soft)",
+            whiteSpace: "pre-wrap",
+            overflowWrap: "anywhere",
+          }}
+        >
+          {JSON.stringify(meta, null, 2)}
+        </pre>
+      ) : (
+        <div
+          className="mono"
+          style={{
+            fontSize: 11.5,
+            color: "var(--muted)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {summary}
         </div>
       )}
+      <button
+        type="button"
+        className="link-btn"
+        style={{ fontSize: 11 }}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {open ? "collapse" : "expand"}
+      </button>
     </div>
   );
 }

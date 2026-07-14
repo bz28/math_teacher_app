@@ -48,6 +48,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/audit-logs/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit Timeline
+         * @description Merged access+write audit timeline with a scope summary.
+         */
+        get: operations["audit_timeline_v1_admin_audit_logs_timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/audit-logs/timeline/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit Timeline Csv
+         * @description The current filtered timeline as a CSV — the compliance deliverable.
+         */
+        get: operations["audit_timeline_csv_v1_admin_audit_logs_timeline_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/documents/{document_id}/content": {
         parameters: {
             query?: never;
@@ -5759,6 +5799,92 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audit_timeline_v1_admin_audit_logs_timeline_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                /** @description Time window in hours; omit for all-time. */
+                hours?: number | null;
+                /** @description Name/email substring (or a pasted UUID) matching the actor OR the target student — replaces the UUID-only inputs. */
+                q?: string | null;
+                school_id?: string | null;
+                /** @description "access" (record reads) or "write" (actions); omit for both. */
+                facet?: string | null;
+                /** @description Prefix match on the write action or the access record type (e.g. "grade" or "grade.publish"). */
+                type?: string | null;
+                /** @description Pivot to every event touching this record or student. */
+                target_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audit_timeline_csv_v1_admin_audit_logs_timeline_export_csv_get: {
+        parameters: {
+            query?: {
+                /** @description Time window in hours; omit for all-time. */
+                hours?: number | null;
+                /** @description Name/email substring (or a pasted UUID) matching the actor OR the target student — replaces the UUID-only inputs. */
+                q?: string | null;
+                school_id?: string | null;
+                /** @description "access" (record reads) or "write" (actions); omit for both. */
+                facet?: string | null;
+                /** @description Prefix match on the write action or the access record type (e.g. "grade" or "grade.publish"). */
+                type?: string | null;
+                /** @description Pivot to every event touching this record or student. */
+                target_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

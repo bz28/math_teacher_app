@@ -6023,6 +6023,327 @@
         ]
       }
     },
+    "/v1/admin/audit-logs/timeline": {
+      "get": {
+        "description": "Merged access+write audit timeline with a scope summary.",
+        "operationId": "audit_timeline_v1_admin_audit_logs_timeline_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Time window in hours; omit for all-time.",
+            "in": "query",
+            "name": "hours",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 8760,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Time window in hours; omit for all-time.",
+              "title": "Hours"
+            }
+          },
+          {
+            "description": "Name/email substring (or a pasted UUID) matching the actor OR the target student \u2014 replaces the UUID-only inputs.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Name/email substring (or a pasted UUID) matching the actor OR the target student \u2014 replaces the UUID-only inputs.",
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
+          },
+          {
+            "description": "\"access\" (record reads) or \"write\" (actions); omit for both.",
+            "in": "query",
+            "name": "facet",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "\"access\" (record reads) or \"write\" (actions); omit for both.",
+              "title": "Facet"
+            }
+          },
+          {
+            "description": "Prefix match on the write action or the access record type (e.g. \"grade\" or \"grade.publish\").",
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Prefix match on the write action or the access record type (e.g. \"grade\" or \"grade.publish\").",
+              "title": "Type"
+            }
+          },
+          {
+            "description": "Pivot to every event touching this record or student.",
+            "in": "query",
+            "name": "target_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Pivot to every event touching this record or student.",
+              "title": "Target Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Audit Timeline V1 Admin Audit Logs Timeline Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Audit Timeline",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/audit-logs/timeline/export.csv": {
+      "get": {
+        "description": "The current filtered timeline as a CSV \u2014 the compliance deliverable.",
+        "operationId": "audit_timeline_csv_v1_admin_audit_logs_timeline_export_csv_get",
+        "parameters": [
+          {
+            "description": "Time window in hours; omit for all-time.",
+            "in": "query",
+            "name": "hours",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 8760,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Time window in hours; omit for all-time.",
+              "title": "Hours"
+            }
+          },
+          {
+            "description": "Name/email substring (or a pasted UUID) matching the actor OR the target student \u2014 replaces the UUID-only inputs.",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Name/email substring (or a pasted UUID) matching the actor OR the target student \u2014 replaces the UUID-only inputs.",
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
+          },
+          {
+            "description": "\"access\" (record reads) or \"write\" (actions); omit for both.",
+            "in": "query",
+            "name": "facet",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "\"access\" (record reads) or \"write\" (actions); omit for both.",
+              "title": "Facet"
+            }
+          },
+          {
+            "description": "Prefix match on the write action or the access record type (e.g. \"grade\" or \"grade.publish\").",
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Prefix match on the write action or the access record type (e.g. \"grade\" or \"grade.publish\").",
+              "title": "Type"
+            }
+          },
+          {
+            "description": "Pivot to every event touching this record or student.",
+            "in": "query",
+            "name": "target_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Pivot to every event touching this record or student.",
+              "title": "Target Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Audit Timeline Csv",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/documents/{document_id}/content": {
       "get": {
         "description": "Serve a stored document's base64 image so the dashboard can render\nthe actual uploaded worksheet. Admin-only \u2014 this is course material,\ninvisible admin-side until now.",
