@@ -268,6 +268,8 @@ export const api = {
   harnessRuns: (params?: Record<string, string>) => request<HarnessRunsData>("/admin/harness-runs", params),
   harnessReport: (id: string) => request<{ html: string }>(`/admin/harness-runs/${id}/report`),
   quality: (params?: Record<string, string>) => request<QualityData>("/admin/quality", params),
+  qualitySession: (sessionId: string) =>
+    request<QualitySessionDetail>(`/admin/quality/${sessionId}`),
   gradingQuality: (params?: Record<string, string>) =>
     request<GradingQualityData>("/admin/grading-quality", params),
   users: (params?: Record<string, string>) => request<UsersData>("/admin/users", params),
@@ -424,29 +426,76 @@ export interface LLMCallsData {
   repo: string;
 }
 
+/** One subject/mode bucket in the quality breakdown, worst-first. */
+export interface QualityBucket {
+  name: string;
+  evaluated: number;
+  passed: number;
+  pass_rate: number;
+  avg_score: number;
+}
+
+export interface QualityScoreRow {
+  id: string;
+  session_id: string;
+  problem: string;
+  subject: string;
+  mode: string;
+  problem_type: string;
+  correctness: number;
+  optimality: number;
+  clarity: number;
+  flow: number;
+  passed: boolean;
+  issues: string | null;
+  created_at: string;
+}
+
 export interface QualityData {
   summary: {
     total: number;
     passed: number;
+    failed: number;
     pass_rate: number;
+    prior_pass_rate: number;
+    prior_total: number;
+    total_sessions: number;
+    coverage_pct: number;
     avg_correctness: number;
     avg_optimality: number;
     avg_clarity: number;
     avg_flow: number;
   };
-  scores: {
+  trend: { day: string; evaluated: number; pass_rate: number }[];
+  by_subject: QualityBucket[];
+  by_mode: QualityBucket[];
+  scores: QualityScoreRow[];
+  total_count: number;
+}
+
+/** Drill-in: a single evaluated session — problem, the exact steps shown
+ *  to the student, and the judge's verdict. */
+export interface QualitySessionDetail {
+  session: {
     id: string;
-    session_id: string;
     problem: string;
+    problem_type: string;
+    subject: string;
+    mode: string;
+    status: string;
+    total_steps: number;
+    created_at: string | null;
+    steps: { title: string; description: string; final_answer: string | null }[];
+  };
+  score: {
     correctness: number;
     optimality: number;
     clarity: number;
     flow: number;
     passed: boolean;
     issues: string | null;
-    created_at: string;
-  }[];
-  total_count: number;
+    created_at: string | null;
+  } | null;
 }
 
 // ── AI grading quality (teacher-override analytics) ──
