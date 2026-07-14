@@ -288,10 +288,36 @@ export interface HarnessRun {
   created_at: string;
 }
 
+/** Per-probe current health — the AI-quality regression alarm band. */
+export interface ProbeHealth {
+  probe: string;
+  latest_run_id: string;
+  latest_mode: string;
+  latest_passed: boolean;
+  latest_det_pass: number;
+  latest_det_total: number;
+  /** Previous run's deterministic result, for the regression delta (null if the probe has only ever run once). */
+  prev_det_pass: number | null;
+  prev_det_total: number | null;
+  /** Most recent non-null judge score in the window — NOT a lifetime average. */
+  recent_judge_mean: number | null;
+  last_run_at: string;
+  /** Deterministic pass-rate (0–1) per recent run, oldest→newest. */
+  spark: number[];
+  total_runs: number;
+}
+
 export interface HarnessRunsData {
   runs: HarnessRun[];
   total_count: number;
-  by_probe: { probe: string; runs: number; avg_judge: number | null; total_cost: number }[];
+  probe_health: ProbeHealth[];
+  summary: {
+    recent_window: number;
+    recent_failing: number;
+    recent_cost: number;
+    probe_count: number;
+    newest_run_at: string | null;
+  };
 }
 
 export type GoldenStatus = "pass" | "fail" | "pending";

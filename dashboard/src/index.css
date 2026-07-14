@@ -2183,3 +2183,244 @@ table.dt tr:last-child td { border-bottom: none; }
   text-transform: uppercase;
   letter-spacing: 1.2px;
 }
+
+/* ── Harness Runs — AI-quality regression alarm ───────────────────────── */
+
+/* Top-line alarm strip. */
+.probe-alarm {
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--ok);
+  background: var(--surface);
+  border-radius: 3px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+}
+.probe-alarm-hot { border-left-color: var(--accent); background: var(--accent-soft); }
+.probe-alarm-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.probe-alarm-line b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.probe-alarm-cost {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.probe-alarm-stale {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Per-probe health cards. */
+.probe-band {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.probe-card {
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-top: 3px solid var(--muted-2);
+  border-radius: 3px;
+  padding: 14px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.probe-card:hover { border-color: var(--rule-strong); background: var(--paper-2); }
+.probe-card-ok { border-top-color: var(--ok); }
+.probe-card-danger { border-top-color: var(--danger); }
+.probe-card-neutral { border-top-color: var(--muted-2); }
+.probe-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+}
+.probe-card-name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: 0.2px;
+}
+.probe-card-pills { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.probe-card-verdict {
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+.probe-card-verdict-ok { color: var(--ok); }
+.probe-card-verdict-danger { color: var(--danger); }
+.probe-card-verdict-neutral { color: var(--muted-2); }
+.probe-card-det {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.probe-card-det-rate {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.probe-card-det-bad { color: var(--danger); }
+.probe-card-det-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+.probe-card-delta {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted-2);
+  margin-left: auto;
+}
+.probe-card-delta-bad { color: var(--accent); }
+.probe-card-spark { display: block; }
+.probe-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.probe-card-stale-time { color: var(--warn); }
+
+/* Run-log header (title + filters). */
+.hr-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.hr-count { color: var(--muted-2); font-family: var(--font-mono); font-weight: 400; }
+.hr-filters { display: flex; align-items: center; gap: 8px; }
+.hr-toggle {
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  padding: 7px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.hr-toggle:hover { border-color: var(--ink-soft); }
+.hr-toggle-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* Result cell — chip + the run's "what happened" note. */
+.hr-result { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.hr-note {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.hr-note-link {
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+.hr-det-bad { color: var(--danger); }
+.hr-dim { color: var(--muted-2); }
+.hr-report-btn {
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.hr-report-btn:hover:not(:disabled) { border-color: var(--ink-soft); }
+.hr-report-btn:disabled { color: var(--muted-2); cursor: default; }
+
+/* Modals (prompt + report). */
+.hr-modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 19, 15, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 24px;
+}
+.hr-modal {
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.hr-modal-prompt { width: min(720px, 92vw); max-height: 80vh; }
+.hr-modal-report { width: min(1100px, 95vw); height: 90vh; }
+.hr-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+  color: var(--ink);
+}
+.hr-modal-close {
+  border: none;
+  background: none;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted);
+}
+.hr-modal-close:hover { color: var(--ink); }
+.hr-modal-prompt-body {
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}

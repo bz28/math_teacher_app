@@ -6964,6 +6964,16 @@
           },
           {
             "in": "query",
+            "name": "failed_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Failed Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
