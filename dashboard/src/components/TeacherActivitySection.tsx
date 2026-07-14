@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -550,12 +550,24 @@ function PdfThumb({ b64, label }: { b64: string; label: string }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [error, setError] = useState(false);
   const [rendering, setRendering] = useState(true);
+  // Decode once per b64. atob() throws synchronously on malformed base64;
+  // catching here (returning null) keeps the failure out of the effect so we
+  // never call setState synchronously in it — the error is derived at render.
+  const bytes = useMemo(() => {
+    try {
+      return base64ToBytes(b64);
+    } catch {
+      return null;
+    }
+  }, [b64]);
 
   useEffect(() => {
+    if (!bytes) return;
     let cancelled = false;
-    // pdf.js takes a fresh copy of the byte buffer (it transfers ownership to
-    // the worker), so build the array inside the effect.
-    const task = pdfjsLib.getDocument({ data: base64ToBytes(b64) });
+    // pdf.js transfers ownership of the buffer to its worker, so hand it a
+    // fresh copy each run — otherwise a re-run (e.g. StrictMode double-mount)
+    // would get a detached buffer.
+    const task = pdfjsLib.getDocument({ data: bytes.slice() });
     task.promise
       .then(async (pdf) => {
         const page = await pdf.getPage(1);
@@ -581,9 +593,10 @@ function PdfThumb({ b64, label }: { b64: string; label: string }) {
       cancelled = true;
       task.destroy();
     };
-  }, [b64]);
+  }, [bytes]);
 
-  if (error) return <div style={placeholderStyle}>{label} (PDF preview failed)</div>;
+  if (error || bytes === null)
+    return <div style={placeholderStyle}>{label} (PDF preview failed)</div>;
 
   return (
     <a
