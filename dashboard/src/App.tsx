@@ -20,7 +20,6 @@ import SchoolDetail from "./pages/SchoolDetail";
 import IndependentStudents from "./pages/IndependentStudents";
 import IndependentTeachers from "./pages/IndependentTeachers";
 import TeacherDetail from "./pages/TeacherDetail";
-import Admins from "./pages/Admins";
 import AuditLogs from "./pages/AuditLogs";
 import SubmissionTrace from "./pages/SubmissionTrace";
 
@@ -60,7 +59,10 @@ export default function App() {
             element={<IndependentTeachers />}
           />
           <Route path="/teachers/:teacherId" element={<TeacherDetail />} />
-          <Route path="/admins" element={<Admins />} />
+          {/* Admins consolidated into the role-filtered Users tab.
+              /admins stays as a redirect so old bookmarks/links land
+              on the Admins preset. */}
+          <Route path="/admins" element={<Navigate to="/users?role=admin" replace />} />
 
           {/* Diagnostics. */}
           <Route path="/audit-logs" element={<AuditLogs />} />

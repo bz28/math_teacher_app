@@ -1,54 +1,155 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { api, type UsersData } from "../lib/api";
-import { formatRelativeDate } from "../lib/format";
-import StatCard from "../components/StatCard";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { api, type SchoolListItem, type UsersData } from "../lib/api";
+import { formatRelativeDate, fmtCost } from "../lib/format";
+import { activityPill, activityStatus, daysSince, windowLabel } from "../lib/definitions";
+import StatTile from "../components/StatTile";
+import StatusPill, { type PillTone } from "../components/StatusPill";
+import DataTable, { type Column } from "../components/DataTable";
 import { Pagination, SearchInput } from "../components/Pagination";
 import { InviteAdminForm } from "../components/InviteAdminForm";
 import { useConfirm } from "../lib/confirm";
 import { useToast } from "../lib/toast";
 
-type SortKey = "total_cost" | "session_count" | "last_active" | "name";
+type UserRow = UsersData["users"][number];
+
 const PAGE_SIZE = 25;
+
+// Role presets driving the segmented filter. "" is the cross-cutting
+// All view; each other value maps straight to the backend `role` param.
+// The Admins preset is just role=admin — the retired Admins tab.
+const ROLE_TABS: { value: string; label: string }[] = [
+  { value: "", label: "All" },
+  { value: "student", label: "Students" },
+  { value: "teacher", label: "Teachers" },
+  { value: "admin", label: "Admins" },
+];
+
+/** Best-available "last seen" for a row: the more recent of unified
+ *  activity (last_active_at = max of last tutoring session and last
+ *  logged ActivityLog action, so a teacher's grade/publish counts) and
+ *  a login (last_login). Admins never run sessions, so last_login is
+ *  the only signal they have. */
+function lastSeenOf(u: UserRow): string | null {
+  const { last_active_at: a, last_login: b } = u;
+  if (!a) return b;
+  if (!b) return a;
+  return new Date(a) >= new Date(b) ? a : b;
+}
+
+function roleBadge(role: string): { tone: PillTone; label: string } {
+  if (role === "admin") return { tone: "info", label: "ADMIN" };
+  if (role === "teacher") return { tone: "live", label: "TEACHER" };
+  return { tone: "neutral", label: "STUDENT" };
+}
+
+function inviteBadge(status: UserRow["invite_status"]): { tone: PillTone; label: string } {
+  if (status === "pending") return { tone: "warn", label: "PENDING INVITE" };
+  if (status === "expired") return { tone: "danger", label: "INVITE EXPIRED" };
+  return { tone: "ok", label: "ACTIVE" };
+}
+
+// The row "…" menu is gated by user *type* — a locked founder decision.
+type MenuAction =
+  | "view-calls"
+  | "view-in-school"
+  | "make-student"
+  | "make-teacher"
+  | "make-admin"
+  | "toggle-plan"
+  | "reset-limit"
+  | "resend-invite"
+  | "revoke-invite"
+  | "delete";
+
+/**
+ * Which row actions the "…" menu offers, keyed off the user's type
+ * (`school` + `role`). The Users tab is the global *access directory*;
+ * a school user's lifecycle (role change, plan, delete) belongs in the
+ * school context, where the roster/billing live — doing it from here
+ * could silently break that school. So the menu adapts:
+ *
+ *  • **School teacher/student** (`school` set): deep-link into that
+ *    school + **Make Admin** (a legitimate cross-cutting access grant).
+ *    Role change / plan / delete are intentionally withheld here.
+ *  • **Admin**: grant/revoke admin (role change to student/teacher) +
+ *    the invite lifecycle (resend / revoke a pending or expired invite).
+ *  • **Individual** (no `school`, teacher/student): the full per-row ops.
+ *
+ * A user is "school-associated" iff `school` is non-null — the backend
+ * already maps the synthetic individual school to null, so `school`
+ * being set means a real institutional affiliation.
+ */
+function menuActionsFor(u: UserRow): MenuAction[] {
+  if (u.role !== "admin" && u.school) {
+    return ["view-in-school", "make-admin"];
+  }
+  if (u.role === "admin") {
+    // Already an admin, so role change is a *revoke* to student/teacher.
+    const actions: MenuAction[] = ["view-calls", "make-student", "make-teacher"];
+    if (u.invite_status !== "active") actions.push("resend-invite", "revoke-invite");
+    return actions;
+  }
+  // Individual teacher/student — every role except their own is offered
+  // (grant-admin included), plus plan, limits, and delete.
+  const roleChanges = (["student", "teacher", "admin"] as const)
+    .filter((r) => r !== u.role)
+    .map((r) => `make-${r}` as MenuAction);
+  const actions: MenuAction[] = ["view-calls", ...roleChanges, "toggle-plan"];
+  if (u.subscription_tier !== "pro") actions.push("reset-limit");
+  actions.push("delete");
+  return actions;
+}
 
 export default function Users() {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const toast = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const role = searchParams.get("role") ?? "";
+  const isAdminView = role === "admin";
+
   const [data, setData] = useState<UsersData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [hours, setHours] = useState("720");
-  const [sortBy, setSortBy] = useState<SortKey>("total_cost");
+  const [plan, setPlan] = useState("");
+  const [schoolId, setSchoolId] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
+  const [schools, setSchools] = useState<SchoolListItem[]>([]);
+
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
   const menuToggleRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const reload = () =>
-    api.users({
-      hours,
-      sort_by: sortBy,
-      limit: String(PAGE_SIZE),
-      offset: String(offset),
-      ...(search ? { search } : {}),
-    }).then(setData);
+    api
+      .users({
+        hours,
+        limit: String(PAGE_SIZE),
+        offset: String(offset),
+        ...(role ? { role } : {}),
+        // Plan / school selects are hidden on the Admin preset, so
+        // don't let a value left over from another view silently
+        // filter the admin list into an empty, unexplained state.
+        ...(!isAdminView && plan ? { plan } : {}),
+        ...(!isAdminView && schoolId ? { school_id: schoolId } : {}),
+        ...(search ? { search } : {}),
+      })
+      .then((d) => { setData(d); setError(null); })
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load users."));
 
-  function openMenuFor(userId: string) {
-    if (openMenu === userId) { setOpenMenu(null); return; }
-    const btn = menuToggleRefs.current[userId];
-    if (!btn) return;
-    const rect = btn.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const menuHeight = 240; // approximate max dropdown height
-    if (spaceBelow < menuHeight) {
-      setMenuPos({ bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right });
-    } else {
-      setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-    }
-    setOpenMenu(userId);
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { reload(); }, [hours, role, plan, schoolId, search, offset, reloadKey]);
 
-  // Close dropdown on outside click or scroll
+  // Institutional schools power the school filter. Best-effort — a
+  // failure just leaves the dropdown with "All schools".
+  useEffect(() => {
+    api.schools().then((r) => setSchools(r.schools)).catch(() => {});
+  }, []);
+
+  // Close the action menu on any outside click or scroll.
   useEffect(() => {
     if (!openMenu) return;
     const close = () => setOpenMenu(null);
@@ -60,25 +161,28 @@ export default function Users() {
     };
   }, [openMenu]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { reload(); }, [hours, sortBy, search, offset]);
+  const setRole = (v: string) => {
+    setOffset(0);
+    setOpenMenu(null);
+    setSearchParams(v ? { role: v } : {}, { replace: true });
+  };
+  const onFilter = <T,>(setter: (v: T) => void) => (v: T) => { setter(v); setOffset(0); };
 
-  // Reset to first page when filters change
-  const handleSearchChange = (v: string) => { setSearch(v); setOffset(0); };
-  const handleSortChange = (v: SortKey) => { setSortBy(v); setOffset(0); };
-  const handleHoursChange = (v: string) => { setHours(v); setOffset(0); };
+  function openMenuFor(userId: string) {
+    if (openMenu === userId) { setOpenMenu(null); return; }
+    const btn = menuToggleRefs.current[userId];
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    if (spaceBelow < 260) {
+      setMenuPos({ bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right });
+    } else {
+      setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    }
+    setOpenMenu(userId);
+  }
 
-  useEffect(() => {
-    if (!openMenu) return;
-    const close = () => setOpenMenu(null);
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
-  }, [openMenu]);
-
-  if (!data) return <p>Loading...</p>;
-
-  const topSpender = data.users.length > 0 ? data.users[0] : null;
-
+  // ── Mutations ──────────────────────────────────────────────────────
   const handleChangeRole = async (userId: string, newRole: string) => {
     if (!(await confirm({
       title: `Change role to ${newRole}?`,
@@ -86,12 +190,8 @@ export default function Users() {
       confirmLabel: "Change role",
       variant: "primary",
     }))) return;
-    try {
-      await api.updateUserRole(userId, newRole);
-      reload();
-    } catch (e) {
-      toast((e as Error).message);
-    }
+    try { await api.updateUserRole(userId, newRole); reload(); }
+    catch (e) { toast((e as Error).message); }
   };
 
   const handleToggleSubscription = async (userId: string, currentTier: string) => {
@@ -106,15 +206,9 @@ export default function Users() {
       variant: "primary",
     }))) return;
     try {
-      await api.updateUserSubscription(
-        userId,
-        isPro ? "free" : "pro",
-        isPro ? "none" : "active",
-      );
+      await api.updateUserSubscription(userId, isPro ? "free" : "pro", isPro ? "none" : "active");
       reload();
-    } catch (e) {
-      toast((e as Error).message);
-    }
+    } catch (e) { toast((e as Error).message); }
   };
 
   const handleResetLimit = async (userId: string) => {
@@ -124,12 +218,26 @@ export default function Users() {
       confirmLabel: "Reset",
       variant: "primary",
     }))) return;
+    try { await api.resetDailyLimit(userId); reload(); }
+    catch (e) { toast((e as Error).message); }
+  };
+
+  const handleResendInvite = async (userId: string, email: string) => {
     try {
-      await api.resetDailyLimit(userId);
+      await api.resendInvite(userId);
+      toast(`Invite resent to ${email}.`, "success");
       reload();
-    } catch (e) {
-      toast((e as Error).message);
-    }
+    } catch (e) { toast((e as Error).message); }
+  };
+
+  const handleRevokeInvite = async (userId: string, email: string) => {
+    if (!(await confirm({
+      title: "Revoke invite?",
+      message: <>The pending admin <strong>{email}</strong> will be removed. They can be re-invited later.</>,
+      confirmLabel: "Revoke invite",
+    }))) return;
+    try { await api.deleteUser(userId); reload(); }
+    catch (e) { toast((e as Error).message); }
   };
 
   const handleDelete = async (userId: string, email: string) => {
@@ -138,27 +246,197 @@ export default function Users() {
       message: <><strong>{email}</strong> will be removed permanently. This can't be undone.</>,
       confirmLabel: "Delete",
     }))) return;
-    try {
-      await api.deleteUser(userId);
-      reload();
-    } catch (e) {
-      toast((e as Error).message);
-    }
+    try { await api.deleteUser(userId); reload(); }
+    catch (e) { toast((e as Error).message); }
   };
+
+  // ── Derived stat band ──────────────────────────────────────────────
+  const newThisWeek = useMemo(() => {
+    if (!data) return 0;
+    // daysSince() hides Date.now behind a function call — matches how
+    // definitions.ts keeps recency math out of the render purity path.
+    return data.registrations_by_day
+      .filter((r) => { const d = daysSince(r.day); return d !== null && d <= 7; })
+      .reduce((sum, r) => sum + r.count, 0);
+  }, [data]);
+  const spark = data?.registrations_by_day.map((r) => r.count) ?? [];
+  const win = windowLabel(Number(hours));
+
+  // ── Columns ────────────────────────────────────────────────────────
+  const userCol: Column<UserRow> = {
+    key: "user", header: "User", width: "26%",
+    sortValue: (u) => (u.name || u.email).toLowerCase(),
+    render: (u) => {
+      const rb = roleBadge(u.role);
+      return (
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {u.name || "—"}
+          </div>
+          <div style={{ fontSize: 11.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {u.email}
+          </div>
+          <div style={{ marginTop: 5, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            {!role && <StatusPill tone={rb.tone} label={rb.label} />}
+            {u.grade_level > 0 && (
+              <span style={{ fontFamily: "var(--font-sans)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1.4, color: "var(--muted-2)" }}>
+                {gradeLabel(u.grade_level)}
+              </span>
+            )}
+          </div>
+        </div>
+      );
+    },
+  };
+
+  const actionCol: Column<UserRow> = {
+    key: "actions", header: "", width: "44px", align: "right",
+    render: (u) => (
+      <button
+        ref={(el) => { menuToggleRefs.current[u.id] = el; }}
+        className="action-toggle"
+        aria-label="Row actions"
+        onClick={(e) => { e.stopPropagation(); openMenuFor(u.id); }}
+      >
+        …
+      </button>
+    ),
+  };
+
+  const defaultCols: Column<UserRow>[] = [
+    userCol,
+    {
+      key: "school", header: "School", width: "16%",
+      sortValue: (u) => u.school?.name.toLowerCase() ?? "",
+      render: (u) => u.school
+        ? <span style={{ color: "var(--ink-soft)" }}>{u.school.name}</span>
+        : <span style={{ color: "var(--muted-2)" }}>—</span>,
+    },
+    {
+      key: "plan", header: "Plan", width: "13%",
+      sortValue: (u) => u.subscription_tier,
+      render: (u) => {
+        const pro = u.subscription_tier === "pro";
+        return (
+          <span
+            className="badge"
+            style={pro ? { background: "var(--info-soft)", color: "var(--info)" } : { background: "transparent", color: "var(--muted)" }}
+          >
+            {pro ? "Pro" : "Free"}
+            {pro && u.subscription_status !== "active" ? ` (${u.subscription_status})` : ""}
+          </span>
+        );
+      },
+    },
+    {
+      key: "activity", header: "Activity", width: "17%",
+      sortValue: (u) => { const s = lastSeenOf(u); return s ? new Date(s).getTime() : 0; },
+      render: (u) => {
+        const seen = lastSeenOf(u);
+        const pill = activityPill(activityStatus(seen));
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <StatusPill tone={pill.tone} label={pill.label} />
+            <span style={{ fontSize: 11.5, color: "var(--muted)" }} title={seen ? new Date(seen).toLocaleString() : undefined}>
+              {seen ? formatRelativeDate(seen) : "never"}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      key: "cost", header: `Cost · ${win}`, width: "15%", numeric: true,
+      sortValue: (u) => u.total_cost,
+      render: (u) => (
+        <div>
+          <div style={{ color: u.total_cost > 0 ? "var(--ink)" : "var(--muted-2)", fontWeight: 600 }}>
+            {fmtCost(u.total_cost)}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--muted)" }}>
+            {u.llm_call_count.toLocaleString()} call{u.llm_call_count === 1 ? "" : "s"}
+            {u.avg_cost_per_session > 0 ? ` · ${fmtCost(u.avg_cost_per_session)}/sess` : ""}
+          </div>
+        </div>
+      ),
+    },
+    actionCol,
+  ];
+
+  const adminCols: Column<UserRow>[] = [
+    userCol,
+    {
+      key: "status", header: "Status", width: "18%",
+      sortValue: (u) => u.invite_status,
+      render: (u) => { const b = inviteBadge(u.invite_status); return <StatusPill tone={b.tone} label={b.label} />; },
+    },
+    {
+      key: "invited", header: "Invited", width: "18%",
+      sortValue: (u) => new Date(u.registered).getTime(),
+      render: (u) => (
+        <span style={{ color: "var(--ink-soft)" }} title={new Date(u.registered).toLocaleString()}>
+          {formatRelativeDate(u.registered)}
+        </span>
+      ),
+    },
+    {
+      key: "last_login", header: "Last dashboard login", width: "20%",
+      sortValue: (u) => (u.last_login ? new Date(u.last_login).getTime() : 0),
+      render: (u) => u.last_login
+        ? <span style={{ color: "var(--ink-soft)" }} title={new Date(u.last_login).toLocaleString()}>{formatRelativeDate(u.last_login)}</span>
+        : <span style={{ color: "var(--muted-2)" }}>never signed in</span>,
+    },
+    actionCol,
+  ];
+
+  const columns = isAdminView ? adminCols : defaultCols;
+
+  const openUser = data?.users.find((u) => u.id === openMenu) ?? null;
 
   return (
     <div>
       <div className="page-header">
-        <span className="eyebrow">All users</span>
+        <span className="eyebrow">System</span>
         <h1>Users</h1>
-        <p>Cross-cutting view across every account in the system.</p>
+        <p>Every account in one place — filter by role, then manage plan, access, and invites from any row.</p>
       </div>
 
-      <InviteAdminForm onInvited={reload} />
+      {/* Segmented role filter — "Admins" is the retired tab, now a preset. */}
+      <div className="segmented" role="tablist" aria-label="Filter by role">
+        {ROLE_TABS.map((t) => (
+          <button
+            key={t.value}
+            type="button"
+            role="tab"
+            aria-selected={role === t.value}
+            className={`segment${role === t.value ? " segment-active" : ""}`}
+            onClick={() => setRole(t.value)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-      <div className="filters" style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <SearchInput value={search} onChange={handleSearchChange} placeholder="Search by name or email..." />
-        <select value={hours} onChange={(e) => handleHoursChange(e.target.value)}>
+      {/* Invite-admin form lives on the Admins preset. */}
+      {isAdminView && <InviteAdminForm onInvited={reload} />}
+
+      <div className="filters">
+        <SearchInput value={search} onChange={onFilter(setSearch)} placeholder="Search by name or email…" />
+        {!isAdminView && (
+          <>
+            <select value={plan} onChange={(e) => onFilter(setPlan)(e.target.value)} aria-label="Filter by plan">
+              <option value="">All plans</option>
+              <option value="pro">Pro</option>
+              <option value="free">Free</option>
+            </select>
+            <select value={schoolId} onChange={(e) => onFilter(setSchoolId)(e.target.value)} aria-label="Filter by school">
+              <option value="">All schools</option>
+              {schools.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </>
+        )}
+        <select value={hours} onChange={(e) => onFilter(setHours)(e.target.value)} aria-label="Activity window">
           <option value="24">Last 24 hours</option>
           <option value="168">Last 7 days</option>
           <option value="720">Last 30 days</option>
@@ -166,194 +444,119 @@ export default function Users() {
         </select>
       </div>
 
-      <div className="stat-grid">
-        <StatCard label="Total Users" value={data.total_users} />
-        <StatCard label="Active (7d)" value={data.active_7d} />
-        <StatCard label="Total Spend" value={`$${data.total_spend.toFixed(2)}`} />
-        <StatCard
-          label="Top Spender"
-          value={topSpender ? `$${topSpender.total_cost.toFixed(2)}` : "-"}
-          sub={topSpender?.name || topSpender?.email || "-"}
-        />
+      <div className="tile-grid">
+        <StatTile label="Total users" value={(data?.total_users ?? 0).toLocaleString()} sub={role ? `${role}s` : "all roles"} />
+        <StatTile label="Active 7d" value={(data?.active_7d ?? 0).toLocaleString()} sub="seen in last 7 days" />
+        <StatTile label={`Spend · ${win}`} value={fmtCost(data?.total_spend ?? 0)} sub="filtered scope" />
+        <StatTile label="New this week" value={newThisWeek.toLocaleString()} sub="new sign-ups" spark={spark} />
       </div>
 
       <div className="table-card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
           <h3 style={{ marginBottom: 0 }}>
-            {search ? `Results for "${search}"` : "All Users"}
-            <span style={{ fontWeight: 400, color: "var(--muted-2)", marginLeft: 8 }}>
-              ({data.filtered_count})
+            {ROLE_TABS.find((t) => t.value === role)?.label ?? "All"}
+            <span style={{ fontWeight: 400, color: "var(--muted)", marginLeft: 8, fontFamily: "var(--font-mono)", fontSize: 13 }}>
+              {data ? data.filtered_count.toLocaleString() : "—"}
             </span>
           </h3>
-          <select value={sortBy} onChange={(e) => handleSortChange(e.target.value as SortKey)} style={{ fontSize: 13 }}>
-            <option value="total_cost">Sort by Cost</option>
-            <option value="session_count">Sort by Sessions</option>
-            <option value="last_active">Sort by Last Active</option>
-            <option value="name">Sort by Name</option>
-          </select>
         </div>
-        <div className="table-scroll">
-        <table>
-          <colgroup>
-            <col style={{ width: "22%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "28%" }} />
-            <col style={{ width: "8%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "14%" }} />
-            <col style={{ width: "8%" }} />
-          </colgroup>
-          <thead>
-            <tr>
-              <th>User</th>
-              <th>Plan</th>
-              <th>Today&apos;s Usage</th>
-              <th>Sessions</th>
-              <th>Cost</th>
-              <th>Joined / Active</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.users.map((u) => (
-              <tr key={u.id}>
-                <td style={{ overflow: "hidden" }}>
-                  <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {u.name || "-"}
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--muted-2)", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {u.email}
-                  </div>
-                  <div style={{ display: "flex", gap: 4, marginTop: 2, flexWrap: "wrap" }}>
-                    <span
-                      className={`badge ${u.role === "admin" ? "badge-active" : u.role === "teacher" ? "badge-warning" : "badge-completed"}`}
-                    >
-                      {u.role}
-                    </span>
-                    {u.grade_level > 0 && (
-                      <span className="badge" style={{ background: "var(--info-soft)", color: "var(--info)" }}>
-                        {gradeLabel(u.grade_level)}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td>
-                  <span
-                    className="badge"
-                    style={{
-                      background: u.subscription_tier === "pro" ? "var(--info-soft)" : "var(--paper-2)",
-                      color: u.subscription_tier === "pro" ? "var(--info)" : "var(--muted)",
-                    }}
-                  >
-                    {u.subscription_tier === "pro" ? "Pro" : "Free"}
-                    {u.subscription_tier === "pro" && u.subscription_status !== "active"
-                      ? ` (${u.subscription_status})`
-                      : ""}
-                  </span>
-                </td>
-                <td>
-                  <div style={{ display: "flex", gap: 6, fontSize: 11, flexWrap: "wrap" }}>
-                    <UsagePill label="P" used={u.daily_usage.sessions} limit={u.daily_usage.sessions_limit} title="Problems" />
-                    <UsagePill label="C" used={u.daily_usage.chats} limit={u.daily_usage.chats_limit} title="Chats" />
-                    <UsagePill label="S" used={u.daily_usage.scans} limit={u.daily_usage.scans_limit} title="Scans" />
-                  </div>
-                </td>
-                <td>{u.session_count}</td>
-                <td style={{ fontWeight: u.total_cost > 0 ? 600 : 400 }}>
-                  ${u.total_cost.toFixed(4)}
-                </td>
-                <td>
-                  <div style={{ fontSize: 12 }} title={new Date(u.registered).toLocaleString()}>
-                    <span style={{ color: "var(--muted-2)" }}>Joined </span>{formatRelativeDate(u.registered)}
-                  </div>
-                  <div style={{ fontSize: 12 }} title={u.last_active ? new Date(u.last_active).toLocaleString() : undefined}>
-                    <span style={{ color: "var(--muted-2)" }}>Active </span>{u.last_active ? formatRelativeDate(u.last_active) : "-"}
-                  </div>
-                </td>
-                <td>
-                  <button
-                    ref={(el) => { menuToggleRefs.current[u.id] = el; }}
-                    className="action-toggle"
-                    onClick={(e) => { e.stopPropagation(); openMenuFor(u.id); }}
-                  >
-                    ...
-                  </button>
-                  {openMenu === u.id && (
-                    <div
-                      className="action-dropdown"
-                      style={{
-                        ...(menuPos.top != null ? { top: menuPos.top } : {}),
-                        ...(menuPos.bottom != null ? { bottom: menuPos.bottom } : {}),
-                        right: menuPos.right,
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button onClick={() => { setOpenMenu(null); navigate(`/llm-calls?user=${u.id}`); }}>
-                        View calls
-                      </button>
-                      <button onClick={() => { setOpenMenu(null); handleToggleSubscription(u.id, u.subscription_tier); }}>
-                        {u.subscription_tier === "pro" ? "Downgrade Plan" : "Upgrade Plan"}
-                      </button>
-                      {(["student", "teacher", "admin"] as const).filter((r) => r !== u.role).map((r) => (
-                        <button key={r} onClick={() => { setOpenMenu(null); handleChangeRole(u.id, r); }}>
-                          Make {r.charAt(0).toUpperCase() + r.slice(1)}
-                        </button>
-                      ))}
-                      {u.subscription_tier !== "pro" && (
-                        <button onClick={() => { setOpenMenu(null); handleResetLimit(u.id); }}>
-                          Reset Daily Limits
-                        </button>
-                      )}
-                      <button className="danger" onClick={() => { setOpenMenu(null); handleDelete(u.id, u.email); }}>
-                        Delete User
-                      </button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {data.users.length === 0 && (
-              <tr><td colSpan={7} style={{ textAlign: "center", color: "#999" }}>No users found</td></tr>
-            )}
-          </tbody>
-        </table>
-        </div>
-        <Pagination
-          offset={offset}
-          limit={PAGE_SIZE}
-          total={data.filtered_count}
-          onChange={setOffset}
+        <DataTable
+          columns={columns}
+          rows={data?.users ?? []}
+          rowKey={(u) => u.id}
+          loading={!data && !error}
+          error={!data ? error : null}
+          onRetry={() => { setError(null); setReloadKey((k) => k + 1); }}
+          minWidth={720}
+          empty={
+            <>
+              <span className="dt-state-title">No users match.</span>
+              <span className="dt-state-sub">Adjust the filters above or check back later.</span>
+            </>
+          }
         />
+        {data && (
+          <Pagination offset={offset} limit={PAGE_SIZE} total={data.filtered_count} onChange={setOffset} />
+        )}
       </div>
+
+      {/* Row action menu — fixed-position so it escapes the table scroll. */}
+      {openUser && (
+        <div
+          className="action-dropdown"
+          style={{
+            ...(menuPos.top != null ? { top: menuPos.top } : {}),
+            ...(menuPos.bottom != null ? { bottom: menuPos.bottom } : {}),
+            right: menuPos.right,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {menuActionsFor(openUser).map((action) => {
+            switch (action) {
+              case "view-calls":
+                return (
+                  <button key={action} onClick={() => { setOpenMenu(null); navigate(`/llm-calls?user=${openUser.id}`); }}>
+                    View calls
+                  </button>
+                );
+              case "view-in-school":
+                return (
+                  <button key={action} onClick={() => { setOpenMenu(null); navigate(`/schools/${openUser.school!.id}`); }}>
+                    View in {openUser.school!.name} →
+                  </button>
+                );
+              case "make-student":
+              case "make-teacher":
+              case "make-admin": {
+                const r = action.slice("make-".length);
+                return (
+                  <button key={action} onClick={() => { setOpenMenu(null); handleChangeRole(openUser.id, r); }}>
+                    Make {r.charAt(0).toUpperCase() + r.slice(1)}
+                  </button>
+                );
+              }
+              case "toggle-plan":
+                return (
+                  <button key={action} onClick={() => { setOpenMenu(null); handleToggleSubscription(openUser.id, openUser.subscription_tier); }}>
+                    {openUser.subscription_tier === "pro" ? "Downgrade plan" : "Upgrade plan"}
+                  </button>
+                );
+              case "reset-limit":
+                return (
+                  <button key={action} onClick={() => { setOpenMenu(null); handleResetLimit(openUser.id); }}>
+                    Reset daily limits
+                  </button>
+                );
+              case "resend-invite":
+                return (
+                  <button key={action} onClick={() => { setOpenMenu(null); handleResendInvite(openUser.id, openUser.email); }}>
+                    Resend invite
+                  </button>
+                );
+              case "revoke-invite":
+                return (
+                  <button key={action} className="danger" onClick={() => { setOpenMenu(null); handleRevokeInvite(openUser.id, openUser.email); }}>
+                    Revoke invite
+                  </button>
+                );
+              case "delete":
+                return (
+                  <button key={action} className="danger" onClick={() => { setOpenMenu(null); handleDelete(openUser.id, openUser.email); }}>
+                    Delete user
+                  </button>
+                );
+            }
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
 function gradeLabel(grade: number): string {
-  if (grade <= 2) return "K-2";
-  if (grade <= 5) return "3-5";
-  if (grade <= 8) return "6-8";
-  if (grade <= 12) return "9-12";
+  if (grade <= 2) return "K–2";
+  if (grade <= 5) return "3–5";
+  if (grade <= 8) return "6–8";
+  if (grade <= 12) return "9–12";
   return "College";
-}
-
-function UsagePill({ label, used, limit, title }: { label: string; used: number; limit: number | null; title: string }) {
-  const isUnlimited = limit === null;
-  const atLimit = !isUnlimited && used >= limit;
-  return (
-    <span
-      style={{
-        padding: "2px 5px",
-        borderRadius: 4,
-        fontWeight: 600,
-        background: atLimit ? "var(--danger-soft)" : isUnlimited ? "var(--ok-soft)" : "var(--paper-2)",
-        color: atLimit ? "var(--danger)" : isUnlimited ? "var(--ok)" : "var(--muted)",
-        border: `1px solid ${atLimit ? "rgba(138, 35, 23, 0.3)" : isUnlimited ? "rgba(74, 107, 58, 0.3)" : "var(--rule)"}`,
-        whiteSpace: "nowrap" as const,
-      }}
-      title={`${title}: ${used}${isUnlimited ? " (unlimited)" : ` / ${limit}`}`}
-    >
-      {label}: {used}{isUnlimited ? "/\u221e" : `/${limit}`}
-    </span>
-  );
 }

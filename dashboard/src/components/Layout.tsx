@@ -41,8 +41,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "System",
     items: [
+      // Users + Admins consolidated: one role-filtered tab. The Admins
+      // preset is reached via the in-page segmented filter (role=admin).
       { to: "/users", label: "Users" },
-      { to: "/admins", label: "Admins" },
       { to: "/audit-logs", label: "Audit log" },
     ],
   },

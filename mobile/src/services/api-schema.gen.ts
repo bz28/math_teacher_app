@@ -750,6 +750,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/users/{user_id}/resend-invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resend Admin Invite
+         * @description Re-issue the set-password invite for a pending admin.
+         *
+         *     Rotates the token (invalidating any earlier link) and resends the
+         *     email. Only valid for an admin who hasn't activated yet — once they
+         *     log in there's a refresh token and re-inviting makes no sense.
+         */
+        post: operations["resend_admin_invite_v1_admin_users__user_id__resend_invite_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/users/{user_id}/reset-daily-limit": {
         parameters: {
             query?: never;
@@ -7196,6 +7220,8 @@ export interface operations {
                 offset?: number;
                 search?: string | null;
                 role?: string | null;
+                plan?: string | null;
+                school_id?: string | null;
                 no_school?: boolean;
                 has_classroom?: boolean;
                 active_classroom?: boolean;
@@ -7303,6 +7329,39 @@ export interface operations {
         };
     };
     delete_user_v1_admin_users__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_admin_invite_v1_admin_users__user_id__resend_invite_post: {
         parameters: {
             query?: never;
             header?: never;

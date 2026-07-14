@@ -2591,3 +2591,35 @@ table.dt tr:last-child td { border-bottom: none; }
   line-height: 1.5;
   color: var(--ink);
 }
+
+/* ── Segmented control — role preset filter on the Users tab ───────── */
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  margin-bottom: 20px;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+.segment {
+  border: none;
+  background: transparent;
+  padding: 7px 16px;
+  border-radius: 3px;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, box-shadow 0.12s;
+}
+.segment:hover { color: var(--ink-soft); }
+.segment-active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 1px 2px rgba(20, 19, 15, 0.08);
+}
+.segment-active:hover { color: var(--accent); }
