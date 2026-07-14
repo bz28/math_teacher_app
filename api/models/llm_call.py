@@ -43,6 +43,19 @@ class LLMCall(Base):
         nullable=True, index=True,
     )
 
+    # The generation job this call was made in service of (the question
+    # call plus its per-problem `decompose` solutions and `practice_eval`
+    # distractors). An EXPLICIT link so admin cost attribution is exact
+    # per generation instead of a time-window heuristic that misattributes
+    # when two jobs overlap. Null on calls unrelated to a generation job
+    # (grading, tutoring, integrity, standalone regenerate). SET NULL on
+    # job delete keeps the cost row for aggregate spend.
+    generation_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("question_bank_generation_jobs.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+
     function: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False)

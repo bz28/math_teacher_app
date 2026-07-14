@@ -226,6 +226,7 @@ async def generate_questions(
     extra_instructions: str | None = None,
     params: dict[str, Any] | None = None,
     call_metadata: dict[str, Any] | None = None,
+    generation_job_id: str | None = None,
 ) -> list[dict[str, str]]:
     """Generate problems for a given topic.
 
@@ -292,6 +293,7 @@ async def generate_questions(
                 model=MODEL_REASON,
                 max_tokens=4096,
                 call_metadata=call_metadata,
+                generation_job_id=generation_job_id,
             )
         else:
             result = await call_claude_json(
@@ -303,6 +305,7 @@ async def generate_questions(
                 model=MODEL_REASON,
                 max_tokens=4096,
                 call_metadata=call_metadata,
+                generation_job_id=generation_job_id,
             )
         questions: list[Any] = result.get("questions", [])  # type: ignore[assignment]
 
@@ -339,6 +342,7 @@ async def generate_solutions(
     *,
     subject: str = Subject.MATH,
     user_id: str | None = None,
+    generation_job_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Generate step-by-step solutions for each question using decompose.
 
@@ -353,6 +357,7 @@ async def generate_solutions(
                 q["text"],
                 user_id=user_id,
                 subject=subject,
+                generation_job_id=generation_job_id,
             )
             return {
                 "question_text": q["text"],

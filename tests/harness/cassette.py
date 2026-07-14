@@ -78,6 +78,7 @@ _IDENTITY_EXCLUDE = {
     "session_id",
     "user_id",
     "submission_id",
+    "generation_job_id",
     "call_metadata",
     "max_retries",
 }

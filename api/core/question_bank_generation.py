@@ -174,6 +174,7 @@ async def _extract_from_files(
     user_id: str,
     constraint: str | None = None,
     call_metadata: dict[str, Any] | None = None,
+    generation_job_id: str | None = None,
 ) -> list[dict[str, str]]:
     """Extract problems from worksheet pages (images or PDFs) via Claude.
 
@@ -216,6 +217,7 @@ async def _extract_from_files(
         model=MODEL_REASON,
         max_tokens=4096,
         call_metadata=call_metadata,
+        generation_job_id=generation_job_id,
     )
 
     questions: list[Any] = result.get("questions", [])  # type: ignore[assignment]
@@ -271,6 +273,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             # model. Upload pages carry no filename and aren't capped, so
             # this is a pure page count (selected == used).
             call_metadata=build_attachment_metadata(len(raw_files), raw_files),
+            generation_job_id=str(job.id),
         )
         if not question_dicts:
             raise RuntimeError(
@@ -342,6 +345,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             extra_instructions=constraint_text,
             params=job.params,
             call_metadata=doc_metadata,
+            generation_job_id=str(job.id),
         )
         if not question_dicts:
             raise RuntimeError(
@@ -354,6 +358,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
         question_dicts,
         subject=course.subject,
         user_id=str(job.created_by_id),
+        generation_job_id=str(job.id),
     )
 
     # 2b. Generate 3 MCQ distractors per question. Stored on the bank
@@ -376,6 +381,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
                     final,
                     user_id=str(job.created_by_id),
                     subject=course.subject,
+                    generation_job_id=str(job.id),
                 )
             except Exception:
                 logger.warning("Distractor generation failed for question %d in job %s", idx, job.id)

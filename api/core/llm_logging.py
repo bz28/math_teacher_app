@@ -60,6 +60,7 @@ async def persist_llm_call(
     input_text: str | None = None,
     output_text: str | None = None,
     submission_id: str | None = None,
+    generation_job_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
 ) -> None:
     """Write an LLM call record to the database. Looks up school_id
@@ -78,6 +79,9 @@ async def persist_llm_call(
 
         user_uuid = _uuid.UUID(user_id) if user_id else None
         submission_uuid = _uuid.UUID(submission_id) if submission_id else None
+        generation_job_uuid = (
+            _uuid.UUID(generation_job_id) if generation_job_id else None
+        )
 
         async with get_session_factory()() as db:
             school_id: _uuid.UUID | None = None
@@ -107,6 +111,7 @@ async def persist_llm_call(
                 user_id=user_uuid,
                 school_id=school_id,
                 submission_id=submission_uuid,
+                generation_job_id=generation_job_uuid,
                 success=success,
                 retry_count=retry_count,
                 input_text=_truncate(input_text),
