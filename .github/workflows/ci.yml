@@ -153,6 +153,13 @@ jobs:
         working-directory: web
         run: pnpm build
 
+      - name: API types match the spec
+        working-directory: web
+        run: |
+          pnpm gen:api
+          git diff --exit-code src/lib/api-schema.gen.ts \
+            || { echo "::error::web/src/lib/api-schema.gen.ts is stale — run 'pnpm gen:api' and commit."; exit 1; }
+
   dashboard:
     runs-on: ubuntu-latest
     steps:
