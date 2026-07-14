@@ -236,6 +236,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/grading-quality/overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Grading Quality Overrides
+         * @description The actual overridden problems behind a weak subject/course row or a
+         *     catastrophic status cell.
+         *
+         *     Filter by ``subject`` and/or ``course`` (a weak-spot row) and/or a
+         *     ``from_status``→``to_status`` transition (a status-matrix cell). Each
+         *     case carries the AI's original call, the teacher's final call, and the
+         *     signed delta — no student identity or written work. Sorted by change
+         *     size (biggest misgrades first) and capped at ``_DRILL_LIMIT``.
+         */
+        get: operations["grading_quality_overrides_v1_admin_grading_quality_overrides_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/harness-runs": {
         parameters: {
             query?: never;
@@ -6136,6 +6163,43 @@ export interface operations {
             query?: {
                 hours?: number;
                 subject?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grading_quality_overrides_v1_admin_grading_quality_overrides_get: {
+        parameters: {
+            query?: {
+                hours?: number;
+                subject?: string | null;
+                course?: string | null;
+                from_status?: string | null;
+                to_status?: string | null;
             };
             header?: never;
             path?: never;
