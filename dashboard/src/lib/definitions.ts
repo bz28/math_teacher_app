@@ -47,9 +47,30 @@ export const DORMANT_AFTER_DAYS = 30;
  *  number via costWindowLabel / windowLabel. */
 export const COST_WINDOW_DAYS = 30;
 
+/**
+ * A harness probe is "stale" once it hasn't reported a run in this long.
+ * CI POSTs a run on every PR and on the scheduled explore sweep, so a
+ * multi-day gap means a probe stopped reporting (or CI broke) — the same
+ * silence that should trip the top-line "CI stopped POSTing" warning.
+ */
+export const HARNESS_STALE_AFTER_HOURS = 72;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type ActivityStatus = "not_started" | "active" | "stale" | "dormant";
+
+/** Hours elapsed since an ISO timestamp, or null if absent/unparseable. */
+export function hoursSince(iso: string | null | undefined): number | null {
+  const d = daysSince(iso);
+  return d === null ? null : d * 24;
+}
+
+/** True once a probe (or the whole harness) has gone quiet past the stale
+ *  threshold. A null/absent timestamp counts as stale. */
+export function isHarnessStale(iso: string | null | undefined): boolean {
+  const h = hoursSince(iso);
+  return h === null || h > HARNESS_STALE_AFTER_HOURS;
+}
 
 /** Days elapsed since an ISO timestamp, or null if absent/unparseable. */
 export function daysSince(iso: string | null | undefined): number | null {
