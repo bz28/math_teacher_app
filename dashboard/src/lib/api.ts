@@ -403,8 +403,6 @@ export const api = {
   schools: () => request<{ schools: SchoolListItem[] }>("/admin/schools"),
   school: (id: string) => request<SchoolDetail>(`/admin/schools/${id}`),
   schoolOverview: (id: string) => request<SchoolOverviewData>(`/admin/schools/${id}/overview`),
-  schoolStudents: (id: string, params?: Record<string, string>) =>
-    request<SchoolStudentsData>(`/admin/schools/${id}/students`, params),
   createSchool: (body: CreateSchoolBody) => mutate<{ id: string; status: string }>("/admin/schools", "POST", body),
   updateSchool: (id: string, body: UpdateSchoolBody) => mutate<{ status: string }>(`/admin/schools/${id}`, "PATCH", body),
   inviteTeacher: (schoolId: string, email: string) =>
@@ -769,6 +767,47 @@ export interface SchoolListItem {
   updated_by: string | null;
 }
 
+// One enrolled student, scoped to a single section. NO subscription /
+// plan — school students don't carry an individual plan. `avg_score` is
+// the mean of that student's graded submissions in this section (0–100),
+// null when nothing's been graded yet.
+export interface SchoolSectionStudent {
+  id: string;
+  name: string;
+  email: string;
+  grade_level: number;
+  submission_count: number;
+  graded_count: number;
+  avg_score: number | null;
+  last_activity_at: string | null;
+}
+
+// A section (class period). `cost_30d` is the rolled-up per-submission AI
+// cost (extraction + integrity + grading) for this section's work.
+export interface SchoolSection {
+  id: string;
+  name: string;
+  course_name: string;
+  student_count: number;
+  submitted_count: number;
+  cost_30d: number;
+  last_activity_at: string | null;
+  students: SchoolSectionStudent[];
+}
+
+// A teacher and the classes they own. `gen_cost_30d` is the teacher's
+// authoring/generation spend (calls not tied to a submission); per-
+// submission cost lives on each section instead.
+export interface SchoolTeacher {
+  id: string;
+  name: string;
+  email: string;
+  joined_at: string;
+  gen_cost_30d: number;
+  gen_call_count_30d: number;
+  sections: SchoolSection[];
+}
+
 export interface SchoolDetail {
   id: string;
   name: string;
@@ -779,14 +818,7 @@ export interface SchoolDetail {
   is_active: boolean;
   notes: string | null;
   created_at: string;
-  teachers: {
-    id: string;
-    name: string;
-    email: string;
-    joined_at: string;
-    call_count_30d: number;
-    total_cost_30d: number;
-  }[];
+  teachers: SchoolTeacher[];
   pending_invites: { id: string; email: string; expires_at: string; created_at: string }[];
 }
 
@@ -875,16 +907,6 @@ export interface TeacherUsage {
   graded: number;
   students_reached: number;
   generations: number;
-}
-
-export interface SchoolStudentsData {
-  school: {
-    id: string;
-    name: string;
-    kind: string;
-  };
-  total_students: number;
-  students: TeacherRosterStudent[];
 }
 
 export interface TeacherStudentsData {

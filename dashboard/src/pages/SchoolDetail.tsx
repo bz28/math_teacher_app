@@ -7,15 +7,16 @@ import {
   api,
   type SchoolDetail as SchoolDetailData,
   type SchoolOverviewData,
-  type SchoolStudentsData,
+  type SchoolSection,
+  type SchoolTeacher,
 } from "../lib/api";
 import { formatRelativeDate, fmtCost } from "../lib/format";
 import { btnGhost, btnPrimary, btnSmall, inputStyle } from "../lib/styles";
 import { useConfirm } from "../lib/confirm";
 import { useToast } from "../lib/toast";
-import { Pagination } from "../components/Pagination";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
+import DataTable, { type Column } from "../components/DataTable";
 import {
   activityPill,
   activityStatus,
@@ -23,19 +24,15 @@ import {
   isAtRisk,
 } from "../lib/definitions";
 
-// Roster page size — the /admin/schools/:id/students endpoint accepts
-// limit/offset, so a >100-student school is now fully reachable via the
-// shared <Pagination> control instead of a hard "first 100" cap.
-const ROSTER_PAGE_SIZE = 50;
-
-// Dedicated per-school deep page. Lives at /schools/:schoolId. Two
-// API fetches in parallel:
-//   - /admin/schools/:id           teachers + invites + CRUD shape
+// Dedicated per-school deep page. Lives at /schools/:schoolId. Two API
+// fetches in parallel:
+//   - /admin/schools/:id           the teacher → section → student tree
 //   - /admin/schools/:id/overview  cost, activity, health
-// We render four numbered sections so the page scans top-to-bottom
-// even on a single column. Section 03 (health) deep-links to
-// /llm-calls with the school + failures filters preset — we don't
-// duplicate the LLM Calls rendering here.
+//
+// The unit is teacher→class, not a flat student roster: every student
+// lives UNDER a section, and a student enrolled in several sections
+// appears under each. Per-submission AI cost rolls up to the section;
+// a teacher's authoring/generation cost stays at the teacher level.
 
 interface EditForm {
   name: string;
@@ -54,9 +51,12 @@ export default function SchoolDetail() {
 
   const [detail, setDetail] = useState<SchoolDetailData | null>(null);
   const [overview, setOverview] = useState<SchoolOverviewData | null>(null);
-  const [students, setStudents] = useState<SchoolStudentsData | null>(null);
-  const [studentOffset, setStudentOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  // Which section rows are drilled open (id set). Client-side expand —
+  // the students already ride along in the detail payload, so opening a
+  // section costs no extra fetch.
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
 
   // Edit (inline)
   const [editing, setEditing] = useState(false);
@@ -69,10 +69,6 @@ export default function SchoolDetail() {
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Detail + overview only — the roster is paginated on its own effect
-  // (keyed on schoolId + studentOffset) so paging doesn't refetch the
-  // header/cost blocks, and mutations that don't touch the roster
-  // (edit, invite) don't reset the current page.
   const reload = async () => {
     if (!schoolId) return;
     try {
@@ -88,15 +84,14 @@ export default function SchoolDetail() {
   };
 
   useEffect(() => {
-    // Reset every per-school piece of state — mid-edit nav from
-    // school A to school B shouldn't leave A's form fields mounted
-    // under B's header. `handleSaveEdit` guards on `!detail` so a
-    // stale form can't post against the wrong id, but the UI was
-    // showing the wrong values briefly until reload landed.
+    // Reset every per-school piece of state — mid-edit nav from school A
+    // to school B shouldn't leave A's form fields mounted under B's
+    // header. `handleSaveEdit` guards on `!detail` so a stale form can't
+    // post against the wrong id, but the UI briefly showed wrong values
+    // until reload landed.
     setDetail(null);
     setOverview(null);
-    setStudents(null);
-    setStudentOffset(0);
+    setOpenSections(new Set());
     setError(null);
     setEditing(false);
     setEditForm(null);
@@ -109,21 +104,13 @@ export default function SchoolDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId]);
 
-  // Paginated roster fetch. Runs on mount, when the school changes, and
-  // when the operator pages. A roster failure is non-fatal — the header
-  // and cost sections still render — so it doesn't set the page error.
-  useEffect(() => {
-    if (!schoolId) return;
-    let cancelled = false;
-    api
-      .schoolStudents(schoolId, {
-        limit: String(ROSTER_PAGE_SIZE),
-        offset: String(studentOffset),
-      })
-      .then((st) => { if (!cancelled) setStudents(st); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [schoolId, studentOffset]);
+  const toggleSection = (id: string) =>
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const startEditing = () => {
     if (!detail) return;
@@ -241,6 +228,16 @@ export default function SchoolDetail() {
     [overview],
   );
 
+  // Distinct enrolled students across every section — a student in
+  // multiple sections counts once here (but appears under each section
+  // in the breakdown below). Memoized off the payload.
+  const { classCount, studentCount } = useMemo(() => {
+    const sections = detail?.teachers.flatMap((t) => t.sections) ?? [];
+    const ids = new Set<string>();
+    for (const s of sections) for (const stu of s.students) ids.add(stu.id);
+    return { classCount: sections.length, studentCount: ids.size };
+  }, [detail]);
+
   if (error) {
     const isNotFound = error.includes("404");
     return (
@@ -279,7 +276,6 @@ export default function SchoolDetail() {
   // Unit economics — cost per active seat. Cheap, and the first thing a
   // buyer-facing founder wants for pricing. Guard divide-by-zero.
   const teacherCount = detail.teachers.length;
-  const studentCount = students?.total_students ?? 0;
   const costPerStudent = studentCount > 0 ? overview.cost.cost_30d / studentCount : null;
   const costPerTeacher = teacherCount > 0 ? overview.cost.cost_30d / teacherCount : null;
 
@@ -354,10 +350,8 @@ export default function SchoolDetail() {
       <div className="tile-grid" style={{ marginBottom: 44 }}>
         <StatTile label="Status" value={<StatusPill {...statusPill} />} />
         <StatTile label="Teachers" value={teacherCount} />
-        <StatTile
-          label="Students"
-          value={students ? studentCount.toLocaleString() : "…"}
-        />
+        <StatTile label="Classes" value={classCount} />
+        <StatTile label="Students" value={studentCount.toLocaleString()} />
         <StatTile
           label={`Cost · ${costWindowLabel()}`}
           value={fmtCost(overview.cost.cost_30d)}
@@ -375,9 +369,47 @@ export default function SchoolDetail() {
         />
       </div>
 
-      {/* ── 01 — ACTIVITY (adoption is the headline) ────────────── */}
+      {/* ── 01 — TEACHERS & CLASSES (the hero) ──────────────────── */}
+      {/* The teacher → section → student hierarchy. Each teacher owns
+          class periods; drill a class to see its students, their work,
+          and grades. Per-submission AI cost rolls up to the class. */}
+      <Section
+        number="01"
+        label={`Teachers & classes (${teacherCount})`}
+        action={
+          teacherCount > 0 ? (
+            <Link
+              to={`/llm-calls?school=${detail.id}&hours=720`}
+              className="link-btn"
+              style={{ fontSize: 12 }}
+              title="LLM calls for everyone at this school (teachers + students)"
+            >
+              View all school calls (30d) →
+            </Link>
+          ) : undefined
+        }
+      >
+        {teacherCount === 0 ? (
+          <p style={{ color: "var(--muted)", fontStyle: "italic" }}>
+            No teachers yet. Invite one below to get the school started.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+            {detail.teachers.map((t) => (
+              <TeacherBlock
+                key={t.id}
+                teacher={t}
+                openSections={openSections}
+                onToggleSection={toggleSection}
+              />
+            ))}
+          </div>
+        )}
+      </Section>
+
+      {/* ── 02 — ACTIVITY (week over week) ──────────────────────── */}
       {!overview.is_internal && (
-        <Section number="01" label="Activity (this week vs last)">
+        <Section number="02" label="Activity (this week vs last)">
           <ActivityRow
             label="Active classes"
             curr={overview.activity.this_week.active_classes}
@@ -406,9 +438,9 @@ export default function SchoolDetail() {
         </Section>
       )}
 
-      {/* ── 02 — COST ───────────────────────────────────────────── */}
+      {/* ── 03 — COST ───────────────────────────────────────────── */}
       <Section
-        number="02"
+        number="03"
         label="Cost"
         action={
           <Link
@@ -486,8 +518,8 @@ export default function SchoolDetail() {
         )}
       </Section>
 
-      {/* ── 03 — HEALTH ─────────────────────────────────────────── */}
-      <Section number="03" label="Health">
+      {/* ── 04 — HEALTH ─────────────────────────────────────────── */}
+      <Section number="04" label="Health">
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
           <HealthBlock
             label="Failed calls (24h)"
@@ -502,31 +534,9 @@ export default function SchoolDetail() {
         </div>
       </Section>
 
-      {/* ── 04 — TEACHERS ───────────────────────────────────────── */}
-      {/* Per-row layout: name+email | joined | 30d cost+calls | → */}
-      {/* drill-in. Mirrors the student row pattern on TeacherDetail */}
-      {/* so admins have a single mental model for "drill into a */}
-      {/* user's LLM calls". Cost is the primary signal for the */}
-      {/* heavy-spender scan; call count is the secondary check. */}
-      <Section
-        number="04"
-        label={`Teachers (${detail.teachers.length})`}
-        action={
-          detail.teachers.length > 0 ? (
-            <Link
-              to={`/llm-calls?school=${detail.id}&hours=720`}
-              className="link-btn"
-              style={{ fontSize: 12 }}
-              title="LLM calls for everyone at this school (teachers + students)"
-            >
-              View all school calls (30d) →
-            </Link>
-          ) : undefined
-        }
-      >
-        {/* Invite CTA — first, because growing the roster is the
-            action an operator comes here to take. */}
-        <div style={{ paddingBottom: 18, marginBottom: 24, borderBottom: "1px solid var(--rule)" }}>
+      {/* ── 05 — MANAGE TEACHERS (invite + pending) ─────────────── */}
+      <Section number="05" label="Manage teachers">
+        <div style={{ marginBottom: detail.pending_invites.length > 0 ? 28 : 0 }}>
           <h3 style={{ marginBottom: 12 }}>Invite a teacher</h3>
           <form onSubmit={handleInvite} style={{ display: "flex", gap: 8 }}>
             <input
@@ -558,81 +568,8 @@ export default function SchoolDetail() {
           )}
         </div>
 
-        {detail.teachers.length > 0 ? (
-          <div className="list" style={{ marginBottom: 24 }}>
-            {detail.teachers.map((t) => (
-              <div
-                key={t.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1.6fr 1fr 1fr auto",
-                  gap: 18,
-                  alignItems: "center",
-                  padding: "14px 0",
-                  borderBottom: "1px solid var(--rule)",
-                }}
-              >
-                <div style={{ overflow: "hidden" }}>
-                  <Link
-                    to={`/teachers/${t.id}`}
-                    style={{
-                      display: "block",
-                      fontFamily: "var(--font-display)",
-                      fontSize: 17,
-                      color: "var(--ink)",
-                      textDecoration: "none",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                    title="View this teacher's roster"
-                  >
-                    {t.name || "—"}
-                  </Link>
-                  <div style={{ fontSize: 11.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {t.email}
-                  </div>
-                </div>
-                <div style={{ fontSize: 12, color: "var(--muted-2)" }}>
-                  <span style={{ color: "var(--muted-2)" }}>Joined </span>
-                  {formatRelativeDate(t.joined_at)}
-                </div>
-                <div title="LLM activity over the last 30 days">
-                  <div
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 15,
-                      color: t.total_cost_30d > 0 ? "var(--ink)" : "var(--muted-2)",
-                      letterSpacing: -0.2,
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    {fmtCost(t.total_cost_30d)}
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
-                    {t.call_count_30d.toLocaleString()} call{t.call_count_30d === 1 ? "" : "s"} · 30d
-                  </div>
-                </div>
-                <Link
-                  to={`/llm-calls?user=${t.id}&hours=720`}
-                  className="action-toggle"
-                  title="View this teacher's LLM calls"
-                  style={{ textDecoration: "none", textAlign: "center" }}
-                >
-                  →
-                </Link>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p style={{ color: "var(--muted)", fontStyle: "italic", marginBottom: 24 }}>
-            No teachers yet. Send an invite above.
-          </p>
-        )}
-
-        {/* Pending invites — only if any */}
         {detail.pending_invites.length > 0 && (
-          <div style={{ marginBottom: 24 }}>
+          <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 18 }}>
             <h3 style={{ marginBottom: 12 }}>Pending invites ({detail.pending_invites.length})</h3>
             <div className="list">
               {detail.pending_invites.map((inv) => (
@@ -663,123 +600,258 @@ export default function SchoolDetail() {
           </div>
         )}
       </Section>
-
-      {/* ── 05 — STUDENTS ─────────────────────────────────────────── */}
-      <Section
-        number="05"
-        label={`Students (${students ? students.total_students : "…"})`}
-      >
-        {!students ? (
-          <p className="loading">Loading roster…</p>
-        ) : students.total_students === 0 ? (
-          <p style={{ color: "var(--muted)", fontStyle: "italic" }}>
-            No students enrolled yet. Once teachers create sections and
-            students join, they'll appear here.
-          </p>
-        ) : (
-          <div className="table-scroll">
-            <table>
-              <colgroup>
-                <col style={{ width: "34%" }} />
-                <col style={{ width: "14%" }} />
-                <col style={{ width: "14%" }} />
-                <col style={{ width: "18%" }} />
-                <col style={{ width: "20%" }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Plan</th>
-                  <th>Grade</th>
-                  <th>Joined</th>
-                  <th>Last active</th>
-                </tr>
-              </thead>
-              <tbody>
-                {students.students.map((s) => (
-                  <tr key={s.id}>
-                    <td style={{ overflow: "hidden" }}>
-                      <div
-                        style={{
-                          fontFamily: "var(--font-display)",
-                          fontSize: 17,
-                          color: "var(--ink)",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {s.name || "—"}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 11.5,
-                          color: "var(--muted)",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {s.email}
-                      </div>
-                    </td>
-                    <td>
-                      <span
-                        className="badge"
-                        style={
-                          s.subscription_tier === "pro"
-                            ? { background: "var(--info-soft)", color: "var(--info)" }
-                            : { background: "transparent", color: "var(--muted)" }
-                        }
-                      >
-                        {s.subscription_tier === "pro" ? "Pro" : "Free"}
-                      </span>
-                      {s.subscription_status && s.subscription_status !== "active" && (
-                        <div
-                          style={{ fontSize: 10.5, color: "var(--accent)", marginTop: 4, textTransform: "uppercase", letterSpacing: 0.6 }}
-                          title="Subscription status"
-                        >
-                          {s.subscription_status.replace(/_/g, " ")}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ fontSize: 12, color: "var(--ink-soft)" }}>
-                      {s.grade_level > 0 ? gradeLabel(s.grade_level) : "—"}
-                    </td>
-                    <td>
-                      <div style={{ fontSize: 12 }} title={new Date(s.registered).toLocaleString()}>
-                        {formatRelativeDate(s.registered)}
-                      </div>
-                    </td>
-                    <td>
-                      <div
-                        style={{ fontSize: 12 }}
-                        title={s.last_active ? new Date(s.last_active).toLocaleString() : undefined}
-                      >
-                        {s.last_active ? formatRelativeDate(s.last_active) : "—"}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Pagination
-              offset={studentOffset}
-              limit={ROSTER_PAGE_SIZE}
-              total={students.total_students}
-              onChange={setStudentOffset}
-            />
-          </div>
-        )}
-      </Section>
     </div>
   );
 }
 
 function gradeLabel(grade: number): string {
+  if (grade <= 0) return "—";
   if (grade <= 2) return "K–2";
   if (grade <= 5) return "3–5";
   if (grade <= 8) return "6–8";
   if (grade <= 12) return "9–12";
   return "College";
+}
+
+/* ── Teacher → classes breakdown ───────────────────────────────── */
+
+function TeacherBlock({
+  teacher,
+  openSections,
+  onToggleSection,
+}: {
+  teacher: SchoolTeacher;
+  openSections: Set<string>;
+  onToggleSection: (id: string) => void;
+}) {
+  // Teacher's last activity = the most recent submission across their
+  // classes. Section-rolled cost + gen cost gives their full footprint.
+  const sectionCost = teacher.sections.reduce((sum, s) => sum + s.cost_30d, 0);
+  const totalCost = sectionCost + teacher.gen_cost_30d;
+  const lastAt = teacher.sections
+    .map((s) => s.last_activity_at)
+    .filter((d): d is string => !!d)
+    .sort()
+    .at(-1) ?? null;
+  const studentTotal = teacher.sections.reduce((sum, s) => sum + s.student_count, 0);
+
+  return (
+    <div style={{ border: "1px solid var(--rule)", borderRadius: 4, overflow: "hidden" }}>
+      {/* Teacher header */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 16,
+          padding: "16px 18px",
+          background: "var(--paper-2)",
+          borderBottom: teacher.sections.length > 0 ? "1px solid var(--rule)" : "none",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <Link
+            to={`/teachers/${teacher.id}`}
+            style={{
+              fontFamily: "var(--font-display)",
+              fontSize: 18,
+              color: "var(--ink)",
+              textDecoration: "none",
+            }}
+            title="View this teacher's roster"
+          >
+            {teacher.name || "—"}
+          </Link>
+          <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {teacher.email}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--muted-2)", marginTop: 6 }}>
+            {teacher.sections.length} class{teacher.sections.length === 1 ? "" : "es"}
+            {" · "}
+            {studentTotal} student{studentTotal === 1 ? "" : "s"}
+            {" · "}
+            {lastAt ? `active ${formatRelativeDate(lastAt)}` : "no activity yet"}
+          </div>
+        </div>
+        <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 16, color: totalCost > 0 ? "var(--ink)" : "var(--muted-2)", letterSpacing: -0.2 }}>
+            {fmtCost(totalCost)}
+            <span style={{ fontSize: 10.5, color: "var(--muted)", fontFamily: "var(--font-sans)", marginLeft: 5 }}>· 30d</span>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3 }} title="Authoring/generation spend not tied to a submission">
+            {fmtCost(teacher.gen_cost_30d)} generation · {teacher.gen_call_count_30d.toLocaleString()} call{teacher.gen_call_count_30d === 1 ? "" : "s"}
+          </div>
+          <Link
+            to={`/llm-calls?user=${teacher.id}&hours=720`}
+            className="link-btn"
+            style={{ fontSize: 11.5, marginTop: 4, display: "inline-block" }}
+          >
+            View calls →
+          </Link>
+        </div>
+      </div>
+
+      {/* Sections (class periods) */}
+      {teacher.sections.length === 0 ? (
+        <div style={{ padding: "14px 18px", fontSize: 12.5, color: "var(--muted)", fontStyle: "italic" }}>
+          No classes yet.
+        </div>
+      ) : (
+        <div>
+          {teacher.sections.map((s) => (
+            <SectionRow
+              key={s.id}
+              section={s}
+              open={openSections.has(s.id)}
+              onToggle={() => onToggleSection(s.id)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const STUDENT_COLS: Column<SchoolSection["students"][number]>[] = [
+  {
+    key: "student",
+    header: "Student",
+    width: "40%",
+    render: (s) => (
+      <div style={{ minWidth: 0 }}>
+        <div style={{ color: "var(--ink)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis" }}>{s.name || "—"}</div>
+        <div style={{ fontSize: 11.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis" }}>{s.email}</div>
+      </div>
+    ),
+  },
+  {
+    key: "grade",
+    header: "Grade",
+    width: "12%",
+    render: (s) => <span style={{ color: "var(--ink-soft)" }}>{gradeLabel(s.grade_level)}</span>,
+  },
+  {
+    key: "subs",
+    header: "Submissions",
+    numeric: true,
+    width: "16%",
+    sortValue: (s) => s.submission_count,
+    render: (s) => (
+      <span style={{ color: s.submission_count > 0 ? "var(--ink)" : "var(--muted-2)" }}>
+        {s.submission_count}
+      </span>
+    ),
+  },
+  {
+    key: "grade_avg",
+    header: "Avg grade",
+    numeric: true,
+    width: "16%",
+    sortValue: (s) => s.avg_score ?? -1,
+    render: (s) =>
+      s.avg_score === null ? (
+        <span style={{ color: "var(--muted-2)" }}>—</span>
+      ) : (
+        <span style={{ color: "var(--ink)" }} title={`${s.graded_count} graded`}>{Math.round(s.avg_score)}%</span>
+      ),
+  },
+  {
+    key: "last",
+    header: "Last work",
+    width: "16%",
+    align: "right",
+    render: (s) => (
+      <span style={{ color: "var(--ink-soft)", fontSize: 12 }}>
+        {s.last_activity_at ? formatRelativeDate(s.last_activity_at) : "—"}
+      </span>
+    ),
+  },
+];
+
+function SectionRow({
+  section,
+  open,
+  onToggle,
+}: {
+  section: SchoolSection;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div style={{ borderTop: "1px solid var(--rule)" }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        style={{
+          width: "100%",
+          display: "grid",
+          gridTemplateColumns: "18px 2fr 1fr 1fr 1fr 1.1fr",
+          gap: 14,
+          alignItems: "center",
+          padding: "13px 18px",
+          background: open ? "var(--paper-2)" : "transparent",
+          border: "none",
+          cursor: "pointer",
+          textAlign: "left",
+          font: "inherit",
+        }}
+      >
+        <span aria-hidden="true" style={{ fontSize: 10, color: "var(--muted-2)", transition: "transform 0.12s", transform: open ? "rotate(90deg)" : "none" }}>▶</span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 15.5, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {section.name}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {section.course_name}
+          </div>
+        </div>
+        <SectionStat value={section.student_count} label="students" />
+        <SectionStat value={section.submitted_count} label="submitted" tone={section.submitted_count > 0 ? "ink" : "muted"} />
+        <div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 14, color: section.cost_30d > 0 ? "var(--ink)" : "var(--muted-2)", letterSpacing: -0.2 }}>
+            {fmtCost(section.cost_30d)}
+          </div>
+          <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 }}>cost · 30d</div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>
+            {section.last_activity_at ? formatRelativeDate(section.last_activity_at) : "none yet"}
+          </div>
+          <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 }}>last work</div>
+        </div>
+      </button>
+
+      {open && (
+        <div style={{ padding: "4px 18px 18px", background: "var(--paper-2)" }}>
+          {section.students.length === 0 ? (
+            <p style={{ fontSize: 12.5, color: "var(--muted)", fontStyle: "italic", margin: "8px 0 0" }}>
+              No students enrolled in this class yet.
+            </p>
+          ) : (
+            <DataTable
+              columns={STUDENT_COLS}
+              rows={section.students}
+              rowKey={(s) => s.id}
+              defaultSort={{ key: "student", dir: "asc" }}
+              minWidth={520}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SectionStat({ value, label, tone = "ink" }: { value: number; label: string; tone?: "ink" | "muted" }) {
+  return (
+    <div>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: 15, color: tone === "ink" && value > 0 ? "var(--ink)" : "var(--muted-2)", letterSpacing: -0.2 }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.8, marginTop: 2 }}>{label}</div>
+    </div>
+  );
 }
 
 /* ── Subcomponents ─────────────────────────────────────────────── */
@@ -1089,4 +1161,3 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
-
