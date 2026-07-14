@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   api,
-  type AdminActionLogData,
+  type ActivityLogData,
   type StudentAccessLogData,
 } from "../lib/api";
 import { Pagination } from "../components/Pagination";
@@ -10,25 +10,26 @@ import { Pagination } from "../components/Pagination";
 /**
  * Audit log viewer for the two compliance trails:
  *  - FERPA student-record access (teacher/admin reads)
- *  - Admin actions (writes — delete, role change, etc.)
+ *  - Activity (writes — admin AND teacher: role changes, assignment
+ *    publishes, generation starts, grade saves, etc.)
  *
  * Single page, two tabs. URL-driven filters for deep links
- * (e.g. /audit-logs?tab=admin-actions&action=user.*). Pagination is
+ * (e.g. /audit-logs?tab=activity&action=grade.*). Pagination is
  * offset-based to match the backend; the visible page size matches
  * other operational pages.
  */
 
-type Tab = "student-access" | "admin-actions";
+type Tab = "student-access" | "activity";
 const PAGE_SIZE = 50;
 
 export default function AuditLogs() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tab: Tab =
-    searchParams.get("tab") === "admin-actions" ? "admin-actions" : "student-access";
+    searchParams.get("tab") === "activity" ? "activity" : "student-access";
 
   const setTab = (next: Tab) => {
     const params = new URLSearchParams(searchParams);
-    if (next === "admin-actions") params.set("tab", "admin-actions");
+    if (next === "activity") params.set("tab", "activity");
     else params.delete("tab");
     params.delete("offset");
     setSearchParams(params);
@@ -55,14 +56,14 @@ export default function AuditLogs() {
         </button>
         <button
           type="button"
-          className={tab === "admin-actions" ? "btn-primary" : "btn-secondary"}
-          onClick={() => setTab("admin-actions")}
+          className={tab === "activity" ? "btn-primary" : "btn-secondary"}
+          onClick={() => setTab("activity")}
         >
-          Admin actions
+          Activity
         </button>
       </div>
 
-      {tab === "student-access" ? <StudentAccessTab /> : <AdminActionsTab />}
+      {tab === "student-access" ? <StudentAccessTab /> : <ActivityTab />}
     </div>
   );
 }
@@ -207,12 +208,13 @@ function StudentAccessTab() {
   );
 }
 
-function AdminActionsTab() {
+function ActivityTab() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [data, setData] = useState<AdminActionLogData | null>(null);
+  const [data, setData] = useState<ActivityLogData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const adminUserId = searchParams.get("admin_user_id") ?? "";
+  const actorUserId = searchParams.get("actor_user_id") ?? "";
+  const actorRole = searchParams.get("actor_role") ?? "";
   const action = searchParams.get("action") ?? "";
   const targetType = searchParams.get("target_type") ?? "";
   const offset = Number(searchParams.get("offset") ?? "0");
@@ -221,8 +223,9 @@ function AdminActionsTab() {
     let cancelled = false;
     // No setData(null) reset — see StudentAccessTab for rationale.
     api
-      .adminActionLog({
-        admin_user_id: adminUserId,
+      .activityLog({
+        actor_user_id: actorUserId,
+        actor_role: actorRole,
         action,
         target_type: targetType,
         limit: String(PAGE_SIZE),
@@ -240,7 +243,7 @@ function AdminActionsTab() {
     return () => {
       cancelled = true;
     };
-  }, [adminUserId, action, targetType, offset]);
+  }, [actorUserId, actorRole, action, targetType, offset]);
 
   function updateFilter(key: string, value: string) {
     const params = new URLSearchParams(searchParams);
@@ -259,24 +262,32 @@ function AdminActionsTab() {
 
   return (
     <div>
-      <div className="filters" style={{ display: "flex", gap: 12, marginTop: 16 }}>
+      <div className="filters" style={{ display: "flex", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
         <input
-          placeholder="Admin user ID (UUID)"
-          value={adminUserId}
-          onChange={(e) => updateFilter("admin_user_id", e.target.value.trim())}
+          placeholder="Actor user ID (UUID)"
+          value={actorUserId}
+          onChange={(e) => updateFilter("actor_user_id", e.target.value.trim())}
           style={{ minWidth: 320 }}
         />
+        <select
+          value={actorRole}
+          onChange={(e) => updateFilter("actor_role", e.target.value)}
+        >
+          <option value="">All roles</option>
+          <option value="teacher">Teacher</option>
+          <option value="admin">Admin</option>
+        </select>
         <input
-          placeholder='Action (e.g. "user.delete" or "user.*")'
+          placeholder='Action (e.g. "grade.publish" or "grade.*")'
           value={action}
           onChange={(e) => updateFilter("action", e.target.value.trim())}
           style={{ minWidth: 260 }}
         />
         <input
-          placeholder="Target type (user, school, etc.)"
+          placeholder="Target type (assignment, submission, etc.)"
           value={targetType}
           onChange={(e) => updateFilter("target_type", e.target.value.trim())}
-          style={{ minWidth: 200 }}
+          style={{ minWidth: 220 }}
         />
       </div>
 
@@ -290,11 +301,11 @@ function AdminActionsTab() {
               <thead>
                 <tr>
                   <th>When</th>
-                  <th>Admin</th>
+                  <th>Actor</th>
+                  <th>Role</th>
                   <th>Action</th>
                   <th>Target</th>
                   <th>Metadata</th>
-                  <th>IP</th>
                 </tr>
               </thead>
               <tbody>
@@ -302,11 +313,12 @@ function AdminActionsTab() {
                   <tr key={e.id}>
                     <td>{new Date(e.performed_at).toLocaleString()}</td>
                     <td>
-                      <div>{e.admin_name ?? "—"}</div>
+                      <div>{e.actor_name ?? "—"}</div>
                       <div style={{ fontSize: 11, color: "#888" }}>
-                        {e.admin_email ?? e.admin_user_id ?? ""}
+                        {e.actor_email ?? e.actor_user_id ?? ""}
                       </div>
                     </td>
+                    <td style={{ fontSize: 12, color: "var(--muted)" }}>{e.actor_role}</td>
                     <td style={{ fontFamily: "monospace" }}>{e.action}</td>
                     <td>
                       <div>{e.target_type}</div>
@@ -325,15 +337,12 @@ function AdminActionsTab() {
                     >
                       {e.metadata ? JSON.stringify(e.metadata) : "—"}
                     </td>
-                    <td style={{ fontFamily: "monospace", fontSize: 11, color: "#888" }}>
-                      {e.ip_address ?? "—"}
-                    </td>
                   </tr>
                 ))}
                 {data.entries.length === 0 && (
                   <tr>
                     <td colSpan={6} style={{ textAlign: "center", padding: 24, color: "#888" }}>
-                      No admin actions match the current filters.
+                      No activity matches the current filters.
                     </td>
                   </tr>
                 )}
