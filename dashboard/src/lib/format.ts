@@ -18,8 +18,11 @@ export function formatRelativeDate(dateStr: string): string {
 
 // Cost formatter — tiered precision so a $400/mo school bill and a
 // $0.0008 per-submission unit cost both render legibly. Single source
-// of truth so the same value reads the same on every page.
+// of truth so the same value reads the same on every page. Exactly-zero
+// spend renders as an em-dash ("no spend"): "$0.0000" reads oddly and
+// buries genuine zero-cost rows in noise.
 export function fmtCost(n: number): string {
+  if (n === 0) return "—";
   if (n >= 1000) return `$${n.toFixed(0)}`;
   if (n >= 10) return `$${n.toFixed(2)}`;
   if (n >= 1) return `$${n.toFixed(2)}`;

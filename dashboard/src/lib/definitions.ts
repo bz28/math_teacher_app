@@ -5,9 +5,16 @@
  * it moves everywhere at once.
  *
  * ── Terms in plain English ─────────────────────────────────────────
+ * - Not started — never active at all (no recency timestamp). Signed
+ *                 up but hasn't done a single thing yet. This is an
+ *                 onboarding gap, NOT a lapse — a school still deciding
+ *                 to start looks nothing like one that quit, so we keep
+ *                 the two apart (and never treat "not started" as
+ *                 at-risk).
  * - Active   — did SOMETHING within the last 7 days.
  * - Stale    — went quiet 8–29 days ago (cooling off; worth a nudge).
- * - Dormant  — silent 30+ days, or never seen (effectively gone).
+ * - Dormant  — WAS active and has since gone silent 30+ days (went
+ *              quiet; effectively gone). Distinct from "not started".
  * - At-risk  — was engaged and has since gone quiet (14+ days), OR is
  *              throwing failed AI calls right now. This is the "needs
  *              you" signal, distinct from a customer who simply hasn't
@@ -39,7 +46,7 @@ export const COST_WINDOW_DAYS = 30;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export type ActivityStatus = "active" | "stale" | "dormant";
+export type ActivityStatus = "not_started" | "active" | "stale" | "dormant";
 
 /** Days elapsed since an ISO timestamp, or null if absent/unparseable. */
 export function daysSince(iso: string | null | undefined): number | null {
@@ -51,11 +58,14 @@ export function daysSince(iso: string | null | undefined): number | null {
 
 /**
  * Classify an entity by how recently it last did anything.
- * A null/absent timestamp (never active) counts as dormant.
+ * A null/absent timestamp means the entity has NEVER been active — that
+ * is "not_started" (an onboarding gap), NOT "dormant" (which means it
+ * WAS active and then went quiet). Only entities with a real timestamp
+ * fall into active / stale / dormant.
  */
 export function activityStatus(lastActiveAt: string | null | undefined): ActivityStatus {
   const d = daysSince(lastActiveAt);
-  if (d === null) return "dormant";
+  if (d === null) return "not_started";
   if (d <= ACTIVE_WITHIN_DAYS) return "active";
   if (d < DORMANT_AFTER_DAYS) return "stale";
   return "dormant";
@@ -110,10 +120,15 @@ export function costWindowLabel(days: number = COST_WINDOW_DAYS): string {
  * (Tone strings match StatusPill's PillTone union.)
  */
 export function activityPill(status: ActivityStatus): {
-  tone: "ok" | "warn" | "neutral";
+  tone: "ok" | "warn" | "neutral" | "info";
   label: string;
 } {
   switch (status) {
+    case "not_started":
+      // Info (blue), never danger: a never-started entity is an
+      // onboarding gap, not an at-risk customer. Distinct muted-vs-info
+      // tone keeps it visually separate from "dormant".
+      return { tone: "info", label: "NOT STARTED" };
     case "active":
       return { tone: "ok", label: "ACTIVE" };
     case "stale":
