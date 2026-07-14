@@ -78,8 +78,11 @@ export default function Users() {
         limit: String(PAGE_SIZE),
         offset: String(offset),
         ...(role ? { role } : {}),
-        ...(plan ? { plan } : {}),
-        ...(schoolId ? { school_id: schoolId } : {}),
+        // Plan / school selects are hidden on the Admin preset, so
+        // don't let a value left over from another view silently
+        // filter the admin list into an empty, unexplained state.
+        ...(!isAdminView && plan ? { plan } : {}),
+        ...(!isAdminView && schoolId ? { school_id: schoolId } : {}),
         ...(search ? { search } : {}),
       })
       .then((d) => { setData(d); setError(null); })
