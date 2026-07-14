@@ -436,49 +436,17 @@ export const submitHomework = (assignmentId: string, files: string[]) =>
 
 // The Vision extraction wire shape — a flat list of steps and final
 // answers, each tagged with the 1-based HW problem_position it belongs to
-// (null = unattributed scratchwork). The UI groups by position. Mirrors
-// the web client's IntegrityExtraction.
-export interface ExtractionStep {
-  step_num: number;
-  problem_position: number | null;
-  latex: string;
-  plain_english: string;
-}
-
-export interface ExtractionFinalAnswer {
-  problem_position: number;
-  answer_latex: string;
-  answer_plain: string;
-}
-
-export interface Extraction {
-  steps: ExtractionStep[];
-  final_answers: ExtractionFinalAnswer[];
-  confidence: number;
-}
-
-/** One file the student turned in. `data` is raw base64 (no data: prefix);
- *  `media_type` is image/jpeg, image/png, or application/pdf. */
-export interface SubmissionFile {
-  data: string;
-  media_type: string;
-  filename?: string | null;
-}
-
-export interface SubmissionState {
-  submission_id: string;
-  submitted_at: string;
-  is_late: boolean;
-  /** Everything the student submitted, in upload order. Lets the confirm
-   *  + submitted screens show the source pages to compare against. Null
-   *  only on rows that pre-date the multi-file column. */
-  files: SubmissionFile[] | null;
-  extraction: Extraction | null;
-  extraction_confirmed_at: string | null;
-  extraction_flagged_at: string | null;
-  integrity_check_enabled: boolean;
-  ai_grading_enabled: boolean;
-}
+// (null = unattributed scratchwork). The UI groups by position. These
+// alias the backend-generated schemas so the wire shape has a single
+// authoritative source (api/schemas/extraction.py) instead of a
+// hand-maintained copy that can drift. `SubmissionState` mirrors
+// StudentSubmissionDetail — it additionally carries `final_answers`,
+// which mobile doesn't currently read.
+export type ExtractionStep = Schemas["ExtractionStepOut"];
+export type ExtractionFinalAnswer = Schemas["ExtractionFinalAnswerOut"];
+export type Extraction = Schemas["ExtractionOut"];
+export type SubmissionFile = Schemas["SubmissionFileOut"];
+export type SubmissionState = Schemas["StudentSubmissionDetail"];
 
 export const getSubmission = (assignmentId: string) =>
   apiGet<SubmissionState>(`/school/student/homework/${assignmentId}/submission`);

@@ -43,6 +43,7 @@ from api.models.integrity_check import (
 from api.models.question_bank import QuestionBankItem
 from api.models.user import User
 from api.routes.teacher_assignments import get_teacher_assignment
+from api.schemas.extraction import ExtractionOut
 from api.services.bank import problem_ids_in_content
 
 router = APIRouter(tags=["integrity"])
@@ -123,7 +124,7 @@ class IntegrityStateResponse(BaseModel):
     # now carries its own slice (see #303), so this is just a
     # convenience mirror of the first problem's slice used by the
     # student's in-chat "View my work" reference panel.
-    extraction: dict[str, Any] | None
+    extraction: ExtractionOut | None
     problems: list[ProblemSummary]
     transcript: list[TurnOut]
 

@@ -3787,6 +3787,53 @@ export interface components {
             /** Subscription Tier */
             subscription_tier: string;
         };
+        /**
+         * ExtractionFinalAnswerOut
+         * @description One per-problem final answer Vision read off the page.
+         */
+        ExtractionFinalAnswerOut: {
+            /** Answer Latex */
+            answer_latex: string;
+            /** Answer Plain */
+            answer_plain: string;
+            /** Problem Position */
+            problem_position: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ExtractionOut
+         * @description Full Vision extraction: ordered steps + per-problem final answers
+         *     + overall confidence. Also used for the per-problem *slice* mirror
+         *     (same shape, filtered to one problem) surfaced in the integrity
+         *     state's `extraction` field.
+         */
+        ExtractionOut: {
+            /** Confidence */
+            confidence: number;
+            /** Final Answers */
+            final_answers: components["schemas"]["ExtractionFinalAnswerOut"][];
+            /** Steps */
+            steps: components["schemas"]["ExtractionStepOut"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ExtractionStepOut
+         * @description One work step Vision transcribed from the student's page.
+         */
+        ExtractionStepOut: {
+            /** Latex */
+            latex: string;
+            /** Plain English */
+            plain_english: string;
+            /** Problem Position */
+            problem_position: number | null;
+            /** Step Num */
+            step_num: number;
+        } & {
+            [key: string]: unknown;
+        };
         /** FlagRequest */
         FlagRequest: {
             /** Flagged */
@@ -4026,10 +4073,7 @@ export interface components {
         IntegrityStateResponse: {
             /** Disposition */
             disposition: string | null;
-            /** Extraction */
-            extraction: {
-                [key: string]: unknown;
-            } | null;
+            extraction: components["schemas"]["ExtractionOut"] | null;
             /** Overall Status */
             overall_status: string;
             /** Problems */
@@ -4757,18 +4801,13 @@ export interface components {
         StudentSubmissionDetail: {
             /** Ai Grading Enabled */
             ai_grading_enabled: boolean;
-            /** Extraction */
-            extraction: {
-                [key: string]: unknown;
-            } | null;
+            extraction: components["schemas"]["ExtractionOut"] | null;
             /** Extraction Confirmed At */
             extraction_confirmed_at: string | null;
             /** Extraction Flagged At */
             extraction_flagged_at: string | null;
             /** Files */
-            files: {
-                [key: string]: string;
-            }[] | null;
+            files: components["schemas"]["SubmissionFileOut"][] | null;
             /** Final Answers */
             final_answers: {
                 [key: string]: string;
@@ -4784,6 +4823,21 @@ export interface components {
              * Format: date-time
              */
             submitted_at: string;
+        };
+        /**
+         * SubmissionFileOut
+         * @description One file the student turned in. `data` is raw base64 (no `data:`
+         *     prefix); `media_type` is image/jpeg, image/png, or application/pdf.
+         */
+        SubmissionFileOut: {
+            /** Data */
+            data: string;
+            /** Filename */
+            filename?: string | null;
+            /** Media Type */
+            media_type: string;
+        } & {
+            [key: string]: unknown;
         };
         /** SubmitHomeworkRequest */
         SubmitHomeworkRequest: {

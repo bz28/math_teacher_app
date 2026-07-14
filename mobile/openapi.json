@@ -1115,6 +1115,99 @@
         "title": "EntitlementsResponse",
         "type": "object"
       },
+      "ExtractionFinalAnswerOut": {
+        "additionalProperties": true,
+        "description": "One per-problem final answer Vision read off the page.",
+        "properties": {
+          "answer_latex": {
+            "title": "Answer Latex",
+            "type": "string"
+          },
+          "answer_plain": {
+            "title": "Answer Plain",
+            "type": "string"
+          },
+          "problem_position": {
+            "title": "Problem Position",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "problem_position",
+          "answer_latex",
+          "answer_plain"
+        ],
+        "title": "ExtractionFinalAnswerOut",
+        "type": "object"
+      },
+      "ExtractionOut": {
+        "additionalProperties": true,
+        "description": "Full Vision extraction: ordered steps + per-problem final answers\n+ overall confidence. Also used for the per-problem *slice* mirror\n(same shape, filtered to one problem) surfaced in the integrity\nstate's `extraction` field.",
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "final_answers": {
+            "items": {
+              "$ref": "#/components/schemas/ExtractionFinalAnswerOut"
+            },
+            "title": "Final Answers",
+            "type": "array"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/ExtractionStepOut"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "steps",
+          "final_answers",
+          "confidence"
+        ],
+        "title": "ExtractionOut",
+        "type": "object"
+      },
+      "ExtractionStepOut": {
+        "additionalProperties": true,
+        "description": "One work step Vision transcribed from the student's page.",
+        "properties": {
+          "latex": {
+            "title": "Latex",
+            "type": "string"
+          },
+          "plain_english": {
+            "title": "Plain English",
+            "type": "string"
+          },
+          "problem_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem Position"
+          },
+          "step_num": {
+            "title": "Step Num",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "step_num",
+          "problem_position",
+          "latex",
+          "plain_english"
+        ],
+        "title": "ExtractionStepOut",
+        "type": "object"
+      },
       "FlagRequest": {
         "properties": {
           "flagged": {
@@ -1621,14 +1714,12 @@
           "extraction": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/ExtractionOut"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Extraction"
+            ]
           },
           "overall_status": {
             "title": "Overall Status",
@@ -3464,14 +3555,12 @@
           "extraction": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/ExtractionOut"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Extraction"
+            ]
           },
           "extraction_confirmed_at": {
             "anyOf": [
@@ -3501,10 +3590,7 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "type": "object"
+                  "$ref": "#/components/schemas/SubmissionFileOut"
                 },
                 "type": "array"
               },
@@ -3552,6 +3638,37 @@
           "ai_grading_enabled"
         ],
         "title": "StudentSubmissionDetail",
+        "type": "object"
+      },
+      "SubmissionFileOut": {
+        "additionalProperties": true,
+        "description": "One file the student turned in. `data` is raw base64 (no `data:`\nprefix); `media_type` is image/jpeg, image/png, or application/pdf.",
+        "properties": {
+          "data": {
+            "title": "Data",
+            "type": "string"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "media_type": {
+            "title": "Media Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "media_type"
+        ],
+        "title": "SubmissionFileOut",
         "type": "object"
       },
       "SubmitHomeworkRequest": {

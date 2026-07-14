@@ -2135,12 +2135,17 @@ export interface StudentHomeworkDetail {
   breakdown: StudentProblemFeedback[] | null;
 }
 
+/** Mirrors the backend `SubmissionFileOut` (api/schemas/extraction.py),
+ *  the authoritative wire shape. Web has no OpenAPI codegen, so this stays
+ *  hand-maintained — keep it in sync with that model. */
 export interface SubmissionFile {
   /** Base64-encoded payload (no `data:` prefix). */
   data: string;
   /** Detected media type — image/jpeg, image/png, application/pdf. */
   media_type: string;
-  /** Original filename, when the client supplied it. */
+  /** Never populated by the backend today; read defensively (falls back
+   *  to "Page N") on the confirm/submitted screens. Optional to match the
+   *  backend's Optional contract field. */
   filename?: string | null;
 }
 
@@ -2607,6 +2612,10 @@ export interface IntegrityExtractionFinalAnswer {
   answer_plain: string;
 }
 
+/** Mirrors the backend `ExtractionOut` (api/schemas/extraction.py), the
+ *  authoritative wire shape. Web has no OpenAPI codegen, so this stays
+ *  hand-maintained — keep it (and the Step/FinalAnswer shapes above) in
+ *  sync with that model. */
 export interface IntegrityExtraction {
   steps: IntegrityExtractionStep[];
   final_answers: IntegrityExtractionFinalAnswer[];
