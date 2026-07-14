@@ -753,8 +753,11 @@ export interface SchoolListItem {
   contact_email: string;
   is_active: boolean;
   teacher_count: number;
+  student_count: number;
   cost_30d: number;
   cost_prev_30d: number;
+  submissions_7d: number;
+  failed_calls_24h: number;
   last_activity_at: string | null;
   // Unified recency = max(last submission, last ActivityLog action).
   // Prefer over last_activity_at for active/stale/dormant — folds in
@@ -800,9 +803,12 @@ export interface SchoolOverviewData {
   school_name: string;
   is_internal: boolean;
   generated_at: string;
+  last_activity_at: string | null;
   cost: {
     this_month: number;
     last_month: number;
+    cost_30d: number;
+    cost_prev_30d: number;
     projected_month_end: number;
     trend_12_weeks: { week_start: string | null; cost: number }[];
   };

@@ -79,7 +79,7 @@ export default function Overview() {
   }, [hours, grade, reloadKey]);
 
   const atRiskSchools = useMemo(
-    () => schools.filter((s) => s.is_active && isAtRisk({ lastActiveAt: s.last_activity_at })).length,
+    () => schools.filter((s) => s.is_active && isAtRisk({ lastActiveAt: s.last_activity_at, failedCalls: s.failed_calls_24h })).length,
     [schools],
   );
 
