@@ -540,7 +540,7 @@ function DocumentThumb({ docId, filename, fileType }: { docId: string; filename:
   return <div style={placeholderStyle}>{filename} ({fileType})</div>;
 }
 
-function base64ToBytes(b64: string): Uint8Array {
+function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -548,9 +548,11 @@ function base64ToBytes(b64: string): Uint8Array {
 }
 
 // Render the first page of a stored PDF to a canvas thumbnail via pdf.js.
-// Click opens the full document (data URI) in a new tab — the browser's
-// native PDF viewer gives the click-to-expand view for free, mirroring how
-// ImageThumb links to its own full-size source.
+// Click opens the full document in a new tab — the browser's native PDF viewer
+// gives the click-to-expand view for free, mirroring how ImageThumb links to
+// its own full-size source. The link points at a blob: URL rather than a
+// data: URL because Chrome blocks top-frame navigation to data: URLs (an
+// anti-phishing measure), which silently swallowed a direct left-click.
 function PdfThumb({ b64, label }: { b64: string; label: string }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [error, setError] = useState(false);
@@ -565,6 +567,27 @@ function PdfThumb({ b64, label }: { b64: string; label: string }) {
       return null;
     }
   }, [b64]);
+
+  // Build a blob: URL from the already-decoded bytes (no re-fetch) so a normal
+  // left-click on the anchor opens the PDF. Chrome blocks top-frame navigation
+  // to data: URLs, so a data: href silently swallowed the click — a blob: URL
+  // navigates fine. Create it inside the effect and revoke in the same cleanup
+  // so the URL that's live in the anchor is always the one this effect owns:
+  // under StrictMode's mount→cleanup→mount, the remount recreates a fresh URL
+  // rather than leaving the anchor pointing at a revoked one.
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!bytes) return;
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    // Syncing an external, non-render-safe resource (an object URL) into state;
+    // runs once per decoded PDF, so it's not a cascading render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPdfUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+      setPdfUrl(null);
+    };
+  }, [bytes]);
 
   useEffect(() => {
     if (!bytes) return;
@@ -605,10 +628,10 @@ function PdfThumb({ b64, label }: { b64: string; label: string }) {
 
   return (
     <a
-      href={`data:application/pdf;base64,${b64}`}
+      href={pdfUrl ?? undefined}
       target="_blank"
-      rel="noreferrer"
-      style={{ display: "inline-block" }}
+      rel="noopener noreferrer"
+      style={{ display: "inline-block", cursor: pdfUrl ? "pointer" : "default" }}
     >
       <div
         style={{
