@@ -718,6 +718,7 @@ export interface TeacherStudentsData {
 export interface UsersData {
   total_users: number;
   active_7d: number;
+  new_users: number;
   total_spend: number;
   filtered_count: number;
   registrations_by_day: { day: string; count: number }[];

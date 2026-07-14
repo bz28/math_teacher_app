@@ -1,14 +1,12 @@
-import UserScopePanel from "../components/UserScopePanel";
+import IndependentPanel from "../components/IndependentPanel";
 
 export default function IndependentStudents() {
   return (
-    <UserScopePanel
+    <IndependentPanel
       eyebrow="Audience"
       title="Independent students"
-      subtitle="Consumer learners with no school affiliation — find the conversion-ready, the heavy users, and the silent churners."
+      subtitle="Consumer learners with no school affiliation — who they are and how active they've been."
       role="student"
-      showDailyUsage
-      showStudentChips
       emptyMessage="No independent students for this window."
     />
   );
