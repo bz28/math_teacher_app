@@ -161,5 +161,8 @@ async def test_overview_p95_latency_computed_and_at_least_median(
     assert p95 >= median
     # The tail pulls p95 above the 100ms body — proof it's not just the mode.
     assert p95 > median
-    # …and the excluded failed call's 99999ms never leaks in.
-    assert p95 < 99999.0
+    # The failed 99999ms call must be excluded. With 95×100 + 5×5000
+    # successful calls, percentile_cont(0.95) ≈ 345ms; if the filter
+    # were dropped the failed call would drag p95 up to ≈5000ms. A
+    # tight bound below that gap is what actually guards the exclusion.
+    assert p95 < 1000.0
