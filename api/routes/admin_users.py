@@ -136,6 +136,15 @@ async def users(
         )
     )).scalar() or 0.0
 
+    # New users in the selected window (scope-filtered, unlike
+    # registrations_by_day which is intentionally global). Powers the
+    # "New this window" tile on the Independent teacher/student tabs.
+    new_users = (await db.execute(
+        select(func.count()).select_from(User).where(
+            *scope_filters, User.created_at >= since
+        )
+    )).scalar() or 0
+
     # Registrations over time
     registrations_by_day = (await db.execute(
         select(
@@ -441,6 +450,7 @@ async def users(
     return {
         "total_users": total_users,
         "active_7d": active_7d,
+        "new_users": new_users,
         "total_spend": round(total_spend, 4),
         "filtered_count": filtered_count,
         "registrations_by_day": [

@@ -1,13 +1,12 @@
-import UserScopePanel from "../components/UserScopePanel";
+import IndependentPanel from "../components/IndependentPanel";
 
 export default function IndependentTeachers() {
   return (
-    <UserScopePanel
+    <IndependentPanel
       eyebrow="Audience"
       title="Independent teachers"
-      subtitle="Teachers piloting outside a school deal — find the ones with real classrooms and convert."
+      subtitle="Teachers using Veradic outside a school deal — who they are and how active they've been."
       role="teacher"
-      showClassroom
       emptyMessage="No independent teachers for this window."
     />
   );
