@@ -1,55 +1,58 @@
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
-  LineChart, Line,
+  PieChart, Pie, Cell, Legend, AreaChart, Area, LineChart, Line,
 } from "recharts";
 import { api, type LLMCallsData, type SchoolListItem } from "../lib/api";
-import { formatRelativeDate, shortModel } from "../lib/format";
-import StatCard from "../components/StatCard";
+import { formatRelativeDate, shortModel, shortId, fmtCost } from "../lib/format";
+import { windowLabel } from "../lib/definitions";
+import StatTile from "../components/StatTile";
+import StatusPill from "../components/StatusPill";
+import DataTable, { type Column } from "../components/DataTable";
 import MetadataChips from "../components/MetadataChips";
-import { Pagination } from "../components/Pagination";
+import { Pagination, SearchInput } from "../components/Pagination";
 import ErrorState from "../components/ErrorState";
 
 const COLORS = ["#14130f", "#4a6b3a", "#b8431a", "#3d5a78", "#a66b15", "#6b21a8"];
-
-type Tab = "all" | "failures";
 const PAGE_SIZE = 25;
+
+type CallRow = LLMCallsData["calls"][number];
+type Status = "" | "ok" | "failed";
+
+function fmtLatency(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
+}
 
 export default function LLMCalls() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tracePathFor = (submissionId: string) =>
-    `/submissions/${submissionId}/trace`;
+  const tracePathFor = (submissionId: string) => `/submissions/${submissionId}/trace`;
+
   const [data, setData] = useState<LLMCallsData | null>(null);
-  // `hours` is URL-driven so deep links from SchoolDetail / TeacherDetail
-  // ("View calls (30d)" → ?hours=720) and from Overview ("View failures"
-  // → ?hours=168) land on the time window they advertised. Initial state
-  // reads searchParams; subsequent edits sync back via handleHoursChange.
+  // Time window is URL-driven so deep links from Overview / SchoolDetail /
+  // TeacherDetail ("View calls (30d)" → ?hours=720, failed calls → ?status=
+  // failed) land on the window + scope they advertised.
   const [hours, setHours] = useState(searchParams.get("hours") ?? "24");
-  const [fnFilter, setFnFilter] = useState("");
   const [userFilter, setUserFilter] = useState(searchParams.get("user") ?? "");
+  const [fnFilter, setFnFilter] = useState("");
+  const [search, setSearch] = useState("");
+  // URL-driven scopes (deep-linkable): submission, session, school, status.
   const submissionFilter = searchParams.get("submission") ?? "";
-  // school filter is URL-driven so deep links from the School detail
-  // page (?school=:id&tab=failures&hours=168) land on a filtered view.
+  const sessionFilter = searchParams.get("session") ?? "";
   const schoolFilter = searchParams.get("school") ?? "";
-  // Tab is URL-driven so deep links like ?tab=failures from the
-  // Overview "View failures →" link land on the right view.
-  const tab: Tab = searchParams.get("tab") === "failures" ? "failures" : "all";
-  const setTab = (next: Tab) => {
-    const params = new URLSearchParams(searchParams);
-    if (next === "failures") params.set("tab", "failures");
-    else params.delete("tab");
-    setSearchParams(params);
-  };
+  const status: Status = ((): Status => {
+    const s = searchParams.get("status");
+    return s === "ok" || s === "failed" ? s : "";
+  })();
+
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [debugState, setDebugState] = useState<Record<string, string>>({});
   const [offset, setOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  // Schools list used to populate the School dropdown. Loaded once
-  // on mount — cheap query and rarely changes. If it fails the
-  // dropdown just hides; the URL filter still works.
+
+  // Schools list for the School dropdown. Loaded once — cheap and rarely
+  // changes; if it fails the dropdown just hides and the URL filter still works.
   const [schools, setSchools] = useState<SchoolListItem[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -66,68 +69,40 @@ export default function LLMCalls() {
       function: fnFilter,
       user_id: userFilter,
       submission_id: submissionFilter,
+      session_id: sessionFilter,
       school_id: schoolFilter,
-      // Failures tab filters server-side so total_count + pagination
-      // reflect only failed calls (not just failures on the current page).
-      ...(tab === "failures" ? { success: "false" } : {}),
+      search,
+      ...(status === "ok" ? { success: "true" } : status === "failed" ? { success: "false" } : {}),
       limit: String(PAGE_SIZE),
       offset: String(offset),
     })
       .then((d) => { if (!cancelled) { setData(d); setError(null); } })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load LLM calls."); });
     return () => { cancelled = true; };
-  }, [hours, fnFilter, userFilter, submissionFilter, schoolFilter, tab, offset, reloadKey]);
+  }, [hours, fnFilter, userFilter, submissionFilter, sessionFilter, schoolFilter, status, search, offset, reloadKey]);
 
-  // Reset offset whenever any non-pagination filter changes so a deep
-  // link (?submission=…, ?user=…) or a scope flip never lands past the
-  // end of the new result set. We do this in an effect rather than
-  // per-handler because submissionFilter/schoolFilter/tab are URL-
-  // driven (no handler to hook), and keeping every reset path in one
-  // place stops the two from drifting.
+  // Reset pagination whenever any non-offset filter changes so a deep link or
+  // scope flip never lands past the end of a smaller result set. One effect
+  // (not per-handler) because several filters are URL-driven with no handler.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOffset(0);
-  }, [userFilter, submissionFilter, schoolFilter, fnFilter, hours, tab]);
+  }, [hours, fnFilter, userFilter, submissionFilter, sessionFilter, schoolFilter, status, search]);
 
-  // Local-state handlers — offset reset is handled by the effect
-  // above, so we don't duplicate it here. handleHoursChange also
-  // mirrors the new value back into the URL so the user can copy
-  // a link that lands on the same window they're currently viewing.
   const handleHoursChange = (v: string) => {
     setHours(v);
     const next = new URLSearchParams(searchParams);
-    if (v === "24") next.delete("hours");
-    else next.set("hours", v);
+    if (v === "24") next.delete("hours"); else next.set("hours", v);
     setSearchParams(next);
   };
-  const handleUserFilter = (v: string) => setUserFilter(v);
-  const handleFnFilter = (v: string) => setFnFilter(fnFilter === v ? "" : v);
-  const clearSubmissionFilter = () => {
+  const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
-    next.delete("submission");
-    setSearchParams(next);
-  };
-  const clearSchoolFilter = () => {
-    const next = new URLSearchParams(searchParams);
-    next.delete("school");
-    setSearchParams(next);
-  };
-  const handleSchoolFilter = (id: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (id) next.set("school", id);
-    else next.delete("school");
-    setSearchParams(next);
-  };
-  const handleSubmissionChipClick = (id: string) => {
-    const next = new URLSearchParams(searchParams);
-    next.set("submission", id);
+    if (value) next.set(key, value); else next.delete(key);
     setSearchParams(next);
   };
 
   const handleDebug = async (callId: string) => {
-    if (!window.confirm("Dispatch a debugging agent for this call? It runs on GitHub and posts its findings as an issue.")) {
-      return;
-    }
+    if (!window.confirm("Dispatch a debugging agent for this call? It runs on GitHub and posts its findings as an issue.")) return;
     setDebugState((s) => ({ ...s, [callId]: "sending" }));
     try {
       await api.debugLLMCall(callId);
@@ -137,27 +112,67 @@ export default function LLMCalls() {
     }
   };
 
+  const columns: Column<CallRow>[] = useMemo(() => [
+    {
+      key: "created_at", header: "When", width: "16%",
+      sortValue: (c) => new Date(c.created_at).getTime(),
+      render: (c) => (
+        <span title={new Date(c.created_at).toLocaleString()}>{formatRelativeDate(c.created_at)}</span>
+      ),
+    },
+    {
+      key: "user", header: "User", width: "22%",
+      render: (c) => <span style={{ color: "var(--ink)" }}>{c.user_name || "—"}</span>,
+    },
+    {
+      key: "function", header: "Function", width: "26%",
+      render: (c) => (
+        <div style={{ minWidth: 0 }}>
+          <div style={{ color: "var(--ink)", fontWeight: 500 }}>{c.function}</div>
+          <div className="llm-ctx">
+            {c.submission_id && <span className="llm-ctx-tag" title={`submission ${c.submission_id}`}>▤ {shortId(c.submission_id)}</span>}
+            {c.session_id && <span className="llm-ctx-tag" title={`session ${c.session_id}`}>⧉ {shortId(c.session_id)}</span>}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "status", header: "Status", width: "12%",
+      sortValue: (c) => (c.success ? 1 : 0),
+      render: (c) => <StatusPill tone={c.success ? "ok" : "danger"} label={c.success ? "OK" : "FAIL"} />,
+    },
+    {
+      key: "cost", header: "Cost", numeric: true, width: "12%",
+      sortValue: (c) => c.cost_usd,
+      render: (c) => fmtCost(c.cost_usd),
+    },
+    {
+      key: "latency", header: "Latency", numeric: true, width: "12%",
+      sortValue: (c) => c.latency_ms,
+      render: (c) => fmtLatency(c.latency_ms),
+    },
+  ], []);
+
   if (!data && error) {
     return <ErrorState message={error} onRetry={() => { setError(null); setReloadKey((k) => k + 1); }} />;
   }
   if (!data) return <p className="loading">Loading…</p>;
 
-  const totalCalls = data.by_function.reduce((s, r) => s + r.count, 0);
-  const totalCost = data.by_function.reduce((s, r) => s + r.total_cost, 0);
-
-  // Failures are filtered server-side (success=false) so total_count and
-  // pagination stay correct; the list here is already scoped to the tab.
-  const callsToShow = data.calls;
+  const win = windowLabel(Number(hours));
+  const errTone = data.failure_rate >= 5 ? "danger" : data.failure_rate > 0 ? "warn" : "ok";
+  const fnOptions = [...new Set(data.by_function.map((r) => r.function))].sort();
+  const selected = expandedId ? data.calls.find((c) => c.id === expandedId) ?? null : null;
 
   return (
     <div>
       <div className="page-header">
         <span className="eyebrow">Diagnostic</span>
         <h1>LLM calls</h1>
-        <p>Every model call the pipeline made — searchable by user, submission, or function.</p>
+        <p>Find and inspect one AI call — its prompt in, response out, cost, latency, success.</p>
       </div>
 
-      <div className="filters" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+      {/* ── Filter bar — the operator's find-that-one-call controls ──── */}
+      <div className="filters">
         <select value={hours} onChange={(e) => handleHoursChange(e.target.value)}>
           <option value="1">Last hour</option>
           <option value="6">Last 6 hours</option>
@@ -165,350 +180,260 @@ export default function LLMCalls() {
           <option value="168">Last 7 days</option>
           <option value="720">Last 30 days</option>
         </select>
-        <select value={userFilter} onChange={(e) => handleUserFilter(e.target.value)}>
+        <select value={userFilter} onChange={(e) => setUserFilter(e.target.value)}>
           <option value="">All users</option>
-          {data.users.map((u) => (
-            <option key={u.id} value={u.id}>{u.email}</option>
-          ))}
+          {data.users.map((u) => <option key={u.id} value={u.id}>{u.email}</option>)}
         </select>
         {schools.length > 0 && (
-          <select value={schoolFilter} onChange={(e) => handleSchoolFilter(e.target.value)}>
+          <select value={schoolFilter} onChange={(e) => setParam("school", e.target.value)}>
             <option value="">All schools</option>
-            {schools.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
+            {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         )}
-        {userFilter && (
-          <button className="filter-badge" onClick={() => handleUserFilter("")} style={{ cursor: "pointer", border: "none" }}>
-            Filtered by user ✕
-          </button>
-        )}
-        {schoolFilter && (
-          <button
-            className="filter-badge"
-            onClick={clearSchoolFilter}
-            style={{ cursor: "pointer", border: "none" }}
-            title={schoolFilter}
-          >
-            School: {schoolLabel(schoolFilter, schools)} ✕
-          </button>
-        )}
+        <select value={fnFilter} onChange={(e) => setFnFilter(e.target.value)}>
+          <option value="">All functions</option>
+          {fnOptions.map((f) => <option key={f} value={f}>{f}</option>)}
+        </select>
+        <select value={status} onChange={(e) => setParam("status", e.target.value)}>
+          <option value="">Any status</option>
+          <option value="ok">Succeeded</option>
+          <option value="failed">Failed</option>
+        </select>
+        <SearchInput value={search} onChange={setSearch} placeholder="Search prompt + response…" />
         {submissionFilter && (
-          <button
-            className="filter-badge"
-            onClick={clearSubmissionFilter}
-            style={{ cursor: "pointer", border: "none" }}
-            title={submissionFilter}
-          >
-            Submission: {submissionFilter.slice(0, 8)}… ✕
+          <button className="filter-badge" onClick={() => setParam("submission", "")} style={{ cursor: "pointer", border: "none" }} title={submissionFilter}>
+            Submission: {shortId(submissionFilter)} ✕
+          </button>
+        )}
+        {sessionFilter && (
+          <button className="filter-badge" onClick={() => setParam("session", "")} style={{ cursor: "pointer", border: "none" }} title={sessionFilter}>
+            Session: {shortId(sessionFilter)} ✕
           </button>
         )}
       </div>
 
-      <div className="stat-grid">
-        <StatCard label="Total Calls" value={totalCalls} />
-        <StatCard label="Total Cost" value={`$${totalCost.toFixed(4)}`} />
-        <StatCard label="Failures" value={data.failure_count} sub={`${data.failure_rate}% failure rate`} />
-        <StatCard label="Models" value={data.by_model.length} />
+      {/* ── ① Strip — the window's headline health + failing functions ── */}
+      <div className="tile-grid">
+        <StatTile label="Total calls" value={data.total_count_window.toLocaleString()} sub={`in the last ${win}`} />
+        <StatTile label={`Cost (${win})`} value={fmtCost(data.total_cost_window)} sub="across all functions" />
+        <StatTile
+          label="Failure rate" tone={errTone} value={`${data.failure_rate}%`}
+          sub={`${data.failure_count.toLocaleString()}/${data.total_count_window.toLocaleString()} calls`}
+        />
+        <StatTile label="p95 latency" value={fmtLatency(data.p95_latency_ms)} sub={`tail of ${win}`} />
       </div>
 
-      <div className="chart-row">
-        <div className="chart-card">
-          <h3>Calls / day</h3>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={data.by_day}>
-              <CartesianGrid strokeDasharray="2 4" />
-              <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="count" fill="#14130f" />
-            </BarChart>
-          </ResponsiveContainer>
+      {data.failures_by_function.length > 0 && (
+        <div className="table-card">
+          <h3>Failing functions · {win}</h3>
+          <DataTable
+            columns={failCols}
+            rows={data.failures_by_function}
+            rowKey={(r) => r.function}
+            defaultSort={{ key: "count", dir: "desc" }}
+            onRowClick={(r) => { setFnFilter(r.function); setParam("status", "failed"); }}
+            rowStatus={() => "var(--danger)"}
+            minWidth={360}
+          />
         </div>
+      )}
 
-        <div className="chart-card">
-          <h3>Cost by model</h3>
-          <ResponsiveContainer width="100%" height={240}>
-            <PieChart>
-              <Pie
-                data={data.by_model}
-                dataKey="total_cost"
-                nameKey="model"
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+      {/* ── ② The primary surface — one searchable, sortable call table ── */}
+      <div className="table-card">
+        <h3>Calls {data.total_count > 0 && <span className="llm-count">({data.total_count.toLocaleString()})</span>}</h3>
+        <DataTable
+          columns={columns}
+          rows={data.calls}
+          rowKey={(c) => c.id}
+          defaultSort={{ key: "created_at", dir: "desc" }}
+          onRowClick={(c) => setExpandedId(expandedId === c.id ? null : c.id)}
+          rowStatus={(c) => (c.id === expandedId ? "var(--accent)" : !c.success ? "var(--danger)" : undefined)}
+          empty={<span className="dt-state-title">No calls match these filters.</span>}
+          minWidth={720}
+        />
+        <Pagination offset={offset} limit={PAGE_SIZE} total={data.total_count} onChange={setOffset} />
+      </div>
+
+      {/* ── ③ A level away — the exact input | output for one call ────── */}
+      {selected && (
+        <div className="table-card llm-detail">
+          <div className="llm-detail-head">
+            <div className="llm-detail-title">
+              <StatusPill tone={selected.success ? "ok" : "danger"} label={selected.success ? "OK" : "FAIL"} />
+              <strong>{selected.function}</strong>
+              <span className="llm-detail-meta" title={selected.model}>{shortModel(selected.model)}</span>
+              <span className="llm-detail-meta">{fmtCost(selected.cost_usd)}</span>
+              <span className="llm-detail-meta">{fmtLatency(selected.latency_ms)}</span>
+              <span className="llm-detail-meta">{selected.input_tokens}/{selected.output_tokens} tok</span>
+              <span className="llm-detail-meta" title={new Date(selected.created_at).toLocaleString()}>{formatRelativeDate(selected.created_at)}</span>
+            </div>
+            <button className="llm-detail-close" onClick={() => setExpandedId(null)} aria-label="Close">✕</button>
+          </div>
+
+          <div className="call-detail-row">
+            <div className="call-detail-section">
+              <div className="llm-io-head">
+                <strong>Input</strong>
+                <CopyButton text={selected.input_text ?? ""} disabled={!selected.input_text} />
+              </div>
+              <pre>{selected.input_text || "(not captured)"}</pre>
+            </div>
+            <div className="call-detail-section">
+              <div className="llm-io-head">
+                <strong>{selected.success ? "Output" : "Error"}</strong>
+                <CopyButton text={selected.output_text ?? ""} disabled={!selected.output_text} />
+              </div>
+              <pre>{selected.output_text || "(not captured)"}</pre>
+            </div>
+          </div>
+
+          <div className="call-detail-metadata">
+            <strong>Metadata</strong>
+            <MetadataChips
+              metadata={selected.metadata}
+              schoolId={selected.school_id}
+              submissionId={selected.submission_id}
+              onSubmissionClick={(id) => setParam("submission", id)}
+            />
+            <div className="llm-detail-actions">
+              {selected.session_id && (
+                <button className="llm-link-btn" onClick={() => { setParam("session", selected.session_id!); setExpandedId(null); }}>
+                  ⧉ View session calls →
+                </button>
+              )}
+              {selected.submission_id && (
+                <Link to={tracePathFor(selected.submission_id)} className="llm-link-btn">
+                  ▤ Open flight recorder →
+                </Link>
+              )}
+              <button
+                className="llm-link-btn"
+                onClick={() => handleDebug(selected.id)}
+                disabled={debugState[selected.id] === "sending"}
               >
-                {data.by_model.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Legend />
-              <Tooltip formatter={(v) => `$${Number(v).toFixed(4)}`} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="chart-row">
-        <div className="chart-card" style={{ gridColumn: "1 / -1" }}>
-          <h3>Avg latency / day (ms)</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={data.by_day}>
-              <CartesianGrid strokeDasharray="2 4" />
-              <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-              <YAxis />
-              <Tooltip formatter={(v) => `${Number(v).toFixed(0)}ms`} />
-              <Line type="monotone" dataKey="avg_latency" stroke="#b8431a" strokeWidth={1.5} dot={{ r: 2 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {data.recent_failures.length > 0 && (
-        <div className="table-card" style={{ borderTop: "1px solid var(--danger)" }}>
-          <h3 style={{ color: "var(--danger)" }}>Recent failures ({data.recent_failures.length})</h3>
-          <div className="table-scroll">
-          <table>
-            <colgroup>
-              <col style={{ width: "20%" }} />
-              <col style={{ width: "15%" }} />
-              <col style={{ width: "15%" }} />
-              <col style={{ width: "30%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "12%" }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>Function</th>
-                <th>Model</th>
-                <th>User</th>
-                <th>Error</th>
-                <th>Retries</th>
-                <th>Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.recent_failures.map((f) => (
-                <tr key={f.id} style={{ background: "var(--danger-soft)" }}>
-                  <td>{f.function}</td>
-                  <td>{f.model}</td>
-                  <td>{f.user_name || "-"}</td>
-                  <td title={f.output_text || undefined} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {f.output_text
-                      ? (f.output_text.length > 80 ? f.output_text.slice(0, 80) + "..." : f.output_text)
-                      : "-"}
-                  </td>
-                  <td>{f.retry_count > 0 ? f.retry_count : "-"}</td>
-                  <td title={new Date(f.created_at).toLocaleString()}>{formatRelativeDate(f.created_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                🔍 Debug with agent
+              </button>
+              {(debugState[selected.id] === "sent" || Boolean(selected.metadata?.debug_dispatched_at)) && (
+                <a
+                  href={`https://github.com/${data.repo}/issues?q=${encodeURIComponent(`is:issue label:llm-debug ${selected.id}`)}`}
+                  target="_blank" rel="noopener noreferrer" className="llm-link-btn"
+                  title="Open the debug agent's findings for this call on GitHub"
+                >
+                  🔗 Debug results
+                </a>
+              )}
+            </div>
+            {debugState[selected.id] === "sending" && <div className="llm-detail-note">Dispatching…</div>}
+            {debugState[selected.id] === "sent" && <div className="llm-detail-note llm-note-ok">Dispatched — results appear under 🔗 once the agent finishes.</div>}
+            {debugState[selected.id] === "error" && <div className="llm-detail-note llm-note-bad">Dispatch failed (token configured?).</div>}
           </div>
         </div>
       )}
 
-      <div className="table-card">
-        <h3>By Function</h3>
-        <div className="table-scroll">
-        <table>
-          <colgroup>
-            <col style={{ width: "28%" }} />
-            <col style={{ width: "12%" }} />
-            <col style={{ width: "15%" }} />
-            <col style={{ width: "15%" }} />
-            <col style={{ width: "15%" }} />
-            <col style={{ width: "15%" }} />
-          </colgroup>
-          <thead>
-            <tr>
-              <th>Function</th>
-              <th>Calls</th>
-              <th>Cost</th>
-              <th>Avg Latency</th>
-              <th>Avg In</th>
-              <th>Avg Out</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.by_function.map((r) => (
-              <tr
-                key={r.function}
-                className="clickable"
-                onClick={() => handleFnFilter(r.function)}
-                style={fnFilter === r.function ? { background: "#ede9fe" } : undefined}
-              >
-                <td>{r.function}</td>
-                <td>{r.count}</td>
-                <td>${r.total_cost.toFixed(4)}</td>
-                <td>{r.avg_latency_ms.toFixed(0)}ms</td>
-                <td>{r.avg_input_tokens}</td>
-                <td>{r.avg_output_tokens}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
-      </div>
-
-      <div className="table-card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <h3 style={{ marginBottom: 0 }}>
-            {tab === "all" ? "Recent Calls" : "Recent Failures"}
-            {fnFilter && <span className="filter-badge">{fnFilter} <button onClick={() => handleFnFilter(fnFilter)}>x</button></span>}
-          </h3>
-          <div style={{ display: "flex", gap: 2, background: "var(--paper-2)", border: "1px solid var(--rule)", borderRadius: 4, padding: 2 }}>
-            <button
-              onClick={() => setTab("all")}
-              style={{
-                padding: "6px 14px", border: "none", borderRadius: 2, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                background: tab === "all" ? "var(--surface)" : "transparent",
-                color: tab === "all" ? "var(--ink)" : "var(--muted)",
-              }}
-            >
-              All ({totalCalls})
-            </button>
-            <button
-              onClick={() => setTab("failures")}
-              style={{
-                padding: "6px 14px", border: "none", borderRadius: 2, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                background: tab === "failures" ? "var(--surface)" : "transparent",
-                color: tab === "failures" ? "var(--danger)" : "var(--muted)",
-              }}
-            >
-              Failures ({data.failure_count})
-            </button>
+      {/* ── Trends — demoted; the aggregate view, a click away ────────── */}
+      <details className="llm-trends">
+        <summary>Trends &amp; aggregates · {win}</summary>
+        <div className="chart-row">
+          <div className="chart-card">
+            <h3>Calls / day</h3>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={data.by_day}>
+                <CartesianGrid strokeDasharray="2 4" />
+                <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="count" fill="#14130f" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="chart-card">
+            <h3>Cost / day ($)</h3>
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={data.by_day}>
+                <CartesianGrid strokeDasharray="2 4" />
+                <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                <YAxis />
+                <Tooltip formatter={(v) => `$${Number(v).toFixed(4)}`} />
+                <Area type="monotone" dataKey="cost" stroke="#b8431a" fill="#b8431a1a" strokeWidth={1.5} />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         </div>
-        <div className="table-scroll">
-        <table>
-          <colgroup>
-            <col style={{ width: "3%" }} />
-            <col style={{ width: "17%" }} />
-            <col style={{ width: "11%" }} />
-            <col style={{ width: "15%" }} />
-            <col style={{ width: "12%" }} />
-            <col style={{ width: "9%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "7%" }} />
-            <col style={{ width: "16%" }} />
-          </colgroup>
-          <thead>
-            <tr>
-              <th></th>
-              <th>Function</th>
-              <th>Model</th>
-              <th>User</th>
-              <th>Tokens</th>
-              <th>Latency</th>
-              <th>Cost</th>
-              <th>Retry</th>
-              <th>Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {callsToShow.map((c) => (
-              <Fragment key={c.id}>
-                <tr
-                  className="clickable"
-                  onClick={() => setExpandedId(expandedId === c.id ? null : c.id)}
-                  style={!c.success ? { background: "var(--danger-soft)" } : undefined}
+
+        <div className="chart-row">
+          <div className="chart-card">
+            <h3>Cost by model</h3>
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={data.by_model} dataKey="total_cost" nameKey="model"
+                  cx="50%" cy="50%" outerRadius={78}
+                  label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                 >
-                  <td>{expandedId === c.id ? "\u25BC" : "\u25B6"}</td>
-                  <td>{c.function}</td>
-                  <td title={c.model}>{shortModel(c.model)}</td>
-                  <td>{c.user_name || "-"}</td>
-                  <td>{c.input_tokens}/{c.output_tokens}</td>
-                  <td>{c.latency_ms.toFixed(0)}ms</td>
-                  <td>${c.cost_usd.toFixed(4)}</td>
-                  <td>{c.retry_count > 0 ? c.retry_count : "-"}</td>
-                  <td title={new Date(c.created_at).toLocaleString()}>{formatRelativeDate(c.created_at)}</td>
-                </tr>
-                {expandedId === c.id && (
-                  <tr>
-                    <td colSpan={9} style={{ padding: 0 }}>
-                      <div className="call-detail">
-                        <div className="call-detail-row">
-                          <div className="call-detail-section">
-                            <strong>Input</strong>
-                            <pre>{c.input_text || "(not captured)"}</pre>
-                          </div>
-                          <div className="call-detail-section">
-                            <strong>{c.success ? "Output" : "Error"}</strong>
-                            <pre>{c.output_text || "(not captured)"}</pre>
-                          </div>
-                        </div>
-                        <div className="call-detail-metadata">
-                          <strong>Metadata</strong>
-                          <MetadataChips
-                            metadata={c.metadata}
-                            schoolId={c.school_id}
-                            submissionId={c.submission_id}
-                            onSubmissionClick={handleSubmissionChipClick}
-                          />
-                          {c.submission_id && (
-                            <div style={{ marginTop: 8 }}>
-                              <Link
-                                to={tracePathFor(c.submission_id)}
-                                style={{ fontSize: 13, fontWeight: 600 }}
-                              >
-                                Open flight recorder for this submission →
-                              </Link>
-                            </div>
-                          )}
-                          <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10 }}>
-                            <button
-                              onClick={() => handleDebug(c.id)}
-                              disabled={debugState[c.id] === "sending"}
-                              style={{ fontSize: 13, fontWeight: 600, padding: "4px 10px", cursor: "pointer" }}
-                            >
-                              🔍 Debug with agent
-                            </button>
-                            {(debugState[c.id] === "sent" || Boolean(c.metadata?.debug_dispatched_at)) && (
-                              <a
-                                href={`https://github.com/${data.repo}/issues?q=${encodeURIComponent(`is:issue label:llm-debug ${c.id}`)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{ fontSize: 13, fontWeight: 600 }}
-                                title="Open the debug agent's findings for this call on GitHub"
-                              >
-                                🔗 Debug results
-                              </a>
-                            )}
-                            {debugState[c.id] === "sending" && <span style={{ fontSize: 13, color: "var(--muted-2)" }}>Dispatching…</span>}
-                            {debugState[c.id] === "sent" && <span style={{ fontSize: 13, color: "var(--ok, green)" }}>Dispatched — results appear under 🔗 once the agent finishes.</span>}
-                            {debugState[c.id] === "error" && <span style={{ fontSize: 13, color: "var(--danger, crimson)" }}>Dispatch failed (token configured?).</span>}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            ))}
-            {callsToShow.length === 0 && (
-              <tr><td colSpan={9} style={{ textAlign: "center", color: "var(--muted-2)", padding: 24 }}>
-                {tab === "failures" ? "No failures in this period" : "No calls found"}
-              </td></tr>
-            )}
-          </tbody>
-        </table>
+                  {data.by_model.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Legend />
+                <Tooltip formatter={(v) => `$${Number(v).toFixed(4)}`} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="chart-card">
+            <h3>Avg latency / day (ms)</h3>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={data.by_day}>
+                <CartesianGrid strokeDasharray="2 4" />
+                <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                <YAxis />
+                <Tooltip formatter={(v) => `${Number(v).toFixed(0)}ms`} />
+                <Line type="monotone" dataKey="avg_latency" stroke="#b8431a" strokeWidth={1.5} dot={{ r: 2 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-        <Pagination
-          offset={offset}
-          limit={PAGE_SIZE}
-          total={data.total_count}
-          onChange={setOffset}
-        />
-      </div>
+
+        <div className="table-card">
+          <h3>By function</h3>
+          <DataTable
+            columns={byFnCols}
+            rows={data.by_function}
+            rowKey={(r) => r.function}
+            defaultSort={{ key: "total_cost", dir: "desc" }}
+            onRowClick={(r) => setFnFilter(r.function)}
+            minWidth={520}
+          />
+        </div>
+      </details>
     </div>
   );
 }
 
-function schoolLabel(id: string, schools: SchoolListItem[]): string {
-  const match = schools.find((s) => s.id === id);
-  return match ? match.name : `${id.slice(0, 8)}…`;
-}
+const failCols: Column<LLMCallsData["failures_by_function"][number]>[] = [
+  { key: "function", header: "Function", width: "50%", render: (r) => r.function },
+  { key: "count", header: "Fails", numeric: true, width: "25%", sortValue: (r) => r.count, render: (r) => r.count.toLocaleString() },
+  { key: "avg_retries", header: "Avg retries", numeric: true, width: "25%", sortValue: (r) => r.avg_retries, render: (r) => r.avg_retries.toFixed(1) },
+];
 
+const byFnCols: Column<LLMCallsData["by_function"][number]>[] = [
+  { key: "function", header: "Function", width: "40%", render: (r) => r.function },
+  { key: "count", header: "Calls", numeric: true, width: "20%", sortValue: (r) => r.count, render: (r) => r.count.toLocaleString() },
+  { key: "total_cost", header: "Cost", numeric: true, width: "20%", sortValue: (r) => r.total_cost, render: (r) => fmtCost(r.total_cost) },
+  { key: "avg_latency_ms", header: "Avg latency", numeric: true, width: "20%", sortValue: (r) => r.avg_latency_ms, render: (r) => fmtLatency(r.avg_latency_ms) },
+];
+
+function CopyButton({ text, disabled }: { text: string; disabled?: boolean }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      className="copy-btn"
+      disabled={disabled}
+      onClick={() => {
+        void navigator.clipboard?.writeText(text);
+        setDone(true);
+        setTimeout(() => setDone(false), 1200);
+      }}
+    >
+      {done ? "Copied ✓" : "Copy"}
+    </button>
+  );
+}

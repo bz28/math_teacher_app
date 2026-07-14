@@ -1077,6 +1077,129 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 }
 
 /* ──────────────────────────────────────────────────────────────────
+   LLM calls — search-first inspector
+   ────────────────────────────────────────────────────────────────── */
+
+/* Per-row session/submission indicator under the function name. */
+.llm-ctx { display: flex; gap: 6px; margin-top: 3px; flex-wrap: wrap; }
+.llm-ctx-tag {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  letter-spacing: 0.2px;
+}
+.llm-count { color: var(--muted); font-weight: 500; }
+
+/* The one-call detail panel (a level away from the table). */
+.llm-detail { border-top-color: var(--accent); }
+.llm-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.llm-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.llm-detail-title strong {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--ink);
+}
+.llm-detail-meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+.llm-detail-close {
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 3px;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.12s, border-color 0.12s;
+}
+.llm-detail-close:hover { color: var(--ink); border-color: var(--ink-soft); }
+
+.llm-io-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.llm-io-head strong { margin-bottom: 0; }
+
+.copy-btn {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  padding: 3px 9px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.copy-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.copy-btn:disabled { opacity: 0.4; cursor: default; }
+
+.llm-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.llm-link-btn {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 5px 11px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.llm-link-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.llm-link-btn:disabled { opacity: 0.5; cursor: default; }
+
+.llm-detail-note { font-size: 12.5px; color: var(--muted-2); margin-top: 10px; }
+.llm-note-ok { color: var(--ok); }
+.llm-note-bad { color: var(--danger); }
+
+/* Demoted trends — collapsed by default so the table is the hero. */
+.llm-trends { margin-top: 28px; border-top: 1px solid var(--rule); }
+.llm-trends > summary {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.8px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  padding: 16px 0 4px;
+  list-style: none;
+}
+.llm-trends > summary::-webkit-details-marker { display: none; }
+.llm-trends > summary::before { content: "▸ "; color: var(--muted-2); }
+.llm-trends[open] > summary::before { content: "▾ "; }
+.llm-trends > summary:hover { color: var(--accent); }
+
+/* ──────────────────────────────────────────────────────────────────
    Metadata chips
    ────────────────────────────────────────────────────────────────── */
 
