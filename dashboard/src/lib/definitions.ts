@@ -17,15 +17,18 @@
  *   (e.g. "30d"), never a silent lifetime total. Use windowLabel().
  *
  * ── What feeds "last active" ───────────────────────────────────────
- * There is no unified cross-source "last active" in the admin API
- * today. Each endpoint exposes the best recency field it has, and we
- * normalize whatever it returns:
- *   - Schools (/admin/schools):  last_activity_at = max(submission.submitted_at)
- *   - Users   (/admin/users):    last_active      = max(session.created_at)
- * Both miss teacher-only actions logged solely in ActivityLog
- * (grade/publish with no session or submission). When a unified
- * "last_active_at" that folds in ActivityLog.performed_at lands on the
- * backend, pass it here unchanged — the thresholds below don't move.
+ * Both list endpoints now expose a unified `last_active_at` that folds
+ * teacher-only ActivityLog actions (grade/publish with no session or
+ * submission) into the recency signal — closing the gap the older
+ * single-source fields missed:
+ *   - Schools (/admin/schools):
+ *       last_active_at = max(submission.submitted_at, ActivityLog.performed_at)
+ *   - Users   (/admin/users):
+ *       last_active_at = max(session.created_at, ActivityLog.performed_at)
+ * Pass `last_active_at` straight into the helpers below — the
+ * thresholds don't move. The legacy per-source fields
+ * (`last_activity_at` on schools, `last_active` on users) are still
+ * returned during the tab migration; prefer `last_active_at`.
  */
 
 export const ACTIVE_WITHIN_DAYS = 7;
