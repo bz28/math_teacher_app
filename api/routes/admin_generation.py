@@ -8,10 +8,17 @@ out of it.
 LLM cost is now linked EXACTLY: every call made in service of a job
 (the question call plus its per-problem `decompose` solutions and
 `practice_eval` distractors) carries the job's id in
-`LLMCall.generation_job_id`, so cost is summed by that FK. Old rows
-predating the FK fall back to the legacy time-window heuristic (calls
+`LLMCall.generation_job_id`, so cost is summed by that FK.
+
+Calls WITHOUT the FK still fall back to the time-window heuristic (calls
 for the job's creator, with a generation `function`, whose `created_at`
-falls inside the job's run window).
+falls inside the job's run window). Those are rows predating the FK plus
+the handful of generation-`function` calls that aren't tied to a job at
+all — a bank-chat re-solve, a single-item `regenerate_one` distractor. If
+one of those fires in the same creator's window it's folded into the job's
+cost; that's the same approximation the whole surface used before, now
+narrowed to only the un-linkable minority, and acceptable for an internal
+observability read.
 
 Produced items still have no FK, so they're correlated after the fact:
 `QuestionBankItem` rows sharing the job's assignment, unit, creator (and
@@ -186,8 +193,8 @@ async def generation_job_detail(
             select(LLMCall)
             .where(
                 LLMCall.function.in_(_GENERATION_FUNCTIONS),
-                # Exact FK link when present; otherwise the legacy
-                # time-window heuristic for old, unlinked calls.
+                # Exact FK link when present; otherwise the time-window
+                # heuristic for unlinked (NULL) calls.
                 or_(
                     LLMCall.generation_job_id == job.id,
                     and_(
@@ -347,7 +354,8 @@ async def _correlate_costs(
 
     A call carrying an explicit `generation_job_id` is attributed to that
     job EXACTLY (no ambiguity even when two jobs overlap in time). A call
-    with no link (old rows predating the FK) falls back to the legacy
+    with no link (a row predating the FK, or a generation-`function` call
+    not tied to a job — see module docstring) falls back to the legacy
     time-window heuristic: it lands in the latest job whose run window
     already contains it. One query across the whole page, bucketed in
     Python."""

@@ -12,7 +12,7 @@ Covers:
 2. The persistence layer writes the FK onto the row.
 3. `_correlate_costs` sums by the exact FK — an overlapping-window call
    linked to job A is NOT stolen by job B — and still falls back to the
-   time-window heuristic for old, unlinked (NULL) calls.
+   time-window heuristic for unlinked (NULL) calls.
 4. The new kwarg is metadata-only: the model request payload is
    byte-identical with vs without it, and the harness cassette key is
    unchanged (so existing recordings still replay).
@@ -219,7 +219,7 @@ async def test_correlate_costs_uses_fk_exactly_across_overlapping_jobs() -> None
             latency_ms=1.0, cost_usd=0.20, user_id=teacher.id, success=True,
             generation_job_id=b_id, created_at=mid,
         ))
-        # Unlinked (legacy) call in the overlap → time-window fallback lands
+        # Unlinked (NULL) call in the overlap → time-window fallback lands
         # it in the latest-started job that contains it (B).
         s.add(LLMCall(
             function="practice_eval", model="m", input_tokens=1, output_tokens=1,
