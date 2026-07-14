@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import {
+  ApiError,
+  NetworkError,
   schoolStudent,
   type SubmitHomeworkResponse,
 } from "@/lib/api";
@@ -61,6 +63,36 @@ interface StagedFile {
   previewUrl: string | null;
   /** Per-row error message; valid files stay alongside. */
   error?: string;
+}
+
+const SUBMIT_FALLBACK_ERROR =
+  "Something went wrong turning in your work. Please try again.";
+
+/**
+ * Turn any submit failure into a student-safe line — a technical
+ * exception message must never reach a kid.
+ *
+ *   - NetworkError already carries a friendly, plain-English message
+ *     ("Can't reach our servers right now…"), so we pass it through.
+ *   - A handful of ApiError statuses map to a specific, actionable
+ *     line (already turned in, payload too big). We deliberately do
+ *     NOT echo `err.message` for the general ApiError case — those
+ *     details ("File 3: invalid magic bytes", validation text) are
+ *     technical.
+ *   - Everything else falls back to one fixed friendly line, rather
+ *     than blanket-blaming the connection.
+ */
+function friendlySubmitError(err: unknown): string {
+  if (err instanceof NetworkError) return err.message;
+  if (err instanceof ApiError) {
+    if (err.status === 409) {
+      return "This homework has already been turned in. Refresh to see your submission.";
+    }
+    if (err.status === 413) {
+      return "Your pages are too large all together. Remove a page or two, or retake a photo, and try again.";
+    }
+  }
+  return SUBMIT_FALLBACK_ERROR;
 }
 
 export function SubmissionPanel({
@@ -225,7 +257,10 @@ export function SubmissionPanel({
       });
       onSubmitted(resp);
     } catch (err) {
-      setError((err as Error).message || "Submit failed. Try again.");
+      // Never surface a raw exception message to a student. Staged
+      // files stay put (we don't clear them) so a retry is one tap
+      // away once they've read the friendly line.
+      setError(friendlySubmitError(err));
       setConfirming(false);
     } finally {
       setSubmitting(false);

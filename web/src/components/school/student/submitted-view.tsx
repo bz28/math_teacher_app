@@ -3,11 +3,25 @@
 import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import type { StudentSubmission, SubmissionFile } from "@/lib/api";
-import { CheckIcon, FileTextIcon, XIcon } from "@/components/ui/icons";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  FileTextIcon,
+  XIcon,
+} from "@/components/ui/icons";
 import { Modal } from "@/components/ui/modal";
 
 interface Props {
   submission: StudentSubmission;
+  /** Whether the teacher has published a grade for this homework. Once
+   *  graded, the GradedSummaryCard + per-problem panels above own the
+   *  page, so we drop the "we'll grade it soon" hero and show the
+   *  submitted pages as a collapsed, secondary reference. */
+  graded: boolean;
+  /** Play the celebratory entrance (fade-up + check bounce) — true only
+   *  on the render right after a fresh submit. A plain revisit passes
+   *  false so the animation doesn't replay on every visit. */
+  animateEntrance: boolean;
 }
 
 /**
@@ -15,16 +29,58 @@ interface Props {
  * files the student turned in (≤10), plus the submission timestamp
  * and late badge. Each thumbnail opens a zoom modal so the student
  * can verify what their teacher will see.
+ *
+ * Two shapes: pre-publish shows the "turned in" payoff hero; once the
+ * teacher publishes a grade, the hero is gone and only a collapsed
+ * "What your teacher saw" gallery remains under the grade summary.
  */
-export function SubmittedView({ submission }: Props) {
+export function SubmittedView({ submission, graded, animateEntrance }: Props) {
   const submittedAt = new Date(submission.submitted_at);
   const files = submission.files ?? [];
   const [zoomedFile, setZoomedFile] = useState<SubmissionFile | null>(null);
   const reduceMotion = useReducedMotion();
   const pageCount = files.length;
+  // Entrance animation only plays on a fresh submit AND when the
+  // student hasn't asked for reduced motion.
+  const animate = animateEntrance && !reduceMotion;
+
+  // Post-publish: no hero. The grade summary above is the answer to
+  // "what did I get" — the submitted pages become collapsed reference.
+  if (graded) {
+    return (
+      <div className="mt-8">
+        <details className="group overflow-hidden rounded-[--radius-lg] border border-border bg-surface">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-5 py-3.5 text-sm font-semibold text-text-primary hover:bg-bg-subtle/40">
+            <span className="flex flex-wrap items-center gap-2">
+              What your teacher saw{" "}
+              <span className="font-normal text-text-muted">
+                ({pageCount} {pageCount === 1 ? "page" : "pages"})
+              </span>
+              {submission.is_late && (
+                <span className="rounded-full bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-dark">
+                  Marked late
+                </span>
+              )}
+            </span>
+            <ChevronDownIcon className="h-4 w-4 shrink-0 text-text-muted transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="border-t border-border-light px-5 pb-5 pt-1">
+            <SubmittedGallery files={files} onZoom={setZoomedFile} />
+            <p className="mt-3 text-xs text-text-muted">
+              Submitted {submittedAt.toLocaleString()}
+            </p>
+          </div>
+        </details>
+        {zoomedFile && (
+          <ZoomModal file={zoomedFile} onClose={() => setZoomedFile(null)} />
+        )}
+      </div>
+    );
+  }
+
   return (
     <motion.div
-      initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+      initial={animate ? { opacity: 0, y: 14 } : false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: "spring", stiffness: 260, damping: 26 }}
       className="mt-8 overflow-hidden rounded-[--radius-lg] border border-success-border bg-success-light shadow-[0_1px_2px_rgba(20,19,15,0.04)]"
@@ -32,9 +88,9 @@ export function SubmittedView({ submission }: Props) {
       {/* Payoff beat — the moment the work is safely in. */}
       <div className="px-6 pt-7 pb-6 text-center">
         <motion.span
-          initial={reduceMotion ? false : { scale: 0.5, opacity: 0 }}
+          initial={animate ? { scale: 0.5, opacity: 0 } : false}
           animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: reduceMotion ? 0 : 0.12, type: "spring", stiffness: 380, damping: 18 }}
+          transition={{ delay: animate ? 0.12 : 0, type: "spring", stiffness: 380, damping: 18 }}
           className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-success text-white shadow-sm"
         >
           <CheckIcon className="h-6 w-6" strokeWidth={3} />
@@ -66,28 +122,38 @@ export function SubmittedView({ submission }: Props) {
             ({files.length} {files.length === 1 ? "page" : "pages"})
           </span>
         </div>
-        {files.length === 0 ? (
-          <p className="mt-2 text-sm italic text-text-muted">
-            No files on this submission.
-          </p>
-        ) : (
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-            {files.map((f, i) => (
-              <SubmissionThumb
-                key={i}
-                file={f}
-                index={i}
-                onClick={() => setZoomedFile(f)}
-              />
-            ))}
-          </div>
-        )}
+        <SubmittedGallery files={files} onZoom={setZoomedFile} />
       </div>
 
       {zoomedFile && (
         <ZoomModal file={zoomedFile} onClose={() => setZoomedFile(null)} />
       )}
     </motion.div>
+  );
+}
+
+/** Thumbnail grid of submitted pages (or an empty-state line). Shared
+ *  by the pre-publish hero and the post-publish collapsed disclosure. */
+function SubmittedGallery({
+  files,
+  onZoom,
+}: {
+  files: SubmissionFile[];
+  onZoom: (f: SubmissionFile) => void;
+}) {
+  if (files.length === 0) {
+    return (
+      <p className="mt-2 text-sm italic text-text-muted">
+        No files on this submission.
+      </p>
+    );
+  }
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+      {files.map((f, i) => (
+        <SubmissionThumb key={i} file={f} index={i} onClick={() => onZoom(f)} />
+      ))}
+    </div>
   );
 }
 

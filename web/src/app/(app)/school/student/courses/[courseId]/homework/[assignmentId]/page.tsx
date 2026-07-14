@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { usePracticeStore } from "@/stores/practice";
 import { useSessionStore, type Subject } from "@/stores/learn";
+import { formatDue } from "@/lib/utils";
 import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
 import { PageErrorState } from "@/components/ui";
@@ -43,10 +44,16 @@ type Mode =
 
 export default function HomeworkPage() {
   const { courseId, assignmentId } = useParams<{ courseId: string; assignmentId: string }>();
+  const router = useRouter();
   const [hw, setHw] = useState<StudentHomeworkDetail | null>(null);
   const [submission, setSubmission] = useState<StudentSubmission | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ kind: "homework" });
+  // True only for the render right after the student submits in this
+  // session — drives the celebratory entrance animation on the
+  // SubmittedView. A plain revisit (navigating back to already-turned-in
+  // work) leaves this false so the check-bounce doesn't replay each time.
+  const [justSubmitted, setJustSubmitted] = useState(false);
   // Client-side flag: the student clicked through the post-extraction
   // confirm screen in this session, so we should not keep shoving it
   // in their face if they come back before sending their first turn.
@@ -269,7 +276,18 @@ export default function HomeworkPage() {
         courseId={courseId}
         onDone={async () => {
           setMode({ kind: "homework" });
+          // Landing on the submitted view after finishing the check is
+          // not a fresh submit — clear the flag so its entrance
+          // animation doesn't replay here.
+          setJustSubmitted(false);
           if (assignmentId) await loadAll(assignmentId);
+        }}
+        onLeave={() => {
+          // Real navigation, not an in-place re-fetch: staying on the
+          // route would re-detect the in-progress check and route the
+          // student straight back into the chat. Progress is saved
+          // server-side; returning re-hydrates and resumes.
+          router.push(`/school/student/courses/${courseId}`);
         }}
       />
     );
@@ -303,7 +321,7 @@ export default function HomeworkPage() {
       <h1 className="mt-3 text-2xl font-bold text-text-primary">{hw.title}</h1>
       <p className="mt-1 text-sm text-text-secondary">
         {hw.problems.length} {hw.problems.length === 1 ? "problem" : "problems"}
-        {hw.due_at ? ` · Due ${new Date(hw.due_at).toLocaleDateString()}` : ""}
+        {hw.due_at ? ` · ${formatDue(hw.due_at)}` : ""}
       </p>
 
       {/* Teacher-authored instructions, e.g. "Show all work, no
@@ -450,12 +468,19 @@ export default function HomeworkPage() {
       </div>
 
       {hw.submitted && submission ? (
-        <SubmittedView submission={submission} />
+        <SubmittedView
+          submission={submission}
+          graded={hw.grade_published_at !== null}
+          animateEntrance={justSubmitted}
+        />
       ) : !hw.submitted ? (
         <SubmissionPanel
           assignmentId={hw.assignment_id}
           dueAt={hw.due_at}
           onSubmitted={async (_resp) => {
+            // Mark this as a fresh submit so the SubmittedView plays its
+            // celebratory entrance once (a later revisit won't).
+            setJustSubmitted(true);
             // Re-fetch everything (detail + submission + integrity
             // state) in one helper so the UI swaps to the
             // SubmittedView and the integrity entry prompt appears
