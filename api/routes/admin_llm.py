@@ -28,14 +28,23 @@ router = APIRouter()
 _DISPATCH_TEXT_CAP = 20000
 
 
+def _escape_like(term: str) -> str:
+    """Escape LIKE/ILIKE wildcards so a free-text search term matches
+    literally — an operator searching for "50%" or "user_id" shouldn't get
+    surprise wildcard behavior. Backslash first so we don't double-escape."""
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 @router.get("/llm-calls")
 async def llm_calls(
     hours: int = Query(default=168, ge=1, le=8760),
     function: str | None = Query(default=None),
     user_id: str | None = Query(default=None),
     submission_id: str | None = Query(default=None),
+    session_id: str | None = Query(default=None),
     school_id: str | None = Query(default=None),
     success: bool | None = Query(default=None),
+    search: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(require_admin),
@@ -50,6 +59,7 @@ async def llm_calls(
     for label, value in (
         ("user_id", user_id),
         ("submission_id", submission_id),
+        ("session_id", session_id),
     ):
         if value:
             try:
@@ -76,6 +86,11 @@ async def llm_calls(
         # admin dashboard can render the full pipeline trace in one
         # place. Indexed on submission_id, instant.
         base_filters.append(LLMCall.submission_id == submission_id)
+    if session_id:
+        # Session scope — pulls every call in one conversation/session so
+        # the "session link" in a row's detail can surface the whole
+        # exchange (understanding-check turns, tutoring, etc.).
+        base_filters.append(LLMCall.session_id == session_id)
     if school_id == INTERNAL_SCHOOL_SENTINEL:
         # The "Internal" pseudo-school — LLMCall rows with school_id
         # IS NULL. Post-bp1000059 that's admin/system calls plus
@@ -94,14 +109,21 @@ async def llm_calls(
             func.count().label("count"),
             func.sum(LLMCall.cost_usd).label("total_cost"),
             func.avg(LLMCall.latency_ms).label("avg_latency"),
-            func.avg(LLMCall.input_tokens).label("avg_input_tokens"),
-            func.avg(LLMCall.output_tokens).label("avg_output_tokens"),
         )
         .where(*base_filters)
         .group_by(LLMCall.function)
         .order_by(func.sum(LLMCall.cost_usd).desc())
     )
     stats = (await db.execute(stats_query)).all()
+
+    # Window-level latency percentile. p95 is the operator's tail-latency
+    # signal — a mean hides the slow calls that actually hurt. Over every
+    # call in the window (not just successes) so a stalled/retried call
+    # still counts. None on an empty window → 0.0.
+    p95_latency = (await db.execute(
+        select(func.percentile_cont(0.95).within_group(LLMCall.latency_ms.asc()))
+        .where(*base_filters)
+    )).scalar()
 
     # By model
     model_stats = (await db.execute(
@@ -133,22 +155,38 @@ async def llm_calls(
         .outerjoin(User, User.id == LLMCall.user_id)
         .where(*base_filters)
     )
+    # Filters that scope only the paginated call list (not the window
+    # aggregates in the strip): the function selector, the success/
+    # failure toggle, and the free-text search over prompt + response.
+    row_filters = []
     if function:
-        calls_query = calls_query.where(LLMCall.function == function)
+        row_filters.append(LLMCall.function == function)
     if success is not None:
-        # Powers the dashboard "Failures" tab: success=false scopes the
-        # paginated list (and total_count below) to failed calls so the
-        # filter + pagination happen server-side instead of on one page.
-        calls_query = calls_query.where(LLMCall.success.is_(success))
-    calls_query = calls_query.order_by(LLMCall.created_at.desc()).offset(offset).limit(limit)
+        # Powers the dashboard success/failure toggle: scopes the paginated
+        # list (and total_count below) so the filter + pagination happen
+        # server-side instead of on one page.
+        row_filters.append(LLMCall.success.is_(success))
+    if search:
+        # Free-text search over the exact prompt in / response out — the
+        # operator's primary "find that one call" tool. %/_ are escaped so
+        # a search term reads as a literal, not a wildcard.
+        like = f"%{_escape_like(search)}%"
+        row_filters.append(or_(
+            LLMCall.input_text.ilike(like, escape="\\"),
+            LLMCall.output_text.ilike(like, escape="\\"),
+        ))
+
+    calls_query = (
+        calls_query.where(*row_filters)
+        .order_by(LLMCall.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
     calls = (await db.execute(calls_query)).all()
 
-    total_query = select(func.count()).select_from(LLMCall).where(*base_filters)
-    if function:
-        total_query = total_query.where(LLMCall.function == function)
-    if success is not None:
-        total_query = total_query.where(LLMCall.success.is_(success))
-    total_count = (await db.execute(total_query)).scalar() or 0
+    total_count = (await db.execute(
+        select(func.count()).select_from(LLMCall).where(*base_filters, *row_filters)
+    )).scalar() or 0
 
     # Failure analysis
     failure_filters = [*base_filters, LLMCall.success.is_(False)]
@@ -172,14 +210,6 @@ async def llm_calls(
         .where(*failure_filters)
         .group_by(LLMCall.function)
         .order_by(func.count().desc())
-    )).all()
-
-    recent_failures = (await db.execute(
-        select(LLMCall, User.email, User.name)
-        .outerjoin(User, User.id == LLMCall.user_id)
-        .where(*failure_filters)
-        .order_by(LLMCall.created_at.desc())
-        .limit(10)
     )).all()
 
     # Users who have LLM calls in this period (for filter dropdown).
@@ -206,6 +236,11 @@ async def llm_calls(
     )).all()
 
     return {
+        "total_count_window": total_calls_count,
+        "total_cost_window": round(
+            sum(float(r.total_cost or 0) for r in stats), 4,
+        ),
+        "p95_latency_ms": round(float(p95_latency or 0), 1),
         "failure_count": failure_count,
         "failure_rate": failure_rate,
         "failures_by_function": [
@@ -216,26 +251,12 @@ async def llm_calls(
             }
             for r in failures_by_function
         ],
-        "recent_failures": [
-            {
-                "id": str(c.id),
-                "function": c.function,
-                "model": c.model,
-                "retry_count": c.retry_count,
-                "output_text": c.output_text,
-                "user_name": name or email or "Deleted User",
-                "created_at": c.created_at.isoformat(),
-            }
-            for c, email, name in recent_failures
-        ],
         "by_function": [
             {
                 "function": r.function,
                 "count": r.count,
                 "total_cost": round(r.total_cost or 0, 4),
                 "avg_latency_ms": round(r.avg_latency or 0, 1),
-                "avg_input_tokens": round(r.avg_input_tokens or 0),
-                "avg_output_tokens": round(r.avg_output_tokens or 0),
             }
             for r in stats
         ],
