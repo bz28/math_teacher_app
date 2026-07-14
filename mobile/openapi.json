@@ -6242,6 +6242,123 @@
         ]
       }
     },
+    "/v1/admin/grading-quality/overrides": {
+      "get": {
+        "description": "The actual overridden problems behind a weak subject/course row or a\ncatastrophic status cell.\n\nFilter by ``subject`` and/or ``course`` (a weak-spot row) and/or a\n``from_status``\u2192``to_status`` transition (a status-matrix cell). Each\ncase carries the AI's original call, the teacher's final call, and the\nsigned delta \u2014 no student identity or written work. Sorted by change\nsize (biggest misgrades first) and capped at ``_DRILL_LIMIT``.",
+        "operationId": "grading_quality_overrides_v1_admin_grading_quality_overrides_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "hours",
+            "required": false,
+            "schema": {
+              "default": 2160,
+              "maximum": 87600,
+              "minimum": 1,
+              "title": "Hours",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subject"
+            }
+          },
+          {
+            "in": "query",
+            "name": "course",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Course"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Grading Quality Overrides V1 Admin Grading Quality Overrides Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Grading Quality Overrides",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/harness-runs": {
       "get": {
         "operationId": "harness_runs_v1_admin_harness_runs_get",
