@@ -315,6 +315,8 @@ export const api = {
   quality: (params?: Record<string, string>) => request<QualityData>("/admin/quality", params),
   gradingQuality: (params?: Record<string, string>) =>
     request<GradingQualityData>("/admin/grading-quality", params),
+  gradingQualityOverrides: (params?: Record<string, string>) =>
+    request<GradingOverridesData>("/admin/grading-quality/overrides", params),
   users: (params?: Record<string, string>) => request<UsersData>("/admin/users", params),
   studentAccessLog: (params?: Record<string, string>) =>
     request<StudentAccessLogData>("/admin/audit-logs/student-access", params),
@@ -516,13 +518,42 @@ export interface GradingBucket {
   lowered: number;
 }
 
+/** Global summary. `reviewed_submissions` is the count of comparable
+ *  reviewed submissions in the report. `ai_graded_submissions` /
+ *  `reviewed_ai_grades` are the review-coverage denominator/numerator:
+ *  of every AI grade produced in the window, how many a teacher vetted. */
+export type GradingSummary = GradingBucket & {
+  reviewed_submissions: number;
+  ai_graded_submissions: number;
+  reviewed_ai_grades: number;
+};
+
 export interface GradingQualityData {
-  summary: GradingBucket & { reviewed_submissions: number };
+  summary: GradingSummary;
   status_matrix: { from: string; to: string; count: number; is_change: boolean }[];
   by_subject: (GradingBucket & { subject: string })[];
   by_course: (GradingBucket & { course: string; subject: string })[];
   trend: (GradingBucket & { day: string })[];
   subjects: string[];
+}
+
+/** One overridden problem behind a weak row or catastrophic cell — the
+ *  AI's original call, the teacher's final, and the signed delta. */
+export interface GradingOverrideCase {
+  subject: string;
+  course: string;
+  day: string | null;
+  ai_status: string;
+  ai_percent: number;
+  final_status: string;
+  final_percent: number;
+  delta: number;
+}
+
+export interface GradingOverridesData {
+  cases: GradingOverrideCase[];
+  total_count: number;
+  truncated: boolean;
 }
 
 // Lead types
