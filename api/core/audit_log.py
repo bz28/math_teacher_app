@@ -116,11 +116,21 @@ async def record_activity(
     try:
         school_id: uuid.UUID | None = None
         try:
-            school_id = (
-                await db.execute(
-                    select(User.school_id).where(User.id == _as_uuid(actor.user_id))
-                )
-            ).scalar_one_or_none()
+            # Run the lookup inside a SAVEPOINT. A driver-level failure of
+            # this SELECT (a DB timeout/outage) leaves the asyncpg
+            # transaction in an aborted state that a plain Python `except`
+            # can't un-poison — so without the savepoint the caller's later
+            # commit() would raise and roll back the teacher's ACTUAL
+            # mutation (grade save, publish, etc.). begin_nested() rolls
+            # back only to the savepoint, keeping the outer transaction (and
+            # the caller's commit) healthy. Best-effort logging must never
+            # touch the underlying write.
+            async with db.begin_nested():
+                school_id = (
+                    await db.execute(
+                        select(User.school_id).where(User.id == _as_uuid(actor.user_id))
+                    )
+                ).scalar_one_or_none()
         except Exception:
             logger.warning("activity school lookup failed", exc_info=True)
 

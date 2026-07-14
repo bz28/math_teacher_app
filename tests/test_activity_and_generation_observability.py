@@ -14,10 +14,12 @@ from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 
+from api.core.audit_log import record_activity
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
+from api.middleware.auth import CurrentUser
 from api.models.activity_log import ActivityLog
 from api.models.assignment import Assignment
 from api.models.course import Course, CourseTeacher, Document
@@ -151,6 +153,71 @@ async def test_logging_failure_never_breaks_the_mutation(
         ).scalar_one()
         assert item.status == "rejected", "the mutation itself must persist"
     assert await _activity_rows("bank_item.reject") == []
+
+
+@pytest.mark.asyncio
+async def test_poisoned_school_lookup_never_breaks_the_mutation() -> None:
+    """A DB-driver failure of record_activity's school-id lookup must not
+    abort the caller's transaction.
+
+    This is the SAVEPOINT guarantee: the lookup runs a real statement that
+    poisons the asyncpg transaction (aborted state), which a plain Python
+    `except` cannot un-poison — without begin_nested() the outer commit()
+    would raise and roll back the teacher's actual write. We assert the
+    outer mutation STILL commits and the row persists.
+    """
+    # A committed actor the lookup can (attempt to) resolve.
+    async with get_session_factory()() as s:
+        actor_user = User(
+            email=f"poison_{uuid.uuid4().hex[:6]}@t.com",
+            password_hash=hash_password("x"), grade_level=12,
+            role="teacher", name="PoisonActor",
+        )
+        s.add(actor_user)
+        await s.commit()
+        actor_id = actor_user.id
+
+    actor = CurrentUser(user_id=actor_id, role="teacher", name="PoisonActor")
+
+    async with get_session_factory()() as db:
+        # The teacher's REAL mutation, pending in the outer transaction.
+        marker_email = f"marker_{uuid.uuid4().hex[:6]}@t.com"
+        marker = User(
+            email=marker_email, password_hash=hash_password("x"),
+            grade_level=8, role="student", name="MutationMarker",
+        )
+        db.add(marker)
+        await db.flush()
+
+        # Poison ONLY the first session.execute (record_activity's school
+        # lookup) by swapping in a statement PostgreSQL rejects, which
+        # aborts the asyncpg transaction. begin_nested() must contain it.
+        real_execute = db.execute
+        calls = {"n": 0}
+
+        async def poisoning_execute(statement, *args, **kwargs):  # type: ignore[no-untyped-def]
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return await real_execute(
+                    text("SELECT * FROM table_that_does_not_exist_xyz")
+                )
+            return await real_execute(statement, *args, **kwargs)
+
+        with patch.object(db, "execute", side_effect=poisoning_execute):
+            await record_activity(
+                db, actor, "test.action", "test_target", actor_id,
+            )
+
+        # The outer transaction must still be healthy and committable.
+        await db.commit()
+
+    # The teacher's mutation persisted despite the poisoned logging lookup.
+    async with get_session_factory()() as s:
+        persisted = (
+            await s.execute(select(User).where(User.email == marker_email))
+        ).scalar_one_or_none()
+    assert persisted is not None, "the teacher's mutation must survive"
+    assert persisted.name == "MutationMarker"
 
 
 # ── Admin activity endpoint ──
