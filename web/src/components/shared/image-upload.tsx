@@ -321,10 +321,23 @@ export function ImageUpload({
   const scanLimitReached = scansRemaining <= 0;
   const queueFull = remaining <= 0;
 
+  // Shared activation for pointer + keyboard: at the scan limit we
+  // surface the upgrade prompt, a full queue is a no-op, otherwise we
+  // open the native file picker.
+  const activateDropzone = () => {
+    if (scanLimitReached) { onScanLimitReached?.(); }
+    else if (queueFull) { /* blocked — queue is full */ }
+    else { fileInputRef.current?.click(); }
+  };
+
   return (
     <>
       {/* Upload area */}
       <div
+        role="button"
+        tabIndex={0}
+        aria-label="Upload a photo of your work"
+        aria-disabled={scanLimitReached || queueFull}
         onDragOver={(e) => {
           if (scanLimitReached || queueFull) return;
           e.preventDefault();
@@ -332,10 +345,12 @@ export function ImageUpload({
         }}
         onDragLeave={() => setDragActive(false)}
         onDrop={(e) => { if (!scanLimitReached && !queueFull) handleDrop(e); }}
-        onClick={() => {
-          if (scanLimitReached) { onScanLimitReached?.(); }
-          else if (queueFull) { /* blocked — queue is full */ }
-          else { fileInputRef.current?.click(); }
+        onClick={activateDropzone}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            activateDropzone();
+          }
         }}
         className={cn(
           "flex flex-col items-center gap-3 rounded-[--radius-lg] border-2 border-dashed p-8 text-center transition-colors",
@@ -398,6 +413,7 @@ export function ImageUpload({
         open={!!result}
         onClose={closeResultModal}
         dismissible={editingIndex === null}
+        label="Review extracted problems"
       >
         {result && (
           <div className="space-y-4">

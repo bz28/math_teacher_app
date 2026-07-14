@@ -16,6 +16,12 @@ interface ModalProps {
    *  (e.g. the teacher upgrade prompt opening above a workshop dialog
    *  at z-[60]). */
   outerClassName?: string;
+  /** Accessible name for the dialog. Prefer `labelledById` pointing at
+   *  the visible heading; fall back to `label` when there's no heading
+   *  element to reference. One of the two should be set so screen
+   *  readers announce more than "dialog". */
+  label?: string;
+  labelledById?: string;
 }
 
 const FOCUSABLE_SELECTOR =
@@ -28,6 +34,8 @@ export function Modal({
   className,
   dismissible = true,
   outerClassName,
+  label,
+  labelledById,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -124,6 +132,8 @@ export function Modal({
             )}
             role="dialog"
             aria-modal="true"
+            aria-label={labelledById ? undefined : label}
+            aria-labelledby={labelledById}
           >
             {children}
           </motion.div>

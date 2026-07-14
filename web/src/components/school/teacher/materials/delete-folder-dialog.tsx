@@ -26,7 +26,7 @@ export function DeleteFolderDialog({
   const blocked = documentCount > 0 || questionCount > 0;
 
   return (
-    <Modal open={open} onClose={onClose}>
+    <Modal open={open} onClose={onClose} label="Delete folder">
       <div className="flex flex-col items-center gap-3 px-1 pt-1 text-center">
         {blocked ? (
           <span

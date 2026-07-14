@@ -992,6 +992,7 @@ function FileZoomModal({
       open
       onClose={onClose}
       className="max-h-[90vh] w-full max-w-5xl bg-surface p-3"
+      label={label}
     >
       <div className="flex items-center justify-between pb-2">
         <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">

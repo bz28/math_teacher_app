@@ -632,6 +632,7 @@ export function IntegrityCheckChat({
                     telemetry.recordPaste(pasted.length);
                     markActivity();
                   }}
+                  aria-label="Your answer"
                   placeholder="Type your answer…"
                   rows={2}
                   disabled={sending}

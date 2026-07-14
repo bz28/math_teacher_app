@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
@@ -29,6 +29,9 @@ export function Sidebar() {
   );
 }
 
+const DRAWER_FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function MobileSidebarDrawer({
   open,
   onClose,
@@ -36,20 +39,62 @@ export function MobileSidebarDrawer({
   open: boolean;
   onClose: () => void;
 }) {
-  // Close on ESC + trap body scroll while open. Same ergonomic
-  // floor as SidebarJoinModal.
+  const asideRef = useRef<HTMLElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  // Focus management + scroll lock — keyed on `open` ONLY, so it runs once
+  // per open/close and never on a parent re-render. As an aria-modal dialog
+  // the drawer moves focus in on open and restores it to the trigger on
+  // close (same contract as ui/modal.tsx, which likewise splits focus from
+  // the key handler so an unstable `onClose` can't yank focus back).
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
+
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+
+    requestAnimationFrame(() => {
+      const first = asideRef.current?.querySelector<HTMLElement>(
+        DRAWER_FOCUSABLE_SELECTOR,
+      );
+      first?.focus();
+    });
+
     return () => {
-      window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
+      previousFocusRef.current?.focus();
     };
+  }, [open]);
+
+  // ESC to close + Tab-cycle trap. Separate effect so it can depend on the
+  // (possibly re-created) `onClose` without re-running the focus effect.
+  useEffect(() => {
+    if (!open) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !asideRef.current) return;
+      const focusable = asideRef.current.querySelectorAll<HTMLElement>(
+        DRAWER_FOCUSABLE_SELECTOR,
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
   if (!open) return null;
@@ -61,7 +106,10 @@ export function MobileSidebarDrawer({
         onClick={onClose}
         aria-hidden
       />
-      <aside className="relative flex h-full w-64 max-w-[80%] flex-col border-r border-border-light bg-[color:var(--color-surface-alt-2)] shadow-md">
+      <aside
+        ref={asideRef}
+        className="relative flex h-full w-64 max-w-[80%] flex-col border-r border-border-light bg-[color:var(--color-surface-alt-2)] shadow-md"
+      >
         <SidebarContent onNavigate={onClose} />
       </aside>
     </div>

@@ -7,6 +7,7 @@ import { useAuthStore } from "@/stores/auth";
 import { teacher, enterPreviewMode, exitPreviewMode, isInPreviewMode } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/shared/logo-mark";
+import { SkipToMainLink } from "@/components/shared/skip-to-main-link";
 import { SchoolStudentLayout } from "@/components/school/student/school-student-layout";
 import { TeacherUsagePill } from "@/components/shared/teacher-usage-pill";
 import { useToast } from "@/components/ui";
@@ -120,12 +121,7 @@ function StudentLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex flex-1 flex-col">
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-[--radius-sm] focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-white"
-      >
-        Skip to main content
-      </a>
+      <SkipToMainLink />
 
       {/* Top bar — warm paper, hairline-bottom border. Nav uses an
           underline-on-active treatment (decision B): no tinted pill
@@ -257,6 +253,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex flex-1">
+      <SkipToMainLink />
       {/* Sidebar — paper-2 warm cream surface, hairline divider; nav
           uses dashboard-style sliding accent rule on active state
           (decision B applied to teacher sidebar too). */}

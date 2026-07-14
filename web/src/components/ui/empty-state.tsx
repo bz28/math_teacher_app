@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 
 interface EmptyStateProps {
   icon?: ReactNode;
@@ -36,10 +36,18 @@ export function EmptyState({
   description,
   action,
 }: EmptyStateProps) {
+  // Honor the OS "reduce motion" setting: skip the perpetual icon bob and
+  // the entrance rise for users who ask for stillness. Mirrors the guard
+  // in school/shared/empty-state.tsx.
+  const reduce = useReducedMotion();
+  const rise = reduce
+    ? {}
+    : { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 } };
+
   return (
     <div className="flex flex-col items-center py-12 text-center">
       <motion.div
-        animate={{ y: [0, -8, 0] }}
+        animate={reduce ? undefined : { y: [0, -8, 0] }}
         transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
         className="mb-4"
       >
@@ -47,8 +55,7 @@ export function EmptyState({
       </motion.div>
 
       <motion.p
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
+        {...rise}
         transition={{ delay: 0.1 }}
         className="text-base font-semibold text-text-secondary"
       >
@@ -57,8 +64,7 @@ export function EmptyState({
 
       {description && (
         <motion.p
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
+          {...rise}
           transition={{ delay: 0.2 }}
           className="mt-1 text-sm text-text-muted"
         >
@@ -68,8 +74,7 @@ export function EmptyState({
 
       {action && (
         <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
+          {...rise}
           transition={{ delay: 0.3 }}
           className="mt-4"
         >

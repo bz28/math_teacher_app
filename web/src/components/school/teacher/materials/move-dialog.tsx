@@ -30,7 +30,7 @@ export function MoveDialog({
   if (!open) return null;
 
   return (
-    <Modal open={open} onClose={onClose}>
+    <Modal open={open} onClose={onClose} label={title}>
       <h2 className="text-lg font-bold tracking-tight text-text-primary">{title}</h2>
       <p className="mt-1.5 text-xs text-text-muted">
         Pick a destination folder. Use the arrow keys to navigate.

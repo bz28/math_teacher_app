@@ -53,7 +53,7 @@ export function CollisionDialog({
   };
 
   return (
-    <Modal open={open} onClose={onCancel} className="max-w-xl">
+    <Modal open={open} onClose={onCancel} className="max-w-xl" label="Resolve folder name conflicts">
       <div>
         <h2 className="text-lg font-bold text-text-primary">
           {collisions.length === 1

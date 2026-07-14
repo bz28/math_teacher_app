@@ -33,7 +33,7 @@ export function NewUnitModal({ courseId, parentId, onClose, onCreated }: NewUnit
   };
 
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} label={parentId ? "New subfolder" : "New unit"}>
       <form
         onSubmit={(e) => {
           e.preventDefault();

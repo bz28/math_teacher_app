@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAuthStore } from "@/stores/auth";
 import { LogoMark } from "@/components/shared/logo-mark";
+import { SkipToMainLink } from "@/components/shared/skip-to-main-link";
 import { MobileSidebarDrawer, Sidebar } from "./sidebar";
 
 /**
@@ -25,6 +26,7 @@ export function SchoolStudentLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="flex flex-1">
+      <SkipToMainLink />
       <Sidebar />
       <MobileSidebarDrawer
         open={drawerOpen}
