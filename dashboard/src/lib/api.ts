@@ -369,6 +369,10 @@ export interface OverviewData {
   failed_calls: number;
   error_rate: number;
   avg_latency_ms: number;
+  // p95 of successful-call latency over the same window/population as
+  // avg_latency_ms. Leads the latency tile — the average hides the
+  // slow tail that actually degrades the experience.
+  p95_latency_ms: number;
   by_mode: { mode: string; count: number }[];
   by_subject: { subject: string; count: number }[];
   sessions_by_day: { day: string; count: number }[];
@@ -599,6 +603,10 @@ export interface SchoolListItem {
   cost_30d: number;
   cost_prev_30d: number;
   last_activity_at: string | null;
+  // Unified recency = max(last submission, last ActivityLog action).
+  // Prefer over last_activity_at for active/stale/dormant — folds in
+  // teacher grade/publish actions that leave no student submission.
+  last_active_at: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string | null;
@@ -732,6 +740,10 @@ export interface UsersData {
     llm_call_count: number;
     avg_cost_per_session: number;
     last_active: string | null;
+    // Unified recency = max(last session, last ActivityLog action).
+    // Prefer over last_active for active/stale/dormant — folds in a
+    // teacher's grade/publish actions that leave no session.
+    last_active_at: string | null;
     registered: string;
     subscription_tier: string;
     subscription_status: string;

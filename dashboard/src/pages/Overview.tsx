@@ -123,9 +123,11 @@ export default function Overview() {
   if (!data) return <p className="loading">Loading…</p>;
 
   const modeMap = Object.fromEntries(data.by_mode.map((m) => [m.mode, m.count]));
-  const latencyStr = data.avg_latency_ms >= 1000
-    ? `${(data.avg_latency_ms / 1000).toFixed(1)}s`
-    : `${Math.round(data.avg_latency_ms)}ms`;
+  const fmtLatency = (ms: number) =>
+    ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
+  // p95 leads the tile: an average hides the slow tail that actually
+  // hurts users. Avg is kept as a secondary reference in the subline.
+  const latencyStr = fmtLatency(data.p95_latency_ms);
   const errTone = data.error_rate >= 5 ? "danger" : data.error_rate > 0 ? "warn" : "ok";
   const dailyRate = Number(hours) > 0 ? data.total_cost / (Number(hours) / 24) : 0;
   const health = healthPill(data.error_rate, data.avg_latency_ms);
@@ -232,9 +234,9 @@ export default function Overview() {
           sub={`${data.failed_calls}/${data.total_calls} calls · ${win}`}
         />
         <StatTile
-          label="Avg latency"
+          label="p95 latency"
           value={latencyStr}
-          sub={`mean of successful calls · ${win}`}
+          sub={`avg ${fmtLatency(data.avg_latency_ms)} · successful calls · ${win}`}
         />
         <StatTile
           label={`Cost (${win})`}
