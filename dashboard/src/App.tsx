@@ -44,8 +44,8 @@ export default function App() {
             </ProtectedRoute>
           }
         >
-          {/* Primary destinations — each is its own audience. */}
-          <Route path="/" element={<Navigate to="/leads" replace />} />
+          {/* Landing = the "what's broken" home. Monitor first. */}
+          <Route path="/" element={<Navigate to="/overview" replace />} />
           <Route path="/leads" element={<Leads />} />
           <Route path="/leads/:leadId" element={<LeadDetail />} />
           <Route path="/schools" element={<Schools />} />
@@ -73,14 +73,12 @@ export default function App() {
             element={<SubmissionTrace />}
           />
 
-          {/* Platform health — now linked from the Diagnostic nav.
-              Landing stays on /leads (founder call for phase 2). */}
+          {/* Overview — the operator home, first item in MONITOR. */}
           <Route path="/overview" element={<Overview />} />
-          {/* Hidden but reachable by URL — kept so phase 2 can
-              decide whether to surface it. */}
+          {/* Users — now surfaced under SYSTEM in the rail. */}
           <Route path="/users" element={<Users />} />
 
-          <Route path="*" element={<Navigate to="/leads" replace />} />
+          <Route path="*" element={<Navigate to="/overview" replace />} />
         </Route>
       </Routes>
       </ToastProvider>

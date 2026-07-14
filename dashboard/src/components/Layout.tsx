@@ -1,37 +1,59 @@
+import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { getToken, setToken } from "../lib/api";
+import { apiHealth, getToken, setToken } from "../lib/api";
 
 interface NavItem {
   to: string;
   label: string;
 }
 
-// Three groups in the sidebar — audiences first (the scopes you run
-// the business through, plus the Leads funnel that feeds them), then
-// the diagnostic tools, then a final internal group for operator
-// management. Admins are internal teammates, not an audience.
-const AUDIENCE_NAV: NavItem[] = [
-  { to: "/leads", label: "Leads" },
-  { to: "/schools", label: "Schools" },
-  { to: "/students/independent", label: "Independent students" },
-  { to: "/teachers/independent", label: "Independent teachers" },
-];
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
 
-const DIAGNOSTIC_NAV: NavItem[] = [
-  { to: "/overview", label: "Platform health" },
-  { to: "/audit-logs", label: "Audit logs" },
-  { to: "/llm-calls", label: "LLM calls" },
-  { to: "/harness-runs", label: "Harness runs" },
-  { to: "/quality", label: "Solution quality" },
-  { to: "/grading-quality", label: "Grading quality" },
-  { to: "/golden-set", label: "Generation QA" },
-];
-
-const INTERNAL_NAV: NavItem[] = [
-  { to: "/admins", label: "Admins" },
+// The pages grouped by the operator's job, in the order they're worked:
+// MONITOR first (is anything broken?), then CUSTOMERS (who are my users,
+// what are they doing), then SYSTEM (internal management). Detail pages
+// (school/lead/teacher/submission drill-ins) stay off the rail — they're
+// reached by clicking a row, not navigating here.
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: "Monitor",
+    items: [
+      { to: "/overview", label: "Overview" },
+      { to: "/llm-calls", label: "LLM calls" },
+      { to: "/grading-quality", label: "Grading quality" },
+      { to: "/quality", label: "Solution quality" },
+      { to: "/harness-runs", label: "Harness runs" },
+      { to: "/golden-set", label: "Generation QA" },
+    ],
+  },
+  {
+    label: "Customers",
+    items: [
+      { to: "/schools", label: "Schools" },
+      { to: "/leads", label: "Leads" },
+      { to: "/teachers/independent", label: "Independent teachers" },
+      { to: "/students/independent", label: "Independent students" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { to: "/users", label: "Users" },
+      { to: "/admins", label: "Admins" },
+      { to: "/audit-logs", label: "Audit log" },
+    ],
+  },
 ];
 
 export default function Layout() {
+  // Mirror the global API-health flag onto a rail-foot status dot so the
+  // operator always sees at a glance whether the backend is reachable.
+  const [apiDown, setApiDown] = useState(apiHealth.isDown());
+  useEffect(() => apiHealth.subscribe(setApiDown), []);
+
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <nav className="sidebar">
@@ -40,49 +62,36 @@ export default function Layout() {
           <div className="sidebar-brand-sub">Operations</div>
         </div>
 
-        {AUDIENCE_NAV.map((n) => (
-          <NavLink
-            key={n.to}
-            to={n.to}
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            {n.label}
-          </NavLink>
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label}>
+            <div className="nav-section-label">{group.label}</div>
+            {group.items.map((n) => (
+              <NavLink
+                key={n.to}
+                to={n.to}
+                className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+              >
+                {n.label}
+              </NavLink>
+            ))}
+          </div>
         ))}
 
-        <div className="nav-divider" />
-
-        {DIAGNOSTIC_NAV.map((n) => (
-          <NavLink
-            key={n.to}
-            to={n.to}
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            {n.label}
-          </NavLink>
-        ))}
-
-        <div className="nav-divider" />
-
-        {INTERNAL_NAV.map((n) => (
-          <NavLink
-            key={n.to}
-            to={n.to}
-            className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-          >
-            {n.label}
-          </NavLink>
-        ))}
-
-        {getToken() && (
-          <button
-            className="logout-btn"
-            style={{ marginTop: "auto" }}
-            onClick={() => { setToken(null); window.location.href = "/login"; }}
-          >
-            Sign out
-          </button>
-        )}
+        <div className="rail-foot">
+          <div className={`rail-status ${apiDown ? "rail-status-down" : "rail-status-ok"}`}>
+            <span aria-hidden="true" className="rail-status-dot" />
+            {apiDown ? "API unreachable" : "System OK"}
+          </div>
+          {getToken() && (
+            <button
+              className="logout-btn"
+              style={{ marginTop: 0 }}
+              onClick={() => { setToken(null); window.location.href = "/login"; }}
+            >
+              Sign out
+            </button>
+          )}
+        </div>
       </nav>
       <main className="main-content">
         <Outlet />
