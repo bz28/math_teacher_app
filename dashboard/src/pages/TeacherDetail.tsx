@@ -74,7 +74,11 @@ export default function TeacherDetail() {
       : null;
   const reachPct =
     data.total_students > 0
-      ? Math.round((u.students_reached / data.total_students) * 100)
+      // students_reached is all-time distinct submitters; total_students is
+      // current enrollment. A student who submitted then unenrolled could
+      // push this past 100%, so cap it — "of N enrolled" should never
+      // read >100%.
+      ? Math.min(100, Math.round((u.students_reached / data.total_students) * 100))
       : null;
 
   const visibleStudents = sectionFilter
