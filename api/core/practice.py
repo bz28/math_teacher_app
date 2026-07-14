@@ -90,6 +90,7 @@ async def generate_distractors(
     *,
     user_id: str | None = None,
     subject: str = Subject.MATH,
+    generation_job_id: str | None = None,
 ) -> list[str]:
     """Generate 3 plausible wrong answers for MC. Uses Haiku for text, Sonnet for diagrams."""
     cfg = get_config(subject)
@@ -112,6 +113,7 @@ async def generate_distractors(
             user_id=user_id,
             model=model,
             max_tokens=max_tokens,
+            generation_job_id=generation_job_id,
         )
         distractors = result.get("distractors", [])
         if isinstance(distractors, list) and len(distractors) >= 3:

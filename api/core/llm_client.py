@@ -223,6 +223,7 @@ async def _log_and_persist(
     input_text: str | None = None,
     output_text: str | None = None,
     submission_id: str | None = None,
+    generation_job_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
 ) -> None:
     """Track cost, log, and persist an LLM call to the database."""
@@ -258,6 +259,7 @@ async def _log_and_persist(
         input_text=input_text,
         output_text=output_text,
         submission_id=submission_id,
+        generation_job_id=generation_job_id,
         call_metadata=call_metadata,
     )
 
@@ -381,6 +383,7 @@ async def call_claude_json(
     thinking_budget: int | None = None,
     temperature: float | None = None,
     submission_id: str | None = None,
+    generation_job_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     """Call Claude and return a structured JSON dict via tool use.
@@ -467,7 +470,8 @@ async def call_claude_json(
                 latency_ms, session_id, user_id,
                 success=True, retry_count=attempt,
                 input_text=user_message, output_text=resp_text,
-                submission_id=submission_id, call_metadata=call_metadata,
+                submission_id=submission_id,
+                generation_job_id=generation_job_id, call_metadata=call_metadata,
             )
             _circuit.record_success()
             return result
@@ -481,7 +485,8 @@ async def call_claude_json(
                 use_model, mode, 0, 0, latency_ms, session_id, user_id,
                 success=False, retry_count=attempt,
                 input_text=user_message, output_text=str(e),
-                submission_id=submission_id, call_metadata=call_metadata,
+                submission_id=submission_id,
+                generation_job_id=generation_job_id, call_metadata=call_metadata,
             )
         except ValueError as e:
             latency_ms = round((time.monotonic() - start) * 1000, 2)
@@ -493,7 +498,8 @@ async def call_claude_json(
                 latency_ms, session_id, user_id,
                 success=False, retry_count=attempt,
                 input_text=user_message, output_text=str(e),
-                submission_id=submission_id, call_metadata=call_metadata,
+                submission_id=submission_id,
+                generation_job_id=generation_job_id, call_metadata=call_metadata,
             )
 
         if attempt < max_retries - 1:
@@ -801,6 +807,7 @@ async def call_claude_vision(
     thinking_budget: int | None = None,
     temperature: float | None = None,
     submission_id: str | None = None,
+    generation_job_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     """Call Claude with image content (Vision) and return structured JSON via tool use.
@@ -883,7 +890,8 @@ async def call_claude_vision(
             latency_ms, session_id=session_id, user_id=user_id,
             success=True, retry_count=0,
             input_text=input_summary, output_text=resp_text,
-            submission_id=submission_id, call_metadata=call_metadata,
+            submission_id=submission_id,
+            generation_job_id=generation_job_id, call_metadata=call_metadata,
         )
         _circuit.record_success()
         return result
@@ -895,7 +903,8 @@ async def call_claude_vision(
             use_model, mode, 0, 0, latency_ms,
             session_id=session_id, user_id=user_id, success=False,
             input_text=input_summary, output_text=str(e),
-            submission_id=submission_id, call_metadata=call_metadata,
+            submission_id=submission_id,
+            generation_job_id=generation_job_id, call_metadata=call_metadata,
         )
         raise RuntimeError(f"Claude Vision API error: {e}") from e
     except ValueError as e:
@@ -911,6 +920,7 @@ async def call_claude_vision(
             use_model, mode, 0, 0, latency_ms,
             session_id=session_id, user_id=user_id, success=False,
             input_text=input_summary, output_text=str(e),
-            submission_id=submission_id, call_metadata=call_metadata,
+            submission_id=submission_id,
+            generation_job_id=generation_job_id, call_metadata=call_metadata,
         )
         raise RuntimeError(f"Failed to parse Claude Vision response: {e}") from e

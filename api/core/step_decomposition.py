@@ -310,6 +310,7 @@ async def decompose_problem(
     work_diagnosis: dict[str, object] | None = None,
     subject: str = Subject.MATH,
     image_base64: str | None = None,
+    generation_job_id: str | None = None,
 ) -> Decomposition:
     """Generate step-by-step decomposition for a problem.
 
@@ -373,6 +374,7 @@ async def decompose_problem(
             max_tokens=8192,
             thinking_budget=2000,
             user_id=user_id,
+            generation_job_id=generation_job_id,
         )
     else:
         result = await call_claude_json(
@@ -384,6 +386,7 @@ async def decompose_problem(
             max_tokens=8192,
             thinking_budget=2000,
             user_id=user_id,
+            generation_job_id=generation_job_id,
         )
 
     steps, final_answer, answer_type = _parse_decomposition(result)
