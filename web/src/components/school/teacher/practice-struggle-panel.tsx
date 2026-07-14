@@ -10,6 +10,7 @@ import {
   type TeacherSection,
 } from "@/lib/api";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageErrorState } from "@/components/ui/page-error-state";
 import { NewPracticeModal } from "./_pieces/new-practice-modal";
 
 /**
@@ -38,6 +39,17 @@ export function PracticeStrugglePanel({ courseId }: { courseId: string }) {
   // The concept the teacher chose to re-teach — opens the new-practice
   // modal pre-seeded on that concept. Null = modal closed.
   const [reteach, setReteach] = useState<string | null>(null);
+  // Retry counters — one per fetch. The retry affordance re-fires
+  // whichever load failed: the section list (if we never got a section)
+  // or the per-section insights read.
+  const [sectionsReloadKey, setSectionsReloadKey] = useState(0);
+  const [insightsReloadKey, setInsightsReloadKey] = useState(0);
+
+  const retry = () => {
+    setError(null);
+    if (activeSection) setInsightsReloadKey((k) => k + 1);
+    else setSectionsReloadKey((k) => k + 1);
+  };
 
   // Load the section list once — drives the pivot and gives us a
   // section_id to scope the (per-section) insights read.
@@ -58,7 +70,7 @@ export function PracticeStrugglePanel({ courseId }: { courseId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [courseId]);
+  }, [courseId, sectionsReloadKey]);
 
   // (Re)load insights whenever the active section changes. The fetch
   // runs inside a nested async fn (not the effect body) so the initial
@@ -68,6 +80,11 @@ export function PracticeStrugglePanel({ courseId }: { courseId: string }) {
     let cancelled = false;
     const load = async () => {
       setLoading(true);
+      // Clear any prior error so switching to a healthy section escapes
+      // the error card — otherwise a failed load on one section would
+      // wall off every later section behind a stale error (the error
+      // branch wins the render ternary even once new data arrives).
+      setError(null);
       try {
         const res = await teacher.practiceInsights(courseId, activeSection);
         if (!cancelled) setInsights(res);
@@ -83,7 +100,7 @@ export function PracticeStrugglePanel({ courseId }: { courseId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [courseId, activeSection]);
+  }, [courseId, activeSection, insightsReloadKey]);
 
   // The re-teach list = items the class actually struggled on, worst
   // first (the read already sorts this way). Items practiced cleanly
@@ -136,7 +153,10 @@ export function PracticeStrugglePanel({ courseId }: { courseId: string }) {
       )}
 
       {error ? (
-        <p className="mt-5 text-sm text-[color:var(--color-error)]">{error}</p>
+        <PageErrorState
+          message="We couldn't load this right now."
+          onRetry={retry}
+        />
       ) : loading || insights === null ? (
         <StruggleSkeleton />
       ) : insights.students_active === 0 ? (

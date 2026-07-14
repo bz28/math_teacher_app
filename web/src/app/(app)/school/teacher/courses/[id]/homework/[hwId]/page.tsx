@@ -636,6 +636,23 @@ export default function HomeworkDetailPage({
     0,
   );
 
+  // Failed-generation surfacing. A job that ends `status:"failed"`
+  // (backend failure OR the poll-ceiling timeout above) drops out of
+  // the `activeGenerating` set, so the generating strip/hero silently
+  // vanish — and a zero-produced run falls through to the empty hero
+  // as if nothing ever happened. Instead, once nothing is still
+  // generating but a tracked job ended failed with a shortfall, show a
+  // persistent banner so the teacher knows what didn't come through
+  // and can re-fire generation. Cleared automatically when they do
+  // (onStarted drops terminal jobs from activeJobs).
+  const failedJobs = activeJobs.filter((j) => j.status === "failed");
+  const stalledShortfall = failedJobs.reduce(
+    (s, j) => s + Math.max(0, j.requested_count - j.produced_count),
+    0,
+  );
+  const generationStalled =
+    !activeGenerating && failedJobs.length > 0 && stalledShortfall > 0;
+
   return (
     <>
     {workshopItem && (
@@ -848,6 +865,19 @@ export default function HomeworkDetailPage({
               courseId={courseId}
               assignmentId={assignmentId}
               rows={inboxRows}
+            />
+          )}
+
+          {/* Generation-stalled banner — persistent surfacing of a
+              failed gen job so a zero-produced (or short) run doesn't
+              vanish into the empty hero. Sits above the pending banner
+              so its "safe in Pending review" note points right at it. */}
+          {generationStalled && (
+            <GenerationStalledBanner
+              shortfall={stalledShortfall}
+              savedCount={pending.length}
+              disabled={isPublished}
+              onRetry={() => setShowGenerate(true)}
             />
           )}
 
@@ -1229,6 +1259,60 @@ function ProblemsGeneratingHero({
           ? `${producedCount} of ${requestedCount} ready — they'll land in the review queue as the AI finishes each one.`
           : "The AI is crafting them from your uploaded materials. Usually about 30 seconds."}
       </p>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Generation-stalled banner — persistent surfacing of a failed gen job.
+// A failed job (backend error or the poll-ceiling timeout) otherwise
+// drops out of the "generating" set, so the progress strip just
+// disappears and a zero-produced run falls through to the empty hero
+// as if nothing happened. This banner keeps the failure visible with a
+// one-click re-fire (reuses the existing Generate-more trigger — no new
+// backend retry semantics) and reassures that anything the job DID
+// produce is safe in the pending-review queue.
+// ────────────────────────────────────────────────────────────────────
+function GenerationStalledBanner({
+  shortfall,
+  savedCount,
+  disabled,
+  onRetry,
+}: {
+  shortfall: number;
+  savedCount: number;
+  disabled: boolean;
+  onRetry: () => void;
+}) {
+  const noun = shortfall === 1 ? "problem" : "problems";
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="mt-4 flex flex-col gap-3 rounded-[--radius-xl] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="flex items-start gap-3">
+        <span className="text-xl leading-none" aria-hidden="true">⚠️</span>
+        <div>
+          <p className="text-sm font-bold text-[color:var(--color-error)]">
+            {`Generation stalled — ${shortfall} ${noun} didn’t come through`}
+          </p>
+          <p className="mt-0.5 text-xs text-text-secondary">
+            {savedCount > 0
+              ? `Anything already produced is safe in Pending review below — nothing was lost. Try again to finish the set.`
+              : `Nothing came through this time. Try again — anything produced lands safely in Pending review.`}
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onRetry}
+        disabled={disabled}
+        title={disabled ? "Unpublish to generate more" : "Re-run generation"}
+        className="shrink-0 self-start rounded-[--radius-md] bg-[color:var(--color-error)] px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:opacity-90 disabled:opacity-50 sm:self-auto"
+      >
+        Try again
+      </button>
     </div>
   );
 }
