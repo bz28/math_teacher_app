@@ -145,8 +145,7 @@ async def users(
         )
     )).scalar() or 0.0
 
-    # New users in the selected window (scope-filtered, unlike
-    # registrations_by_day which is intentionally global). Powers the
+    # New users in the selected window (scope-filtered). Powers the
     # "New this window" tile on the Independent teacher/student tabs.
     new_users = (await db.execute(
         select(func.count()).select_from(User).where(
@@ -154,13 +153,15 @@ async def users(
         )
     )).scalar() or 0
 
-    # Registrations over time
+    # Registrations over time — scope-filtered so the "New this week"
+    # tile and sparkline track the active role/plan/school filter,
+    # consistent with total_users / active_7d / total_spend above.
     registrations_by_day = (await db.execute(
         select(
             cast(User.created_at, Date).label("day"),
             func.count().label("count"),
         )
-        .where(User.created_at >= since)
+        .where(User.created_at >= since, *scope_filters)
         .group_by("day")
         .order_by("day")
     )).all()
