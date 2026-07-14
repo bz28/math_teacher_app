@@ -329,11 +329,13 @@ def _run_flows(args: argparse.Namespace) -> int:
 def _run_explore(args: argparse.Namespace) -> int:
     from datetime import UTC, datetime
 
+    from api.core.llm_client import MODEL_REASON
     from tests.harness.explorer import (
         explore,
         generate_scenarios,
         load_corpus,
         persist_explore_summary,
+        persist_golden_cases,
         promote_failures,
         write_explore_report,
     )
@@ -351,10 +353,13 @@ def _run_explore(args: argparse.Namespace) -> int:
         corpus = promote_failures(result)
         report_html = write_explore_report(result, Path(args.out))
         cost = await run_cost(args.mode, started)
-        ok = await persist_explore_summary(
+        run_id = await persist_explore_summary(
             result, report_html, cost, args.mode, args.summary_db,
         )
-        return result, corpus, cost, ok
+        # Refresh the live golden-set health view (best-effort). The run row
+        # carries the failure report each case links to via last_run_id.
+        await persist_golden_cases(result, run_id, MODEL_REASON, args.summary_db)
+        return result, corpus, cost, bool(run_id)
 
     result, corpus, cost, ok = asyncio.run(_exec())
     total = len(result.results)

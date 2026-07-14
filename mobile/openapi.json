@@ -1422,6 +1422,57 @@
         "title": "GenerationParams",
         "type": "object"
       },
+      "GoldenCaseCreate": {
+        "properties": {
+          "adversarial": {
+            "default": false,
+            "title": "Adversarial",
+            "type": "boolean"
+          },
+          "constraint": {
+            "minLength": 1,
+            "title": "Constraint",
+            "type": "string"
+          },
+          "expected_shapes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Expected Shapes",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "probe": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Probe",
+            "type": "string"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          }
+        },
+        "required": [
+          "probe",
+          "name",
+          "constraint"
+        ],
+        "title": "GoldenCaseCreate",
+        "type": "object"
+      },
       "GradeRequest": {
         "properties": {
           "breakdown": {
@@ -2510,6 +2561,19 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "RerunPayload": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "title": "RerunPayload",
+        "type": "object"
+      },
       "ResolveRequest": {
         "description": "Teacher's session-level resolution of an integrity check. The\noutcome is what the teacher decided after reviewing \u2014 it does NOT\nchange the AI's disposition. All three outcomes clear the flag from\nthe roster's needs-attention aggregate.",
         "properties": {
@@ -2544,6 +2608,17 @@
           }
         },
         "title": "RespondRequest",
+        "type": "object"
+      },
+      "RetirePayload": {
+        "properties": {
+          "retired": {
+            "default": true,
+            "title": "Retired",
+            "type": "boolean"
+          }
+        },
+        "title": "RetirePayload",
         "type": "object"
       },
       "SectionStudentInsightsResponse": {
@@ -6169,6 +6244,193 @@
           }
         ],
         "summary": "Generation Job Detail",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/golden-set": {
+      "get": {
+        "description": "Every golden case + the health tiles the console leads with.",
+        "operationId": "golden_set_v1_admin_golden_set_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Golden Set V1 Admin Golden Set Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Golden Set",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Add a golden case. It starts `pending` until the next corpus run evaluates it.",
+        "operationId": "add_golden_case_v1_admin_golden_set_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoldenCaseCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Add Golden Case V1 Admin Golden Set Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add Golden Case",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/golden-set/rerun": {
+      "post": {
+        "description": "Flag cases for a fresh eval. The autonomous harness picks these up on its\nnext corpus run (it re-runs the whole corpus and upserts fresh results,\nclearing the flag) \u2014 this records the operator's intent without wiping the\ncurrently-shown verdict.",
+        "operationId": "rerun_golden_eval_v1_admin_golden_set_rerun_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RerunPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Rerun Golden Eval V1 Admin Golden Set Rerun Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rerun Golden Eval",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/golden-set/{case_id}/retire": {
+      "patch": {
+        "description": "Retire (or restore) a case \u2014 keeps its history, drops it from the tiles.",
+        "operationId": "retire_golden_case_v1_admin_golden_set__case_id__retire_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetirePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Retire Golden Case V1 Admin Golden Set  Case Id  Retire Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Retire Golden Case",
         "tags": [
           "admin"
         ]

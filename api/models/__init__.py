@@ -11,6 +11,7 @@ from api.models import (  # noqa: F401
     assignment,
     contact_lead,
     course,
+    golden_case,
     harness_run,
     integrity_check,
     lead_meeting,
