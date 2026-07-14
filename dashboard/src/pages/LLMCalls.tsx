@@ -33,10 +33,14 @@ export default function LLMCalls() {
   // TeacherDetail ("View calls (30d)" → ?hours=720, failed calls → ?status=
   // failed) land on the window + scope they advertised.
   const [hours, setHours] = useState(searchParams.get("hours") ?? "24");
-  const [userFilter, setUserFilter] = useState(searchParams.get("user") ?? "");
+  // Function + free-text search are the operator's transient live query —
+  // deliberately local (not URL-synced), unlike the deep-linkable scopes.
   const [fnFilter, setFnFilter] = useState("");
   const [search, setSearch] = useState("");
-  // URL-driven scopes (deep-linkable): submission, session, school, status.
+  // URL-driven scopes (deep-linkable, and the single source of truth so the
+  // shown value and the URL can never disagree): user, submission, session,
+  // school, status.
+  const userFilter = searchParams.get("user") ?? "";
   const submissionFilter = searchParams.get("submission") ?? "";
   const sessionFilter = searchParams.get("session") ?? "";
   const schoolFilter = searchParams.get("school") ?? "";
@@ -173,28 +177,28 @@ export default function LLMCalls() {
 
       {/* ── Filter bar — the operator's find-that-one-call controls ──── */}
       <div className="filters">
-        <select value={hours} onChange={(e) => handleHoursChange(e.target.value)}>
+        <select aria-label="Time window" value={hours} onChange={(e) => handleHoursChange(e.target.value)}>
           <option value="1">Last hour</option>
           <option value="6">Last 6 hours</option>
           <option value="24">Last 24 hours</option>
           <option value="168">Last 7 days</option>
           <option value="720">Last 30 days</option>
         </select>
-        <select value={userFilter} onChange={(e) => setUserFilter(e.target.value)}>
+        <select aria-label="Filter by user" value={userFilter} onChange={(e) => setParam("user", e.target.value)}>
           <option value="">All users</option>
           {data.users.map((u) => <option key={u.id} value={u.id}>{u.email}</option>)}
         </select>
         {schools.length > 0 && (
-          <select value={schoolFilter} onChange={(e) => setParam("school", e.target.value)}>
+          <select aria-label="Filter by school" value={schoolFilter} onChange={(e) => setParam("school", e.target.value)}>
             <option value="">All schools</option>
             {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         )}
-        <select value={fnFilter} onChange={(e) => setFnFilter(e.target.value)}>
+        <select aria-label="Filter by function" value={fnFilter} onChange={(e) => setFnFilter(e.target.value)}>
           <option value="">All functions</option>
           {fnOptions.map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
-        <select value={status} onChange={(e) => setParam("status", e.target.value)}>
+        <select aria-label="Filter by status" value={status} onChange={(e) => setParam("status", e.target.value)}>
           <option value="">Any status</option>
           <option value="ok">Succeeded</option>
           <option value="failed">Failed</option>
