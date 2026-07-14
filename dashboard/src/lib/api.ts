@@ -400,6 +400,7 @@ export const api = {
   debugLLMCall: (callId: string) =>
     mutate<{ status: string; call_id: string }>(`/admin/llm-calls/${callId}/debug`, "POST"),
   inviteAdmin: (email: string, name: string) => mutate<{ status: string }>("/admin/users/invite", "POST", { email, name }),
+  resendInvite: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}/resend-invite`, "POST"),
   teacherStudents: (teacherId: string, params?: Record<string, string>) =>
     request<TeacherStudentsData>(`/admin/users/${teacherId}/students`, params),
   // Leads
@@ -1018,9 +1019,16 @@ export interface UsersData {
     // Prefer over last_active for active/stale/dormant — folds in a
     // teacher's grade/publish actions that leave no session.
     last_active_at: string | null;
+    /** Most recent login (refresh-token issue). Best "last seen"
+     *  signal for admins, who never run tutoring sessions. */
+    last_login: string | null;
+    /** Account activation state, surfaced on the Admin preset. */
+    invite_status: "active" | "pending" | "expired";
     registered: string;
     subscription_tier: string;
     subscription_status: string;
+    /** Institutional school affiliation, or null (solo / indie). */
+    school: { id: string; name: string } | null;
     daily_usage: {
       sessions: number;
       sessions_limit: number | null;

@@ -35,7 +35,7 @@ from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.session import Session
-from api.models.user import User
+from api.models.user import RefreshToken, User
 from api.routes.admin_helpers import activity_last_action_sq, time_range
 from api.services.bank import problem_ids_in_content
 
@@ -54,6 +54,8 @@ async def users(
     offset: int = Query(default=0, ge=0),
     search: str | None = Query(default=None, max_length=100),
     role: str | None = Query(default=None, pattern=r"^(student|teacher|admin)$"),
+    plan: str | None = Query(default=None, pattern=r"^(free|pro)$"),
+    school_id: uuid.UUID | None = Query(default=None),
     no_school: bool = Query(default=False),
     # Teacher-only conversion-prospect filters. has_classroom limits
     # to teachers running at least one section with students enrolled;
@@ -87,6 +89,10 @@ async def users(
     scope_filters: list[Any] = [User.is_preview.is_(False)]
     if role:
         scope_filters.append(User.role == role)
+    if plan:
+        scope_filters.append(User.subscription_tier == plan)
+    if school_id:
+        scope_filters.append(User.school_id == school_id)
     if no_school:
         # "Independent" means different things for the two roles
         # post-bp1000059:
@@ -194,6 +200,22 @@ async def users(
     # user with neither stays NULL.
     last_active_at = func.greatest(
         user_sessions.c.last_active, user_activity.c.last_action_at
+    )
+
+    # Last dashboard/app login — the most recent refresh token issued
+    # to the user. Refresh tokens are minted at login and on rotation,
+    # so max(created_at) is the best available "last seen" signal. It's
+    # the only activity signal admins have (they never run tutoring
+    # sessions, so user_sessions.last_active is always NULL for them),
+    # so the consolidated Users page surfaces it for the Admin preset.
+    # Not time-windowed: an admin's last login can predate any window.
+    user_last_login = (
+        select(
+            RefreshToken.user_id,
+            func.max(RefreshToken.created_at).label("last_login"),
+        )
+        .group_by(RefreshToken.user_id)
+        .subquery()
     )
 
     # Daily usage subqueries (today)
@@ -439,6 +461,10 @@ async def users(
             last_active_at.label("last_active_at"),
             User.subscription_tier,
             User.subscription_status,
+            # Invite state — only meaningful for admins (surfaced on the
+            # Admin preset), but cheap to always select.
+            User.password_reset_token_hash,
+            User.password_reset_expires,
             func.coalesce(daily_sessions.c.daily_sessions, 0).label("daily_sessions"),
             func.coalesce(daily_chats.c.daily_chats, 0).label("daily_chats"),
             func.coalesce(daily_scans.c.daily_scans, 0).label("daily_scans"),
@@ -446,10 +472,15 @@ async def users(
             func.coalesce(teacher_students.c.student_count, 0).label("student_count"),
             func.coalesce(teacher_submissions_30d.c.submissions_30d, 0).label("submissions_30d"),
             func.coalesce(teacher_homeworks.c.homework_count, 0).label("homework_count"),
+            user_last_login.c.last_login,
+            School.id.label("school_id"),
+            School.name.label("school_name"),
+            School.kind.label("school_kind"),
         )
         .outerjoin(user_cost, user_cost.c.user_id == User.id)
         .outerjoin(user_sessions, user_sessions.c.user_id == User.id)
         .outerjoin(user_activity, user_activity.c.gid == User.id)
+        .outerjoin(user_last_login, user_last_login.c.user_id == User.id)
         .outerjoin(daily_sessions, daily_sessions.c.user_id == User.id)
         .outerjoin(daily_chats, daily_chats.c.user_id == User.id)
         .outerjoin(daily_scans, daily_scans.c.user_id == User.id)
@@ -457,6 +488,7 @@ async def users(
         .outerjoin(teacher_students, teacher_students.c.user_id == User.id)
         .outerjoin(teacher_submissions_30d, teacher_submissions_30d.c.user_id == User.id)
         .outerjoin(teacher_homeworks, teacher_homeworks.c.user_id == User.id)
+        .outerjoin(School, School.id == User.school_id)
         .where(*search_filters)
     )
     users_query = (
@@ -466,6 +498,25 @@ async def users(
         .offset(offset)
     )
     all_users = (await db.execute(users_query)).all()
+
+    now = datetime.now(UTC)
+
+    def invite_status(r: Any) -> str:
+        """Account activation state, surfaced for the Admin preset.
+
+        An invited admin is created with a random password + a
+        set-password token and has never logged in. So:
+          - has logged in (a refresh token exists)       → "active"
+          - never logged in, no outstanding token        → "active"
+            (a plain seeded/never-invited account)
+          - never logged in, token still valid           → "pending"
+          - never logged in, token expired               → "expired"
+        """
+        if r.last_login is not None or r.password_reset_token_hash is None:
+            return "active"
+        if r.password_reset_expires is not None and r.password_reset_expires < now:
+            return "expired"
+        return "pending"
 
     return {
         "total_users": total_users,
@@ -495,9 +546,19 @@ async def users(
                 # graded/published (no session). `last_active` is kept
                 # for the parallel tab PRs mid-migration.
                 "last_active_at": r.last_active_at.isoformat() if r.last_active_at else None,
+                "last_login": r.last_login.isoformat() if r.last_login else None,
+                "invite_status": invite_status(r),
                 "registered": r.created_at.isoformat(),
                 "subscription_tier": r.subscription_tier,
                 "subscription_status": r.subscription_status,
+                # Real (institutional) school only. Synthetic
+                # kind='individual' schools are the indie-teacher
+                # signal, not a partner — surfaced as no school.
+                "school": (
+                    {"id": str(r.school_id), "name": r.school_name}
+                    if r.school_id is not None and r.school_kind != SCHOOL_KIND_INDIVIDUAL
+                    else None
+                ),
                 "daily_usage": {
                     "sessions": r.daily_sessions,
                     "sessions_limit": None if r.subscription_tier == "pro" else FREE_DAILY_SESSION_LIMIT,
@@ -523,6 +584,33 @@ class InviteAdminRequest(BaseModel):
     name: str
 
 
+def _issue_invite_token(user: User) -> str:
+    """Stamp a fresh set-password token on `user` and return the raw
+    token to embed in the email link. Mutates the user; caller commits."""
+    raw_token = secrets.token_urlsafe(32)
+    user.password_reset_token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    user.password_reset_expires = datetime.now(UTC) + timedelta(hours=INVITE_TOKEN_EXPIRY_HOURS)
+    return raw_token
+
+
+def _send_admin_invite_email(*, inviter_name: str, email: str, raw_token: str) -> None:
+    """Fire-and-forget the admin invite email with the set-password link."""
+    set_password_url = f"https://veradicai.com/set-password?token={raw_token}"
+    asyncio.create_task(send_email(
+        to=[email],
+        subject="You've been invited to Veradic AI Admin",
+        html=(
+            f"<h2>Welcome to Veradic AI!</h2>"
+            f"<p><strong>{inviter_name}</strong> has invited you as an admin.</p>"
+            f"<p>Click the link below to set your password and log in:</p>"
+            f'<p><a href="{set_password_url}" style="display:inline-block;padding:12px 24px;'
+            f'background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;'
+            f'font-weight:600;">Set Your Password</a></p>'
+            f"<p style=\"color:#64748b;font-size:13px;\">This link expires in {INVITE_TOKEN_EXPIRY_HOURS} hours.</p>"
+        ),
+    ))
+
+
 @router.post("/users/invite")
 async def invite_admin(
     body: InviteAdminRequest,
@@ -534,38 +622,55 @@ async def invite_admin(
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="A user with this email already exists")
 
-    # Generate password reset token
-    raw_token = secrets.token_urlsafe(32)
-    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-
     user = User(
         email=body.email.lower(),
         name=body.name.strip(),
         password_hash=hash_password(secrets.token_urlsafe(32)),
         grade_level=0,
         role="admin",
-        password_reset_token_hash=token_hash,
-        password_reset_expires=datetime.now(UTC) + timedelta(hours=INVITE_TOKEN_EXPIRY_HOURS),
     )
+    raw_token = _issue_invite_token(user)
     db.add(user)
     await db.commit()
 
-    set_password_url = f"https://veradicai.com/set-password?token={raw_token}"
     logger.info("AUDIT: admin=%s invited new admin email=%s", current_user.user_id, body.email)
+    _send_admin_invite_email(inviter_name=current_user.name, email=body.email.lower(), raw_token=raw_token)
 
-    asyncio.create_task(send_email(
-        to=[body.email.lower()],
-        subject="You've been invited to Veradic AI Admin",
-        html=(
-            f"<h2>Welcome to Veradic AI!</h2>"
-            f"<p><strong>{current_user.name}</strong> has invited you as an admin.</p>"
-            f"<p>Click the link below to set your password and log in:</p>"
-            f'<p><a href="{set_password_url}" style="display:inline-block;padding:12px 24px;'
-            f'background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;'
-            f'font-weight:600;">Set Your Password</a></p>'
-            f"<p style=\"color:#64748b;font-size:13px;\">This link expires in {INVITE_TOKEN_EXPIRY_HOURS} hours.</p>"
-        ),
-    ))
+    return {"status": "ok"}
+
+
+@router.post("/users/{user_id}/resend-invite")
+async def resend_admin_invite(
+    user_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Re-issue the set-password invite for a pending admin.
+
+    Rotates the token (invalidating any earlier link) and resends the
+    email. Only valid for an admin who hasn't activated yet — once they
+    log in there's a refresh token and re-inviting makes no sense.
+    """
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only admin invites can be resent")
+
+    already_active = (await db.execute(
+        select(RefreshToken.id).where(RefreshToken.user_id == user_id).limit(1)
+    )).scalar_one_or_none()
+    if already_active is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This admin has already activated their account",
+        )
+
+    raw_token = _issue_invite_token(user)
+    await db.commit()
+
+    logger.info("AUDIT: admin=%s resent invite to admin=%s", current_user.user_id, user_id)
+    _send_admin_invite_email(inviter_name=current_user.name, email=user.email, raw_token=raw_token)
 
     return {"status": "ok"}
 
