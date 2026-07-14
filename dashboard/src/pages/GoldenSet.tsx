@@ -380,32 +380,46 @@ export default function GoldenSet() {
       )}
 
       {/* ── The linked harness failure report (reuses /harness-runs/{id}/report) ── */}
-      {reportHtml !== null && (
-        <div className="gs-modal-overlay" onClick={() => setReportHtml(null)}>
-          <div className="gs-report-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="gs-modal-head">
-              <b>Eval report</b>
-              <button className="gs-modal-x" onClick={() => setReportHtml(null)}>✕</button>
-            </div>
-            <iframe title="Eval report" srcDoc={reportHtml} sandbox="" className="gs-report-frame" />
-          </div>
-        </div>
-      )}
+      {reportHtml !== null && <ReportModal html={reportHtml} onClose={() => setReportHtml(null)} />}
 
       {toast && <div className="toast-card gs-toast">{toast}</div>}
     </div>
   );
 }
 
+function useEscClose(onClose: () => void) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+}
+
 function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useEscClose(onClose);
   return (
     <div className="gs-modal-overlay" onClick={onClose}>
-      <div className="gs-drawer" onClick={(e) => e.stopPropagation()}>
+      <div className="gs-drawer" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="gs-modal-head">
           <b>{title}</b>
-          <button className="gs-modal-x" onClick={onClose}>✕</button>
+          <button className="gs-modal-x" aria-label="Close" onClick={onClose}>✕</button>
         </div>
         <div className="gs-drawer-body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function ReportModal({ html, onClose }: { html: string; onClose: () => void }) {
+  useEscClose(onClose);
+  return (
+    <div className="gs-modal-overlay" onClick={onClose}>
+      <div className="gs-report-modal" role="dialog" aria-modal="true" aria-label="Eval report" onClick={(e) => e.stopPropagation()}>
+        <div className="gs-modal-head">
+          <b>Eval report</b>
+          <button className="gs-modal-x" aria-label="Close" onClick={onClose}>✕</button>
+        </div>
+        <iframe title="Eval report" srcDoc={html} sandbox="" className="gs-report-frame" />
       </div>
     </div>
   );
