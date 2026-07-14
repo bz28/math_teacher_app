@@ -14,7 +14,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.audit_log import log_admin_action
+from api.core.audit_log import record_activity
 from api.core.auth import hash_password
 from api.core.email import send_email
 from api.core.entitlements import (
@@ -551,14 +551,13 @@ async def update_user_role(
     user.role = body.role
     user.updated_by_id = current_user.user_id
     user.updated_by_name = current_user.name
-    await log_admin_action(
+    await record_activity(
         db,
-        admin_user_id=current_user.user_id,
-        admin_role=current_user.role,
-        action="user.role_change",
-        target_type="user",
-        target_id=user_id,
-        metadata={"old_role": old_role, "new_role": body.role},
+        current_user,
+        "user.role_change",
+        "user",
+        user_id,
+        {"old_role": old_role, "new_role": body.role},
         request=request,
     )
     await db.commit()
@@ -640,14 +639,13 @@ async def update_user_subscription(
         user.subscription_provider = user.subscription_provider or "admin"
     user.updated_by_id = current_user.user_id
     user.updated_by_name = current_user.name
-    await log_admin_action(
+    await record_activity(
         db,
-        admin_user_id=current_user.user_id,
-        admin_role=current_user.role,
-        action="user.subscription_change",
-        target_type="user",
-        target_id=user_id,
-        metadata={
+        current_user,
+        "user.subscription_change",
+        "user",
+        user_id,
+        {
             "old_tier": old_tier, "old_status": old_status,
             "new_tier": user.subscription_tier, "new_status": user.subscription_status,
             "stripe_cancelled": stripe_cancelled,
@@ -681,14 +679,13 @@ async def delete_user(
     logger.info("AUDIT: admin=%s deleted user=%s (email=%s)", current_user.user_id, user_id, user.email)
     # Stamp the audit row before the delete — target_id is a plain UUID (no FK),
     # so it survives the user row; email/role are captured here for the trail.
-    await log_admin_action(
+    await record_activity(
         db,
-        admin_user_id=current_user.user_id,
-        admin_role=current_user.role,
-        action="user.delete",
-        target_type="user",
-        target_id=user_id,
-        metadata={"email": user.email, "role": user.role},
+        current_user,
+        "user.delete",
+        "user",
+        user_id,
+        {"email": user.email, "role": user.role},
         request=request,
     )
     await db.delete(user)

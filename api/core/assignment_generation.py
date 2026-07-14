@@ -225,6 +225,7 @@ async def generate_questions(
     images: list[dict[str, str]] | None = None,
     extra_instructions: str | None = None,
     params: dict[str, Any] | None = None,
+    call_metadata: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
     """Generate problems for a given topic.
 
@@ -242,6 +243,11 @@ async def generate_questions(
                 non-default value is translated to a constraint bullet
                 appended to the user message. See
                 _translate_params_to_instructions.
+        call_metadata: Optional structured tags logged on the LLM call
+                (e.g. attached-document provenance from
+                build_attachment_metadata). Observability only — it is
+                NOT part of the prompt or vision content, so passing it
+                leaves the model's input byte-identical.
 
     Returns list of {"title", "text", "difficulty"}. The model's
     auto-labeled difficulty (per the schema enum) flows downstream
@@ -285,6 +291,7 @@ async def generate_questions(
                 user_id=user_id,
                 model=MODEL_REASON,
                 max_tokens=4096,
+                call_metadata=call_metadata,
             )
         else:
             result = await call_claude_json(
@@ -295,6 +302,7 @@ async def generate_questions(
                 user_id=user_id,
                 model=MODEL_REASON,
                 max_tokens=4096,
+                call_metadata=call_metadata,
             )
         questions: list[Any] = result.get("questions", [])  # type: ignore[assignment]
 

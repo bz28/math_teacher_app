@@ -5647,14 +5647,14 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/v1/admin/audit-logs/admin-actions": {
+    "/v1/admin/activity": {
       "get": {
-        "description": "Paginated admin action log.",
-        "operationId": "admin_action_log_v1_admin_audit_logs_admin_actions_get",
+        "description": "Paginated role-agnostic activity log (admin + teacher writes).",
+        "operationId": "activity_log_v1_admin_activity_get",
         "parameters": [
           {
             "in": "query",
-            "name": "admin_user_id",
+            "name": "actor_user_id",
             "required": false,
             "schema": {
               "anyOf": [
@@ -5666,11 +5666,29 @@
                   "type": "null"
                 }
               ],
-              "title": "Admin User Id"
+              "title": "Actor User Id"
             }
           },
           {
-            "description": "Exact action (\"user.delete\") or prefix glob (\"user.*\").",
+            "description": "\"admin\" or \"teacher\".",
+            "in": "query",
+            "name": "actor_role",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "\"admin\" or \"teacher\".",
+              "title": "Actor Role"
+            }
+          },
+          {
+            "description": "Exact action (\"grade.publish\") or prefix glob (\"grade.*\").",
             "in": "query",
             "name": "action",
             "required": false,
@@ -5683,7 +5701,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Exact action (\"user.delete\") or prefix glob (\"user.*\").",
+              "description": "Exact action (\"grade.publish\") or prefix glob (\"grade.*\").",
               "title": "Action"
             }
           },
@@ -5701,6 +5719,43 @@
                 }
               ],
               "title": "Target Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
+          },
+          {
+            "description": "Time window.",
+            "in": "query",
+            "name": "hours",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 8760,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Time window.",
+              "title": "Hours"
             }
           },
           {
@@ -5733,7 +5788,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Admin Action Log V1 Admin Audit Logs Admin Actions Get",
+                  "title": "Response Activity Log V1 Admin Activity Get",
                   "type": "object"
                 }
               }
@@ -5756,7 +5811,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Admin Action Log",
+        "summary": "Activity Log",
         "tags": [
           "admin"
         ]
@@ -5888,6 +5943,232 @@
           }
         ],
         "summary": "Student Access Log",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/documents/{document_id}/content": {
+      "get": {
+        "description": "Serve a stored document's base64 image so the dashboard can render\nthe actual uploaded worksheet. Admin-only \u2014 this is course material,\ninvisible admin-side until now.",
+        "operationId": "document_content_v1_admin_documents__document_id__content_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Document Content V1 Admin Documents  Document Id  Content Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Document Content",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/generation/jobs": {
+      "get": {
+        "description": "Paginated list of a teacher's generation jobs with correlated cost.",
+        "operationId": "generation_jobs_v1_admin_generation_jobs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "teacher_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Teacher Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hours",
+            "required": false,
+            "schema": {
+              "default": 720,
+              "maximum": 8760,
+              "minimum": 1,
+              "title": "Hours",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Generation Jobs V1 Admin Generation Jobs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Generation Jobs",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/generation/jobs/{job_id}": {
+      "get": {
+        "description": "One generation job: its focus/params, produced problems, the\ncorrelated LLM calls (with cost + expandable input/output), and the\nstored source documents so the dashboard can render the worksheet.",
+        "operationId": "generation_job_detail_v1_admin_generation_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Generation Job Detail V1 Admin Generation Jobs  Job Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Generation Job Detail",
         "tags": [
           "admin"
         ]

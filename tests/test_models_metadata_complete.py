@@ -41,7 +41,7 @@ def test_models_register_tables_on_metadata() -> None:
     for critical in (
         "question_bank_items",
         "integrity_check_submissions",
-        "admin_audit_log",
+        "activity_log",
     ):
         assert critical in tables, (
             f"{critical} is not registered on Base.metadata — autogenerate would "

@@ -273,8 +273,14 @@ export const api = {
   users: (params?: Record<string, string>) => request<UsersData>("/admin/users", params),
   studentAccessLog: (params?: Record<string, string>) =>
     request<StudentAccessLogData>("/admin/audit-logs/student-access", params),
-  adminActionLog: (params?: Record<string, string>) =>
-    request<AdminActionLogData>("/admin/audit-logs/admin-actions", params),
+  activityLog: (params?: Record<string, string>) =>
+    request<ActivityLogData>("/admin/activity", params),
+  generationJobs: (params?: Record<string, string>) =>
+    request<GenerationJobsData>("/admin/generation/jobs", params),
+  generationJob: (id: string) =>
+    request<GenerationJobDetail>(`/admin/generation/jobs/${id}`),
+  documentContent: (id: string) =>
+    request<DocumentContent>(`/admin/documents/${id}/content`),
   updateUserRole: (userId: string, role: string) => mutate<{ status: string }>(`/admin/users/${userId}/role`, "PATCH", { role }),
   deleteUser: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}`, "DELETE"),
   updateUserSubscription: (userId: string, tier: string, status: string) =>
@@ -762,12 +768,13 @@ export interface StudentAccessLogData {
   entries: StudentAccessLogEntry[];
 }
 
-export interface AdminActionLogEntry {
+export interface ActivityLogEntry {
   id: string;
-  admin_user_id: string | null;
-  admin_name: string | null;
-  admin_email: string | null;
-  admin_role: string;
+  actor_user_id: string | null;
+  actor_name: string | null;
+  actor_email: string | null;
+  actor_role: string;
+  school_id: string | null;
   action: string;
   target_type: string;
   target_id: string | null;
@@ -776,10 +783,107 @@ export interface AdminActionLogEntry {
   performed_at: string;
 }
 
-export interface AdminActionLogData {
+export interface ActivityLogData {
   total: number;
   limit: number;
   offset: number;
-  entries: AdminActionLogEntry[];
+  entries: ActivityLogEntry[];
+}
+
+// ── Generation observability ──
+
+export interface GenerationJobSummary {
+  id: string;
+  mode: string;
+  status: string;
+  requested_count: number;
+  produced_count: number;
+  constraint: string | null;
+  source_doc_count: number;
+  course_id: string;
+  course_name: string | null;
+  unit_id: string;
+  unit_name: string | null;
+  created_by_id: string;
+  created_at: string;
+  updated_at: string;
+  llm_cost_usd: number;
+  llm_call_count: number;
+}
+
+export interface GenerationJobsData {
+  total: number;
+  limit: number;
+  offset: number;
+  jobs: GenerationJobSummary[];
+}
+
+export interface GenerationItem {
+  id: string;
+  title: string | null;
+  question: string;
+  final_answer: string | null;
+  solution_steps: Array<Record<string, unknown>> | null;
+  difficulty: string | null;
+  format: string;
+  status: string;
+  figure_svg: string | null;
+}
+
+export interface GenerationLLMCall {
+  id: string;
+  function: string;
+  model: string;
+  cost_usd: number;
+  input_tokens: number;
+  output_tokens: number;
+  latency_ms: number;
+  success: boolean;
+  created_at: string;
+  input_text: string | null;
+  output_text: string | null;
+}
+
+export interface GenerationSourceDoc {
+  id: string;
+  filename: string;
+  file_type: string;
+}
+
+export interface GenerationUploadedImage {
+  index: number;
+  media_type: string;
+  image_data: string | null;
+}
+
+export interface GenerationAttachments {
+  /** How many documents the teacher selected (N). */
+  selected: number;
+  /** How many actually reached the model after the vision-image cap (M). */
+  used: number;
+  /** Filenames of the documents actually sent to the model. */
+  filenames: string[];
+}
+
+export interface GenerationJobDetail {
+  job: GenerationJobSummary & {
+    params: Record<string, unknown> | null;
+    source_doc_ids: string[];
+    error_message: string | null;
+  };
+  /** Attached-doc provenance from the generation call, or null if none. */
+  attachments: GenerationAttachments | null;
+  source_documents: GenerationSourceDoc[];
+  uploaded_images: GenerationUploadedImage[];
+  items: GenerationItem[];
+  llm_calls: GenerationLLMCall[];
+}
+
+export interface DocumentContent {
+  id: string;
+  filename: string;
+  file_type: string;
+  file_size: number;
+  image_data: string | null;
 }
 

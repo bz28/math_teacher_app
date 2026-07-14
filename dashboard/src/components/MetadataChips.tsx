@@ -7,6 +7,31 @@ import { renderChipValue, shortId } from "../lib/format";
 // the row header so it skips it from the chip strip).
 const DEFAULT_SKIP_KEYS = ["submission_id", "school_id"];
 
+// Attached-document provenance keys (stamped by generation LLM calls,
+// see api/core/document_vision.build_attachment_metadata). Rendered as
+// one readable "Attached materials" chip instead of three raw chips so
+// even the raw LLM-calls view is honest about what went into the model.
+const ATTACHMENT_KEYS = [
+  "attached_doc_filenames",
+  "attached_docs_selected",
+  "attached_docs_used",
+];
+
+function attachmentChipValue(
+  metadata: Record<string, unknown>,
+): string | null {
+  if (!("attached_docs_selected" in metadata)) return null;
+  const selected = Number(metadata.attached_docs_selected ?? 0);
+  const used = Number(metadata.attached_docs_used ?? 0);
+  const raw = metadata.attached_doc_filenames;
+  const filenames = Array.isArray(raw) ? raw.map(String) : [];
+  const names = filenames.length
+    ? filenames.join(", ")
+    : `${used} page${used === 1 ? "" : "s"}`;
+  const count = used < selected ? `${used} of ${selected}` : `${selected}`;
+  return `${names} (${count})`;
+}
+
 export interface MetadataChipsProps {
   metadata: Record<string, unknown> | null;
   /** Promoted school_id column. Null = the "internal" bucket. */
@@ -35,13 +60,14 @@ export default function MetadataChips({
   extraSkipKeys = [],
   hidePromoted = false,
 }: MetadataChipsProps) {
-  const skipKeys = new Set([...DEFAULT_SKIP_KEYS, ...extraSkipKeys]);
+  const skipKeys = new Set([...DEFAULT_SKIP_KEYS, ...ATTACHMENT_KEYS, ...extraSkipKeys]);
   const entries = metadata
     ? Object.entries(metadata).filter(([k]) => !skipKeys.has(k))
     : [];
+  const attachments = metadata ? attachmentChipValue(metadata) : null;
 
   const showPromoted = !hidePromoted && (schoolId !== undefined || submissionId);
-  if (!showPromoted && entries.length === 0) {
+  if (!showPromoted && entries.length === 0 && attachments === null) {
     return <span className="metadata-empty">(none)</span>;
   }
 
@@ -75,6 +101,9 @@ export default function MetadataChips({
             onSubmissionClick ? () => onSubmissionClick(submissionId) : undefined
           }
         />
+      )}
+      {attachments !== null && (
+        <Chip label="Attached materials" value={attachments} />
       )}
       {entries.map(([k, v]) => (
         <Chip key={k} label={k} value={renderChipValue(v)} />

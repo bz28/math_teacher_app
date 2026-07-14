@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.audit_log import record_activity
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.integrity_pipeline import (
     ABANDONED_INTERVIEW_DEADLINE,
@@ -538,6 +539,11 @@ async def create_assignment(
         rubric=body.rubric,
     )
     db.add(assignment)
+    await db.flush()
+    await record_activity(
+        db, current_user, "assignment.create", "assignment", assignment.id,
+        {"title": assignment.title, "type": assignment.type},
+    )
     await db.commit()
     await db.refresh(assignment)
     return {"id": str(assignment.id), "title": assignment.title, "status": assignment.status}
@@ -879,6 +885,10 @@ async def update_assignment(
         cleaned = body.description.strip()
         a.description = cleaned if cleaned else None
 
+    await record_activity(
+        db, current_user, "assignment.update", "assignment", a.id,
+        {"title": a.title, "status": a.status},
+    )
     await db.commit()
     return {"status": "ok"}
 
@@ -979,6 +989,10 @@ async def publish_assignment(
     a.status = "published"
     await db.flush()
     await recompute_bank_locks(db, a.course_id)
+    await record_activity(
+        db, current_user, "assignment.publish", "assignment", a.id,
+        {"title": a.title, "type": a.type},
+    )
     await db.commit()
     return {"status": "ok"}
 
@@ -995,6 +1009,10 @@ async def unpublish_assignment(
     a.status = "draft"
     await db.flush()
     await recompute_bank_locks(db, a.course_id)
+    await record_activity(
+        db, current_user, "assignment.unpublish", "assignment", a.id,
+        {"title": a.title},
+    )
     await db.commit()
     return {"status": "ok"}
 
@@ -1785,6 +1803,10 @@ async def grade_submission(
             detail="No grade fields provided",
         )
 
+    await record_activity(
+        db, current_user, "grade.save", "submission", sub.id,
+        {"assignment_id": str(sub.assignment_id), "final_score": grade.final_score},
+    )
     await db.commit()
     return {
         "status": "ok",
@@ -1840,6 +1862,10 @@ async def mark_submission_reviewed(
     now = datetime.now(UTC)
     grade.reviewed_by = current_user.user_id
     grade.reviewed_at = now
+    await record_activity(
+        db, current_user, "grade.mark_reviewed", "submission", sub.id,
+        {"assignment_id": str(sub.assignment_id), "final_score": grade.final_score},
+    )
     await db.commit()
     return {"status": "ok", "reviewed_at": now.isoformat()}
 
@@ -1876,6 +1902,10 @@ async def unmark_submission_reviewed(
     if grade is not None and grade.reviewed_at is not None:
         grade.reviewed_by = None
         grade.reviewed_at = None
+        await record_activity(
+            db, current_user, "grade.unmark_reviewed", "submission", sub.id,
+            {"assignment_id": str(sub.assignment_id)},
+        )
         await db.commit()
     return {"status": "ok", "reviewed_at": None}
 
@@ -2055,6 +2085,10 @@ async def publish_grades(
         g.published_teacher_notes = g.teacher_notes
         g.grade_published_at = now
 
+    await record_activity(
+        db, current_user, "grade.publish", "assignment", a.id,
+        {"published_count": len(grades), "reviewed_only": reviewed_only},
+    )
     await db.commit()
     return {"status": "ok", "published_count": len(grades)}
 

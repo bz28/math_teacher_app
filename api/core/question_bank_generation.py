@@ -20,7 +20,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
-from api.core.document_vision import MAX_VISION_IMAGES, build_vision_content, fetch_document_images
+from api.core.document_vision import (
+    MAX_VISION_IMAGES,
+    build_attachment_metadata,
+    build_vision_content,
+    fetch_document_images,
+)
 from api.core.geometry import render_figure_or_none
 from api.core.image_utils import to_content_block
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
@@ -168,6 +173,7 @@ async def _extract_from_files(
     subject: str,
     user_id: str,
     constraint: str | None = None,
+    call_metadata: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
     """Extract problems from worksheet pages (images or PDFs) via Claude.
 
@@ -209,6 +215,7 @@ async def _extract_from_files(
         user_id=user_id,
         model=MODEL_REASON,
         max_tokens=4096,
+        call_metadata=call_metadata,
     )
 
     questions: list[Any] = result.get("questions", [])  # type: ignore[assignment]
@@ -260,6 +267,10 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             subject=course.subject,
             user_id=str(job.created_by_id),
             constraint=job.constraint,
+            # Observability only: how many uploaded pages were fed to the
+            # model. Upload pages carry no filename and aren't capped, so
+            # this is a pure page count (selected == used).
+            call_metadata=build_attachment_metadata(len(raw_files), raw_files),
         )
         if not question_dicts:
             raise RuntimeError(
@@ -274,6 +285,11 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
         images = await fetch_document_images(
             db, doc_ids, job.course_id, max_images=MAX_VISION_IMAGES,
         )
+        # Observability only: record which docs (and how many of N
+        # selected) actually reached the model, so the admin views can
+        # flag a run the MAX_VISION_IMAGES cap silently truncated. Not
+        # part of the prompt — the model's input is unchanged.
+        doc_metadata = build_attachment_metadata(len(doc_ids), images) if doc_ids else None
 
         constraint_text = job.constraint
         if job.parent_question_id:
@@ -325,6 +341,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             images=images or None,
             extra_instructions=constraint_text,
             params=job.params,
+            call_metadata=doc_metadata,
         )
         if not question_dicts:
             raise RuntimeError(
@@ -495,6 +512,8 @@ async def regenerate_one(
     images = await fetch_document_images(
         db, doc_ids, item.course_id, max_images=MAX_VISION_IMAGES,
     )
+    # Observability only: which attached docs (of N) reached the model.
+    doc_metadata = build_attachment_metadata(len(doc_ids), images) if doc_ids else None
 
     cfg = get_config(course.subject)
     system_prompt = _REGENERATE_SYSTEM_TEMPLATE.format(professor_role=cfg["professor_role"])
@@ -531,6 +550,7 @@ async def regenerate_one(
                 user_id=str(user_id),
                 model=MODEL_REASON,
                 max_tokens=4096,
+                call_metadata=doc_metadata,
             )
         else:
             result = await call_claude_json(
@@ -541,6 +561,7 @@ async def regenerate_one(
                 user_id=str(user_id),
                 model=MODEL_REASON,
                 max_tokens=4096,
+                call_metadata=doc_metadata,
             )
     except Exception as e:
         raise RuntimeError(f"AI revision failed: {e}") from e

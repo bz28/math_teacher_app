@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type TeacherStudentsData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
+import TeacherActivitySection from "../components/TeacherActivitySection";
 
 // Per-teacher drill-in. Lives at /teachers/:teacherId. Reachable from
 // the Independent Teachers list (and, once the SchoolDetail teacher
@@ -95,6 +96,8 @@ export default function TeacherDetail() {
           </span>
         </p>
       </div>
+
+      <TeacherActivitySection teacherId={t.id} />
 
       <section className="table-card" style={{ marginBottom: 24 }}>
         <div
