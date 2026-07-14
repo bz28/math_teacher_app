@@ -502,7 +502,6 @@ function DrillModal({
           rowKey={(r) => r._k}
           loading={!data && !error}
           error={error}
-          defaultSort={{ key: "delta", dir: "asc" }}
           minWidth={560}
           empty={<span className="dt-state-title">No overridden cases here.</span>}
         />
@@ -633,7 +632,7 @@ export default function GradingQuality() {
             />
             <StatTile
               label="Review coverage"
-              tone={coveragePct !== null && coveragePct < 50 ? "warn" : "default"}
+              tone={coveragePct !== null && coveragePct < 50 && summary.ai_graded_submissions >= 5 ? "warn" : "default"}
               value={coveragePct === null ? "—" : `${Math.round(coveragePct)}%`}
               sub={
                 summary.ai_graded_submissions > 0
