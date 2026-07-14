@@ -5,12 +5,13 @@ import html
 import logging
 import secrets
 import uuid
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
@@ -18,13 +19,12 @@ from api.core.email import send_email
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.activity_log import ActivityLog
-from api.models.assignment import Submission
-from api.models.course import Course
+from api.models.assignment import Submission, SubmissionGrade
+from api.models.course import Course, CourseTeacher
 from api.models.llm_call import LLMCall
 from api.models.school import SCHOOL_KIND_INSTITUTIONAL, School
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
-from api.models.session import Session
 from api.models.teacher_invite import TeacherInvite
 from api.models.user import User
 from api.routes.admin_helpers import activity_last_action_sq
@@ -291,38 +291,225 @@ async def get_school(
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    """School deep page: the teacher → section → student hierarchy.
+
+    The unit is teacher→class, not a flat school-wide roster. We return
+    every teacher, their sections (class periods), and each section's
+    enrolled students — with cost rolled up to the level where it's
+    unambiguously attributable:
+
+      * Per-submission AI (Vision extraction + integrity + AI grading,
+        and grading of assigned practice) is attributable via
+        LLMCall.submission_id → submission → section, so it rolls up to
+        the **section**.
+      * A teacher's authoring/generation spend has no submission, so it
+        can't be pinned to one section — it stays at the **teacher**
+        level (LLMCall.user_id = teacher, submission_id IS NULL).
+
+    All aggregation is done with grouped subqueries assembled in Python
+    (no per-teacher / per-section follow-up queries), so a large school
+    still resolves in a fixed number of round trips.
+    """
     school = (await db.execute(select(School).where(School.id == school_id))).scalar_one_or_none()
     if not school:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="School not found")
 
-    # Teachers at this school, joined to a 30d LLM stats subquery so a
-    # 20-teacher school still resolves in one round trip (no per-row
-    # follow-up query). Outer-joined so a teacher with zero calls
-    # surfaces with 0/0 rather than dropping out of the list.
     since_30d = datetime.now(UTC) - timedelta(days=30)
-    llm_stats_sq = (
+
+    # ── Teachers + their generation (non-submission) spend ──────────
+    # Per-submission calls roll up to sections below (via submission_id),
+    # so a teacher's own bucket filters submission_id IS NULL to avoid
+    # double-counting a grading call that happens to carry the teacher's
+    # user_id. What's left is authoring/generation + misc tooling.
+    gen_stats_sq = (
         select(
             LLMCall.user_id.label("user_id"),
-            func.count().label("call_count"),
-            func.coalesce(func.sum(LLMCall.cost_usd), 0).label("total_cost"),
+            func.count().label("gen_calls"),
+            func.coalesce(func.sum(LLMCall.cost_usd), 0).label("gen_cost"),
         )
-        .where(LLMCall.created_at >= since_30d, LLMCall.user_id.isnot(None))
+        .where(
+            LLMCall.created_at >= since_30d,
+            LLMCall.user_id.isnot(None),
+            LLMCall.submission_id.is_(None),
+        )
         .group_by(LLMCall.user_id)
         .subquery()
     )
-    teachers = (await db.execute(
+    teacher_rows = (await db.execute(
         select(
             User.id,
             User.name,
             User.email,
             User.created_at,
-            func.coalesce(llm_stats_sq.c.call_count, 0).label("call_count_30d"),
-            func.coalesce(llm_stats_sq.c.total_cost, 0).label("total_cost_30d"),
+            func.coalesce(gen_stats_sq.c.gen_calls, 0).label("gen_calls"),
+            func.coalesce(gen_stats_sq.c.gen_cost, 0).label("gen_cost"),
         )
-        .outerjoin(llm_stats_sq, llm_stats_sq.c.user_id == User.id)
+        .outerjoin(gen_stats_sq, gen_stats_sq.c.user_id == User.id)
         .where(User.school_id == school.id, User.role == "teacher")
         .order_by(User.name)
     )).all()
+
+    # ── Sections of the school, keyed to their owner teacher ────────
+    section_rows = (await db.execute(
+        select(
+            Section.id,
+            Section.name,
+            Course.name.label("course_name"),
+            CourseTeacher.teacher_id,
+        )
+        .join(Course, Course.id == Section.course_id)
+        .join(
+            CourseTeacher,
+            and_(
+                CourseTeacher.course_id == Course.id,
+                CourseTeacher.role == "owner",
+            ),
+        )
+        .where(Course.school_id == school.id)
+        .order_by(Section.name)
+    )).all()
+
+    # ── Per-section aggregates (all grouped by section_id) ──────────
+    # Enrolled student count.
+    enroll_rows = (await db.execute(
+        select(
+            SectionEnrollment.section_id,
+            func.count(func.distinct(SectionEnrollment.student_id)).label("cnt"),
+        )
+        .join(Course, Course.id == SectionEnrollment.course_id)
+        .where(Course.school_id == school.id)
+        .group_by(SectionEnrollment.section_id)
+    )).all()
+    student_count = {r.section_id: int(r.cnt) for r in enroll_rows}
+
+    # Distinct submitters + last submission timestamp.
+    sub_rows = (await db.execute(
+        select(
+            Submission.section_id,
+            func.count(func.distinct(Submission.student_id)).label("submitters"),
+            func.max(Submission.submitted_at).label("last_at"),
+        )
+        .join(Section, Section.id == Submission.section_id)
+        .join(Course, Course.id == Section.course_id)
+        .where(Course.school_id == school.id)
+        .group_by(Submission.section_id)
+    )).all()
+    submitted_count = {r.section_id: int(r.submitters) for r in sub_rows}
+    section_last = {r.section_id: r.last_at for r in sub_rows}
+
+    # Rolled-up per-submission cost (extraction + integrity + grading),
+    # attributed via submission_id → submission → section.
+    cost_rows = (await db.execute(
+        select(
+            Submission.section_id,
+            func.coalesce(func.sum(LLMCall.cost_usd), 0).label("cost"),
+        )
+        .join(Submission, Submission.id == LLMCall.submission_id)
+        .join(Section, Section.id == Submission.section_id)
+        .join(Course, Course.id == Section.course_id)
+        .where(Course.school_id == school.id, LLMCall.created_at >= since_30d)
+        .group_by(Submission.section_id)
+    )).all()
+    section_cost = {r.section_id: float(r.cost) for r in cost_rows}
+
+    # ── Per-section student drill (enrollment + submission + grade) ──
+    # One row per (section, student): a student in several sections
+    # appears under each. Aggregates are keyed on (section_id,
+    # student_id) so the per-section submission/grade context is exact.
+    enrolled_rows = (await db.execute(
+        select(
+            SectionEnrollment.section_id,
+            User.id,
+            User.name,
+            User.email,
+            User.grade_level,
+        )
+        .join(User, User.id == SectionEnrollment.student_id)
+        .join(Course, Course.id == SectionEnrollment.course_id)
+        .where(Course.school_id == school.id)
+        .order_by(User.name)
+    )).all()
+
+    stu_sub_rows = (await db.execute(
+        select(
+            Submission.section_id,
+            Submission.student_id,
+            func.count().label("subs"),
+            func.max(Submission.submitted_at).label("last_at"),
+        )
+        .join(Section, Section.id == Submission.section_id)
+        .join(Course, Course.id == Section.course_id)
+        .where(Course.school_id == school.id)
+        .group_by(Submission.section_id, Submission.student_id)
+    )).all()
+    stu_sub = {
+        (r.section_id, r.student_id): (int(r.subs), r.last_at)
+        for r in stu_sub_rows
+    }
+
+    stu_grade_rows = (await db.execute(
+        select(
+            Submission.section_id,
+            Submission.student_id,
+            func.avg(SubmissionGrade.final_score).label("avg_score"),
+            func.count(SubmissionGrade.final_score).label("graded"),
+        )
+        .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .join(Section, Section.id == Submission.section_id)
+        .join(Course, Course.id == Section.course_id)
+        .where(
+            Course.school_id == school.id,
+            SubmissionGrade.final_score.isnot(None),
+        )
+        .group_by(Submission.section_id, Submission.student_id)
+    )).all()
+    stu_grade = {
+        (r.section_id, r.student_id): (float(r.avg_score), int(r.graded))
+        for r in stu_grade_rows
+    }
+
+    students_by_section: dict[uuid.UUID, list[dict[str, Any]]] = defaultdict(list)
+    for er in enrolled_rows:
+        subs, stu_last = stu_sub.get((er.section_id, er.id), (0, None))
+        avg_score, graded = stu_grade.get((er.section_id, er.id), (None, 0))
+        students_by_section[er.section_id].append({
+            "id": str(er.id),
+            "name": er.name,
+            "email": er.email,
+            "grade_level": er.grade_level,
+            "submission_count": subs,
+            "graded_count": graded,
+            "avg_score": round(avg_score, 1) if avg_score is not None else None,
+            "last_activity_at": stu_last.isoformat() if stu_last else None,
+        })
+
+    # ── Assemble the nested teacher → section → student tree ────────
+    sections_by_teacher: dict[uuid.UUID, list[dict[str, Any]]] = defaultdict(list)
+    for sr in section_rows:
+        sec_last = section_last.get(sr.id)
+        sections_by_teacher[sr.teacher_id].append({
+            "id": str(sr.id),
+            "name": sr.name,
+            "course_name": sr.course_name,
+            "student_count": student_count.get(sr.id, 0),
+            "submitted_count": submitted_count.get(sr.id, 0),
+            "cost_30d": round(section_cost.get(sr.id, 0.0), 4),
+            "last_activity_at": sec_last.isoformat() if sec_last else None,
+            "students": students_by_section.get(sr.id, []),
+        })
+
+    teachers = [
+        {
+            "id": str(t.id),
+            "name": t.name,
+            "email": t.email,
+            "joined_at": t.created_at.isoformat(),
+            "gen_cost_30d": round(float(t.gen_cost), 6),
+            "gen_call_count_30d": int(t.gen_calls),
+            "sections": sections_by_teacher.get(t.id, []),
+        }
+        for t in teacher_rows
+    ]
 
     # Pending invites
     invites = (await db.execute(
@@ -341,17 +528,7 @@ async def get_school(
         "is_active": school.is_active,
         "notes": school.notes,
         "created_at": school.created_at.isoformat(),
-        "teachers": [
-            {
-                "id": str(t.id),
-                "name": t.name,
-                "email": t.email,
-                "joined_at": t.created_at.isoformat(),
-                "call_count_30d": int(t.call_count_30d),
-                "total_cost_30d": round(float(t.total_cost_30d), 6),
-            }
-            for t in teachers
-        ],
+        "teachers": teachers,
         "pending_invites": [
             {
                 "id": str(i.id),
@@ -360,91 +537,6 @@ async def get_school(
                 "created_at": i.created_at.isoformat(),
             }
             for i in invites
-        ],
-    }
-
-
-@router.get("/schools/{school_id}/students")
-async def school_students(
-    school_id: uuid.UUID,
-    limit: int = Query(default=100, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
-    current_user: CurrentUser = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """Roster of every student enrolled in any of the school's courses.
-
-    One pass over courses → sections → section_enrollments → users
-    so a school with many teachers doesn't N+1 across the per-teacher
-    endpoint. Same row shape as `/admin/users/{teacher_id}/students`
-    minus per-section context (a student may sit across several
-    teachers within the same school; surfacing each enrollment would
-    bloat the table for no obvious operator value).
-    """
-    school = (await db.execute(
-        select(School).where(School.id == school_id)
-    )).scalar_one_or_none()
-    if school is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="School not found",
-        )
-
-    students_base = (
-        select(
-            User.id,
-            User.email,
-            User.name,
-            User.grade_level,
-            User.created_at,
-            User.subscription_tier,
-            User.subscription_status,
-        )
-        .join(SectionEnrollment, SectionEnrollment.student_id == User.id)
-        .join(Course, Course.id == SectionEnrollment.course_id)
-        .where(Course.school_id == school.id)
-        .distinct()
-    )
-    total = (await db.execute(
-        select(func.count()).select_from(students_base.subquery())
-    )).scalar() or 0
-
-    last_active_sq = (
-        select(
-            Session.user_id,
-            func.max(Session.created_at).label("last_active"),
-        )
-        .group_by(Session.user_id)
-        .subquery()
-    )
-
-    rows = (await db.execute(
-        students_base
-        .add_columns(last_active_sq.c.last_active)
-        .outerjoin(last_active_sq, last_active_sq.c.user_id == User.id)
-        .order_by(User.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )).all()
-
-    return {
-        "school": {
-            "id": str(school.id),
-            "name": school.name,
-            "kind": school.kind,
-        },
-        "total_students": total,
-        "students": [
-            {
-                "id": str(r.id),
-                "email": r.email,
-                "name": r.name,
-                "grade_level": r.grade_level,
-                "registered": r.created_at.isoformat(),
-                "last_active": r.last_active.isoformat() if r.last_active else None,
-                "subscription_tier": r.subscription_tier,
-                "subscription_status": r.subscription_status,
-            }
-            for r in rows
         ],
     }
 
