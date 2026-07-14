@@ -39,9 +39,18 @@ from api.routes.admin_helpers import time_range
 router = APIRouter()
 
 # LLM `function` labels a generation job spends money on. `function` on
-# LLMCall is the LLMMode value (api/core/llm_client.py) — generate mode
-# uses generate_questions, upload mode uses bank_extract.
-_GENERATION_FUNCTIONS = ("generate_questions", "bank_extract")
+# LLMCall is the LLMMode value (api/core/llm_client.py). One job fans out
+# to several: the question call (generate_questions, or bank_extract in
+# upload mode), then per-question solution (decompose) and distractor
+# (practice_eval) calls — all logged under the job creator's user_id
+# inside the job's run window. The solve + distractor calls usually
+# dominate cost, so leaving them out would badly understate a job's spend.
+_GENERATION_FUNCTIONS = (
+    "generate_questions",
+    "bank_extract",
+    "decompose",
+    "practice_eval",
+)
 
 # The produced items / LLM calls are committed just before the job's
 # updated_at is stamped "done"; a small buffer absorbs that skew.

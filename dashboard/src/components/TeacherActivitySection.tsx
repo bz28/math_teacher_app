@@ -386,7 +386,8 @@ function GenerationDrillIn({ jobId, summary }: { jobId: string; summary: Generat
               {it.figure_svg && (
                 <div
                   style={{ maxWidth: 220, margin: "6px 0" }}
-                  // Rendered geometry SVG produced by the model; admin-only surface.
+                  // Geometry SVG rendered deterministically from the model's
+                  // structured figure_spec (not raw model output); admin-only.
                   dangerouslySetInnerHTML={{ __html: it.figure_svg }}
                 />
               )}

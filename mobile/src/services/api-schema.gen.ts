@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/v1/admin/audit-logs/admin-actions": {
+    "/v1/admin/activity": {
         parameters: {
             query?: never;
             header?: never;
@@ -12,10 +12,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Admin Action Log
-         * @description Paginated admin action log.
+         * Activity Log
+         * @description Paginated role-agnostic activity log (admin + teacher writes).
          */
-        get: operations["admin_action_log_v1_admin_audit_logs_admin_actions_get"];
+        get: operations["activity_log_v1_admin_activity_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -40,6 +40,70 @@ export interface paths {
          *     scan even at scale.
          */
         get: operations["student_access_log_v1_admin_audit_logs_student_access_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/documents/{document_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Document Content
+         * @description Serve a stored document's base64 image so the dashboard can render
+         *     the actual uploaded worksheet. Admin-only — this is course material,
+         *     invisible admin-side until now.
+         */
+        get: operations["document_content_v1_admin_documents__document_id__content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/generation/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Generation Jobs
+         * @description Paginated list of a teacher's generation jobs with correlated cost.
+         */
+        get: operations["generation_jobs_v1_admin_generation_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/generation/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Generation Job Detail
+         * @description One generation job: its focus/params, produced problems, the
+         *     correlated LLM calls (with cost + expandable input/output), and the
+         *     stored source documents so the dashboard can render the worksheet.
+         */
+        get: operations["generation_job_detail_v1_admin_generation_jobs__job_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5453,13 +5517,18 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    admin_action_log_v1_admin_audit_logs_admin_actions_get: {
+    activity_log_v1_admin_activity_get: {
         parameters: {
             query?: {
-                admin_user_id?: string | null;
-                /** @description Exact action ("user.delete") or prefix glob ("user.*"). */
+                actor_user_id?: string | null;
+                /** @description "admin" or "teacher". */
+                actor_role?: string | null;
+                /** @description Exact action ("grade.publish") or prefix glob ("grade.*"). */
                 action?: string | null;
                 target_type?: string | null;
+                school_id?: string | null;
+                /** @description Time window. */
+                hours?: number | null;
                 limit?: number;
                 offset?: number;
             };
@@ -5503,6 +5572,110 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    document_content_v1_admin_documents__document_id__content_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generation_jobs_v1_admin_generation_jobs_get: {
+        parameters: {
+            query?: {
+                teacher_id?: string | null;
+                school_id?: string | null;
+                status?: string | null;
+                hours?: number;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generation_job_detail_v1_admin_generation_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
