@@ -49,6 +49,58 @@ function inviteBadge(status: UserRow["invite_status"]): { tone: PillTone; label:
   return { tone: "ok", label: "ACTIVE" };
 }
 
+// The row "…" menu is gated by user *type* — a locked founder decision.
+type MenuAction =
+  | "view-calls"
+  | "view-in-school"
+  | "make-student"
+  | "make-teacher"
+  | "make-admin"
+  | "toggle-plan"
+  | "reset-limit"
+  | "resend-invite"
+  | "revoke-invite"
+  | "delete";
+
+/**
+ * Which row actions the "…" menu offers, keyed off the user's type
+ * (`school` + `role`). The Users tab is the global *access directory*;
+ * a school user's lifecycle (role change, plan, delete) belongs in the
+ * school context, where the roster/billing live — doing it from here
+ * could silently break that school. So the menu adapts:
+ *
+ *  • **School teacher/student** (`school` set): deep-link into that
+ *    school + **Make Admin** (a legitimate cross-cutting access grant).
+ *    Role change / plan / delete are intentionally withheld here.
+ *  • **Admin**: grant/revoke admin (role change to student/teacher) +
+ *    the invite lifecycle (resend / revoke a pending or expired invite).
+ *  • **Individual** (no `school`, teacher/student): the full per-row ops.
+ *
+ * A user is "school-associated" iff `school` is non-null — the backend
+ * already maps the synthetic individual school to null, so `school`
+ * being set means a real institutional affiliation.
+ */
+function menuActionsFor(u: UserRow): MenuAction[] {
+  if (u.role !== "admin" && u.school) {
+    return ["view-in-school", "make-admin"];
+  }
+  if (u.role === "admin") {
+    // Already an admin, so role change is a *revoke* to student/teacher.
+    const actions: MenuAction[] = ["view-calls", "make-student", "make-teacher"];
+    if (u.invite_status !== "active") actions.push("resend-invite", "revoke-invite");
+    return actions;
+  }
+  // Individual teacher/student — every role except their own is offered
+  // (grant-admin included), plus plan, limits, and delete.
+  const roleChanges = (["student", "teacher", "admin"] as const)
+    .filter((r) => r !== u.role)
+    .map((r) => `make-${r}` as MenuAction);
+  const actions: MenuAction[] = ["view-calls", ...roleChanges, "toggle-plan"];
+  if (u.subscription_tier !== "pro") actions.push("reset-limit");
+  actions.push("delete");
+  return actions;
+}
+
 export default function Users() {
   const navigate = useNavigate();
   const confirm = useConfirm();
@@ -439,37 +491,62 @@ export default function Users() {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button onClick={() => { setOpenMenu(null); navigate(`/llm-calls?user=${openUser.id}`); }}>
-            View calls
-          </button>
-          {(["student", "teacher", "admin"] as const)
-            .filter((r) => r !== openUser.role)
-            .map((r) => (
-              <button key={r} onClick={() => { setOpenMenu(null); handleChangeRole(openUser.id, r); }}>
-                Make {r.charAt(0).toUpperCase() + r.slice(1)}
-              </button>
-            ))}
-          <button onClick={() => { setOpenMenu(null); handleToggleSubscription(openUser.id, openUser.subscription_tier); }}>
-            {openUser.subscription_tier === "pro" ? "Downgrade plan" : "Upgrade plan"}
-          </button>
-          {openUser.subscription_tier !== "pro" && (
-            <button onClick={() => { setOpenMenu(null); handleResetLimit(openUser.id); }}>
-              Reset daily limits
-            </button>
-          )}
-          {openUser.role === "admin" && openUser.invite_status !== "active" && (
-            <>
-              <button onClick={() => { setOpenMenu(null); handleResendInvite(openUser.id, openUser.email); }}>
-                Resend invite
-              </button>
-              <button className="danger" onClick={() => { setOpenMenu(null); handleRevokeInvite(openUser.id, openUser.email); }}>
-                Revoke invite
-              </button>
-            </>
-          )}
-          <button className="danger" onClick={() => { setOpenMenu(null); handleDelete(openUser.id, openUser.email); }}>
-            Delete user
-          </button>
+          {menuActionsFor(openUser).map((action) => {
+            switch (action) {
+              case "view-calls":
+                return (
+                  <button key={action} onClick={() => { setOpenMenu(null); navigate(`/llm-calls?user=${openUser.id}`); }}>
+                    View calls
+                  </button>
+                );
+              case "view-in-school":
+                return (
+                  <button key={action} onClick={() => { setOpenMenu(null); navigate(`/schools/${openUser.school!.id}`); }}>
+                    View in {openUser.school!.name} →
+                  </button>
+                );
+              case "make-student":
+              case "make-teacher":
+              case "make-admin": {
+                const r = action.slice("make-".length);
+                return (
+                  <button key={action} onClick={() => { setOpenMenu(null); handleChangeRole(openUser.id, r); }}>
+                    Make {r.charAt(0).toUpperCase() + r.slice(1)}
+                  </button>
+                );
+              }
+              case "toggle-plan":
+                return (
+                  <button key={action} onClick={() => { setOpenMenu(null); handleToggleSubscription(openUser.id, openUser.subscription_tier); }}>
+                    {openUser.subscription_tier === "pro" ? "Downgrade plan" : "Upgrade plan"}
+                  </button>
+                );
+              case "reset-limit":
+                return (
+                  <button key={action} onClick={() => { setOpenMenu(null); handleResetLimit(openUser.id); }}>
+                    Reset daily limits
+                  </button>
+                );
+              case "resend-invite":
+                return (
+                  <button key={action} onClick={() => { setOpenMenu(null); handleResendInvite(openUser.id, openUser.email); }}>
+                    Resend invite
+                  </button>
+                );
+              case "revoke-invite":
+                return (
+                  <button key={action} className="danger" onClick={() => { setOpenMenu(null); handleRevokeInvite(openUser.id, openUser.email); }}>
+                    Revoke invite
+                  </button>
+                );
+              case "delete":
+                return (
+                  <button key={action} className="danger" onClick={() => { setOpenMenu(null); handleDelete(openUser.id, openUser.email); }}>
+                    Delete user
+                  </button>
+                );
+            }
+          })}
         </div>
       )}
     </div>
