@@ -91,11 +91,13 @@ def _summary_fields(result: RunResult) -> dict[str, object]:
     }
 
 
-async def write_harness_run(fields: dict[str, object], summary_db_url: str) -> bool:
+async def write_harness_run(fields: dict[str, object], summary_db_url: str) -> str | None:
     """Insert one HarnessRun row into the MAIN app DB the admin dashboard reads
     (separate from the harness's own test DB). Shared by the run and explore
-    paths. Best-effort: returns False on any failure rather than crashing the
-    harness — the summary is observability, never load-bearing."""
+    paths. Best-effort: returns the new row id on success, or None on any
+    failure rather than crashing the harness — the summary is observability,
+    never load-bearing. (Truthy id / falsy None keeps the old bool callers
+    working.)"""
     try:
         from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -104,20 +106,22 @@ async def write_harness_run(fields: dict[str, object], summary_db_url: str) -> b
         engine = create_async_engine(summary_db_url)
         try:
             async with async_sessionmaker(engine, expire_on_commit=False)() as s:
-                s.add(HarnessRun(**fields))
+                row = HarnessRun(**fields)
+                s.add(row)
                 await s.commit()
+                return str(row.id)
         finally:
             await engine.dispose()
-        return True
     except Exception:  # noqa: BLE001 — summary is observability, never fatal
-        return False
+        return None
 
 
 async def persist_run_summary(
     result: RunResult, report_html: str, summary_db_url: str,
-) -> bool:
+) -> str | None:
     """Write a one-row run summary (including the self-contained HTML report)
-    to the admin dashboard's DB. Best-effort via write_harness_run."""
+    to the admin dashboard's DB. Best-effort via write_harness_run; returns the
+    new run id (or None on failure)."""
     return await write_harness_run(
         {"report_html": report_html, **_summary_fields(result)}, summary_db_url,
     )

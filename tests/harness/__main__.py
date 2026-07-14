@@ -329,11 +329,13 @@ def _run_flows(args: argparse.Namespace) -> int:
 def _run_explore(args: argparse.Namespace) -> int:
     from datetime import UTC, datetime
 
+    from api.core.llm_client import MODEL_REASON
     from tests.harness.explorer import (
         explore,
         generate_scenarios,
         load_corpus,
         persist_explore_summary,
+        persist_golden_cases,
         promote_failures,
         write_explore_report,
     )
@@ -351,10 +353,18 @@ def _run_explore(args: argparse.Namespace) -> int:
         corpus = promote_failures(result)
         report_html = write_explore_report(result, Path(args.out))
         cost = await run_cost(args.mode, started)
-        ok = await persist_explore_summary(
+        run_id = await persist_explore_summary(
             result, report_html, cost, args.mode, args.summary_db,
         )
-        return result, corpus, cost, ok
+        # Refresh the live golden-set health view (best-effort) — but ONLY for a
+        # corpus run. The golden set IS the stable regression corpus; a generate
+        # run invents fresh, run-to-run-varying scenario names that would pile up
+        # as ephemeral rows. Generated failures reach the golden set the honest
+        # way: promote_failures writes them to the corpus, and the next
+        # --from-corpus run upserts them.
+        if args.from_corpus:
+            await persist_golden_cases(result, run_id, MODEL_REASON, args.summary_db)
+        return result, corpus, cost, bool(run_id)
 
     result, corpus, cost, ok = asyncio.run(_exec())
     total = len(result.results)

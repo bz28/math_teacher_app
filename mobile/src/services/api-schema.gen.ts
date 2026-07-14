@@ -112,6 +112,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/golden-set": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Golden Set
+         * @description Every golden case + the health tiles the console leads with.
+         */
+        get: operations["golden_set_v1_admin_golden_set_get"];
+        put?: never;
+        /**
+         * Add Golden Case
+         * @description Add a golden case. It starts `pending` until the next corpus run evaluates it.
+         */
+        post: operations["add_golden_case_v1_admin_golden_set_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/golden-set/rerun": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rerun Golden Eval
+         * @description Flag cases for a fresh eval. The autonomous harness picks these up on its
+         *     next corpus run (it re-runs the whole corpus and upserts fresh results,
+         *     clearing the flag) — this records the operator's intent without wiping the
+         *     currently-shown verdict.
+         */
+        post: operations["rerun_golden_eval_v1_admin_golden_set_rerun_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/golden-set/{case_id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Retire Golden Case
+         * @description Retire (or restore) a case — keeps its history, drops it from the tiles.
+         */
+        patch: operations["retire_golden_case_v1_admin_golden_set__case_id__retire_patch"];
+        trace?: never;
+    };
     "/v1/admin/grading-quality": {
         parameters: {
             query?: never;
@@ -4004,6 +4071,24 @@ export interface components {
              */
             problem_type: "mixed" | "word" | "computation" | "multi_step" | "proof";
         };
+        /** GoldenCaseCreate */
+        GoldenCaseCreate: {
+            /**
+             * Adversarial
+             * @default false
+             */
+            adversarial: boolean;
+            /** Constraint */
+            constraint: string;
+            /** Expected Shapes */
+            expected_shapes?: string[];
+            /** Name */
+            name: string;
+            /** Probe */
+            probe: string;
+            /** Rationale */
+            rationale?: string | null;
+        };
         /** GradeRequest */
         GradeRequest: {
             /** Breakdown */
@@ -4483,6 +4568,11 @@ export interface components {
             /** Signup School Name */
             signup_school_name?: string | null;
         };
+        /** RerunPayload */
+        RerunPayload: {
+            /** Ids */
+            ids?: string[];
+        };
         /**
          * ResolveRequest
          * @description Teacher's session-level resolution of an integrity check. The
@@ -4509,6 +4599,14 @@ export interface components {
              * @default
              */
             student_response: string;
+        };
+        /** RetirePayload */
+        RetirePayload: {
+            /**
+             * Retired
+             * @default true
+             */
+            retired: boolean;
         };
         /** SectionStudentInsightsResponse */
         SectionStudentInsightsResponse: {
@@ -5733,6 +5831,135 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    golden_set_v1_admin_golden_set_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    add_golden_case_v1_admin_golden_set_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoldenCaseCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rerun_golden_eval_v1_admin_golden_set_rerun_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RerunPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retire_golden_case_v1_admin_golden_set__case_id__retire_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetirePayload"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import html
 import json
+import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -254,9 +255,10 @@ async def persist_explore_summary(
     cost_usd: float | None,
     mode: str,
     summary_db_url: str,
-) -> bool:
+) -> str | None:
     """Write a run-summary row for an exploration so it shows in the admin
-    'Harness Runs' tab (probe suffixed with ·explore). Best-effort."""
+    'Harness Runs' tab (probe suffixed with ·explore). Best-effort; returns the
+    new run id (or None on failure)."""
     from tests.harness.runner import write_harness_run
 
     total = len(result.results)
@@ -287,3 +289,84 @@ async def persist_explore_summary(
         },
         summary_db_url,
     )
+
+
+async def persist_golden_cases(
+    result: ExploreResult,
+    run_id: str | None,
+    model: str,
+    summary_db_url: str,
+) -> int:
+    """Upsert each scenario's outcome into the main-DB `golden_cases` table so
+    the dashboard's Generation QA tab shows live per-case pass/fail. This is the
+    seam that turns the regression corpus into a live eval-health view: every
+    corpus run refreshes each case's status, records the run that produced it
+    (`last_run_id` → the HTML report), and clears any pending re-eval request.
+
+    Best-effort: returns the number of cases written, 0 on any failure (the
+    summary is observability, never load-bearing)."""
+    try:
+        from datetime import UTC, datetime
+
+        from sqlalchemy import select
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        from api.models.golden_case import (
+            STATUS_FAIL,
+            STATUS_PASS,
+            GoldenCase,
+        )
+
+        now = datetime.now(UTC)
+        run_uuid = uuid.UUID(run_id) if run_id else None
+        engine = create_async_engine(summary_db_url)
+        written = 0
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as s:
+                for r in result.results:
+                    sc = r.scenario
+                    status = STATUS_PASS if r.passed else STATUS_FAIL
+                    output = "Passed — output matched the steer." if r.passed else _fail_reason(r)
+                    existing = (
+                        await s.execute(
+                            select(GoldenCase).where(
+                                GoldenCase.probe == result.probe_name,
+                                GoldenCase.name == sc.name,
+                            ),
+                        )
+                    ).scalar_one_or_none()
+                    if existing is None:
+                        s.add(GoldenCase(
+                            probe=result.probe_name,
+                            name=sc.name,
+                            constraint=sc.constraint,
+                            adversarial=sc.adversarial,
+                            expected_shapes=sc.expected_shapes,
+                            rationale=sc.rationale,
+                            last_status=status,
+                            prev_status=None,
+                            last_run_at=now,
+                            last_model=model,
+                            last_run_id=run_uuid,
+                            last_output=output,
+                        ))
+                    else:
+                        existing.prev_status = existing.last_status
+                        existing.last_status = status
+                        existing.last_run_at = now
+                        existing.last_model = model
+                        existing.last_run_id = run_uuid
+                        existing.last_output = output
+                        existing.rerun_requested_at = None
+                        # Keep the definition fresh in case the corpus edited it.
+                        existing.constraint = sc.constraint
+                        existing.adversarial = sc.adversarial
+                        existing.expected_shapes = sc.expected_shapes
+                        existing.rationale = sc.rationale
+                    written += 1
+                await s.commit()
+        finally:
+            await engine.dispose()
+        return written
+    except Exception:  # noqa: BLE001 — summary is observability, never fatal
+        return 0
