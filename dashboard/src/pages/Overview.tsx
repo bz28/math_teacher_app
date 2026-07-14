@@ -1,9 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
-import { api, type OverviewData } from "../lib/api";
-import StatCard from "../components/StatCard";
+import { api, type OverviewData, type SchoolListItem } from "../lib/api";
+import { fmtCost } from "../lib/format";
+import { STALE_AFTER_DAYS, isAtRisk, windowLabel } from "../lib/definitions";
+import StatTile from "../components/StatTile";
+import StatusPill, { type PillTone } from "../components/StatusPill";
+import DataTable, { type Column } from "../components/DataTable";
 import ErrorState from "../components/ErrorState";
 
 const MODE_COLORS: Record<string, string> = {
@@ -17,37 +22,98 @@ const SUBJECT_COLORS: Record<string, string> = {
   chemistry: "#4a6b3a",
 };
 
-function HealthBadge({ errorRate, latency }: { errorRate: number; latency: number }) {
-  const isDegraded = errorRate >= 5 || latency >= 5000;
-  const isDown = errorRate >= 20;
+const HARNESS_WINDOW_DAYS = 7;
 
-  const dotClass = isDown ? "dot-danger" : isDegraded ? "dot-warn" : "dot-ok";
-  const label = isDown ? "Unhealthy" : isDegraded ? "Degraded" : "Healthy";
-
-  return (
-    <span className="list-row-status" style={{ fontSize: 13 }}>
-      <span aria-hidden="true" className={`dot ${dotClass}`}>●</span>
-      {label}
-    </span>
-  );
+// Health rollup — the same thresholds the old badge used, now expressed
+// as a StatusPill so the one status system covers the page header too.
+function healthPill(errorRate: number, latency: number): { tone: PillTone; label: string } {
+  if (errorRate >= 20) return { tone: "danger", label: "UNHEALTHY" };
+  if (errorRate >= 5 || latency >= 5000) return { tone: "warn", label: "DEGRADED" };
+  return { tone: "ok", label: "HEALTHY" };
 }
 
+interface AttentionItem {
+  id: string;
+  severity: "danger" | "warn";
+  to: string;
+  node: ReactNode;
+}
+
+interface TopSpender { name: string; email: string | null; total_cost: number }
+
 export default function Overview() {
+  const navigate = useNavigate();
   const [data, setData] = useState<OverviewData | null>(null);
+  const [schools, setSchools] = useState<SchoolListItem[]>([]);
+  const [failedRuns, setFailedRuns] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [hours, setHours] = useState("24");
   const [grade, setGrade] = useState("");
 
   useEffect(() => {
-    const fetch = () =>
+    let cancelled = false;
+    const load = () => {
       api.overview({ hours, grade })
-        .then((d) => { setData(d); setError(null); })
-        .catch((e) => setError(e instanceof Error ? e.message : "Failed to load overview."));
-    fetch();
-    const interval = setInterval(fetch, 30_000);
-    return () => clearInterval(interval);
+        .then((d) => { if (!cancelled) { setData(d); setError(null); } })
+        .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load overview."); });
+      // Enrichers for the attention band. Best-effort: a failure here
+      // must never blank the page, so they own their own state and
+      // swallow errors — the band just omits that signal.
+      api.schools()
+        .then((r) => { if (!cancelled) setSchools(r.schools); })
+        .catch(() => {});
+      api.harnessRuns({ limit: "200" })
+        .then((r) => {
+          if (cancelled) return;
+          const cutoff = Date.now() - HARNESS_WINDOW_DAYS * 86_400_000;
+          setFailedRuns(
+            r.runs.filter((x) => !x.passed && new Date(x.created_at).getTime() >= cutoff).length,
+          );
+        })
+        .catch(() => {});
+    };
+    load();
+    const interval = setInterval(load, 30_000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [hours, grade, reloadKey]);
+
+  const atRiskSchools = useMemo(
+    () => schools.filter((s) => s.is_active && isAtRisk({ lastActiveAt: s.last_activity_at })).length,
+    [schools],
+  );
+
+  const win = windowLabel(Number(hours));
+
+  const attention: AttentionItem[] = useMemo(() => {
+    if (!data) return [];
+    const items: AttentionItem[] = [];
+    if (data.error_rate >= 5) {
+      items.push({
+        id: "error-rate", severity: "danger", to: "/llm-calls",
+        node: <>Error rate is <b>{data.error_rate}%</b> — {data.failed_calls}/{data.total_calls} AI calls failing ({win})</>,
+      });
+    } else if (data.failed_calls > 0) {
+      items.push({
+        id: "failed-calls", severity: "warn", to: "/llm-calls",
+        node: <><b>{data.failed_calls}</b> AI call{data.failed_calls === 1 ? "" : "s"} failed in the last {win}</>,
+      });
+    }
+    if (atRiskSchools > 0) {
+      items.push({
+        id: "at-risk-schools", severity: "warn", to: "/schools",
+        node: <><b>{atRiskSchools}</b> active school{atRiskSchools === 1 ? "" : "s"} at risk — quiet {STALE_AFTER_DAYS}+ days</>,
+      });
+    }
+    if (failedRuns > 0) {
+      items.push({
+        id: "harness", severity: "warn", to: "/harness-runs",
+        node: <><b>{failedRuns}</b> harness run{failedRuns === 1 ? "" : "s"} failing in the last {HARNESS_WINDOW_DAYS}d</>,
+      });
+    }
+    // Danger before warn so the worst thing is always on top.
+    return items.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "danger" ? -1 : 1));
+  }, [data, atRiskSchools, failedRuns, win]);
 
   // Only surface the error panel when there's nothing to show. A blip
   // during 30s polling keeps the last-good view rather than yanking it.
@@ -60,16 +126,41 @@ export default function Overview() {
   const latencyStr = data.avg_latency_ms >= 1000
     ? `${(data.avg_latency_ms / 1000).toFixed(1)}s`
     : `${Math.round(data.avg_latency_ms)}ms`;
+  const errTone = data.error_rate >= 5 ? "danger" : data.error_rate > 0 ? "warn" : "ok";
+  const dailyRate = Number(hours) > 0 ? data.total_cost / (Number(hours) / 24) : 0;
+  const health = healthPill(data.error_rate, data.avg_latency_ms);
+
+  const spenderCols: Column<TopSpender>[] = [
+    {
+      key: "user", header: "User", width: "70%",
+      render: (s) => (
+        <div style={{ minWidth: 0 }}>
+          <div style={{ color: "var(--ink)", fontWeight: 500 }}>{s.name}</div>
+          {s.email && s.email !== s.name && (
+            <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{s.email}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "cost", header: `Cost (${win})`, numeric: true, width: "30%",
+      sortValue: (s) => s.total_cost,
+      render: (s) => <span style={{ color: "var(--ink)", fontWeight: 600 }}>{fmtCost(s.total_cost)}</span>,
+    },
+  ];
 
   return (
-    <div className="platform-overview">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 28 }}>
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
         <div className="page-header" style={{ marginBottom: 0 }}>
           <span className="eyebrow">Diagnostic</span>
           <h1>Overview</h1>
-          <p>System health and usage at a glance.</p>
+          <p>What needs you right now — health, cost, and the customers slipping.</p>
         </div>
-        <HealthBadge errorRate={data.error_rate} latency={data.avg_latency_ms} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <StatusPill tone="live" label="LIVE" pulse title="Auto-refreshes every 30s" />
+          <StatusPill tone={health.tone} label={health.label} />
+        </div>
       </div>
 
       <div className="filters" style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -96,22 +187,73 @@ export default function Overview() {
         )}
       </div>
 
-      <div className="stat-grid">
-        <StatCard label="Sessions" value={data.total_sessions} />
-        <StatCard label="Total Cost" value={`$${data.total_cost.toFixed(2)}`} />
-        <StatCard label="Active Users" value={data.active_users} />
-        <StatCard label="New Users" value={data.new_users} />
-        <StatCard label="Total Users" value={data.total_users} sub="All time" />
-        <StatCard label="Deleted Accounts" value={data.deleted_accounts} sub="All time" />
-        <StatCard label="Avg Latency" value={latencyStr} />
-        <StatCard
-          label="Error Rate"
-          value={
-            <span style={{ color: data.error_rate >= 5 ? "var(--danger)" : data.error_rate > 0 ? "var(--warn)" : "var(--ok)" }}>
-              {data.error_rate}%
-            </span>
-          }
-          sub={`${data.failed_calls} failed / ${data.total_calls} total`}
+      {/* ── Attention band — the hero "what's broken" element ──────── */}
+      {attention.length === 0 ? (
+        <div className="attention attention-clear">
+          <div className="attention-head">
+            <div className="attention-title attention-title-clear">
+              <StatusPill tone="ok" label="ALL CLEAR" />
+              Nothing needs you
+            </div>
+            <span className="attention-clear-sub">No failing calls, at-risk schools, or harness failures in this window.</span>
+          </div>
+        </div>
+      ) : (
+        <div className={`attention${attention.some((a) => a.severity === "danger") ? " attention-alert" : ""}`}>
+          <div className="attention-head">
+            <div className="attention-title">
+              {attention.length} thing{attention.length === 1 ? "" : "s"} need you
+            </div>
+            {/* No aggregate window label here: items span different
+                windows (error 24h, at-risk 14d, harness 7d) and each
+                carries its own inline. */}
+            <span className="attention-count">sorted by severity</span>
+          </div>
+          <ul className="attention-list">
+            {attention.map((item) => (
+              <li key={item.id}>
+                <button className="attention-item" onClick={() => navigate(item.to)}>
+                  <span className={`attention-item-bar attention-item-bar-${item.severity}`} />
+                  <span className="attention-item-text">{item.node}</span>
+                  <span aria-hidden="true" className="attention-item-arrow">→</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* ── Health tiles — the founder's headline numbers ─────────── */}
+      <div className="tile-grid">
+        <StatTile
+          label="Error rate"
+          tone={errTone}
+          value={`${data.error_rate}%`}
+          sub={`${data.failed_calls}/${data.total_calls} calls · ${win}`}
+        />
+        <StatTile
+          label="Avg latency"
+          value={latencyStr}
+          sub={`mean of successful calls · ${win}`}
+        />
+        <StatTile
+          label={`Cost (${win})`}
+          value={fmtCost(data.total_cost)}
+          sub={`≈ ${fmtCost(dailyRate)}/day run-rate`}
+          spark={data.cost_by_day.map((d) => d.cost)}
+        />
+      </div>
+
+      {/* ── Cost attribution — who's spending ─────────────────────── */}
+      <div className="table-card">
+        <h3>Top spenders · {win}</h3>
+        <DataTable
+          columns={spenderCols}
+          rows={data.top_spenders as TopSpender[]}
+          rowKey={(s) => s.email ?? s.name}
+          defaultSort={{ key: "cost", dir: "desc" }}
+          empty={<span className="dt-state-title">No spend in this window.</span>}
+          minWidth={360}
         />
       </div>
 
@@ -175,31 +317,27 @@ export default function Overview() {
         </div>
       </div>
 
-      {data.top_spenders.length > 0 && (
-        <div className="table-card">
-          <h3>Top Spenders</h3>
-          <table>
-            <colgroup>
-              <col style={{ width: "70%" }} />
-              <col style={{ width: "30%" }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.top_spenders.map((s, i) => (
-                <tr key={i}>
-                  <td>{s.name}</td>
-                  <td style={{ fontWeight: 600 }}>${s.total_cost.toFixed(4)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* ── Usage — demoted below the fold. Deleted-accounts vanity
+             metric dropped entirely. ─────────────────────────────── */}
+      <div className="overview-section">Usage · {win}</div>
+      <div className="mini-metrics">
+        <div className="mini-metric">
+          <span className="mini-metric-label">Sessions</span>
+          <span className="mini-metric-value">{data.total_sessions.toLocaleString()}</span>
         </div>
-      )}
+        <div className="mini-metric">
+          <span className="mini-metric-label">Active users</span>
+          <span className="mini-metric-value">{data.active_users.toLocaleString()}</span>
+        </div>
+        <div className="mini-metric">
+          <span className="mini-metric-label">New users</span>
+          <span className="mini-metric-value">{data.new_users.toLocaleString()}</span>
+        </div>
+        <div className="mini-metric">
+          <span className="mini-metric-label">Total users (all-time)</span>
+          <span className="mini-metric-value">{data.total_users.toLocaleString()}</span>
+        </div>
+      </div>
     </div>
   );
 }
