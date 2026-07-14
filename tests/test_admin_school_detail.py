@@ -319,6 +319,57 @@ async def test_multi_section_student_appears_under_each(
     assert b_by_id[seeded["stu3_id"]]["avg_score"] is None
 
 
+async def test_default_response_has_empty_unassigned_bucket(
+    client: AsyncClient, seeded: dict[str, Any],
+) -> None:
+    r = await client.get(
+        f"/v1/admin/schools/{seeded['school_id']}",
+        headers=auth_headers(seeded["admin_token"]),
+    )
+    # Every course in the normal fixture has an owner, so nothing orphans.
+    assert r.json()["unassigned_sections"] == []
+
+
+async def test_ownerless_section_lands_in_unassigned_bucket(
+    client: AsyncClient,
+) -> None:
+    """A section whose course has no owner CourseTeacher row must NOT
+    silently drop — it (and its students) surface in unassigned_sections
+    instead of vanishing from the page."""
+    await _wipe()
+    async with get_session_factory()() as s:
+        admin = User(email=f"a_{uuid.uuid4().hex[:6]}@t.com", password_hash=hash_password("x"),
+                     grade_level=99, role="admin", name="Admin")
+        school = School(name="Orphan School", kind=SCHOOL_KIND_INSTITUTIONAL,
+                        contact_name="C", contact_email=f"o_{uuid.uuid4().hex[:6]}@s.com")
+        s.add_all([admin, school])
+        await s.flush()
+        # A course with NO CourseTeacher owner row.
+        course = Course(school_id=school.id, name="Orphaned Algebra", subject="math")
+        s.add(course)
+        await s.flush()
+        sec = Section(course_id=course.id, name="Ghost Period")
+        s.add(sec)
+        stu = User(email=f"s_{uuid.uuid4().hex[:6]}@t.com", password_hash=hash_password("x"),
+                   grade_level=9, role="student", name="Orphan Student", school_id=school.id)
+        s.add(stu)
+        await s.flush()
+        s.add(SectionEnrollment(section_id=sec.id, course_id=course.id, student_id=stu.id))
+        await s.commit()
+        token = create_access_token(str(admin.id), "admin")
+        school_id = str(school.id)
+        stu_id = str(stu.id)
+
+    r = await client.get(f"/v1/admin/schools/{school_id}", headers=auth_headers(token))
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["teachers"] == []
+    assert len(data["unassigned_sections"]) == 1
+    orphan = data["unassigned_sections"][0]
+    assert orphan["student_count"] == 1
+    assert {stu["id"] for stu in orphan["students"]} == {stu_id}
+
+
 async def test_detail_404_on_missing(
     client: AsyncClient, seeded: dict[str, Any],
 ) -> None:

@@ -819,6 +819,10 @@ export interface SchoolDetail {
   notes: string | null;
   created_at: string;
   teachers: SchoolTeacher[];
+  // Sections whose owner isn't a current teacher of this school (a data
+  // anomaly — the create flow always attaches an owner). Normally empty;
+  // surfaced so their students never silently disappear.
+  unassigned_sections: SchoolSection[];
   pending_invites: { id: string; email: string; expires_at: string; created_at: string }[];
 }
 

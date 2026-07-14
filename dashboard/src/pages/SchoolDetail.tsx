@@ -232,7 +232,10 @@ export default function SchoolDetail() {
   // multiple sections counts once here (but appears under each section
   // in the breakdown below). Memoized off the payload.
   const { classCount, studentCount } = useMemo(() => {
-    const sections = detail?.teachers.flatMap((t) => t.sections) ?? [];
+    const sections = [
+      ...(detail?.teachers.flatMap((t) => t.sections) ?? []),
+      ...(detail?.unassigned_sections ?? []),
+    ];
     const ids = new Set<string>();
     for (const s of sections) for (const stu of s.students) ids.add(stu.id);
     return { classCount: sections.length, studentCount: ids.size };
@@ -389,7 +392,7 @@ export default function SchoolDetail() {
           ) : undefined
         }
       >
-        {teacherCount === 0 ? (
+        {teacherCount === 0 && detail.unassigned_sections.length === 0 ? (
           <p style={{ color: "var(--muted)", fontStyle: "italic" }}>
             No teachers yet. Invite one below to get the school started.
           </p>
@@ -403,6 +406,13 @@ export default function SchoolDetail() {
                 onToggleSection={toggleSection}
               />
             ))}
+            {detail.unassigned_sections.length > 0 && (
+              <UnassignedBlock
+                sections={detail.unassigned_sections}
+                openSections={openSections}
+                onToggleSection={toggleSection}
+              />
+            )}
           </div>
         )}
       </Section>
@@ -708,6 +718,42 @@ function TeacherBlock({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// Fallback bucket for sections whose owner isn't a current teacher of
+// this school (a data anomaly). Renders with the same section rows so
+// the students are still reachable rather than silently missing.
+function UnassignedBlock({
+  sections,
+  openSections,
+  onToggleSection,
+}: {
+  sections: SchoolSection[];
+  openSections: Set<string>;
+  onToggleSection: (id: string) => void;
+}) {
+  return (
+    <div style={{ border: "1px solid var(--rule)", borderRadius: 4, overflow: "hidden" }}>
+      <div style={{ padding: "16px 18px", background: "var(--paper-2)", borderBottom: "1px solid var(--rule)" }}>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: 18, color: "var(--ink)" }}>
+          Unassigned classes
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>
+          {sections.length} class{sections.length === 1 ? "" : "es"} with no owning teacher at this school
+        </div>
+      </div>
+      <div>
+        {sections.map((s) => (
+          <SectionRow
+            key={s.id}
+            section={s}
+            open={openSections.has(s.id)}
+            onToggle={() => onToggleSection(s.id)}
+          />
+        ))}
+      </div>
     </div>
   );
 }

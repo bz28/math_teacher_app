@@ -350,6 +350,10 @@ async def get_school(
     )).all()
 
     # ── Sections of the school, keyed to their owner teacher ────────
+    # Outer-joined to CourseTeacher(owner) so a section whose course has
+    # no owner row (a data anomaly — the create flow always attaches one)
+    # still surfaces rather than silently dropping its students; it lands
+    # in the "unassigned" bucket below instead.
     section_rows = (await db.execute(
         select(
             Section.id,
@@ -358,7 +362,7 @@ async def get_school(
             CourseTeacher.teacher_id,
         )
         .join(Course, Course.id == Section.course_id)
-        .join(
+        .outerjoin(
             CourseTeacher,
             and_(
                 CourseTeacher.course_id == Course.id,
@@ -484,10 +488,16 @@ async def get_school(
         })
 
     # ── Assemble the nested teacher → section → student tree ────────
+    # A section whose owner isn't one of the school's current teachers
+    # (no owner row, or owner reassigned to another school) can't hang
+    # off a teacher card — route it to an "unassigned" bucket so its
+    # students still show rather than vanishing.
+    teacher_ids = {t.id for t in teacher_rows}
     sections_by_teacher: dict[uuid.UUID, list[dict[str, Any]]] = defaultdict(list)
+    unassigned_sections: list[dict[str, Any]] = []
     for sr in section_rows:
         sec_last = section_last.get(sr.id)
-        sections_by_teacher[sr.teacher_id].append({
+        section = {
             "id": str(sr.id),
             "name": sr.name,
             "course_name": sr.course_name,
@@ -496,7 +506,11 @@ async def get_school(
             "cost_30d": round(section_cost.get(sr.id, 0.0), 4),
             "last_activity_at": sec_last.isoformat() if sec_last else None,
             "students": students_by_section.get(sr.id, []),
-        })
+        }
+        if sr.teacher_id in teacher_ids:
+            sections_by_teacher[sr.teacher_id].append(section)
+        else:
+            unassigned_sections.append(section)
 
     teachers = [
         {
@@ -529,6 +543,7 @@ async def get_school(
         "notes": school.notes,
         "created_at": school.created_at.isoformat(),
         "teachers": teachers,
+        "unassigned_sections": unassigned_sections,
         "pending_invites": [
             {
                 "id": str(i.id),
