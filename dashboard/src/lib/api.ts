@@ -689,12 +689,33 @@ export interface TeacherRosterStudent {
   last_active: string | null;
   subscription_tier: string;
   subscription_status: string;
+  /** Which of the teacher's sections this student belongs to. Present on
+   *  the per-teacher roster (drives click-to-filter); absent on the
+   *  school-wide roster. */
+  section_ids?: string[];
 }
 
 export interface TeacherRosterSection {
   id: string;
   name: string;
   course_id: string;
+  student_count: number;
+  last_activity_at: string | null;
+}
+
+/** The founder's "what is this teacher actually doing" rollup — all-time
+ *  creation + grading footprint. Nulls mean "no homeworks yet". */
+export interface TeacherUsage {
+  homeworks_created: number;
+  practice_sets: number;
+  problems_per_homework: number | null;
+  published: number;
+  homeworks_per_week: number | null;
+  last_created_at: string | null;
+  submissions_received: number;
+  graded: number;
+  students_reached: number;
+  generations: number;
 }
 
 export interface SchoolStudentsData {
@@ -715,9 +736,17 @@ export interface TeacherStudentsData {
     subscription_tier: string;
     subscription_status: string;
     school_id: string | null;
+    /** School context for the header breadcrumb. `kind` is
+     *  "institutional" (→ School page) or "individual" (indie → the
+     *  Independent Teachers list). Null for a school-less teacher. */
+    school: { id: string; name: string; kind: string } | null;
+    /** Teacher's own last action (from ActivityLog) — drives the header
+     *  active/dormant verdict. Null if they've never acted. */
+    last_active_at: string | null;
     call_count_30d: number;
     total_cost_30d: number;
   };
+  usage: TeacherUsage;
   sections: TeacherRosterSection[];
   total_students: number;
   students: TeacherRosterStudent[];
@@ -759,6 +788,7 @@ export interface UsersData {
       sections: number;
       students: number;
       submissions_30d: number;
+      homeworks: number;
     };
   }[];
 }

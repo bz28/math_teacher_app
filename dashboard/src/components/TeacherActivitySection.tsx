@@ -57,10 +57,12 @@ const sectionHeader = (title: string, right: React.ReactNode) => (
 );
 
 export default function TeacherActivitySection({ teacherId }: { teacherId: string }) {
+  // Generations first — the richest, founder-priority surface (source doc
+  // + focus + produced problems + cost) — then the action timeline.
   return (
     <>
-      <ActivityTimeline teacherId={teacherId} />
       <GenerationsPanel teacherId={teacherId} />
+      <ActivityTimeline teacherId={teacherId} />
     </>
   );
 }
@@ -188,15 +190,8 @@ function ActivityRow({ e }: { e: ActivityLogEntry }) {
           <span style={{ color: "#888" }}>—</span>
         )}
       </td>
-      <td
-        style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: 11,
-          color: "#888",
-          overflowWrap: "anywhere",
-        }}
-      >
-        {e.metadata ? metaSummary(e.metadata) : "—"}
+      <td style={{ fontSize: 12, color: "var(--ink-soft)", overflowWrap: "anywhere" }}>
+        {activityDetail(e.action, e.metadata)}
       </td>
     </tr>
   );
@@ -230,7 +225,17 @@ function GenerationsPanel({ teacherId }: { teacherId: string }) {
     <section className="table-card" style={{ marginBottom: 24 }}>
       {sectionHeader(
         "AI generations",
-        data ? `${data.total} job${data.total === 1 ? "" : "s"}` : "",
+        <span style={{ display: "inline-flex", gap: 12, alignItems: "baseline" }}>
+          {data && <span>{data.total} job{data.total === 1 ? "" : "s"}</span>}
+          <Link
+            to={`/llm-calls?user=${teacherId}&hours=720`}
+            className="link-btn"
+            style={{ fontSize: 12 }}
+            title="Every LLM call this teacher made in the last 30 days"
+          >
+            View all LLM calls (30d) →
+          </Link>
+        </span>,
       )}
       {error && <p className="error" style={{ padding: "12px 16px" }}>{error}</p>}
       {!data && !error && <p className="loading" style={{ padding: "12px 16px" }}>Loading…</p>}
@@ -704,10 +709,58 @@ function shortId(id: string): string {
   return id.split("-")[0];
 }
 
-function metaSummary(meta: Record<string, unknown>): string {
-  return Object.entries(meta)
-    .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
-    .join("  ·  ");
+// Typed, human-readable rendering of an activity row's metadata — the
+// operator reads "Generated 5 questions", not a raw JSON blob. Each
+// known action maps its small metadata payload (see
+// api/core/audit_log.record_activity call sites) to a sentence; unknown
+// actions fall back to an em-dash rather than dumping JSON.
+function activityDetail(action: string, meta: Record<string, unknown> | null): string {
+  if (!meta) return "—";
+  const str = (k: string) => (meta[k] == null ? "" : String(meta[k]));
+  const num = (k: string) => (typeof meta[k] === "number" ? (meta[k] as number) : undefined);
+  const quoted = (k: string, fallback: string) =>
+    str(k) ? `${fallback} "${str(k)}"` : fallback;
+
+  switch (action) {
+    case "assignment.create":
+      return [str("title"), str("type")].filter(Boolean).join(" · ") || "Created assignment";
+    case "assignment.publish":
+      return quoted("title", "Published");
+    case "assignment.unpublish":
+      return quoted("title", "Unpublished");
+    case "assignment.update":
+      return [str("title"), str("status")].filter(Boolean).join(" · ") || "Edited assignment";
+    case "generation.start": {
+      const mode = str("mode");
+      if (mode === "upload") {
+        const p = num("page_count");
+        return `Uploaded ${p ?? "?"} page${p === 1 ? "" : "s"}`;
+      }
+      const c = num("requested_count");
+      const label = mode === "similar" ? "similar question" : "question";
+      return `Generated ${c ?? "?"} ${label}${c === 1 ? "" : "s"}`;
+    }
+    case "grade.save": {
+      const sc = num("final_score");
+      return sc != null ? `Saved grade · ${sc}` : "Saved grade";
+    }
+    case "grade.mark_reviewed": {
+      const sc = num("final_score");
+      return sc != null ? `Marked reviewed · ${sc}` : "Marked reviewed";
+    }
+    case "grade.unmark_reviewed":
+      return "Reopened for review";
+    case "grade.publish": {
+      const c = num("published_count");
+      return `Published ${c ?? "?"} grade${c === 1 ? "" : "s"}${meta.reviewed_only ? " (reviewed only)" : ""}`;
+    }
+    case "bank_item.approve":
+      return quoted("title", "Approved item");
+    case "bank_item.reject":
+      return quoted("title", "Rejected item");
+    default:
+      return "—";
+  }
 }
 
 function actionBadgeStyle(action: string): React.CSSProperties {
