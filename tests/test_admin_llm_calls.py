@@ -133,6 +133,13 @@ async def test_failures_by_function_rollup(client: AsyncClient) -> None:
     rollup = {r["function"]: r["count"] for r in body["failures_by_function"]}
     assert rollup == {"solve": 2, "grade": 1}
     assert body["failure_count"] == 3
+    # Regression: avg() of the integer retry_count returns a Decimal; without a
+    # float() cast it JSON-encodes as a string ("2.0") and breaks the dashboard's
+    # numeric .toFixed(). Every strip/rollup number must be a real JSON number.
+    for r in body["failures_by_function"]:
+        assert isinstance(r["avg_retries"], (int, float))
+    for key in ("p95_latency_ms", "total_cost_window", "failure_rate"):
+        assert isinstance(body[key], (int, float)), key
 
 
 async def test_session_scope(client: AsyncClient) -> None:

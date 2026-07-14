@@ -247,7 +247,11 @@ async def llm_calls(
             {
                 "function": r.function,
                 "count": r.count,
-                "avg_retries": round(r.avg_retries or 0, 1),
+                # float() first: avg() of the integer retry_count comes back as a
+                # Decimal, which round() keeps Decimal → JSON-encodes as a STRING
+                # ("2.0"), breaking the dashboard's numeric .toFixed(). Cast so the
+                # wire value is a real number.
+                "avg_retries": round(float(r.avg_retries or 0), 1),
             }
             for r in failures_by_function
         ],
