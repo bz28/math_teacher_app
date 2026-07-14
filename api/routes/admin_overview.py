@@ -157,6 +157,10 @@ async def overview(
         "top_spenders": [
             {
                 "name": r.name or r.email,
+                # Surface the email so cost is attributable to a real
+                # person, not just a display name (the query already
+                # selects it). Null when the account has no email.
+                "email": r.email,
                 "total_cost": round(r.total_cost, 4),
             }
             for r in top_spenders

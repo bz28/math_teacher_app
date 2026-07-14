@@ -373,7 +373,7 @@ export interface OverviewData {
   by_subject: { subject: string; count: number }[];
   sessions_by_day: { day: string; count: number }[];
   cost_by_day: { day: string; cost: number }[];
-  top_spenders: { name: string; total_cost: number }[];
+  top_spenders: { name: string; email: string | null; total_cost: number }[];
 }
 
 export interface LLMCallsData {
