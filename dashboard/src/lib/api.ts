@@ -466,25 +466,17 @@ export interface OverviewData {
 }
 
 export interface LLMCallsData {
+  total_count_window: number;
+  total_cost_window: number;
+  p95_latency_ms: number;
   failure_count: number;
   failure_rate: number;
   failures_by_function: { function: string; count: number; avg_retries: number }[];
-  recent_failures: {
-    id: string;
-    function: string;
-    model: string;
-    retry_count: number;
-    output_text: string | null;
-    user_name: string | null;
-    created_at: string;
-  }[];
   by_function: {
     function: string;
     count: number;
     total_cost: number;
     avg_latency_ms: number;
-    avg_input_tokens: number;
-    avg_output_tokens: number;
   }[];
   by_model: { model: string; count: number; total_cost: number }[];
   by_day: { day: string; count: number; cost: number; avg_latency: number }[];

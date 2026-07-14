@@ -6655,8 +6655,10 @@ export interface operations {
                 function?: string | null;
                 user_id?: string | null;
                 submission_id?: string | null;
+                session_id?: string | null;
                 school_id?: string | null;
                 success?: boolean | null;
+                search?: string | null;
                 limit?: number;
                 offset?: number;
             };

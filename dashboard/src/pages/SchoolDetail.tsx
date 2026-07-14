@@ -425,12 +425,12 @@ export default function SchoolDetail() {
           <HealthBlock
             label="Failed calls (24h)"
             count={overview.failed_calls_24h}
-            href={`/llm-calls?school=${detail.id}&tab=failures&hours=24`}
+            href={`/llm-calls?school=${detail.id}&status=failed&hours=24`}
           />
           <HealthBlock
             label="Failed calls (7d)"
             count={overview.failed_calls_7d}
-            href={`/llm-calls?school=${detail.id}&tab=failures&hours=168`}
+            href={`/llm-calls?school=${detail.id}&status=failed&hours=168`}
           />
         </div>
       </Section>
