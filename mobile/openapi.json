@@ -7884,6 +7884,57 @@
         ]
       }
     },
+    "/v1/admin/quality/{session_id}": {
+      "get": {
+        "description": "Drill-in for a single evaluated session: the problem, the exact\ndecomposition steps shown to the student, and the judge's verdict.\nThis is the destination the evaluations table deep-links into.",
+        "operationId": "quality_session_detail_v1_admin_quality__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Quality Session Detail V1 Admin Quality  Session Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Quality Session Detail",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/schools": {
       "get": {
         "operationId": "list_schools_v1_admin_schools_get",

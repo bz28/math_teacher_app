@@ -2001,3 +2001,62 @@ table.dt tr:last-child td { border-bottom: none; }
   font-variant-numeric: tabular-nums;
   color: var(--ink-soft);
 }
+
+/* ── Solution-quality drill-in: the decomposition steps ──────────────── */
+.sq-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-left: 1px solid var(--rule-strong);
+}
+.sq-step {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 12px;
+  padding: 16px 0 16px 16px;
+}
+.sq-step:not(:last-child) { border-bottom: 1px solid var(--rule); }
+.sq-step-rail {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.sq-step-body { min-width: 0; }
+.sq-step-title {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.sq-step-desc {
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+.sq-step-answer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 4px 10px;
+  background: var(--ok-soft);
+  color: var(--ok);
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.sq-step-answer-label {
+  font-family: var(--font-sans);
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+}
