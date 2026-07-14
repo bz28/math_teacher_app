@@ -78,13 +78,14 @@ async def _probe_health(db: AsyncSession) -> list[dict[str, Any]]:
     ).all()
 
     # Lifetime run count per probe — context alongside the recent-window trend.
-    counts = dict(
-        (
+    counts: dict[str, int] = {
+        probe: count
+        for probe, count in (
             await db.execute(
                 select(HarnessRun.probe, func.count()).group_by(HarnessRun.probe),
             )
-        ).all(),
-    )
+        ).all()
+    }
 
     grouped: dict[str, list[Any]] = defaultdict(list)
     for row in rows:
