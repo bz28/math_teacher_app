@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
-from api.models.admin_audit_log import AdminAuditLog
+from api.models.activity_log import ActivityLog
 from api.models.course import Course, CourseTeacher
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
@@ -128,11 +128,11 @@ async def test_audit_endpoint_is_admin_only(
 
 
 @pytest.mark.asyncio
-async def test_admin_role_change_writes_admin_audit_row(
+async def test_admin_role_change_writes_activity_row(
     client: AsyncClient, grade_world: dict[str, uuid.UUID]
 ) -> None:
-    """An admin mutation (role change) records an AdminAuditLog row and the
-    admin-actions read endpoint surfaces it — guards log_admin_action being
+    """An admin mutation (role change) records an ActivityLog row and the
+    unified activity read endpoint surfaces it — guards record_activity being
     wired in rather than dead code."""
     admin_token = create_access_token(str(grade_world["admin_id"]), "admin")
     r = await client.patch(
@@ -144,17 +144,18 @@ async def test_admin_role_change_writes_admin_audit_row(
 
     async with get_session_factory()() as s:
         rows = (await s.execute(
-            select(AdminAuditLog).where(AdminAuditLog.target_id == grade_world["student_id"])
+            select(ActivityLog).where(ActivityLog.target_id == grade_world["student_id"])
         )).scalars().all()
-    assert len(rows) == 1, "exactly one admin-action row should be logged"
+    assert len(rows) == 1, "exactly one activity row should be logged"
     row = rows[0]
-    assert row.admin_user_id == grade_world["admin_id"]
+    assert row.actor_user_id == grade_world["admin_id"]
+    assert row.actor_role == "admin"
     assert row.action == "user.role_change"
     assert row.target_type == "user"
     assert row.action_metadata == {"old_role": "student", "new_role": "teacher"}
 
     surfaced = await client.get(
-        "/v1/admin/audit-logs/admin-actions",
+        "/v1/admin/activity",
         params={"action": "user.role_change"},
         headers=auth_headers(admin_token),
     )

@@ -6,7 +6,7 @@
 # DROP TABLE for the missing tables). test_models_metadata_complete.py
 # asserts this list stays in sync with the files in this directory.
 from api.models import (  # noqa: F401
-    admin_audit_log,
+    activity_log,
     app_stat,
     assignment,
     contact_lead,
