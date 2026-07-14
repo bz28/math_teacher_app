@@ -525,6 +525,10 @@ export interface LLMCallsData {
     created_at: string;
   }[];
   total_count: number;
+  /** Case-file identity + outcome for the single-submission trace view.
+   *  Populated only when the request scopes to one submission_id; null on
+   *  the general LLM-calls list. */
+  submission: SubmissionSummary | null;
   users: { id: string; email: string }[];
   repo: string;
 }
@@ -552,6 +556,31 @@ export interface QualityScoreRow {
   passed: boolean;
   issues: string | null;
   created_at: string;
+}
+
+/** The DECISIONS one graded submission produced — joined from the
+ *  submission / grade / integrity-check tables so the SubmissionTrace
+ *  header can read as a case file instead of a raw UUID. Scores are
+ *  percentages (0–100), matching the teacher review UI. */
+export interface SubmissionSummary {
+  id: string;
+  status: string | null;
+  student_id: string | null;
+  student_name: string | null;
+  school_id: string | null;
+  school_name: string | null;
+  assignment_title: string | null;
+  assignment_type: string | null;
+  ai_score: number | null;
+  final_score: number | null;
+  ai_grading_status: string | null;
+  graded_at: string | null;
+  reviewed_at: string | null;
+  grade_published_at: string | null;
+  integrity_disposition: string | null;
+  integrity_headline: string | null;
+  integrity_status: string | null;
+  integrity_resolution: string | null;
 }
 
 export interface QualityData {
