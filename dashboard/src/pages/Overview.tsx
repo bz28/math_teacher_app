@@ -4,6 +4,7 @@ import {
 } from "recharts";
 import { api, type OverviewData } from "../lib/api";
 import StatCard from "../components/StatCard";
+import ErrorState from "../components/ErrorState";
 
 const MODE_COLORS: Record<string, string> = {
   learn: "#14130f",
@@ -33,16 +34,26 @@ function HealthBadge({ errorRate, latency }: { errorRate: number; latency: numbe
 
 export default function Overview() {
   const [data, setData] = useState<OverviewData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [hours, setHours] = useState("24");
   const [grade, setGrade] = useState("");
 
   useEffect(() => {
-    const fetch = () => api.overview({ hours, grade }).then(setData);
+    const fetch = () =>
+      api.overview({ hours, grade })
+        .then((d) => { setData(d); setError(null); })
+        .catch((e) => setError(e instanceof Error ? e.message : "Failed to load overview."));
     fetch();
     const interval = setInterval(fetch, 30_000);
     return () => clearInterval(interval);
-  }, [hours, grade]);
+  }, [hours, grade, reloadKey]);
 
+  // Only surface the error panel when there's nothing to show. A blip
+  // during 30s polling keeps the last-good view rather than yanking it.
+  if (!data && error) {
+    return <ErrorState message={error} onRetry={() => { setError(null); setReloadKey((k) => k + 1); }} />;
+  }
   if (!data) return <p className="loading">Loading…</p>;
 
   const modeMap = Object.fromEntries(data.by_mode.map((m) => [m.mode, m.count]));

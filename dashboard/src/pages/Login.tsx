@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, getUserRole } from "../lib/api";
+import { api, getUserRole, setToken } from "../lib/api";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -21,12 +21,20 @@ export default function Login() {
       await api.login(email, password);
       const role = getUserRole();
       if (role !== "admin") {
+        // login() already persisted the (valid, non-admin) tokens. Clear
+        // them so the next visit doesn't drop a non-admin into the
+        // operator shell where every call 403s.
+        setToken(null);
         setError("Admin access only. Teachers and students should use veradicai.com.");
         return;
       }
       navigate("/");
-    } catch {
-      setError("Invalid credentials.");
+    } catch (err) {
+      // Surface the real failure instead of blaming the operator's
+      // password for everything: api.login throws "Invalid credentials."
+      // only for a rejected 401 and a descriptive message for 5xx, and
+      // NetworkError already carries friendly timeout / unreachable copy.
+      setError(err instanceof Error && err.message ? err.message : "Sign-in failed. Please try again.");
     }
   }
 

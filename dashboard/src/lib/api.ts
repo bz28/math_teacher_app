@@ -334,7 +334,14 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    if (!res.ok) throw new Error("Login failed");
+    // Distinguish a rejected credential (401) from a server-side or
+    // transient failure (5xx) so the login screen can surface the real
+    // cause instead of blaming the operator's password. NetworkError
+    // (timeout / unreachable) is thrown upstream by trackedFetch.
+    if (!res.ok) {
+      if (res.status === 401) throw new Error("Invalid credentials.");
+      throw new Error(`Sign-in failed (${res.status}). Please try again.`);
+    }
     const data = await res.json();
     saveTokens(data);
     return data;
