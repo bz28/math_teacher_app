@@ -262,11 +262,56 @@ export interface HarnessRunsData {
   by_probe: { probe: string; runs: number; avg_judge: number | null; total_cost: number }[];
 }
 
+export type GoldenStatus = "pass" | "fail" | "pending";
+
+export interface GoldenCase {
+  id: string;
+  probe: string;
+  name: string;
+  constraint: string;
+  adversarial: boolean;
+  expected_shapes: string[];
+  rationale: string | null;
+  last_status: GoldenStatus;
+  is_regression: boolean;
+  last_run_at: string | null;
+  last_model: string | null;
+  last_run_id: string | null;
+  last_output: string | null;
+  rerun_requested: boolean;
+  retired: boolean;
+}
+
+export interface GoldenSetData {
+  cases: GoldenCase[];
+  stats: {
+    set_size: number;
+    last_run: { at: string | null; model: string | null };
+    pass_rate: { passing: number; evaluated: number };
+    regressions: number;
+  };
+}
+
+export interface GoldenCaseCreate {
+  probe: string;
+  name: string;
+  constraint: string;
+  adversarial: boolean;
+  expected_shapes: string[];
+  rationale: string | null;
+}
+
 export const api = {
   overview: (params?: Record<string, string>) => request<OverviewData>("/admin/overview", params),
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
   harnessRuns: (params?: Record<string, string>) => request<HarnessRunsData>("/admin/harness-runs", params),
   harnessReport: (id: string) => request<{ html: string }>(`/admin/harness-runs/${id}/report`),
+  goldenSet: () => request<GoldenSetData>("/admin/golden-set"),
+  addGoldenCase: (body: GoldenCaseCreate) => mutate<GoldenCase>("/admin/golden-set", "POST", body),
+  retireGoldenCase: (id: string, retired: boolean) =>
+    mutate<GoldenCase>(`/admin/golden-set/${id}/retire`, "PATCH", { retired }),
+  rerunGoldenEval: (ids: string[] = []) =>
+    mutate<{ requested: number }>("/admin/golden-set/rerun", "POST", { ids }),
   quality: (params?: Record<string, string>) => request<QualityData>("/admin/quality", params),
   gradingQuality: (params?: Record<string, string>) =>
     request<GradingQualityData>("/admin/grading-quality", params),
