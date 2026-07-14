@@ -30,7 +30,7 @@ export function PageMasthead({ eyebrow, title, subtitle, rule = true, action }: 
         transition={{ duration: 0.5 }}
       >
         {eyebrow !== undefined && (
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">
+          <p className="eyebrow">
             {eyebrow || " "}
           </p>
         )}

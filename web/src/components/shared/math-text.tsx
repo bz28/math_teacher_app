@@ -113,8 +113,6 @@ const restoreDollarMath = (s: string) => s.replaceAll(DOLLAR_SENTINEL, "\\$");
 function parse(input: string): Segment[] {
   // Clean up before parsing
   let text = input.replace(/<br\s*\/?>/gi, "\n");
-  // Strip arrow characters that Claude sometimes inserts inside SVG
-  text = text.replace(/→\s*/g, "").replace(/←\s*/g, "");
   // Protect escaped (literal) dollars from the math-delimiter matcher.
   text = text.replace(/\\\$/g, DOLLAR_SENTINEL);
 
@@ -158,7 +156,10 @@ function parse(input: string): Segment[] {
         content: restoreDollarMath(restoreBrokenLatexCommands(m.slice(1, -1).trim())),
       });
     } else if (m.startsWith("<svg")) {
-      segments.push({ type: "svg", content: m });
+      // Strip stray Unicode arrows (→ ←) Claude sometimes injects into SVG
+      // markup, where they break rendering. Scoped to the SVG segment so
+      // legitimate prose/math arrows ("as x → 0", "f: A → B") survive.
+      segments.push({ type: "svg", content: m.replace(/→\s*/g, "").replace(/←\s*/g, "") });
     } else if (m.startsWith("**") && m.endsWith("**")) {
       // Bold content is RE-PARSED by a nested <MathText> (render switch),
       // so it must stay in source form: restore the sentinel to `\$`, not a
