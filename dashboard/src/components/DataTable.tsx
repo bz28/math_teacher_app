@@ -169,6 +169,14 @@ export default function DataTable<T>({
                   onKeyDown={
                     onRowClick
                       ? (e) => {
+                          // Only when the row itself has focus. Cells can hold
+                          // their own controls (Users' row-actions button),
+                          // which stopPropagation on click — but a keydown
+                          // from one would still bubble here and fire the row
+                          // handler on top of the button's own action. No tab
+                          // pairs onRowClick with an inner control today; this
+                          // keeps that combination from silently breaking.
+                          if (e.target !== e.currentTarget) return;
                           if (e.key !== "Enter" && e.key !== " ") return;
                           e.preventDefault(); // Space would scroll the page
                           onRowClick(row);
