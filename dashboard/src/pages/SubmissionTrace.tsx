@@ -12,6 +12,7 @@ import {
 import { PIPELINE_BUCKETS, bucketFor } from "../lib/llm_modes";
 import MetadataChips from "../components/MetadataChips";
 import StatusPill, { type PillTone } from "../components/StatusPill";
+import { useConfirm } from "../lib/confirm";
 
 // SubmissionTrace — the per-submission case file. Traces ONE student
 // submission end-to-end (extraction → grading → integrity) so an
@@ -78,6 +79,7 @@ const ASSIGNMENT_TYPE_LABEL: Record<string, string> = {
 
 export default function SubmissionTrace() {
   const { submissionId } = useParams<{ submissionId: string }>();
+  const confirm = useConfirm();
   const [data, setData] = useState<LLMCallsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [debugState, setDebugState] = useState<Record<string, string>>({});
@@ -101,9 +103,12 @@ export default function SubmissionTrace() {
   }, [submissionId]);
 
   const handleDebug = async (callId: string) => {
-    if (!window.confirm("Dispatch a debugging agent for this call? It runs on GitHub and posts its findings as an issue.")) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Dispatch a debugging agent?",
+      message: "It runs on GitHub and posts its findings as an issue.",
+      confirmLabel: "Dispatch",
+    });
+    if (!ok) return;
     setDebugState((s) => ({ ...s, [callId]: "sending" }));
     try {
       await api.debugLLMCall(callId);

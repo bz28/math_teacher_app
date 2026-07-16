@@ -1197,51 +1197,6 @@ textarea:focus {
 
 input::placeholder, textarea::placeholder { color: var(--muted-2); }
 
-/* ──────────────────────────────────────────────────────────────────
-   LLM call expanded row
-   ────────────────────────────────────────────────────────────────── */
-
-.call-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 18px 0;
-  background: transparent;
-  border-top: 1px solid var(--rule);
-}
-
-.call-detail-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-}
-
-.call-detail-metadata strong,
-.call-detail-section strong {
-  display: block;
-  font-family: var(--font-sans);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 1.6px;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-
-.call-detail-section pre {
-  background: var(--ink);
-  color: var(--paper);
-  padding: 14px;
-  border-radius: 3px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.6;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 300px;
-  overflow-y: auto;
-}
 
 /* ──────────────────────────────────────────────────────────────────
    LLM calls — search-first inspector
@@ -1257,14 +1212,41 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 }
 .llm-count { color: var(--muted); font-weight: 500; }
 
-/* The one-call detail panel (a level away from the table). */
-.llm-detail { border-top-color: var(--accent); }
-.llm-detail-head {
+/* The one-call detail — a modal, so the prompt can't open below the fold. */
+.llm-modal-body {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 36px 32px;
+}
+.llm-io {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.llm-io-section strong {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.6px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+/* No max-height: the modal body is the single scroll container. A capped,
+   inner-scrolling box showed ~13% of a real prompt and trapped the wheel. */
+.llm-io-section pre {
+  background: var(--ink);
+  color: var(--paper);
+  padding: 14px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
 }
 .llm-detail-title {
   display: flex;
@@ -1283,19 +1265,6 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   font-size: 12px;
   color: var(--muted);
 }
-.llm-detail-close {
-  border: 1px solid var(--rule);
-  background: var(--surface);
-  color: var(--muted);
-  border-radius: 3px;
-  width: 26px;
-  height: 26px;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: color 0.12s, border-color 0.12s;
-}
-.llm-detail-close:hover { color: var(--ink); border-color: var(--ink-soft); }
-
 .llm-io-head {
   display: flex;
   align-items: center;
@@ -2091,6 +2060,12 @@ table.dt tr:last-child td { border-bottom: none; }
   box-shadow: inset 3px 0 0 var(--row-status, var(--accent));
 }
 .dt-row-click { cursor: pointer; }
+/* Keyboard focus ring. Inset so it reads inside the row's hairline rule
+   rather than straddling the row above. */
+.dt-row-click:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 
 .dt-drill {
   text-align: right;
