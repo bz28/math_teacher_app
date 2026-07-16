@@ -48,6 +48,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/audit-logs/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit Timeline
+         * @description Merged access+write audit timeline with a scope summary.
+         */
+        get: operations["audit_timeline_v1_admin_audit_logs_timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/audit-logs/timeline/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit Timeline Csv
+         * @description The current filtered timeline as a CSV — the compliance deliverable.
+         */
+        get: operations["audit_timeline_csv_v1_admin_audit_logs_timeline_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/documents/{document_id}/content": {
         parameters: {
             query?: never;
@@ -112,6 +152,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/golden-set": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Golden Set
+         * @description Every golden case + the health tiles the console leads with.
+         */
+        get: operations["golden_set_v1_admin_golden_set_get"];
+        put?: never;
+        /**
+         * Add Golden Case
+         * @description Add a golden case. It starts `pending` until the next corpus run evaluates it.
+         */
+        post: operations["add_golden_case_v1_admin_golden_set_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/golden-set/rerun": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rerun Golden Eval
+         * @description Flag cases for a fresh eval. The autonomous harness picks these up on its
+         *     next corpus run (it re-runs the whole corpus and upserts fresh results,
+         *     clearing the flag) — this records the operator's intent without wiping the
+         *     currently-shown verdict.
+         */
+        post: operations["rerun_golden_eval_v1_admin_golden_set_rerun_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/golden-set/{case_id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Retire Golden Case
+         * @description Retire (or restore) a case — keeps its history, drops it from the tiles.
+         */
+        patch: operations["retire_golden_case_v1_admin_golden_set__case_id__retire_patch"];
+        trace?: never;
+    };
     "/v1/admin/grading-quality": {
         parameters: {
             query?: never;
@@ -121,6 +228,33 @@ export interface paths {
         };
         /** Grading Quality */
         get: operations["grading_quality_v1_admin_grading_quality_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/grading-quality/overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Grading Quality Overrides
+         * @description The actual overridden problems behind a weak subject/course row or a
+         *     catastrophic status cell.
+         *
+         *     Filter by ``subject`` and/or ``course`` (a weak-spot row) and/or a
+         *     ``from_status``→``to_status`` transition (a status-matrix cell). Each
+         *     case carries the AI's original call, the teacher's final call, and the
+         *     signed delta — no student identity or written work. Sorted by change
+         *     size (biggest misgrades first) and capped at ``_DRILL_LIMIT``.
+         */
+        get: operations["grading_quality_overrides_v1_admin_grading_quality_overrides_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -401,6 +535,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/quality/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quality Session Detail
+         * @description Drill-in for a single evaluated session: the problem, the exact
+         *     decomposition steps shown to the student, and the judge's verdict.
+         *     This is the destination the evaluations table deep-links into.
+         */
+        get: operations["quality_session_detail_v1_admin_quality__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/schools": {
         parameters: {
             query?: never;
@@ -426,7 +582,27 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get School */
+        /**
+         * Get School
+         * @description School deep page: the teacher → section → student hierarchy.
+         *
+         *     The unit is teacher→class, not a flat school-wide roster. We return
+         *     every teacher, their sections (class periods), and each section's
+         *     enrolled students — with cost rolled up to the level where it's
+         *     unambiguously attributable:
+         *
+         *       * Per-submission AI (Vision extraction + integrity + AI grading,
+         *         and grading of assigned practice) is attributable via
+         *         LLMCall.submission_id → submission → section, so it rolls up to
+         *         the **section**.
+         *       * A teacher's authoring/generation spend has no submission, so it
+         *         can't be pinned to one section — it stays at the **teacher**
+         *         level (LLMCall.user_id = teacher, submission_id IS NULL).
+         *
+         *     All aggregation is done with grouped subqueries assembled in Python
+         *     (no per-teacher / per-section follow-up queries), so a large school
+         *     still resolves in a fixed number of round trips.
+         */
         get: operations["get_school_v1_admin_schools__school_id__get"];
         put?: never;
         post?: never;
@@ -481,33 +657,6 @@ export interface paths {
         };
         /** School Overview */
         get: operations["school_overview_v1_admin_schools__school_id__overview_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/schools/{school_id}/students": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * School Students
-         * @description Roster of every student enrolled in any of the school's courses.
-         *
-         *     One pass over courses → sections → section_enrollments → users
-         *     so a school with many teachers doesn't N+1 across the per-teacher
-         *     endpoint. Same row shape as `/admin/users/{teacher_id}/students`
-         *     minus per-section context (a student may sit across several
-         *     teachers within the same school; surfacing each enrollment would
-         *     bloat the table for no obvious operator value).
-         */
-        get: operations["school_students_v1_admin_schools__school_id__students_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -596,6 +745,30 @@ export interface paths {
         post?: never;
         /** Delete User */
         delete: operations["delete_user_v1_admin_users__user_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/users/{user_id}/resend-invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resend Admin Invite
+         * @description Re-issue the set-password invite for a pending admin.
+         *
+         *     Rotates the token (invalidating any earlier link) and resends the
+         *     email. Only valid for an admin who hasn't activated yet — once they
+         *     log in there's a refresh token and re-inviting makes no sense.
+         */
+        post: operations["resend_admin_invite_v1_admin_users__user_id__resend_invite_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4004,6 +4177,24 @@ export interface components {
              */
             problem_type: "mixed" | "word" | "computation" | "multi_step" | "proof";
         };
+        /** GoldenCaseCreate */
+        GoldenCaseCreate: {
+            /**
+             * Adversarial
+             * @default false
+             */
+            adversarial: boolean;
+            /** Constraint */
+            constraint: string;
+            /** Expected Shapes */
+            expected_shapes?: string[];
+            /** Name */
+            name: string;
+            /** Probe */
+            probe: string;
+            /** Rationale */
+            rationale?: string | null;
+        };
         /** GradeRequest */
         GradeRequest: {
             /** Breakdown */
@@ -4483,6 +4674,11 @@ export interface components {
             /** Signup School Name */
             signup_school_name?: string | null;
         };
+        /** RerunPayload */
+        RerunPayload: {
+            /** Ids */
+            ids?: string[];
+        };
         /**
          * ResolveRequest
          * @description Teacher's session-level resolution of an integrity check. The
@@ -4509,6 +4705,14 @@ export interface components {
              * @default
              */
             student_response: string;
+        };
+        /** RetirePayload */
+        RetirePayload: {
+            /**
+             * Retired
+             * @default true
+             */
+            retired: boolean;
         };
         /** SectionStudentInsightsResponse */
         SectionStudentInsightsResponse: {
@@ -5652,6 +5856,92 @@ export interface operations {
             };
         };
     };
+    audit_timeline_v1_admin_audit_logs_timeline_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                /** @description Time window in hours; omit for all-time. */
+                hours?: number | null;
+                /** @description Name/email substring (or a pasted UUID) matching the actor OR the target student — replaces the UUID-only inputs. */
+                q?: string | null;
+                school_id?: string | null;
+                /** @description "access" (record reads) or "write" (actions); omit for both. */
+                facet?: string | null;
+                /** @description Prefix match on the write action or the access record type (e.g. "grade" or "grade.publish"). */
+                type?: string | null;
+                /** @description Pivot to every event touching this record or student. */
+                target_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audit_timeline_csv_v1_admin_audit_logs_timeline_export_csv_get: {
+        parameters: {
+            query?: {
+                /** @description Time window in hours; omit for all-time. */
+                hours?: number | null;
+                /** @description Name/email substring (or a pasted UUID) matching the actor OR the target student — replaces the UUID-only inputs. */
+                q?: string | null;
+                school_id?: string | null;
+                /** @description "access" (record reads) or "write" (actions); omit for both. */
+                facet?: string | null;
+                /** @description Prefix match on the write action or the access record type (e.g. "grade" or "grade.publish"). */
+                type?: string | null;
+                /** @description Pivot to every event touching this record or student. */
+                target_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     document_content_v1_admin_documents__document_id__content_get: {
         parameters: {
             query?: never;
@@ -5756,6 +6046,135 @@ export interface operations {
             };
         };
     };
+    golden_set_v1_admin_golden_set_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    add_golden_case_v1_admin_golden_set_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoldenCaseCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rerun_golden_eval_v1_admin_golden_set_rerun_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RerunPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retire_golden_case_v1_admin_golden_set__case_id__retire_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetirePayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     grading_quality_v1_admin_grading_quality_get: {
         parameters: {
             query?: {
@@ -5790,10 +6209,48 @@ export interface operations {
             };
         };
     };
+    grading_quality_overrides_v1_admin_grading_quality_overrides_get: {
+        parameters: {
+            query?: {
+                hours?: number;
+                subject?: string | null;
+                course?: string | null;
+                from_status?: string | null;
+                to_status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     harness_runs_v1_admin_harness_runs_get: {
         parameters: {
             query?: {
                 probe?: string | null;
+                failed_only?: boolean;
                 limit?: number;
                 offset?: number;
             };
@@ -6280,8 +6737,10 @@ export interface operations {
                 function?: string | null;
                 user_id?: string | null;
                 submission_id?: string | null;
+                session_id?: string | null;
                 school_id?: string | null;
                 success?: boolean | null;
+                search?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -6428,6 +6887,39 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    quality_session_detail_v1_admin_quality__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -6719,42 +7211,6 @@ export interface operations {
             };
         };
     };
-    school_students_v1_admin_schools__school_id__students_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path: {
-                school_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     users_v1_admin_users_get: {
         parameters: {
             query?: {
@@ -6764,6 +7220,8 @@ export interface operations {
                 offset?: number;
                 search?: string | null;
                 role?: string | null;
+                plan?: string | null;
+                school_id?: string | null;
                 no_school?: boolean;
                 has_classroom?: boolean;
                 active_classroom?: boolean;
@@ -6871,6 +7329,39 @@ export interface operations {
         };
     };
     delete_user_v1_admin_users__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_admin_invite_v1_admin_users__user_id__resend_invite_post: {
         parameters: {
             query?: never;
             header?: never;
