@@ -160,6 +160,21 @@ export default function DataTable<T>({
                   className={`dt-row${onRowClick ? " dt-row-click" : ""}`}
                   style={status ? ({ "--row-status": status } as React.CSSProperties) : undefined}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  // Clickable rows are the primary affordance on most tabs, so
+                  // they have to be reachable without a mouse. We keep the <tr>
+                  // (rather than role="button", which would strip the row out of
+                  // the table semantics screen readers rely on) and add the two
+                  // things a native button would give us: focus and Enter/Space.
+                  tabIndex={onRowClick ? 0 : undefined}
+                  onKeyDown={
+                    onRowClick
+                      ? (e) => {
+                          if (e.key !== "Enter" && e.key !== " ") return;
+                          e.preventDefault(); // Space would scroll the page
+                          onRowClick(row);
+                        }
+                      : undefined
+                  }
                 >
                   {columns.map((c) => (
                     <td

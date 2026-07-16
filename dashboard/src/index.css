@@ -2091,6 +2091,12 @@ table.dt tr:last-child td { border-bottom: none; }
   box-shadow: inset 3px 0 0 var(--row-status, var(--accent));
 }
 .dt-row-click { cursor: pointer; }
+/* Keyboard focus ring. Inset so it reads inside the row's hairline rule
+   rather than straddling the row above. */
+.dt-row-click:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 
 .dt-drill {
   text-align: right;
