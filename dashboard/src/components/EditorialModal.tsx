@@ -43,6 +43,7 @@ export function EditorialModal({
 }) {
   const titleId = useId();
   const triggerRef = useRef<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
   const onCloseRef = useRef(onClose);
   // Always-fresh callback ref. Updated inside an effect (not in render)
   // to satisfy react-hooks/refs — mutating ref.current during render is
@@ -53,6 +54,14 @@ export function EditorialModal({
 
   useEffect(() => {
     triggerRef.current = document.activeElement as HTMLElement | null;
+    // Move focus into the dialog. Without this the trigger keeps focus behind
+    // the backdrop: Tab walks controls the user can't see, and Space re-fires
+    // the trigger. Skip when the content already claimed focus itself — the
+    // Add/Edit note modal autoFocuses its textarea, and landing the caret in
+    // the field beats announcing the title.
+    if (!dialogRef.current?.contains(document.activeElement)) {
+      dialogRef.current?.focus();
+    }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCloseRef.current();
     };
@@ -69,10 +78,13 @@ export function EditorialModal({
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        tabIndex={-1}
         style={{
+          outline: "none",
           position: "relative",
           maxWidth,
           width: "92%",

@@ -277,7 +277,9 @@ export default function LLMCalls() {
           tracePath={selectedCall.submission_id ? tracePathFor(selectedCall.submission_id) : null}
           onClose={() => setSelectedCall(null)}
           onDebug={() => handleDebug(selectedCall.id)}
-          onSubmissionClick={(id) => setParam("submission", id)}
+          // Both chips refilter the table underneath, so both dismiss — leaving
+          // the modal up would silently rescope the list behind it.
+          onSubmissionClick={(id) => { setParam("submission", id); setSelectedCall(null); }}
           onSessionClick={(id) => { setParam("session", id); setSelectedCall(null); }}
         />
       )}
