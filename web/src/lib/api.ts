@@ -3,6 +3,16 @@
  * Mirrors mobile/src/services/api.ts — same endpoints, same auth flow.
  */
 
+// Types generated from the backend OpenAPI spec (`pnpm gen:api` →
+// api-schema.gen.ts). A CI drift gate keeps the generated file in sync
+// with the backend Pydantic schemas. This file is being incrementally
+// migrated onto these names batch by batch; the extraction/submission
+// contract types below are the first batch, the rest stay hand-written
+// for follow-up batches.
+import type { components } from "./api-schema.gen";
+
+type Schemas = components["schemas"];
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/v1";
 const DEFAULT_TIMEOUT = 15_000;
 const LLM_TIMEOUT = 30_000;
@@ -2135,19 +2145,12 @@ export interface StudentHomeworkDetail {
   breakdown: StudentProblemFeedback[] | null;
 }
 
-/** Mirrors the backend `SubmissionFileOut` (api/schemas/extraction.py),
- *  the authoritative wire shape. Web has no OpenAPI codegen, so this stays
- *  hand-maintained — keep it in sync with that model. */
-export interface SubmissionFile {
-  /** Base64-encoded payload (no `data:` prefix). */
-  data: string;
-  /** Detected media type — image/jpeg, image/png, application/pdf. */
-  media_type: string;
-  /** Never populated by the backend today; read defensively (falls back
-   *  to "Page N") on the confirm/submitted screens. Optional to match the
-   *  backend's Optional contract field. */
-  filename?: string | null;
-}
+/** Backend `SubmissionFileOut` (api/schemas/extraction.py). `data` is
+ *  base64 (no `data:` prefix); `media_type` is image/jpeg|png or
+ *  application/pdf; `filename` is never set by the backend today and is
+ *  read defensively (falls back to "Page N") on the confirm/submitted
+ *  screens. Aliased onto the generated schema so it can't drift. */
+export type SubmissionFile = Schemas["SubmissionFileOut"];
 
 export interface StudentSubmission {
   submission_id: string;
@@ -2594,33 +2597,20 @@ export interface TeacherIntegrityTranscriptTurn {
   telemetry: IntegrityTurnTelemetry | null;
 }
 
-export interface IntegrityExtractionStep {
-  step_num: number;
-  /** 1-based HW problem position this step belongs to. Null when the
-   *  extractor couldn't confidently attribute the step to a single
-   *  problem (scratchwork, cross-problem setup). */
-  problem_position: number | null;
-  latex: string;
-  plain_english: string;
-}
+/** Backend `ExtractionStepOut` (api/schemas/extraction.py). One work step
+ *  Vision transcribed; `problem_position` is the 1-based HW problem it
+ *  belongs to, null when the extractor couldn't confidently attribute it
+ *  (scratchwork, cross-problem setup). */
+export type IntegrityExtractionStep = Schemas["ExtractionStepOut"];
 
-/** One final-answer entry per HW problem that had a discernible
- *  answer on the page. Empty when the student didn't write one. */
-export interface IntegrityExtractionFinalAnswer {
-  problem_position: number;
-  answer_latex: string;
-  answer_plain: string;
-}
+/** Backend `ExtractionFinalAnswerOut` (api/schemas/extraction.py). One
+ *  entry per HW problem that had a discernible answer on the page. */
+export type IntegrityExtractionFinalAnswer = Schemas["ExtractionFinalAnswerOut"];
 
-/** Mirrors the backend `ExtractionOut` (api/schemas/extraction.py), the
- *  authoritative wire shape. Web has no OpenAPI codegen, so this stays
- *  hand-maintained — keep it (and the Step/FinalAnswer shapes above) in
- *  sync with that model. */
-export interface IntegrityExtraction {
-  steps: IntegrityExtractionStep[];
-  final_answers: IntegrityExtractionFinalAnswer[];
-  confidence: number;
-}
+/** Backend `ExtractionOut` (api/schemas/extraction.py): ordered steps +
+ *  per-problem final answers + overall confidence. Aliased onto the
+ *  generated schema so it can't drift. */
+export type IntegrityExtraction = Schemas["ExtractionOut"];
 
 /**
  * Six-dimension rubric stored per probed problem. Required dimensions

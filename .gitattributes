@@ -1,0 +1,3 @@
+# Generated codegen files are compared byte-for-byte by the CI drift gate.
+# Force LF so a Windows checkout with autocrlf can't commit CRLF and false-fail the gate.
+*.gen.ts text eol=lf

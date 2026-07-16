@@ -28,6 +28,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Auto-generated from the OpenAPI spec (`pnpm gen:api`); never hand-edited
+    // and regenerated verbatim, so linting it is noise and could false-fail
+    // the CI drift gate on a formatting rule.
+    "src/lib/api-schema.gen.ts",
   ]),
 ]);
 
