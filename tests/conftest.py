@@ -8,8 +8,9 @@ os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("SENTRY_DSN", "")
 os.environ.setdefault("JWT_REFRESH_GRACE_PERIOD_SECONDS", "0")
 
+import asyncio
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -19,6 +20,8 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 from api.core.auth import create_access_token, hash_password
+from api.core.cost_tracker import cost_tracker
+from api.core.llm_client import _circuit
 from api.database import Base, get_engine, get_session_factory
 from api.main import app
 from api.models.assignment import Assignment, AssignmentSection
@@ -216,16 +219,67 @@ def _mock_integrity_ai() -> Any:
 
 
 @pytest.fixture(autouse=True)
-async def _drain_integrity_tasks() -> AsyncIterator[None]:
-    """Drain any integrity background tasks spawned during the test.
+def _reset_llm_shared_state() -> Iterator[None]:
+    """Reset the process-global LLM state that bleeds across tests.
 
-    Runs AFTER the test body so any fire-and-forget tasks from the
-    submit endpoint finish (or fail) cleanly before the next test
-    starts. Prevents tasks from leaking across tests and hitting a
-    session that's about to be truncated.
+    Two module-level singletons in the LLM stack carry mutable state
+    that survives a single test and poisons later ones — a classic
+    cross-file flake that only shows up once several files run in the
+    same process:
+
+    - `llm_client._circuit` (the circuit breaker): a test that trips it
+      leaves it OPEN, so the *next* file's first real Claude call is
+      rejected with "Circuit breaker is open" instead of behaving
+      normally. (test_session.py previously carried a local copy of
+      this reset — now centralized here so every file is protected.)
+    - `cost_tracker` (daily spend): accrued cost carries forward and can
+      push a later test over the daily limit.
+
+    Reset on BOTH sides of the test so neither inherited state (from a
+    prior test) nor forward-leaked state (into the next) can bite.
+    """
+    _circuit.reset()
+    cost_tracker.reset()
+    yield
+    _circuit.reset()
+    cost_tracker.reset()
+
+
+async def _drain_fire_and_forget_pools() -> None:
+    """Await the fire-and-forget task pools that persist LLM telemetry.
+
+    Beyond the integrity pipeline's own tasks, every real Claude call
+    schedules an untracked background task to write its call-log /
+    quality-judge row to the DB (see llm_logging.fire_and_forget_persist
+    and judge.fire_and_forget_judge). Each opens its OWN session, so if
+    one leaks past the test that spawned it, it can hit the DB mid-way
+    through a later test — writing an LLMCall row against a user/session
+    the next test just truncated, or contending on the shared Postgres.
+    Drain them here so they can't cross a test boundary.
+    """
+    from api.core import judge, llm_logging
+
+    for _ in range(10):
+        tasks = list(llm_logging._background_tasks) + list(judge._background_tasks)
+        if not tasks:
+            return
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+@pytest.fixture(autouse=True)
+async def _drain_integrity_tasks() -> AsyncIterator[None]:
+    """Drain every background task spawned during the test.
+
+    Runs AFTER the test body so any fire-and-forget tasks — the submit
+    pipeline's extraction/integrity/diagnosis tasks AND the LLM
+    telemetry/judge persistence tasks — finish (or fail) cleanly before
+    the next test starts. Prevents tasks from leaking across tests and
+    hitting a session/row that's about to be truncated, or racing the
+    next test on a contended local Postgres.
     """
     yield
     await drain_integrity_background_tasks()
+    await _drain_fire_and_forget_pools()
 
 
 async def _truncate_world_tables() -> None:

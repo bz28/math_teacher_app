@@ -55,6 +55,12 @@ class CostTracker:
                     settings.daily_cost_limit_usd,
                 )
 
+    def reset(self) -> None:
+        """Reset accumulated spend to zero. Used by tests to keep the
+        process-global tracker from bleeding cost across test cases."""
+        self._total_usd = 0.0
+        self._reset_day = datetime.date.today().toordinal()
+
     @property
     def total_usd(self) -> float:
         self._maybe_reset()

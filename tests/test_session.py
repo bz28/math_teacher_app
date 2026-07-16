@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import AsyncClient
 
-from api.core.llm_client import _circuit
 from api.core.step_decomposition import Decomposition
 
 
@@ -82,10 +81,8 @@ def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-@pytest.fixture(autouse=True)
-def _reset_circuit_breaker() -> None:
-    """Reset the global circuit breaker before each test."""
-    _circuit.reset()
+# The global circuit breaker is reset around every test by the autouse
+# `_reset_llm_shared_state` fixture in conftest.py — no local reset needed.
 
 
 # ---------------------------------------------------------------------------
