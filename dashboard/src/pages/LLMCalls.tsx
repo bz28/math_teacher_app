@@ -13,6 +13,8 @@ import DataTable, { type Column } from "../components/DataTable";
 import MetadataChips from "../components/MetadataChips";
 import { Pagination, SearchInput } from "../components/Pagination";
 import ErrorState from "../components/ErrorState";
+import { EditorialModal } from "../components/EditorialModal";
+import { useConfirm } from "../lib/confirm";
 
 const COLORS = ["#14130f", "#4a6b3a", "#b8431a", "#3d5a78", "#a66b15", "#6b21a8"];
 const PAGE_SIZE = 25;
@@ -26,6 +28,7 @@ function fmtLatency(ms: number): string {
 
 export default function LLMCalls() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const confirm = useConfirm();
   const tracePathFor = (submissionId: string) => `/submissions/${submissionId}/trace`;
 
   const [data, setData] = useState<LLMCallsData | null>(null);
@@ -49,7 +52,10 @@ export default function LLMCalls() {
     return s === "ok" || s === "failed" ? s : "";
   })();
 
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Hold the selected call *object*, not its id. The list refetches on every
+  // filter change; an id looked up against `data.calls` would blank the open
+  // modal the moment a refetch dropped that row. A snapshot always renders.
+  const [selectedCall, setSelectedCall] = useState<CallRow | null>(null);
   const [debugState, setDebugState] = useState<Record<string, string>>({});
   const [offset, setOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -106,7 +112,12 @@ export default function LLMCalls() {
   };
 
   const handleDebug = async (callId: string) => {
-    if (!window.confirm("Dispatch a debugging agent for this call? It runs on GitHub and posts its findings as an issue.")) return;
+    const ok = await confirm({
+      title: "Dispatch a debugging agent?",
+      message: "It runs on GitHub and posts its findings as an issue.",
+      confirmLabel: "Dispatch",
+    });
+    if (!ok) return;
     setDebugState((s) => ({ ...s, [callId]: "sending" }));
     try {
       await api.debugLLMCall(callId);
@@ -165,7 +176,6 @@ export default function LLMCalls() {
   const win = windowLabel(Number(hours));
   const errTone = data.failure_rate >= 5 ? "danger" : data.failure_rate > 0 ? "warn" : "ok";
   const fnOptions = [...new Set(data.by_function.map((r) => r.function))].sort();
-  const selected = expandedId ? data.calls.find((c) => c.id === expandedId) ?? null : null;
 
   return (
     <div>
@@ -250,88 +260,26 @@ export default function LLMCalls() {
           rows={data.calls}
           rowKey={(c) => c.id}
           defaultSort={{ key: "created_at", dir: "desc" }}
-          onRowClick={(c) => setExpandedId(expandedId === c.id ? null : c.id)}
-          rowStatus={(c) => (c.id === expandedId ? "var(--accent)" : !c.success ? "var(--danger)" : undefined)}
+          onRowClick={(c) => setSelectedCall(c)}
+          rowStatus={(c) => (c.id === selectedCall?.id ? "var(--accent)" : !c.success ? "var(--danger)" : undefined)}
           empty={<span className="dt-state-title">No calls match these filters.</span>}
           minWidth={720}
         />
         <Pagination offset={offset} limit={PAGE_SIZE} total={data.total_count} onChange={setOffset} />
       </div>
 
-      {/* ── ③ A level away — the exact input | output for one call ────── */}
-      {selected && (
-        <div className="table-card llm-detail">
-          <div className="llm-detail-head">
-            <div className="llm-detail-title">
-              <StatusPill tone={selected.success ? "ok" : "danger"} label={selected.success ? "OK" : "FAIL"} />
-              <strong>{selected.function}</strong>
-              <span className="llm-detail-meta" title={selected.model}>{shortModel(selected.model)}</span>
-              <span className="llm-detail-meta">{fmtCost(selected.cost_usd)}</span>
-              <span className="llm-detail-meta">{fmtLatency(selected.latency_ms)}</span>
-              <span className="llm-detail-meta">{selected.input_tokens}/{selected.output_tokens} tok</span>
-              <span className="llm-detail-meta" title={new Date(selected.created_at).toLocaleString()}>{formatRelativeDate(selected.created_at)}</span>
-            </div>
-            <button className="llm-detail-close" onClick={() => setExpandedId(null)} aria-label="Close">✕</button>
-          </div>
-
-          <div className="call-detail-row">
-            <div className="call-detail-section">
-              <div className="llm-io-head">
-                <strong>Input</strong>
-                <CopyButton text={selected.input_text ?? ""} disabled={!selected.input_text} />
-              </div>
-              <pre>{selected.input_text || "(not captured)"}</pre>
-            </div>
-            <div className="call-detail-section">
-              <div className="llm-io-head">
-                <strong>{selected.success ? "Output" : "Error"}</strong>
-                <CopyButton text={selected.output_text ?? ""} disabled={!selected.output_text} />
-              </div>
-              <pre>{selected.output_text || "(not captured)"}</pre>
-            </div>
-          </div>
-
-          <div className="call-detail-metadata">
-            <strong>Metadata</strong>
-            <MetadataChips
-              metadata={selected.metadata}
-              schoolId={selected.school_id}
-              submissionId={selected.submission_id}
-              onSubmissionClick={(id) => setParam("submission", id)}
-            />
-            <div className="llm-detail-actions">
-              {selected.session_id && (
-                <button className="llm-link-btn" onClick={() => { setParam("session", selected.session_id!); setExpandedId(null); }}>
-                  ⧉ View session calls →
-                </button>
-              )}
-              {selected.submission_id && (
-                <Link to={tracePathFor(selected.submission_id)} className="llm-link-btn">
-                  ▤ Open flight recorder →
-                </Link>
-              )}
-              <button
-                className="llm-link-btn"
-                onClick={() => handleDebug(selected.id)}
-                disabled={debugState[selected.id] === "sending"}
-              >
-                🔍 Debug with agent
-              </button>
-              {(debugState[selected.id] === "sent" || Boolean(selected.metadata?.debug_dispatched_at)) && (
-                <a
-                  href={`https://github.com/${data.repo}/issues?q=${encodeURIComponent(`is:issue label:llm-debug ${selected.id}`)}`}
-                  target="_blank" rel="noopener noreferrer" className="llm-link-btn"
-                  title="Open the debug agent's findings for this call on GitHub"
-                >
-                  🔗 Debug results
-                </a>
-              )}
-            </div>
-            {debugState[selected.id] === "sending" && <div className="llm-detail-note">Dispatching…</div>}
-            {debugState[selected.id] === "sent" && <div className="llm-detail-note llm-note-ok">Dispatched — results appear under 🔗 once the agent finishes.</div>}
-            {debugState[selected.id] === "error" && <div className="llm-detail-note llm-note-bad">Dispatch failed (token configured?).</div>}
-          </div>
-        </div>
+      {/* ── ③ One call, up front — prompt in, response out ───────────── */}
+      {selectedCall && (
+        <CallDetailModal
+          call={selectedCall}
+          repo={data.repo}
+          debugState={debugState[selectedCall.id]}
+          tracePath={selectedCall.submission_id ? tracePathFor(selectedCall.submission_id) : null}
+          onClose={() => setSelectedCall(null)}
+          onDebug={() => handleDebug(selectedCall.id)}
+          onSubmissionClick={(id) => setParam("submission", id)}
+          onSessionClick={(id) => { setParam("session", id); setSelectedCall(null); }}
+        />
       )}
 
       {/* ── Trends — demoted; the aggregate view, a click away ────────── */}
@@ -423,6 +371,100 @@ const byFnCols: Column<LLMCallsData["by_function"][number]>[] = [
   { key: "total_cost", header: "Cost", numeric: true, width: "20%", sortValue: (r) => r.total_cost, render: (r) => fmtCost(r.total_cost) },
   { key: "avg_latency_ms", header: "Avg latency", numeric: true, width: "20%", sortValue: (r) => r.avg_latency_ms, render: (r) => fmtLatency(r.avg_latency_ms) },
 ];
+
+/**
+ * The one-call detail. Lives in a modal rather than inline under the table
+ * because the panel used to render below all 25 rows — clicking the top row
+ * put its prompt ~1600px below the fold with no scroll, so the click looked
+ * like it did nothing.
+ *
+ * Input/output stack full-width and uncapped; the modal body is the single
+ * scroll container. The old panel capped each <pre> at 300px with its own
+ * scrollbar, which showed ~13% of a real (~1400-token) prompt and trapped
+ * the wheel inside a box nested in a scrolling page.
+ */
+function CallDetailModal({
+  call, repo, debugState, tracePath, onClose, onDebug, onSubmissionClick, onSessionClick,
+}: {
+  call: CallRow;
+  repo: string;
+  debugState: string | undefined;
+  tracePath: string | null;
+  onClose: () => void;
+  onDebug: () => void;
+  onSubmissionClick: (id: string) => void;
+  onSessionClick: (id: string) => void;
+}) {
+  // On a failure the error is what you came for, so it leads.
+  const io = call.success
+    ? [{ label: "Input", text: call.input_text }, { label: "Output", text: call.output_text }]
+    : [{ label: "Error", text: call.output_text }, { label: "Input", text: call.input_text }];
+
+  return (
+    <EditorialModal eyebrow="LLM call" title={call.function} onClose={onClose} maxWidth={1040}>
+      <div className="llm-modal-body">
+        <div className="llm-detail-title">
+          <StatusPill tone={call.success ? "ok" : "danger"} label={call.success ? "OK" : "FAIL"} />
+          <span className="llm-detail-meta" title={call.model}>{shortModel(call.model)}</span>
+          <span className="llm-detail-meta">{call.user_name || "—"}</span>
+          <span className="llm-detail-meta">{call.input_tokens}/{call.output_tokens} tok</span>
+          <span className="llm-detail-meta">{fmtLatency(call.latency_ms)}</span>
+          <span className="llm-detail-meta">{fmtCost(call.cost_usd)}</span>
+          <span className="llm-detail-meta" title={new Date(call.created_at).toLocaleString()}>
+            {formatRelativeDate(call.created_at)}
+          </span>
+        </div>
+
+        <div className="llm-io">
+          {io.map(({ label, text }) => (
+            <div key={label} className="llm-io-section">
+              <div className="llm-io-head">
+                <strong>{label}</strong>
+                <CopyButton text={text ?? ""} disabled={!text} />
+              </div>
+              <pre>{text || "(not captured)"}</pre>
+            </div>
+          ))}
+        </div>
+
+        <div className="llm-io-section">
+          <strong>Metadata</strong>
+          <MetadataChips
+            metadata={call.metadata}
+            schoolId={call.school_id}
+            submissionId={call.submission_id}
+            onSubmissionClick={onSubmissionClick}
+          />
+          <div className="llm-detail-actions">
+            {call.session_id && (
+              <button className="llm-link-btn" onClick={() => onSessionClick(call.session_id!)}>
+                ⧉ View session calls →
+              </button>
+            )}
+            {tracePath && (
+              <Link to={tracePath} className="llm-link-btn">▤ Open flight recorder →</Link>
+            )}
+            <button className="llm-link-btn" onClick={onDebug} disabled={debugState === "sending"}>
+              🔍 Debug with agent
+            </button>
+            {(debugState === "sent" || Boolean(call.metadata?.debug_dispatched_at)) && (
+              <a
+                href={`https://github.com/${repo}/issues?q=${encodeURIComponent(`is:issue label:llm-debug ${call.id}`)}`}
+                target="_blank" rel="noopener noreferrer" className="llm-link-btn"
+                title="Open the debug agent's findings for this call on GitHub"
+              >
+                🔗 Debug results
+              </a>
+            )}
+          </div>
+          {debugState === "sending" && <div className="llm-detail-note">Dispatching…</div>}
+          {debugState === "sent" && <div className="llm-detail-note llm-note-ok">Dispatched — results appear under 🔗 once the agent finishes.</div>}
+          {debugState === "error" && <div className="llm-detail-note llm-note-bad">Dispatch failed (token configured?).</div>}
+        </div>
+      </div>
+    </EditorialModal>
+  );
+}
 
 function CopyButton({ text, disabled }: { text: string; disabled?: boolean }) {
   const [done, setDone] = useState(false);
