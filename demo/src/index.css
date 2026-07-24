@@ -1738,6 +1738,24 @@ h3 {
   padding-top: 38px;
   border-top: 1px solid rgba(247, 245, 240, 0.18);
 }
+.it-payoff-contact {
+  margin-top: 22px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(247, 245, 240, 0.62);
+}
+.it-payoff-contact a {
+  color: var(--paper);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(247, 245, 240, 0.35);
+  transition: text-decoration-color 0.15s ease;
+}
+.it-payoff-contact a:hover {
+  text-decoration-color: var(--paper);
+}
 
 /* ---- WHAT IT'S WORTH (ROI calculator + by-the-numbers) ------ */
 .it-roi {
@@ -2548,11 +2566,18 @@ h3 {
   color: var(--muted);
 }
 
-/* Quiet way out to the live marketing site, top-right of the front door. */
+/* Site + contact links, top-right of the front door — equal prominence. */
 .dh-site-launch {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 10px;
   margin-bottom: 4px;
+}
+.dh-site-sep {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
 }
 .dh-site-link {
   display: inline-flex;
