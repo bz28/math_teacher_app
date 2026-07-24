@@ -20,8 +20,13 @@ const h = loadDemoHub();
 export default function DemoHub() {
   return (
     <div className="it-demo it-page">
-      {/* Quiet way out to the live marketing site. */}
+      {/* Quiet way out to the live marketing site, and an equally easy way
+          to get in touch. */}
       <div className="dh-site-launch">
+        <a className="dh-site-link" href="mailto:ben@veradicai.com">
+          ben@veradicai.com
+        </a>
+        <span className="dh-site-sep" aria-hidden="true">·</span>
         <a
           className="dh-site-link"
           href="https://veradicai.com"
@@ -98,6 +103,14 @@ export default function DemoHub() {
             ))}
           </div>
           <p className="it-payoff-closing">{h.payoff.closing}</p>
+          <p className="it-payoff-contact">
+            Questions, or want to see it on your own class?{" "}
+            <a href="mailto:ben@veradicai.com">ben@veradicai.com</a>
+            <span className="dh-contact-sep" aria-hidden="true"> · </span>
+            <a href="https://veradicai.com" target="_blank" rel="noreferrer">
+              veradicai.com
+            </a>
+          </p>
         </div>
       </section>
     </div>
