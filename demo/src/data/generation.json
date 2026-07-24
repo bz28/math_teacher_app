@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Problem generation — golden set",
-    "subtitle": "How the AI writes a problem set from your worksheet — and re-derives every answer before you see it",
+    "subtitle": "How the AI writes a problem set tuned to your course — and re-derives every answer before you see it",
     "framing": "The walkthrough screens below are captured from the live product. The verified problem in the centerpiece is one worked example from our hand-checked Golden Set — labeled illustrative, shown so you can read exactly how the re-derivation works. Capability facts only: no outcome stats, no pricing.",
     "capturedAt": "2026-06-29",
     "model": "claude-sonnet-4-6",
@@ -9,9 +9,9 @@
   },
   "hero": {
     "eyebrow": "Veradic · Problem generation",
-    "headline": "Hand it a worksheet. Get back a problem set you can actually trust.",
-    "subhead": "Finding or writing good problems eats a Sunday afternoon — and the AI generators that promise to help will hand you a clean-looking question with an answer key that's quietly wrong, the kind you don't catch until a student does. Veradic generates a full set from the worksheet you already use — figures, worked solutions, the works — then re-derives every answer itself, so what you hand out is correct.",
-    "triplet": ["Generated from your worksheet", "Figures + worked solutions", "Every answer re-derived"],
+    "headline": "Generate a problem set you can actually trust — in minutes.",
+    "subhead": "Finding or writing good problems eats a Sunday afternoon — and the AI generators that promise to help will hand you a clean-looking question with an answer key that's quietly wrong, the kind you don't catch until a student does. Veradic generates a full set tuned to your course — figures, worked solutions, the works — then re-derives every answer itself, so what you hand out is correct.",
+    "triplet": ["Tuned to your course", "Figures + worked solutions", "Every answer re-derived"],
     "cue": "See how it works",
     "peek": {
       "label": "Generated problem",
@@ -28,11 +28,11 @@
     {
       "src": "/golden-set/shots/f1_dashboard.png",
       "title": "Start from the course you already teach",
-      "caption": "Your courses, your units — the starting point. Point Veradic at a worksheet you'd use anyway and it generates a problem set tuned to that exact material, instead of you combing the web for something close enough to assign."
+      "caption": "Your courses, your units — the starting point. Point Veradic at the course you already teach and it generates a problem set tuned to that exact material, instead of you combing the web for something close enough to assign."
     },
     {
       "src": "/golden-set/shots/f2_homework.png",
-      "title": "A whole problem set, written from your worksheet",
+      "title": "A whole problem set, written from your course",
       "caption": "Minutes later: a full set drawn from your material — free-response and multiple-choice together, each with its figure and a complete worked solution. Want more? One tap generates the next batch. The blank page is gone."
     }
   ],
@@ -76,7 +76,7 @@
     "points": [
       {
         "title": "Hours of writing, gone",
-        "body": "The set arrives drafted from your own worksheet. You review and approve instead of staring at a blank page on a Sunday night, hunting for problems that fit the unit."
+        "body": "The set arrives drafted from your own course material. You review and approve instead of staring at a blank page on a Sunday night, hunting for problems that fit the unit."
       },
       {
         "title": "An answer key you can trust",
@@ -91,7 +91,7 @@
         "body": "Generated from your material and your standards, then adjustable in plain English — and nothing reaches a student until you approve it."
       }
     ],
-    "closing": "A full problem set from your own worksheet, every answer re-derived and checked, figures and solutions included — and you still approve each one before it reaches a student. That's the whole point."
+    "closing": "A full problem set tuned to your own course, every answer re-derived and checked, figures and solutions included — and you still approve each one before it reaches a student. That's the whole point."
   },
   "byNumbers": [
     {
@@ -111,8 +111,8 @@
     },
     {
       "value": "From your material",
-      "label": "Tuned to your worksheet",
-      "sub": "drawn from the standards and the worksheet you already teach"
+      "label": "Tuned to your course",
+      "sub": "drawn from the standards and the course you already teach"
     }
   ]
 }

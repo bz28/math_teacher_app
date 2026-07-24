@@ -32,9 +32,9 @@
   },
   "hero": {
     "eyebrow": "Veradic · Understanding check",
-    "headline": "Snap the homework. Get your evenings back — and finally know who really understands.",
-    "subhead": "Veradic reads each student's handwritten work, has a calm three-minute chat to check they truly get it, then hands you a graded roster. It catches the smooth memorizer — and never falsely accuses an honest kid.",
-    "triplet": ["Reads their work", "Checks they understand", "Hands you the roster"],
+    "headline": "A right answer isn't understanding. So Veradic checks — one student at a time.",
+    "subhead": "Veradic reads each student's handwritten work, then has a calm three-minute chat that asks them to explain their own steps — the understanding a grade alone can't show. It catches the student who only memorized, stays fair to the one who's halting or nervous, and hands you the full conversation and the reasoning behind every call. The student never sees a verdict; you make the final decision.",
+    "triplet": ["Reads their work", "Checks they understand", "The reasoning, on your desk"],
     "cue": "See how it works",
     "peek": {
       "label": "Understanding check · roster",

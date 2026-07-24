@@ -13,13 +13,13 @@
   },
   "flow": {
     "eyebrow": "A day in your teacher's life",
-    "title": "One simple loop — from a worksheet to a class you can actually see",
+    "title": "One simple loop — from your course to a class you can actually see",
     "sub": "Not four separate tools to learn. One connected workflow, start to finish. Watch how little the teacher actually has to do.",
     "beats": [
       {
         "step": "01",
         "title": "Assign",
-        "line": "Turn any worksheet you already have into a ready-to-assign set — every problem independently re-derived and the answer key checked for you.",
+        "line": "Turn your course into a ready-to-assign set in minutes — every problem independently re-derived and the answer key checked for you.",
         "ease": "From material they already have",
         "shot": "/golden-set/shots/f3_review.png"
       },
@@ -82,7 +82,7 @@
         "key": "generation",
         "tag": "Trust what you assign",
         "title": "Problem generation",
-        "benefit": "Turn a worksheet into a ready-to-assign set — every problem independently re-derived, figures and worked solutions included, so the answer key is never quietly wrong.",
+        "benefit": "Turn your course into a ready-to-assign set in minutes — every problem independently re-derived, figures and worked solutions included, so the answer key is never quietly wrong.",
         "shot": "/golden-set/shots/f3_review.png",
         "to": "/golden-set/generation",
         "cta": "See how it works"
