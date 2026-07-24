@@ -5,7 +5,7 @@
     "framing": "Illustrative, hand-authored scenarios — not real students or classroom transcripts. The metrics below are measured on our adversarial test set, not on production data, which we will report only when we have real, privacy-safe data to back it.",
     "intro": "When a student turns in work, the integrity check has a short, warm one-on-one chat about the work they already did — it asks them to explain their own steps, then asks exactly one conceptual question before it will clear a correct answer. Every conversation, verdict, and line of reasoning on this page is the system's own output, replayed verbatim from our evaluation harness.",
     "capturedAt": "2026-06-29",
-    "model": "claude-sonnet-4-6",
+    "model": "Claude",
     "source": "Verbatim from our 22-case integrity test set",
     "stats": [
       {

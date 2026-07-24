@@ -3,7 +3,7 @@
     "title": "Golden Set",
     "subtitle": "Generated from real materials, every answer verified by hand",
     "capturedAt": "2026-06-29",
-    "model": "claude-sonnet-4-6",
+    "model": "Claude",
     "teacher": "Dr. Avery Stone",
     "intro": "A verified showcase of problems the platform generated from real teacher worksheets. Every problem here was independently re-derived by hand — answer and full reasoning checked — so what you see is exactly what the platform produces, certified correct.",
     "stats": [
