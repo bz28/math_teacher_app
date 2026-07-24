@@ -16,15 +16,17 @@ export function HomeIntegrity() {
     >
       <div className="mx-auto w-full max-w-6xl px-6 py-16 md:px-8 md:py-24">
         <div className="mx-auto max-w-3xl text-center">
-          <Eyebrow variant="invert">The integrity layer</Eyebrow>
+          <Eyebrow variant="invert">The understanding check</Eyebrow>
           <h2 className="mt-6 text-display-md text-[#F4F1E8]">
-            Know if they did the work&nbsp;&mdash; and if they{" "}
-            <span className="font-display-serif italic text-[#7FC4A0]">understand it.</span>
+            Know if they truly{" "}
+            <span className="font-display-serif italic text-[#7FC4A0]">understand it</span>
+            &nbsp;&mdash; not just whether the answer&rsquo;s right.
           </h2>
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-[#8FB7A4] md:text-xl">
             After a submission, Veradic asks the student to explain their own
-            steps. Some can&rsquo;t because they copied. Some can&rsquo;t because
-            they&rsquo;re lost. You catch both &mdash; before the test.
+            steps &mdash; the understanding a grade alone can&rsquo;t show. Some
+            can&rsquo;t explain it because they&rsquo;re lost; some because they
+            didn&rsquo;t really do the work. You see both, before the test does.
           </p>
         </div>
 

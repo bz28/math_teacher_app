@@ -21,12 +21,12 @@ export default function Home() {
         <HomeWorkspace />
         <CtaBand
           eyebrow="Ready when you are"
-          headline="Start teaching with Veradic today."
-          subhead="Generate your first 10 problems free, or book a 20-minute walkthrough for your school."
-          primaryLabel="Start free"
-          primaryHref="/register?role=teacher"
-          secondaryLabel="Book a 20-min demo"
-          secondaryHref="/demo"
+          headline="Bring Veradic to your school."
+          subhead="Book a 20-minute walkthrough — we'll show you the whole loop on your own material and get your classes set up."
+          primaryLabel="Book a demo"
+          primaryHref="/demo"
+          secondaryLabel="For schools & districts"
+          secondaryHref="/for-districts"
         />
       </main>
       <Footer />
