@@ -19,6 +19,15 @@ export function Navbar() {
         </Link>
 
         <div className="ml-auto flex items-center gap-3 md:gap-4">
+          {/* Plain anchor, not next/link — /tour is the static product tour
+              (built from demo/ into public/tour), served via a rewrite, not a
+              Next route, so it needs a full navigation. */}
+          <a
+            href="/tour"
+            className="hidden text-sm font-semibold text-[color:var(--color-text-secondary)] transition-colors hover:text-[color:var(--color-primary)] sm:inline"
+          >
+            Tour
+          </a>
           <Link
             href="/login"
             className="text-sm font-semibold text-[color:var(--color-text-secondary)] transition-colors hover:text-[color:var(--color-primary)]"

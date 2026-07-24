@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Proxy API requests in development to avoid CORS issues
   async rewrites() {
-    return process.env.NEXT_PUBLIC_API_URL
+    // Proxy API requests in development to avoid CORS issues.
+    const apiProxy = process.env.NEXT_PUBLIC_API_URL
       ? [
           {
             source: "/api/proxy/:path*",
@@ -11,6 +11,22 @@ const nextConfig: NextConfig = {
           },
         ]
       : [];
+
+    return {
+      beforeFiles: [],
+      // afterFiles runs only when no real file matched — so the tour's actual
+      // assets in public/tour (JS, CSS, screenshots, the film) are served by
+      // the filesystem first, and these rewrites just serve the SPA's
+      // index.html for its own client routes (/tour, /tour/integrity, …) so
+      // deep links and refreshes resolve. The tour is built from demo/ into
+      // public/tour by scripts/build-tour.mjs at build time.
+      afterFiles: [
+        ...apiProxy,
+        { source: "/tour", destination: "/tour/index.html" },
+        { source: "/tour/:path*", destination: "/tour/index.html" },
+      ],
+      fallback: [],
+    };
   },
   // Permanent redirects for renamed marketing routes
   async redirects() {
