@@ -6,21 +6,10 @@
     "capturedAt": "2026-06"
   },
   "hero": {
-    "eyebrow": "Veradic · The platform",
-    "headline": "Snap the homework. The grading and the understanding check run themselves — and you get your evenings back.",
-    "subhead": "The nights spent grading at the kitchen table. Never quite sure who actually understands until the test tells you. Veradic reads each student's handwritten work, grades every problem with a receipt, has a calm three-minute chat to check they truly get it, then hands you a class you can see at a glance — and the few who need you.",
-    "triplet": ["Grades the work", "Checks understanding", "Shows you who's struggling"],
-    "cue": "See how it fits together",
-    "peek": {
-      "label": "Your class · at a glance",
-      "status": { "text": "End to end", "tone": "good" },
-      "rows": [
-        { "k": "Graded", "v": "30 of 30", "tone": "good" },
-        { "k": "Understanding checked", "v": "30 of 30", "tone": "good" },
-        { "k": "Need you first", "v": "5", "tone": "accent" }
-      ],
-      "foot": "Illustrative — the platform, end to end"
-    }
+    "eyebrow": "Veradic · The AI platform for schools",
+    "headline": "See what your class actually understands — and what they don't.",
+    "subhead": "One platform for the whole teaching loop. Veradic checks true understanding through a short one-on-one chat — what a grade alone can't show you — and gives you the full conversation and the reasoning behind every call, so nothing it surfaces is a black box. It reveals exactly what your class has mastered and where it's slipping, backed by grading scored with a per-problem receipt and problem sets tuned to your course generated in minutes. Nothing auto-posts; a teacher approves every call.",
+    "cue": "See how it fits together"
   },
   "flow": {
     "eyebrow": "A day in your teacher's life",

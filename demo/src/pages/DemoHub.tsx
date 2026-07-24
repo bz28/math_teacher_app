@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import StatCard from "../components/StatCard";
 import HeroBlock from "../components/demo/HeroBlock";
+import RosterPeek from "../components/demo/RosterPeek";
 import VideoHero from "../components/demo/VideoHero";
 import FlowSpine from "../components/demo/FlowSpine";
 import BrowserFrame from "../components/demo/BrowserFrame";
@@ -9,27 +10,31 @@ import { loadDemoHub } from "../lib/demo-hub";
 
 const h = loadDemoHub();
 
-// The demo front door. A founder walks a head of education through it: the
-// overarching promise (hero), the end-to-end flow spine that shows the whole
+// The demo front door — the one page everyone lands on. The overarching promise
+// (hero), the ~4-minute product film, the end-to-end flow spine that shows the
 // platform is ONE simple connected workflow ("a day in your teacher's life"),
-// the four deep-dive stories you can step into, the business case (reused ROI),
-// and a school + referral close. Each use-case card steps INTO present mode
-// (/present/{integrity,grading,generation,teacher-day}). Reuses the shipped
-// .it-* editorial system.
+// the four deep-dive stories you can step into, the business case (ROI), and a
+// school + referral close. Each use-case card opens a deep-dive
+// (/{integrity,grading,generation,teacher-day}). Reuses the shipped .it-*
+// editorial system.
 
 export default function DemoHub() {
   return (
     <div className="it-demo it-page">
-      {/* Launch into the full-screen, sidebar-free presenter view used to
-          pitch a teacher live. The in-dashboard demo below stays as-is. */}
-      <div className="dh-present-launch">
-        <Link to="/present" className="dh-present-btn">
-          Present
-          <span className="dh-present-btn-arrow" aria-hidden="true">▸</span>
-        </Link>
+      {/* Quiet way out to the live marketing site. */}
+      <div className="dh-site-launch">
+        <a
+          className="dh-site-link"
+          href="https://veradicai.com"
+          target="_blank"
+          rel="noreferrer"
+        >
+          veradicai.com
+          <span className="dh-site-link-arrow" aria-hidden="true">↗</span>
+        </a>
       </div>
 
-      <HeroBlock hero={h.hero} />
+      <HeroBlock hero={h.hero} aside={<RosterPeek />} />
 
       {/* ── THE FILM — the ~4-minute product film, the landing centerpiece ─ */}
       <VideoHero />
@@ -47,7 +52,7 @@ export default function DemoHub() {
 
         <div className="dh-cards">
           {h.useCases.cards.map((card) => (
-            <Link className="dh-card" to={`/present/${card.key}`} key={card.key}>
+            <Link className="dh-card" to={`/${card.key}`} key={card.key}>
               <div className="dh-card-shot">
                 <BrowserFrame src={card.shot} alt={card.title} />
               </div>

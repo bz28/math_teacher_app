@@ -7,7 +7,7 @@ import type { Flow } from "../../lib/demo-hub";
 // legible product shot, a short title + one line, and an explicit EASE tag so
 // "look how little the teacher has to do" runs as a visible through-line. The
 // analytics beat (`feature`) gets a prominence treatment. Rendered identically
-// on /demo (DemoHub) and /present (PresentOverview), so it lives here once.
+// on the front door (DemoHub), so it lives here once.
 
 export default function FlowSpine({ flow }: { flow: Flow }) {
   return (
