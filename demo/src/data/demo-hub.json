@@ -2,7 +2,7 @@
   "meta": {
     "framing": "The screens below are captured from the live product. One seeded student — the 73% receipt — is illustrative, labeled wherever it appears. No outcome stats, no pricing: capability facts only.",
     "source": "Live product captures + evaluation harness",
-    "model": "claude",
+    "model": "Claude",
     "capturedAt": "2026-06"
   },
   "hero": {
@@ -97,29 +97,7 @@
   "roi": {
     "eyebrow": "The math, your numbers",
     "title": "What it's worth to you",
-    "sub": "Veradic grades every paper and runs the understanding check; you still see every one — but a quick review of its work is far faster than grading from scratch. Drag your own class through the model below — the arithmetic is right there, nothing hidden.",
-    "byNumbers": [
-      {
-        "value": "Every student",
-        "label": "Checked, not sampled",
-        "sub": "the whole class — not a spot-check of five"
-      },
-      {
-        "value": "~3 min",
-        "label": "Per-student understanding check",
-        "sub": "a conversation, not an interrogation"
-      },
-      {
-        "value": "Per-problem",
-        "label": "Itemized, defensible grades",
-        "sub": "every point traced back to the work"
-      },
-      {
-        "value": "0",
-        "label": "Honest students wrongly flagged",
-        "sub": "on our 22-case adversarial test set"
-      }
-    ]
+    "sub": "Veradic grades every paper and runs the understanding check; you still see every one — but a quick review of its work is far faster than grading from scratch. Drag your own class through the model below — the arithmetic is right there, nothing hidden."
   },
   "payoff": {
     "eyebrow": "For your school",
@@ -139,6 +117,6 @@
         "body": "You see where every student is — the whole class, not a sampled five — with the ones slipping and the concepts the class is missing surfaced before the test does it for you."
       }
     ],
-    "closing": "Evenings back for every teacher. Integrity you can put your name to. And every student seen, so no one slips through. Honestly — this is what I'd want every school you know to have. If it earns it, an introduction to the schools in your circle would mean the world."
+    "closing": "Evenings back for every teacher. Integrity you can put your name to. And every student seen, so no one slips through. That's the whole point."
   }
 }

@@ -60,13 +60,10 @@ export type UseCases = {
   cards: UseCaseCard[];
 };
 
-export type ByNumber = { value: string; label: string; sub: string };
-
 export type Roi = {
   eyebrow: string;
   title: string;
   sub: string;
-  byNumbers: ByNumber[];
 };
 
 export type PayoffPoint = { title: string; body: string };

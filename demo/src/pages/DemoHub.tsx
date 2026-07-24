@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import StatCard from "../components/StatCard";
 import HeroBlock from "../components/demo/HeroBlock";
 import RosterPeek from "../components/demo/RosterPeek";
 import VideoHero from "../components/demo/VideoHero";
@@ -81,15 +80,6 @@ export default function DemoHub() {
         </div>
 
         <RoiCalculator />
-
-        <div className="it-worth-strip">
-          <h3 className="it-proof-h">By the numbers</h3>
-          <div className="stat-grid gs-stats it-worth-stats">
-            {h.roi.byNumbers.map((s) => (
-              <StatCard key={s.label} label={s.label} value={s.value} sub={s.sub} />
-            ))}
-          </div>
-        </div>
       </section>
 
       {/* ── THE CLOSE — full-bleed ink payoff ────────────────────── */}

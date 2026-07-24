@@ -4,7 +4,7 @@
     "subtitle": "How a teacher walks in already knowing who needs them — and turns a struggle signal into a reteach set in one click",
     "framing": "The screens below are captured live from the real product, walked through with one illustrative seeded class (Algebra I · Period 3). The names, the \"6 of 8 missed distributing a negative,\" and the per-student status are seeded demo data shown so you can read the mechanism — not a measured outcome. Capability facts only: no outcome stats, no pricing.",
     "capturedAt": "2026-06-30",
-    "model": "claude-sonnet-4-6",
+    "model": "Claude",
     "source": "teaching-day walkthrough · live capture"
   },
   "hero": {

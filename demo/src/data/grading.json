@@ -4,7 +4,7 @@
     "subtitle": "How the AI grades real handwritten work — and how it shows its math",
     "framing": "Illustrative seeded demo data, not a real student. The 73% receipt below is one worked example, captured live from the product so you can read the mechanism — Veradic grades real photographed work this exact way; the names and numbers here are there to show how.",
     "capturedAt": "2026-06-29",
-    "model": "claude-sonnet-4-6",
+    "model": "Claude",
     "source": "grading walkthrough · live capture"
   },
   "hero": {
