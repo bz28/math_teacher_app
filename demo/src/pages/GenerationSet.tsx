@@ -28,7 +28,7 @@ export default function GenerationSet() {
       <section id="flow" className="it-section">
         <div className="it-section-head">
           <span className="eyebrow">The walkthrough</span>
-          <h2>From your worksheet to a ready-to-assign set</h2>
+          <h2>From your course to a ready-to-assign set</h2>
           <p className="it-section-sub">
             The real product, end to end — you hand it the material you already teach, and it hands
             back a full problem set with the writing already done.
@@ -61,7 +61,7 @@ export default function GenerationSet() {
                 <span className="gen-verify-fmt mono">
                   {p.format.toUpperCase()} · {p.difficulty}
                 </span>
-                <span className="gen-verify-from">generated from worksheet</span>
+                <span className="gen-verify-from">generated from your course</span>
               </header>
               <div className="gen-verify-q">
                 <MathText>{p.question}</MathText>

@@ -62,7 +62,8 @@ export type Hero = {
   eyebrow: string;
   headline: string;
   subhead: string;
-  triplet: string[];
+  /** Optional three-beat of what it does. Omitted on the front-door hero. */
+  triplet?: string[];
   cue: string;
   peek?: HeroPeek;
 };

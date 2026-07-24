@@ -1,15 +1,16 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { PRESENT_HOME, PRESENT_STORIES } from "../lib/present-stories";
+import { STORY_HOME, STORIES } from "../lib/present-stories";
 
-// The presenter shell. A full-bleed, sidebar-free frame the founder screens to
-// a teacher: the world-class story content (reused IntegritySet/GradingSet/…),
-// wrapped in a quiet hairline top bar instead of the admin chrome.
+// The story shell. A full-bleed, sidebar-free frame that wraps the deep-dive
+// stories (IntegritySet/GradingSet/…) in a quiet hairline top bar — the same
+// clean surface whether a buyer opens a card alone or a founder screens it live.
 //
 // Navigation:
+//   • wordmark   — back to the front door
 //   • jump links — the four stories, current one highlighted
-//   • ← / →     — previous / next story in pitch order
-//   • Esc / Home — back to the /present overview
+//   • ← / →      — previous / next story in pitch order
+//   • Esc / Home — back to the front door
 // Arrow-key nav is suppressed whenever a form control is focused so the ROI
 // calculator's sliders and inputs keep their native behavior.
 
@@ -27,10 +28,8 @@ export default function PresentLayout() {
   const navigate = useNavigate();
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Index of the current story in pitch order (-1 on the overview).
-  const currentIndex = PRESENT_STORIES.findIndex(
-    (s) => s.path === location.pathname,
-  );
+  // Index of the current story in pitch order (-1 if not on a story).
+  const currentIndex = STORIES.findIndex((s) => s.path === location.pathname);
 
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -55,20 +54,15 @@ export default function PresentLayout() {
 
       if (e.key === "Escape" || e.key === "Home") {
         // In fullscreen, let Esc exit fullscreen first — don't also navigate
-        // to the overview, which would lose the presenter's place mid-pitch.
+        // home, which would lose the reader's place mid-story.
         if (e.key === "Escape" && document.fullscreenElement) return;
-        if (location.pathname !== PRESENT_HOME) {
-          e.preventDefault();
-          navigate(PRESENT_HOME);
-        }
+        e.preventDefault();
+        navigate(STORY_HOME);
         return;
       }
 
       if (e.key === "ArrowRight") {
-        const next =
-          currentIndex < 0
-            ? PRESENT_STORIES[0]
-            : PRESENT_STORIES[currentIndex + 1];
+        const next = currentIndex < 0 ? STORIES[0] : STORIES[currentIndex + 1];
         if (next) {
           e.preventDefault();
           navigate(next.path);
@@ -76,10 +70,10 @@ export default function PresentLayout() {
       } else if (e.key === "ArrowLeft") {
         if (currentIndex > 0) {
           e.preventDefault();
-          navigate(PRESENT_STORIES[currentIndex - 1].path);
+          navigate(STORIES[currentIndex - 1].path);
         } else if (currentIndex === 0) {
           e.preventDefault();
-          navigate(PRESENT_HOME);
+          navigate(STORY_HOME);
         }
       }
     };
@@ -96,22 +90,13 @@ export default function PresentLayout() {
     <div className="present-shell">
       <header className="present-bar">
         <div className="present-bar-left">
-          <NavLink to={PRESENT_HOME} className="present-wordmark">
+          <NavLink to={STORY_HOME} className="present-wordmark">
             Veradic
-          </NavLink>
-          <NavLink
-            to={PRESENT_HOME}
-            end
-            className={({ isActive }) =>
-              `present-overview-link ${isActive ? "active" : ""}`
-            }
-          >
-            Overview
           </NavLink>
         </div>
 
         <nav className="present-jump" aria-label="Demo stories">
-          {PRESENT_STORIES.map((s) => (
+          {STORIES.map((s) => (
             <NavLink
               key={s.key}
               to={s.path}

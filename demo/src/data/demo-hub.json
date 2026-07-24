@@ -6,31 +6,20 @@
     "capturedAt": "2026-06"
   },
   "hero": {
-    "eyebrow": "Veradic · The platform",
-    "headline": "Snap the homework. The grading and the understanding check run themselves — and you get your evenings back.",
-    "subhead": "The nights spent grading at the kitchen table. Never quite sure who actually understands until the test tells you. Veradic reads each student's handwritten work, grades every problem with a receipt, has a calm three-minute chat to check they truly get it, then hands you a class you can see at a glance — and the few who need you.",
-    "triplet": ["Grades the work", "Checks understanding", "Shows you who's struggling"],
-    "cue": "See how it fits together",
-    "peek": {
-      "label": "Your class · at a glance",
-      "status": { "text": "End to end", "tone": "good" },
-      "rows": [
-        { "k": "Graded", "v": "30 of 30", "tone": "good" },
-        { "k": "Understanding checked", "v": "30 of 30", "tone": "good" },
-        { "k": "Need you first", "v": "5", "tone": "accent" }
-      ],
-      "foot": "Illustrative — the platform, end to end"
-    }
+    "eyebrow": "Veradic · The AI platform for schools",
+    "headline": "See what your class actually understands — and what they don't.",
+    "subhead": "One platform for the whole teaching loop. Veradic checks true understanding through a short one-on-one chat — what a grade alone can't show you — and gives you the full conversation and the reasoning behind every call, so nothing it surfaces is a black box. It reveals exactly what your class has mastered and where it's slipping, backed by grading scored with a per-problem receipt and problem sets tuned to your course generated in minutes. Nothing auto-posts; a teacher approves every call.",
+    "cue": "See how it fits together"
   },
   "flow": {
     "eyebrow": "A day in your teacher's life",
-    "title": "One simple loop — from a worksheet to a class you can actually see",
+    "title": "One simple loop — from your course to a class you can actually see",
     "sub": "Not four separate tools to learn. One connected workflow, start to finish. Watch how little the teacher actually has to do.",
     "beats": [
       {
         "step": "01",
         "title": "Assign",
-        "line": "Turn any worksheet you already have into a ready-to-assign set — every problem independently re-derived and the answer key checked for you.",
+        "line": "Turn your course into a ready-to-assign set in minutes — every problem independently re-derived and the answer key checked for you.",
         "ease": "From material they already have",
         "shot": "/golden-set/shots/f3_review.png"
       },
@@ -77,7 +66,6 @@
         "title": "The understanding check",
         "benefit": "Catches the smooth memorizer that one graded answer can't. A calm three-minute chat per student — and the kid never sees a verdict, so a teacher always makes the call.",
         "shot": "/golden-set-integrity/05-conceptual-probe.png",
-        "to": "/golden-set/integrity",
         "cta": "See how it works"
       },
       {
@@ -86,16 +74,14 @@
         "title": "AI grading you can defend",
         "benefit": "Every problem scored with a receipt — 100 − 20 − 7 = 73% — sitting right next to the handwriting it came from. You review the few it's unsure about and sign off.",
         "shot": "/golden-set-grading/03-receipt.png",
-        "to": "/golden-set/grading",
         "cta": "See how it works"
       },
       {
         "key": "generation",
         "tag": "Trust what you assign",
         "title": "Problem generation",
-        "benefit": "Turn a worksheet into a ready-to-assign set — every problem independently re-derived, figures and worked solutions included, so the answer key is never quietly wrong.",
+        "benefit": "Turn your course into a ready-to-assign set in minutes — every problem independently re-derived, figures and worked solutions included, so the answer key is never quietly wrong.",
         "shot": "/golden-set/shots/f3_review.png",
-        "to": "/golden-set/generation",
         "cta": "See how it works"
       },
       {
@@ -104,7 +90,6 @@
         "title": "Your teaching week",
         "benefit": "Walk in to a to-do list, not a scoreboard — the few students who need you surfaced first, then turn a class-wide gap into ten practice problems in one click.",
         "shot": "/golden-set-teacherday/01-needs-you-today.png",
-        "to": "/golden-set/teacher-day",
         "cta": "See how it works"
       }
     ]
