@@ -66,7 +66,6 @@
         "title": "The understanding check",
         "benefit": "Catches the smooth memorizer that one graded answer can't. A calm three-minute chat per student — and the kid never sees a verdict, so a teacher always makes the call.",
         "shot": "/golden-set-integrity/05-conceptual-probe.png",
-        "to": "/golden-set/integrity",
         "cta": "See how it works"
       },
       {
@@ -75,7 +74,6 @@
         "title": "AI grading you can defend",
         "benefit": "Every problem scored with a receipt — 100 − 20 − 7 = 73% — sitting right next to the handwriting it came from. You review the few it's unsure about and sign off.",
         "shot": "/golden-set-grading/03-receipt.png",
-        "to": "/golden-set/grading",
         "cta": "See how it works"
       },
       {
@@ -84,7 +82,6 @@
         "title": "Problem generation",
         "benefit": "Turn your course into a ready-to-assign set in minutes — every problem independently re-derived, figures and worked solutions included, so the answer key is never quietly wrong.",
         "shot": "/golden-set/shots/f3_review.png",
-        "to": "/golden-set/generation",
         "cta": "See how it works"
       },
       {
@@ -93,7 +90,6 @@
         "title": "Your teaching week",
         "benefit": "Walk in to a to-do list, not a scoreboard — the few students who need you surfaced first, then turn a class-wide gap into ten practice problems in one click.",
         "shot": "/golden-set-teacherday/01-needs-you-today.png",
-        "to": "/golden-set/teacher-day",
         "cta": "See how it works"
       }
     ]

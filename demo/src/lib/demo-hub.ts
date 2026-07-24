@@ -50,7 +50,6 @@ export type UseCaseCard = {
   title: string;
   benefit: string;
   shot: string;
-  to: string;
   cta: string;
 };
 
