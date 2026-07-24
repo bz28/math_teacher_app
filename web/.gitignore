@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Product tour — built from demo/ into public/tour at build time (scripts/build-tour.mjs)
+/public/tour

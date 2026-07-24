@@ -1,3 +1,5 @@
+import { asset } from "../../lib/asset";
+
 // A soft browser-window chrome around a product screenshot. Keeps the
 // real captures feeling like live product, not loose images. The `tone`
 // prop lets the hero moment lift the frame with an accent ring.
@@ -25,7 +27,7 @@ export default function BrowserFrame({
         </span>
         <span className="it-frame-url mono">{url}</span>
       </div>
-      <img src={src} alt={alt} loading={eager ? "eager" : "lazy"} />
+      <img src={asset(src)} alt={alt} loading={eager ? "eager" : "lazy"} />
     </figure>
   );
 }

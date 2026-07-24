@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { asset } from "../../lib/asset";
 
 // The landing centerpiece: the polished ~4-minute product film that shows the
 // whole teaching loop running end to end. Sits high on the "/" front door,
@@ -42,13 +43,13 @@ export default function VideoHero() {
         <video
           ref={videoRef}
           className="dh-video-el"
-          poster="/veradic-cycle-poster.jpg"
+          poster={asset("/veradic-cycle-poster.jpg")}
           controls
           preload="metadata"
           playsInline
           onPlay={() => setStarted(true)}
         >
-          <source src="/veradic-cycle.mp4" type="video/mp4" />
+          <source src={asset("/veradic-cycle.mp4")} type="video/mp4" />
           Your browser doesn’t support embedded video. The Veradic product film
           shows the full teaching loop, end to end.
         </video>
