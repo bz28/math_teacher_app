@@ -25,9 +25,11 @@ const subjectsLinks: LinkItem[] = [
   { label: "Chemistry", href: "/subjects/chemistry" },
 ];
 
+// No "Create account" — Veradic is sold to schools; teachers arrive via a
+// school invite and prospects book a demo. Students self-serve from /students.
 const accountLinks: LinkItem[] = [
   { label: "Sign in", href: "/login" },
-  { label: "Create account", href: "/register" },
+  { label: "Book a demo", href: "/demo" },
   { label: "Support", href: "/support" },
 ];
 
@@ -86,9 +88,9 @@ export function Footer() {
               </span>
             </div>
             <p className="mt-5 max-w-xs text-sm leading-relaxed text-[color:var(--color-text-secondary)]">
-              Classroom AI that catches the work, drafts the grading,
-              and gives every student more practice than you have time
-              to write.
+              Classroom AI that reads the work, checks who understands,
+              drafts the grading, and gives every student more practice
+              than you have time to write.
             </p>
           </div>
 

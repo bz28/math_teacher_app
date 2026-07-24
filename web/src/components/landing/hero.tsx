@@ -46,18 +46,19 @@ export function Hero() {
             </motion.span>
           </h1>
           <motion.p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl" variants={rise}>
-            Catch who copied and who&rsquo;s quietly lost. Veradic drafts the
-            grades and writes next week&rsquo;s homework &mdash; before you leave
-            the building.
+            See who actually understands &mdash; not just who got the right
+            answer. Veradic checks real understanding, drafts every grade for
+            your approval, and writes next week&rsquo;s homework &mdash; before
+            you leave the building.
           </motion.p>
 
           <motion.div className="mt-10 flex flex-col items-center gap-4" variants={rise}>
             <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4">
               <Link
-                href="/register?role=teacher"
+                href="/demo"
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-[--radius-pill] bg-[color:var(--color-primary)] px-8 text-[15px] font-semibold tracking-[0.01em] text-white transition-colors hover:bg-[color:var(--color-primary-dark)]"
               >
-                Start free
+                Book a demo
                 <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 12h14M12 5l7 7-7 7" />
                 </svg>
@@ -66,12 +67,12 @@ export function Hero() {
                 href="#integrity"
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-[--radius-pill] border border-[color:var(--color-border)] bg-transparent px-8 text-[15px] font-semibold tracking-[0.01em] text-[color:var(--color-text)] transition-colors hover:border-[color:var(--color-text)]"
               >
-                See it catch a copied answer
+                See it check who really understands
                 <span aria-hidden="true">&darr;</span>
               </a>
             </div>
             <p className="text-xs font-medium text-[color:var(--color-text-secondary)]">
-              No credit card &middot; Cancel anytime
+              Built for teachers &middot; Sold to schools
             </p>
           </motion.div>
         </motion.div>

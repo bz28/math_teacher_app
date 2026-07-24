@@ -25,14 +25,14 @@ export function Navbar() {
           >
             Sign In
           </Link>
-          {/* Primary nav CTA leads with the wider funnel — solo teachers
-              self-serving. Sharp radius matches the dashboard's button
-              family; hero CTAs keep pill. */}
+          {/* Veradic is sold to schools — teachers don't self-serve. The
+              primary CTA books a walkthrough; existing school users sign in.
+              Sharp radius matches the dashboard's button family. */}
           <Link
-            href="/register?role=teacher"
+            href="/demo"
             className="rounded-[--radius-sm] bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold tracking-[0.01em] text-white transition-colors hover:bg-[color:var(--color-primary-dark)] md:px-5 md:py-2.5"
           >
-            Start free
+            Book a demo
           </Link>
         </div>
       </div>
