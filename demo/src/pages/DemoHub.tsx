@@ -90,31 +90,16 @@ export default function DemoHub() {
         <RoiCalculator />
       </section>
 
-      {/* ── THE CLOSE — full-bleed ink payoff ────────────────────── */}
-      <section className="it-payoff">
-        <div className="it-payoff-inner">
-          <span className="it-payoff-eyebrow">{h.payoff.eyebrow}</span>
-          <h2 className="it-payoff-title">{h.payoff.title}</h2>
-          <p className="it-payoff-lead">{h.payoff.lead}</p>
-          <div className="it-payoff-points">
-            {h.payoff.points.map((p, i) => (
-              <div key={p.title} className="it-payoff-point">
-                <span className="it-payoff-num mono">{String(i + 1).padStart(2, "0")}</span>
-                <h3 className="it-payoff-point-title">{p.title}</h3>
-                <p className="it-payoff-point-body">{p.body}</p>
-              </div>
-            ))}
-          </div>
-          <p className="it-payoff-closing">{h.payoff.closing}</p>
-          <p className="it-payoff-contact">
-            Questions, or want to see it on your own class?{" "}
-            <a href="mailto:ben@veradicai.com?subject=Veradic">Get in touch</a>
-            <span className="dh-contact-sep" aria-hidden="true"> · </span>
-            <a href="https://veradicai.com" target="_blank" rel="noreferrer">
-              veradicai.com
-            </a>
-          </p>
-        </div>
+      {/* ── THE CLOSE — a quiet sign-off + contact ───────────────── */}
+      <section className="dh-close">
+        <p className="dh-close-line">
+          Questions, or want to see it on your own class?{" "}
+          <a href="mailto:ben@veradicai.com?subject=Veradic">Get in touch</a>
+          <span className="dh-contact-sep" aria-hidden="true"> · </span>
+          <a href="https://veradicai.com" target="_blank" rel="noreferrer">
+            veradicai.com
+          </a>
+        </p>
       </section>
     </div>
   );

@@ -98,25 +98,5 @@
     "eyebrow": "The math, your numbers",
     "title": "What it's worth to you",
     "sub": "Veradic grades every paper and runs the understanding check; you still see every one — but a quick review of its work is far faster than grading from scratch. Drag your own class through the model below — the arithmetic is right there, nothing hidden."
-  },
-  "payoff": {
-    "eyebrow": "For your school",
-    "title": "What this gives a school that stands behind it.",
-    "lead": "Not another tool to roll out and babysit. Three things a head of education can put their name to — in every classroom, for every student:",
-    "points": [
-      {
-        "title": "Every teacher gets their evenings back",
-        "body": "The grading and the understanding check run on their own — teachers review only the handful that need a human, not the whole stack at 10pm. And there's almost nothing to learn — a photo, a review, a click; no training program to roll out."
-      },
-      {
-        "title": "Integrity you can stand behind",
-        "body": "Every grade itemized and traceable; every understanding call conservative, and the student never sees a verdict — so a teacher always makes the final call. Across our adversarial test set, zero honest students were ever falsely flagged. Reputation you can defend to any parent."
-      },
-      {
-        "title": "No student quietly falls behind",
-        "body": "You see where every student is — the whole class, not a sampled five — with the ones slipping and the concepts the class is missing surfaced before the test does it for you."
-      }
-    ],
-    "closing": "Evenings back for every teacher. Integrity you can put your name to. And every student seen, so no one slips through. That's the whole point."
   }
 }

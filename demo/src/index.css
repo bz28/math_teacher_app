@@ -1738,23 +1738,30 @@ h3 {
   padding-top: 38px;
   border-top: 1px solid rgba(247, 245, 240, 0.18);
 }
-.it-payoff-contact {
-  margin-top: 22px;
-  font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 1.5;
-  color: rgba(247, 245, 240, 0.62);
+/* ---- FRONT-DOOR CLOSE — a quiet sign-off + contact ---------- */
+.dh-close {
+  margin-top: 80px;
+  padding: 40px 0 8px;
+  border-top: 1px solid var(--rule);
+  text-align: center;
 }
-.it-payoff-contact a {
-  color: var(--paper);
+.dh-close-line {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.dh-close-line a {
+  color: var(--ink);
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 3px;
-  text-decoration-color: rgba(247, 245, 240, 0.35);
+  text-decoration-color: var(--rule-strong);
   transition: text-decoration-color 0.15s ease;
 }
-.it-payoff-contact a:hover {
-  text-decoration-color: var(--paper);
+.dh-close-line a:hover {
+  text-decoration-color: var(--accent);
+  color: var(--accent);
 }
 
 /* ---- WHAT IT'S WORTH (ROI calculator + by-the-numbers) ------ */
