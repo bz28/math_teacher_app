@@ -66,16 +66,6 @@ export type Roi = {
   sub: string;
 };
 
-export type PayoffPoint = { title: string; body: string };
-
-export type Payoff = {
-  eyebrow: string;
-  title: string;
-  lead: string;
-  points: PayoffPoint[];
-  closing: string;
-};
-
 export type DemoHub = {
   meta: {
     framing: string;
@@ -87,7 +77,6 @@ export type DemoHub = {
   flow: Flow;
   useCases: UseCases;
   roi: Roi;
-  payoff: Payoff;
 };
 
 export function loadDemoHub(): DemoHub {
