@@ -36,8 +36,6 @@ function RegisterPageContent() {
   const [password, setPassword] = useState("");
   const [gradeLevel, setGradeLevel] = useState(8);
   const [joinCode, setJoinCode] = useState("");
-  const [schoolName, setSchoolName] = useState("");
-  const [teacherConfirmed, setTeacherConfirmed] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [checkingEmail, setCheckingEmail] = useState(false);
   const { register, loading, error, clearError, user } = useAuthStore();
@@ -49,12 +47,9 @@ function RegisterPageContent() {
   const inviteToken = searchParams.get("invite");
   const sectionInviteToken = searchParams.get("section_invite");
 
-  // Self-signup role. URL drives the initial value (`?role=teacher`
-  // from the homepage "Start free" CTA) but the in-page toggle below
-  // lets the user switch without changing URLs. Invite flows ignore
-  // this — the invite is authoritative on role.
-  const initialRole = searchParams.get("role") === "teacher" ? "teacher" : "student";
-  const [role, setRole] = useState<"student" | "teacher">(initialRole);
+  // Self-signup is student-only. Veradic is sold to schools: teachers never
+  // self-register — they arrive through a teacher invite (authoritative on
+  // role) or their school books a demo. So there's no role toggle here.
   const [invite, setInvite] = useState<InviteData | null>(null);
   const [sectionInvite, setSectionInvite] = useState<SectionInviteData | null>(null);
   const [inviteLoading, setInviteLoading] = useState(!!inviteToken || !!sectionInviteToken);
@@ -150,31 +145,19 @@ function RegisterPageContent() {
     // submit during that window.
     if ((user || hasStoredTokens()) && !inviteToken && !sectionInviteToken) return;
 
-    // Self-signup teacher (no invite). Role gets posted explicitly so
-    // the backend creates a teacher account, and signup_school_name
-    // travels along when provided. The "I am a teacher" affirmation
-    // is form-only — the backend doesn't store the checkbox state.
-    const isTeacherSelfSignup =
-      role === "teacher" && !inviteToken && !sectionInviteToken;
-
     const trimmedCode = joinCode.trim().toUpperCase();
-    const trimmedSchool = schoolName.trim();
     try {
       await register({
         email,
         password,
         name,
         grade_level: gradeLevel,
-        ...(isTeacherSelfSignup ? { role: "teacher" as const } : {}),
-        ...(isTeacherSelfSignup && trimmedSchool
-          ? { signup_school_name: trimmedSchool }
-          : {}),
         ...(inviteToken ? { invite_token: inviteToken } : {}),
         ...(sectionInviteToken ? { section_invite_token: sectionInviteToken } : {}),
         ...(trimmedCode ? { join_code: trimmedCode } : {}),
       });
       router.replace(
-        invite || isTeacherSelfSignup
+        invite
           ? "/school/teacher"
           : sectionInvite || trimmedCode
             ? "/school/student"
@@ -303,43 +286,8 @@ function RegisterPageContent() {
               Create your account
             </h1>
             <p className="mt-1 text-sm text-text-secondary">
-              {role === "teacher"
-                ? "Start using Veradic in your classroom"
-                : "Start mastering any subject"}
+              Start mastering any subject
             </p>
-
-            {/* Role toggle — only on self-signup. Invite flows hide
-                this because the invite already determines role. */}
-            <div
-              role="group"
-              aria-label="Choose account type"
-              className="mt-5 flex rounded-[--radius-sm] border border-border-light bg-surface-alt p-1"
-            >
-              {(["student", "teacher"] as const).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  aria-pressed={role === r}
-                  onClick={() => {
-                    setRole(r);
-                    // Reset teacher-only fields when switching off
-                    // teacher so a previously-checked affirmation or
-                    // typed school name doesn't survive a toggle.
-                    if (r === "student") {
-                      setSchoolName("");
-                      setTeacherConfirmed(false);
-                    }
-                  }}
-                  className={`flex-1 rounded-[--radius-sm] px-3 py-2 text-sm font-semibold transition-colors ${
-                    role === r
-                      ? "bg-primary text-white shadow-sm"
-                      : "text-text-secondary hover:text-text-primary"
-                  }`}
-                >
-                  {r === "student" ? "I'm a student" : "I'm a teacher"}
-                </button>
-              ))}
-            </div>
           </>
         )}
 
@@ -392,13 +340,11 @@ function RegisterPageContent() {
 
           {/* Grade picker — shown for every self-signup path and for
               section-invite students. Hidden only for teacher-invite
-              (where the welcome card lives in its own branch). The
-              label flips for teachers so they read it as "what I
-              teach" instead of "what grade I'm in". */}
+              (where the welcome card lives in its own branch). */}
           {!isInviteFlow && (
             <div className="flex flex-col gap-1.5">
               <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
-                {role === "teacher" ? "Grade level you teach" : "Grade Level"}
+                Grade Level
               </label>
               <div className="flex gap-2">
                 {GRADE_OPTIONS.map((opt) => (
@@ -419,8 +365,8 @@ function RegisterPageContent() {
             </div>
           )}
 
-          {/* Join code — students only; hidden for invite + teacher flows */}
-          {!lockEmail && role === "student" && (
+          {/* Join code — self-signup students; hidden for invite flows */}
+          {!lockEmail && (
             <div>
               <Input
                 label="Join code (optional)"
@@ -438,46 +384,11 @@ function RegisterPageContent() {
             </div>
           )}
 
-          {/* Teacher-only fields — self-signup only (teacher invite
-              has its own welcome card and doesn't show these). */}
-          {!lockEmail && role === "teacher" && (
-            <>
-              <div>
-                <Input
-                  label="School (optional)"
-                  placeholder="e.g. Lincoln High School"
-                  value={schoolName}
-                  onChange={(e) => setSchoolName(e.target.value)}
-                  maxLength={200}
-                />
-                <p className="mt-1 text-xs text-text-secondary">
-                  Helps us understand who&apos;s joining. We won&apos;t contact your school.
-                </p>
-              </div>
-
-              <label className="flex cursor-pointer items-start gap-2.5 rounded-[--radius-sm] border border-border-light bg-surface-alt px-3 py-2.5">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4 cursor-pointer accent-primary"
-                  checked={teacherConfirmed}
-                  onChange={(e) => setTeacherConfirmed(e.target.checked)}
-                  required
-                />
-                <span className="text-sm text-text-secondary">
-                  I am a teacher and intend to use Veradic with my own students.
-                </span>
-              </label>
-            </>
-          )}
-
           <Button
             type="submit"
             loading={loading}
             className="w-full"
-            disabled={
-              !!emailError ||
-              (role === "teacher" && !lockEmail && !teacherConfirmed)
-            }
+            disabled={!!emailError}
           >
             {isInviteFlow
               ? "Set Up Your Account"
