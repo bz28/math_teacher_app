@@ -23,8 +23,11 @@ export default function DemoHub() {
       {/* Quiet way out to the live marketing site, and an equally easy way
           to get in touch. */}
       <div className="dh-site-launch">
-        <a className="dh-site-link" href="mailto:ben@veradicai.com">
-          ben@veradicai.com
+        <a
+          className="dh-site-link"
+          href="mailto:ben@veradicai.com?subject=Veradic"
+        >
+          Contact
         </a>
         <span className="dh-site-sep" aria-hidden="true">·</span>
         <a
@@ -105,7 +108,7 @@ export default function DemoHub() {
           <p className="it-payoff-closing">{h.payoff.closing}</p>
           <p className="it-payoff-contact">
             Questions, or want to see it on your own class?{" "}
-            <a href="mailto:ben@veradicai.com">ben@veradicai.com</a>
+            <a href="mailto:ben@veradicai.com?subject=Veradic">Get in touch</a>
             <span className="dh-contact-sep" aria-hidden="true"> · </span>
             <a href="https://veradicai.com" target="_blank" rel="noreferrer">
               veradicai.com
