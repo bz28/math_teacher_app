@@ -19,8 +19,11 @@ if (!existsSync(demoDir)) {
 const run = (cmd, env) =>
   execSync(cmd, { cwd: demoDir, stdio: "inherit", env: { ...process.env, ...env } });
 
+// --include=dev is required: Vercel builds run with NODE_ENV=production, which
+// makes npm omit devDependencies — but the demo's build tools (vite,
+// typescript, @types/node) are devDeps, so tsc/vite would fail without them.
 console.log("[build-tour] installing demo/ deps…");
-run("npm ci --no-audit --no-fund");
+run("npm ci --include=dev --no-audit --no-fund");
 
 console.log("[build-tour] building demo/ with base /tour/ …");
 run("npm run build", { DEMO_BASE: "/tour/" });
