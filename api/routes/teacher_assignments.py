@@ -1929,11 +1929,29 @@ async def regrade_submission(
     until the teacher republishes, so students keep seeing the old
     grade until then.
 
-    Re-runs extraction (one Vision call) rather than reading a cache:
-    the extraction snapshot lives on the integrity-check rows only for
-    probed problems; using the same code path as the submission
-    pipeline keeps behavior consistent.
+    Reuses the extraction already on the submission instead of paying
+    for another Vision call. `Submission.extraction` is written once by
+    the submit pipeline and the read is temperature-0, so re-reading the
+    same photo returns the same transcription at full price — the old
+    behavior burned roughly half the AI cost of a regrade to recompute a
+    value we had already stored. Vision only re-runs when nothing was
+    ever persisted (extraction failed or predates the column).
+
+    Grades the student-corrected view (`extraction_edits` overlaid), the
+    same as the submit pipeline does. Re-extracting used to discard those
+    corrections, so a regrade silently graded the raw Vision read while
+    the original grade had honored what the student said they wrote.
+
+    Known limitation, unchanged by this: the saved extraction's
+    `problem_position` tags are relative to the problem list as it stood
+    at extraction time. If a teacher edits the HW's problems after
+    students submit, those tags go stale — but they are already stale
+    everywhere else that reads `Submission.extraction` (the confirm-screen
+    record, the teacher review grouping, the integrity rows), so this is a
+    pre-existing app-wide gap rather than something regrade should mask
+    with an expensive re-read.
     """
+    from api.core.extraction_edits import apply_extraction_edits
     from api.core.grading_ai import run_ai_grading_for_submission
     from api.core.integrity_ai import extract_student_work
     from api.services.bank import load_problems_for_assignment
@@ -1959,13 +1977,27 @@ async def regrade_submission(
     # the admin dashboard can distinguish student-submission grades
     # from teacher-triggered regrades and spot any over-use.
     actor_id = str(current_user.user_id)
-    # Re-run extraction with the HW's problems as context so Vision
-    # re-tags per-problem attribution against any problem edits the
-    # teacher has made since the original grading run.
-    problems = await load_problems_for_assignment(db, assignment)
-    extraction = await extract_student_work(
-        sub.id, db, problems=problems, user_id=actor_id,
-    )
+    if sub.extraction is None:
+        # Nothing persisted — extraction failed at submit time, or the
+        # row predates the column. Fall back to a live Vision read with
+        # the HW's problems as context so steps come back position-tagged.
+        problems = await load_problems_for_assignment(db, assignment)
+        raw_extraction = await extract_student_work(
+            sub.id, db, problems=problems, user_id=actor_id,
+        )
+        sub.extraction = raw_extraction
+    else:
+        raw_extraction = sub.extraction
+
+    # Overlay the student's confirm-time corrections, matching the submit
+    # pipeline (_run_integrity_and_grading_background) so a regrade grades
+    # the same view of the work the original grade did.
+    extraction = apply_extraction_edits(raw_extraction, sub.extraction_edits)
+    if extraction is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Could not regrade — no gradeable content",
+        )
     await run_ai_grading_for_submission(
         sub.id, extraction, db, user_id=actor_id, force=True,
     )
