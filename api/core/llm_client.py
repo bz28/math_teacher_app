@@ -327,6 +327,56 @@ def _system_with_cache(
     ]
 
 
+def _with_transcript_cache(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return `messages` with a prompt-cache breakpoint on its last block.
+
+    A multi-turn agent re-sends the ENTIRE transcript on every round trip,
+    so without a breakpoint the cost of a conversation is quadratic in its
+    length: turn 10 pays full input price for turns 1-9 all over again.
+    Marking the tail of the last message caches everything before it, so
+    the next turn reads that prefix at `_CACHE_READ_MULT` and only writes
+    the delta.
+
+    The breakpoint ROLLS — it sits on whatever the last message is, which
+    is what makes each turn's prefix a superset of the one cached last
+    turn (that's the prefix match the read needs). Combined with the
+    separate breakpoint on the system prompt that's 2 of Anthropic's 4.
+
+    Returns a shallow copy: callers keep the transcript across turns and
+    persist it, so mutating their list in place would leak an
+    ever-growing pile of stale `cache_control` keys back into storage.
+
+    A prefix shorter than the model's cacheable minimum is silently not
+    cached by the API (no error), so this is safe to apply unconditionally
+    — short openers simply get no benefit.
+    """
+    if not messages:
+        return messages
+    last = messages[-1]
+    content = last.get("content")
+    if isinstance(content, str) and content:
+        # Plain-string content (the kickoff + every student turn) has to
+        # become a block list before it can carry cache_control. Guarded
+        # on non-empty: promoting "" would synthesize an empty text
+        # block, which the API rejects outright — turning a caller's bad
+        # input into a different, more confusing error.
+        blocks: list[Any] = [{"type": "text", "text": content}]
+    elif isinstance(content, list) and content:
+        blocks = list(content)
+    else:
+        # Empty or unrecognized content — nothing to anchor a breakpoint
+        # to. Send it through untouched rather than inventing a block.
+        return messages
+
+    tail = blocks[-1]
+    if not isinstance(tail, dict):
+        return messages
+    blocks[-1] = {**tail, "cache_control": {"type": "ephemeral"}}
+    return [*messages[:-1], {**last, "content": blocks}]
+
+
 def _to_tool_params(schema: ToolSchema) -> tuple[list[ToolParam], ToolChoiceToolParam]:
     """Convert a ToolSchema dict to typed SDK params."""
     tool: ToolParam = {
@@ -774,6 +824,12 @@ async def call_claude_conversation(
     because every turn sends a distinct, growing transcript. See the
     `@_cassetted` decorator + `tests/harness/cassette.py`.
 
+    The transcript is sent with a rolling prompt-cache breakpoint on its
+    last block (see `_with_transcript_cache`), so re-sending the whole
+    conversation each turn costs a tenth rather than full price. The
+    breakpoint is added INSIDE this function, after `@_cassetted` has
+    already hashed the incoming args — existing cassettes still replay.
+
     `temperature` (if set) pins the sampling temperature — 0.0 makes the
     agent's verdict reproducible across runs. This path passes no
     `thinking` kwarg (extended thinking would force temperature 1.0), so
@@ -814,7 +870,7 @@ async def call_claude_conversation(
             model=use_model,
             max_tokens=max_tokens,
             system=_system_with_cache(_with_safety(system_prompt)),
-            messages=messages,
+            messages=_with_transcript_cache(messages),
             tools=tools,
             tool_choice={"type": "auto"},
             timeout=90.0,
