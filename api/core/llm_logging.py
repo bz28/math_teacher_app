@@ -62,6 +62,8 @@ async def persist_llm_call(
     submission_id: str | None = None,
     generation_job_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
 ) -> None:
     """Write an LLM call record to the database. Looks up school_id
     from users.school_id at write time so the dashboard can filter
@@ -105,6 +107,8 @@ async def persist_llm_call(
                 model=model,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
+                cache_read_tokens=cache_read_tokens,
+                cache_write_tokens=cache_write_tokens,
                 latency_ms=latency_ms,
                 cost_usd=cost_usd,
                 session_id=_uuid.UUID(session_id) if session_id else None,

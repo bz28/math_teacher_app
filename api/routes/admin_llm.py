@@ -357,6 +357,8 @@ async def llm_calls(
                 "model": c.model,
                 "input_tokens": c.input_tokens,
                 "output_tokens": c.output_tokens,
+                "cache_read_tokens": c.cache_read_tokens,
+                "cache_write_tokens": c.cache_write_tokens,
                 "latency_ms": round(c.latency_ms, 1),
                 "cost_usd": round(c.cost_usd, 6),
                 "success": c.success,

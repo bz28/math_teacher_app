@@ -511,6 +511,12 @@ export interface LLMCallsData {
     model: string;
     input_tokens: number;
     output_tokens: number;
+    // Prompt-cache traffic. 0/0 means the call touched no cache — either
+    // it sends no cache_control, or the cached prefix had expired (the
+    // ephemeral cache lives 5 minutes). Pre-instrumentation rows are
+    // backfilled to 0, so treat old calls as "unmeasured", not "no hits".
+    cache_read_tokens: number;
+    cache_write_tokens: number;
     latency_ms: number;
     cost_usd: number;
     input_text: string | null;
