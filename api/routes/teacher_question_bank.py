@@ -14,7 +14,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.audit_log import record_activity
+from api.core.audit_log import record_activity, record_question_edit
 from api.core.constants import SOLUTION_FAILED_SENTINEL_PREFIX
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.image_utils import validate_and_decode_upload
@@ -31,6 +31,7 @@ from api.middleware.auth import CurrentUser, get_current_user_full, require_teac
 from api.middleware.rate_limit import limiter
 from api.models.course import Course
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
+from api.models.question_edit import EDIT_CHAT, EDIT_MANUAL
 from api.models.user import User
 from api.routes.teacher_assignments import get_teacher_assignment
 from api.routes.teacher_courses import get_teacher_course
@@ -492,6 +493,7 @@ async def get_generation_job(
 async def update_bank_item(
     body: UpdateBankItemRequest,
     item: QuestionBankItem = Depends(get_bank_item),
+    current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     # Lock policy: only *content* edits are blocked when the item is in a
@@ -539,6 +541,12 @@ async def update_bank_item(
         item.difficulty = body.difficulty
     if body.unit_id is not None:
         item.unit_id = body.unit_id
+
+    # A generated question a teacher had to rewrite is the clearest
+    # signal the generation prompt is wrong. No-ops when the question
+    # text didn't change — a title typo says nothing about the prompt.
+    if content_changing:
+        await record_question_edit(db, item, EDIT_MANUAL, current_user)
 
     await db.commit()
     return _serialize_item(item, await used_in_for_item(db, item))
@@ -797,6 +805,7 @@ async def post_chat_message(
 async def accept_chat_proposal(
     body: ChatMessageIndexRequest,
     item: QuestionBankItem = Depends(get_bank_item),
+    current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Apply the proposal attached to a specific AI message in the chat.
@@ -887,6 +896,7 @@ async def accept_chat_proposal(
         else m
         for i, m in enumerate(existing)
     ]
+    await record_question_edit(db, item, EDIT_CHAT, current_user)
     await db.commit()
     return _serialize_item(item, await used_in_for_item(db, item))
 
