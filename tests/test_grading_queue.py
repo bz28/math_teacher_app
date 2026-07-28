@@ -618,3 +618,94 @@ async def test_a_submission_with_no_extraction_is_skipped_not_marked_graded() ->
     assert job is not None
     # `done` would assert a grade exists. It doesn't.
     assert job.status == STATUS_SKIPPED
+
+
+async def test_extending_a_due_date_moves_the_queued_class() -> None:
+    """The most common due-date edit. Without a reschedule the class
+    still grades at the OLD time — before the extension has run out."""
+    from api.core.grading_queue import reschedule_assignment
+
+    world = await _seed_hw(n_submissions=2)
+    original = datetime.now(UTC) + timedelta(hours=1)
+    await _prepare(world["assignment_id"], world["submission_ids"], due_at=original)
+    for sid in world["submission_ids"]:
+        await _enqueue(world["assignment_id"], sid)
+
+    extended = original + timedelta(days=3)
+    async with get_session_factory()() as s:
+        assignment = (await s.execute(
+            select(Assignment).where(Assignment.id == world["assignment_id"])
+        )).scalar_one()
+        assignment.due_at = extended
+        moved = await reschedule_assignment(s, assignment)
+        await s.commit()
+    assert moved == 2
+
+    for sid in world["submission_ids"]:
+        job = await _job(sid)
+        assert job is not None
+        assert job.scheduled_for == extended
+
+
+async def test_clearing_a_due_date_unschedules_the_class() -> None:
+    """Otherwise rows sit at a past timestamp and auto-grade anyway,
+    contradicting the rule that no due date means "wait for a teacher"."""
+    from api.core.grading_queue import reschedule_assignment
+
+    world = await _seed_hw(n_submissions=2)
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) - timedelta(minutes=5),
+    )
+    for sid in world["submission_ids"]:
+        await _enqueue(world["assignment_id"], sid)
+
+    async with get_session_factory()() as s:
+        assignment = (await s.execute(
+            select(Assignment).where(Assignment.id == world["assignment_id"])
+        )).scalar_one()
+        assignment.due_at = None
+        await reschedule_assignment(s, assignment)
+        await s.commit()
+
+    for sid in world["submission_ids"]:
+        assert (await _job(sid)).scheduled_for is None  # type: ignore[union-attr]
+
+    # And a drain must now leave them alone.
+    async with get_session_factory()() as s:
+        claimed = await _claim_due(s, 100)
+    assert not (set(world["submission_ids"]) & {c.submission_id for c in claimed})
+
+
+async def test_rescheduling_does_not_disturb_finished_work() -> None:
+    from api.core.grading_queue import reschedule_assignment
+
+    world = await _seed_hw(n_submissions=2)
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    for sid in world["submission_ids"]:
+        await _enqueue(world["assignment_id"], sid)
+
+    done_sub = world["submission_ids"][0]
+    async with get_session_factory()() as s:
+        job = (await s.execute(
+            select(GradingJob).where(GradingJob.submission_id == done_sub)
+        )).scalar_one()
+        job.status = STATUS_DONE
+        job.scheduled_for = datetime.now(UTC) - timedelta(days=1)
+        await s.commit()
+
+    async with get_session_factory()() as s:
+        assignment = (await s.execute(
+            select(Assignment).where(Assignment.id == world["assignment_id"])
+        )).scalar_one()
+        assignment.due_at = datetime.now(UTC) + timedelta(days=5)
+        moved = await reschedule_assignment(s, assignment)
+        await s.commit()
+
+    # Only the still-queued one. Re-pointing a finished job would
+    # silently re-grade work that is already done.
+    assert moved == 1
+    assert (await _job(done_sub)).status == STATUS_DONE  # type: ignore[union-attr]

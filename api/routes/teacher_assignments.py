@@ -848,13 +848,27 @@ async def update_assignment(
     if body.status is not None:
         a.status = body.status
 
+    due_at_changed = False
     if body.clear_due_at:
         a.due_at = None
+        due_at_changed = True
     elif body.due_at is not None and body.due_at != "":
         try:
             a.due_at = datetime.fromisoformat(body.due_at)
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid due_at format")
+        due_at_changed = True
+    if due_at_changed:
+        # Queued grading is scheduled off the due date, and that
+        # scheduling is a snapshot taken when each student confirmed.
+        # Without re-pointing it, extending a deadline still grades the
+        # class at the OLD time (before the extension has even run out),
+        # and clearing a due date leaves rows at a past timestamp that
+        # auto-grade anyway — contradicting the rule that no due date
+        # means "wait for the teacher".
+        from api.core.grading_queue import reschedule_assignment
+
+        await reschedule_assignment(db, a)
     if body.late_policy is not None:
         a.late_policy = body.late_policy
     if body.unit_ids is not None:

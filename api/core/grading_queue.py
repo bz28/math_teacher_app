@@ -185,6 +185,44 @@ async def request_now(
     return int(result.rowcount or 0)
 
 
+async def reschedule_assignment(
+    db: AsyncSession, assignment: Assignment,
+) -> int:
+    """Re-point an assignment's queued jobs at its current due date.
+
+    Enqueue-time scheduling is a snapshot, and `enqueue_submission`'s
+    `least()` can only ever move a job EARLIER — so nothing else in the
+    system can react to a due date changing. Two ordinary teacher edits
+    go wrong without this:
+
+    - **Extending a deadline** (the most common edit by far) leaves the
+      class scheduled at the old time, so it grades before the extension
+      has run out. Students who used the extra days get graded on work
+      they hadn't finished, and the class splits across two drains,
+      losing the shared cache prefix as well.
+    - **Clearing a due date** leaves rows sitting at a past timestamp
+      that will still auto-grade on the next drain — directly
+      contradicting the promise that NULL means "wait for a teacher".
+
+    Only `queued` jobs move. A `running` one is mid-flight; `done`,
+    `skipped` and `failed` are terminal and re-pointing them would
+    silently re-grade work that is finished.
+
+    A teacher's explicit "Grade now" IS overwritten here, and that is
+    correct: editing the deadline afterwards is a later, more specific
+    instruction about when this class should grade.
+    """
+    result = cast("CursorResult[Any]", await db.execute(
+        update(GradingJob)
+        .where(
+            GradingJob.assignment_id == assignment.id,
+            GradingJob.status == STATUS_QUEUED,
+        )
+        .values(scheduled_for=assignment.due_at, updated_at=_now()),
+    ))
+    return int(result.rowcount or 0)
+
+
 async def _reclaim_stale(db: AsyncSession) -> int:
     """Return abandoned `running` jobs to the queue.
 
