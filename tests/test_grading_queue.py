@@ -709,3 +709,80 @@ async def test_rescheduling_does_not_disturb_finished_work() -> None:
     # silently re-grade work that is already done.
     assert moved == 1
     assert (await _job(done_sub)).status == STATUS_DONE  # type: ignore[union-attr]
+
+
+async def test_a_teacher_can_revive_a_failed_job() -> None:
+    """`failed` was a dead end: nothing could move a job out of it, so a
+    submission that exhausted its retries during an Anthropic incident
+    stayed ungraded forever short of a database edit. The button the
+    teacher already has is the natural retry."""
+    world = await _seed_hw()
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    sid = world["submission_ids"][0]
+    await _enqueue(world["assignment_id"], sid)
+
+    boom = AsyncMock(side_effect=RuntimeError("anthropic exploded"))
+    for _ in range(MAX_ATTEMPTS):
+        with patch(
+            "api.core.grading_ai.run_ai_grading_for_submission", new=boom,
+        ):
+            await drain()
+    assert (await _job(sid)).status == STATUS_FAILED  # type: ignore[union-attr]
+
+    async with get_session_factory()() as s:
+        moved = await request_now(
+            s,
+            assignment_id=world["assignment_id"],
+            requested_by_id=await _teacher_id(world["assignment_id"]),
+            submission_id=sid,
+        )
+        await s.commit()
+    assert moved == 1
+
+    job = await _job(sid)
+    assert job is not None
+    assert job.status == STATUS_QUEUED
+    # Budget reset — the failure was three tries ago and conditions have
+    # presumably changed. Without this the revived job would park again
+    # on its very next attempt.
+    assert job.attempts == 0
+
+    with patch(
+        "api.core.grading_ai.run_ai_grading_for_submission",
+        new=AsyncMock(side_effect=_fake_grade),
+    ):
+        await drain()
+    assert (await _job(sid)).status == STATUS_DONE  # type: ignore[union-attr]
+
+
+async def test_reviving_does_not_touch_finished_or_skipped_work() -> None:
+    world = await _seed_hw(n_submissions=2)
+    await _prepare(world["assignment_id"], world["submission_ids"], due_at=None)
+    done_sub, skipped_sub = world["submission_ids"]
+    for sid in world["submission_ids"]:
+        await _enqueue(world["assignment_id"], sid)
+
+    async with get_session_factory()() as s:
+        for sid, st in ((done_sub, STATUS_DONE), (skipped_sub, STATUS_SKIPPED)):
+            job = (await s.execute(
+                select(GradingJob).where(GradingJob.submission_id == sid)
+            )).scalar_one()
+            job.status = st
+        await s.commit()
+
+    async with get_session_factory()() as s:
+        moved = await request_now(
+            s,
+            assignment_id=world["assignment_id"],
+            requested_by_id=await _teacher_id(world["assignment_id"]),
+        )
+        await s.commit()
+
+    # Neither is re-runnable: `done` needs a regrade, `skipped` has
+    # nothing to grade. Re-running either would double-charge.
+    assert moved == 0
+    assert (await _job(done_sub)).status == STATUS_DONE  # type: ignore[union-attr]
+    assert (await _job(skipped_sub)).status == STATUS_SKIPPED  # type: ignore[union-attr]

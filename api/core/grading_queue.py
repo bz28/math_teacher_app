@@ -167,17 +167,34 @@ async def request_now(
     Without, every still-queued submission on the assignment ("Grade
     all"). Returns how many jobs were moved.
 
-    Only touches `queued` rows. A `running` job is already being handled,
-    and a `done` one needs a regrade rather than a re-queue — silently
-    re-running either would double-charge.
+    Also REVIVES `failed` jobs, with the retry budget reset. Without
+    this, `failed` is a dead end — nothing in the system could move a
+    job out of it, so a submission that exhausted its retries during an
+    Anthropic incident would stay ungraded forever with no way back
+    short of a database edit. The teacher pressing the button they
+    already have is the natural retry, and resetting `attempts` is what
+    makes it mean anything: the failure was three tries ago and
+    conditions have presumably changed.
+
+    Still won't touch `running` (already in flight), `done` (needs a
+    regrade, not a re-queue) or `skipped` (nothing to grade) — silently
+    re-running any of those would double-charge.
     """
     stmt = (
         update(GradingJob)
         .where(
             GradingJob.assignment_id == assignment_id,
-            GradingJob.status == STATUS_QUEUED,
+            GradingJob.status.in_((STATUS_QUEUED, STATUS_FAILED)),
         )
-        .values(scheduled_for=_now(), requested_by_id=requested_by_id)
+        .values(
+            status=STATUS_QUEUED,
+            scheduled_for=_now(),
+            requested_by_id=requested_by_id,
+            attempts=0,
+            started_at=None,
+            finished_at=None,
+            updated_at=_now(),
+        )
     )
     if submission_id is not None:
         stmt = stmt.where(GradingJob.submission_id == submission_id)
