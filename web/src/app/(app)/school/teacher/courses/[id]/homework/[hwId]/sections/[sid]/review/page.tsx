@@ -343,6 +343,12 @@ function HomeworkSectionReview({
   // Whether the pinned work rail (wide layout) shows the photo inline.
   // A session preference — lifted here so it persists across students.
   const [photoPinned, setPhotoPinned] = useState(true);
+  // Bumped to re-run the roster load effect. Grading happens
+  // server-side after the request returns, so there is nothing to
+  // patch optimistically — the grades genuinely don't exist yet, and
+  // inventing them client-side would show a teacher scores that
+  // aren't real. Refetch instead.
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -453,7 +459,7 @@ function HomeworkSectionReview({
     return () => {
       cancelled = true;
     };
-  }, [assignmentId, courseId, sectionId, focusStudentId]);
+  }, [assignmentId, courseId, sectionId, focusStudentId, reloadNonce]);
 
   // Item analysis is HW-wide and read-only, so it loads independently
   // of the roster/detail panels — a failure here never blocks grading.
@@ -878,6 +884,18 @@ function HomeworkSectionReview({
   const pendingTotal = pendingInSection + pendingOtherSections;
   const dirtyTotal = dirtyInSection + dirtyOtherSections;
   const gradedTotal = gradedInSection + gradedOtherSections;
+  // Turned in, but no AI grade yet. AI grading is queued and runs when
+  // the due date passes; a HW with no due date never grades on its own
+  // (there's no moment that means "the class is in"), so for those this
+  // count only ever falls when the teacher asks. Section-scoped: the
+  // button acts on this HW, and showing a HW-wide number next to a
+  // section-scoped action would misdescribe what pressing it does.
+  const ungradedInSection = useMemo(() => {
+    if (!roster) return 0;
+    return roster.filter(
+      (e) => e.submission && e.submission.final_score === null,
+    ).length;
+  }, [roster]);
   // Reviewed vs unopened split of the full to-release set (HW-wide).
   const toReleaseTotal = pendingTotal + dirtyTotal;
   const reviewedToPublishTotal =
@@ -975,6 +993,33 @@ function HomeworkSectionReview({
   // confirm so the teacher decides on the unapproved / flagged grades
   // with eyes open. A direct publish that errors falls back to opening
   // the dialog so its error + retry are visible.
+  // "Grade all". AI grading is queued and normally runs when the due
+  // date passes; a HW with no due date never grades on its own, so for
+  // those this is the only path. Grading happens server-side after the
+  // request returns, so we refetch rather than patching state
+  // optimistically — the grades genuinely aren't ready yet, and showing
+  // scores that don't exist would be worse than showing a spinner.
+  const [gradingAll, setGradingAll] = useState(false);
+  const [gradeAllError, setGradeAllError] = useState<string | null>(null);
+  const onGradeAllClick = useCallback(async () => {
+    setGradingAll(true);
+    setGradeAllError(null);
+    try {
+      await teacher.gradePendingSubmissions(assignmentId);
+      // The server kicks a drain immediately, but grading a class is
+      // several seconds of LLM calls — so this refetch is a first look,
+      // not a guarantee everything has landed. Anything still in flight
+      // shows as ungraded and the button stays available.
+      setReloadNonce((n) => n + 1);
+    } catch (e) {
+      setGradeAllError(
+        e instanceof Error ? e.message : "Couldn't start grading",
+      );
+    } finally {
+      setGradingAll(false);
+    }
+  }, [assignmentId]);
+
   const onPublishClick = useCallback(() => {
     if (unreviewedToPublishTotal === 0 && flaggedToPublishTotal === 0) {
       void handlePublish(false).then((ok) => {
@@ -1181,7 +1226,34 @@ function HomeworkSectionReview({
                 {submittedCount} of {totalRoster}
               </b>{" "}
               submitted ·{" "}
-              {needsEyesCount > 0 ? (
+              {/* Ungraded is checked FIRST and stated plainly. An ungraded
+                  submission is neither flagged nor low-confidence, so it
+                  falls out of `needsEyesCount` — which used to be
+                  harmless, because grading ran seconds after a student
+                  confirmed and nobody saw the gap. Now grading waits for
+                  the due date, so "the AI is confident on every
+                  submission" would be shown routinely about work the AI
+                  has not looked at. Never claim confidence in a verdict
+                  that doesn't exist. */}
+              {ungradedInSection > 0 ? (
+                <>
+                  <b className="font-bold text-text-primary">
+                    {ungradedInSection}
+                  </b>{" "}
+                  not graded yet
+                  {needsEyesCount > 0 ? (
+                    <>
+                      {" · "}
+                      <b className="font-bold text-text-primary">
+                        {needsEyesCount}
+                      </b>{" "}
+                      {needsEyesCount === 1 ? "needs" : "need"} your eyes.
+                    </>
+                  ) : (
+                    <>.</>
+                  )}
+                </>
+              ) : needsEyesCount > 0 ? (
                 <>
                   <b className="font-bold text-text-primary">{needsEyesCount}</b>{" "}
                   {needsEyesCount === 1 ? "needs" : "need"} your eyes · the AI is
@@ -1207,12 +1279,29 @@ function HomeworkSectionReview({
           )}
         </div>
         {roster !== null && (
-          <PublishButton
-            pendingTotal={pendingTotal}
-            dirtyTotal={dirtyTotal}
-            gradedTotal={gradedTotal}
-            onOpen={onPublishClick}
-          />
+          <div className="flex flex-col items-end gap-1.5">
+            <div className="flex items-center gap-2">
+              <GradeAllButton
+                ungradedCount={ungradedInSection}
+                busy={gradingAll}
+                onClick={onGradeAllClick}
+              />
+              <PublishButton
+                pendingTotal={pendingTotal}
+                dirtyTotal={dirtyTotal}
+                gradedTotal={gradedTotal}
+                onOpen={onPublishClick}
+              />
+            </div>
+            {gradeAllError && (
+              // Inline rather than a toast: the failed action is right
+              // here, and a teacher who missed a disappearing toast
+              // would reasonably think grading had started.
+              <p role="alert" className="text-[11.5px] font-semibold text-red-600">
+                {gradeAllError}
+              </p>
+            )}
+          </div>
         )}
       </div>
 
@@ -1402,6 +1491,53 @@ function HomeworkSectionReview({
         }}
       />
     </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// "Grade all" (page header). Sits BEFORE Publish because it's the
+// earlier step: you can't publish what hasn't been graded.
+//
+// Only renders when there is ungraded submitted work. That makes it
+// self-explaining — its presence means "there's something to grade",
+// and it disappears once the class is done rather than sitting there
+// inert inviting a pointless click.
+//
+// The count is the point of the label. "Grade all" alone doesn't tell
+// a teacher whether they're about to spend on 2 submissions or 30.
+// ────────────────────────────────────────────────────────────────────
+
+function GradeAllButton({
+  ungradedCount,
+  busy,
+  onClick,
+}: {
+  ungradedCount: number;
+  busy: boolean;
+  onClick: () => void;
+}) {
+  if (ungradedCount === 0) return null;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      className="inline-flex items-center gap-1.5 rounded-[--radius-pill] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:bg-[color:var(--color-surface-alt-2)] disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {busy ? (
+        <>
+          <span
+            aria-hidden
+            className="inline-block h-3 w-3 animate-spin rounded-full border-[1.5px] border-current border-t-transparent"
+          />
+          Grading…
+        </>
+      ) : (
+        <>
+          Grade {ungradedCount} ungraded
+        </>
+      )}
+    </button>
   );
 }
 
@@ -2059,11 +2195,20 @@ function TriageRoster({
   onSelect: (id: string) => void;
 }) {
   const needsEyes: RosterEntry[] = [];
+  const awaitingGrade: RosterEntry[] = [];
   const confident: RosterEntry[] = [];
   const notSubmitted: RosterEntry[] = [];
   for (const e of roster) {
     if (!e.submission) notSubmitted.push(e);
     else if (isFlagged(e) || hasLowConfidence(e)) needsEyes.push(e);
+    // Ungraded gets its own group. It used to fall into "AI confident"
+    // — technically true (nothing was flagged) and substantively a lie,
+    // because the AI hadn't looked at the work at all. That was almost
+    // invisible while grading ran seconds after a student confirmed;
+    // now that grading waits for the due date it would be the normal
+    // state of a class all week. Never file work the AI hasn't seen
+    // under a claim about the AI's confidence.
+    else if (e.submission.final_score === null) awaitingGrade.push(e);
     else confident.push(e);
   }
   // Uncertainty-first: flagged (0) before low-confidence (1), then by
@@ -2111,6 +2256,16 @@ function TriageRoster({
         />
       )}
       {renderRows(needsEyes)}
+      {awaitingGrade.length > 0 && (
+        // Above "AI confident": work with no verdict yet is more
+        // actionable than work the AI has already cleared.
+        <RosterGroupHeader
+          label="Awaiting grade"
+          count={awaitingGrade.length}
+          tone="calm"
+        />
+      )}
+      {renderRows(awaitingGrade)}
       {confident.length > 0 && (
         <RosterGroupHeader
           label="AI confident"
