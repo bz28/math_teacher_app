@@ -28,7 +28,12 @@ from fastapi import APIRouter, Header, HTTPException, status
 from api.config import settings
 from api.core.grading_queue import DEFAULT_DRAIN_LIMIT, drain
 
-router = APIRouter(prefix="/internal/grading", tags=["internal"])
+# include_in_schema=False: this is service-to-service, and publishing
+# it put the path and its auth header name into the public OpenAPI
+# spec and both generated TypeScript clients.
+router = APIRouter(
+    prefix="/internal/grading", tags=["internal"], include_in_schema=False,
+)
 
 
 @router.post("/drain")

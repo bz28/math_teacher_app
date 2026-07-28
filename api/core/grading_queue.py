@@ -122,6 +122,11 @@ async def enqueue_submission(
                 "started_at": None,
                 "finished_at": None,
                 "requested_by_id": stmt.excluded.requested_by_id,
+                # Explicit: `pg_insert` does not fire the column's
+                # `onupdate`, so without this a re-enqueued row keeps
+                # the timestamp of its original insert and looks stale
+                # to anything ordering by it.
+                "updated_at": _now(),
                 # least() keeps the EARLIER of the two schedules, and
                 # treats NULL as "no opinion" rather than "never". A
                 # teacher pressing "Grade now" on a not-yet-due

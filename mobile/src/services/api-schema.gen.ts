@@ -1339,32 +1339,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/internal/grading/drain": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Drain Grading Queue
-         * @description Run one drain pass; report what it did.
-         *
-         *     Returns per-pass counters (`reclaimed` / `claimed` / `assignments` /
-         *     `succeeded` / `failed`) so the caller's logs answer "did anything
-         *     happen, and did it work?" without a database session. A cron that
-         *     silently 200s while grading nothing is indistinguishable from a
-         *     healthy one otherwise.
-         */
-        post: operations["drain_grading_queue_v1_internal_grading_drain_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/practice/check": {
         parameters: {
             query?: never;
@@ -8229,41 +8203,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageExtractResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    drain_grading_queue_v1_internal_grading_drain_post: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: {
-                "x-grading-token"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
                 };
             };
             /** @description Validation Error */

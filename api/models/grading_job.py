@@ -111,14 +111,18 @@ class GradingJob(Base):
         index=True,
     )
 
+    # No index=True here or on scheduled_for: the migration creates a
+    # composite (status, scheduled_for), which is the drain's only hot
+    # query. Declaring singles as well makes `alembic revision
+    # --autogenerate` emit two CREATE INDEXes forever.
     status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default=STATUS_QUEUED, index=True,
+        String(20), nullable=False, default=STATUS_QUEUED,
     )
 
     # NULL means "no due date — wait for a teacher". See the module
     # docstring: the drain must never read NULL as "run now".
     scheduled_for: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True, index=True,
+        DateTime(timezone=True), nullable=True,
     )
 
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
