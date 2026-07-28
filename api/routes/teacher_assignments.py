@@ -1942,14 +1942,18 @@ async def regrade_submission(
     corrections, so a regrade silently graded the raw Vision read while
     the original grade had honored what the student said they wrote.
 
-    Known limitation, unchanged by this: the saved extraction's
+    Known limitation this DOES make worse: the saved extraction's
     `problem_position` tags are relative to the problem list as it stood
-    at extraction time. If a teacher edits the HW's problems after
-    students submit, those tags go stale — but they are already stale
-    everywhere else that reads `Submission.extraction` (the confirm-screen
-    record, the teacher review grouping, the integrity rows), so this is a
-    pre-existing app-wide gap rather than something regrade should mask
-    with an expensive re-read.
+    at extraction time. Those tags are already stale everywhere else that
+    reads `Submission.extraction` (the confirm-screen record, the teacher
+    review grouping, the integrity rows) — but regrade used to be the one
+    reader that healed them, because re-running Vision re-tagged against
+    the current problems. Reusing the stored extraction gives that up. It
+    only bites after an unpublish → edit problems → republish cycle, which
+    shifts positions; a regrade then attributes stored steps to the wrong
+    problem or drops them into "Other work". Worth its own fix (re-tag the
+    stored extraction against the current problem list); not worth paying
+    for a full Vision read on every regrade to paper over.
     """
     from api.core.extraction_edits import apply_extraction_edits
     from api.core.grading_ai import run_ai_grading_for_submission
@@ -1981,11 +1985,23 @@ async def regrade_submission(
         # Nothing persisted — extraction failed at submit time, or the
         # row predates the column. Fall back to a live Vision read with
         # the HW's problems as context so steps come back position-tagged.
+        #
+        # Deliberately NOT written back to `sub.extraction`. That column
+        # is what BOTH clients use to decide the student still owes a
+        # confirmation — "extraction present AND extraction_confirmed_at
+        # null" routes them to the confirm screen (web homework page's
+        # routing precedence; mobile ExtractionConfirmScreen). Persisting
+        # here would pop that screen for homework that is already graded
+        # and possibly returned, and any correction the student made from
+        # it would be silently dropped: run_ai_grading_for_submission
+        # skips a submission that already has a final_score. Leaving the
+        # submit pipeline as the column's only writer keeps that
+        # invariant intact. The cost is one Vision read per regrade on
+        # pre-column rows, which is the behavior they had anyway.
         problems = await load_problems_for_assignment(db, assignment)
         raw_extraction = await extract_student_work(
             sub.id, db, problems=problems, user_id=actor_id,
         )
-        sub.extraction = raw_extraction
     else:
         raw_extraction = sub.extraction
 

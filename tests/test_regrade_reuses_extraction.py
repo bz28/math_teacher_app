@@ -15,8 +15,15 @@ Covers:
 1. With an extraction stored, regrade makes no Vision call.
 2. The grader receives the student-corrected view, not the raw read.
 3. With no extraction stored (failed at submit, or a pre-column row),
-   Vision still runs — and the result is persisted so the next regrade
-   is free.
+   Vision still runs — and the result is deliberately NOT persisted.
+4. That non-persistence holds at the exact condition the clients branch
+   on, so a regrade can never hand a student a confirm prompt for
+   homework that is already graded.
+
+On (3): caching the fallback read would make the next regrade free, and
+it is still the wrong call. `Submission.extraction` is not a private
+cache — its presence is what tells both clients the student still owes a
+confirmation. The submit pipeline stays its only writer.
 """
 
 import uuid
@@ -125,12 +132,21 @@ async def test_regrade_skips_vision_and_grades_corrected_view(
     assert _STORED_EXTRACTION["steps"][0]["latex"] == "x^2 - 5x + 6 = 0"
 
 
-async def test_regrade_falls_back_to_vision_and_persists_it(
+async def test_regrade_falls_back_to_vision_without_persisting_it(
     client: AsyncClient,
 ) -> None:
     """No stored extraction (failed at submit, or a pre-column row):
-    Vision still runs, and the result is saved so the NEXT regrade is
-    free rather than paying again."""
+    Vision runs for THIS grade, and the result is deliberately NOT
+    written back to the submission.
+
+    Persisting it would be free money on the next regrade, and it is
+    still wrong. `Submission.extraction` is not a private cache — it is
+    the flag both clients read to decide the student still owes a
+    confirmation. Writing it here flips an already-graded submission
+    from "pending" to "please confirm your work", months later, for
+    homework the student has already had returned. See
+    test_regrade_does_not_resurrect_the_student_confirm_screen.
+    """
     world = await _seed_hw()
     sub_id = world["submission_ids"][0]
     await _enable_grading_and_store(
@@ -154,9 +170,68 @@ async def test_regrade_falls_back_to_vision_and_persists_it(
 
     assert r.status_code == 200, r.text
     vision.assert_awaited_once()
+    # The grader still received the freshly-read work...
+    assert grader.await_count == 1
 
     async with get_session_factory()() as s:
         stored = (await s.execute(
             select(Submission.extraction).where(Submission.id == sub_id)
         )).scalar_one()
-    assert stored == _STORED_EXTRACTION
+    # ...but the column stays null, so the client's confirm-screen
+    # routing sees exactly what it saw before the regrade.
+    assert stored is None
+
+
+async def test_regrade_does_not_resurrect_the_student_confirm_screen(
+    client: AsyncClient,
+) -> None:
+    """Regression: a regrade must not put an already-graded submission
+    back into the student's "confirm your work" state.
+
+    Both clients route a student to the confirm screen when
+    `extraction != null AND extraction_confirmed_at == null` (and the
+    submission has files). There is no already-graded guard in that
+    precedence chain. So any regrade that populates `extraction` on a
+    legacy row hands the student a confirm prompt for work that is
+    already graded — and if they correct something from it, the
+    correction is dropped on the floor, because grading skips a
+    submission that already has a final_score. That is precisely the
+    bug this whole PR exists to fix, so it must not come back in the
+    fallback branch.
+
+    This asserts the exact tuple the clients branch on.
+    """
+    world = await _seed_hw()
+    sub_id = world["submission_ids"][0]
+    await _enable_grading_and_store(
+        world["assignment_id"], sub_id, extraction=None,
+    )
+
+    vision = AsyncMock(return_value=_STORED_EXTRACTION)
+    grader = AsyncMock(return_value=_GRADER_RESULT)
+    with (
+        patch("api.core.integrity_ai.extract_student_work", new=vision),
+        patch("api.core.grading_ai.grade_submission_with_ai", new=grader),
+        patch(
+            "api.core.grading_ai.run_ai_grading_for_submission",
+            new=_real_run_ai_grading,
+        ),
+    ):
+        r = await client.post(
+            f"/v1/teacher/submissions/{sub_id}/regrade",
+            headers=_auth(world["teacher_token"]),
+        )
+    assert r.status_code == 200, r.text
+
+    async with get_session_factory()() as s:
+        extraction, confirmed_at = (await s.execute(
+            select(
+                Submission.extraction, Submission.extraction_confirmed_at,
+            ).where(Submission.id == sub_id)
+        )).one()
+
+    # The client condition is `extraction != null && confirmed_at == null`.
+    # It must be False. It is False here because extraction stays null —
+    # if a future change starts persisting it, this fails and the fix is
+    # to guard the clients on grade state, not to delete this test.
+    assert not (extraction is not None and confirmed_at is None)
