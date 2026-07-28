@@ -27,6 +27,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from httpx import AsyncClient
 from sqlalchemy import select
 
 from api.core.grading_queue import (
@@ -786,3 +787,78 @@ async def test_reviving_does_not_touch_finished_or_skipped_work() -> None:
     assert moved == 0
     assert (await _job(done_sub)).status == STATUS_DONE  # type: ignore[union-attr]
     assert (await _job(skipped_sub)).status == STATUS_SKIPPED  # type: ignore[union-attr]
+
+
+# ── The drain endpoint (the scheduled clock knocks here) ─────────────
+
+
+async def test_drain_endpoint_is_shut_when_no_token_is_configured(
+    client: AsyncClient,
+) -> None:
+    """Safe default. An unguarded drain lets anyone on the internet force
+    every pending class on the platform to grade on demand — real money.
+    Unset means 503, not open."""
+    from api.config import settings
+
+    original = settings.grading_drain_token
+    settings.grading_drain_token = ""
+    try:
+        r = await client.post("/v1/internal/grading/drain")
+        assert r.status_code == 503
+    finally:
+        settings.grading_drain_token = original
+
+
+async def test_drain_endpoint_rejects_a_wrong_token(
+    client: AsyncClient,
+) -> None:
+    from api.config import settings
+
+    original = settings.grading_drain_token
+    settings.grading_drain_token = "the-real-one"
+    try:
+        assert (await client.post("/v1/internal/grading/drain")).status_code == 401
+        r = await client.post(
+            "/v1/internal/grading/drain",
+            headers={"X-Grading-Token": "not-it"},
+        )
+        assert r.status_code == 401
+    finally:
+        settings.grading_drain_token = original
+
+
+async def test_drain_endpoint_grades_a_due_class_and_reports_it(
+    client: AsyncClient,
+) -> None:
+    """End-to-end through the door the cron knocks on."""
+    from api.config import settings
+
+    world = await _seed_hw(n_submissions=2)
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    for sid in world["submission_ids"]:
+        await _enqueue(world["assignment_id"], sid)
+
+    original = settings.grading_drain_token
+    settings.grading_drain_token = "test-token"
+    try:
+        with patch(
+            "api.core.grading_ai.run_ai_grading_for_submission",
+            new=AsyncMock(side_effect=_fake_grade),
+        ):
+            r = await client.post(
+                "/v1/internal/grading/drain",
+                headers={"X-Grading-Token": "test-token"},
+            )
+    finally:
+        settings.grading_drain_token = original
+
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    # The cron reads this to tell a healthy run from one that silently
+    # graded nothing.
+    assert payload["succeeded"] >= 2
+    for sid in world["submission_ids"]:
+        assert (await _job(sid)).status == STATUS_DONE  # type: ignore[union-attr]
