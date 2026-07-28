@@ -2223,9 +2223,20 @@ export interface paths {
          *     moment that means "the class is in"), and a teacher who wants a head
          *     start before Friday shouldn't have to wait for the deadline.
          *
-         *     Only moves `queued` jobs. A `running` one is already being handled
-         *     and a `done` one needs a regrade, not a re-queue — re-running either
-         *     would double-charge for the same work.
+         *     Moves `queued` jobs, and REVIVES `failed` ones with their retry
+         *     budget reset — otherwise `failed` is a dead end nothing escapes, and
+         *     a submission that ran out of retries during an API incident would
+         *     stay ungraded forever.
+         *
+         *     Leaves `running` alone (already in flight) and `done` alone (needs a
+         *     regrade, not a re-queue) — re-running either would double-charge.
+         *     Leaves `skipped` alone too: there is nothing gradeable there, so a
+         *     re-run would find the same nothing.
+         *
+         *     `section_id` scopes this to one class. The review page is
+         *     per-section and its button counts only that section, so without the
+         *     scope a teacher would be billed for every other section of the same
+         *     homework.
          *
          *     The drain is kicked immediately rather than left to the next cron
          *     tick, because a teacher is standing there waiting. It is still only
@@ -9530,7 +9541,9 @@ export interface operations {
     };
     grade_pending_submissions_v1_teacher_assignments__assignment_id__grade_pending_post: {
         parameters: {
-            query?: never;
+            query?: {
+                section_id?: string | null;
+            };
             header?: never;
             path: {
                 assignment_id: string;

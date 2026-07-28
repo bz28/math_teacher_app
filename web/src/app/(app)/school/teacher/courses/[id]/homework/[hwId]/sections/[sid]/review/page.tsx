@@ -449,8 +449,19 @@ function HomeworkSectionReview({
                 (e) => e.student_id === focusStudentId && e.submission !== null,
               )
             : undefined;
-        const pick = focused ?? firstUnreleased ?? firstSubmitter;
-        if (pick) setSelectedStudentId(pick.student_id);
+        // Only auto-select on a FIRST load. This effect also re-runs on
+        // a post-grading refetch, and re-picking there would throw a
+        // teacher who was reading student #12 back to the first
+        // unreleased submitter — they pressed "Grade all", they didn't
+        // ask to be moved. Roster clicks don't write `?student=`, so
+        // `focused` can't preserve their place either.
+        setSelectedStudentId((current) => {
+          if (current && merged.some((e) => e.student_id === current)) {
+            return current;
+          }
+          const pick = focused ?? firstUnreleased ?? firstSubmitter;
+          return pick ? pick.student_id : current;
+        });
       })
       .catch((e) => {
         if (cancelled) return;
@@ -577,6 +588,15 @@ function HomeworkSectionReview({
   const needsEyesCount =
     roster?.filter((e) => e.submission && (isFlagged(e) || hasLowConfidence(e)))
       .length ?? 0;
+  // Ungraded MINUS anything already reported as needing eyes. The two
+  // sets overlap (integrity runs at confirm time, grading waits for the
+  // due date), so counting both raw reported one student twice — and
+  // disagreed with the triage list, which files them under "Needs your
+  // eyes". Header and roster must partition the class the same way.
+  const awaitingOnlyCount =
+    roster?.filter(
+      (e) => isAwaitingGrade(e) && !isFlagged(e) && !hasLowConfidence(e),
+    ).length ?? 0;
 
   // Mirror the server's recomputed grade back onto the roster row so
   // the left-list status/score updates the moment a save returns.
@@ -892,9 +912,7 @@ function HomeworkSectionReview({
   // section-scoped action would misdescribe what pressing it does.
   const ungradedInSection = useMemo(() => {
     if (!roster) return 0;
-    return roster.filter(
-      (e) => e.submission && e.submission.final_score === null,
-    ).length;
+    return roster.filter((e) => isAwaitingGrade(e)).length;
   }, [roster]);
   // Reviewed vs unopened split of the full to-release set (HW-wide).
   const toReleaseTotal = pendingTotal + dirtyTotal;
@@ -1005,7 +1023,7 @@ function HomeworkSectionReview({
     setGradingAll(true);
     setGradeAllError(null);
     try {
-      await teacher.gradePendingSubmissions(assignmentId);
+      await teacher.gradePendingSubmissions(assignmentId, sectionId);
       // The server kicks a drain immediately, but grading a class is
       // several seconds of LLM calls — so this refetch is a first look,
       // not a guarantee everything has landed. Anything still in flight
@@ -1018,7 +1036,7 @@ function HomeworkSectionReview({
     } finally {
       setGradingAll(false);
     }
-  }, [assignmentId]);
+  }, [assignmentId, sectionId]);
 
   const onPublishClick = useCallback(() => {
     if (unreviewedToPublishTotal === 0 && flaggedToPublishTotal === 0) {
@@ -1235,10 +1253,10 @@ function HomeworkSectionReview({
                   submission" would be shown routinely about work the AI
                   has not looked at. Never claim confidence in a verdict
                   that doesn't exist. */}
-              {ungradedInSection > 0 ? (
+              {awaitingOnlyCount > 0 ? (
                 <>
                   <b className="font-bold text-text-primary">
-                    {ungradedInSection}
+                    {awaitingOnlyCount}
                   </b>{" "}
                   not graded yet
                   {needsEyesCount > 0 ? (
@@ -1962,6 +1980,23 @@ function needsTeacher(entry: RosterEntry): boolean {
 // so this needs no extra fetch. Historical rows without a confidence
 // value contribute nothing, matching the always-on signal's neutral
 // treatment of null.
+/** Turned in, no grade yet, and a grade is genuinely still coming.
+ *
+ *  Deliberately NOT just `final_score === null`. An unreadable
+ *  submission also has no score, but the confirm path records the skip
+ *  and never enqueues it (`school_student_practice`), so no grade is on
+ *  its way and no `grading_jobs` row exists. Counting it as awaiting
+ *  made "Grade N ungraded" a permanent no-op — it moved zero jobs,
+ *  refetched to the identical state, and never disappeared. Its own
+ *  status pill already says "Couldn't read · grade manually"; the
+ *  grouping has to agree with the pill. */
+function isAwaitingGrade(entry: RosterEntry): boolean {
+  const sub = entry.submission;
+  if (!sub) return false;
+  if (sub.final_score !== null) return false;
+  return sub.ai_grading_status !== "skipped_unreadable";
+}
+
 function hasLowConfidence(entry: RosterEntry): boolean {
   const breakdown = entry.submission?.breakdown;
   if (!breakdown) return false;
@@ -2208,7 +2243,7 @@ function TriageRoster({
     // now that grading waits for the due date it would be the normal
     // state of a class all week. Never file work the AI hasn't seen
     // under a claim about the AI's confidence.
-    else if (e.submission.final_score === null) awaitingGrade.push(e);
+    else if (isAwaitingGrade(e)) awaitingGrade.push(e);
     else confident.push(e);
   }
   // Uncertainty-first: flagged (0) before low-confidence (1), then by

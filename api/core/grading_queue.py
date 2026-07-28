@@ -160,6 +160,7 @@ async def request_now(
     assignment_id: uuid.UUID,
     requested_by_id: uuid.UUID,
     submission_id: uuid.UUID | None = None,
+    section_id: uuid.UUID | None = None,
 ) -> int:
     """Teacher-triggered grading: pull work forward to the next drain.
 
@@ -198,6 +199,21 @@ async def request_now(
     )
     if submission_id is not None:
         stmt = stmt.where(GradingJob.submission_id == submission_id)
+    if section_id is not None:
+        # An assignment spans sections, and the review page is
+        # per-section: its button counts THIS section's ungraded work
+        # and says so. Without this filter the endpoint moved every
+        # queued job on the homework, so a teacher told "Grade 2
+        # ungraded" could be billed for the whole grade level. The
+        # label and the action have to describe the same thing.
+        stmt = stmt.where(
+            GradingJob.submission_id.in_(
+                select(Submission.id).where(
+                    Submission.assignment_id == assignment_id,
+                    Submission.section_id == section_id,
+                )
+            )
+        )
     result = cast("CursorResult[Any]", await db.execute(stmt))
     return int(result.rowcount or 0)
 
@@ -250,22 +266,45 @@ async def _reclaim_stale(db: AsyncSession) -> int:
     `failed` purely because deploys happened.
     """
     cutoff = _now() - timedelta(minutes=STALE_RUNNING_MINUTES)
-    result = cast("CursorResult[Any]", await db.execute(
+
+    # Out of budget: PARK, don't abandon. A submission that reliably
+    # outlives its worker (a hang, an oversized payload, a drain killed
+    # by a request timeout three times running) must not keep cycling
+    # and burning a call every pass. But it must not be left `running`
+    # either — nothing claims a `running` row and nothing revives one,
+    # so it would sit invisible and ungradeable forever, in the feature
+    # whose entire point is that work can't go missing. `failed` is
+    # terminal AND revivable by the teacher's own button.
+    parked = cast("CursorResult[Any]", await db.execute(
         update(GradingJob)
         .where(
             GradingJob.status == STATUS_RUNNING,
             GradingJob.started_at < cutoff,
-            # Without this, a submission that reliably outlives its
-            # worker (a hang, an oversized payload) cycles
-            # running -> stale -> queued forever, burning an LLM call
-            # every pass and never reaching a state anyone looks at.
-            # `_finish` can't cap it because `_finish` never runs on a
-            # job whose worker died.
-            GradingJob.attempts < MAX_ATTEMPTS,
+            GradingJob.attempts >= MAX_ATTEMPTS,
         )
-        .values(status=STATUS_QUEUED, started_at=None),
+        .values(
+            status=STATUS_FAILED,
+            finished_at=_now(),
+            last_error=(
+                "abandoned mid-grade after "
+                f"{MAX_ATTEMPTS} attempts — worker never reported back"
+            ),
+            updated_at=_now(),
+        ),
     ))
-    return int(result.rowcount or 0)
+
+    # Still in budget: back to the queue. Attempts is NOT incremented —
+    # the job never got its chance, and charging it for a deploy would
+    # park healthy work.
+    requeued = cast("CursorResult[Any]", await db.execute(
+        update(GradingJob)
+        .where(
+            GradingJob.status == STATUS_RUNNING,
+            GradingJob.started_at < cutoff,
+        )
+        .values(status=STATUS_QUEUED, started_at=None, updated_at=_now()),
+    ))
+    return int(parked.rowcount or 0) + int(requeued.rowcount or 0)
 
 
 async def _claim_due(db: AsyncSession, limit: int) -> list[GradingJob]:

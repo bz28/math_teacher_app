@@ -1566,9 +1566,11 @@ export const teacher = {
    *  Also revives anything that previously failed. Already-graded and
    *  in-flight submissions are left alone; `queued: 0` means there was
    *  simply nothing to do, which is not an error. */
-  gradePendingSubmissions(assignmentId: string) {
+  gradePendingSubmissions(assignmentId: string, sectionId: string) {
+    // Section-scoped on purpose: an assignment spans sections, and the
+    // review page counts (and promises) only this one.
     return apiFetch<{ status: string; queued: number }>(
-      `/teacher/assignments/${assignmentId}/grade-pending`,
+      `/teacher/assignments/${assignmentId}/grade-pending?section_id=${sectionId}`,
       { method: "POST" },
     );
   },

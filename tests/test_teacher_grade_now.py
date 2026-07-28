@@ -241,3 +241,82 @@ async def test_future_due_date_can_be_pulled_forward(
         assert job is not None
         assert job.status == STATUS_QUEUED
         assert job.scheduled_for <= datetime.now(UTC)  # type: ignore[operator]
+
+
+async def test_grade_all_is_scoped_to_the_section_it_was_clicked_from(
+    client: AsyncClient,
+) -> None:
+    """An assignment spans sections; the review page is per-section and
+    its button counts only that section. Without the scope, a teacher
+    told "Grade 2 ungraded" gets billed for every other section of the
+    same homework — and nothing ever tells them."""
+    from api.models.assignment import AssignmentSection
+    from api.models.section import Section
+    from api.models.user import User
+
+    world = await _seed_hw(n_submissions=1)
+    await _prepare(world, due_at=None)
+    mine = world["submission_ids"][0]
+
+    # A second section on the SAME homework, with its own student.
+    async with get_session_factory()() as s:
+        assignment = (await s.execute(
+            select(Assignment).where(Assignment.id == world["assignment_id"])
+        )).scalar_one()
+        other_section = Section(course_id=assignment.course_id, name="Period 2")
+        s.add(other_section)
+        await s.flush()
+        s.add(AssignmentSection(
+            assignment_id=assignment.id, section_id=other_section.id,
+        ))
+        other_student = User(
+            email=f"other_{uuid.uuid4().hex[:6]}@t.com",
+            password_hash="x", grade_level=8, role="student", name="O",
+        )
+        s.add(other_student)
+        await s.flush()
+        other_sub = Submission(
+            assignment_id=assignment.id, student_id=other_student.id,
+            section_id=other_section.id, status="submitted",
+            extraction=_EXTRACTION,
+        )
+        s.add(other_sub)
+        await s.flush()
+        other_id = other_sub.id
+        await enqueue_submission(s, other_id, assignment)
+        await s.commit()
+
+    with patch("api.core.grading_queue.drain", new=AsyncMock(return_value={})):
+        r = await client.post(
+            f"/v1/teacher/assignments/{world['assignment_id']}/grade-pending"
+            f"?section_id={world['section_id']}",
+            headers=_auth(world["teacher_token"]),
+        )
+
+    assert r.status_code == 200, r.text
+    # Only this section's work was pulled forward — the label and the
+    # action describe the same thing.
+    assert r.json()["queued"] == 1
+    assert (await _job(mine)).scheduled_for is not None  # type: ignore[union-attr]
+    assert (await _job(other_id)).scheduled_for is None  # type: ignore[union-attr]
+
+
+async def test_grade_now_rejects_a_hw_with_ai_grading_off(
+    client: AsyncClient,
+) -> None:
+    """Defence in depth. `_grade_one` re-reads the switch too, but the
+    endpoint gate had no coverage at all."""
+    world = await _seed_hw()
+    await _prepare(world, due_at=None)
+    async with get_session_factory()() as s:
+        assignment = (await s.execute(
+            select(Assignment).where(Assignment.id == world["assignment_id"])
+        )).scalar_one()
+        assignment.ai_grading_enabled = False
+        await s.commit()
+
+    r = await client.post(
+        f"/v1/teacher/submissions/{world['submission_ids'][0]}/grade-now",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 400

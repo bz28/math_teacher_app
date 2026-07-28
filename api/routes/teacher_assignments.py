@@ -1948,6 +1948,7 @@ async def unmark_submission_reviewed(
 @router.post("/assignments/{assignment_id}/grade-pending")
 async def grade_pending_submissions(
     assignment_id: uuid.UUID,
+    section_id: uuid.UUID | None = None,
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -1958,9 +1959,20 @@ async def grade_pending_submissions(
     moment that means "the class is in"), and a teacher who wants a head
     start before Friday shouldn't have to wait for the deadline.
 
-    Only moves `queued` jobs. A `running` one is already being handled
-    and a `done` one needs a regrade, not a re-queue — re-running either
-    would double-charge for the same work.
+    Moves `queued` jobs, and REVIVES `failed` ones with their retry
+    budget reset — otherwise `failed` is a dead end nothing escapes, and
+    a submission that ran out of retries during an API incident would
+    stay ungraded forever.
+
+    Leaves `running` alone (already in flight) and `done` alone (needs a
+    regrade, not a re-queue) — re-running either would double-charge.
+    Leaves `skipped` alone too: there is nothing gradeable there, so a
+    re-run would find the same nothing.
+
+    `section_id` scopes this to one class. The review page is
+    per-section and its button counts only that section, so without the
+    scope a teacher would be billed for every other section of the same
+    homework.
 
     The drain is kicked immediately rather than left to the next cron
     tick, because a teacher is standing there waiting. It is still only
@@ -1978,8 +1990,16 @@ async def grade_pending_submissions(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="AI grading is not enabled for this homework",
         )
+    # `section_id` scopes this to one class. The review page is
+    # per-section and its button says "Grade N ungraded" counting THIS
+    # section — so without the scope a teacher would be billed for every
+    # other section of the same homework too. Omitted = the whole
+    # homework, which is what a HW-level caller would mean.
     moved = await request_now(
-        db, assignment_id=assignment_id, requested_by_id=current_user.user_id,
+        db,
+        assignment_id=assignment_id,
+        requested_by_id=current_user.user_id,
+        section_id=section_id,
     )
     await db.commit()
     if moved:
