@@ -24,6 +24,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/overview", label: "Overview" },
       { to: "/llm-calls", label: "LLM calls" },
       { to: "/grading-quality", label: "Grading quality" },
+      { to: "/generation-quality", label: "Generation quality" },
       { to: "/quality", label: "Solution quality" },
       { to: "/harness-runs", label: "Harness runs" },
       { to: "/golden-set", label: "Generation QA" },

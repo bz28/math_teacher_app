@@ -10,6 +10,7 @@ import LLMCalls from "./pages/LLMCalls";
 import HarnessRuns from "./pages/HarnessRuns";
 import Quality from "./pages/Quality";
 import SessionQuality from "./pages/SessionQuality";
+import GenerationQuality from "./pages/GenerationQuality";
 import GradingQuality from "./pages/GradingQuality";
 import GoldenSet from "./pages/GoldenSet";
 import Users from "./pages/Users";
@@ -71,6 +72,7 @@ export default function App() {
           <Route path="/quality" element={<Quality />} />
           <Route path="/quality/:sessionId" element={<SessionQuality />} />
           <Route path="/grading-quality" element={<GradingQuality />} />
+          <Route path="/generation-quality" element={<GenerationQuality />} />
           <Route path="/golden-set" element={<GoldenSet />} />
           <Route
             path="/submissions/:submissionId/trace"

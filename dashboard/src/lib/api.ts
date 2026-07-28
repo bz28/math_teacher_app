@@ -359,6 +359,59 @@ export interface GoldenCaseCreate {
   rationale: string | null;
 }
 
+
+// ── Generation quality ───────────────────────────────────────────────
+// A generated question a teacher had to rewrite is the clearest signal
+// the generation prompt is wrong. `tracking_since` rides on every
+// response because these events are only recorded FORWARD — without it
+// an empty page would read as "no teacher has ever edited a question".
+
+export interface EditedQuestion {
+  id: string;
+  title: string;
+  question: string;
+  status: string;
+  source: string;
+  generation_prompt: string | null;
+  edit_count: number;
+  last_edited_at: string | null;
+}
+
+export interface EditedQuestionsData {
+  questions: EditedQuestion[];
+  total: number;
+  tracking_since: string;
+}
+
+export interface QuestionEditEntry {
+  id: string;
+  kind: string;
+  before: string | null;
+  after: string | null;
+  created_at: string;
+  editor: string | null;
+  school: string | null;
+}
+
+export interface QuestionEditHistory {
+  id: string;
+  title: string;
+  question: string;
+  final_answer: string | null;
+  status: string;
+  source: string;
+  generation_prompt: string | null;
+  edits: QuestionEditEntry[];
+  tracking_since: string;
+}
+
+export interface GenerationQualitySummary {
+  total_edits: number;
+  questions_touched: number;
+  by_kind: Record<string, number>;
+  tracking_since: string;
+}
+
 export const api = {
   overview: (params?: Record<string, string>) => request<OverviewData>("/admin/overview", params),
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
@@ -373,6 +426,12 @@ export const api = {
   quality: (params?: Record<string, string>) => request<QualityData>("/admin/quality", params),
   qualitySession: (sessionId: string) =>
     request<QualitySessionDetail>(`/admin/quality/${sessionId}`),
+  editedQuestions: (params?: Record<string, string>) =>
+    request<EditedQuestionsData>("/admin/generation-quality/questions", params),
+  questionEditHistory: (id: string) =>
+    request<QuestionEditHistory>(`/admin/generation-quality/questions/${id}`),
+  generationQualitySummary: (params?: Record<string, string>) =>
+    request<GenerationQualitySummary>("/admin/generation-quality/summary", params),
   gradingQuality: (params?: Record<string, string>) =>
     request<GradingQualityData>("/admin/grading-quality", params),
   gradingQualityOverrides: (params?: Record<string, string>) =>
