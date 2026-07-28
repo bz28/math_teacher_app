@@ -2205,6 +2205,41 @@ export interface paths {
         patch: operations["update_assignment_v1_teacher_assignments__assignment_id__patch"];
         trace?: never;
     };
+    "/v1/teacher/assignments/{assignment_id}/grade-pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grade Pending Submissions
+         * @description "Grade all" — grade everything turned in so far, right now.
+         *
+         *     The teacher's escape hatch from the schedule. Two cases need it: an
+         *     assignment with no due date never grades on its own (there is no
+         *     moment that means "the class is in"), and a teacher who wants a head
+         *     start before Friday shouldn't have to wait for the deadline.
+         *
+         *     Only moves `queued` jobs. A `running` one is already being handled
+         *     and a `done` one needs a regrade, not a re-queue — re-running either
+         *     would double-charge for the same work.
+         *
+         *     The drain is kicked immediately rather than left to the next cron
+         *     tick, because a teacher is standing there waiting. It is still only
+         *     an optimisation: the rows are already durable, so if this process
+         *     dies mid-drain the scheduled drain picks the work up anyway. That is
+         *     the whole reason the queue exists.
+         */
+        post: operations["grade_pending_submissions_v1_teacher_assignments__assignment_id__grade_pending_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/assignments/{assignment_id}/item-analysis": {
         parameters: {
             query?: never;
@@ -3410,6 +3445,35 @@ export interface paths {
         head?: never;
         /** Grade Submission */
         patch: operations["grade_submission_v1_teacher_submissions__submission_id__grade_patch"];
+        trace?: never;
+    };
+    "/v1/teacher/submissions/{submission_id}/grade-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grade Submission Now
+         * @description "Grade now" on one student's row.
+         *
+         *     Same escape hatch, one submission. Deliberately forfeits the shared
+         *     cached prefix — one call has nothing to share with — which is the
+         *     right trade when a teacher needs this student's grade in front of
+         *     them now. They are making that choice knowingly by clicking.
+         *
+         *     Returns `queued: 0` rather than erroring when there is nothing to
+         *     do (already graded, or already running). Nothing went wrong; the
+         *     grade is simply already on its way.
+         */
+        post: operations["grade_submission_now_v1_teacher_submissions__submission_id__grade_now_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/teacher/submissions/{submission_id}/mark-reviewed": {
@@ -9464,6 +9528,39 @@ export interface operations {
             };
         };
     };
+    grade_pending_submissions_v1_teacher_assignments__assignment_id__grade_pending_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     item_analysis_v1_teacher_assignments__assignment_id__item_analysis_get: {
         parameters: {
             query?: never;
@@ -11789,6 +11886,39 @@ export interface operations {
                 "application/json": components["schemas"]["GradeRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grade_submission_now_v1_teacher_submissions__submission_id__grade_now_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

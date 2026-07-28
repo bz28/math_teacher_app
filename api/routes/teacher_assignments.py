@@ -1,5 +1,6 @@
 """Teacher assignment management — CRUD + section assignment."""
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -184,6 +185,26 @@ async def _validate_units_in_course(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="One or more units do not belong to this course",
         )
+
+
+# Strong refs to in-flight drain kicks, so Python's GC can't collect a
+# running task mid-flight. Discarded on completion.
+_DRAIN_TASKS: set[asyncio.Task[Any]] = set()
+
+
+def _spawn_drain(drain: Any) -> None:
+    """Kick a drain now because a teacher is waiting on it.
+
+    Best-effort by design. The jobs are already committed, so if this
+    process dies before the drain finishes, the scheduled drain picks
+    the work up — losing this task costs latency, never the grade. That
+    is exactly the property the queue was built for, and it is why an
+    optimistic in-process kick is safe here when the original
+    fire-and-forget grading was not.
+    """
+    task = asyncio.create_task(drain())
+    _DRAIN_TASKS.add(task)
+    task.add_done_callback(_DRAIN_TASKS.discard)
 
 
 async def get_teacher_assignment(db: AsyncSession, assignment_id: uuid.UUID, teacher_id: uuid.UUID) -> Assignment:
@@ -1922,6 +1943,94 @@ async def unmark_submission_reviewed(
         )
         await db.commit()
     return {"status": "ok", "reviewed_at": None}
+
+
+@router.post("/assignments/{assignment_id}/grade-pending")
+async def grade_pending_submissions(
+    assignment_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """"Grade all" — grade everything turned in so far, right now.
+
+    The teacher's escape hatch from the schedule. Two cases need it: an
+    assignment with no due date never grades on its own (there is no
+    moment that means "the class is in"), and a teacher who wants a head
+    start before Friday shouldn't have to wait for the deadline.
+
+    Only moves `queued` jobs. A `running` one is already being handled
+    and a `done` one needs a regrade, not a re-queue — re-running either
+    would double-charge for the same work.
+
+    The drain is kicked immediately rather than left to the next cron
+    tick, because a teacher is standing there waiting. It is still only
+    an optimisation: the rows are already durable, so if this process
+    dies mid-drain the scheduled drain picks the work up anyway. That is
+    the whole reason the queue exists.
+    """
+    from api.core.grading_queue import drain, request_now
+
+    assignment = await get_teacher_assignment(
+        db, assignment_id, current_user.user_id,
+    )
+    if not assignment.ai_grading_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="AI grading is not enabled for this homework",
+        )
+    moved = await request_now(
+        db, assignment_id=assignment_id, requested_by_id=current_user.user_id,
+    )
+    await db.commit()
+    if moved:
+        _spawn_drain(drain)
+    return {"status": "ok", "queued": moved}
+
+
+@router.post("/submissions/{submission_id}/grade-now")
+async def grade_submission_now(
+    submission_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """"Grade now" on one student's row.
+
+    Same escape hatch, one submission. Deliberately forfeits the shared
+    cached prefix — one call has nothing to share with — which is the
+    right trade when a teacher needs this student's grade in front of
+    them now. They are making that choice knowingly by clicking.
+
+    Returns `queued: 0` rather than erroring when there is nothing to
+    do (already graded, or already running). Nothing went wrong; the
+    grade is simply already on its way.
+    """
+    from api.core.grading_queue import drain, request_now
+
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if not sub:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found",
+        )
+    assignment = await get_teacher_assignment(
+        db, sub.assignment_id, current_user.user_id,
+    )
+    if not assignment.ai_grading_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="AI grading is not enabled for this homework",
+        )
+    moved = await request_now(
+        db,
+        assignment_id=sub.assignment_id,
+        requested_by_id=current_user.user_id,
+        submission_id=submission_id,
+    )
+    await db.commit()
+    if moved:
+        _spawn_drain(drain)
+    return {"status": "ok", "queued": moved}
 
 
 @router.post("/submissions/{submission_id}/regrade")

@@ -12316,6 +12316,57 @@
         ]
       }
     },
+    "/v1/teacher/assignments/{assignment_id}/grade-pending": {
+      "post": {
+        "description": "\"Grade all\" \u2014 grade everything turned in so far, right now.\n\nThe teacher's escape hatch from the schedule. Two cases need it: an\nassignment with no due date never grades on its own (there is no\nmoment that means \"the class is in\"), and a teacher who wants a head\nstart before Friday shouldn't have to wait for the deadline.\n\nOnly moves `queued` jobs. A `running` one is already being handled\nand a `done` one needs a regrade, not a re-queue \u2014 re-running either\nwould double-charge for the same work.\n\nThe drain is kicked immediately rather than left to the next cron\ntick, because a teacher is standing there waiting. It is still only\nan optimisation: the rows are already durable, so if this process\ndies mid-drain the scheduled drain picks the work up anyway. That is\nthe whole reason the queue exists.",
+        "operationId": "grade_pending_submissions_v1_teacher_assignments__assignment_id__grade_pending_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assignment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assignment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Grade Pending Submissions V1 Teacher Assignments  Assignment Id  Grade Pending Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Grade Pending Submissions",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
     "/v1/teacher/assignments/{assignment_id}/item-analysis": {
       "get": {
         "description": "Per-problem performance across a homework's graded submissions.\n\nAggregates every graded breakdown, joining each entry to its problem\nby `problem_id` (= bank_item_id) rather than list position, so the\nteacher sees which problems the class struggled with most even when\ngrading/hydration reordered or dropped entries. Items are sorted\nworst-first (ascending avg_percent) but each carries its original\n`problem_index` so the UI can restore assignment order if it wants.\n\nDefensive throughout: an entry for a problem no longer in the\nassignment, a missing `score_status`/`problem_id`, or a null percent\nis skipped rather than raising \u2014 the endpoint never 500s on a\nmalformed grade row. An empty breakdown (`[]`, a retracted grade) is\nnot counted as graded.",
@@ -16289,6 +16340,57 @@
           }
         ],
         "summary": "Grade Submission",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/submissions/{submission_id}/grade-now": {
+      "post": {
+        "description": "\"Grade now\" on one student's row.\n\nSame escape hatch, one submission. Deliberately forfeits the shared\ncached prefix \u2014 one call has nothing to share with \u2014 which is the\nright trade when a teacher needs this student's grade in front of\nthem now. They are making that choice knowingly by clicking.\n\nReturns `queued: 0` rather than erroring when there is nothing to\ndo (already graded, or already running). Nothing went wrong; the\ngrade is simply already on its way.",
+        "operationId": "grade_submission_now_v1_teacher_submissions__submission_id__grade_now_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Grade Submission Now V1 Teacher Submissions  Submission Id  Grade Now Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Grade Submission Now",
         "tags": [
           "teacher"
         ]
