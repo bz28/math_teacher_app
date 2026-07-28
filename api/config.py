@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # to the admin "Harness Runs" tab over HTTPS. Empty token disables the
     # endpoint (503).
     harness_ingest_token: str = ""
+    # Shared secret for POST /internal/grading/drain. Empty disables
+    # the endpoint (503) rather than leaving it open — an unguarded
+    # drain lets anyone force every pending class to grade on demand.
+    grading_drain_token: str = ""
 
     # Improver — a static service key the scheduled LLM-defect scan presents
     # (X-Improver-Key) to the read-only defect endpoint. Admin JWTs expire in

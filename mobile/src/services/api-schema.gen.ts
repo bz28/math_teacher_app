@@ -1339,6 +1339,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/internal/grading/drain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Drain Grading Queue
+         * @description Run one drain pass; report what it did.
+         *
+         *     Returns per-pass counters (`reclaimed` / `claimed` / `assignments` /
+         *     `succeeded` / `failed`) so the caller's logs answer "did anything
+         *     happen, and did it work?" without a database session. A cron that
+         *     silently 200s while grading nothing is indistinguishable from a
+         *     healthy one otherwise.
+         */
+        post: operations["drain_grading_queue_v1_internal_grading_drain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/practice/check": {
         parameters: {
             query?: never;
@@ -3468,10 +3494,31 @@ export interface paths {
          *     until the teacher republishes, so students keep seeing the old
          *     grade until then.
          *
-         *     Re-runs extraction (one Vision call) rather than reading a cache:
-         *     the extraction snapshot lives on the integrity-check rows only for
-         *     probed problems; using the same code path as the submission
-         *     pipeline keeps behavior consistent.
+         *     Reuses the extraction already on the submission instead of paying
+         *     for another Vision call. `Submission.extraction` is written once by
+         *     the submit pipeline and the read is temperature-0, so re-reading the
+         *     same photo returns the same transcription at full price — the old
+         *     behavior burned roughly half the AI cost of a regrade to recompute a
+         *     value we had already stored. Vision only re-runs when nothing was
+         *     ever persisted (extraction failed or predates the column).
+         *
+         *     Grades the student-corrected view (`extraction_edits` overlaid), the
+         *     same as the submit pipeline does. Re-extracting used to discard those
+         *     corrections, so a regrade silently graded the raw Vision read while
+         *     the original grade had honored what the student said they wrote.
+         *
+         *     Known limitation this DOES make worse: the saved extraction's
+         *     `problem_position` tags are relative to the problem list as it stood
+         *     at extraction time. Those tags are already stale everywhere else that
+         *     reads `Submission.extraction` (the confirm-screen record, the teacher
+         *     review grouping, the integrity rows) — but regrade used to be the one
+         *     reader that healed them, because re-running Vision re-tagged against
+         *     the current problems. Reusing the stored extraction gives that up. It
+         *     only bites after an unpublish → edit problems → republish cycle, which
+         *     shifts positions; a regrade then attributes stored steps to the wrong
+         *     problem or drops them into "Other work". Worth its own fix (re-tag the
+         *     stored extraction against the current problem list); not worth paying
+         *     for a full Vision read on every regrade to paper over.
          */
         post: operations["regrade_submission_v1_teacher_submissions__submission_id__regrade_post"];
         delete?: never;
@@ -8182,6 +8229,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageExtractResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    drain_grading_queue_v1_internal_grading_drain_post: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                "x-grading-token"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
                 };
             };
             /** @description Validation Error */

@@ -10252,6 +10252,70 @@
         ]
       }
     },
+    "/v1/internal/grading/drain": {
+      "post": {
+        "description": "Run one drain pass; report what it did.\n\nReturns per-pass counters (`reclaimed` / `claimed` / `assignments` /\n`succeeded` / `failed`) so the caller's logs answer \"did anything\nhappen, and did it work?\" without a database session. A cron that\nsilently 200s while grading nothing is indistinguishable from a\nhealthy one otherwise.",
+        "operationId": "drain_grading_queue_v1_internal_grading_drain_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-grading-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Grading-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Drain Grading Queue V1 Internal Grading Drain Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Drain Grading Queue",
+        "tags": [
+          "internal"
+        ]
+      }
+    },
     "/v1/practice/check": {
       "post": {
         "description": "Check if a user's answer is correct.",
@@ -16347,7 +16411,7 @@
     },
     "/v1/teacher/submissions/{submission_id}/regrade": {
       "post": {
-        "description": "Re-run AI grading against the assignment's current rubric.\n\nIntended trigger: teacher edited the rubric after the AI first\ngraded, so `rubric_snapshot` differs from `assignment.rubric` \u2014\nthe review page surfaces a regrade CTA that calls this endpoint.\n\nOverride semantics: we replace the live `breakdown / final_score`\neven if the teacher had manually reviewed \u2014 the regrade is the\nteacher's explicit ask to throw out their edits and use the fresh\nAI pass against the updated rubric. `published_*` is untouched\nuntil the teacher republishes, so students keep seeing the old\ngrade until then.\n\nRe-runs extraction (one Vision call) rather than reading a cache:\nthe extraction snapshot lives on the integrity-check rows only for\nprobed problems; using the same code path as the submission\npipeline keeps behavior consistent.",
+        "description": "Re-run AI grading against the assignment's current rubric.\n\nIntended trigger: teacher edited the rubric after the AI first\ngraded, so `rubric_snapshot` differs from `assignment.rubric` \u2014\nthe review page surfaces a regrade CTA that calls this endpoint.\n\nOverride semantics: we replace the live `breakdown / final_score`\neven if the teacher had manually reviewed \u2014 the regrade is the\nteacher's explicit ask to throw out their edits and use the fresh\nAI pass against the updated rubric. `published_*` is untouched\nuntil the teacher republishes, so students keep seeing the old\ngrade until then.\n\nReuses the extraction already on the submission instead of paying\nfor another Vision call. `Submission.extraction` is written once by\nthe submit pipeline and the read is temperature-0, so re-reading the\nsame photo returns the same transcription at full price \u2014 the old\nbehavior burned roughly half the AI cost of a regrade to recompute a\nvalue we had already stored. Vision only re-runs when nothing was\never persisted (extraction failed or predates the column).\n\nGrades the student-corrected view (`extraction_edits` overlaid), the\nsame as the submit pipeline does. Re-extracting used to discard those\ncorrections, so a regrade silently graded the raw Vision read while\nthe original grade had honored what the student said they wrote.\n\nKnown limitation this DOES make worse: the saved extraction's\n`problem_position` tags are relative to the problem list as it stood\nat extraction time. Those tags are already stale everywhere else that\nreads `Submission.extraction` (the confirm-screen record, the teacher\nreview grouping, the integrity rows) \u2014 but regrade used to be the one\nreader that healed them, because re-running Vision re-tagged against\nthe current problems. Reusing the stored extraction gives that up. It\nonly bites after an unpublish \u2192 edit problems \u2192 republish cycle, which\nshifts positions; a regrade then attributes stored steps to the wrong\nproblem or drops them into \"Other work\". Worth its own fix (re-tag the\nstored extraction against the current problem list); not worth paying\nfor a full Vision read on every regrade to paper over.",
         "operationId": "regrade_submission_v1_teacher_submissions__submission_id__regrade_post",
         "parameters": [
           {

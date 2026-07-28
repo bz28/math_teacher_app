@@ -1,0 +1,478 @@
+"""The durable grading queue.
+
+Grading used to be an in-memory `asyncio.create_task` fired the moment a
+student confirmed their transcription. These pin the two things that
+replaced it, because both fail SILENTLY when they break — no exception,
+no error log, just money spent or work quietly never done:
+
+1. **Scheduling policy.** A NULL `scheduled_for` means "no due date —
+   wait for a teacher". If a drain ever treats NULL as due, it
+   auto-grades every no-due-date assignment on the platform, which is
+   exactly what the design promises not to do. The backfill parks the
+   entire pre-existing backlog at NULL, so this one guards a lot of rows.
+
+2. **Cache sequencing.** A class shares one cached prompt prefix, and a
+   prefix cannot be READ while it is still being WRITTEN. Fire thirty
+   calls at once and all thirty miss and pay full price. The first job of
+   an assignment must therefore finish before the rest start.
+
+Plus durability: a claimed job whose worker died has to come back, and a
+job that keeps failing has to park somewhere visible instead of cycling.
+"""
+
+import asyncio
+import uuid
+from datetime import UTC, datetime, timedelta
+from typing import Any
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from sqlalchemy import select
+
+from api.core.grading_queue import (
+    _claim_due,
+    _reclaim_stale,
+    drain,
+    enqueue_submission,
+    request_now,
+)
+from api.database import get_session_factory
+from api.models.assignment import Assignment, Submission
+from api.models.grading_job import (
+    MAX_ATTEMPTS,
+    STALE_RUNNING_MINUTES,
+    STATUS_FAILED,
+    STATUS_QUEUED,
+    STATUS_RUNNING,
+    GradingJob,
+)
+from tests.test_teacher_review_checkpoint import _seed_hw
+
+pytestmark = pytest.mark.asyncio
+
+_EXTRACTION: dict[str, Any] = {
+    "steps": [
+        {"step_num": 1, "problem_position": 1,
+         "latex": "x^2 - 5x + 6 = 0", "plain_english": ""},
+    ],
+    "final_answers": [
+        {"problem_position": 1, "answer_latex": "x=2,3", "answer_plain": ""},
+    ],
+    "confidence": 0.9,
+}
+
+
+async def _prepare(
+    assignment_id: uuid.UUID,
+    submission_ids: list[uuid.UUID],
+    *,
+    due_at: datetime | None,
+) -> None:
+    """Turn AI grading on, set (or clear) the due date, give every
+    submission an extraction so the grader has something to work with."""
+    async with get_session_factory()() as s:
+        assignment = (await s.execute(
+            select(Assignment).where(Assignment.id == assignment_id)
+        )).scalar_one()
+        assignment.ai_grading_enabled = True
+        assignment.due_at = due_at
+        for sid in submission_ids:
+            sub = (await s.execute(
+                select(Submission).where(Submission.id == sid)
+            )).scalar_one()
+            sub.extraction = _EXTRACTION
+        await s.commit()
+
+
+async def _enqueue(
+    assignment_id: uuid.UUID, submission_id: uuid.UUID, **kwargs: Any,
+) -> None:
+    async with get_session_factory()() as s:
+        assignment = (await s.execute(
+            select(Assignment).where(Assignment.id == assignment_id)
+        )).scalar_one()
+        await enqueue_submission(s, submission_id, assignment, **kwargs)
+        await s.commit()
+
+
+async def _teacher_id(assignment_id: uuid.UUID) -> uuid.UUID:
+    """_seed_hw doesn't hand back the teacher, and adding it there would
+    edit a fixture five other test modules depend on. Read it off the
+    assignment instead."""
+    async with get_session_factory()() as s:
+        return (await s.execute(
+            select(Assignment.teacher_id).where(Assignment.id == assignment_id)
+        )).scalar_one()
+
+
+async def _job(submission_id: uuid.UUID) -> GradingJob | None:
+    async with get_session_factory()() as s:
+        return (await s.execute(
+            select(GradingJob).where(GradingJob.submission_id == submission_id)
+        )).scalar_one_or_none()
+
+
+async def _all_jobs(assignment_id: uuid.UUID) -> list[GradingJob]:
+    async with get_session_factory()() as s:
+        return list((await s.execute(
+            select(GradingJob).where(GradingJob.assignment_id == assignment_id)
+        )).scalars().all())
+
+
+# ── Scheduling policy ────────────────────────────────────────────────
+
+
+async def test_due_date_schedules_the_class_for_that_moment() -> None:
+    world = await _seed_hw()
+    due = datetime.now(UTC) + timedelta(days=2)
+    await _prepare(world["assignment_id"], world["submission_ids"], due_at=due)
+
+    for sid in world["submission_ids"]:
+        await _enqueue(world["assignment_id"], sid)
+
+    for sid in world["submission_ids"]:
+        job = await _job(sid)
+        assert job is not None
+        assert job.status == STATUS_QUEUED
+        # Every submission on the HW lands on the SAME timestamp — that
+        # shared moment is what lets them share a cached prefix.
+        assert job.scheduled_for == due
+
+
+async def test_no_due_date_leaves_the_job_unscheduled() -> None:
+    world = await _seed_hw()
+    await _prepare(world["assignment_id"], world["submission_ids"], due_at=None)
+
+    sid = world["submission_ids"][0]
+    await _enqueue(world["assignment_id"], sid)
+
+    job = await _job(sid)
+    assert job is not None
+    assert job.status == STATUS_QUEUED
+    # NULL, not now(). There is no moment that means "the class is in",
+    # so this waits for a teacher rather than grading one kid at a time
+    # at full price.
+    assert job.scheduled_for is None
+
+
+async def test_drain_never_claims_an_unscheduled_job() -> None:
+    """The policy guard. If this ever fails, every no-due-date
+    assignment on the platform — including the entire backfilled
+    backlog — grades itself on the next cron tick."""
+    world = await _seed_hw()
+    await _prepare(world["assignment_id"], world["submission_ids"], due_at=None)
+    for sid in world["submission_ids"]:
+        await _enqueue(world["assignment_id"], sid)
+
+    async with get_session_factory()() as s:
+        claimed = await _claim_due(s, 100)
+    assert not (set(world["submission_ids"]) & {c.submission_id for c in claimed})
+
+    for sid in world["submission_ids"]:
+        job = await _job(sid)
+        assert job is not None
+        assert job.status == STATUS_QUEUED
+        assert job.attempts == 0
+
+
+async def test_future_schedule_is_not_claimed_until_it_passes() -> None:
+    world = await _seed_hw()
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    sid = world["submission_ids"][0]
+    await _enqueue(world["assignment_id"], sid)
+
+    async with get_session_factory()() as s:
+        claimed = await _claim_due(s, 100)
+    assert sid not in {c.submission_id for c in claimed}
+
+    # Move the due date into the past — a late submission, or simply the
+    # deadline arriving — and it becomes claimable.
+    async with get_session_factory()() as s:
+        job = (await s.execute(
+            select(GradingJob).where(GradingJob.submission_id == sid)
+        )).scalar_one()
+        job.scheduled_for = datetime.now(UTC) - timedelta(minutes=1)
+        await s.commit()
+
+    async with get_session_factory()() as s:
+        claimed = await _claim_due(s, 100)
+    assert sid in {c.submission_id for c in claimed}
+
+
+# ── Teacher overrides ────────────────────────────────────────────────
+
+
+async def test_grade_all_pulls_the_whole_assignment_forward() -> None:
+    world = await _seed_hw(n_submissions=3)
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) + timedelta(days=3),
+    )
+    for sid in world["submission_ids"]:
+        await _enqueue(world["assignment_id"], sid)
+
+    async with get_session_factory()() as s:
+        moved = await request_now(
+            s,
+            assignment_id=world["assignment_id"],
+            requested_by_id=await _teacher_id(world["assignment_id"]),
+        )
+        await s.commit()
+    assert moved == len(world["submission_ids"])
+
+    async with get_session_factory()() as s:
+        claimed = await _claim_due(s, 100)
+    assert {c.submission_id for c in claimed} >= set(world["submission_ids"])
+
+
+async def test_grade_now_pulls_only_that_student_forward() -> None:
+    world = await _seed_hw()
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) + timedelta(days=3),
+    )
+    for sid in world["submission_ids"]:
+        await _enqueue(world["assignment_id"], sid)
+
+    target = world["submission_ids"][0]
+    async with get_session_factory()() as s:
+        moved = await request_now(
+            s,
+            assignment_id=world["assignment_id"],
+            requested_by_id=await _teacher_id(world["assignment_id"]),
+            submission_id=target,
+        )
+        await s.commit()
+    assert moved == 1
+
+    async with get_session_factory()() as s:
+        claimed = await _claim_due(s, 100)
+    assert [c.submission_id for c in claimed] == [target]
+
+
+async def test_grade_now_works_on_an_unscheduled_job() -> None:
+    """The no-due-date path is manual-only, so the teacher button is the
+    ONLY way those ever grade. If this breaks, that work is unreachable."""
+    world = await _seed_hw()
+    await _prepare(world["assignment_id"], world["submission_ids"], due_at=None)
+    sid = world["submission_ids"][0]
+    await _enqueue(world["assignment_id"], sid)
+    assert (await _job(sid)).scheduled_for is None  # type: ignore[union-attr]
+
+    async with get_session_factory()() as s:
+        await request_now(
+            s,
+            assignment_id=world["assignment_id"],
+            requested_by_id=await _teacher_id(world["assignment_id"]),
+            submission_id=sid,
+        )
+        await s.commit()
+
+    async with get_session_factory()() as s:
+        claimed = await _claim_due(s, 100)
+    assert sid in {c.submission_id for c in claimed}
+
+
+async def test_reenqueue_is_idempotent_and_keeps_the_earlier_schedule() -> None:
+    world = await _seed_hw()
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) + timedelta(days=3),
+    )
+    sid = world["submission_ids"][0]
+    await _enqueue(world["assignment_id"], sid)
+
+    # Teacher says "grade this now"...
+    async with get_session_factory()() as s:
+        await request_now(
+            s,
+            assignment_id=world["assignment_id"],
+            requested_by_id=await _teacher_id(world["assignment_id"]),
+            submission_id=sid,
+        )
+        await s.commit()
+
+    # ...and then the submission is re-confirmed, which enqueues again
+    # with the assignment's future due date. The teacher's request must
+    # win: a re-confirm can't push work the teacher asked for back out
+    # to Friday.
+    await _enqueue(world["assignment_id"], sid)
+
+    assert len(await _all_jobs(world["assignment_id"])) == 1
+    job = await _job(sid)
+    assert job is not None
+    assert job.scheduled_for is not None
+    assert job.scheduled_for <= datetime.now(UTC)
+
+
+# ── Durability ───────────────────────────────────────────────────────
+
+
+async def test_a_job_whose_worker_died_is_reclaimed() -> None:
+    """The whole reason the queue exists. A deploy mid-grade used to
+    lose the work with no record; now the row is still `running` and the
+    next drain takes it back."""
+    world = await _seed_hw()
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) - timedelta(minutes=5),
+    )
+    sid = world["submission_ids"][0]
+    await _enqueue(world["assignment_id"], sid)
+
+    async with get_session_factory()() as s:
+        claimed = await _claim_due(s, 100)
+    assert sid in {c.submission_id for c in claimed}
+
+    # Simulate the worker vanishing: the row sits `running` past the
+    # stale cutoff with nobody working it.
+    async with get_session_factory()() as s:
+        job = (await s.execute(
+            select(GradingJob).where(GradingJob.submission_id == sid)
+        )).scalar_one()
+        job.started_at = datetime.now(UTC) - timedelta(
+            minutes=STALE_RUNNING_MINUTES + 1,
+        )
+        await s.commit()
+
+    async with get_session_factory()() as s:
+        reclaimed = await _reclaim_stale(s)
+        await s.commit()
+    # At least ours. Not an equality check: sibling tests in this session
+    # leave their own claimed rows behind, and a platform-wide counter
+    # would make this fail for reasons unrelated to what it tests.
+    assert reclaimed >= 1
+
+    job = await _job(sid)
+    assert job is not None
+    assert job.status == STATUS_QUEUED
+    assert job.started_at is None
+    # Attempts NOT incremented — the job never got its chance, and
+    # charging it for a deploy would eventually park healthy work.
+    assert job.attempts == 1
+
+
+async def test_a_fresh_running_job_is_not_stolen() -> None:
+    world = await _seed_hw()
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) - timedelta(minutes=5),
+    )
+    sid = world["submission_ids"][0]
+    await _enqueue(world["assignment_id"], sid)
+
+    async with get_session_factory()() as s:
+        await _claim_due(s, 100)
+
+    async with get_session_factory()() as s:
+        await _reclaim_stale(s)
+        await s.commit()
+
+    # The assertion that matters is about THIS job, not the count.
+    job = await _job(sid)
+    assert job is not None
+    assert job.status == STATUS_RUNNING
+
+
+async def test_repeated_failure_parks_the_job_instead_of_cycling() -> None:
+    world = await _seed_hw()
+    await _prepare(
+        world["assignment_id"], world["submission_ids"][:1],
+        due_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    sid = world["submission_ids"][0]
+    await _enqueue(world["assignment_id"], sid)
+
+    boom = AsyncMock(side_effect=RuntimeError("anthropic exploded"))
+    for _ in range(MAX_ATTEMPTS):
+        with patch(
+            "api.core.grading_ai.run_ai_grading_for_submission", new=boom,
+        ):
+            await drain()
+
+    job = await _job(sid)
+    assert job is not None
+    assert job.status == STATUS_FAILED
+    assert job.attempts == MAX_ATTEMPTS
+    assert job.last_error is not None
+    assert "anthropic exploded" in job.last_error
+    # Parked, not queued — so a genuinely ungradeable submission becomes
+    # visible instead of burning an LLM call every cron tick forever.
+    async with get_session_factory()() as s:
+        claimed = await _claim_due(s, 100)
+    assert sid not in {c.submission_id for c in claimed}
+
+
+# ── Cache sequencing ─────────────────────────────────────────────────
+
+
+async def test_first_job_of_an_assignment_finishes_before_the_rest_start() -> None:
+    """The saving depends on this ordering, and nothing else catches it.
+
+    The shared prompt prefix is written by the first call and read by the
+    others at a tenth of the price. A read cannot happen while the write
+    is still in flight, so firing the class off simultaneously makes
+    every call miss — same grades, full bill, no error anywhere.
+    """
+    # A real class, not one kid — the ordering only exists across a group.
+    world = await _seed_hw(n_submissions=3)
+    subs = world["submission_ids"]
+    assert len(subs) == 3
+    await _prepare(
+        world["assignment_id"], subs,
+        due_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    for sid in subs:
+        await _enqueue(world["assignment_id"], sid)
+
+    events: list[tuple[str, int]] = []
+    order = 0
+
+    async def _slow_grade(*args: Any, **kwargs: Any) -> None:
+        nonlocal order
+        order += 1
+        events.append(("start", order))
+        await asyncio.sleep(0.05)
+        order += 1
+        events.append(("end", order))
+
+    with patch(
+        "api.core.grading_ai.run_ai_grading_for_submission",
+        new=AsyncMock(side_effect=_slow_grade),
+    ):
+        result = await drain()
+
+    assert result["claimed"] == len(subs)
+    assert result["succeeded"] == len(subs)
+    # The first call must have CLOSED before any other opened. If the
+    # group were fanned out with gather(), the first two events would be
+    # start,start.
+    assert events[0][0] == "start"
+    assert events[1][0] == "end", (
+        f"first grade must complete before the rest begin, got {events[:4]}"
+    )
+
+
+async def test_drain_reports_what_it_did() -> None:
+    world = await _seed_hw(n_submissions=3)
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    for sid in world["submission_ids"]:
+        await _enqueue(world["assignment_id"], sid)
+
+    with patch(
+        "api.core.grading_ai.run_ai_grading_for_submission", new=AsyncMock(),
+    ):
+        result = await drain()
+
+    assert result["claimed"] == len(world["submission_ids"])
+    assert result["assignments"] == 1
+    assert result["failed"] == 0
+    # A cron that 200s while grading nothing must be distinguishable
+    # from a healthy one.
+    assert result["succeeded"] == len(world["submission_ids"])
