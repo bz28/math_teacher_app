@@ -6395,6 +6395,240 @@
         ]
       }
     },
+    "/v1/admin/generation-quality/questions": {
+      "get": {
+        "description": "Generated questions ranked by how much repair a teacher had to do.\n\n`min_edits` defaults to 1 rather than 0 on purpose: a question\nnobody touched is not evidence about the prompt, and including the\nwhole bank would bury the eleven rows that matter under thousands\nthat don't.",
+        "operationId": "edited_questions_v1_admin_generation_quality_questions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "teacher_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Teacher Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
+          },
+          {
+            "description": "manual | chat",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "manual | chat",
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_edits",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Min Edits",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Edited Questions V1 Admin Generation Quality Questions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Edited Questions",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/generation-quality/questions/{item_id}": {
+      "get": {
+        "description": "One question's full repair history, oldest first.\n\nThe diffs are the payload. A count tells you WHICH question to look\nat; only the before/after tells you what the prompt got wrong \u2014 and\nthat is the thing you can actually act on.",
+        "operationId": "question_edit_history_v1_admin_generation_quality_questions__item_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Question Edit History V1 Admin Generation Quality Questions  Item Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Question Edit History",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/generation-quality/summary": {
+      "get": {
+        "description": "Headline counters for the page's stat row.",
+        "operationId": "generation_quality_summary_v1_admin_generation_quality_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Generation Quality Summary V1 Admin Generation Quality Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Generation Quality Summary",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/generation/jobs": {
       "get": {
         "description": "Paginated list of a teacher's generation jobs with correlated cost.",

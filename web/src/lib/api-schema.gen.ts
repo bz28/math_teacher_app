@@ -110,6 +110,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/generation-quality/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Edited Questions
+         * @description Generated questions ranked by how much repair a teacher had to do.
+         *
+         *     `min_edits` defaults to 1 rather than 0 on purpose: a question
+         *     nobody touched is not evidence about the prompt, and including the
+         *     whole bank would bury the eleven rows that matter under thousands
+         *     that don't.
+         */
+        get: operations["edited_questions_v1_admin_generation_quality_questions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/generation-quality/questions/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Question Edit History
+         * @description One question's full repair history, oldest first.
+         *
+         *     The diffs are the payload. A count tells you WHICH question to look
+         *     at; only the before/after tells you what the prompt got wrong — and
+         *     that is the thing you can actually act on.
+         */
+        get: operations["question_edit_history_v1_admin_generation_quality_questions__item_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/generation-quality/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Generation Quality Summary
+         * @description Headline counters for the page's stat row.
+         */
+        get: operations["generation_quality_summary_v1_admin_generation_quality_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/generation/jobs": {
         parameters: {
             query?: never;
@@ -6045,6 +6114,111 @@ export interface operations {
             path: {
                 document_id: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edited_questions_v1_admin_generation_quality_questions_get: {
+        parameters: {
+            query?: {
+                teacher_id?: string | null;
+                school_id?: string | null;
+                /** @description manual | chat */
+                kind?: string | null;
+                min_edits?: number;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    question_edit_history_v1_admin_generation_quality_questions__item_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generation_quality_summary_v1_admin_generation_quality_summary_get: {
+        parameters: {
+            query?: {
+                school_id?: string | null;
+            };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
