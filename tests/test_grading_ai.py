@@ -8,6 +8,9 @@ grading judgment:
 - `_build_user_message` wraps student-controlled text in <student_work>
   delimiters so on-paper directives ("award full credit") land as content,
   not as instructions to the grader.
+- The prompt's cacheable/per-student split holds: the shared half (rubric +
+  questions + answer keys) stays byte-identical across a class, and no
+  student's work leaks into it.
 
 No LLM calls — pure functions in, dicts/strings out.
 """
@@ -16,7 +19,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from api.core.grading_ai import _build_breakdown, _build_user_message
+from api.core.grading_ai import (
+    _build_breakdown,
+    _build_system_prompt,
+    _build_user_message,
+)
 
 
 def _pos_to_bid(*positions: int) -> dict[int, str]:
@@ -379,6 +386,93 @@ class TestBuildUserMessageDelimiters:
         assert "<student_work>" in msg
         assert "</student_work>" in msg
         assert "(no work shown for this problem)" in msg
+
+
+class TestCacheablePrefixSplit:
+    """The grading prompt is split so an assignment's shared half (rubric +
+    every question + answer key) sits in the cached system prefix and only
+    the student's work goes in the user message.
+
+    These pin the split's two failure modes: student data leaking INTO the
+    prefix (which breaks the cache hit for every later submission, silently
+    — the grades still look right, the bill just doesn't drop), and the
+    question/answer key going missing from BOTH halves (which would leave
+    the grader with nothing to grade against)."""
+
+    def _problems(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "position": 1,
+                "question": "Solve x^2 - 5x + 6 = 0",
+                "final_answer": "x = 2 or x = 3",
+            },
+            {
+                "position": 2,
+                "question": "Differentiate f(x) = 3x^2",
+                "final_answer": "f'(x) = 6x",
+            },
+        ]
+
+    def _extraction(self, latex: str, answer: str) -> dict[str, Any]:
+        return {
+            "steps": [
+                {
+                    "step_num": 1,
+                    "latex": latex,
+                    "plain_english": "",
+                    "problem_position": 1,
+                },
+            ],
+            "final_answers": [{"answer_latex": answer, "problem_position": 1}],
+        }
+
+    def test_prefix_is_byte_identical_across_students(self) -> None:
+        # The whole point: two students on the same assignment must produce
+        # the same system prompt, or nothing after the first one hits cache.
+        problems = self._problems()
+        rubric = {"full_credit": "Correct final answer with work shown"}
+        assert _build_system_prompt(rubric, problems) == _build_system_prompt(
+            rubric, problems
+        )
+
+    def test_no_student_work_leaks_into_the_prefix(self) -> None:
+        problems = self._problems()
+        system = _build_system_prompt(None, problems)
+        for latex, answer in (("(x-2)(x-3)", "x=2"), ("QUADRATIC FORMULA", "x=3")):
+            msg = _build_user_message(self._extraction(latex, answer), problems)
+            assert latex in msg and latex not in system
+            assert answer in msg and answer not in system
+
+    def test_prefix_carries_every_question_and_answer_key(self) -> None:
+        problems = self._problems()
+        system = _build_system_prompt(None, problems)
+        for p in problems:
+            assert p["question"] in system
+            assert p["final_answer"] in system
+
+    def test_answer_key_is_not_duplicated_into_the_user_message(self) -> None:
+        # Repeating the key per student would re-send the expensive half at
+        # full price and defeat the split.
+        problems = self._problems()
+        msg = _build_user_message(self._extraction("(x-2)(x-3)", "x=2"), problems)
+        for p in problems:
+            assert p["question"] not in msg
+            assert p["final_answer"] not in msg
+
+    def test_both_halves_use_the_same_problem_numbering(self) -> None:
+        # Positions are the only link between the cached questions and the
+        # per-student work — if the headings drift, the grader pairs the
+        # wrong answer key with the wrong work.
+        problems = self._problems()
+        system = _build_system_prompt(None, problems)
+        msg = _build_user_message(self._extraction("(x-2)(x-3)", "x=2"), problems)
+        for p in problems:
+            assert f"## Problem {p['position']}" in system
+            assert f"## Problem {p['position']}" in msg
+
+    def test_missing_answer_key_renders_placeholder(self) -> None:
+        problems = [{"position": 1, "question": "Prove it", "final_answer": None}]
+        assert "(no answer key)" in _build_system_prompt(None, problems)
 
 
 class TestExtractorInjectionGuardrail:
