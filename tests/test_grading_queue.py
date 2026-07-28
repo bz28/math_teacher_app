@@ -37,13 +37,15 @@ from api.core.grading_queue import (
     request_now,
 )
 from api.database import get_session_factory
-from api.models.assignment import Assignment, Submission
+from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.grading_job import (
     MAX_ATTEMPTS,
     STALE_RUNNING_MINUTES,
+    STATUS_DONE,
     STATUS_FAILED,
     STATUS_QUEUED,
     STATUS_RUNNING,
+    STATUS_SKIPPED,
     GradingJob,
 )
 from tests.test_teacher_review_checkpoint import _seed_hw
@@ -103,6 +105,24 @@ async def _teacher_id(assignment_id: uuid.UUID) -> uuid.UUID:
         return (await s.execute(
             select(Assignment.teacher_id).where(Assignment.id == assignment_id)
         )).scalar_one()
+
+
+async def _fake_grade(
+    submission_id: uuid.UUID, extraction: Any, db: Any, **kwargs: Any,
+) -> None:
+    """Stand-in for the real grader that actually writes a grade row.
+
+    A bare AsyncMock isn't good enough any more: `_grade_one` now checks
+    that a grade genuinely landed before retiring the job, because
+    `run_ai_grading_for_submission` returns silently when the model hands
+    back an empty `grades` array — a paid-for call that produced nothing.
+    A mock that grades nothing is therefore indistinguishable from that
+    bug, and would make these tests assert the wrong outcome.
+    """
+    db.add(SubmissionGrade(
+        submission_id=submission_id, final_score=100.0, breakdown=[],
+    ))
+    await db.flush()
 
 
 async def _job(submission_id: uuid.UUID) -> GradingJob | None:
@@ -428,31 +448,35 @@ async def test_first_job_of_an_assignment_finishes_before_the_rest_start() -> No
     for sid in subs:
         await _enqueue(world["assignment_id"], sid)
 
-    events: list[tuple[str, int]] = []
-    order = 0
+    # drain() is platform-wide by design, so sibling tests' jobs ride
+    # along. Record which submission each event belongs to and look only
+    # at ours — otherwise this asserts on whatever ran first globally.
+    mine = set(subs)
+    events: list[tuple[str, uuid.UUID]] = []
 
-    async def _slow_grade(*args: Any, **kwargs: Any) -> None:
-        nonlocal order
-        order += 1
-        events.append(("start", order))
+    async def _slow_grade(
+        sub_id: uuid.UUID, extraction: Any, db: Any, **kwargs: Any,
+    ) -> None:
+        events.append(("start", sub_id))
         await asyncio.sleep(0.05)
-        order += 1
-        events.append(("end", order))
+        await _fake_grade(sub_id, extraction, db, **kwargs)
+        events.append(("end", sub_id))
 
     with patch(
         "api.core.grading_ai.run_ai_grading_for_submission",
         new=AsyncMock(side_effect=_slow_grade),
     ):
-        result = await drain()
+        await drain()
 
-    assert result["claimed"] == len(subs)
-    assert result["succeeded"] == len(subs)
-    # The first call must have CLOSED before any other opened. If the
-    # group were fanned out with gather(), the first two events would be
-    # start,start.
-    assert events[0][0] == "start"
-    assert events[1][0] == "end", (
-        f"first grade must complete before the rest begin, got {events[:4]}"
+    ours = [e for e in events if e[1] in mine]
+    assert len(ours) == 2 * len(subs), f"expected every submission graded, got {ours}"
+    # The first of OUR calls must have CLOSED before any other of ours
+    # opened. Fanned out with gather(), the first two would be
+    # start,start — and the cached prefix would be written by nobody and
+    # read by nobody.
+    assert ours[0][0] == "start"
+    assert ours[1][0] == "end", (
+        f"first grade must complete before the rest begin, got {ours[:4]}"
     )
 
 
@@ -466,13 +490,131 @@ async def test_drain_reports_what_it_did() -> None:
         await _enqueue(world["assignment_id"], sid)
 
     with patch(
-        "api.core.grading_ai.run_ai_grading_for_submission", new=AsyncMock(),
+        "api.core.grading_ai.run_ai_grading_for_submission",
+        new=AsyncMock(side_effect=_fake_grade),
     ):
         result = await drain()
 
-    assert result["claimed"] == len(world["submission_ids"])
-    assert result["assignments"] == 1
-    assert result["failed"] == 0
+    # Counters are platform-wide (one drain serves every school), so
+    # assert they ACCOUNT for our work rather than equal it exactly.
+    assert result["claimed"] >= len(world["submission_ids"])
+    assert result["assignments"] >= 1
+    assert result["succeeded"] >= len(world["submission_ids"])
     # A cron that 200s while grading nothing must be distinguishable
-    # from a healthy one.
-    assert result["succeeded"] == len(world["submission_ids"])
+    # from a healthy one, so every one of ours must be reflected.
+    for sid in world["submission_ids"]:
+        job = await _job(sid)
+        assert job is not None
+        assert job.status == STATUS_DONE
+
+
+# ── Guards added after cold review ───────────────────────────────────
+
+
+async def test_turning_ai_grading_off_after_submit_stops_the_bill() -> None:
+    """`ai_grading_enabled` is read at confirm time, but a teacher can
+    switch it off in the days before the due date. Billing them for a
+    grade they opted out of isn't defensible, so the drain re-checks."""
+    world = await _seed_hw()
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    sid = world["submission_ids"][0]
+    await _enqueue(world["assignment_id"], sid)
+
+    async with get_session_factory()() as s:
+        assignment = (await s.execute(
+            select(Assignment).where(Assignment.id == world["assignment_id"])
+        )).scalar_one()
+        assignment.ai_grading_enabled = False
+        await s.commit()
+
+    grader = AsyncMock(side_effect=_fake_grade)
+    with patch("api.core.grading_ai.run_ai_grading_for_submission", new=grader):
+        await drain()
+
+    grader.assert_not_awaited()
+    job = await _job(sid)
+    assert job is not None
+    assert job.status == STATUS_SKIPPED
+
+
+async def test_a_grader_that_returns_nothing_is_retried_not_retired() -> None:
+    """`run_ai_grading_for_submission` returns silently when the model
+    hands back an empty `grades` array — a paid-for call that produced
+    no grade. Marking that `done` retires the job forever and loses the
+    work, which is the precise failure the queue exists to prevent."""
+    world = await _seed_hw()
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    sid = world["submission_ids"][0]
+    await _enqueue(world["assignment_id"], sid)
+
+    # Grades nothing, raises nothing — exactly the silent-empty case.
+    with patch(
+        "api.core.grading_ai.run_ai_grading_for_submission", new=AsyncMock(),
+    ):
+        await drain()
+
+    job = await _job(sid)
+    assert job is not None
+    assert job.status == STATUS_QUEUED, "must retry, not retire"
+    assert job.attempts == 1
+    assert job.last_error is not None
+
+
+async def test_the_daily_cost_cap_does_not_burn_a_class_s_retries() -> None:
+    """The spend cap and the circuit breaker fire for EVERY job in
+    flight. Charging each an attempt would park whole classes in
+    `failed` after one bad afternoon — and nothing revives a failed
+    job."""
+    world = await _seed_hw()
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    sid = world["submission_ids"][0]
+    await _enqueue(world["assignment_id"], sid)
+
+    capped = AsyncMock(side_effect=RuntimeError("daily cost cap exceeded"))
+    for _ in range(MAX_ATTEMPTS + 2):
+        with patch(
+            "api.core.grading_ai.run_ai_grading_for_submission", new=capped,
+        ):
+            await drain()
+
+    job = await _job(sid)
+    assert job is not None
+    # Still retryable after more rounds than MAX_ATTEMPTS — the platform
+    # said "come back later", not "this one is broken".
+    assert job.status == STATUS_QUEUED
+    assert job.attempts == 0
+
+
+async def test_a_submission_with_no_extraction_is_skipped_not_marked_graded() -> None:
+    world = await _seed_hw()
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    sid = world["submission_ids"][0]
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == sid)
+        )).scalar_one()
+        sub.extraction = None
+        await s.commit()
+    await _enqueue(world["assignment_id"], sid)
+
+    with patch(
+        "api.core.grading_ai.run_ai_grading_for_submission", new=AsyncMock(),
+    ):
+        await drain()
+
+    job = await _job(sid)
+    assert job is not None
+    # `done` would assert a grade exists. It doesn't.
+    assert job.status == STATUS_SKIPPED

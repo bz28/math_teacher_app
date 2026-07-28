@@ -55,12 +55,18 @@ from api.database import Base
 # queued  — owed, waiting for `scheduled_for` (or for a teacher, if NULL).
 # running — claimed by a drain worker; `started_at` is when.
 # done    — graded. Terminal until a regrade resets the row.
+# skipped — closed with no grade, and none coming: no extraction, AI
+#           grading switched off after submit, or an unreadable photo.
+#           Terminal. Deliberately NOT `done` — `done` asserts a grade
+#           exists, so folding these in would make "is this class
+#           graded?" answer yes when it isn't.
 # failed  — exhausted `MAX_ATTEMPTS`; `last_error` says why. Terminal
 #           until a teacher retries, so a stuck job is visible rather
 #           than silently retrying forever.
 STATUS_QUEUED = "queued"
 STATUS_RUNNING = "running"
 STATUS_DONE = "done"
+STATUS_SKIPPED = "skipped"
 STATUS_FAILED = "failed"
 
 # A job is retried this many times before it parks in `failed`. Grading

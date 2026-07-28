@@ -33,7 +33,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_session_factory
-from api.models.assignment import Assignment, Submission
+from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.grading_job import (
     MAX_ATTEMPTS,
     STALE_RUNNING_MINUTES,
@@ -41,6 +41,7 @@ from api.models.grading_job import (
     STATUS_FAILED,
     STATUS_QUEUED,
     STATUS_RUNNING,
+    STATUS_SKIPPED,
     GradingJob,
 )
 
@@ -50,6 +51,21 @@ logger = logging.getLogger(__name__)
 # for an unbounded time and get killed halfway by a request timeout —
 # whatever is left is still queued and the next pass picks it up.
 DEFAULT_DRAIN_LIMIT = 200
+
+# Concurrent grades in flight. Each one holds a DB connection for the
+# whole Anthropic round trip, and the pool (10 + 20 overflow) is SHARED
+# with live teacher and student traffic — so this is a ceiling on how
+# much of the app's connection budget a drain may occupy, not a
+# throughput knob. Matches the limits the generation and diagnosis
+# pipelines already use for the same reason.
+_MAX_CONCURRENT_GRADES = 5
+_SLOTS = asyncio.Semaphore(_MAX_CONCURRENT_GRADES)
+
+# What actually happened to a job, which is not the same question as
+# "did the drain error". See `_finish`.
+_GRADED = "graded"    # a grade landed
+_SKIPPED = "skipped"  # nothing to grade, and nothing coming
+_FAILED = "failed"    # should have worked; retry or park
 
 
 def _now() -> datetime:
@@ -179,6 +195,13 @@ async def _reclaim_stale(db: AsyncSession) -> int:
         .where(
             GradingJob.status == STATUS_RUNNING,
             GradingJob.started_at < cutoff,
+            # Without this, a submission that reliably outlives its
+            # worker (a hang, an oversized payload) cycles
+            # running -> stale -> queued forever, burning an LLM call
+            # every pass and never reaching a state anyone looks at.
+            # `_finish` can't cap it because `_finish` never runs on a
+            # job whose worker died.
+            GradingJob.attempts < MAX_ATTEMPTS,
         )
         .values(status=STATUS_QUEUED, started_at=None),
     ))
@@ -232,24 +255,42 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> bool:
         run_ai_grading_for_submission,
     )
     from api.core.integrity_ai import UNREADABLE_THRESHOLD
+    from api.models.assignment import Assignment
 
     try:
+        # The connection is held across the Anthropic call below, so it
+        # is only taken once we're ready to make it — see `_SLOTS`.
         async with get_session_factory()() as db:
             sub = (await db.execute(
                 select(Submission).where(Submission.id == submission_id)
             )).scalar_one_or_none()
             if sub is None or sub.extraction is None:
-                await _finish(db, job_id, ok=True, error=None)
+                # Nothing gradeable and nothing coming: close the job as
+                # `skipped` rather than `done`. `done` would claim a
+                # grade exists.
+                await _finish(db, job_id, outcome=_SKIPPED, error=None)
                 await db.commit()
-                return True
+                return False
+
+            # Re-read the switch. It was checked at confirm time, but a
+            # teacher can turn AI grading off in the days between then
+            # and the due date — and if they have, billing them for a
+            # grade they opted out of is not a defensible thing to do.
+            assignment = (await db.execute(
+                select(Assignment).where(Assignment.id == sub.assignment_id)
+            )).scalar_one_or_none()
+            if assignment is None or not assignment.ai_grading_enabled:
+                await _finish(db, job_id, outcome=_SKIPPED, error=None)
+                await db.commit()
+                return False
 
             extraction = apply_extraction_edits(
                 sub.extraction, sub.extraction_edits,
             )
             if extraction is None:
-                await _finish(db, job_id, ok=True, error=None)
+                await _finish(db, job_id, outcome=_SKIPPED, error=None)
                 await db.commit()
-                return True
+                return False
 
             # Second line of defence. The submit pipeline already gates
             # on this and declines to queue an unreadable submission at
@@ -258,43 +299,123 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> bool:
             # Grade what's true now rather than what was true on Monday.
             if extraction.get("confidence", 0.0) < UNREADABLE_THRESHOLD:
                 await record_unreadable_grading_skip(submission_id, db)
-            else:
-                await run_ai_grading_for_submission(
-                    submission_id, extraction, db,
-                    user_id=str(sub.student_id),
+                await _finish(db, job_id, outcome=_SKIPPED, error=None)
+                await db.commit()
+                return False
+
+            await run_ai_grading_for_submission(
+                submission_id, extraction, db, user_id=str(sub.student_id),
+            )
+            # Did a grade actually land? `run_ai_grading_for_submission`
+            # returns silently when the model hands back an empty
+            # `grades` array — a call was paid for and nothing was
+            # produced. Marking that `done` retires the job forever and
+            # loses the work, which is the exact failure the queue
+            # exists to prevent. Treat it as a failure so it retries.
+            graded = (await db.execute(
+                select(SubmissionGrade.final_score)
+                .where(SubmissionGrade.submission_id == submission_id)
+            )).scalar_one_or_none()
+            if graded is None:
+                await _finish(
+                    db, job_id, outcome=_FAILED,
+                    error="grader returned no grades",
                 )
-            await _finish(db, job_id, ok=True, error=None)
+                await db.commit()
+                return False
+
+            await _finish(db, job_id, outcome=_GRADED, error=None)
             await db.commit()
             return True
     except Exception as exc:  # noqa: BLE001 — a failed job must park, not crash the drain
         logger.exception("grading job %s failed", job_id)
         try:
             async with get_session_factory()() as db:
-                await _finish(db, job_id, ok=False, error=str(exc)[:2000])
+                # An infrastructure stop — the daily cost cap tripping,
+                # or the LLM circuit breaker opening — is not this
+                # submission's fault, and it hits every job in the batch
+                # at once. Charging each of them an attempt would park
+                # whole classes in `failed` after one bad afternoon, and
+                # nothing revives a failed job. Record the error, leave
+                # the attempt uncharged, retry next drain.
+                await _finish(
+                    db, job_id,
+                    outcome=_FAILED,
+                    error=str(exc)[:2000],
+                    charge_attempt=not _is_infrastructure_stop(exc),
+                )
                 await db.commit()
         except Exception:  # noqa: BLE001
             logger.exception("could not record failure for grading job %s", job_id)
         return False
 
 
+def _is_infrastructure_stop(exc: BaseException) -> bool:
+    """Was this the platform saying "stop", rather than this submission
+    being ungradeable?
+
+    The daily spend cap and the LLM circuit breaker both raise plain
+    RuntimeErrors that fire for every job in flight. They mean "come back
+    later", not "this one is broken", so they must not burn the retry
+    budget of work that is perfectly gradeable tomorrow.
+    """
+    message = str(exc).lower()
+    return any(
+        marker in message
+        for marker in ("cost cap", "daily cap", "circuit breaker", "budget")
+    )
+
+
 async def _finish(
-    db: AsyncSession, job_id: uuid.UUID, *, ok: bool, error: str | None,
+    db: AsyncSession,
+    job_id: uuid.UUID,
+    *,
+    outcome: str,
+    error: str | None,
+    charge_attempt: bool = True,
 ) -> None:
-    """Close out a job. A failure below MAX_ATTEMPTS goes back to queued
-    so the next drain retries it; at the cap it parks in `failed` so a
-    genuinely ungradeable submission becomes visible instead of cycling
-    forever."""
+    """Close out a job.
+
+    Three outcomes, deliberately distinct:
+
+    - `_GRADED` — a grade landed. Terminal.
+    - `_SKIPPED` — there was nothing to grade and nothing is coming (no
+      extraction, AI grading switched off, unreadable). Terminal, but
+      NOT `done`: `done` asserts a grade exists, and something reading
+      this table to answer "is this class graded?" would be misled.
+    - `_FAILED` — it should have worked and didn't. Back to `queued` for
+      another go, or parked once the retry budget is spent.
+
+    `charge_attempt=False` is for platform-level stops (the daily spend
+    cap, the LLM circuit breaker) that hit every job in the batch at
+    once. Charging those would park entire classes in `failed` after one
+    bad afternoon, and nothing revives a failed job.
+    """
     job = (await db.execute(
         select(GradingJob).where(GradingJob.id == job_id)
     )).scalar_one_or_none()
     if job is None:
         return
-    if ok:
+
+    if outcome == _GRADED:
         job.status = STATUS_DONE
         job.finished_at = _now()
         job.last_error = None
         return
+    if outcome == _SKIPPED:
+        job.status = STATUS_SKIPPED
+        job.finished_at = _now()
+        job.last_error = None
+        return
+
     job.last_error = error
+    if not charge_attempt:
+        # Refund the attempt `_claim_due` took on the way in, so a
+        # platform stop costs nothing but time.
+        job.attempts = max(0, job.attempts - 1)
+        job.status = STATUS_QUEUED
+        job.started_at = None
+        return
     if job.attempts >= MAX_ATTEMPTS:
         job.status = STATUS_FAILED
         job.finished_at = _now()
@@ -318,10 +439,19 @@ async def _run_group(jobs: list[GradingJob]) -> tuple[int, int]:
     succeeded = 1 if ok else 0
     failed = 0 if ok else 1
 
+    async def _bounded(job: GradingJob) -> bool:
+        # Every in-flight grade holds a DB connection for the whole
+        # Anthropic round trip. The app's pool is 10 + 20 overflow and is
+        # SHARED with live teacher and student traffic, so an unbounded
+        # fan-out over a 30-student class starves the API and everyone
+        # gets pool timeouts while a drain runs. Same guard the
+        # generation and diagnosis pipelines already use.
+        async with _SLOTS:
+            return await _grade_one(job.id, job.submission_id)
+
     if rest:
         results = await asyncio.gather(
-            *(_grade_one(j.id, j.submission_id) for j in rest),
-            return_exceptions=False,
+            *(_bounded(j) for j in rest), return_exceptions=False,
         )
         succeeded += sum(1 for r in results if r)
         failed += sum(1 for r in results if not r)
