@@ -192,6 +192,63 @@ async def test_delete_school_with_full_hierarchy(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_delete_school_detaches_rather_than_destroys(
+    client: AsyncClient,
+) -> None:
+    """Pin the real blast radius, because the confirm dialog has to state it.
+
+    Every FK pointing at `schools.id` is ON DELETE SET NULL except
+    `teacher_invites`, which CASCADEs. So a delete does not destroy a
+    term's work — it DETACHES it. Students keep their accounts, the
+    course and its sections/assignments/submissions/grades all survive.
+
+    Two consequences worth pinning because they are invisible in the
+    UI and nobody would guess them from a button labelled "Delete":
+
+      * the course is orphaned — it still exists but belongs to no
+        school, so it drops out of every school-scoped view;
+      * `llm_calls.school_id` is nulled, so the school's historical
+        AI spend loses its attribution. In a console whose main job is
+        cost tracking, deleting a school quietly rewrites the past.
+    """
+    await _wipe()
+    seed = await _seed_full_school()
+
+    res = await client.delete(
+        f"/v1/admin/schools/{seed['school_id']}",
+        headers=auth_headers(str(seed["token"])),
+    )
+    assert res.status_code == 200, res.text
+
+    async with get_session_factory()() as s:
+        # The student's account survives, unlinked from the school.
+        student = (await s.execute(
+            select(User).where(User.id == seed["student_id"])
+        )).scalar_one_or_none()
+        assert student is not None, "deleting a school must not delete its students"
+        assert student.school_id is None
+
+        # The course survives but is orphaned — no school owns it.
+        course = (await s.execute(select(Course))).scalars().first()
+        assert course is not None, "the course must survive the school"
+        assert course.school_id is None, "the course is detached, not deleted"
+
+        # Student work is fully intact.
+        assert (await s.execute(select(Submission))).scalars().first() is not None
+        assert (await s.execute(select(SubmissionGrade))).scalars().first() is not None
+
+        # Cost history survives, but loses its school attribution.
+        call = (await s.execute(select(LLMCall))).scalars().first()
+        assert call is not None, "cost rows must not be destroyed"
+        assert call.school_id is None, (
+            "school attribution on historical spend is nulled by the delete"
+        )
+
+        # Pending invites are the one thing genuinely destroyed.
+        assert (await s.execute(select(TeacherInvite))).scalars().first() is None
+
+
+@pytest.mark.asyncio
 async def test_delete_missing_school_is_404(client: AsyncClient) -> None:
     """A school id that does not exist is a 404, not a 500."""
     await _wipe()

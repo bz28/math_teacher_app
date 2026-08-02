@@ -166,18 +166,62 @@ export default function SchoolDetail() {
     }
   };
 
+  // What a delete actually does, stated in the dialog.
+  //
+  // It used to say only "N teachers will be unlinked", which left an
+  // operator to guess at everything else — and the natural guess for a
+  // button labelled "Permanently delete" is that a term's work goes
+  // with it. It doesn't. Every FK to schools.id is ON DELETE SET NULL
+  // except teacher_invites, so the delete DETACHES rather than
+  // destroys (pinned in tests/test_admin_school_delete.py).
+  //
+  // The two non-obvious consequences are named because nothing else in
+  // the UI reveals them: the classes survive but belong to no school,
+  // and historical AI spend loses its school attribution — which in a
+  // console built for cost tracking means deleting a school quietly
+  // rewrites the reporting past.
   const handleDelete = async () => {
     if (!detail) return;
+    // Takes the plural form explicitly — "class" + "s" is "classs".
+    const plural = (n: number, one: string, many: string) =>
+      `${n} ${n === 1 ? one : many}`;
     if (!(await confirm({
       title: `Permanently delete ${detail.name}?`,
-      message: <><strong>{detail.teachers.length}</strong> teacher{detail.teachers.length === 1 ? "" : "s"} will be unlinked. This cannot be undone.</>,
-      confirmLabel: "Delete",
+      message: (
+        <>
+          <p style={{ margin: "0 0 8px" }}>
+            <strong>{plural(detail.teachers.length, "teacher", "teachers")}</strong> and{" "}
+            <strong>{plural(studentCount, "student", "students")}</strong> keep their
+            accounts, but are unlinked from this school.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            <strong>{plural(classCount, "class", "classes")}</strong> and all their
+            homework, submissions and grades survive — but detach from the
+            school and disappear from every school-scoped view.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            The school's AI spend stays in platform totals but is no longer
+            attributed to it.
+          </p>
+          <p style={{ margin: 0 }}>This cannot be undone.</p>
+        </>
+      ),
+      confirmLabel: "Delete school",
     }))) return;
     try {
       await api.deleteSchool(detail.id);
       navigate("/schools");
     } catch (err) {
-      toast((err as Error).message);
+      const message = (err as Error).message;
+      // A 404 here means the row is already gone — a double-click, or a
+      // retry after a response was lost. The delete the operator wanted
+      // has happened, so treat it as success rather than reporting a
+      // failure for a school that no longer exists.
+      if (/404|not found/i.test(message)) {
+        navigate("/schools");
+        return;
+      }
+      toast(message);
     }
   };
 
