@@ -114,6 +114,24 @@ async def users(
                     School.id == User.school_id,
                     School.kind == SCHOOL_KIND_INDIVIDUAL,
                 )
+                # `.correlate(User)` is load-bearing, not decoration.
+                #
+                # This filter is applied to several queries, and one of
+                # them (the row query) already outer-joins `schools`.
+                # SQLAlchemy's auto-correlation then treats School as
+                # belonging to the OUTER query and removes it from this
+                # subquery's FROM — leaving a SELECT with no FROM at
+                # all, which raises InvalidRequestError and 500s the
+                # request.
+                #
+                # That is the whole reason /teachers/independent has
+                # been failing: the page 500s, an unhandled 500 carries
+                # no CORS header, so the browser reports it as an
+                # unreachable server and the console blamed the host.
+                #
+                # Naming User as the ONLY correlated table keeps School
+                # in this subquery where it belongs.
+                .correlate(User)
                 .exists()
             )
         else:
