@@ -120,9 +120,14 @@ async def _seed() -> dict:
         await s.flush()
         s.add(AssignmentSection(assignment_id=hw.id, section_id=section.id))
 
-        for stu in (stu_a, stu_b):
+        # The teacher ALSO submits to their own assignment — the
+        # "try it as a student" pattern. Without this row the seed
+        # cannot tell a correct dedup from a plain sum, and a mutation
+        # replacing the dedup with `own + others` survives the suite.
+        for submitter in (stu_a, stu_b, teacher):
             sub = Submission(
-                assignment_id=hw.id, student_id=stu.id, section_id=section.id,
+                assignment_id=hw.id, student_id=submitter.id,
+                section_id=section.id,
             )
             s.add(sub)
             await s.flush()
@@ -169,10 +174,14 @@ async def test_teacher_impact_matches_what_the_delete_destroys(
 
     assert impact["role"] == "teacher"
     assert impact["assignments_destroyed"] == 1
-    assert impact["submissions_destroyed"] == 2
-    assert impact["grades_destroyed"] == 2
-    # The number that makes deleting a teacher dangerous: two students
-    # who are NOT being deleted lose their graded work.
+    # THREE submissions die (two students + the teacher's own), counted
+    # once each. Summing "the user's own" and "everything on their
+    # assignments" would say 4 — the teacher's row is in both sets.
+    assert impact["submissions_destroyed"] == 3
+    assert impact["grades_destroyed"] == 3
+    # The number that makes deleting a teacher dangerous, and it counts
+    # BYSTANDERS only: the teacher submitted too, but they are the one
+    # being deleted, so they are not affected — they are the cause.
     assert impact["students_affected"] == 2
 
     before = await _row_counts()
@@ -220,8 +229,8 @@ async def test_student_impact_is_only_their_own_work(client: AsyncClient) -> Non
 
     assert before["submissions"] - after["submissions"] == 1
     assert before["grades"] - after["grades"] == 1
-    # The other student's work is untouched.
-    assert after["submissions"] == 1
+    # Everyone else's work is untouched (student B + the teacher's own).
+    assert after["submissions"] == 2
     assert after["assignments"] == 1
 
 
@@ -295,8 +304,8 @@ async def test_deactivate_revokes_access_and_is_reversible(
     # And nothing was destroyed.
     counts = await _row_counts()
     assert counts["assignments"] == 1
-    assert counts["submissions"] == 2
-    assert counts["grades"] == 2
+    assert counts["submissions"] == 3
+    assert counts["grades"] == 3
 
     # Reversible.
     back = await client.patch(

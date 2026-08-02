@@ -12,7 +12,7 @@ from typing import Any
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import Date, cast, func, select
+from sqlalchemy import Date, cast, distinct, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import record_activity
@@ -861,52 +861,68 @@ async def delete_user_impact(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    # Assignments this user OWNS as a teacher. For a student this is
-    # empty, which is the whole reason the two roles are asked the same
-    # question and get very different answers.
-    owned_assignments = (await db.execute(
-        select(Assignment.id).where(Assignment.teacher_id == user_id)
-    )).scalars().all()
+    # ── Everything below stays INSIDE the database ──
+    #
+    # The first version of this pulled ids into Python and fed them back
+    # as `.in_(...)`. That breaks exactly where it hurts most: asyncpg
+    # caps a statement at 32,767 bind parameters, so a teacher with more
+    # submissions than that raised a 500 — and a failed preflight made
+    # the UI *less* careful, not more. The account whose deletion
+    # destroys the most work was the one that skipped the gate.
+    #
+    # Correlated subqueries have no parameter count, so the query cost
+    # is flat no matter how large the teacher.
+    owned_assignment_ids = (
+        select(Assignment.id).where(Assignment.teacher_id == user_id).scalar_subquery()
+    )
 
-    # Work that dies with those assignments — belonging to ANYONE.
-    others_submissions = 0
-    students_affected = 0
-    if owned_assignments:
-        others_submissions = (await db.execute(
-            select(func.count()).select_from(Submission)
-            .where(Submission.assignment_id.in_(owned_assignments))
-        )).scalar() or 0
-        students_affected = (await db.execute(
-            select(func.count(func.distinct(Submission.student_id)))
-            .where(
-                Submission.assignment_id.in_(owned_assignments),
-                Submission.student_id != user_id,
-            )
-        )).scalar() or 0
-
-    # Work that dies because it is the user's OWN (the student case).
-    own_submissions = (await db.execute(
-        select(func.count()).select_from(Submission)
-        .where(Submission.student_id == user_id)
+    assignments_destroyed = (await db.execute(
+        select(func.count()).select_from(Assignment)
+        .where(Assignment.teacher_id == user_id)
     )).scalar() or 0
 
-    # Grades are counted through submissions rather than assumed 1:1 —
-    # an ungraded submission has no grade row, so deriving the number
-    # would overstate what is actually lost.
-    submission_ids = set((await db.execute(
-        select(Submission.id).where(Submission.student_id == user_id)
-    )).scalars().all())
-    if owned_assignments:
-        submission_ids |= set((await db.execute(
-            select(Submission.id)
-            .where(Submission.assignment_id.in_(owned_assignments))
-        )).scalars().all())
-    grades_destroyed = 0
-    if submission_ids:
-        grades_destroyed = (await db.execute(
-            select(func.count()).select_from(SubmissionGrade)
-            .where(SubmissionGrade.submission_id.in_(submission_ids))
-        )).scalar() or 0
+    # Every submission that dies: the user's own, plus everything on the
+    # assignments they own.
+    #
+    # These two sets OVERLAP when a teacher submitted to their own
+    # assignment (the "try it as a student" pattern). The first version
+    # ran them as two counts and added them, which reported 3 where the
+    # delete actually destroyed 2. Overstating fails safe, but this
+    # endpoint's whole promise is that the number IS the damage.
+    #
+    # The fix is expressing the union as ONE predicate: a row either
+    # matches or it doesn't, so it can only be counted once. `distinct`
+    # is therefore redundant today and is kept only as a guard if a
+    # join is ever added here — it is not what makes this correct.
+    doomed_submissions = or_(
+        Submission.student_id == user_id,
+        Submission.assignment_id.in_(owned_assignment_ids),
+    )
+
+    submissions_destroyed = (await db.execute(
+        select(func.count(distinct(Submission.id))).where(doomed_submissions)
+    )).scalar() or 0
+
+    # Grades counted THROUGH submissions rather than assumed 1:1 — an
+    # ungraded submission has no grade row, so deriving the number would
+    # overstate what is actually lost.
+    grades_destroyed = (await db.execute(
+        select(func.count()).select_from(SubmissionGrade)
+        .where(SubmissionGrade.submission_id.in_(
+            select(Submission.id).where(doomed_submissions).scalar_subquery()
+        ))
+    )).scalar() or 0
+
+    # The number that makes deleting a teacher dangerous: OTHER people
+    # who lose work. Excludes the user themselves — they are being
+    # deleted, so they are not a bystander.
+    students_affected = (await db.execute(
+        select(func.count(distinct(Submission.student_id)))
+        .where(
+            Submission.assignment_id.in_(owned_assignment_ids),
+            Submission.student_id != user_id,
+        )
+    )).scalar() or 0
 
     enrollments = (await db.execute(
         select(func.count()).select_from(SectionEnrollment)
@@ -919,14 +935,9 @@ async def delete_user_impact(
         "email": user.email,
         "role": user.role,
         "is_active": user.is_active,
-        "assignments_destroyed": len(owned_assignments),
-        # Total submissions lost: the user's own plus everything on the
-        # assignments they own. A teacher who is also a student of
-        # nothing has no overlap, so a plain sum is exact here.
-        "submissions_destroyed": own_submissions + others_submissions,
+        "assignments_destroyed": assignments_destroyed,
+        "submissions_destroyed": submissions_destroyed,
         "grades_destroyed": grades_destroyed,
-        # The number that makes this dangerous: OTHER people who lose
-        # work when this account goes.
         "students_affected": students_affected,
         "enrollments_removed": enrollments,
     }

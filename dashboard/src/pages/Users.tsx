@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { api, type SchoolListItem, type UsersData } from "../lib/api";
+import { api, getUserId, type SchoolListItem, type UsersData } from "../lib/api";
 import { formatRelativeDate, fmtCost } from "../lib/format";
 import { activityPill, activityStatus, daysSince, windowLabel } from "../lib/definitions";
 import StatTile from "../components/StatTile";
@@ -82,7 +82,8 @@ type MenuAction =
  * already maps the synthetic individual school to null, so `school`
  * being set means a real institutional affiliation.
  */
-function menuActionsFor(u: UserRow): MenuAction[] {
+function menuActionsFor(u: UserRow, selfId: string | null): MenuAction[] {
+  const isSelf = selfId !== null && u.id === selfId;
   if (u.role !== "admin" && u.school) {
     return ["view-in-school", "make-admin"];
   }
@@ -99,7 +100,7 @@ function menuActionsFor(u: UserRow): MenuAction[] {
     .map((r) => `make-${r}` as MenuAction);
   const actions: MenuAction[] = ["view-calls", ...roleChanges, "toggle-plan"];
   if (u.subscription_tier !== "pro") actions.push("reset-limit");
-  actions.push("toggle-active", "delete");
+  if (!isSelf) actions.push("toggle-active", "delete");
   return actions;
 }
 
@@ -121,6 +122,10 @@ export default function Users() {
   const [offset, setOffset] = useState(0);
   const [schools, setSchools] = useState<SchoolListItem[]>([]);
 
+  // The console must not offer an admin destructive actions against
+  // their own account — the API 400s both, so the only outcome was an
+  // error toast for a control that should never have been there.
+  const selfId = getUserId();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
   const menuToggleRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -296,6 +301,9 @@ export default function Users() {
           </div>
           <div style={{ marginTop: 5, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
             {!role && <StatusPill tone={rb.tone} label={rb.label} />}
+            {!u.is_active && (
+              <StatusPill tone="neutral" label="DEACTIVATED" title="Access revoked — nothing deleted" />
+            )}
             {u.grade_level > 0 && (
               <span style={{ fontFamily: "var(--font-sans)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1.4, color: "var(--muted-2)" }}>
                 {gradeLabel(u.grade_level)}
@@ -509,7 +517,7 @@ export default function Users() {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {menuActionsFor(openUser).map((action) => {
+          {menuActionsFor(openUser, selfId).map((action) => {
             switch (action) {
               case "view-calls":
                 return (

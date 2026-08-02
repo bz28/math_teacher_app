@@ -46,13 +46,22 @@ export function ConfirmModal({
   const messageId = useId();
   const typedId = useId();
   const [typed, setTyped] = useState("");
-  // Trimmed, case-sensitive. Trimmed because a trailing space from a
-  // copy-paste is not a mistake worth blocking on; case-sensitive
-  // because matching a name loosely would let "delete" through for a
-  // teacher called "Delete", and the gate is only worth having if it
+  // BOTH sides trimmed, case-sensitive.
+  //
+  // Trimming only the typed side made the gate unsatisfiable whenever
+  // the target itself had surrounding whitespace — a roster-imported
+  // name like "Ms. Alvarez " could never be matched, not even by
+  // copy-pasting the label, so the action was permanently blocked.
+  // Case-sensitive because loose matching would let "delete" through
+  // for a teacher named "Delete"; the gate is only worth having if it
   // means what it says.
-  const gated = requireTypedConfirmation !== undefined;
-  const unlocked = !gated || typed.trim() === requireTypedConfirmation;
+  //
+  // A blank required string is treated as UNGATED rather than as a
+  // gate that is already open — an empty input box above an enabled
+  // Delete button reads as a gate the operator has somehow satisfied.
+  const required = requireTypedConfirmation?.trim() ?? "";
+  const gated = required.length > 0;
+  const unlocked = !gated || typed.trim() === required;
   const triggerRef = useRef<HTMLElement | null>(null);
   const onCancelRef = useRef(onCancel);
   // Always-fresh callback ref. Updated inside an effect (not in render)
@@ -112,7 +121,7 @@ export function ConfirmModal({
                 marginBottom: 6,
               }}
             >
-              Type <strong style={{ color: "var(--ink)" }}>{requireTypedConfirmation}</strong> to confirm
+              Type <strong style={{ color: "var(--ink)" }}>{required}</strong> to confirm
             </label>
             <input
               id={typedId}

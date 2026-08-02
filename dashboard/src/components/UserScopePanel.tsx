@@ -197,6 +197,23 @@ export default function UserScopePanel({
     }
   };
 
+  const handleToggleActive = async (
+    userId: string, email: string, nextActive: boolean,
+  ) => {
+    if (!nextActive && !(await confirm({
+      title: `Deactivate ${email}?`,
+      message: "They lose access immediately. Nothing is deleted, and you can reactivate them at any time.",
+      confirmLabel: "Deactivate",
+    }))) return;
+    try {
+      await api.setUserActive(userId, nextActive);
+      toast(nextActive ? `${email} reactivated.` : `${email} deactivated.`, "success");
+      reload();
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
+
   // Shared with the Users page and the school page — see
   // lib/deleteUserFlow. An independent teacher owns homework and
   // student submissions exactly like a school teacher does, so this
@@ -474,6 +491,11 @@ export default function UserScopePanel({
                             Reset daily limits
                           </button>
                         )}
+                        <button
+                          onClick={() => { setOpenMenu(null); handleToggleActive(u.id, u.email, !u.is_active); }}
+                        >
+                          {u.is_active ? "Deactivate" : "Reactivate"}
+                        </button>
                         <button
                           className="danger"
                           onClick={() => { setOpenMenu(null); handleDelete(u.id, u.email); }}

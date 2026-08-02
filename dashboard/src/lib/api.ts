@@ -123,6 +123,18 @@ export function getUserRole(): string | null {
   }
 }
 
+/** The signed-in admin's own user id (JWT `sub`), or null. */
+export function getUserId(): string | null {
+  const token = getAccessToken();
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.sub ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Refresh-token rotation ─────────────────────────────────────────
 //
 // Before this, the dashboard had no refresh logic at all — any 401

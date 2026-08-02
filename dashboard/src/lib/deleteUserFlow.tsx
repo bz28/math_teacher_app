@@ -70,31 +70,43 @@ export async function confirmAndDeleteUser(
   try {
     impact = await api.userDeleteImpact(userId);
   } catch {
-    // The preflight is an enhancement, not a gate. If it fails we must
-    // not silently fall through to a friction-free delete, so this
-    // takes the CAUTIOUS branch: confirm with the damage unknown,
-    // stated as unknown.
     impact = null;
   }
 
   const label = impact?.name || impact?.email || fallbackLabel;
 
+  // ── Unknown damage is treated as the WORST case, not the best ──
+  //
+  // This branch used to be a one-click "Delete anyway" — strictly LESS
+  // friction than the known-damage path. That inverted the whole
+  // design: the preflight is most likely to fail on the biggest
+  // accounts (it is the heaviest query), so the teacher whose deletion
+  // destroys the most work was the one who skipped the gate.
+  //
+  // An unknown number is not a small number. It gets the same typed
+  // confirmation as known damage.
   if (!impact) {
     if (!(await confirm({
-      title: `Delete ${label}?`,
+      title: `Permanently delete ${label}?`,
       message: (
         <>
           <p style={{ margin: "0 0 8px" }}>
-            We couldn't check what this deletion would destroy.
+            <strong>We couldn't check what this would destroy.</strong>
           </p>
-          <p style={{ margin: 0 }}>
+          <p style={{ margin: "0 0 8px" }}>
             If this is a teacher, deleting them also permanently deletes
             every homework they created and every student submission and
-            grade on it. This cannot be undone.
+            grade on it — work belonging to students who are not being
+            deleted.
+          </p>
+          <p style={{ margin: 0 }}>
+            Deactivating instead revokes access and keeps everything.
+            This cannot be undone.
           </p>
         </>
       ),
       confirmLabel: "Delete anyway",
+      requireTypedConfirmation: label,
     }))) return false;
     await api.deleteUser(userId);
     return true;
@@ -104,10 +116,17 @@ export async function confirmAndDeleteUser(
   if (!hasImpact(impact)) {
     if (!(await confirm({
       title: `Delete ${label}?`,
+      // Deliberately narrower than "nothing else is attached". The
+      // preflight counts homework, submissions and grades; it does NOT
+      // count every table that cascades off a user (tutoring work,
+      // uploaded documents, practice activity). Claiming "nothing" was
+      // asserting something this endpoint cannot see — the exact
+      // defect this whole dialog exists to stop.
       message: (
         <>
-          <strong>{impact.email}</strong> will be removed permanently.
-          Nothing else is attached to this account. This cannot be undone.
+          <strong>{impact.email}</strong> will be removed permanently. No
+          homework, submissions or grades are attached to this account.
+          This cannot be undone.
         </>
       ),
       confirmLabel: "Delete",
