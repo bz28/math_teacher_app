@@ -34,8 +34,8 @@ import uuid
 import pytest
 from fastapi import APIRouter
 from httpx import AsyncClient
-from starlette.testclient import TestClient
 from sqlalchemy import text
+from starlette.testclient import TestClient
 
 from api.config import settings
 from api.core.auth import create_access_token, hash_password
