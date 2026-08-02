@@ -27,17 +27,15 @@ responses carry `TRACKING_SINCE`; the UI shows "tracking began …".
 
 ## One row per edit, keyed by kind
 
-Two ways a question changes are recorded, at the two route call sites
+The three ways a question changes are recorded at the route call sites
 that perform them (NOT inside `snapshot_history`, which only fills the
 one-level undo):
 
 - `manual`     — teacher edited the fields directly (PATCH)
 - `chat`       — teacher accepted a proposal from the workshop agent
-
-`regenerate` is defined but not yet wired — a teacher rejecting the
-output outright is arguably the purest prompt-quality signal, so it is
-worth adding, and its absence should not be mistaken for "no one
-regenerates".
+- `regenerate` — teacher threw the output out and asked for a fresh
+  attempt. The least ambiguous verdict of the three: they did not try
+  to repair it.
 
 `before`/`after` hold the question text only. Not the whole item: the
 question is what the prompt produced and what the teacher judged, and

@@ -123,6 +123,7 @@ export default function GenerationQuality() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<QuestionEditHistory | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -156,13 +157,18 @@ export default function GenerationQuality() {
     }
     let cancelled = false;
     setDetailLoading(true);
+    setDetailError(null);
     api
       .questionEditHistory(openId)
       .then((d) => {
         if (!cancelled) setDetail(d);
       })
-      .catch(() => {
-        if (!cancelled) setDetail(null);
+      .catch((e) => {
+        if (cancelled) return;
+        setDetail(null);
+        setDetailError(
+          e instanceof Error ? e.message : "Couldn't load this question",
+        );
       })
       .finally(() => {
         if (!cancelled) setDetailLoading(false);
@@ -311,14 +317,39 @@ export default function GenerationQuality() {
         onRetry={() => void load()}
         defaultSort={{ key: "edit_count", dir: "desc" }}
         empty={
-          <div className="gq-empty">
-            <p className="gq-empty-head">No repairs recorded yet.</p>
-            <p>
-              Either the generated questions are landing well, or nobody has
-              edited one since counting began. Come back after a few rounds of
-              generation.
-            </p>
-          </div>
+          // Two different zeros. "Nothing matches your filters" and
+          // "nothing has ever been recorded" are opposite facts, and
+          // showing the second while the tiles above count repairs was
+          // the same lie this page exists to avoid.
+          minEdits > 1 || kind ? (
+            <div className="gq-empty">
+              <p className="gq-empty-head">No questions match these filters.</p>
+              <p>
+                There are repairs recorded — just none matching what you asked
+                for.{" "}
+                <button
+                  type="button"
+                  className="gq-linkish"
+                  onClick={() => {
+                    setMinEdits(1);
+                    setKind("");
+                  }}
+                >
+                  Clear the filters
+                </button>{" "}
+                to see everything.
+              </p>
+            </div>
+          ) : (
+            <div className="gq-empty">
+              <p className="gq-empty-head">No repairs recorded yet.</p>
+              <p>
+                Either the generated questions are landing well, or nobody has
+                edited one since counting began. Come back after a few rounds of
+                generation.
+              </p>
+            </div>
+          )
         }
       />
 
@@ -330,6 +361,21 @@ export default function GenerationQuality() {
           maxWidth={760}
         >
           {detailLoading && <p className="gq-loading">Loading…</p>}
+          {!detailLoading && detailError && (
+            /* An empty modal with a title and nothing in it reads as
+               "this question has no history", which is a different and
+               wrong claim. Name the failure and offer the way out. */
+            <div className="gq-loading" role="alert">
+              <p>{detailError}</p>
+              <button
+                type="button"
+                className="gq-retry"
+                onClick={() => setOpenId((id) => (id ? `${id}` : id))}
+              >
+                Try again
+              </button>
+            </div>
+          )}
           {!detailLoading && detail && (
             <div className="gq-detail">
               {/* The prompt first. It's the thing you actually change once

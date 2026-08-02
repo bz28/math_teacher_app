@@ -2777,3 +2777,17 @@ table.dt tr:last-child td { border-bottom: none; }
   .gq-detail { padding: 20px 18px 24px; }
   .gq-step-when { margin-left: 0; }
 }
+
+.gq-retry, .gq-linkish {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--info);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.gq-retry { margin-top: 10px; display: inline-block; font-weight: 650; }
+.gq-retry:focus-visible, .gq-linkish:focus-visible {
+  outline: 2px solid var(--info); outline-offset: 2px;
+}

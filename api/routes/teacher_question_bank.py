@@ -31,7 +31,7 @@ from api.middleware.auth import CurrentUser, get_current_user_full, require_teac
 from api.middleware.rate_limit import limiter
 from api.models.course import Course
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
-from api.models.question_edit import EDIT_CHAT, EDIT_MANUAL
+from api.models.question_edit import EDIT_CHAT, EDIT_MANUAL, EDIT_REGENERATE
 from api.models.user import User
 from api.routes.teacher_assignments import get_teacher_assignment
 from api.routes.teacher_courses import get_teacher_course
@@ -698,6 +698,15 @@ async def regenerate_bank_item(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Regeneration failed: {e}",
         ) from e
+
+    # A teacher hitting regenerate is the LEAST ambiguous verdict that
+    # the generated question was bad — stronger evidence than a wording
+    # tweak, because they threw the whole thing out rather than repair
+    # it. It was the one signal the generation-quality page didn't get,
+    # which biased the ranking toward questions teachers bothered to
+    # fix and away from the ones they gave up on.
+    await record_question_edit(db, item, EDIT_REGENERATE, current_user)
+    await db.commit()
     return _serialize_item(item, await used_in_for_item(db, item))
 
 
