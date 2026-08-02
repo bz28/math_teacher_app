@@ -271,6 +271,29 @@ async function download(path: string, params?: Record<string, string>): Promise<
   URL.revokeObjectURL(url);
 }
 
+/**
+ * What deleting an account would destroy. Fetched before the confirm
+ * dialog so the operator is shown the real damage rather than a
+ * generic "this can't be undone".
+ *
+ * `students_affected` is the one that matters: deleting a TEACHER
+ * cascades through their assignments into every submission and grade
+ * on them, so the people who lose work are usually not the person
+ * being deleted.
+ */
+export interface UserDeleteImpact {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+  assignments_destroyed: number;
+  submissions_destroyed: number;
+  grades_destroyed: number;
+  students_affected: number;
+  enrollments_removed: number;
+}
+
 export interface HarnessRun {
   id: string;
   probe: string;
@@ -453,6 +476,14 @@ export const api = {
     request<DocumentContent>(`/admin/documents/${id}/content`),
   updateUserRole: (userId: string, role: string) => mutate<{ status: string }>(`/admin/users/${userId}/role`, "PATCH", { role }),
   deleteUser: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}`, "DELETE"),
+  /** What a delete would destroy — asked before showing the confirm. */
+  userDeleteImpact: (userId: string) =>
+    request<UserDeleteImpact>(`/admin/users/${userId}/delete-impact`),
+  /** The reversible alternative: revoke access, keep the work. */
+  setUserActive: (userId: string, isActive: boolean) =>
+    mutate<{ status: string; is_active: boolean }>(
+      `/admin/users/${userId}/active`, "PATCH", { is_active: isActive },
+    ),
   updateUserSubscription: (userId: string, tier: string, status: string) =>
     mutate<{ status: string }>(`/admin/users/${userId}/subscription`, "PATCH", { tier, status }),
   resetDailyLimit: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}/reset-daily-limit`, "POST"),
@@ -1075,6 +1106,8 @@ export interface UsersData {
     name: string;
     role: string;
     grade_level: number;
+    /** False when an admin has revoked access without deleting. */
+    is_active: boolean;
     session_count: number;
     total_cost: number;
     llm_call_count: number;

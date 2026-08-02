@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
-import { btnGhost, btnPrimary, overlay } from "../lib/styles";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { btnGhost, btnPrimary, inputStyle, overlay } from "../lib/styles";
 
 /**
  * Lightweight confirmation modal replacing browser `confirm()`. The
@@ -29,6 +29,7 @@ export function ConfirmModal({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   variant = "danger",
+  requireTypedConfirmation,
   onConfirm,
   onCancel,
 }: {
@@ -37,11 +38,21 @@ export function ConfirmModal({
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: "danger" | "primary";
+  requireTypedConfirmation?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
   const titleId = useId();
   const messageId = useId();
+  const typedId = useId();
+  const [typed, setTyped] = useState("");
+  // Trimmed, case-sensitive. Trimmed because a trailing space from a
+  // copy-paste is not a mistake worth blocking on; case-sensitive
+  // because matching a name loosely would let "delete" through for a
+  // teacher called "Delete", and the gate is only worth having if it
+  // means what it says.
+  const gated = requireTypedConfirmation !== undefined;
+  const unlocked = !gated || typed.trim() === requireTypedConfirmation;
   const triggerRef = useRef<HTMLElement | null>(null);
   const onCancelRef = useRef(onCancel);
   // Always-fresh callback ref. Updated inside an effect (not in render)
@@ -90,11 +101,48 @@ export function ConfirmModal({
         <div id={messageId} style={{ fontSize: 13.5, color: "var(--muted)", lineHeight: 1.5, marginBottom: 18 }}>
           {message}
         </div>
+        {gated && (
+          <div style={{ marginBottom: 18 }}>
+            <label
+              htmlFor={typedId}
+              style={{
+                display: "block",
+                fontSize: 12,
+                color: "var(--muted)",
+                marginBottom: 6,
+              }}
+            >
+              Type <strong style={{ color: "var(--ink)" }}>{requireTypedConfirmation}</strong> to confirm
+            </label>
+            <input
+              id={typedId}
+              autoFocus
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && unlocked) onConfirm();
+              }}
+              style={{ ...inputStyle, width: "100%" }}
+            />
+          </div>
+        )}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button autoFocus={variant === "danger"} onClick={onCancel} style={btnGhost}>
+          <button
+            autoFocus={variant === "danger" && !gated}
+            onClick={onCancel}
+            style={btnGhost}
+          >
             {cancelLabel}
           </button>
-          <button autoFocus={variant !== "danger"} onClick={onConfirm} style={confirmStyle}>
+          <button
+            autoFocus={variant !== "danger" && !gated}
+            onClick={onConfirm}
+            disabled={!unlocked}
+            style={{
+              ...confirmStyle,
+              ...(unlocked ? {} : { opacity: 0.45, cursor: "not-allowed" }),
+            }}
+          >
             {confirmLabel}
           </button>
         </div>

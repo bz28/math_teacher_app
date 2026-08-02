@@ -9,6 +9,7 @@ import DataTable, { type Column } from "../components/DataTable";
 import { Pagination, SearchInput } from "../components/Pagination";
 import { InviteAdminForm } from "../components/InviteAdminForm";
 import { useConfirm } from "../lib/confirm";
+import { confirmAndDeleteUser } from "../lib/deleteUserFlow";
 import { useToast } from "../lib/toast";
 
 type UserRow = UsersData["users"][number];
@@ -59,6 +60,7 @@ type MenuAction =
   | "toggle-plan"
   | "reset-limit"
   | "resend-invite"
+  | "toggle-active"
   | "revoke-invite"
   | "delete";
 
@@ -97,7 +99,7 @@ function menuActionsFor(u: UserRow): MenuAction[] {
     .map((r) => `make-${r}` as MenuAction);
   const actions: MenuAction[] = ["view-calls", ...roleChanges, "toggle-plan"];
   if (u.subscription_tier !== "pro") actions.push("reset-limit");
-  actions.push("delete");
+  actions.push("toggle-active", "delete");
   return actions;
 }
 
@@ -240,14 +242,30 @@ export default function Users() {
     catch (e) { toast((e as Error).message); }
   };
 
+  // Delegates to the shared flow so this page, the school page and the
+  // independent-users panel all gate a delete the same way. The old
+  // dialog here said only "will be removed permanently", which for a
+  // teacher understated it by every homework they ever wrote plus
+  // every student submission and grade on it.
   const handleDelete = async (userId: string, email: string) => {
-    if (!(await confirm({
-      title: "Delete user?",
-      message: <><strong>{email}</strong> will be removed permanently. This can't be undone.</>,
-      confirmLabel: "Delete",
+    try {
+      if (await confirmAndDeleteUser(confirm, userId, email)) reload();
+    } catch (e) { toast((e as Error).message); }
+  };
+
+  const handleToggleActive = async (
+    userId: string, email: string, nextActive: boolean,
+  ) => {
+    if (!nextActive && !(await confirm({
+      title: `Deactivate ${email}?`,
+      message: "They lose access immediately. Nothing is deleted, and you can reactivate them at any time.",
+      confirmLabel: "Deactivate",
     }))) return;
-    try { await api.deleteUser(userId); reload(); }
-    catch (e) { toast((e as Error).message); }
+    try {
+      await api.setUserActive(userId, nextActive);
+      toast(nextActive ? `${email} reactivated.` : `${email} deactivated.`, "success");
+      reload();
+    } catch (e) { toast((e as Error).message); }
   };
 
   // ── Derived stat band ──────────────────────────────────────────────
@@ -537,6 +555,18 @@ export default function Users() {
                 return (
                   <button key={action} className="danger" onClick={() => { setOpenMenu(null); handleRevokeInvite(openUser.id, openUser.email); }}>
                     Revoke invite
+                  </button>
+                );
+              case "toggle-active":
+                return (
+                  <button
+                    key={action}
+                    onClick={() => {
+                      setOpenMenu(null);
+                      handleToggleActive(openUser.id, openUser.email, !openUser.is_active);
+                    }}
+                  >
+                    {openUser.is_active ? "Deactivate" : "Reactivate"}
                   </button>
                 );
               case "delete":
