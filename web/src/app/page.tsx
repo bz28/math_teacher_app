@@ -19,8 +19,13 @@ export default function Home() {
         <Hero />
         <HomeIntegrity />
         <HomeWorkspace />
+        {/* No eyebrow. Every section on this page opened with the same
+            small uppercase label, which is most of why four different
+            arguments read as one shape repeated — and the headline
+            carries its own weight without one. The prop stays on
+            CtaBand because /for-districts and the subject pages still
+            pass it; this is a homepage decision, not a component one. */}
         <CtaBand
-          eyebrow="Ready when you are"
           headline="Bring Veradic to your school."
           subhead="Book a 20-minute walkthrough — we'll show you the whole loop on your own material and get your classes set up."
           primaryLabel="Book a demo"

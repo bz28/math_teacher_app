@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { motion, MotionConfig } from "framer-motion";
-import { Eyebrow } from "./eyebrow";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 const rise = {
@@ -34,10 +33,7 @@ export function Hero() {
           animate="show"
           variants={{ show: { transition: { staggerChildren: 0.09, delayChildren: 0.05 } } }}
         >
-          <motion.div variants={rise}>
-            <Eyebrow>For teachers</Eyebrow>
-          </motion.div>
-          <h1 className="mt-7 tracking-[-0.025em] text-[color:var(--color-text)] [font-size:clamp(2.75rem,5.8vw,4.75rem)] [line-height:1.05] [text-wrap:balance]">
+          <h1 className="tracking-[-0.025em] text-[color:var(--color-text)] [font-size:clamp(2.75rem,5.8vw,4.75rem)] [line-height:1.05] [text-wrap:balance]">
             <motion.span className="block font-bold pb-2" variants={rise}>
               Your students already have AI.
             </motion.span>
