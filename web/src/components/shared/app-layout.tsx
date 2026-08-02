@@ -380,7 +380,16 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Mobile header for teachers — paper-2 warm cream, hairline-bottom. */}
-      <div className="flex flex-1 flex-col md:min-w-0">
+      {/* `min-w-0` at EVERY width, not just md+.
+          A flex item defaults to min-width:auto, which refuses to shrink
+          below its content's intrinsic width. Scoping the override to
+          md: meant that on a phone the widest child — a roster row, a
+          long homework title — silently widened the entire shell:
+          measured 587px inside a 390px viewport on /school/teacher, so
+          the header, the nav and every row scrolled sideways. Mobile is
+          exactly where the constraint is tightest, so it is the last
+          place the release valve should be switched off. */}
+      <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border-light bg-[color:var(--color-surface-alt-2)]/90 px-4 backdrop-blur-md md:hidden">
           <Link href="/school/teacher" className="flex items-center gap-2">
             <LogoMark size={28} />

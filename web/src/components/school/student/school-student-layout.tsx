@@ -33,7 +33,10 @@ export function SchoolStudentLayout({ children }: { children: React.ReactNode })
         onClose={() => setDrawerOpen(false)}
       />
 
-      <div className="flex flex-1 flex-col md:min-w-0">
+      {/* min-w-0 at every width — see the same fix in shared/app-layout.
+          Scoped to md:, a flex item keeps min-width:auto on phones and
+          the widest child widens the whole shell. */}
+      <div className="flex min-w-0 flex-1 flex-col">
         {/* Mobile header — hamburger opens the drawer, keeps sign-out
             reachable as a last-resort action. Warm-paper bg matches
             the teacher mobile header. */}

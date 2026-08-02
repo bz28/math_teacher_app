@@ -211,16 +211,37 @@ function QueueRow({ item, first }: { item: NeedsAttentionItem; first: boolean })
         <StatusPill tone={chip.tone} label={chip.label} icon={chip.icon} />
       </div>
 
+      {/* The name is what a teacher scans; on a phone it was the thing
+          that lost. A 94px pill and a fixed 112px due column left about
+          100px for the identity, so every row read "Ava Alv… / Slope …"
+          — a triage queue that can't tell you who or what.
+          Below sm the two fixed columns stand down: the course name
+          drops (the assignment title and period already identify the
+          work) and the due joins the meta line, which hands the name
+          roughly 240px and renders it in full. From sm up the original
+          four-column row is untouched. */}
       <div className="min-w-0 flex-1">
         <p className="truncate font-serif text-[17px] leading-tight tracking-[-0.01em] text-text-primary transition-colors group-hover:text-primary">
           {item.student_name}
         </p>
         <p className="mt-0.5 truncate text-[12.5px] text-text-secondary">
           <span className="font-medium text-text-primary">{item.assignment_title}</span>
-          <span aria-hidden className="mx-1.5 text-[color:var(--color-border)]">·</span>
-          {item.course_name}
+          <span aria-hidden className="mx-1.5 hidden text-[color:var(--color-border)] sm:inline">·</span>
+          <span className="hidden sm:inline">{item.course_name}</span>
           <span aria-hidden className="mx-1.5 text-[color:var(--color-border)]">·</span>
           {item.section_name}
+          {/* On a phone the due only earns its space when the pill is
+              NOT already saying OVERDUE. Printing both spent the room
+              the period label needed, so a row read
+              "Slope & Intercepts · Perio…" while announcing lateness
+              twice. When it isn't overdue the pill carries no timing,
+              so the due is the only signal and stays. */}
+          {due && !due.overdue && (
+            <span className="sm:hidden">
+              <span aria-hidden className="mx-1.5 text-[color:var(--color-border)]">·</span>
+              {due.text}
+            </span>
+          )}
         </p>
       </div>
 
@@ -228,7 +249,7 @@ function QueueRow({ item, first }: { item: NeedsAttentionItem; first: boolean })
         <SubjectChip subject={item.subject} />
       </div>
 
-      <div className="w-[112px] shrink-0 text-right">
+      <div className="hidden w-[112px] shrink-0 text-right sm:block">
         {due && (
           <span
             className={`font-mono text-[12px] ${
