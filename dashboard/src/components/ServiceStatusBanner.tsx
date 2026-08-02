@@ -10,11 +10,40 @@ import { apiHealth } from "../lib/api";
 //
 // useSyncExternalStore keeps React subscribed to the apiHealth flag
 // without the setState-in-effect cascading-render footgun.
+//
+// ── On not naming a cause we can't observe ──
+//
+// This banner used to read "Either Railway is down or the service is
+// restarting — check Railway status." The client cannot know that. All
+// it observed was a `fetch` that never got a response, which is equally
+// consistent with the operator's wifi dropping, DNS, a VPN, a captive
+// portal, or a bad API base URL. Naming Railway sent an operator to a
+// status page that was green and cost them the actual diagnosis.
+//
+// So the copy now states the observation ("no response") and offers
+// both branches, with the one thing the browser genuinely does know
+// promoted to its own case: `navigator.onLine === false` is reliable
+// in the negative direction — if the browser says it has no network,
+// it doesn't. (The reverse is not true, which is why "online" still
+// gets the ambiguous message rather than a confident "it's the server".)
 
 const getSnapshot = () => apiHealth.isDown();
 
+// Browser connectivity, as an external store so the banner re-renders
+// the moment the machine goes offline or comes back.
+const subscribeOnline = (fn: () => void) => {
+  window.addEventListener("online", fn);
+  window.addEventListener("offline", fn);
+  return () => {
+    window.removeEventListener("online", fn);
+    window.removeEventListener("offline", fn);
+  };
+};
+const getOnlineSnapshot = () => navigator.onLine;
+
 export default function ServiceStatusBanner() {
   const down = useSyncExternalStore(apiHealth.subscribe, getSnapshot);
+  const online = useSyncExternalStore(subscribeOnline, getOnlineSnapshot);
   if (!down) return null;
   return (
     <div
@@ -56,19 +85,31 @@ export default function ServiceStatusBanner() {
             }}
           />
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            <strong style={{ fontWeight: 600 }}>Can't reach the backend.</strong>{" "}
-            <span style={{ color: "var(--ink-soft)" }}>
-              Either Railway is down or the service is restarting — check{" "}
-              <a
-                href="https://status.railway.com"
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: "var(--accent)", textDecoration: "underline" }}
-              >
-                Railway status
-              </a>
-              .
-            </span>
+            {online ? (
+              <>
+                <strong style={{ fontWeight: 600 }}>No response from the backend.</strong>{" "}
+                <span style={{ color: "var(--ink-soft)" }}>
+                  This is either your connection or the service itself — if
+                  other sites load, check{" "}
+                  <a
+                    href="https://status.railway.com"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: "var(--accent)", textDecoration: "underline" }}
+                  >
+                    Railway status
+                  </a>
+                  .
+                </span>
+              </>
+            ) : (
+              <>
+                <strong style={{ fontWeight: 600 }}>You're offline.</strong>{" "}
+                <span style={{ color: "var(--ink-soft)" }}>
+                  Reconnect and the console will pick up where it left off.
+                </span>
+              </>
+            )}
           </span>
         </div>
         <button
