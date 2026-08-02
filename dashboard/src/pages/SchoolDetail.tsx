@@ -758,6 +758,16 @@ function TeacherBlock({
           >
             {teacher.name || "—"}
           </Link>
+          {/* Access state has to be visible on the roster itself. The
+              only other signal is the Deactivate/Reactivate button
+              label, which you have to read one row at a time — so
+              "who has been switched off here?" was unanswerable at a
+              glance on the page that answers everything else. */}
+          {!teacher.is_active && (
+            <span style={{ marginLeft: 8, verticalAlign: "middle" }}>
+              <StatusPill tone="neutral" label="DEACTIVATED" title="Access revoked — nothing deleted" />
+            </span>
+          )}
           <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {teacher.email}
           </div>
@@ -885,7 +895,14 @@ const studentCols = (
     width: "40%",
     render: (s) => (
       <div style={{ minWidth: 0 }}>
-        <div style={{ color: "var(--ink)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis" }}>{s.name || "—"}</div>
+        <div style={{ color: "var(--ink)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis" }}>
+          {s.name || "—"}
+          {!s.is_active && (
+            <span style={{ marginLeft: 6, verticalAlign: "middle" }}>
+              <StatusPill tone="neutral" label="DEACTIVATED" title="Access revoked — nothing deleted" />
+            </span>
+          )}
+        </div>
         <div style={{ fontSize: 11.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis" }}>{s.email}</div>
       </div>
     ),
