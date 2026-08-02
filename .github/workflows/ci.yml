@@ -3,8 +3,19 @@ name: CI
 on:
   push:
     branches: [main]
+  # Every PR, not just PRs into main.
+  #
+  # This was `branches: [main]` from the first CI commit, back when
+  # every PR went straight to main. That stopped being true once we
+  # started stacking: a PR based on another PR's branch matched none
+  # of the filters, so it got NO backend, dashboard or mobile run at
+  # all — it sat there looking unverified-but-fine, and would have
+  # merged on nothing but its author's say-so.
+  #
+  # Omitting `branches` is also the GitHub default; the filter was the
+  # deliberate part. Duplicate runs aren't a concern here because the
+  # `push` trigger is still limited to main.
   pull_request:
-    branches: [main]
 
 jobs:
   prod-deps-smoke:
