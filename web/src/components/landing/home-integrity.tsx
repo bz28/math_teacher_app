@@ -14,6 +14,16 @@ import { IntegrityInterview } from "./integrity-interview";
  * interview being a 600px card marooned in a 1152px container with the
  * headline towering over it. The demo IS the argument here — it should not
  * be the smallest thing in its own section.
+ *
+ * Splits at xl, not lg. At 1024 the demo column came out at 472px, narrower
+ * than the 600 it had before the split existed, and "answer correct" wrapped
+ * onto a second line inside the verdict card. 1024 is iPad-landscape and an
+ * ordinary laptop window, so it stacks there and splits only where the demo
+ * genuinely gains room.
+ *
+ * `items-start` is right for reading order, but the reason first given for it
+ * was backwards: once the verdict card resolves the DEMO column is the taller
+ * one, not the text.
  */
 export function HomeIntegrity() {
   return (
@@ -23,7 +33,7 @@ export function HomeIntegrity() {
       style={{ background: "radial-gradient(125% 88% at 50% 0%, #0C3325 0%, #08231A 55%, #061812 100%)" }}
     >
       <div className="mx-auto w-full max-w-6xl px-6 py-16 md:px-8 md:py-24">
-        <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)] lg:gap-16">
+        <div className="grid items-start gap-12 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)] xl:gap-16">
           {/* The argument. Left-anchored, not centred — a centred column
               sitting beside an artifact gives the eye two competing axes. */}
           <div className="max-w-xl">

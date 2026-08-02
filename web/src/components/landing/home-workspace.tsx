@@ -8,12 +8,14 @@ import { HomeworkFlow } from "./homework-flow";
  * (contrast beat after the dark integrity section above).
  *
  * Third distinct stance on the page, deliberately: the hero is centred, the
- * integrity section is split, this one is left-anchored with the demo widened
- * beneath it. The flow demo is a document — a problem sheet with a
- * worked-solution drawer — so it earns width in a way the chat transcript in
- * the section above does not; it runs to 880px rather than the old 600, which
- * is where the step rail and the sheet start to drift apart. Not edge to edge:
- * a document that spans a 1152px section stops reading as a document.
+ * integrity section is split, this one is left-anchored — heading and demo
+ * sharing one left edge.
+ *
+ * It briefly ran at 880px on the theory that the demo "is a document". That
+ * was wrong for half of it: Refine and Publish read better wide, but Review
+ * strands each row's difficulty tag hundreds of pixels from its text, and
+ * Generate is a form, where an 820px field holding thirty characters is just
+ * a large empty box. Back to 600, which all four stages were designed around.
  */
 export function HomeWorkspace() {
   return (

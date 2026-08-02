@@ -52,7 +52,10 @@ export function IntegrityInterview() {
         minHeight: 470,
         display: "flex",
         flexDirection: "column",
-        alignItems: "center",
+        // flex-start, not center: the heading beside (or above) this
+        // is left-aligned, and a self-centring card gave the section
+        // two different left edges at every stacked width.
+        alignItems: "flex-start",
         justifyContent: "center",
       }}
     >
