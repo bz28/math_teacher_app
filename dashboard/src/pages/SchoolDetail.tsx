@@ -179,15 +179,21 @@ export default function SchoolDetail() {
     }
   };
 
-  const handleDeactivateUser = async (userId: string, label: string) => {
-    if (!(await confirm({
+  // Takes the TARGET state so the same handler reactivates. Without
+  // that this page could only ever switch access off — the button read
+  // "Deactivate" even for someone already deactivated, and undoing it
+  // meant going to find them in the global Users directory.
+  const handleSetUserActive = async (
+    userId: string, label: string, nextActive: boolean,
+  ) => {
+    if (!nextActive && !(await confirm({
       title: `Deactivate ${label}?`,
       message: "They lose access immediately. Nothing is deleted — their classes, homework and grades stay exactly as they are, and you can reactivate them at any time.",
       confirmLabel: "Deactivate",
     }))) return;
     try {
-      await api.setUserActive(userId, false);
-      toast(`${label} deactivated.`, "success");
+      await api.setUserActive(userId, nextActive);
+      toast(`${label} ${nextActive ? "reactivated" : "deactivated"}.`, "success");
       reload();
     } catch (err) {
       toast((err as Error).message);
@@ -477,7 +483,7 @@ export default function SchoolDetail() {
                 openSections={openSections}
                 onToggleSection={toggleSection}
                 onDeleteUser={handleDeleteUser}
-                onToggleActive={handleDeactivateUser}
+                onToggleActive={handleSetUserActive}
               />
             ))}
             {detail.unassigned_sections.length > 0 && (
@@ -486,7 +492,7 @@ export default function SchoolDetail() {
                 openSections={openSections}
                 onToggleSection={toggleSection}
                 onDeleteUser={handleDeleteUser}
-                onToggleActive={handleDeactivateUser}
+                onToggleActive={handleSetUserActive}
               />
             )}
           </div>
@@ -712,7 +718,7 @@ function TeacherBlock({
   openSections: Set<string>;
   onToggleSection: (id: string) => void;
   onDeleteUser: (userId: string, label: string) => void;
-  onToggleActive: (userId: string, label: string) => void;
+  onToggleActive: (userId: string, label: string, nextActive: boolean) => void;
 }) {
   // Teacher's last activity = the most recent submission across their
   // classes. Section-rolled cost + gen cost gives their full footprint.
@@ -787,9 +793,9 @@ function TeacherBlock({
           <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 10 }}>
             <button
               style={{ ...btnSmall, ...btnGhost }}
-              onClick={() => onToggleActive(teacher.id, teacher.email)}
+              onClick={() => onToggleActive(teacher.id, teacher.email, !teacher.is_active)}
             >
-              Deactivate
+              {teacher.is_active ? "Deactivate" : "Reactivate"}
             </button>
             <button
               style={{ ...btnSmall, ...btnGhost, color: "var(--danger)", borderColor: "var(--danger)" }}
@@ -838,7 +844,7 @@ function UnassignedBlock({
   openSections: Set<string>;
   onToggleSection: (id: string) => void;
   onDeleteUser: (userId: string, label: string) => void;
-  onToggleActive: (userId: string, label: string) => void;
+  onToggleActive: (userId: string, label: string, nextActive: boolean) => void;
 }) {
   return (
     <div style={{ border: "1px solid var(--rule)", borderRadius: 4, overflow: "hidden" }}>
@@ -871,7 +877,7 @@ function UnassignedBlock({
 // gate as everywhere else — the shared flow decides how hard it is.
 const studentCols = (
   onDeleteUser: (userId: string, label: string) => void,
-  onToggleActive: (userId: string, label: string) => void,
+  onToggleActive: (userId: string, label: string, nextActive: boolean) => void,
 ): Column<SchoolSection["students"][number]>[] => [
   {
     key: "student",
@@ -935,9 +941,9 @@ const studentCols = (
       <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
         <button
           style={{ ...btnSmall, ...btnGhost }}
-          onClick={() => onToggleActive(s.id, s.name || s.email)}
+          onClick={() => onToggleActive(s.id, s.name || s.email, !s.is_active)}
         >
-          Deactivate
+          {s.is_active ? "Deactivate" : "Reactivate"}
         </button>
         <button
           style={{ ...btnSmall, ...btnGhost, color: "var(--danger)", borderColor: "var(--danger)" }}
@@ -961,7 +967,7 @@ function SectionRow({
   open: boolean;
   onToggle: () => void;
   onDeleteUser: (userId: string, label: string) => void;
-  onToggleActive: (userId: string, label: string) => void;
+  onToggleActive: (userId: string, label: string, nextActive: boolean) => void;
 }) {
   return (
     <div style={{ borderTop: "1px solid var(--rule)" }}>

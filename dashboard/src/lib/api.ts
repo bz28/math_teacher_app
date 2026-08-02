@@ -928,6 +928,8 @@ export interface SchoolSectionStudent {
   name: string;
   email: string;
   grade_level: number;
+  /** False when an admin has revoked access without deleting. */
+  is_active: boolean;
   submission_count: number;
   graded_count: number;
   avg_score: number | null;
@@ -955,6 +957,8 @@ export interface SchoolTeacher {
   name: string;
   email: string;
   joined_at: string;
+  /** False when an admin has revoked access without deleting. */
+  is_active: boolean;
   gen_cost_30d: number;
   gen_call_count_30d: number;
   sections: SchoolSection[];
