@@ -84,7 +84,13 @@ export default function ServiceStatusBanner() {
               background: "var(--accent)",
             }}
           />
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {/* Wraps rather than ellipsizing. This span used to be
+              nowrap + text-overflow: ellipsis, which quietly truncated
+              the tail of the message on a narrow window — and the tail
+              is where the only actionable part lives (the status link).
+              A banner whose whole purpose is "don't hide what's going
+              on" must not hide half of it at 600px. */}
+          <span style={{ minWidth: 0, lineHeight: 1.45 }}>
             {online ? (
               <>
                 <strong style={{ fontWeight: 600 }}>No response from the backend.</strong>{" "}
