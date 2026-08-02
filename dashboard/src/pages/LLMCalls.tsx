@@ -410,6 +410,14 @@ function CallDetailModal({
           <span className="llm-detail-meta" title={call.model}>{shortModel(call.model)}</span>
           <span className="llm-detail-meta">{call.user_name || "—"}</span>
           <span className="llm-detail-meta">{call.input_tokens}/{call.output_tokens} tok</span>
+          {(call.cache_read_tokens > 0 || call.cache_write_tokens > 0) && (
+            <span
+              className="llm-detail-meta"
+              title={`Prompt cache: ${call.cache_read_tokens} read at 0.1x input, ${call.cache_write_tokens} written at 1.25x input`}
+            >
+              cache {call.cache_read_tokens}r/{call.cache_write_tokens}w
+            </span>
+          )}
           <span className="llm-detail-meta">{fmtLatency(call.latency_ms)}</span>
           <span className="llm-detail-meta">{fmtCost(call.cost_usd)}</span>
           <span className="llm-detail-meta" title={new Date(call.created_at).toLocaleString()}>

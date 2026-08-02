@@ -1555,6 +1555,36 @@ export const teacher = {
       grade_dirty: boolean;
     }>(`/teacher/submissions/${submissionId}/regrade`, { method: "POST" });
   },
+  /** Grade everything turned in so far, now.
+   *
+   *  AI grading is queued and normally runs when the homework's due
+   *  date passes, so the whole class grades together and shares one
+   *  cached prompt prefix. A homework with NO due date is never graded
+   *  automatically — there's no moment that means "the class is in" —
+   *  so for those this is the only way work ever gets graded.
+   *
+   *  Also revives anything that previously failed. Already-graded and
+   *  in-flight submissions are left alone; `queued: 0` means there was
+   *  simply nothing to do, which is not an error. */
+  gradePendingSubmissions(assignmentId: string, sectionId: string) {
+    // Section-scoped on purpose: an assignment spans sections, and the
+    // review page counts (and promises) only this one.
+    return apiFetch<{ status: string; queued: number }>(
+      `/teacher/assignments/${assignmentId}/grade-pending?section_id=${sectionId}`,
+      { method: "POST" },
+    );
+  },
+  /** Grade one student's submission now, ahead of the schedule.
+   *
+   *  Deliberately forfeits the shared cached prefix — a single call has
+   *  nothing to share with — which is the right trade when the teacher
+   *  needs this grade in front of them. */
+  gradeSubmissionNow(submissionId: string) {
+    return apiFetch<{ status: string; queued: number }>(
+      `/teacher/submissions/${submissionId}/grade-now`,
+      { method: "POST" },
+    );
+  },
   /** Publish every graded submission on this HW to students at once.
    *  Idempotent — already-published grades are skipped, and ungraded
    *  submissions are ignored (teacher can grade + publish more later).

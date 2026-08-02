@@ -101,7 +101,7 @@ export function HomeworkFlow() {
   };
 
   return (
-    <div style={{ width: "100%", maxWidth: 600, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
+    <div style={{ width: "100%", maxWidth: 880, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
       <Stepper active={stage} onJump={jump} />
       <div style={{ position: "relative", minHeight: 508, background: "#FFFFFF", borderRadius: 18, boxShadow: "0 36px 90px -40px rgba(0,0,0,0.5)", border: "1px solid #ECE7DA", overflow: "hidden" }}>
         <AnimatePresence mode="wait">

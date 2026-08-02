@@ -6395,6 +6395,240 @@
         ]
       }
     },
+    "/v1/admin/generation-quality/questions": {
+      "get": {
+        "description": "Generated questions ranked by how much repair a teacher had to do.\n\n`min_edits` defaults to 1 rather than 0 on purpose: a question\nnobody touched is not evidence about the prompt, and including the\nwhole bank would bury the eleven rows that matter under thousands\nthat don't.",
+        "operationId": "edited_questions_v1_admin_generation_quality_questions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "teacher_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Teacher Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
+          },
+          {
+            "description": "manual | chat",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "manual | chat",
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_edits",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Min Edits",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Edited Questions V1 Admin Generation Quality Questions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Edited Questions",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/generation-quality/questions/{item_id}": {
+      "get": {
+        "description": "One question's full repair history, oldest first.\n\nThe diffs are the payload. A count tells you WHICH question to look\nat; only the before/after tells you what the prompt got wrong \u2014 and\nthat is the thing you can actually act on.",
+        "operationId": "question_edit_history_v1_admin_generation_quality_questions__item_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Question Edit History V1 Admin Generation Quality Questions  Item Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Question Edit History",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/generation-quality/summary": {
+      "get": {
+        "description": "Headline counters for the page's stat row.",
+        "operationId": "generation_quality_summary_v1_admin_generation_quality_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Generation Quality Summary V1 Admin Generation Quality Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Generation Quality Summary",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/generation/jobs": {
       "get": {
         "description": "Paginated list of a teacher's generation jobs with correlated cost.",
@@ -12316,6 +12550,74 @@
         ]
       }
     },
+    "/v1/teacher/assignments/{assignment_id}/grade-pending": {
+      "post": {
+        "description": "\"Grade all\" \u2014 grade everything turned in so far, right now.\n\nThe teacher's escape hatch from the schedule. Two cases need it: an\nassignment with no due date never grades on its own (there is no\nmoment that means \"the class is in\"), and a teacher who wants a head\nstart before Friday shouldn't have to wait for the deadline.\n\nMoves `queued` jobs, and REVIVES `failed` ones with their retry\nbudget reset \u2014 otherwise `failed` is a dead end nothing escapes, and\na submission that ran out of retries during an API incident would\nstay ungraded forever.\n\nLeaves `running` alone (already in flight) and `done` alone (needs a\nregrade, not a re-queue) \u2014 re-running either would double-charge.\nLeaves `skipped` alone too: there is nothing gradeable there, so a\nre-run would find the same nothing.\n\n`section_id` scopes this to one class. The review page is\nper-section and its button counts only that section, so without the\nscope a teacher would be billed for every other section of the same\nhomework.\n\nThe drain is kicked immediately rather than left to the next cron\ntick, because a teacher is standing there waiting. It is still only\nan optimisation: the rows are already durable, so if this process\ndies mid-drain the scheduled drain picks the work up anyway. That is\nthe whole reason the queue exists.",
+        "operationId": "grade_pending_submissions_v1_teacher_assignments__assignment_id__grade_pending_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assignment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assignment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "section_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Section Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Grade Pending Submissions V1 Teacher Assignments  Assignment Id  Grade Pending Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Grade Pending Submissions",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
     "/v1/teacher/assignments/{assignment_id}/item-analysis": {
       "get": {
         "description": "Per-problem performance across a homework's graded submissions.\n\nAggregates every graded breakdown, joining each entry to its problem\nby `problem_id` (= bank_item_id) rather than list position, so the\nteacher sees which problems the class struggled with most even when\ngrading/hydration reordered or dropped entries. Items are sorted\nworst-first (ascending avg_percent) but each carries its original\n`problem_index` so the UI can restore assignment order if it wants.\n\nDefensive throughout: an entry for a problem no longer in the\nassignment, a missing `score_status`/`problem_id`, or a null percent\nis skipped rather than raising \u2014 the endpoint never 500s on a\nmalformed grade row. An empty breakdown (`[]`, a retracted grade) is\nnot counted as graded.",
@@ -16294,6 +16596,57 @@
         ]
       }
     },
+    "/v1/teacher/submissions/{submission_id}/grade-now": {
+      "post": {
+        "description": "\"Grade now\" on one student's row.\n\nSame escape hatch, one submission. Deliberately forfeits the shared\ncached prefix \u2014 one call has nothing to share with \u2014 which is the\nright trade when a teacher needs this student's grade in front of\nthem now. They are making that choice knowingly by clicking.\n\nReturns `queued: 0` rather than erroring when there is nothing to\ndo (already graded, or already running). Nothing went wrong; the\ngrade is simply already on its way.",
+        "operationId": "grade_submission_now_v1_teacher_submissions__submission_id__grade_now_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Grade Submission Now V1 Teacher Submissions  Submission Id  Grade Now Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Grade Submission Now",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
     "/v1/teacher/submissions/{submission_id}/mark-reviewed": {
       "post": {
         "description": "Stamp `reviewed_at` once the teacher has addressed every problem.\n\nThis is the SOLE writer of the review stamp. A grade save (PATCH\n/grade) records a grade but never marks the submission reviewed \u2014\n\"reviewed\" means every problem has been addressed (each confident\ngrade confirmed or each uncertain one graded). The frontend tracks\nthat per-submission \"all addressed\" state and calls this endpoint at\nthe moment it completes (a bulk \"Confirm all\" or the last grade), so\na partially-graded submission can never read as reviewed.\n\nRequires a grade to exist (final_score set) \u2014 there's nothing to\n\"review\" on an ungraded or skipped-unreadable submission, so we 400;\nthe teacher grades those by hand instead.",
@@ -16347,7 +16700,7 @@
     },
     "/v1/teacher/submissions/{submission_id}/regrade": {
       "post": {
-        "description": "Re-run AI grading against the assignment's current rubric.\n\nIntended trigger: teacher edited the rubric after the AI first\ngraded, so `rubric_snapshot` differs from `assignment.rubric` \u2014\nthe review page surfaces a regrade CTA that calls this endpoint.\n\nOverride semantics: we replace the live `breakdown / final_score`\neven if the teacher had manually reviewed \u2014 the regrade is the\nteacher's explicit ask to throw out their edits and use the fresh\nAI pass against the updated rubric. `published_*` is untouched\nuntil the teacher republishes, so students keep seeing the old\ngrade until then.\n\nRe-runs extraction (one Vision call) rather than reading a cache:\nthe extraction snapshot lives on the integrity-check rows only for\nprobed problems; using the same code path as the submission\npipeline keeps behavior consistent.",
+        "description": "Re-run AI grading against the assignment's current rubric.\n\nIntended trigger: teacher edited the rubric after the AI first\ngraded, so `rubric_snapshot` differs from `assignment.rubric` \u2014\nthe review page surfaces a regrade CTA that calls this endpoint.\n\nOverride semantics: we replace the live `breakdown / final_score`\neven if the teacher had manually reviewed \u2014 the regrade is the\nteacher's explicit ask to throw out their edits and use the fresh\nAI pass against the updated rubric. `published_*` is untouched\nuntil the teacher republishes, so students keep seeing the old\ngrade until then.\n\nReuses the extraction already on the submission instead of paying\nfor another Vision call. `Submission.extraction` is written once by\nthe submit pipeline and the read is temperature-0, so re-reading the\nsame photo returns the same transcription at full price \u2014 the old\nbehavior burned roughly half the AI cost of a regrade to recompute a\nvalue we had already stored. Vision only re-runs when nothing was\never persisted (extraction failed or predates the column).\n\nGrades the student-corrected view (`extraction_edits` overlaid), the\nsame as the submit pipeline does. Re-extracting used to discard those\ncorrections, so a regrade silently graded the raw Vision read while\nthe original grade had honored what the student said they wrote.\n\nKnown limitation this DOES make worse: the saved extraction's\n`problem_position` tags are relative to the problem list as it stood\nat extraction time. Those tags are already stale everywhere else that\nreads `Submission.extraction` (the confirm-screen record, the teacher\nreview grouping, the integrity rows) \u2014 but regrade used to be the one\nreader that healed them, because re-running Vision re-tagged against\nthe current problems. Reusing the stored extraction gives that up. It\nonly bites after an unpublish \u2192 edit problems \u2192 republish cycle, which\nshifts positions; a regrade then attributes stored steps to the wrong\nproblem or drops them into \"Other work\". Worth its own fix (re-tag the\nstored extraction against the current problem list); not worth paying\nfor a full Vision read on every regrade to paper over.",
         "operationId": "regrade_submission_v1_teacher_submissions__submission_id__regrade_post",
         "parameters": [
           {

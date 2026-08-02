@@ -1,0 +1,84 @@
+name: Grading queue drain
+
+# The clock for the AI-grading queue.
+#
+# Grading is no longer done inline when a student confirms — it is written
+# to `grading_jobs` and scheduled, usually to the assignment's due date, so
+# a class grades together. Something has to come along and act on that list;
+# this is that something.
+#
+# It deliberately lives OUTSIDE the app. The whole reason the queue exists is
+# that an in-process promise dies with the process — a deploy landing
+# mid-grade used to lose the work with no record it was ever owed. Putting
+# the timer inside the API would recreate that at one level up. Here, if a
+# run fails or the API is mid-deploy, nothing is lost: the rows are still in
+# the database and the next run picks them up.
+#
+# Config (Settings → Secrets and variables → Actions):
+#   GRADING_DRAIN_TOKEN (secret) — must match the backend's
+#                                  `grading_drain_token` setting.
+#   PROD_API_BASE (variable)     — prod API root incl. /v1. Already used by
+#                                  the improver workflows; not sensitive.
+#
+# Until BOTH are set this job no-ops loudly rather than failing the run — a
+# red X every five minutes trains people to ignore the workflow, and the
+# unconfigured state is expected before the secret is first set.
+
+on:
+  schedule:
+    # Every 5 minutes. Checking is nearly free — when nothing is due it is a
+    # single indexed query that returns zero rows — so the cadence is set by
+    # "how late may a grade be?", not by cost. Five minutes means a teacher
+    # opening their laptop just after a deadline finds the class graded.
+    - cron: "*/5 * * * *"
+  workflow_dispatch: # manual kick, for verifying the wiring after setup
+
+# Never let two drains overlap. The endpoint is safe if they do — it claims
+# rows with FOR UPDATE SKIP LOCKED, so concurrent drains take disjoint work
+# rather than double-grading — but a backlog that runs longer than five
+# minutes would otherwise pile runs on top of each other for no benefit.
+concurrency:
+  group: grading-drain
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Drain the grading queue
+        env:
+          TOKEN: ${{ secrets.GRADING_DRAIN_TOKEN }}
+          API_BASE: ${{ vars.PROD_API_BASE }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$API_BASE" ]; then
+            echo "::notice::GRADING_DRAIN_TOKEN or PROD_API_BASE not set — skipping."
+            echo "Queued grading will not run until both are configured."
+            exit 0
+          fi
+
+          # --max-time bounds the request: a large backlog is capped at 200
+          # jobs server-side, but grading them is LLM calls, so a run can
+          # legitimately take minutes. Anything unclaimed stays queued.
+          body=$(mktemp)
+          code=$(curl -sS -o "$body" -w "%{http_code}" \
+            --max-time 600 \
+            -X POST "$API_BASE/internal/grading/drain" \
+            -H "X-Grading-Token: $TOKEN")
+
+          echo "HTTP $code"
+          cat "$body"
+          echo
+
+          case "$code" in
+            200) ;;
+            503)
+              # Backend token unset — the deploy hasn't got it yet. Not a
+              # failure worth alerting on; the next run will pick it up.
+              echo "::warning::Drain endpoint reports not-configured (503)."
+              exit 0
+              ;;
+            *)
+              echo "::error::Drain failed with HTTP $code"
+              exit 1
+              ;;
+          esac

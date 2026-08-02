@@ -73,6 +73,14 @@ _DEFAULT_PRICING = _PRICING[MODEL_SONNET]
 
 MAX_RETRIES = 3
 
+# Prompt-cache price multipliers, relative to the model's base INPUT rate.
+# A cache write costs 25% more than fresh input (you pay a premium to
+# store the prefix); a subsequent read costs a tenth. Both are Anthropic
+# platform rates for the 5-minute `ephemeral` cache we use, so they hold
+# across models and don't belong in the per-model _PRICING table.
+_CACHE_WRITE_MULT = 1.25
+_CACHE_READ_MULT = 0.1
+
 # Extended thinking: minimum budget enforced by the Anthropic API.
 MIN_THINKING_BUDGET = 1024
 
@@ -205,9 +213,44 @@ _circuit = CircuitBreaker()
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _calc_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+def _calc_cost(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+) -> float:
+    """Price one call, accounting for prompt-cache traffic.
+
+    Anthropic bills cached input at a different rate from fresh input and
+    reports it in SEPARATE usage fields — `input_tokens` covers only the
+    uncached remainder. Pricing on `input_tokens` alone (what we did
+    before these two args existed) therefore undercharges every cached
+    call and makes a cache hit indistinguishable from a short prompt.
+    """
     input_price, output_price = _PRICING.get(model, _DEFAULT_PRICING)
-    return (input_tokens * input_price) + (output_tokens * output_price)
+    return (
+        (input_tokens * input_price)
+        + (output_tokens * output_price)
+        + (cache_read_tokens * input_price * _CACHE_READ_MULT)
+        + (cache_write_tokens * input_price * _CACHE_WRITE_MULT)
+    )
+
+
+def _usage_cache_tokens(usage: Any) -> tuple[int, int]:
+    """Pull (cache_read, cache_write) off a response's usage block.
+
+    Both fields are absent/None on responses that touched no cache, and
+    on older SDK versions, so every access is defensive — a missing field
+    must degrade to "no cache traffic", never raise inside the logging
+    path of an otherwise-successful call.
+    """
+    read = getattr(usage, "cache_read_input_tokens", None)
+    write = getattr(usage, "cache_creation_input_tokens", None)
+    return (
+        read if isinstance(read, int) else 0,
+        write if isinstance(write, int) else 0,
+    )
 
 
 async def _log_and_persist(
@@ -225,19 +268,28 @@ async def _log_and_persist(
     submission_id: str | None = None,
     generation_job_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
 ) -> None:
     """Track cost, log, and persist an LLM call to the database."""
-    cost = _calc_cost(model, input_tokens, output_tokens)
+    cost = _calc_cost(
+        model, input_tokens, output_tokens,
+        cache_read_tokens, cache_write_tokens,
+    )
     await cost_tracker.add(cost)
 
     logger.info(
-        "LLM call: mode=%s model=%s tokens=%d+%d cost=$%.4f latency=%.0fms",
-        mode, model, input_tokens, output_tokens, cost, latency_ms,
+        "LLM call: mode=%s model=%s tokens=%d+%d cache=%dr/%dw cost=$%.4f "
+        "latency=%.0fms",
+        mode, model, input_tokens, output_tokens,
+        cache_read_tokens, cache_write_tokens, cost, latency_ms,
         extra={
             "llm_mode": mode,
             "model": model,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
+            "cache_read_tokens": cache_read_tokens,
+            "cache_write_tokens": cache_write_tokens,
             "cost_usd": round(cost, 6),
             "latency_ms": latency_ms,
             "session_id": session_id,
@@ -250,6 +302,8 @@ async def _log_and_persist(
         function=mode,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
         latency_ms=latency_ms,
         cost_usd=round(cost, 6),
         session_id=session_id,
@@ -271,6 +325,56 @@ def _system_with_cache(
     return [
         {"type": "text", "text": prompt, "cache_control": {"type": "ephemeral"}},
     ]
+
+
+def _with_transcript_cache(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return `messages` with a prompt-cache breakpoint on its last block.
+
+    A multi-turn agent re-sends the ENTIRE transcript on every round trip,
+    so without a breakpoint the cost of a conversation is quadratic in its
+    length: turn 10 pays full input price for turns 1-9 all over again.
+    Marking the tail of the last message caches everything before it, so
+    the next turn reads that prefix at `_CACHE_READ_MULT` and only writes
+    the delta.
+
+    The breakpoint ROLLS — it sits on whatever the last message is, which
+    is what makes each turn's prefix a superset of the one cached last
+    turn (that's the prefix match the read needs). Combined with the
+    separate breakpoint on the system prompt that's 2 of Anthropic's 4.
+
+    Returns a shallow copy: callers keep the transcript across turns and
+    persist it, so mutating their list in place would leak an
+    ever-growing pile of stale `cache_control` keys back into storage.
+
+    A prefix shorter than the model's cacheable minimum is silently not
+    cached by the API (no error), so this is safe to apply unconditionally
+    — short openers simply get no benefit.
+    """
+    if not messages:
+        return messages
+    last = messages[-1]
+    content = last.get("content")
+    if isinstance(content, str) and content:
+        # Plain-string content (the kickoff + every student turn) has to
+        # become a block list before it can carry cache_control. Guarded
+        # on non-empty: promoting "" would synthesize an empty text
+        # block, which the API rejects outright — turning a caller's bad
+        # input into a different, more confusing error.
+        blocks: list[Any] = [{"type": "text", "text": content}]
+    elif isinstance(content, list) and content:
+        blocks = list(content)
+    else:
+        # Empty or unrecognized content — nothing to anchor a breakpoint
+        # to. Send it through untouched rather than inventing a block.
+        return messages
+
+    tail = blocks[-1]
+    if not isinstance(tail, dict):
+        return messages
+    blocks[-1] = {**tail, "cache_control": {"type": "ephemeral"}}
+    return [*messages[:-1], {**last, "content": blocks}]
 
 
 def _to_tool_params(schema: ToolSchema) -> tuple[list[ToolParam], ToolChoiceToolParam]:
@@ -464,6 +568,7 @@ async def call_claude_json(
                     f"(expected 'tool_use' or 'end_turn', may be truncated at {max_tokens} tokens)"
                 )
 
+            cache_read, cache_write = _usage_cache_tokens(response.usage)
             await _log_and_persist(
                 use_model, mode,
                 response.usage.input_tokens, response.usage.output_tokens,
@@ -472,6 +577,7 @@ async def call_claude_json(
                 input_text=user_message, output_text=resp_text,
                 submission_id=submission_id,
                 generation_job_id=generation_job_id, call_metadata=call_metadata,
+                cache_read_tokens=cache_read, cache_write_tokens=cache_write,
             )
             _circuit.record_success()
             return result
@@ -492,6 +598,9 @@ async def call_claude_json(
             latency_ms = round((time.monotonic() - start) * 1000, 2)
             last_error = e
             logger.warning("Tool use extraction error (attempt %d): %s", attempt + 1, e)
+            # The API call succeeded and billed us; only the parse failed —
+            # so log its real usage, cache traffic included.
+            cache_read, cache_write = _usage_cache_tokens(response.usage)
             await _log_and_persist(
                 use_model, mode,
                 response.usage.input_tokens, response.usage.output_tokens,
@@ -500,6 +609,7 @@ async def call_claude_json(
                 input_text=user_message, output_text=str(e),
                 submission_id=submission_id,
                 generation_job_id=generation_job_id, call_metadata=call_metadata,
+                cache_read_tokens=cache_read, cache_write_tokens=cache_write,
             )
 
         if attempt < max_retries - 1:
@@ -714,6 +824,12 @@ async def call_claude_conversation(
     because every turn sends a distinct, growing transcript. See the
     `@_cassetted` decorator + `tests/harness/cassette.py`.
 
+    The transcript is sent with a rolling prompt-cache breakpoint on its
+    last block (see `_with_transcript_cache`), so re-sending the whole
+    conversation each turn costs a tenth rather than full price. The
+    breakpoint is added INSIDE this function, after `@_cassetted` has
+    already hashed the incoming args — existing cassettes still replay.
+
     `temperature` (if set) pins the sampling temperature — 0.0 makes the
     agent's verdict reproducible across runs. This path passes no
     `thinking` kwarg (extended thinking would force temperature 1.0), so
@@ -754,7 +870,7 @@ async def call_claude_conversation(
             model=use_model,
             max_tokens=max_tokens,
             system=_system_with_cache(_with_safety(system_prompt)),
-            messages=messages,
+            messages=_with_transcript_cache(messages),
             tools=tools,
             tool_choice={"type": "auto"},
             timeout=90.0,
@@ -770,6 +886,7 @@ async def call_claude_conversation(
                 out_parts.append(block.text)
             elif getattr(block, "type", None) == "tool_use":
                 out_parts.append(f"[tool:{block.name}]")
+        cache_read, cache_write = _usage_cache_tokens(response.usage)
         await _log_and_persist(
             use_model, mode,
             response.usage.input_tokens, response.usage.output_tokens,
@@ -778,6 +895,7 @@ async def call_claude_conversation(
             input_text=input_summary,
             output_text="\n".join(out_parts) or None,
             submission_id=submission_id, call_metadata=call_metadata,
+            cache_read_tokens=cache_read, cache_write_tokens=cache_write,
         )
         _circuit.record_success()
         return _serialize_content_blocks(list(response.content))
@@ -884,6 +1002,7 @@ async def call_claude_vision(
             )
         result, resp_text = _extract_tool_result(response, tool_schema)
 
+        cache_read, cache_write = _usage_cache_tokens(response.usage)
         await _log_and_persist(
             use_model, mode,
             response.usage.input_tokens, response.usage.output_tokens,
@@ -892,6 +1011,7 @@ async def call_claude_vision(
             input_text=input_summary, output_text=resp_text,
             submission_id=submission_id,
             generation_job_id=generation_job_id, call_metadata=call_metadata,
+            cache_read_tokens=cache_read, cache_write_tokens=cache_write,
         )
         _circuit.record_success()
         return result

@@ -33,6 +33,7 @@ from api.models.user import User
 
 if TYPE_CHECKING:
     from api.middleware.auth import CurrentUser
+    from api.models.question_bank import QuestionBankItem
 
 logger = logging.getLogger(__name__)
 
@@ -147,3 +148,62 @@ async def record_activity(
         db.add(entry)
     except Exception:
         logger.exception("Failed to record activity")
+
+
+async def record_question_edit(
+    db: AsyncSession,
+    item: "QuestionBankItem",
+    kind: str,
+    actor: "CurrentUser | None" = None,
+) -> None:
+    """Record one teacher edit to a generated question.
+
+    Call AFTER the mutation. `snapshot_history` has already put the old
+    question into `previous_question`, so both halves are on the item by
+    then and no caller has to carry the before-text around.
+
+    Why a dedicated table rather than `record_activity`: that log is a
+    compliance surface with an explicit "keep metadata SMALL — ids /
+    counts / titles" contract, and it's read for procurement reporting.
+    Question bodies are neither small nor compliance data, and putting
+    them there would degrade a surface someone else depends on to serve
+    an analysis it was never shaped for.
+
+    Records nothing when the question text didn't actually change — a
+    teacher fixing a typo in the TITLE is not evidence about the
+    generation prompt, and counting it would dilute the signal the
+    admin page exists to surface.
+
+    Never raises: the edit already happened, and failing to log it must
+    not fail the teacher's request.
+    """
+    from api.models.question_edit import QuestionEdit
+
+    try:
+        before = item.previous_question
+        after = item.question
+        if before == after:
+            return
+
+        school_id: uuid.UUID | None = None
+        actor_id: uuid.UUID | None = None
+        if actor is not None:
+            actor_id = _as_uuid(actor.user_id)
+            try:
+                async with db.begin_nested():
+                    school_id = (await db.execute(
+                        select(User.school_id).where(User.id == actor_id)
+                    )).scalar_one_or_none()
+            except Exception:  # noqa: BLE001 — same savepoint guard record_activity uses
+                logger.exception("question-edit school lookup failed")
+
+        db.add(QuestionEdit(
+            bank_item_id=item.id,
+            edited_by_id=actor_id,
+            school_id=school_id,
+            kind=kind,
+            before=before,
+            after=after,
+        ))
+    except Exception:  # noqa: BLE001
+        logger.exception("could not record question edit for item %s", item.id)

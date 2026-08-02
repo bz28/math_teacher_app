@@ -110,6 +110,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/generation-quality/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Edited Questions
+         * @description Generated questions ranked by how much repair a teacher had to do.
+         *
+         *     `min_edits` defaults to 1 rather than 0 on purpose: a question
+         *     nobody touched is not evidence about the prompt, and including the
+         *     whole bank would bury the eleven rows that matter under thousands
+         *     that don't.
+         */
+        get: operations["edited_questions_v1_admin_generation_quality_questions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/generation-quality/questions/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Question Edit History
+         * @description One question's full repair history, oldest first.
+         *
+         *     The diffs are the payload. A count tells you WHICH question to look
+         *     at; only the before/after tells you what the prompt got wrong — and
+         *     that is the thing you can actually act on.
+         */
+        get: operations["question_edit_history_v1_admin_generation_quality_questions__item_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/generation-quality/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Generation Quality Summary
+         * @description Headline counters for the page's stat row.
+         */
+        get: operations["generation_quality_summary_v1_admin_generation_quality_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/generation/jobs": {
         parameters: {
             query?: never;
@@ -2205,6 +2274,52 @@ export interface paths {
         patch: operations["update_assignment_v1_teacher_assignments__assignment_id__patch"];
         trace?: never;
     };
+    "/v1/teacher/assignments/{assignment_id}/grade-pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grade Pending Submissions
+         * @description "Grade all" — grade everything turned in so far, right now.
+         *
+         *     The teacher's escape hatch from the schedule. Two cases need it: an
+         *     assignment with no due date never grades on its own (there is no
+         *     moment that means "the class is in"), and a teacher who wants a head
+         *     start before Friday shouldn't have to wait for the deadline.
+         *
+         *     Moves `queued` jobs, and REVIVES `failed` ones with their retry
+         *     budget reset — otherwise `failed` is a dead end nothing escapes, and
+         *     a submission that ran out of retries during an API incident would
+         *     stay ungraded forever.
+         *
+         *     Leaves `running` alone (already in flight) and `done` alone (needs a
+         *     regrade, not a re-queue) — re-running either would double-charge.
+         *     Leaves `skipped` alone too: there is nothing gradeable there, so a
+         *     re-run would find the same nothing.
+         *
+         *     `section_id` scopes this to one class. The review page is
+         *     per-section and its button counts only that section, so without the
+         *     scope a teacher would be billed for every other section of the same
+         *     homework.
+         *
+         *     The drain is kicked immediately rather than left to the next cron
+         *     tick, because a teacher is standing there waiting. It is still only
+         *     an optimisation: the rows are already durable, so if this process
+         *     dies mid-drain the scheduled drain picks the work up anyway. That is
+         *     the whole reason the queue exists.
+         */
+        post: operations["grade_pending_submissions_v1_teacher_assignments__assignment_id__grade_pending_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/assignments/{assignment_id}/item-analysis": {
         parameters: {
             query?: never;
@@ -3412,6 +3527,35 @@ export interface paths {
         patch: operations["grade_submission_v1_teacher_submissions__submission_id__grade_patch"];
         trace?: never;
     };
+    "/v1/teacher/submissions/{submission_id}/grade-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grade Submission Now
+         * @description "Grade now" on one student's row.
+         *
+         *     Same escape hatch, one submission. Deliberately forfeits the shared
+         *     cached prefix — one call has nothing to share with — which is the
+         *     right trade when a teacher needs this student's grade in front of
+         *     them now. They are making that choice knowingly by clicking.
+         *
+         *     Returns `queued: 0` rather than erroring when there is nothing to
+         *     do (already graded, or already running). Nothing went wrong; the
+         *     grade is simply already on its way.
+         */
+        post: operations["grade_submission_now_v1_teacher_submissions__submission_id__grade_now_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/submissions/{submission_id}/mark-reviewed": {
         parameters: {
             query?: never;
@@ -3468,10 +3612,31 @@ export interface paths {
          *     until the teacher republishes, so students keep seeing the old
          *     grade until then.
          *
-         *     Re-runs extraction (one Vision call) rather than reading a cache:
-         *     the extraction snapshot lives on the integrity-check rows only for
-         *     probed problems; using the same code path as the submission
-         *     pipeline keeps behavior consistent.
+         *     Reuses the extraction already on the submission instead of paying
+         *     for another Vision call. `Submission.extraction` is written once by
+         *     the submit pipeline and the read is temperature-0, so re-reading the
+         *     same photo returns the same transcription at full price — the old
+         *     behavior burned roughly half the AI cost of a regrade to recompute a
+         *     value we had already stored. Vision only re-runs when nothing was
+         *     ever persisted (extraction failed or predates the column).
+         *
+         *     Grades the student-corrected view (`extraction_edits` overlaid), the
+         *     same as the submit pipeline does. Re-extracting used to discard those
+         *     corrections, so a regrade silently graded the raw Vision read while
+         *     the original grade had honored what the student said they wrote.
+         *
+         *     Known limitation this DOES make worse: the saved extraction's
+         *     `problem_position` tags are relative to the problem list as it stood
+         *     at extraction time. Those tags are already stale everywhere else that
+         *     reads `Submission.extraction` (the confirm-screen record, the teacher
+         *     review grouping, the integrity rows) — but regrade used to be the one
+         *     reader that healed them, because re-running Vision re-tagged against
+         *     the current problems. Reusing the stored extraction gives that up. It
+         *     only bites after an unpublish → edit problems → republish cycle, which
+         *     shifts positions; a regrade then attributes stored steps to the wrong
+         *     problem or drops them into "Other work". Worth its own fix (re-tag the
+         *     stored extraction against the current problem list); not worth paying
+         *     for a full Vision read on every regrade to paper over.
          */
         post: operations["regrade_submission_v1_teacher_submissions__submission_id__regrade_post"];
         delete?: never;
@@ -5949,6 +6114,111 @@ export interface operations {
             path: {
                 document_id: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edited_questions_v1_admin_generation_quality_questions_get: {
+        parameters: {
+            query?: {
+                teacher_id?: string | null;
+                school_id?: string | null;
+                /** @description manual | chat */
+                kind?: string | null;
+                min_edits?: number;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    question_edit_history_v1_admin_generation_quality_questions__item_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generation_quality_summary_v1_admin_generation_quality_summary_get: {
+        parameters: {
+            query?: {
+                school_id?: string | null;
+            };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -9443,6 +9713,41 @@ export interface operations {
             };
         };
     };
+    grade_pending_submissions_v1_teacher_assignments__assignment_id__grade_pending_post: {
+        parameters: {
+            query?: {
+                section_id?: string | null;
+            };
+            header?: never;
+            path: {
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     item_analysis_v1_teacher_assignments__assignment_id__item_analysis_get: {
         parameters: {
             query?: never;
@@ -11768,6 +12073,39 @@ export interface operations {
                 "application/json": components["schemas"]["GradeRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grade_submission_now_v1_teacher_submissions__submission_id__grade_now_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

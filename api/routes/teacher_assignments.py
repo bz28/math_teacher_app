@@ -1,5 +1,6 @@
 """Teacher assignment management — CRUD + section assignment."""
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -184,6 +185,26 @@ async def _validate_units_in_course(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="One or more units do not belong to this course",
         )
+
+
+# Strong refs to in-flight drain kicks, so Python's GC can't collect a
+# running task mid-flight. Discarded on completion.
+_DRAIN_TASKS: set[asyncio.Task[Any]] = set()
+
+
+def _spawn_drain(drain: Any) -> None:
+    """Kick a drain now because a teacher is waiting on it.
+
+    Best-effort by design. The jobs are already committed, so if this
+    process dies before the drain finishes, the scheduled drain picks
+    the work up — losing this task costs latency, never the grade. That
+    is exactly the property the queue was built for, and it is why an
+    optimistic in-process kick is safe here when the original
+    fire-and-forget grading was not.
+    """
+    task = asyncio.create_task(drain())
+    _DRAIN_TASKS.add(task)
+    task.add_done_callback(_DRAIN_TASKS.discard)
 
 
 async def get_teacher_assignment(db: AsyncSession, assignment_id: uuid.UUID, teacher_id: uuid.UUID) -> Assignment:
@@ -848,13 +869,27 @@ async def update_assignment(
     if body.status is not None:
         a.status = body.status
 
+    due_at_changed = False
     if body.clear_due_at:
         a.due_at = None
+        due_at_changed = True
     elif body.due_at is not None and body.due_at != "":
         try:
             a.due_at = datetime.fromisoformat(body.due_at)
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid due_at format")
+        due_at_changed = True
+    if due_at_changed:
+        # Queued grading is scheduled off the due date, and that
+        # scheduling is a snapshot taken when each student confirmed.
+        # Without re-pointing it, extending a deadline still grades the
+        # class at the OLD time (before the extension has even run out),
+        # and clearing a due date leaves rows at a past timestamp that
+        # auto-grade anyway — contradicting the rule that no due date
+        # means "wait for the teacher".
+        from api.core.grading_queue import reschedule_assignment
+
+        await reschedule_assignment(db, a)
     if body.late_policy is not None:
         a.late_policy = body.late_policy
     if body.unit_ids is not None:
@@ -1910,6 +1945,114 @@ async def unmark_submission_reviewed(
     return {"status": "ok", "reviewed_at": None}
 
 
+@router.post("/assignments/{assignment_id}/grade-pending")
+async def grade_pending_submissions(
+    assignment_id: uuid.UUID,
+    section_id: uuid.UUID | None = None,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """"Grade all" — grade everything turned in so far, right now.
+
+    The teacher's escape hatch from the schedule. Two cases need it: an
+    assignment with no due date never grades on its own (there is no
+    moment that means "the class is in"), and a teacher who wants a head
+    start before Friday shouldn't have to wait for the deadline.
+
+    Moves `queued` jobs, and REVIVES `failed` ones with their retry
+    budget reset — otherwise `failed` is a dead end nothing escapes, and
+    a submission that ran out of retries during an API incident would
+    stay ungraded forever.
+
+    Leaves `running` alone (already in flight) and `done` alone (needs a
+    regrade, not a re-queue) — re-running either would double-charge.
+    Leaves `skipped` alone too: there is nothing gradeable there, so a
+    re-run would find the same nothing.
+
+    `section_id` scopes this to one class. The review page is
+    per-section and its button counts only that section, so without the
+    scope a teacher would be billed for every other section of the same
+    homework.
+
+    The drain is kicked immediately rather than left to the next cron
+    tick, because a teacher is standing there waiting. It is still only
+    an optimisation: the rows are already durable, so if this process
+    dies mid-drain the scheduled drain picks the work up anyway. That is
+    the whole reason the queue exists.
+    """
+    from api.core.grading_queue import drain, request_now
+
+    assignment = await get_teacher_assignment(
+        db, assignment_id, current_user.user_id,
+    )
+    if not assignment.ai_grading_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="AI grading is not enabled for this homework",
+        )
+    # `section_id` scopes this to one class. The review page is
+    # per-section and its button says "Grade N ungraded" counting THIS
+    # section — so without the scope a teacher would be billed for every
+    # other section of the same homework too. Omitted = the whole
+    # homework, which is what a HW-level caller would mean.
+    moved = await request_now(
+        db,
+        assignment_id=assignment_id,
+        requested_by_id=current_user.user_id,
+        section_id=section_id,
+    )
+    await db.commit()
+    if moved:
+        _spawn_drain(drain)
+    return {"status": "ok", "queued": moved}
+
+
+@router.post("/submissions/{submission_id}/grade-now")
+async def grade_submission_now(
+    submission_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """"Grade now" on one student's row.
+
+    Same escape hatch, one submission. Deliberately forfeits the shared
+    cached prefix — one call has nothing to share with — which is the
+    right trade when a teacher needs this student's grade in front of
+    them now. They are making that choice knowingly by clicking.
+
+    Returns `queued: 0` rather than erroring when there is nothing to
+    do (already graded, or already running). Nothing went wrong; the
+    grade is simply already on its way.
+    """
+    from api.core.grading_queue import drain, request_now
+
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if not sub:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found",
+        )
+    assignment = await get_teacher_assignment(
+        db, sub.assignment_id, current_user.user_id,
+    )
+    if not assignment.ai_grading_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="AI grading is not enabled for this homework",
+        )
+    moved = await request_now(
+        db,
+        assignment_id=sub.assignment_id,
+        requested_by_id=current_user.user_id,
+        submission_id=submission_id,
+    )
+    await db.commit()
+    if moved:
+        _spawn_drain(drain)
+    return {"status": "ok", "queued": moved}
+
+
 @router.post("/submissions/{submission_id}/regrade")
 async def regrade_submission(
     submission_id: uuid.UUID,
@@ -1929,11 +2072,33 @@ async def regrade_submission(
     until the teacher republishes, so students keep seeing the old
     grade until then.
 
-    Re-runs extraction (one Vision call) rather than reading a cache:
-    the extraction snapshot lives on the integrity-check rows only for
-    probed problems; using the same code path as the submission
-    pipeline keeps behavior consistent.
+    Reuses the extraction already on the submission instead of paying
+    for another Vision call. `Submission.extraction` is written once by
+    the submit pipeline and the read is temperature-0, so re-reading the
+    same photo returns the same transcription at full price — the old
+    behavior burned roughly half the AI cost of a regrade to recompute a
+    value we had already stored. Vision only re-runs when nothing was
+    ever persisted (extraction failed or predates the column).
+
+    Grades the student-corrected view (`extraction_edits` overlaid), the
+    same as the submit pipeline does. Re-extracting used to discard those
+    corrections, so a regrade silently graded the raw Vision read while
+    the original grade had honored what the student said they wrote.
+
+    Known limitation this DOES make worse: the saved extraction's
+    `problem_position` tags are relative to the problem list as it stood
+    at extraction time. Those tags are already stale everywhere else that
+    reads `Submission.extraction` (the confirm-screen record, the teacher
+    review grouping, the integrity rows) — but regrade used to be the one
+    reader that healed them, because re-running Vision re-tagged against
+    the current problems. Reusing the stored extraction gives that up. It
+    only bites after an unpublish → edit problems → republish cycle, which
+    shifts positions; a regrade then attributes stored steps to the wrong
+    problem or drops them into "Other work". Worth its own fix (re-tag the
+    stored extraction against the current problem list); not worth paying
+    for a full Vision read on every regrade to paper over.
     """
+    from api.core.extraction_edits import apply_extraction_edits
     from api.core.grading_ai import run_ai_grading_for_submission
     from api.core.integrity_ai import extract_student_work
     from api.services.bank import load_problems_for_assignment
@@ -1959,13 +2124,39 @@ async def regrade_submission(
     # the admin dashboard can distinguish student-submission grades
     # from teacher-triggered regrades and spot any over-use.
     actor_id = str(current_user.user_id)
-    # Re-run extraction with the HW's problems as context so Vision
-    # re-tags per-problem attribution against any problem edits the
-    # teacher has made since the original grading run.
-    problems = await load_problems_for_assignment(db, assignment)
-    extraction = await extract_student_work(
-        sub.id, db, problems=problems, user_id=actor_id,
-    )
+    if sub.extraction is None:
+        # Nothing persisted — extraction failed at submit time, or the
+        # row predates the column. Fall back to a live Vision read with
+        # the HW's problems as context so steps come back position-tagged.
+        #
+        # Deliberately NOT written back to `sub.extraction`. That column
+        # is what BOTH clients use to decide the student still owes a
+        # confirmation — "extraction present AND extraction_confirmed_at
+        # null" routes them to the confirm screen (web homework page's
+        # routing precedence; mobile ExtractionConfirmScreen). Persisting
+        # here would pop that screen for homework that is already graded
+        # and possibly returned, and any correction the student made from
+        # it would be silently dropped: run_ai_grading_for_submission
+        # skips a submission that already has a final_score. Leaving the
+        # submit pipeline as the column's only writer keeps that
+        # invariant intact. The cost is one Vision read per regrade on
+        # pre-column rows, which is the behavior they had anyway.
+        problems = await load_problems_for_assignment(db, assignment)
+        raw_extraction = await extract_student_work(
+            sub.id, db, problems=problems, user_id=actor_id,
+        )
+    else:
+        raw_extraction = sub.extraction
+
+    # Overlay the student's confirm-time corrections, matching the submit
+    # pipeline (_run_integrity_and_grading_background) so a regrade grades
+    # the same view of the work the original grade did.
+    extraction = apply_extraction_edits(raw_extraction, sub.extraction_edits)
+    if extraction is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Could not regrade — no gradeable content",
+        )
     await run_ai_grading_for_submission(
         sub.id, extraction, db, user_id=actor_id, force=True,
     )

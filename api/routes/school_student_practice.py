@@ -158,21 +158,37 @@ async def _run_extraction_background(submission_id: uuid.UUID) -> None:
 async def _run_integrity_and_grading_background(
     submission_id: uuid.UUID,
 ) -> None:
-    """Run integrity + AI grading using the already-persisted extraction.
+    """Run integrity, and ENQUEUE AI grading, from the persisted extraction.
 
     Called from the confirm-extraction endpoint after the student
     signs off on Vision's reading. Expects `Submission.extraction` to
     be populated; bails cleanly if it's null (extraction never ran or
     was interrupted).
 
+    Integrity still runs here and now — the understanding-check is the
+    student's next step and can't wait for a due date.
+
+    Grading does NOT. It gets a `grading_jobs` row and runs later, for
+    two reasons. The durability one: this coroutine is fire-and-forget
+    in the web process, so a deploy landing mid-flight used to lose the
+    grade with no record it was ever owed. The cost one: an assignment's
+    submissions share a cached prompt prefix worth ~10x on the shared
+    half, and that cache lives five minutes — grading each student the
+    moment they confirm spreads a class across an entire evening and
+    guarantees every single call misses. Queuing lets the class grade
+    together. See `api.core.grading_queue`.
+
+    Nothing is hidden by the deferral: the teacher approves every grade
+    before a student sees it anyway, so a grade that doesn't exist yet
+    and one that exists but isn't approved look identical from the
+    student's side.
+
     Each phase commits independently so a grading failure doesn't
     lose integrity results. Never re-raises.
     """
     from api.core.extraction_edits import apply_extraction_edits
-    from api.core.grading_ai import (
-        record_unreadable_grading_skip,
-        run_ai_grading_for_submission,
-    )
+    from api.core.grading_ai import record_unreadable_grading_skip
+    from api.core.grading_queue import enqueue_submission
     from api.core.integrity_ai import UNREADABLE_THRESHOLD
 
     try:
@@ -187,7 +203,6 @@ async def _run_integrity_and_grading_background(
             )).scalar_one_or_none()
             if not assignment:
                 return
-            user_id = str(sub.student_id)
             # Overlay any student corrections captured at confirm time
             # before either pipeline runs. Both integrity sampling and
             # AI grading consume the overlaid view — that way the AI
@@ -225,12 +240,15 @@ async def _run_integrity_and_grading_background(
 
             if run_grading:
                 try:
-                    # Gate AI grading on extraction confidence — same
-                    # threshold the integrity pipeline uses. A garbage
-                    # read (confidence ~0.05) has no trustworthy work to
-                    # grade, so we record a "needs manual grading" marker
-                    # instead of grading junk as fact. The teacher can
-                    # still grade by hand.
+                    # The unreadable gate stays HERE, not at grade time.
+                    # It costs nothing (it reads a confidence float, no
+                    # LLM call) and the teacher needs to know a photo is
+                    # illegible now, while the student is still around to
+                    # retake it — not on Friday when the queue drains, and
+                    # certainly not never, which is what a no-due-date
+                    # assignment would mean. An unreadable submission is
+                    # therefore never queued: there is no grade coming, so
+                    # a pending row would misrepresent it.
                     confidence = extraction.get("confidence", 0.0)
                     if confidence < UNREADABLE_THRESHOLD:
                         logger.info(
@@ -242,13 +260,19 @@ async def _run_integrity_and_grading_background(
                             submission_id, db,
                         )
                     else:
-                        await run_ai_grading_for_submission(
-                            submission_id, extraction, db, user_id=user_id,
-                        )
+                        # Queue it; don't grade it. `enqueue_submission`
+                        # decides WHEN from the assignment: a due date
+                        # means the class grades together once it passes;
+                        # no due date means it waits for the teacher to
+                        # ask, there being no moment that says "the class
+                        # is in". Either way the row exists from here on,
+                        # so the work survives a restart and reads as
+                        # pending rather than as nothing at all.
+                        await enqueue_submission(db, submission_id, assignment)
                     await db.commit()
                 except Exception:
                     logger.exception(
-                        "ai grading failed for submission %s; "
+                        "could not queue grading for submission %s; "
                         "teacher can grade manually",
                         submission_id,
                     )

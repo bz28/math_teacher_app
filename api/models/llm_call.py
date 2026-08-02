@@ -58,8 +58,28 @@ class LLMCall(Base):
 
     function: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
+    # UNCACHED input tokens only — Anthropic reports cache traffic in the
+    # two columns below, NOT inside input_tokens. Summing input_tokens
+    # alone therefore understates how much context a call actually sent.
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Prompt-cache traffic, priced differently from ordinary input:
+    # a write costs 1.25x base input, a read 0.1x (see _CACHE_WRITE_MULT /
+    # _CACHE_READ_MULT in llm_client). Split out rather than folded into
+    # input_tokens so the dashboard can show a real cache HIT RATE —
+    # without these two numbers there is no way to tell whether the
+    # cache_control we send is doing anything at all.
+    # Backfilled to 0 for pre-instrumentation rows: those calls predate
+    # the measurement, so 0 reads "we don't know", and their persisted
+    # cost_usd is left exactly as it was originally computed.
+    cache_read_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", default=0,
+    )
+    cache_write_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", default=0,
+    )
+
     latency_ms: Mapped[float] = mapped_column(Float, nullable=False)
     cost_usd: Mapped[float] = mapped_column(Float, nullable=False)
     input_text: Mapped[str | None] = mapped_column(Text, nullable=True)

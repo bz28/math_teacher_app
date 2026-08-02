@@ -8,19 +8,50 @@ grading judgment:
 - `_build_user_message` wraps student-controlled text in <student_work>
   delimiters so on-paper directives ("award full credit") land as content,
   not as instructions to the grader.
+- The prompt's cacheable/per-student split holds: the shared half (rubric +
+  questions + answer keys) stays byte-identical across a class, and no
+  student's work leaks into it.
 
 No LLM calls — pure functions in, dicts/strings out.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from api.core.grading_ai import _build_breakdown, _build_user_message
+from api.core.grading_ai import (
+    _build_breakdown,
+    _build_system_prompt,
+    _build_user_message,
+)
+
+_HEADING = re.compile(r"^## Problem (\d+)\s*$")
 
 
 def _pos_to_bid(*positions: int) -> dict[int, str]:
     return {p: f"bank-{p}" for p in positions}
+
+
+def _sections_by_position(rendered: str) -> dict[int, str]:
+    """Split a rendered prompt half into {position: text under that heading}.
+
+    Both halves of the grading prompt key off `## Problem N`, and that
+    heading is the ONLY thing binding a question to the work being graded
+    against it. Slicing on the heading is what lets a test assert content
+    sits under the *right* one — a plain `in` check on the whole string
+    can't tell correct rendering from a one-off shift.
+    """
+    sections: dict[int, str] = {}
+    current: int | None = None
+    for line in rendered.split("\n"):
+        match = _HEADING.match(line)
+        if match:
+            current = int(match.group(1))
+            sections[current] = ""
+        elif current is not None:
+            sections[current] += line + "\n"
+    return sections
 
 
 class TestBuildBreakdownPercentClamp:
@@ -379,6 +410,190 @@ class TestBuildUserMessageDelimiters:
         assert "<student_work>" in msg
         assert "</student_work>" in msg
         assert "(no work shown for this problem)" in msg
+
+
+class TestCacheablePrefixSplit:
+    """The grading prompt is split so an assignment's shared half (rubric +
+    every question + answer key) sits in the cached system prefix and only
+    the student's work goes in the user message.
+
+    These pin the split's two failure modes: student data leaking INTO the
+    prefix (which breaks the cache hit for every later submission, silently
+    — the grades still look right, the bill just doesn't drop), and the
+    question/answer key going missing from BOTH halves (which would leave
+    the grader with nothing to grade against)."""
+
+    def _problems(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "position": 1,
+                "question": "Solve x^2 - 5x + 6 = 0",
+                "final_answer": "x = 2 or x = 3",
+            },
+            {
+                "position": 2,
+                "question": "Differentiate f(x) = 3x^2",
+                "final_answer": "f'(x) = 6x",
+            },
+            # Three, not two: with only two problems a one-off shift wraps
+            # around and can still look self-consistent. Three makes any
+            # misalignment unambiguous.
+            {
+                "position": 3,
+                "question": "Evaluate the integral of 2x dx from 0 to 4",
+                "final_answer": "16",
+            },
+        ]
+
+    def _extraction(self, latex: str, answer: str) -> dict[str, Any]:
+        return {
+            "steps": [
+                {
+                    "step_num": 1,
+                    "latex": latex,
+                    "plain_english": "",
+                    "problem_position": 1,
+                },
+            ],
+            "final_answers": [{"answer_latex": answer, "problem_position": 1}],
+        }
+
+    def test_each_heading_carries_only_its_own_question_and_key(self) -> None:
+        # THE failure mode the split introduces. Membership assertions
+        # ("problem 2's question appears somewhere in the prefix") pass
+        # happily when the content is rendered under the WRONG heading —
+        # headings 1,2,3 in order, but carrying problem 2,3,1's text. The
+        # grader would then mark work against another problem's answer key
+        # and emit a perfectly well-formed wrong grade. Pin adjacency, not
+        # presence: each section holds its own content and nobody else's.
+        problems = self._problems()
+        sections = _sections_by_position(_build_system_prompt(None, problems))
+        assert set(sections) == {p["position"] for p in problems}
+        for p in problems:
+            body = sections[p["position"]]
+            assert p["question"] in body
+            assert p["final_answer"] in body
+            for other in problems:
+                if other["position"] == p["position"]:
+                    continue
+                assert other["question"] not in body
+                assert other["final_answer"] not in body
+
+    def test_each_student_block_carries_only_its_own_work(self) -> None:
+        # Same adjacency guarantee on the per-student half: problem 2's
+        # work must not render under "## Problem 1", or the two halves
+        # pair up correctly by number and still grade the wrong pairing.
+        problems = self._problems()
+        extraction = {
+            "steps": [
+                {
+                    "step_num": i + 1,
+                    "latex": f"WORK-FOR-PROBLEM-{p['position']}",
+                    "plain_english": "",
+                    "problem_position": p["position"],
+                }
+                for i, p in enumerate(problems)
+            ],
+            "final_answers": [
+                {
+                    "answer_latex": f"ANSWER-FOR-PROBLEM-{p['position']}",
+                    "problem_position": p["position"],
+                }
+                for p in problems
+            ],
+        }
+        sections = _sections_by_position(_build_user_message(extraction, problems))
+        assert set(sections) == {p["position"] for p in problems}
+        for p in problems:
+            body = sections[p["position"]]
+            pos = p["position"]
+            assert f"WORK-FOR-PROBLEM-{pos}" in body
+            assert f"ANSWER-FOR-PROBLEM-{pos}" in body
+            for other in problems:
+                if other["position"] == pos:
+                    continue
+                assert f"WORK-FOR-PROBLEM-{other['position']}" not in body
+                assert f"ANSWER-FOR-PROBLEM-{other['position']}" not in body
+
+    def test_gapped_positions_stay_aligned_across_both_halves(self) -> None:
+        # Positions are NOT guaranteed contiguous: api/services/bank.py
+        # numbers with enumerate() and skips deleted bank items, so a real
+        # assignment can be 1, 3, 4. Both halves render from the same list,
+        # so they must agree on the gap too.
+        problems = [
+            {"position": 1, "question": "Solve for x", "final_answer": "x = 1"},
+            {"position": 3, "question": "Find the area", "final_answer": "12"},
+            {"position": 4, "question": "State the domain", "final_answer": "x > 0"},
+        ]
+        extraction = {
+            "steps": [
+                {
+                    "step_num": 1,
+                    "latex": "GAPPED-WORK",
+                    "plain_english": "",
+                    "problem_position": 3,
+                },
+            ],
+            "final_answers": [{"answer_latex": "GAPPED-ANS", "problem_position": 3}],
+        }
+        system_sections = _sections_by_position(_build_system_prompt(None, problems))
+        user_sections = _sections_by_position(
+            _build_user_message(extraction, problems)
+        )
+        assert set(system_sections) == {1, 3, 4}
+        assert set(user_sections) == {1, 3, 4}
+        assert "Find the area" in system_sections[3]
+        assert "GAPPED-WORK" in user_sections[3]
+        assert "GAPPED-WORK" not in user_sections[1]
+        assert "GAPPED-WORK" not in user_sections[4]
+
+    def test_prefix_is_byte_identical_across_students(self) -> None:
+        # The whole point: two students on the same assignment must produce
+        # the same system prompt, or nothing after the first one hits cache.
+        problems = self._problems()
+        rubric = {"full_credit": "Correct final answer with work shown"}
+        assert _build_system_prompt(rubric, problems) == _build_system_prompt(
+            rubric, problems
+        )
+
+    def test_no_student_work_leaks_into_the_prefix(self) -> None:
+        problems = self._problems()
+        system = _build_system_prompt(None, problems)
+        for latex, answer in (("(x-2)(x-3)", "x=2"), ("QUADRATIC FORMULA", "x=3")):
+            msg = _build_user_message(self._extraction(latex, answer), problems)
+            assert latex in msg and latex not in system
+            assert answer in msg and answer not in system
+
+    def test_prefix_carries_every_question_and_answer_key(self) -> None:
+        problems = self._problems()
+        system = _build_system_prompt(None, problems)
+        for p in problems:
+            assert p["question"] in system
+            assert p["final_answer"] in system
+
+    def test_answer_key_is_not_duplicated_into_the_user_message(self) -> None:
+        # Repeating the key per student would re-send the expensive half at
+        # full price and defeat the split.
+        problems = self._problems()
+        msg = _build_user_message(self._extraction("(x-2)(x-3)", "x=2"), problems)
+        for p in problems:
+            assert p["question"] not in msg
+            assert p["final_answer"] not in msg
+
+    def test_both_halves_use_the_same_problem_numbering(self) -> None:
+        # Positions are the only link between the cached questions and the
+        # per-student work — if the headings drift, the grader pairs the
+        # wrong answer key with the wrong work.
+        problems = self._problems()
+        system = _build_system_prompt(None, problems)
+        msg = _build_user_message(self._extraction("(x-2)(x-3)", "x=2"), problems)
+        for p in problems:
+            assert f"## Problem {p['position']}" in system
+            assert f"## Problem {p['position']}" in msg
+
+    def test_missing_answer_key_renders_placeholder(self) -> None:
+        problems = [{"position": 1, "question": "Prove it", "final_answer": None}]
+        assert "(no answer key)" in _build_system_prompt(None, problems)
 
 
 class TestExtractorInjectionGuardrail:
