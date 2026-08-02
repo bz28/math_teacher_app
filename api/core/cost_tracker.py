@@ -15,6 +15,23 @@ from api.config import settings
 logger = logging.getLogger(__name__)
 
 
+class PlatformStopError(RuntimeError):
+    """The platform said stop, and it is not this request's fault.
+
+    Raised when a shared limit trips — the daily spend cap, the LLM
+    circuit breaker — as opposed to something wrong with the specific
+    work being attempted. Callers that retry need this distinction:
+    a platform stop hits every in-flight job at once, so charging each
+    one a retry burns whole batches of perfectly good work in minutes.
+
+    A TYPE rather than a message convention on purpose. This started as
+    a substring match on the exception text, which silently stopped
+    working because the cap's wording ("Daily cost limit reached") and
+    the guard's markers ("cost cap", "daily cap") were never the same
+    words.
+    """
+
+
 @dataclass
 class CostTracker:
     _total_usd: float = field(default=0.0, init=False)
@@ -32,7 +49,7 @@ class CostTracker:
         async with self._lock:
             self._maybe_reset()
             if self._total_usd >= settings.daily_cost_limit_usd:
-                raise RuntimeError(
+                raise PlatformStopError(
                     f"Daily cost limit reached "
                     f"(${self._total_usd:.2f} >= ${settings.daily_cost_limit_usd:.2f})"
                 )

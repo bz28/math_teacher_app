@@ -580,7 +580,21 @@ async def test_the_daily_cost_cap_does_not_burn_a_class_s_retries() -> None:
     sid = world["submission_ids"][0]
     await _enqueue(world["assignment_id"], sid)
 
-    capped = AsyncMock(side_effect=RuntimeError("daily cost cap exceeded"))
+    # Raise what the cap ACTUALLY raises, via the real code path. The
+    # previous version of this test invented RuntimeError("daily cost
+    # cap exceeded") — a string no production code emits — and so
+    # asserted that the mock matched the guard, not that the guard
+    # matched reality. It passed while the guard was broken.
+    from api.core.cost_tracker import CostTracker
+
+    tracker = CostTracker()
+    tracker._total_usd = 10_000.0  # noqa: SLF001 — forcing the real raise
+    tracker._reset_day = datetime.now(UTC).date().toordinal()  # noqa: SLF001
+
+    async def _capped(*a: Any, **k: Any) -> None:
+        await tracker.check_limit()
+
+    capped = AsyncMock(side_effect=_capped)
     for _ in range(MAX_ATTEMPTS + 2):
         with patch(
             "api.core.grading_ai.run_ai_grading_for_submission", new=capped,

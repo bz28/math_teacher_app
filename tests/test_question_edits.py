@@ -68,7 +68,11 @@ async def _own_course(world: dict[str, Any]) -> None:
 async def _edits(item_id: uuid.UUID) -> list[QuestionEdit]:
     async with get_session_factory()() as s:
         return list((await s.execute(
-            select(QuestionEdit).where(QuestionEdit.bank_item_id == item_id)
+            select(QuestionEdit)
+            .where(QuestionEdit.bank_item_id == item_id)
+            # Explicit: the ordering assertions below were reading
+            # physical row order, which Postgres never promises.
+            .order_by(QuestionEdit.created_at.asc())
         )).scalars().all())
 
 
