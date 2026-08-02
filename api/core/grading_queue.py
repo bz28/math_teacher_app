@@ -453,16 +453,21 @@ def _is_infrastructure_stop(exc: BaseException) -> bool:
     """Was this the platform saying "stop", rather than this submission
     being ungradeable?
 
-    The daily spend cap and the LLM circuit breaker both raise plain
-    RuntimeErrors that fire for every job in flight. They mean "come back
-    later", not "this one is broken", so they must not burn the retry
-    budget of work that is perfectly gradeable tomorrow.
+    The daily spend cap and the LLM circuit breaker both fire for every
+    job in flight at once. They mean "come back later", not "this one is
+    broken", so they must not burn the retry budget of work that is
+    perfectly gradeable tomorrow — three drains at a 5-minute cadence
+    would otherwise park whole classes in `failed`, which nothing
+    revives automatically.
+
+    Keyed on the exception TYPE. This was previously a substring match
+    on the message, which never actually matched: the cap raises "Daily
+    cost limit reached" and the guard looked for "cost cap" / "daily
+    cap" / "budget".
     """
-    message = str(exc).lower()
-    return any(
-        marker in message
-        for marker in ("cost cap", "daily cap", "circuit breaker", "budget")
-    )
+    from api.core.cost_tracker import PlatformStopError
+
+    return isinstance(exc, PlatformStopError)
 
 
 async def _finish(

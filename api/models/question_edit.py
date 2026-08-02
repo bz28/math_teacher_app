@@ -27,12 +27,17 @@ responses carry `TRACKING_SINCE`; the UI shows "tracking began …".
 
 ## One row per edit, keyed by kind
 
-The three ways a question changes all funnel through `snapshot_history`,
-which is where these are written:
+Two ways a question changes are recorded, at the two route call sites
+that perform them (NOT inside `snapshot_history`, which only fills the
+one-level undo):
 
 - `manual`     — teacher edited the fields directly (PATCH)
 - `chat`       — teacher accepted a proposal from the workshop agent
-- `regenerate` — teacher asked for a fresh AI attempt
+
+`regenerate` is defined but not yet wired — a teacher rejecting the
+output outright is arguably the purest prompt-quality signal, so it is
+worth adding, and its absence should not be mistaken for "no one
+regenerates".
 
 `before`/`after` hold the question text only. Not the whole item: the
 question is what the prompt produced and what the teacher judged, and
@@ -56,8 +61,13 @@ EDIT_REGENERATE = "regenerate"
 # When recording began. Deliberately a constant rather than a stored
 # row: it is a fact about the deploy, not about any question, and the
 # admin API returns it so a count of 0 can be read as "not tracked then"
-# instead of "never edited". Set to the date the migration shipped.
-TRACKING_SINCE = datetime(2026, 7, 28, tzinfo=UTC)
+# instead of "never edited".
+#
+# This is the MERGE time, not the date the code was written. It was
+# briefly set five days early, which would have had the page assert
+# it was counting across a window in which nothing was recorded —
+# the precise misreading the constant exists to prevent.
+TRACKING_SINCE = datetime(2026, 8, 2, 18, 16, tzinfo=UTC)
 
 
 class QuestionEdit(Base):

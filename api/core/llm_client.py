@@ -27,7 +27,7 @@ import anthropic
 from anthropic.types import ToolChoiceToolParam, ToolParam
 
 from api.config import settings
-from api.core.cost_tracker import cost_tracker
+from api.core.cost_tracker import PlatformStopError, cost_tracker
 from api.core.llm_logging import fire_and_forget_persist
 from api.core.llm_schemas import ToolSchema
 
@@ -520,7 +520,7 @@ async def call_claude_json(
             with temperature != 1.0 raises ValueError.
     """
     if not _circuit.allow_request():
-        raise RuntimeError("Circuit breaker is open — Claude API temporarily unavailable")
+        raise PlatformStopError("Circuit breaker is open — Claude API temporarily unavailable")
     await cost_tracker.check_limit()
 
     use_model = model or MODEL_CLASSIFY
@@ -944,7 +944,7 @@ async def call_claude_vision(
     temperature 1.0, so a custom temperature requires thinking_budget=None.
     """
     if not _circuit.allow_request():
-        raise RuntimeError("Circuit breaker is open — Claude API temporarily unavailable")
+        raise PlatformStopError("Circuit breaker is open — Claude API temporarily unavailable")
     await cost_tracker.check_limit()
 
     use_model = model or MODEL_REASON
