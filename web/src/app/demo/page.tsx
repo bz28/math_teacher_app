@@ -14,15 +14,24 @@ export default function DemoPage() {
     school_name: "",
     contact_name: "",
     contact_email: "",
+    // Was hardcoded to "teacher" on every submission, so a
+    // superintendent evaluating a district rollout arrived in the lead
+    // list indistinguishable from a teacher trying it on one class —
+    // the single most useful thing to know about an inbound.
+    role: "",
     approx_students: "",
     message: "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setSubmitting(true);
+    // Clear any previous failure so a retry doesn't show the old error
+    // underneath a fresh attempt.
+    setFailed(false);
     try {
       // Parse approx_students leniently — empty stays undefined,
       // non-numeric drops to undefined, decimals get rounded to the
@@ -38,13 +47,19 @@ export default function DemoPage() {
         school_name: form.school_name.trim(),
         contact_name: form.contact_name.trim(),
         contact_email: form.contact_email.trim(),
-        role: "teacher",
+        role: form.role || "Teacher",
         approx_students: students,
         message: form.message.trim() || undefined,
       });
       setSubmitted(true);
     } catch {
-      setSubmitted(true);
+      // This used to `setSubmitted(true)` — the form thanked people for
+      // a submission that never arrived. It is the only way anyone can
+      // reach this company, so a swallowed failure is a lead lost with
+      // nobody on either end aware of it. Show the truth, keep every
+      // field they typed, and give them a route that doesn't depend on
+      // the thing that just broke.
+      setFailed(true);
     } finally {
       setSubmitting(false);
     }
@@ -241,6 +256,36 @@ export default function DemoPage() {
                     />
                   </div>
                   <div>
+                    <label
+                      htmlFor="lead-role"
+                      className="text-[13px] font-semibold tracking-wide text-[color:var(--color-text-secondary)]"
+                    >
+                      Your role
+                      <span className="ml-0.5 text-red-400">*</span>
+                    </label>
+                    <select
+                      id="lead-role"
+                      value={form.role}
+                      onChange={(e) => setForm({ ...form, role: e.target.value })}
+                      required
+                      className="mt-1.5 w-full rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition-colors focus:border-[color:var(--color-primary)]"
+                    >
+                      <option value="" disabled>
+                        Select your role…
+                      </option>
+                      {/* Human-readable values, not slugs: `lead.role`
+                          is rendered verbatim in the admin Leads table
+                          and in the notification email, and nothing
+                          filters on it programmatically. */}
+                      <option value="Teacher">Teacher</option>
+                      <option value="Department head">Department head</option>
+                      <option value="Principal">Principal or head of school</option>
+                      <option value="District administrator">
+                        District administrator
+                      </option>
+                    </select>
+                  </div>
+                  <div>
                     <label className="text-[13px] font-semibold tracking-wide text-[color:var(--color-text-secondary)]">
                       Approximate # of students
                     </label>
@@ -271,12 +316,41 @@ export default function DemoPage() {
                       className="mt-1.5 w-full resize-vertical rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition-colors placeholder:text-[color:var(--color-text-muted)] focus:border-[color:var(--color-primary)]"
                     />
                   </div>
+                  {/* Names what failed, what survived, and a route out
+                      that doesn't depend on the thing that just broke.
+                      Rendered above the button so it is between the
+                      operator and a second identical click. */}
+                  {failed && (
+                    <div
+                      role="alert"
+                      className="rounded-xl border border-[color:var(--color-error)] bg-[color:var(--color-error-bg,transparent)] px-4 py-3 text-sm"
+                    >
+                      <p className="font-semibold text-[color:var(--color-error)]">
+                        We couldn&apos;t send that.
+                      </p>
+                      <p className="mt-1 text-[color:var(--color-text-secondary)]">
+                        Nothing was lost — your answers are still here. Try
+                        once more, or email{" "}
+                        <a
+                          href="mailto:support@veradicai.com"
+                          className="font-semibold underline"
+                        >
+                          support@veradicai.com
+                        </a>{" "}
+                        and we&apos;ll pick it up from there.
+                      </p>
+                    </div>
+                  )}
                   <button
                     type="submit"
                     disabled={submitting}
                     className="w-full rounded-full bg-[color:var(--color-primary)] py-4 text-base font-bold text-white transition-colors hover:bg-[color:var(--color-primary-dark)] disabled:opacity-60"
                   >
-                    {submitting ? "Sending…" : "Request a Demo"}
+                    {submitting
+                      ? "Sending…"
+                      : failed
+                        ? "Try again"
+                        : "Request a Demo"}
                   </button>
                 </motion.form>
               </div>
