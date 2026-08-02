@@ -5,6 +5,7 @@ import { formatRelativeDate } from "../lib/format";
 import StatCard from "./StatCard";
 import { Pagination, SearchInput } from "./Pagination";
 import { useConfirm } from "../lib/confirm";
+import { confirmAndDeleteUser } from "../lib/deleteUserFlow";
 import { useToast } from "../lib/toast";
 
 // Shared user-listing surface for the per-audience pages
@@ -196,15 +197,30 @@ export default function UserScopePanel({
     }
   };
 
-  const handleDelete = async (userId: string, email: string) => {
-    if (!(await confirm({
-      title: "Delete user?",
-      message: <><strong>{email}</strong> will be removed permanently. This can't be undone.</>,
-      confirmLabel: "Delete",
+  const handleToggleActive = async (
+    userId: string, email: string, nextActive: boolean,
+  ) => {
+    if (!nextActive && !(await confirm({
+      title: `Deactivate ${email}?`,
+      message: "They lose access immediately. Nothing is deleted, and you can reactivate them at any time.",
+      confirmLabel: "Deactivate",
     }))) return;
     try {
-      await api.deleteUser(userId);
+      await api.setUserActive(userId, nextActive);
+      toast(nextActive ? `${email} reactivated.` : `${email} deactivated.`, "success");
       reload();
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
+
+  // Shared with the Users page and the school page — see
+  // lib/deleteUserFlow. An independent teacher owns homework and
+  // student submissions exactly like a school teacher does, so this
+  // surface needs the same gate rather than its own softer one.
+  const handleDelete = async (userId: string, email: string) => {
+    try {
+      if (await confirmAndDeleteUser(confirm, userId, email)) reload();
     } catch (e) {
       toast((e as Error).message);
     }
@@ -475,6 +491,11 @@ export default function UserScopePanel({
                             Reset daily limits
                           </button>
                         )}
+                        <button
+                          onClick={() => { setOpenMenu(null); handleToggleActive(u.id, u.email, !u.is_active); }}
+                        >
+                          {u.is_active ? "Deactivate" : "Reactivate"}
+                        </button>
                         <button
                           className="danger"
                           onClick={() => { setOpenMenu(null); handleDelete(u.id, u.email); }}

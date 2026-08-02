@@ -341,6 +341,7 @@ async def get_school(
             User.name,
             User.email,
             User.created_at,
+            User.is_active,
             func.coalesce(gen_stats_sq.c.gen_calls, 0).label("gen_calls"),
             func.coalesce(gen_stats_sq.c.gen_cost, 0).label("gen_cost"),
         )
@@ -427,6 +428,10 @@ async def get_school(
             User.name,
             User.email,
             User.grade_level,
+            # Drives the row's Deactivate/Reactivate label. Without it
+            # the button reads "Deactivate" for someone already
+            # deactivated, and the page offers no way back.
+            User.is_active,
         )
         .join(User, User.id == SectionEnrollment.student_id)
         .join(Course, Course.id == SectionEnrollment.course_id)
@@ -481,6 +486,7 @@ async def get_school(
             "name": er.name,
             "email": er.email,
             "grade_level": er.grade_level,
+            "is_active": er.is_active,
             "submission_count": subs,
             "graded_count": graded,
             "avg_score": round(avg_score, 1) if avg_score is not None else None,
@@ -518,6 +524,7 @@ async def get_school(
             "name": t.name,
             "email": t.email,
             "joined_at": t.created_at.isoformat(),
+            "is_active": t.is_active,
             "gen_cost_30d": round(float(t.gen_cost), 6),
             "gen_call_count_30d": int(t.gen_calls),
             "sections": sections_by_teacher.get(t.id, []),

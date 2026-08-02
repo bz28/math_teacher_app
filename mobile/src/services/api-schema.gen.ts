@@ -819,6 +819,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/users/{user_id}/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Set User Active
+         * @description Deactivate (or restore) an account — the reversible alternative.
+         *
+         *     `is_active=False` is already enforced everywhere that matters:
+         *     login refuses it (api/routes/auth.py) and token validation refuses
+         *     it (api/core/auth.py), so a deactivated user loses access on the
+         *     spot. It just had no admin surface, which meant the console's only
+         *     way to stop an account was the irreversible one.
+         *
+         *     Offering this next to delete is the point: almost every reason an
+         *     operator reaches for "remove this teacher" (left the school, wrong
+         *     account, shouldn't have access) is served by revoking access, and
+         *     none of those reasons want a term of student work destroyed.
+         */
+        patch: operations["set_user_active_v1_admin_users__user_id__active_patch"];
+        trace?: never;
+    };
+    "/v1/admin/users/{user_id}/delete-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Delete User Impact
+         * @description What deleting this account would destroy — asked BEFORE deleting.
+         *
+         *     ## Why this exists
+         *
+         *     `DELETE /users/{id}` is a hard delete, and the FK graph means it
+         *     reaches a long way past the row itself:
+         *
+         *         users.id → assignments.teacher_id  (CASCADE)
+         *                  → submissions             (CASCADE)
+         *                  → submission_grades       (CASCADE)
+         *
+         *     So deleting ONE TEACHER destroys every homework they ever wrote and
+         *     every submission and grade on it — including the work of students
+         *     who are not being deleted and whose accounts survive. Measured, not
+         *     inferred: deleting a teacher with two students' graded submissions
+         *     takes assignments 1→0, submissions 2→0, grades 2→0.
+         *
+         *     The console offered no hint of that. It said "will be removed
+         *     permanently", which reads as "this account", not "and 62 other
+         *     people's grades". An admin cannot consent to damage nobody showed
+         *     them, so this endpoint returns the damage and the UI states it.
+         *
+         *     Counts only — no names. This is a pre-flight check an operator runs
+         *     on the way to a delete, not a student-record view, and pulling
+         *     rosters here would make a routine admin action read student data it
+         *     has no need for.
+         */
+        get: operations["delete_user_impact_v1_admin_users__user_id__delete_impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/users/{user_id}/resend-invite": {
         parameters: {
             query?: never;
@@ -4938,6 +5014,11 @@ export interface components {
             /** Total Steps */
             total_steps: number;
         };
+        /** SetActiveRequest */
+        SetActiveRequest: {
+            /** Is Active */
+            is_active: boolean;
+        };
         /** SetPasswordRequest */
         SetPasswordRequest: {
             /** Password */
@@ -7617,6 +7698,76 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_user_active_v1_admin_users__user_id__active_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetActiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_user_impact_v1_admin_users__user_id__delete_impact_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
                     };
                 };
             };

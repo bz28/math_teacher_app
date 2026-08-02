@@ -283,3 +283,39 @@ async def test_delete_school_is_not_idempotent_second_call_404s(
 
     second = await client.delete(f"/v1/admin/schools/{seed['school_id']}", headers=headers)
     assert second.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_school_detail_exposes_is_active_for_teachers_and_students(
+    client: AsyncClient,
+) -> None:
+    """The school page needs each person's access state to label its button.
+
+    Without this the Deactivate control is one-way: it reads
+    "Deactivate" even for someone already deactivated, and the only way
+    back is to hunt for them in the global Users directory.
+    """
+    await _wipe()
+    seed = await _seed_full_school()
+    headers = auth_headers(str(seed["token"]))
+
+    # Revoke the teacher's access, leaving the student active.
+    res = await client.patch(
+        f"/v1/admin/users/{seed['teacher_id']}/active",
+        json={"is_active": False}, headers=headers,
+    )
+    assert res.status_code == 200, res.text
+
+    detail = (await client.get(
+        f"/v1/admin/schools/{seed['school_id']}", headers=headers,
+    )).json()
+
+    teacher = detail["teachers"][0]
+    assert teacher["is_active"] is False
+
+    students = [
+        stu
+        for t in detail["teachers"] for s in t["sections"] for stu in s["students"]
+    ]
+    assert students, "expected the seeded student in the tree"
+    assert all(stu["is_active"] is True for stu in students)

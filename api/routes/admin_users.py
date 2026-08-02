@@ -12,7 +12,7 @@ from typing import Any
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import Date, cast, func, select
+from sqlalchemy import Date, cast, distinct, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import record_activity
@@ -462,6 +462,10 @@ async def users(
             last_active_at.label("last_active_at"),
             User.subscription_tier,
             User.subscription_status,
+            # Drives the row's Deactivate/Reactivate action. Without it
+            # the console could revoke access but never show whether it
+            # already had.
+            User.is_active,
             # Invite state — only meaningful for admins (surfaced on the
             # Admin preset), but cheap to always select.
             User.password_reset_token_hash,
@@ -536,6 +540,7 @@ async def users(
                 "name": r.name,
                 "role": r.role,
                 "grade_level": r.grade_level,
+                "is_active": r.is_active,
                 "session_count": r.session_count,
                 "total_cost": round(r.total_cost, 4),
                 "llm_call_count": r.llm_call_count,
@@ -817,6 +822,177 @@ async def update_user_subscription(
         current_user.user_id, user_id, old_tier, old_status, user.subscription_tier, user.subscription_status,
     )
     return {"status": "ok", "tier": user.subscription_tier, "subscription_status": user.subscription_status}
+
+
+@router.get("/users/{user_id}/delete-impact")
+async def delete_user_impact(
+    user_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """What deleting this account would destroy — asked BEFORE deleting.
+
+    ## Why this exists
+
+    `DELETE /users/{id}` is a hard delete, and the FK graph means it
+    reaches a long way past the row itself:
+
+        users.id → assignments.teacher_id  (CASCADE)
+                 → submissions             (CASCADE)
+                 → submission_grades       (CASCADE)
+
+    So deleting ONE TEACHER destroys every homework they ever wrote and
+    every submission and grade on it — including the work of students
+    who are not being deleted and whose accounts survive. Measured, not
+    inferred: deleting a teacher with two students' graded submissions
+    takes assignments 1→0, submissions 2→0, grades 2→0.
+
+    The console offered no hint of that. It said "will be removed
+    permanently", which reads as "this account", not "and 62 other
+    people's grades". An admin cannot consent to damage nobody showed
+    them, so this endpoint returns the damage and the UI states it.
+
+    Counts only — no names. This is a pre-flight check an operator runs
+    on the way to a delete, not a student-record view, and pulling
+    rosters here would make a routine admin action read student data it
+    has no need for.
+    """
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # ── Everything below stays INSIDE the database ──
+    #
+    # The first version of this pulled ids into Python and fed them back
+    # as `.in_(...)`. That breaks exactly where it hurts most: asyncpg
+    # caps a statement at 32,767 bind parameters, so a teacher with more
+    # submissions than that raised a 500 — and a failed preflight made
+    # the UI *less* careful, not more. The account whose deletion
+    # destroys the most work was the one that skipped the gate.
+    #
+    # Correlated subqueries have no parameter count, so the query cost
+    # is flat no matter how large the teacher.
+    owned_assignment_ids = (
+        select(Assignment.id).where(Assignment.teacher_id == user_id).scalar_subquery()
+    )
+
+    assignments_destroyed = (await db.execute(
+        select(func.count()).select_from(Assignment)
+        .where(Assignment.teacher_id == user_id)
+    )).scalar() or 0
+
+    # Every submission that dies: the user's own, plus everything on the
+    # assignments they own.
+    #
+    # These two sets OVERLAP when a teacher submitted to their own
+    # assignment (the "try it as a student" pattern). The first version
+    # ran them as two counts and added them, which reported 3 where the
+    # delete actually destroyed 2. Overstating fails safe, but this
+    # endpoint's whole promise is that the number IS the damage.
+    #
+    # The fix is expressing the union as ONE predicate: a row either
+    # matches or it doesn't, so it can only be counted once. `distinct`
+    # is therefore redundant today and is kept only as a guard if a
+    # join is ever added here — it is not what makes this correct.
+    doomed_submissions = or_(
+        Submission.student_id == user_id,
+        Submission.assignment_id.in_(owned_assignment_ids),
+    )
+
+    submissions_destroyed = (await db.execute(
+        select(func.count(distinct(Submission.id))).where(doomed_submissions)
+    )).scalar() or 0
+
+    # Grades counted THROUGH submissions rather than assumed 1:1 — an
+    # ungraded submission has no grade row, so deriving the number would
+    # overstate what is actually lost.
+    grades_destroyed = (await db.execute(
+        select(func.count()).select_from(SubmissionGrade)
+        .where(SubmissionGrade.submission_id.in_(
+            select(Submission.id).where(doomed_submissions).scalar_subquery()
+        ))
+    )).scalar() or 0
+
+    # The number that makes deleting a teacher dangerous: OTHER people
+    # who lose work. Excludes the user themselves — they are being
+    # deleted, so they are not a bystander.
+    students_affected = (await db.execute(
+        select(func.count(distinct(Submission.student_id)))
+        .where(
+            Submission.assignment_id.in_(owned_assignment_ids),
+            Submission.student_id != user_id,
+        )
+    )).scalar() or 0
+
+    enrollments = (await db.execute(
+        select(func.count()).select_from(SectionEnrollment)
+        .where(SectionEnrollment.student_id == user_id)
+    )).scalar() or 0
+
+    return {
+        "id": str(user.id),
+        "name": user.name,
+        "email": user.email,
+        "role": user.role,
+        "is_active": user.is_active,
+        "assignments_destroyed": assignments_destroyed,
+        "submissions_destroyed": submissions_destroyed,
+        "grades_destroyed": grades_destroyed,
+        "students_affected": students_affected,
+        "enrollments_removed": enrollments,
+    }
+
+
+class SetActiveRequest(BaseModel):
+    is_active: bool
+
+
+@router.patch("/users/{user_id}/active")
+async def set_user_active(
+    user_id: uuid.UUID,
+    body: SetActiveRequest,
+    request: Request,
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Deactivate (or restore) an account — the reversible alternative.
+
+    `is_active=False` is already enforced everywhere that matters:
+    login refuses it (api/routes/auth.py) and token validation refuses
+    it (api/core/auth.py), so a deactivated user loses access on the
+    spot. It just had no admin surface, which meant the console's only
+    way to stop an account was the irreversible one.
+
+    Offering this next to delete is the point: almost every reason an
+    operator reaches for "remove this teacher" (left the school, wrong
+    account, shouldn't have access) is served by revoking access, and
+    none of those reasons want a term of student work destroyed.
+    """
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if str(user.id) == str(current_user.user_id) and not body.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot deactivate your own account",
+        )
+
+    user.is_active = body.is_active
+    await record_activity(
+        db,
+        current_user,
+        "user.activate" if body.is_active else "user.deactivate",
+        "user",
+        user_id,
+        {"email": user.email, "role": user.role},
+        request=request,
+    )
+    await db.commit()
+    logger.info(
+        "AUDIT: admin=%s set user=%s active=%s",
+        current_user.user_id, user_id, body.is_active,
+    )
+    return {"status": "ok", "is_active": user.is_active}
 
 
 @router.delete("/users/{user_id}")

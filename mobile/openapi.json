@@ -2760,6 +2760,19 @@
         "title": "SessionResponse",
         "type": "object"
       },
+      "SetActiveRequest": {
+        "properties": {
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "is_active"
+        ],
+        "title": "SetActiveRequest",
+        "type": "object"
+      },
       "SetPasswordRequest": {
         "properties": {
           "password": {
@@ -9328,6 +9341,118 @@
           }
         ],
         "summary": "Delete User",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/users/{user_id}/active": {
+      "patch": {
+        "description": "Deactivate (or restore) an account \u2014 the reversible alternative.\n\n`is_active=False` is already enforced everywhere that matters:\nlogin refuses it (api/routes/auth.py) and token validation refuses\nit (api/core/auth.py), so a deactivated user loses access on the\nspot. It just had no admin surface, which meant the console's only\nway to stop an account was the irreversible one.\n\nOffering this next to delete is the point: almost every reason an\noperator reaches for \"remove this teacher\" (left the school, wrong\naccount, shouldn't have access) is served by revoking access, and\nnone of those reasons want a term of student work destroyed.",
+        "operationId": "set_user_active_v1_admin_users__user_id__active_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetActiveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set User Active V1 Admin Users  User Id  Active Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set User Active",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/users/{user_id}/delete-impact": {
+      "get": {
+        "description": "What deleting this account would destroy \u2014 asked BEFORE deleting.\n\n## Why this exists\n\n`DELETE /users/{id}` is a hard delete, and the FK graph means it\nreaches a long way past the row itself:\n\n    users.id \u2192 assignments.teacher_id  (CASCADE)\n             \u2192 submissions             (CASCADE)\n             \u2192 submission_grades       (CASCADE)\n\nSo deleting ONE TEACHER destroys every homework they ever wrote and\nevery submission and grade on it \u2014 including the work of students\nwho are not being deleted and whose accounts survive. Measured, not\ninferred: deleting a teacher with two students' graded submissions\ntakes assignments 1\u21920, submissions 2\u21920, grades 2\u21920.\n\nThe console offered no hint of that. It said \"will be removed\npermanently\", which reads as \"this account\", not \"and 62 other\npeople's grades\". An admin cannot consent to damage nobody showed\nthem, so this endpoint returns the damage and the UI states it.\n\nCounts only \u2014 no names. This is a pre-flight check an operator runs\non the way to a delete, not a student-record view, and pulling\nrosters here would make a routine admin action read student data it\nhas no need for.",
+        "operationId": "delete_user_impact_v1_admin_users__user_id__delete_impact_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete User Impact V1 Admin Users  User Id  Delete Impact Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete User Impact",
         "tags": [
           "admin"
         ]

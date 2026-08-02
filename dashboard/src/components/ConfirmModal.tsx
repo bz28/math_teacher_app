@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
-import { btnGhost, btnPrimary, overlay } from "../lib/styles";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { btnGhost, btnPrimary, inputStyle, overlay } from "../lib/styles";
 
 /**
  * Lightweight confirmation modal replacing browser `confirm()`. The
@@ -29,6 +29,7 @@ export function ConfirmModal({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   variant = "danger",
+  requireTypedConfirmation,
   onConfirm,
   onCancel,
 }: {
@@ -37,11 +38,30 @@ export function ConfirmModal({
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: "danger" | "primary";
+  requireTypedConfirmation?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
   const titleId = useId();
   const messageId = useId();
+  const typedId = useId();
+  const [typed, setTyped] = useState("");
+  // BOTH sides trimmed, case-sensitive.
+  //
+  // Trimming only the typed side made the gate unsatisfiable whenever
+  // the target itself had surrounding whitespace — a roster-imported
+  // name like "Ms. Alvarez " could never be matched, not even by
+  // copy-pasting the label, so the action was permanently blocked.
+  // Case-sensitive because loose matching would let "delete" through
+  // for a teacher named "Delete"; the gate is only worth having if it
+  // means what it says.
+  //
+  // A blank required string is treated as UNGATED rather than as a
+  // gate that is already open — an empty input box above an enabled
+  // Delete button reads as a gate the operator has somehow satisfied.
+  const required = requireTypedConfirmation?.trim() ?? "";
+  const gated = required.length > 0;
+  const unlocked = !gated || typed.trim() === required;
   const triggerRef = useRef<HTMLElement | null>(null);
   const onCancelRef = useRef(onCancel);
   // Always-fresh callback ref. Updated inside an effect (not in render)
@@ -90,11 +110,48 @@ export function ConfirmModal({
         <div id={messageId} style={{ fontSize: 13.5, color: "var(--muted)", lineHeight: 1.5, marginBottom: 18 }}>
           {message}
         </div>
+        {gated && (
+          <div style={{ marginBottom: 18 }}>
+            <label
+              htmlFor={typedId}
+              style={{
+                display: "block",
+                fontSize: 12,
+                color: "var(--muted)",
+                marginBottom: 6,
+              }}
+            >
+              Type <strong style={{ color: "var(--ink)" }}>{required}</strong> to confirm
+            </label>
+            <input
+              id={typedId}
+              autoFocus
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && unlocked) onConfirm();
+              }}
+              style={{ ...inputStyle, width: "100%" }}
+            />
+          </div>
+        )}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button autoFocus={variant === "danger"} onClick={onCancel} style={btnGhost}>
+          <button
+            autoFocus={variant === "danger" && !gated}
+            onClick={onCancel}
+            style={btnGhost}
+          >
             {cancelLabel}
           </button>
-          <button autoFocus={variant !== "danger"} onClick={onConfirm} style={confirmStyle}>
+          <button
+            autoFocus={variant !== "danger" && !gated}
+            onClick={onConfirm}
+            disabled={!unlocked}
+            style={{
+              ...confirmStyle,
+              ...(unlocked ? {} : { opacity: 0.45, cursor: "not-allowed" }),
+            }}
+          >
             {confirmLabel}
           </button>
         </div>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { api, type SchoolListItem, type UsersData } from "../lib/api";
+import { api, getUserId, type SchoolListItem, type UsersData } from "../lib/api";
 import { formatRelativeDate, fmtCost } from "../lib/format";
 import { activityPill, activityStatus, daysSince, windowLabel } from "../lib/definitions";
 import StatTile from "../components/StatTile";
@@ -9,6 +9,7 @@ import DataTable, { type Column } from "../components/DataTable";
 import { Pagination, SearchInput } from "../components/Pagination";
 import { InviteAdminForm } from "../components/InviteAdminForm";
 import { useConfirm } from "../lib/confirm";
+import { confirmAndDeleteUser } from "../lib/deleteUserFlow";
 import { useToast } from "../lib/toast";
 
 type UserRow = UsersData["users"][number];
@@ -59,6 +60,7 @@ type MenuAction =
   | "toggle-plan"
   | "reset-limit"
   | "resend-invite"
+  | "toggle-active"
   | "revoke-invite"
   | "delete";
 
@@ -80,7 +82,8 @@ type MenuAction =
  * already maps the synthetic individual school to null, so `school`
  * being set means a real institutional affiliation.
  */
-function menuActionsFor(u: UserRow): MenuAction[] {
+function menuActionsFor(u: UserRow, selfId: string | null): MenuAction[] {
+  const isSelf = selfId !== null && u.id === selfId;
   if (u.role !== "admin" && u.school) {
     return ["view-in-school", "make-admin"];
   }
@@ -97,7 +100,7 @@ function menuActionsFor(u: UserRow): MenuAction[] {
     .map((r) => `make-${r}` as MenuAction);
   const actions: MenuAction[] = ["view-calls", ...roleChanges, "toggle-plan"];
   if (u.subscription_tier !== "pro") actions.push("reset-limit");
-  actions.push("delete");
+  if (!isSelf) actions.push("toggle-active", "delete");
   return actions;
 }
 
@@ -119,6 +122,10 @@ export default function Users() {
   const [offset, setOffset] = useState(0);
   const [schools, setSchools] = useState<SchoolListItem[]>([]);
 
+  // The console must not offer an admin destructive actions against
+  // their own account — the API 400s both, so the only outcome was an
+  // error toast for a control that should never have been there.
+  const selfId = getUserId();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
   const menuToggleRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -240,14 +247,30 @@ export default function Users() {
     catch (e) { toast((e as Error).message); }
   };
 
+  // Delegates to the shared flow so this page, the school page and the
+  // independent-users panel all gate a delete the same way. The old
+  // dialog here said only "will be removed permanently", which for a
+  // teacher understated it by every homework they ever wrote plus
+  // every student submission and grade on it.
   const handleDelete = async (userId: string, email: string) => {
-    if (!(await confirm({
-      title: "Delete user?",
-      message: <><strong>{email}</strong> will be removed permanently. This can't be undone.</>,
-      confirmLabel: "Delete",
+    try {
+      if (await confirmAndDeleteUser(confirm, userId, email)) reload();
+    } catch (e) { toast((e as Error).message); }
+  };
+
+  const handleToggleActive = async (
+    userId: string, email: string, nextActive: boolean,
+  ) => {
+    if (!nextActive && !(await confirm({
+      title: `Deactivate ${email}?`,
+      message: "They lose access immediately. Nothing is deleted, and you can reactivate them at any time.",
+      confirmLabel: "Deactivate",
     }))) return;
-    try { await api.deleteUser(userId); reload(); }
-    catch (e) { toast((e as Error).message); }
+    try {
+      await api.setUserActive(userId, nextActive);
+      toast(nextActive ? `${email} reactivated.` : `${email} deactivated.`, "success");
+      reload();
+    } catch (e) { toast((e as Error).message); }
   };
 
   // ── Derived stat band ──────────────────────────────────────────────
@@ -278,6 +301,9 @@ export default function Users() {
           </div>
           <div style={{ marginTop: 5, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
             {!role && <StatusPill tone={rb.tone} label={rb.label} />}
+            {!u.is_active && (
+              <StatusPill tone="neutral" label="DEACTIVATED" title="Access revoked — nothing deleted" />
+            )}
             {u.grade_level > 0 && (
               <span style={{ fontFamily: "var(--font-sans)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1.4, color: "var(--muted-2)" }}>
                 {gradeLabel(u.grade_level)}
@@ -491,7 +517,7 @@ export default function Users() {
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {menuActionsFor(openUser).map((action) => {
+          {menuActionsFor(openUser, selfId).map((action) => {
             switch (action) {
               case "view-calls":
                 return (
@@ -537,6 +563,18 @@ export default function Users() {
                 return (
                   <button key={action} className="danger" onClick={() => { setOpenMenu(null); handleRevokeInvite(openUser.id, openUser.email); }}>
                     Revoke invite
+                  </button>
+                );
+              case "toggle-active":
+                return (
+                  <button
+                    key={action}
+                    onClick={() => {
+                      setOpenMenu(null);
+                      handleToggleActive(openUser.id, openUser.email, !openUser.is_active);
+                    }}
+                  >
+                    {openUser.is_active ? "Deactivate" : "Reactivate"}
                   </button>
                 );
               case "delete":

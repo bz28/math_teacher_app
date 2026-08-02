@@ -2,7 +2,15 @@ import { useCallback, useRef, useState, type ReactNode } from "react";
 import { ConfirmModal } from "./ConfirmModal";
 import { ConfirmContext, type ConfirmFn, type ConfirmOptions } from "../lib/confirm";
 
-type Pending = ConfirmOptions & { resolve: (value: boolean) => void };
+// `seq` exists to key the modal. ConfirmModal now holds internal state
+// (the typed-confirmation field), and a prompt that REPLACES a live one
+// keeps the same element position — so without a changing key React
+// reuses the instance and the previous dialog's typed text survives
+// into the new one. That could arrive pre-unlocked.
+type Pending = ConfirmOptions & {
+  resolve: (value: boolean) => void;
+  seq: number;
+};
 
 /**
  * Drop-in async replacement for `window.confirm()`. Mount once at
@@ -24,6 +32,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   // updater fires twice under React StrictMode in dev and would
   // resolve a fresh prompt to false the instant it lands.
   const pendingRef = useRef<Pending | null>(null);
+  const seqRef = useRef(0);
 
   // Resolve the previous prompt to false before showing a new one,
   // so a programmatic double-fire (or a fast double-click that races
@@ -33,7 +42,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   const confirm = useCallback<ConfirmFn>((options) => {
     return new Promise((resolve) => {
       pendingRef.current?.resolve(false);
-      const next: Pending = { ...options, resolve };
+      const next: Pending = { ...options, resolve, seq: ++seqRef.current };
       pendingRef.current = next;
       setState(next);
     });
@@ -55,11 +64,13 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       {children}
       {state && (
         <ConfirmModal
+          key={state.seq}
           title={state.title}
           message={state.message}
           confirmLabel={state.confirmLabel}
           cancelLabel={state.cancelLabel}
           variant={state.variant}
+          requireTypedConfirmation={state.requireTypedConfirmation}
           onCancel={handleCancel}
           onConfirm={handleConfirm}
         />

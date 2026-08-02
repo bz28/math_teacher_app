@@ -13,6 +13,7 @@ import {
 import { formatRelativeDate, fmtCost } from "../lib/format";
 import { btnGhost, btnPrimary, btnSmall, inputStyle } from "../lib/styles";
 import { useConfirm } from "../lib/confirm";
+import { confirmAndDeleteUser } from "../lib/deleteUserFlow";
 import { useToast } from "../lib/toast";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
@@ -160,6 +161,39 @@ export default function SchoolDetail() {
     }))) return;
     try {
       await api.updateSchool(detail.id, { is_active: next });
+      reload();
+    } catch (err) {
+      toast((err as Error).message);
+    }
+  };
+
+  // Account-level actions on the people inside the school. Both go
+  // through the shared flow (lib/deleteUserFlow) so this page, the
+  // Users directory and the independent-users panel gate a deletion
+  // identically — the dangerous surface must not be the casual one.
+  const handleDeleteUser = async (userId: string, label: string) => {
+    try {
+      if (await confirmAndDeleteUser(confirm, userId, label)) reload();
+    } catch (err) {
+      toast((err as Error).message);
+    }
+  };
+
+  // Takes the TARGET state so the same handler reactivates. Without
+  // that this page could only ever switch access off — the button read
+  // "Deactivate" even for someone already deactivated, and undoing it
+  // meant going to find them in the global Users directory.
+  const handleSetUserActive = async (
+    userId: string, label: string, nextActive: boolean,
+  ) => {
+    if (!nextActive && !(await confirm({
+      title: `Deactivate ${label}?`,
+      message: "They lose access immediately. Nothing is deleted — their classes, homework and grades stay exactly as they are, and you can reactivate them at any time.",
+      confirmLabel: "Deactivate",
+    }))) return;
+    try {
+      await api.setUserActive(userId, nextActive);
+      toast(`${label} ${nextActive ? "reactivated" : "deactivated"}.`, "success");
       reload();
     } catch (err) {
       toast((err as Error).message);
@@ -448,6 +482,8 @@ export default function SchoolDetail() {
                 teacher={t}
                 openSections={openSections}
                 onToggleSection={toggleSection}
+                onDeleteUser={handleDeleteUser}
+                onToggleActive={handleSetUserActive}
               />
             ))}
             {detail.unassigned_sections.length > 0 && (
@@ -455,6 +491,8 @@ export default function SchoolDetail() {
                 sections={detail.unassigned_sections}
                 openSections={openSections}
                 onToggleSection={toggleSection}
+                onDeleteUser={handleDeleteUser}
+                onToggleActive={handleSetUserActive}
               />
             )}
           </div>
@@ -673,10 +711,14 @@ function TeacherBlock({
   teacher,
   openSections,
   onToggleSection,
+  onDeleteUser,
+  onToggleActive,
 }: {
   teacher: SchoolTeacher;
   openSections: Set<string>;
   onToggleSection: (id: string) => void;
+  onDeleteUser: (userId: string, label: string) => void;
+  onToggleActive: (userId: string, label: string, nextActive: boolean) => void;
 }) {
   // Teacher's last activity = the most recent submission across their
   // classes. Section-rolled cost + gen cost gives their full footprint.
@@ -716,6 +758,16 @@ function TeacherBlock({
           >
             {teacher.name || "—"}
           </Link>
+          {/* Access state has to be visible on the roster itself. The
+              only other signal is the Deactivate/Reactivate button
+              label, which you have to read one row at a time — so
+              "who has been switched off here?" was unanswerable at a
+              glance on the page that answers everything else. */}
+          {!teacher.is_active && (
+            <span style={{ marginLeft: 8, verticalAlign: "middle" }}>
+              <StatusPill tone="neutral" label="DEACTIVATED" title="Access revoked — nothing deleted" />
+            </span>
+          )}
           <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {teacher.email}
           </div>
@@ -742,6 +794,26 @@ function TeacherBlock({
           >
             View calls →
           </Link>
+          {/* Account actions sit on the teacher, not the school: an
+              operator dealing with one departed teacher shouldn't have
+              to go find them in the global Users directory. Deactivate
+              is first and plainly styled because it is the right answer
+              to almost every reason someone lands here; Delete is the
+              destructive outlier and says so. */}
+          <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 10 }}>
+            <button
+              style={{ ...btnSmall, ...btnGhost }}
+              onClick={() => onToggleActive(teacher.id, teacher.email, !teacher.is_active)}
+            >
+              {teacher.is_active ? "Deactivate" : "Reactivate"}
+            </button>
+            <button
+              style={{ ...btnSmall, ...btnGhost, color: "var(--danger)", borderColor: "var(--danger)" }}
+              onClick={() => onDeleteUser(teacher.id, teacher.email)}
+            >
+              Delete
+            </button>
+          </div>
         </div>
       </div>
 
@@ -758,6 +830,8 @@ function TeacherBlock({
               section={s}
               open={openSections.has(s.id)}
               onToggle={() => onToggleSection(s.id)}
+              onDeleteUser={onDeleteUser}
+              onToggleActive={onToggleActive}
             />
           ))}
         </div>
@@ -773,10 +847,14 @@ function UnassignedBlock({
   sections,
   openSections,
   onToggleSection,
+  onDeleteUser,
+  onToggleActive,
 }: {
   sections: SchoolSection[];
   openSections: Set<string>;
   onToggleSection: (id: string) => void;
+  onDeleteUser: (userId: string, label: string) => void;
+  onToggleActive: (userId: string, label: string, nextActive: boolean) => void;
 }) {
   return (
     <div style={{ border: "1px solid var(--rule)", borderRadius: 4, overflow: "hidden" }}>
@@ -795,6 +873,8 @@ function UnassignedBlock({
             section={s}
             open={openSections.has(s.id)}
             onToggle={() => onToggleSection(s.id)}
+            onDeleteUser={onDeleteUser}
+            onToggleActive={onToggleActive}
           />
         ))}
       </div>
@@ -802,14 +882,27 @@ function UnassignedBlock({
   );
 }
 
-const STUDENT_COLS: Column<SchoolSection["students"][number]>[] = [
+// A factory rather than a const because the last column carries the
+// per-student account actions, which need the page's handlers. Same
+// gate as everywhere else — the shared flow decides how hard it is.
+const studentCols = (
+  onDeleteUser: (userId: string, label: string) => void,
+  onToggleActive: (userId: string, label: string, nextActive: boolean) => void,
+): Column<SchoolSection["students"][number]>[] => [
   {
     key: "student",
     header: "Student",
     width: "40%",
     render: (s) => (
       <div style={{ minWidth: 0 }}>
-        <div style={{ color: "var(--ink)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis" }}>{s.name || "—"}</div>
+        <div style={{ color: "var(--ink)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis" }}>
+          {s.name || "—"}
+          {!s.is_active && (
+            <span style={{ marginLeft: 6, verticalAlign: "middle" }}>
+              <StatusPill tone="neutral" label="DEACTIVATED" title="Access revoked — nothing deleted" />
+            </span>
+          )}
+        </div>
         <div style={{ fontSize: 11.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis" }}>{s.email}</div>
       </div>
     ),
@@ -856,16 +949,42 @@ const STUDENT_COLS: Column<SchoolSection["students"][number]>[] = [
       </span>
     ),
   },
+  {
+    key: "actions",
+    header: "",
+    width: "14%",
+    align: "right",
+    render: (s) => (
+      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+        <button
+          style={{ ...btnSmall, ...btnGhost }}
+          onClick={() => onToggleActive(s.id, s.name || s.email, !s.is_active)}
+        >
+          {s.is_active ? "Deactivate" : "Reactivate"}
+        </button>
+        <button
+          style={{ ...btnSmall, ...btnGhost, color: "var(--danger)", borderColor: "var(--danger)" }}
+          onClick={() => onDeleteUser(s.id, s.name || s.email)}
+        >
+          Delete
+        </button>
+      </div>
+    ),
+  },
 ];
 
 function SectionRow({
   section,
   open,
   onToggle,
+  onDeleteUser,
+  onToggleActive,
 }: {
   section: SchoolSection;
   open: boolean;
   onToggle: () => void;
+  onDeleteUser: (userId: string, label: string) => void;
+  onToggleActive: (userId: string, label: string, nextActive: boolean) => void;
 }) {
   return (
     <div style={{ borderTop: "1px solid var(--rule)" }}>
@@ -920,7 +1039,7 @@ function SectionRow({
             </p>
           ) : (
             <DataTable
-              columns={STUDENT_COLS}
+              columns={studentCols(onDeleteUser, onToggleActive)}
               rows={section.students}
               rowKey={(s) => s.id}
               defaultSort={{ key: "student", dir: "asc" }}

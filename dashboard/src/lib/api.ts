@@ -123,6 +123,18 @@ export function getUserRole(): string | null {
   }
 }
 
+/** The signed-in admin's own user id (JWT `sub`), or null. */
+export function getUserId(): string | null {
+  const token = getAccessToken();
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.sub ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Refresh-token rotation ─────────────────────────────────────────
 //
 // Before this, the dashboard had no refresh logic at all — any 401
@@ -269,6 +281,29 @@ async function download(path: string, params?: Record<string, string>): Promise<
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * What deleting an account would destroy. Fetched before the confirm
+ * dialog so the operator is shown the real damage rather than a
+ * generic "this can't be undone".
+ *
+ * `students_affected` is the one that matters: deleting a TEACHER
+ * cascades through their assignments into every submission and grade
+ * on them, so the people who lose work are usually not the person
+ * being deleted.
+ */
+export interface UserDeleteImpact {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+  assignments_destroyed: number;
+  submissions_destroyed: number;
+  grades_destroyed: number;
+  students_affected: number;
+  enrollments_removed: number;
 }
 
 export interface HarnessRun {
@@ -453,6 +488,14 @@ export const api = {
     request<DocumentContent>(`/admin/documents/${id}/content`),
   updateUserRole: (userId: string, role: string) => mutate<{ status: string }>(`/admin/users/${userId}/role`, "PATCH", { role }),
   deleteUser: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}`, "DELETE"),
+  /** What a delete would destroy — asked before showing the confirm. */
+  userDeleteImpact: (userId: string) =>
+    request<UserDeleteImpact>(`/admin/users/${userId}/delete-impact`),
+  /** The reversible alternative: revoke access, keep the work. */
+  setUserActive: (userId: string, isActive: boolean) =>
+    mutate<{ status: string; is_active: boolean }>(
+      `/admin/users/${userId}/active`, "PATCH", { is_active: isActive },
+    ),
   updateUserSubscription: (userId: string, tier: string, status: string) =>
     mutate<{ status: string }>(`/admin/users/${userId}/subscription`, "PATCH", { tier, status }),
   resetDailyLimit: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}/reset-daily-limit`, "POST"),
@@ -897,6 +940,8 @@ export interface SchoolSectionStudent {
   name: string;
   email: string;
   grade_level: number;
+  /** False when an admin has revoked access without deleting. */
+  is_active: boolean;
   submission_count: number;
   graded_count: number;
   avg_score: number | null;
@@ -924,6 +969,8 @@ export interface SchoolTeacher {
   name: string;
   email: string;
   joined_at: string;
+  /** False when an admin has revoked access without deleting. */
+  is_active: boolean;
   gen_cost_30d: number;
   gen_call_count_30d: number;
   sections: SchoolSection[];
@@ -1075,6 +1122,8 @@ export interface UsersData {
     name: string;
     role: string;
     grade_level: number;
+    /** False when an admin has revoked access without deleting. */
+    is_active: boolean;
     session_count: number;
     total_cost: number;
     llm_call_count: number;
