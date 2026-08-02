@@ -65,11 +65,9 @@ export default function ForDistrictsPage() {
         <PaperworkBlock />
         <FAQ
           items={districtFaqs}
-          eyebrow="District questions"
           heading="What district leaders ask."
         />
         <CtaBand
-          eyebrow="Ready to start"
           headline="Bring Veradic to your district."
           subhead="Send us your paperwork. We'll handle the rest."
           primaryLabel="Email us"

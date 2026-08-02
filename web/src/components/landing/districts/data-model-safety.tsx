@@ -1,5 +1,4 @@
 import { Section } from "../section";
-import { Eyebrow } from "../eyebrow";
 
 type Topic = {
   heading: string;
@@ -39,7 +38,6 @@ export function DataModelSafety() {
   return (
     <Section variant="alt2" id="data-model-safety">
       <div className="mx-auto max-w-3xl text-center">
-        <Eyebrow>Data hosting &amp; model safety</Eyebrow>
         <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
           Where the data lives. How the model behaves.
         </h2>

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Section } from "../section";
-import { Eyebrow } from "../eyebrow";
 
 const HANDLED = [
   "Standard NDPA template, signed and countersigned",
@@ -22,7 +21,6 @@ export function PaperworkBlock() {
     <Section variant="default" id="paperwork">
       <div className="mx-auto grid max-w-5xl gap-12 md:grid-cols-[1.2fr_1fr] md:items-start md:gap-16">
         <div>
-          <Eyebrow>Paperwork</Eyebrow>
           <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
             Send us what your district uses. We&rsquo;ve seen it.
           </h2>

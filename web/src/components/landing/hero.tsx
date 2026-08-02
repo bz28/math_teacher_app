@@ -33,8 +33,16 @@ export function Hero() {
           animate="show"
           variants={{ show: { transition: { staggerChildren: 0.09, delayChildren: 0.05 } } }}
         >
-          <h1 className="tracking-[-0.025em] text-[color:var(--color-text)] [font-size:clamp(2.75rem,5.8vw,4.75rem)] [line-height:1.05] [text-wrap:balance]">
-            <motion.span className="block font-bold pb-2" variants={rise}>
+          {/* Both lines are the display serif. The setup line was set in
+              Inter Bold while the payoff was Fraunces italic — one
+              sentence, two typefaces, and the break landed exactly
+              where the argument turns, so the turn read as a font
+              change rather than a thought. Now the face is constant
+              and roman→italic carries the pivot, which is what italic
+              is for. Tracking eased from -0.025em: that was tuned for
+              Inter and collides Fraunces' terminals at 4.75rem. */}
+          <h1 className="font-display-serif tracking-[-0.02em] text-[color:var(--color-text)] [font-size:clamp(2.75rem,5.8vw,4.75rem)] [line-height:1.08] [text-wrap:balance]">
+            <motion.span className="block font-semibold pb-2" variants={rise}>
               Your students already have AI.
             </motion.span>
             <motion.span className="block font-display-serif italic font-semibold pb-2 text-[color:var(--color-primary)] [font-size:1.2em]" variants={rise}>

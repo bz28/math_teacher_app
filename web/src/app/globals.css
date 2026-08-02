@@ -212,7 +212,11 @@
 /* ── Tailwind theme extension ── */
 @theme inline {
   --font-sans: var(--font-inter);
-  --font-serif: var(--font-instrument-serif);
+  /* One display serif for the whole site. This pointed at
+     Instrument Serif while a second serif (Fraunces) set a
+     handful of italic phrases — two faces doing one job, at
+     different weights, on the same page. */
+  --font-serif: var(--font-fraunces);
   --font-mono: var(--font-geist-mono);
 
   /* Colors */
@@ -432,12 +436,22 @@ html {
 .text-display-lg,
 .text-display-md,
 .text-display-sm {
+  /* The display scale is SERIF. It inherited Inter, so every headline
+     on the site was set in the same grotesk as the body — which is
+     why the pages read as category-default despite an editorial
+     brief. */
+  font-family: var(--font-fraunces), Georgia, "Times New Roman", serif;
   text-wrap: balance;
 }
-.text-display-xl { font-size: var(--text-display-xl); line-height: 0.98; letter-spacing: -0.03em; font-weight: 700; }
-.text-display-lg { font-size: var(--text-display-lg); line-height: 1.02; letter-spacing: -0.025em; font-weight: 700; }
-.text-display-md { font-size: var(--text-display-md); line-height: 1.1; letter-spacing: -0.02em; font-weight: 700; }
-.text-display-sm { font-size: var(--text-display-sm); line-height: 1.15; letter-spacing: -0.015em; font-weight: 700; }
+/* Tracking retuned for the serif. Inter needed -0.03em to look set;
+   Fraunces has wider natural sidebearings and real optical mass, so
+   the same negative tracking collides the terminals at display size.
+   Weight steps down as size goes up — 700 at 5.5rem is a slab, 600
+   carries the same authority with air in the counters. */
+.text-display-xl { font-size: var(--text-display-xl); line-height: 1.02; letter-spacing: -0.02em; font-weight: 600; }
+.text-display-lg { font-size: var(--text-display-lg); line-height: 1.06; letter-spacing: -0.018em; font-weight: 600; }
+.text-display-md { font-size: var(--text-display-md); line-height: 1.14; letter-spacing: -0.014em; font-weight: 700; }
+.text-display-sm { font-size: var(--text-display-sm); line-height: 1.2; letter-spacing: -0.01em; font-weight: 700; }
 
 /* ── Editorial serif utility — Instrument Serif for emphasis phrases,
    subtitles, and italic display moments. Pages opt in explicitly via

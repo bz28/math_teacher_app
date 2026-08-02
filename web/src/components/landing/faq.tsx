@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { faqs as homepageFaqs } from "@/lib/seo";
 import { Section } from "./section";
-import { Eyebrow } from "./eyebrow";
 
 type FaqItem = { question: string; answer: string };
 
@@ -29,7 +28,6 @@ export function FAQ({
     <Section variant="alt" id="faq">
       <div className="mx-auto max-w-3xl">
         <div className="mb-14 text-center">
-          <Eyebrow>{eyebrow}</Eyebrow>
           <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
             {heading}
           </h2>

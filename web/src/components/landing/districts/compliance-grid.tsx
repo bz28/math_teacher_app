@@ -1,5 +1,4 @@
 import { Section } from "../section";
-import { Eyebrow } from "../eyebrow";
 
 type ComplianceItem = {
   label: string;
@@ -54,7 +53,6 @@ export function ComplianceGrid() {
   return (
     <Section variant="alt" id="compliance">
       <div className="mx-auto max-w-3xl text-center">
-        <Eyebrow>Compliance & data isolation</Eyebrow>
         <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
           Every law your district lawyer asks about — answered.
         </h2>

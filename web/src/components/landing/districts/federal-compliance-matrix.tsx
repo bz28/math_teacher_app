@@ -1,5 +1,4 @@
 import { Section } from "../section";
-import { Eyebrow } from "../eyebrow";
 
 type EvidenceLink = {
   /** Display text shown in the evidence column. */
@@ -118,7 +117,6 @@ export function FederalComplianceMatrix() {
   return (
     <Section variant="default" id="federal-compliance">
       <div className="mx-auto max-w-3xl text-center">
-        <Eyebrow>Federal compliance, line by line</Eyebrow>
         <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
           The checklist your procurement team runs.
         </h2>

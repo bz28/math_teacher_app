@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
 import { Section } from "@/components/landing/section";
-import { Eyebrow } from "@/components/landing/eyebrow";
 import { FAQ } from "@/components/landing/faq";
 import { contact } from "@/lib/api";
 
@@ -72,7 +71,6 @@ export default function DemoPage() {
         {/* ── Compact hero ── */}
         <Section variant="default">
           <div className="mx-auto max-w-3xl text-center">
-            <Eyebrow>Book a demo</Eyebrow>
             <motion.h1
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
@@ -97,7 +95,6 @@ export default function DemoPage() {
         <Section variant="alt" id="contact">
           <div className="mx-auto max-w-5xl">
             <div className="text-center">
-              <Eyebrow>Get started</Eyebrow>
               <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
                 Tell us where you teach.
               </h2>

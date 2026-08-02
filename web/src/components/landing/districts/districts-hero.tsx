@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Section } from "../section";
-import { Eyebrow } from "../eyebrow";
 
 /**
  * Hero for /for-districts — the page admins land on when forwarded a
@@ -14,7 +13,6 @@ export function DistrictsHero() {
   return (
     <Section variant="default">
       <div className="mx-auto max-w-3xl text-center">
-        <Eyebrow>For superintendents and curriculum directors</Eyebrow>
         <h1 className="mt-8 text-display-xl text-[color:var(--color-text)]">
           Built for your teachers.{" "}
           <span className="font-serif italic font-normal text-[color:var(--color-primary-dark)]">
