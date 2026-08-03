@@ -59,6 +59,37 @@ export function IntegrityInterview() {
         justifyContent: "center",
       }}
     >
+      {/* Skip straight to the payoff.
+          The scripted exchange runs ~12.8s before the verdict card
+          resolves, and it is the single most persuasive artifact on
+          the site — a visitor who will not wait out the animation
+          never sees the argument at all. The only existing control
+          (Replay) appeared AFTER the payoff, which helps the people
+          who already stayed. This is visible from the first turn and
+          disappears once there is nothing left to skip. */}
+      {!reduce && phase !== "card" && (
+        <button
+          type="button"
+          onClick={() => setPhase("card")}
+          style={{
+            alignSelf: "flex-start",
+            marginBottom: 10,
+            background: "none",
+            border: "none",
+            padding: "4px 0",
+            font: "inherit",
+            fontSize: 12.5,
+            fontWeight: 600,
+            color: "var(--color-text-muted)",
+            cursor: "pointer",
+            textDecoration: "underline",
+            textUnderlineOffset: 3,
+          }}
+        >
+          Skip to the verdict
+        </button>
+      )}
+
       <div style={{ width: "100%", maxWidth: 600, display: "flex", justifyContent: "center" }}>
         <AnimatePresence mode="wait">
           {effectivePhase === "chat" ? (
