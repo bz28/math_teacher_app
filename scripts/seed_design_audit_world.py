@@ -209,6 +209,24 @@ async def seed() -> dict:
                     "students": students,
                 })
 
+        # The focus student sits in ONE section per course, across
+        # every course — a real student's day, not a single class. With
+        # them enrolled in only one section the student surfaces render
+        # a world with one class and one grade, which reads as an empty
+        # state and hides every ranking, grouping and density problem
+        # the audit exists to find.
+        seen_courses = {made[0]["course"].id}
+        for grp in made[1:]:
+            if grp["course"].id in seen_courses:
+                continue
+            seen_courses.add(grp["course"].id)
+            s.add(SectionEnrollment(
+                section_id=grp["section"].id,
+                course_id=grp["course"].id,
+                student_id=focus_student.id,
+            ))
+            grp["students"].append(focus_student)
+
         # ── Homework across every state the UI must render ──
         #
         # not-yet-due / due-today / overdue, and within the graded ones a
