@@ -39,12 +39,18 @@
   --color-info-light: #DDE6EF;
   --color-info-border: #B5C2D1;
 
-  /* Ink & paper text — warm muted browns. --color-text-secondary
-     is WCAG AA at 14px on --color-bg; --color-text-muted is AA-Large
-     only, intended for ≥18px labels and small caps. */
+  /* Ink & paper text — warm muted browns. Both --color-text-secondary
+     and --color-text-muted clear WCAG AA (4.5:1) for normal text on
+     every paper surface, so neither carries a size caveat.
+     --color-text-muted was #7D7669, documented as "AA-Large only,
+     ≥18px" — and then used at 10–16px on /students, /subjects/*,
+     /trust and /login, measuring 4.13–4.31:1. A rule that lives only
+     in a comment is not a rule; darkening the token enforces it
+     everywhere at once. #6F6857 keeps the warm hue and measures
+     5.08–5.54:1 across --color-bg, --color-surface-alt and white. */
   --color-text: #14130F;
   --color-text-secondary: #5C554C;
-  --color-text-muted: #7D7669;
+  --color-text-muted: #6F6857;
   --color-text-on-primary: #FFFFFF;
 
   /* Backgrounds — paper-warm. --color-bg is the page; --color-surface
@@ -103,11 +109,18 @@
   --gradient-header: linear-gradient(135deg, #0E5238, #1F6B47);
 }
 
+/* Subject accents carry text and set button fills, so --color-primary
+   has to clear AA both AS text on paper and UNDER white text. The
+   original #0984E3 measured 3.71:1 as an 11px label and 3.87:1 behind
+   white on "Try a problem" — a primary action below the floor. The
+   hue is preserved; only the value drops, and --color-primary-light
+   keeps the bright blue for fills and gradients where nothing is read
+   against it. */
 [data-subject="physics"] {
-  --color-primary: #0984E3;
+  --color-primary: #0B6BB5;
   --color-primary-light: #74B9FF;
   --color-primary-bg: #E8F4FD;
-  --color-primary-dark: #0773C5;
+  --color-primary-dark: #095289;
   --gradient-primary: linear-gradient(135deg, #0984E3, #74B9FF);
   --gradient-header: linear-gradient(135deg, #0984E3, #4BA3ED);
 }

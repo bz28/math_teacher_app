@@ -54,7 +54,7 @@ const physicsIcon = (
 );
 
 const whyReasons = [
-  "Covers the full physics curriculum from conceptual physics through AP Physics C: mechanics, electricity, magnetism, and modern physics.",
+  "Built on the same engine as our math tool, which is the deepest subject we ship. Physics is newer and still deepening \u2014 it handles core problem types today and gains coverage every term.",
   "Walks students through free-body diagrams, unit conversions, and energy conservation: the moves that matter, not just the final numbers.",
   "Catches the unit errors, sign errors, and vector-component mistakes that trip up every physics student at least once a week.",
 ];
@@ -71,7 +71,7 @@ export default function PhysicsPage() {
       description="From kinematics through modern physics, Veradic walks every student through the reasoning, so they get the answer, and they actually understand the physics behind it."
       detailedDescription="Whether your students are drawing their first free-body diagram, working through projectile motion, or prepping for the AP Physics exam, Veradic meets them where they are and guides them forward, one step at a time."
       educationalProgramDescription="AI-powered physics tutoring for classrooms, covering kinematics, forces, energy, waves, electricity, magnetism, and modern physics with step-by-step guidance and teacher-controlled content."
-      badgeColor="#0984E3"
+      badgeColor="#0B6BB5"
       icon={physicsIcon}
       whyReasons={whyReasons}
       subjectProseBlock={subjectProseBlock}

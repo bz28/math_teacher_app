@@ -55,7 +55,7 @@ const chemIcon = (
 );
 
 const whyReasons = [
-  "Covers the full chemistry curriculum from intro chem through AP Chemistry and organic. One tool for every section in your course.",
+  "Built on the same engine as our math tool, which is the deepest subject we ship. Chemistry is newer and still deepening \u2014 it handles core problem types today and gains coverage every term.",
   "Handles the unit gymnastics chemistry demands (grams to moles to molecules) without students giving up halfway through.",
   "Renders real molecular structures so students understand bonding and reactivity instead of just memorizing names.",
 ];
@@ -72,7 +72,7 @@ export default function ChemistryPage() {
       description="From balancing equations through organic synthesis, Veradic walks every student through the chemistry, so they get the answer, and they actually understand the reaction behind it."
       detailedDescription="Whether your students are just learning the periodic table or prepping for AP Chemistry, Veradic meets them where they are and guides them forward through stoichiometry, bonding, equilibrium, and beyond, one step at a time."
       educationalProgramDescription="AI-powered chemistry tutoring for classrooms, covering atoms, bonding, stoichiometry, thermochemistry, equilibrium, acids and bases, electrochemistry, kinetics, and organic chemistry with step-by-step guidance and teacher-controlled content."
-      badgeColor="#00B894"
+      badgeColor="#0A7357"
       icon={chemIcon}
       whyReasons={whyReasons}
       subjectProseBlock={subjectProseBlock}
