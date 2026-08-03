@@ -27,7 +27,7 @@ export function DistrictsHero() {
         </p>
         <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
           <Link
-            href="mailto:support@veradicai.com?subject=DPA%20%2B%20pilot%20info%20%E2%80%94%20%5BDistrict%20name%5D"
+            href="/demo"
             className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-[color:var(--color-primary)] px-8 text-base font-bold text-white transition-colors hover:bg-[color:var(--color-primary-dark)]"
           >
             Request DPA + pilot info

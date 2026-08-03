@@ -77,7 +77,7 @@ export default function DemoPage() {
               transition={{ duration: 0.5 }}
               className="mt-6 text-display-lg text-[color:var(--color-text)]"
             >
-              Bring Veradic to your classroom.
+              Bring Veradic to your school.
             </motion.h1>
             <motion.p
               initial={{ opacity: 0, y: 16 }}
@@ -96,7 +96,7 @@ export default function DemoPage() {
           <div className="mx-auto max-w-5xl">
             <div className="text-center">
               <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
-                Tell us where you teach.
+                Tell us about your school.
               </h2>
               <p className="mt-4 text-lg text-[color:var(--color-text-secondary)]">
                 We&rsquo;ll handle the rest.

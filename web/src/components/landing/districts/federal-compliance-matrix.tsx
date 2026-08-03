@@ -41,6 +41,26 @@ const ROWS: ComplianceRow[] = [
     },
   },
   {
+    // Migrated from the deleted ComplianceGrid. These two were the only
+    // claims that section made which the matrix did not already carry —
+    // the other four (FERPA, COPPA, DPA, state addenda) were verbatim
+    // restatements of rows below.
+    requirement: "Never used for AI training",
+    how: "Student work, tutor conversations, integrity-check transcripts and grades are never used to train AI models — ours or anyone else's.",
+    evidence: {
+      label: "Privacy Policy",
+      href: "/privacy#how-we-use-information",
+    },
+  },
+  {
+    requirement: "District-owned education record",
+    how: "All student-generated content is treated as an education record under district policy. Districts can export, audit or delete it at any time.",
+    evidence: {
+      label: "Trust & Security",
+      href: "/trust#overview",
+    },
+  },
+  {
     requirement: "CIPA",
     how: "Internet filtering and minor-protection controls are a district-side responsibility under CIPA. Veradic does not bypass or interfere with district filtering.",
     evidence: {
