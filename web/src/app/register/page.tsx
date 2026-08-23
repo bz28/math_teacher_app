@@ -36,6 +36,10 @@ function RegisterPageContent() {
   const [password, setPassword] = useState("");
   const [gradeLevel, setGradeLevel] = useState(8);
   const [joinCode, setJoinCode] = useState("");
+  // Which door the visitor says they came for. Self-signup only: an
+  // invite already settles the question, and a teacher on their
+  // school's invite link is in exactly the right place.
+  const [audience, setAudience] = useState<"student" | "teacher">("student");
   const [emailError, setEmailError] = useState("");
   const [checkingEmail, setCheckingEmail] = useState(false);
   const { register, loading, error, clearError, user } = useAuthStore();
@@ -256,6 +260,35 @@ function RegisterPageContent() {
         transition={{ duration: 0.18, ease: "easeOut" }}
         className="relative w-full max-w-md rounded-[--radius-md] border border-border bg-surface p-8"
       >
+        {/* Which door — self-signup only. Reuses the Grade Level picker's
+            segmented treatment so it reads as native to this form rather
+            than bolted on top of it. */}
+        {!lockEmail && (
+          <div className="mb-6 flex flex-col gap-1.5">
+            <span id="audience-label" className="text-[13px] font-semibold tracking-wide text-text-secondary">
+              I&apos;m a…
+            </span>
+            <div role="radiogroup" aria-labelledby="audience-label" className="flex gap-2">
+              {(["student", "teacher"] as const).map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  role="radio"
+                  aria-checked={audience === role}
+                  onClick={() => setAudience(role)}
+                  className={`flex-1 rounded-[--radius-sm] border py-2.5 text-sm font-semibold capitalize transition-colors ${
+                    audience === role
+                      ? "border-primary bg-primary-bg text-primary"
+                      : "border-border bg-input-bg text-text-secondary hover:border-primary/30"
+                  }`}
+                >
+                  {role}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {isInviteFlow ? (
           <>
             <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
@@ -283,14 +316,38 @@ function RegisterPageContent() {
         ) : (
           <>
             <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
-              Create your student account
+              {audience === "teacher"
+                ? "Let's set up your classroom"
+                : "Create your student account"}
             </h1>
             <p className="mt-1 text-sm text-text-secondary">
-              Start mastering any subject
+              {audience === "teacher"
+                ? "It starts with a conversation, not a signup form"
+                : "Start mastering any subject"}
             </p>
           </>
         )}
 
+        {audience === "teacher" ? (
+          <div className="mt-6">
+            <p className="text-sm leading-relaxed text-text-secondary">
+              Tell us about your school and we&apos;ll have your roster,
+              sections, and grading ready before your first assignment.
+            </p>
+            <Link
+              href="/demo"
+              className="mt-5 flex w-full items-center justify-center gap-2 rounded-[--radius-sm] bg-primary px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
+            >
+              Tell us about your school
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </Link>
+            <p className="mt-3 text-center text-xs text-text-muted">
+              Already invited by your school? Use the link in your invite email.
+            </p>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <Input
             label="Name"
@@ -408,6 +465,7 @@ function RegisterPageContent() {
             </Link>.
           </p>
         </form>
+        )}
 
         <div className="mt-6 border-t border-border-light pt-4 text-center">
           <p className="text-sm text-text-secondary">
@@ -419,18 +477,6 @@ function RegisterPageContent() {
               Sign In
             </Link>
           </p>
-          {!lockEmail && (
-            <p className="mt-2 text-sm text-text-secondary">
-              Teacher?{" "}
-              <Link
-                href="/demo"
-                className="font-semibold text-primary hover:text-primary-dark"
-              >
-                Tell us about your school
-              </Link>{" "}
-              and we&apos;ll set up your classroom.
-            </p>
-          )}
         </div>
       </motion.div>
     </div>
