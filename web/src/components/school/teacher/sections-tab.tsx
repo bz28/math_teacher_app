@@ -234,6 +234,15 @@ function SectionCard({
       await reloadDetail();
     }, "Failed to revoke invite");
 
+  const toggleEnrollment = () =>
+    run(async () => {
+      await teacher.setEnrollmentOpen(courseId, section.id, !enrollmentOpen);
+      // Detail wins over the list row when the roster is open, so refresh
+      // it too or the card would snap back to the stale value.
+      if (expanded) await reloadDetail();
+      onChanged();
+    }, "Failed to update enrollment");
+
   const regenerateCode = () =>
     run(async () => {
       await teacher.generateJoinCode(courseId, section.id);
@@ -294,6 +303,7 @@ function SectionCard({
   };
 
   const code = detail?.join_code ?? section.join_code;
+  const enrollmentOpen = detail?.enrollment_open ?? section.enrollment_open;
 
   return (
     <div className="rounded-[--radius-lg] border border-border-light bg-surface">
@@ -382,8 +392,15 @@ function SectionCard({
           dominant affordance. Bulk-email invites live under Manage. */}
       {code && (
         <div className="border-t border-border-light px-4 py-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-            Share with your class
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+              Share with your class
+            </span>
+            {!enrollmentOpen && (
+              <span className="rounded-full bg-[color:var(--color-surface-alt-2)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-text-secondary">
+                Closed
+              </span>
+            )}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <button
@@ -393,7 +410,9 @@ function SectionCard({
               className={`inline-flex items-center gap-2 rounded-[--radius-md] px-3 py-1.5 font-mono text-base font-bold tracking-[0.12em] transition-colors ${
                 copied
                   ? "bg-[color:var(--color-success-light)] text-[color:var(--color-success)]"
-                  : "bg-primary-bg text-primary hover:bg-primary/20"
+                  : enrollmentOpen
+                    ? "bg-primary-bg text-primary hover:bg-primary/20"
+                    : "bg-[color:var(--color-surface-alt-2)] text-text-muted hover:bg-[color:var(--color-surface-alt-2)]/70"
               }`}
             >
               {code}
@@ -402,9 +421,22 @@ function SectionCard({
               </span>
             </button>
             <p className="text-xs text-text-muted">
-              Students enter this code to join.
+              {enrollmentOpen
+                ? "Students enter this code to join."
+                : "New students can't join with this code right now."}
             </p>
+            <button
+              type="button"
+              onClick={toggleEnrollment}
+              disabled={busy}
+              className="ml-auto rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)] disabled:opacity-50"
+            >
+              {enrollmentOpen ? "Close enrollment" : "Reopen enrollment"}
+            </button>
           </div>
+          {error && !expanded && (
+            <p className="mt-2 text-xs text-[color:var(--color-error)]">{error}</p>
+          )}
         </div>
       )}
 

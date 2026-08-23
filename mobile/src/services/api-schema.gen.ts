@@ -5826,6 +5826,8 @@ export interface components {
         };
         /** UpdateSectionRequest */
         UpdateSectionRequest: {
+            /** Enrollment Open */
+            enrollment_open?: boolean | null;
             /** Name */
             name?: string | null;
         };

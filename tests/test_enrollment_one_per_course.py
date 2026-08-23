@@ -6,7 +6,6 @@ already in — not the DB unique-constraint error, and not a silent
 duplicate.
 """
 import uuid
-from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -39,14 +38,13 @@ async def two_sections_one_course() -> dict[str, str]:
         s.add_all([student, course])
         await s.flush()
 
-        expires = datetime.now(UTC) + timedelta(days=7)
         p1 = Section(
             course_id=course.id, name="Period 1",
-            join_code=f"A{tag}", join_code_expires_at=expires,
+            join_code=f"A{tag}",
         )
         p2 = Section(
             course_id=course.id, name="Period 2",
-            join_code=f"B{tag}", join_code_expires_at=expires,
+            join_code=f"B{tag}",
         )
         # Second course (different) to confirm we only block same-course
         # second enrollments, not "any second enrollment."
@@ -55,7 +53,7 @@ async def two_sections_one_course() -> dict[str, str]:
         await s.flush()
         g1 = Section(
             course_id=geom.id, name="Block A",
-            join_code=f"G{tag}", join_code_expires_at=expires,
+            join_code=f"G{tag}",
         )
         s.add_all([p1, p2, g1])
         await s.commit()

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
@@ -317,7 +317,6 @@ async def seed_joinable_section(seed: Seed) -> str:
         code = f"J{uuid.uuid4().hex[:7].upper()}"
         s.add(Section(
             course_id=course.id, name="Joinable", join_code=code,
-            join_code_expires_at=datetime.now(UTC) + timedelta(days=30),
         ))
         await s.commit()
     return code
