@@ -283,7 +283,7 @@ function RegisterPageContent() {
         ) : (
           <>
             <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
-              Create your account
+              Create your student account
             </h1>
             <p className="mt-1 text-sm text-text-secondary">
               Start mastering any subject
@@ -419,6 +419,18 @@ function RegisterPageContent() {
               Sign In
             </Link>
           </p>
+          {!lockEmail && (
+            <p className="mt-2 text-sm text-text-secondary">
+              Teacher?{" "}
+              <Link
+                href="/demo"
+                className="font-semibold text-primary hover:text-primary-dark"
+              >
+                Tell us about your school
+              </Link>{" "}
+              and we&apos;ll set up your classroom.
+            </p>
+          )}
         </div>
       </motion.div>
     </div>
