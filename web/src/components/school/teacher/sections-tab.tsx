@@ -423,7 +423,7 @@ function SectionCard({
             <p className="text-xs text-text-muted">
               {enrollmentOpen
                 ? "Students enter this code to join."
-                : "New students can't join with this code right now."}
+                : "New students can't join right now."}
             </p>
             <button
               type="button"

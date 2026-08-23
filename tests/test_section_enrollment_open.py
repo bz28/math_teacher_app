@@ -13,11 +13,13 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
 from api.models.course import Course, CourseTeacher
 from api.models.section import Section
+from api.models.section_invite import SectionInvite
 from api.models.user import User
 
 from .conftest import auth_headers
@@ -74,11 +76,11 @@ def _patch_url(fx: dict[str, str]) -> str:
 
 
 @pytest.mark.asyncio
-async def test_new_section_is_open_and_code_never_expires(
+async def test_new_section_is_open_and_its_code_admits_students(
     client: AsyncClient, open_section: dict[str, str],
 ) -> None:
-    """The regression the timer caused: a code that works today must
-    still work with no teacher action in between."""
+    """A fresh section is open, exposes no expiry field, and its code
+    admits a student — the shape the 7-day timer used to break."""
     r = await client.get(
         f"/v1/teacher/courses/{open_section['course_id']}/sections",
         headers=auth_headers(open_section["teacher_token"]),
@@ -167,3 +169,49 @@ async def test_rename_does_not_disturb_enrollment_state(
     assert detail.status_code == 200, detail.text
     assert detail.json()["name"] == "Period 2"
     assert detail.json()["enrollment_open"] is False
+
+
+@pytest.mark.asyncio
+async def test_closed_enrollment_blocks_pending_email_invites(
+    client: AsyncClient, open_section: dict[str, str],
+) -> None:
+    """Closing enrollment has to shut every door, not just the code.
+    A pending emailed invite is still a way in, so the shared invite
+    loader gates on the same flag — which covers validating the link,
+    signing up through it, and claiming it while already logged in."""
+    teacher = auth_headers(open_section["teacher_token"])
+    invited_email = f"eo_invited_{open_section['tag'].lower()}@t.com"
+
+    invited = await client.post(
+        f"/v1/teacher/courses/{open_section['course_id']}"
+        f"/sections/{open_section['section_id']}/invites",
+        headers=teacher, json={"email": invited_email},
+    )
+    assert invited.status_code == 200, invited.text
+    # The serializer deliberately withholds the token (it's the secret in
+    # the emailed link), so read it back from the row.
+    async with get_session_factory()() as s:
+        token = (await s.execute(
+            select(SectionInvite.token).where(SectionInvite.email == invited_email)
+        )).scalar_one()
+
+    # Still open: the link validates.
+    ok = await client.get(f"/v1/auth/invite/section/{token}")
+    assert ok.status_code == 200, ok.text
+
+    await client.patch(
+        _patch_url(open_section), headers=teacher, json={"enrollment_open": False},
+    )
+
+    blocked = await client.get(f"/v1/auth/invite/section/{token}")
+    assert blocked.status_code == 403, blocked.text
+    assert "accepting new students" in blocked.json()["detail"]
+
+    signup = await client.post(REGISTER_URL, json={
+        "email": invited_email,
+        "password": "StrongPass1",
+        "name": "Invited But Late",
+        "grade_level": 9,
+        "section_invite_token": token,
+    })
+    assert signup.status_code == 403, signup.text

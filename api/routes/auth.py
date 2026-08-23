@@ -417,6 +417,11 @@ async def _load_section_invite(
     )).scalar_one_or_none()
     if not section:
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Section no longer exists")
+    if not section.enrollment_open:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This class isn't accepting new students. Ask your teacher to reopen it.",
+        )
     course = (await db.execute(
         select(Course).where(Course.id == section.course_id)
     )).scalar_one_or_none()
