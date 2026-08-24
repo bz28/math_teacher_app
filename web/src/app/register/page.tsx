@@ -51,9 +51,10 @@ function RegisterPageContent() {
   const inviteToken = searchParams.get("invite");
   const sectionInviteToken = searchParams.get("section_invite");
 
-  // Self-signup is student-only. Veradic is sold to schools: teachers never
-  // self-register — they arrive through a teacher invite (authoritative on
-  // role) or their school books a demo. So there's no role toggle here.
+  // The form itself only ever creates students. Veradic is sold to
+  // schools, so a teacher belongs on the demo path (or their school's
+  // invite link), not here — the picker below routes them there rather
+  // than letting them sign up into the wrong kind of account.
   const [invite, setInvite] = useState<InviteData | null>(null);
   const [sectionInvite, setSectionInvite] = useState<SectionInviteData | null>(null);
   const [inviteLoading, setInviteLoading] = useState(!!inviteToken || !!sectionInviteToken);
@@ -275,6 +276,20 @@ function RegisterPageContent() {
                   type="button"
                   role="radio"
                   aria-checked={audience === role}
+                  // A radiogroup is one tab stop, and arrows move within it.
+                  // Without this the role announces a choice the keyboard
+                  // can't actually make.
+                  tabIndex={audience === role ? 0 : -1}
+                  onKeyDown={(e) => {
+                    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return;
+                    e.preventDefault();
+                    const next = audience === "student" ? "teacher" : "student";
+                    setAudience(next);
+                    e.currentTarget.parentElement
+                      ?.querySelector<HTMLButtonElement>(`[data-audience="${next}"]`)
+                      ?.focus();
+                  }}
+                  data-audience={role}
                   onClick={() => setAudience(role)}
                   className={`flex-1 rounded-[--radius-sm] border py-2.5 text-sm font-semibold capitalize transition-colors ${
                     audience === role
@@ -328,22 +343,22 @@ function RegisterPageContent() {
           </>
         )}
 
-        {audience === "teacher" ? (
+        {audience === "teacher" && !lockEmail ? (
           <div className="mt-6">
             <p className="text-sm leading-relaxed text-text-secondary">
-              Tell us about your school and we&apos;ll have your roster,
-              sections, and grading ready before your first assignment.
+              Tell us about your school. We&apos;ll reply within a day and set
+              your classes up together on a short call.
             </p>
             <Link
               href="/demo"
-              className="mt-5 flex w-full items-center justify-center gap-2 rounded-[--radius-sm] bg-primary px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
+              className="mt-5 flex w-full items-center justify-center gap-2 rounded-[--radius-sm] bg-primary px-4 py-3 text-sm font-semibold text-text-on-primary transition-colors hover:bg-primary-dark"
             >
               Tell us about your school
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M5 12h14M12 5l7 7-7 7" />
               </svg>
             </Link>
-            <p className="mt-3 text-center text-xs text-text-muted">
+            <p className="mt-3 text-center text-xs text-text-secondary">
               Already invited by your school? Use the link in your invite email.
             </p>
           </div>
