@@ -77,6 +77,36 @@ jobs:
           SENTRY_DSN: ""
         run: alembic upgrade head
 
+      # Migrations and models must agree. Without this, a model change
+      # that never got a migration passes CI silently (the test suite
+      # builds its schema from the models, so it never notices), and a
+      # promised follow-up migration can be forgotten entirely — both of
+      # which had already happened by the time this step was added.
+      - name: Migrations match the models
+        env:
+          DATABASE_URL: postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_test
+          JWT_SECRET: ci-test-secret
+          CLAUDE_API_KEY: sk-ant-ci-fake-key
+          APP_ENV: test
+          SENTRY_DSN: ""
+        run: |
+          alembic check \
+            || { echo "::error::Schema drift — the models and migrations disagree. Run 'alembic revision --autogenerate -m \"...\"', review what it produces, and commit it."; exit 1; }
+
+      # A second head means two migrations claim the same parent, which
+      # only shows up as a hard failure at deploy time.
+      - name: Single migration head
+        env:
+          DATABASE_URL: postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_test
+          JWT_SECRET: ci-test-secret
+          CLAUDE_API_KEY: sk-ant-ci-fake-key
+          APP_ENV: test
+          SENTRY_DSN: ""
+        run: |
+          heads=$(alembic heads | grep -c "(head)")
+          test "$heads" -eq 1 \
+            || { echo "::error::$heads alembic heads — two migrations share a parent. Rebase one onto the other."; exit 1; }
+
       - name: Lint
         run: ruff check api/ tests/
 
