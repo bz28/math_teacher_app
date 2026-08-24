@@ -256,7 +256,7 @@ async def stripe_webhook(
 
     if settings.stripe_webhook_secret:
         try:
-            event = stripe.Webhook.construct_event(  # type: ignore[no-untyped-call]
+            event = stripe.Webhook.construct_event(
                 payload, stripe_signature or "", settings.stripe_webhook_secret,
             )
         except (ValueError, stripe.SignatureVerificationError) as e:
