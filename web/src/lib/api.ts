@@ -403,6 +403,47 @@ async function refreshAccessToken(): Promise<RefreshResult> {
 
 // ── Core fetch ──
 
+
+// ── Admin "read as teacher" ──────────────────────────────────────────
+//
+// An admin debugging the live pilot opens the real teacher app with
+// ?view_as=<teacherId>; the id lives in sessionStorage (NOT localStorage)
+// so the mode dies with the tab and can't be silently inherited later.
+// Every request then carries ?as_teacher=<id>, and the server swaps the
+// SCOPE to her while keeping the admin as the accessor.
+//
+// The param is attached to WRITES as well as reads, which looks wrong and
+// isn't: without it a write in this mode would execute successfully as the
+// ADMIN's own account — creating a course under the wrong owner with no
+// error. With it, the server refuses (see require_teacher's GET-only
+// guard) and the admin gets a clear "read-only" message. A loud refusal
+// beats a silent wrong write.
+const VIEW_AS_KEY = "veradic_view_as_teacher";
+
+export function getViewAsTeacher(): string | null {
+  try {
+    return sessionStorage.getItem(VIEW_AS_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setViewAsTeacher(teacherId: string | null): void {
+  try {
+    if (teacherId) sessionStorage.setItem(VIEW_AS_KEY, teacherId);
+    else sessionStorage.removeItem(VIEW_AS_KEY);
+  } catch {
+    // Private mode / storage disabled — the mode simply won't engage.
+  }
+}
+
+/** Append ?as_teacher to a path when the mode is active. */
+function withViewAs(path: string): string {
+  const id = getViewAsTeacher();
+  if (!id) return path;
+  return path + (path.includes("?") ? "&" : "?") + `as_teacher=${encodeURIComponent(id)}`;
+}
+
 async function apiFetch<T>(
   path: string,
   options: RequestInit & { timeout?: number } = {},
@@ -421,7 +462,7 @@ async function apiFetch<T>(
 
   let res: Response;
   try {
-    res = await fetch(`${BASE_URL}${path}`, {
+    res = await fetch(`${BASE_URL}${withViewAs(path)}`, {
       ...fetchOpts,
       headers,
       signal: controller.signal,

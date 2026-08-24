@@ -147,8 +147,11 @@ async def get_student_practice_activity(
     # confirmed above. The helper commits its own row and never raises.
     await log_student_record_access(
         db,
-        accessor_user_id=current_user.user_id,
-        accessor_role=current_user.role,
+        # accessor_*, not user_id/role: when an admin is reading as a
+        # teacher the SCOPE is hers but the ACCESSOR is the admin,
+        # and this log answers "who looked at this child's record".
+        accessor_user_id=current_user.accessor_id,
+        accessor_role=current_user.accessor_role,
         target_student_id=student_id,
         record_type="practice_activity",
         accessor_school_id=course.school_id,
@@ -490,8 +493,11 @@ async def get_section_student_insights(
     # the teacher did. Authz is confirmed above; the helper never raises.
     await log_student_record_access(
         db,
-        accessor_user_id=current_user.user_id,
-        accessor_role=current_user.role,
+        # accessor_*, not user_id/role: when an admin is reading as a
+        # teacher the SCOPE is hers but the ACCESSOR is the admin,
+        # and this log answers "who looked at this child's record".
+        accessor_user_id=current_user.accessor_id,
+        accessor_role=current_user.accessor_role,
         target_student_id=None,
         record_type="practice_insights_roster",
         record_id=section_id,

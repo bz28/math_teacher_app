@@ -685,8 +685,11 @@ async def teacher_get_integrity_detail(
     # work extraction. Ownership confirmed above; log before returning.
     await log_student_record_access(
         db,
-        accessor_user_id=current_user.user_id,
-        accessor_role=current_user.role,
+        # accessor_*, not user_id/role: when an admin is reading as a
+        # teacher the SCOPE is hers but the ACCESSOR is the admin,
+        # and this log answers "who looked at this child's record".
+        accessor_user_id=current_user.accessor_id,
+        accessor_role=current_user.accessor_role,
         target_student_id=sub.student_id,
         record_type="integrity_submission",
         record_id=submission_id,

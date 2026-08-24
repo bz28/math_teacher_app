@@ -135,6 +135,7 @@ export default function TeacherDetail() {
           />
           <HeadlineStat label="Students" value={data.total_students.toLocaleString()} />
           <HeadlineStat label="Generations" value={u.generations.toLocaleString()} />
+          <ViewAsTeacherButton teacherId={teacherId!} name={t.name || t.email} />
         </div>
       </div>
 
@@ -257,6 +258,40 @@ function HeadlineStat({
 }
 
 // ── Sections card ──
+
+
+/**
+ * Deep-link into the real teacher app scoped to this teacher's data.
+ *
+ * Deliberately NOT impersonation: no token is minted and no credential
+ * changes hands. The admin signs into the teacher app as THEMSELVES (the
+ * teacher guard already admits admins) and the `view_as` parameter tells
+ * the API whose data to scope reads to. The server refuses any write in
+ * that mode, so the worst case is a refused click, never a change made
+ * under her name.
+ *
+ * Opens in a new tab: the admin is mid-investigation here and shouldn't
+ * lose the timeline they were reading to go look at her screen.
+ */
+function ViewAsTeacherButton({ teacherId, name }: { teacherId: string; name: string }) {
+  // The teacher app is a separate deployment; fall back to the local dev
+  // origin so this works without extra setup.
+  const webBase =
+    (import.meta.env.VITE_WEB_URL as string | undefined) ?? "http://localhost:3000";
+  const href = `${webBase}/school/teacher?view_as=${encodeURIComponent(teacherId)}`;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="btn-secondary"
+      title={`Open the teacher app scoped to ${name}'s data — read only`}
+      style={{ alignSelf: "center", whiteSpace: "nowrap" }}
+    >
+      View as teacher ↗
+    </a>
+  );
+}
 
 function SectionsCard({
   data,

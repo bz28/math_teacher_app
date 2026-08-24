@@ -246,8 +246,11 @@ async def get_student_grades(
     # The helper commits its own row and never raises.
     await log_student_record_access(
         db,
-        accessor_user_id=current_user.user_id,
-        accessor_role=current_user.role,
+        # accessor_*, not user_id/role: when an admin is reading as a
+        # teacher the SCOPE is hers but the ACCESSOR is the admin,
+        # and this log answers "who looked at this child's record".
+        accessor_user_id=current_user.accessor_id,
+        accessor_role=current_user.accessor_role,
         target_student_id=student_id,
         record_type="grades",
         accessor_school_id=course.school_id,
@@ -428,8 +431,11 @@ async def export_course_grades_csv(
     # since it spans the roster) before producing the file.
     await log_student_record_access(
         db,
-        accessor_user_id=current_user.user_id,
-        accessor_role=current_user.role,
+        # accessor_*, not user_id/role: when an admin is reading as a
+        # teacher the SCOPE is hers but the ACCESSOR is the admin,
+        # and this log answers "who looked at this child's record".
+        accessor_user_id=current_user.accessor_id,
+        accessor_role=current_user.accessor_role,
         target_student_id=None,
         record_type="grades_export",
         accessor_school_id=course.school_id,
