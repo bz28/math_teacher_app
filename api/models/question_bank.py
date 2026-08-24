@@ -27,6 +27,12 @@ class QuestionBankItem(Base):
     """A single AI-generated or teacher-edited question available for use
     in homework, tests, and student practice/learn modes once approved."""
 
+    # Composite the bank listing filters on. Declared so the model matches
+    # the database and autogenerate stops proposing its removal.
+    __table_args__ = (
+        Index("ix_question_bank_items_course_status", "course_id", "status"),
+    )
+
     __tablename__ = "question_bank_items"
     # eager_defaults makes SQLAlchemy fetch onupdate/server_default
     # values inline with the INSERT/UPDATE via RETURNING, instead of

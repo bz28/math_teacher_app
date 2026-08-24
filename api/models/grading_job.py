@@ -46,7 +46,7 @@ every grading call with its cost.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -85,6 +85,14 @@ STALE_RUNNING_MINUTES = 15
 class GradingJob(Base):
     __tablename__ = "grading_jobs"
 
+    # Declared here rather than left to the migration alone. The index
+    # exists in every database; a model that doesn't know about it makes
+    # `alembic check` propose dropping it on every run, which is how a
+    # real index gets deleted by an unrelated autogenerate.
+    __table_args__ = (
+        Index("ix_grading_jobs_status_scheduled_for", "status", "scheduled_for"),
+    )
+
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
@@ -111,10 +119,10 @@ class GradingJob(Base):
         index=True,
     )
 
-    # No index=True here or on scheduled_for: the migration creates a
-    # composite (status, scheduled_for), which is the drain's only hot
-    # query. Declaring singles as well makes `alembic revision
-    # --autogenerate` emit two CREATE INDEXes forever.
+    # No index=True here or on scheduled_for: the drain's only hot query
+    # is the composite (status, scheduled_for) declared in
+    # __table_args__ below. Declaring singles as well would have
+    # autogenerate emit two redundant CREATE INDEXes forever.
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=STATUS_QUEUED,
     )
