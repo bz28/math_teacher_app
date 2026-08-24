@@ -17,9 +17,11 @@ page that is *already broken*:
 2. **Never rejects for size.** Fields are truncated, not 422'd. A
    half-truncated stack still names the bug; a rejected report tells us
    nothing.
-3. **Rate limited.** It's an unauthenticated write reachable by any
-   browser, and a render crash-loop can fire hundreds of times a second.
-   The client de-dupes per page-load as well; this is the backstop.
+3. **Rate limited, but loosely.** It's an unauthenticated write reachable
+   by any browser. The limit is keyed on IP and a whole school shares one,
+   so it is set high enough that a classroom-wide crash still gets through
+   — see the note on `_RATE_LIMIT`. Honest traffic is bounded client-side;
+   the server limit exists for hostile floods, not for browsers.
 """
 
 import uuid
@@ -50,9 +52,21 @@ router = APIRouter(tags=["client-errors"])
 # missing — the whole point is accepting anonymous reports.
 _optional_bearer = HTTPBearer(auto_error=False)
 
-# Generous enough for a genuine crash-loop burst from one browser, tight
-# enough that the table can't be flooded from a single address.
-_RATE_LIMIT = "60/minute"
+# Keyed on IP, and a SCHOOL SITS BEHIND ONE NAT GATEWAY — thirty students
+# and their teacher share a single address. A bad deploy that crashes every
+# browser in a classroom therefore arrives as one IP sending a burst, and a
+# tight limit would drop most of it: the cap would bite hardest exactly when
+# the incident is biggest and the data most valuable, silently.
+#
+# So this is deliberately loose. The real bound on honest traffic is
+# client-side (report-error.ts de-dupes by fingerprint and stops at 25 per
+# page load), which means normal browsers cannot approach this number no
+# matter how badly things break. What's left for the server limit to do is
+# stop a hostile actor flooding the table — and 300/min still caps that.
+#
+# Do not tighten this back to a "sensible-looking" 60 without re-reading
+# the paragraph above.
+_RATE_LIMIT = "300/minute"
 
 
 def _clip(value: str | None, limit: int) -> str | None:
