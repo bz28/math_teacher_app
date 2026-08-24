@@ -3,6 +3,10 @@
 Shared across all modules that make Claude calls to enforce a single
 daily spend limit. Uses asyncio.Lock to prevent concurrent requests
 from racing past the limit.
+
+"Daily" means a UTC day. Everything else in this codebase timestamps in
+UTC, and the cap resetting at the server's local midnight would mean the
+spend window silently moves whenever the deploy region does.
 """
 
 import asyncio
@@ -38,8 +42,12 @@ class CostTracker:
     _reset_day: int = field(default=0, init=False)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
 
+    @staticmethod
+    def _utc_day() -> int:
+        return datetime.datetime.now(datetime.UTC).date().toordinal()
+
     def _maybe_reset(self) -> None:
-        today = datetime.date.today().toordinal()
+        today = self._utc_day()
         if today != self._reset_day:
             self._total_usd = 0.0
             self._reset_day = today
@@ -76,7 +84,7 @@ class CostTracker:
         """Reset accumulated spend to zero. Used by tests to keep the
         process-global tracker from bleeding cost across test cases."""
         self._total_usd = 0.0
-        self._reset_day = datetime.date.today().toordinal()
+        self._reset_day = self._utc_day()
 
     @property
     def total_usd(self) -> float:
