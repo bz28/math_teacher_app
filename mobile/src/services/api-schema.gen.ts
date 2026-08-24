@@ -88,6 +88,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/client-errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Client Errors
+         * @description Client-side errors, grouped by fingerprint, worst-recent first.
+         *
+         *     Each group carries its occurrence count, first/last seen, how many
+         *     distinct users hit it, and one representative row (the most recent)
+         *     for the stack. Ordered by last-seen so a bug that is happening NOW
+         *     outranks one that happened more often last week — during a pilot,
+         *     recency is the signal that matters.
+         */
+        get: operations["client_errors_v1_admin_client_errors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/documents/{document_id}/content": {
         parameters: {
             query?: never;
@@ -1424,6 +1450,27 @@ export interface paths {
         get: operations["teacher_usage_v1_billing_teacher_usage_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/client-errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report Client Error
+         * @description Record one client-side error. Always 204 — the caller is a broken
+         *     page and has nothing useful to do with a failure here.
+         */
+        post: operations["report_client_error_v1_client_errors_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3942,6 +3989,30 @@ export interface components {
             /** Token */
             token: string;
         };
+        /**
+         * ClientErrorIn
+         * @description One reported error. Every field except `message`, `kind`, and
+         *     `fingerprint` is best-effort — the reporter runs inside a broken page
+         *     and should send whatever it managed to collect rather than nothing.
+         */
+        ClientErrorIn: {
+            /** Component Stack */
+            component_stack?: string | null;
+            /** Context */
+            context?: {
+                [key: string]: unknown;
+            } | null;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Kind */
+            kind: string;
+            /** Message */
+            message: string;
+            /** Route */
+            route?: string | null;
+            /** Stack */
+            stack?: string | null;
+        };
         /** CompleteMockTestRequest */
         CompleteMockTestRequest: {
             /** Correct Count */
@@ -6177,6 +6248,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    client_errors_v1_admin_client_errors_get: {
+        parameters: {
+            query?: {
+                user_id?: string | null;
+                school_id?: string | null;
+                kind?: string | null;
+                hours?: number | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -8513,6 +8621,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsageResponse"];
+                };
+            };
+        };
+    };
+    report_client_error_v1_client_errors_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientErrorIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

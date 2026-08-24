@@ -216,6 +216,78 @@
         "title": "ClaimSectionInviteRequest",
         "type": "object"
       },
+      "ClientErrorIn": {
+        "description": "One reported error. Every field except `message`, `kind`, and\n`fingerprint` is best-effort \u2014 the reporter runs inside a broken page\nand should send whatever it managed to collect rather than nothing.",
+        "properties": {
+          "component_stack": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Stack"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "fingerprint": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "route": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route"
+          },
+          "stack": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stack"
+          }
+        },
+        "required": [
+          "kind",
+          "message",
+          "fingerprint"
+        ],
+        "title": "ClientErrorIn",
+        "type": "object"
+      },
       "CompleteMockTestRequest": {
         "properties": {
           "correct_count": {
@@ -6368,6 +6440,127 @@
         ]
       }
     },
+    "/v1/admin/client-errors": {
+      "get": {
+        "description": "Client-side errors, grouped by fingerprint, worst-recent first.\n\nEach group carries its occurrence count, first/last seen, how many\ndistinct users hit it, and one representative row (the most recent)\nfor the stack. Ordered by last-seen so a bug that is happening NOW\noutranks one that happened more often last week \u2014 during a pilot,\nrecency is the signal that matters.",
+        "operationId": "client_errors_v1_admin_client_errors_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hours",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 8760,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hours"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Client Errors V1 Admin Client Errors Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Client Errors",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/documents/{document_id}/content": {
       "get": {
         "description": "Serve a stored document's base64 image so the dashboard can render\nthe actual uploaded worksheet. Admin-only \u2014 this is course material,\ninvisible admin-side until now.",
@@ -10485,6 +10678,46 @@
         "summary": "Teacher Usage",
         "tags": [
           "billing"
+        ]
+      }
+    },
+    "/v1/client-errors": {
+      "post": {
+        "description": "Record one client-side error. Always 204 \u2014 the caller is a broken\npage and has nothing useful to do with a failure here.",
+        "operationId": "report_client_error_v1_client_errors_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientErrorIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Report Client Error",
+        "tags": [
+          "client-errors"
         ]
       }
     },
