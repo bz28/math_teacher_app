@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -341,8 +342,13 @@ async def _claim_due(db: AsyncSession, limit: int) -> list[GradingJob]:
     return list(rows)
 
 
-async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> bool:
+async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> str:
     """Grade one submission in its own session. Never raises.
+
+    Returns which of the three outcomes happened (`_GRADED` / `_SKIPPED`
+    / `_FAILED`), NOT a bool. `_finish` treats the three as deliberately
+    distinct, and a bool collapses skipped into failed for every caller
+    above — which is what the drain's counters report to a cron.
 
     Own session per job so one failure can't poison a sibling's
     transaction — the previous in-process implementation shared a
@@ -369,7 +375,7 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> bool:
                 # grade exists.
                 await _finish(db, job_id, outcome=_SKIPPED, error=None)
                 await db.commit()
-                return False
+                return _SKIPPED
 
             # Re-read the switch. It was checked at confirm time, but a
             # teacher can turn AI grading off in the days between then
@@ -381,7 +387,7 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> bool:
             if assignment is None or not assignment.ai_grading_enabled:
                 await _finish(db, job_id, outcome=_SKIPPED, error=None)
                 await db.commit()
-                return False
+                return _SKIPPED
 
             extraction = apply_extraction_edits(
                 sub.extraction, sub.extraction_edits,
@@ -389,7 +395,7 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> bool:
             if extraction is None:
                 await _finish(db, job_id, outcome=_SKIPPED, error=None)
                 await db.commit()
-                return False
+                return _SKIPPED
 
             # Second line of defence. The submit pipeline already gates
             # on this and declines to queue an unreadable submission at
@@ -400,7 +406,7 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> bool:
                 await record_unreadable_grading_skip(submission_id, db)
                 await _finish(db, job_id, outcome=_SKIPPED, error=None)
                 await db.commit()
-                return False
+                return _SKIPPED
 
             await run_ai_grading_for_submission(
                 submission_id, extraction, db, user_id=str(sub.student_id),
@@ -421,11 +427,11 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> bool:
                     error="grader returned no grades",
                 )
                 await db.commit()
-                return False
+                return _FAILED
 
             await _finish(db, job_id, outcome=_GRADED, error=None)
             await db.commit()
-            return True
+            return _GRADED
     except Exception as exc:  # noqa: BLE001 — a failed job must park, not crash the drain
         logger.exception("grading job %s failed", job_id)
         try:
@@ -446,7 +452,7 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> bool:
                 await db.commit()
         except Exception:  # noqa: BLE001
             logger.exception("could not record failure for grading job %s", job_id)
-        return False
+        return _FAILED
 
 
 def _is_infrastructure_stop(exc: BaseException) -> bool:
@@ -528,22 +534,24 @@ async def _finish(
         job.started_at = None
 
 
-async def _run_group(jobs: list[GradingJob]) -> tuple[int, int]:
+async def _run_group(jobs: list[GradingJob]) -> Counter[str]:
     """Run one assignment's claimed jobs, warming the cache prefix first.
 
     See the module docstring: the first call is awaited alone so it
     writes the shared prefix, and the rest then read it. Fanning all of
     them out at once would make every call miss.
+
+    Returns a tally keyed by outcome (`_GRADED` / `_SKIPPED` / `_FAILED`)
+    rather than a succeeded/failed pair — see `_grade_one`.
     """
+    tally: Counter[str] = Counter()
     if not jobs:
-        return 0, 0
+        return tally
 
     first, rest = jobs[0], jobs[1:]
-    ok = await _grade_one(first.id, first.submission_id)
-    succeeded = 1 if ok else 0
-    failed = 0 if ok else 1
+    tally[await _grade_one(first.id, first.submission_id)] += 1
 
-    async def _bounded(job: GradingJob) -> bool:
+    async def _bounded(job: GradingJob) -> str:
         # Every in-flight grade holds a DB connection for the whole
         # Anthropic round trip. The app's pool is 10 + 20 overflow and is
         # SHARED with live teacher and student traffic, so an unbounded
@@ -557,9 +565,8 @@ async def _run_group(jobs: list[GradingJob]) -> tuple[int, int]:
         results = await asyncio.gather(
             *(_bounded(j) for j in rest), return_exceptions=False,
         )
-        succeeded += sum(1 for r in results if r)
-        failed += sum(1 for r in results if not r)
-    return succeeded, failed
+        tally.update(results)
+    return tally
 
 
 async def drain(limit: int = DEFAULT_DRAIN_LIMIT) -> dict[str, int]:
@@ -573,19 +580,24 @@ async def drain(limit: int = DEFAULT_DRAIN_LIMIT) -> dict[str, int]:
     for job in claimed:
         by_assignment.setdefault(job.assignment_id, []).append(job)
 
-    succeeded = failed = 0
+    tally: Counter[str] = Counter()
     # Assignments run one after another rather than all at once: each
     # group's first call is warming its own prefix, and overlapping the
     # groups would put every warm-up call in flight simultaneously.
     for group in by_assignment.values():
-        s, f = await _run_group(group)
-        succeeded += s
-        failed += f
+        tally.update(await _run_group(group))
 
+    # `skipped` is reported separately from `failed` on purpose. A skip
+    # ("unreadable photo", "teacher switched AI grading off") is a closed
+    # door, not a malfunction — folding it into `failed` pages someone
+    # for a non-problem AND hides the real failure count in a mixed
+    # batch, which is the opposite of what these counters are for (see
+    # api.routes.grading_drain).
     return {
         "reclaimed": reclaimed,
         "claimed": len(claimed),
         "assignments": len(by_assignment),
-        "succeeded": succeeded,
-        "failed": failed,
+        "succeeded": tally[_GRADED],
+        "skipped": tally[_SKIPPED],
+        "failed": tally[_FAILED],
     }

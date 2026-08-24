@@ -509,6 +509,53 @@ async def test_drain_reports_what_it_did() -> None:
         assert job.status == STATUS_DONE
 
 
+async def test_a_skipped_job_is_not_reported_as_a_failure() -> None:
+    """The drain's counters are the alerting signal for a background job
+    that spends money unattended, and skipped is not a malfunction.
+
+    A skip (unreadable photo, AI grading switched off after confirm) is a
+    closed door with no grade coming; a failure is live work still
+    counting down its retry budget. Folding the first into the second
+    both pages someone for a non-problem AND hides the real failure count
+    in a mixed batch. `_finish` keeps the three outcomes distinct in the
+    database — the counters above it must too.
+    """
+    world = await _seed_hw(n_submissions=2)
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    for sid in world["submission_ids"]:
+        await _enqueue(world["assignment_id"], sid)
+
+    # Switch AI grading off so BOTH jobs take a skip path.
+    async with get_session_factory()() as s:
+        assignment = (await s.execute(
+            select(Assignment).where(Assignment.id == world["assignment_id"])
+        )).scalar_one()
+        assignment.ai_grading_enabled = False
+        await s.commit()
+
+    grader = AsyncMock(side_effect=_fake_grade)
+    with patch("api.core.grading_ai.run_ai_grading_for_submission", new=grader):
+        result = await drain()
+
+    grader.assert_not_awaited()
+    # The database already recorded these correctly; the regression is
+    # purely in what the drain reports back.
+    for sid in world["submission_ids"]:
+        job = await _job(sid)
+        assert job is not None
+        assert job.status == STATUS_SKIPPED
+
+    assert "skipped" in result, "drain must report skips as their own bucket"
+    assert result["skipped"] >= len(world["submission_ids"])
+    # The load-bearing assertion: nothing failed, so nothing may be
+    # reported as failed. Counters are platform-wide, so a sibling test's
+    # genuine failure could add to this — but ours must not.
+    assert result["failed"] == 0
+
+
 # ── Guards added after cold review ───────────────────────────────────
 
 
