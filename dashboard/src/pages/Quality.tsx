@@ -18,7 +18,13 @@ import { SUBJECT_LABEL, MODE_LABEL } from "../lib/quality";
 const PAGE_SIZE = 25;
 
 // Pass rate is the health headline — tone it like a status light.
-function rateTone(rate: number): "ok" | "warn" | "danger" | "default" {
+//
+// `evaluated` is not optional. With no sample, `pass_rate` is 0, which
+// scored as "danger" and painted a red WEAK verdict on a page that had
+// simply not run yet — a dashboard crying wolf is one you stop reading.
+// No sample, no verdict.
+function rateTone(rate: number, evaluated: number): "ok" | "warn" | "danger" | "default" {
+  if (evaluated === 0) return "default";
   if (rate >= 90) return "ok";
   if (rate >= 75) return "default";
   if (rate >= 60) return "warn";
@@ -53,7 +59,7 @@ function BreakdownTable({
       key: "pass_rate", header: "Pass rate", width: "42%",
       sortValue: (b) => b.pass_rate,
       render: (b) => {
-        const tone = rateTone(b.pass_rate);
+        const tone = rateTone(b.pass_rate, b.evaluated);
         return (
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ flex: 1, height: 7, background: "var(--paper-2)", overflow: "hidden" }}>
@@ -96,7 +102,10 @@ function BreakdownTable({
         columns={cols}
         rows={rows}
         rowKey={(b) => b.name}
-        rowStatus={(b) => (b.pass_rate < 60 ? "var(--danger)" : b.pass_rate < 75 ? "var(--warn)" : undefined)}
+        rowStatus={(b) =>
+          b.evaluated === 0 ? undefined
+            : b.pass_rate < 60 ? "var(--danger)"
+              : b.pass_rate < 75 ? "var(--warn)" : undefined}
         minWidth={340}
         empty={<span className="dt-state-title">No {kind} data in this window.</span>}
       />
@@ -158,7 +167,8 @@ export default function Quality() {
     { label: "Flow", value: summary.avg_flow },
   ];
 
-  const healthTone = rateTone(summary.pass_rate);
+  const healthTone = rateTone(summary.pass_rate, summary.total);
+  const hasSample = summary.total > 0;
 
   const scoreCols: Column<QualityScoreRow>[] = [
     {
@@ -209,8 +219,16 @@ export default function Quality() {
           <p>How good the AI-generated solutions are — an LLM judge scores a sample of solver runs. Always read the score next to its sample size.</p>
         </div>
         <StatusPill
-          tone={healthTone === "danger" ? "danger" : healthTone === "warn" ? "warn" : "ok"}
-          label={summary.pass_rate >= 75 ? "HEALTHY" : summary.pass_rate >= 60 ? "SLIPPING" : "WEAK"}
+          tone={
+            !hasSample ? "neutral"
+              : healthTone === "danger" ? "danger"
+                : healthTone === "warn" ? "warn" : "ok"
+          }
+          label={
+            !hasSample ? "NO DATA"
+              : summary.pass_rate >= 75 ? "HEALTHY"
+                : summary.pass_rate >= 60 ? "SLIPPING" : "WEAK"
+          }
         />
       </div>
 
@@ -229,9 +247,17 @@ export default function Quality() {
         <StatTile
           label="Pass rate"
           tone={healthTone}
-          value={<span style={{ fontSize: 44, letterSpacing: -1 }}>{summary.pass_rate}%</span>}
-          delta={delta}
-          sub={`${summary.passed}/${summary.total} solutions cleared the bar · ${win}`}
+          value={
+            <span style={{ fontSize: 44, letterSpacing: -1 }}>
+              {hasSample ? `${summary.pass_rate}%` : "—"}
+            </span>
+          }
+          delta={hasSample ? delta : undefined}
+          sub={
+            hasSample
+              ? `${summary.passed}/${summary.total} solutions cleared the bar · ${win}`
+              : `nothing evaluated · ${win}`
+          }
           spark={data.trend.map((t) => t.pass_rate)}
         />
         <StatTile
@@ -279,9 +305,14 @@ export default function Quality() {
             <span style={{ fontSize: 13, color: "var(--ink-soft)" }}>{d.label}</span>
             <span className="num" style={{
               fontSize: 17,
-              color: d.value >= 4 ? "var(--ok)" : d.value >= 3 ? "var(--warn)" : "var(--danger)",
+              // Same rule as the headline verdict: an unscored dimension
+              // is not a failing one. Without this the four tiles read
+              // 0.0 in danger red on a page that never ran.
+              color: !hasSample ? "var(--muted-2)"
+                : d.value >= 4 ? "var(--ok)"
+                  : d.value >= 3 ? "var(--warn)" : "var(--danger)",
             }}>
-              {d.value.toFixed(1)}
+              {hasSample ? d.value.toFixed(1) : "—"}
             </span>
             <span style={{ fontSize: 11, color: "var(--muted-2)" }}>/5</span>
           </div>

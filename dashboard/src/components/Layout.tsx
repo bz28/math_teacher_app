@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { apiHealth, getToken, setToken } from "../lib/api";
 
 interface NavItem {
   to: string;
   label: string;
+  /** Extra paths that should light this item up (one nav slot, several URLs). */
+  alsoActiveOn?: string[];
 }
 
 interface NavGroup {
@@ -35,8 +37,10 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/schools", label: "Schools" },
       { to: "/leads", label: "Leads" },
-      { to: "/teachers/independent", label: "Independent teachers" },
-      { to: "/students/independent", label: "Independent students" },
+      // One slot for both audiences — the page itself toggles between
+      // them. Both URLs stay live; signup alert emails link to each.
+      { to: "/teachers/independent", label: "Independent users",
+        alsoActiveOn: ["/students/independent"] },
     ],
   },
   {
@@ -53,6 +57,7 @@ const NAV_GROUPS: NavGroup[] = [
 export default function Layout() {
   // Mirror the global API-health flag onto a rail-foot status dot so the
   // operator always sees at a glance whether the backend is reachable.
+  const { pathname } = useLocation();
   const [apiDown, setApiDown] = useState(apiHealth.isDown());
   useEffect(() => apiHealth.subscribe(setApiDown), []);
 
@@ -71,7 +76,11 @@ export default function Layout() {
               <NavLink
                 key={n.to}
                 to={n.to}
-                className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+                className={({ isActive }) =>
+                  `nav-link ${
+                    isActive || n.alsoActiveOn?.includes(pathname) ? "active" : ""
+                  }`
+                }
               >
                 {n.label}
               </NavLink>

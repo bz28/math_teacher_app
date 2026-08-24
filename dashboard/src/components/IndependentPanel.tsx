@@ -47,6 +47,13 @@ export default function IndependentPanel({
   emptyMessage,
 }: IndependentPanelProps) {
   const navigate = useNavigate();
+  // Teachers and students are the same view over a different role, so
+  // they share one nav slot and switch here. Both URLs stay routable —
+  // every signup alert email links to one of them (api/routes/auth.py).
+  const roleTabs: { role: "teacher" | "student"; label: string; to: string }[] = [
+    { role: "teacher", label: "Teachers", to: "/teachers/independent" },
+    { role: "student", label: "Students", to: "/students/independent" },
+  ];
   const [data, setData] = useState<UsersData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hours, setHours] = useState("720");
@@ -168,6 +175,20 @@ export default function IndependentPanel({
       </div>
 
       <div className="filters" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <div className="segmented" role="tablist" aria-label="Audience">
+          {roleTabs.map((t) => (
+            <button
+              key={t.role}
+              type="button"
+              role="tab"
+              aria-selected={role === t.role}
+              className={`segment${role === t.role ? " segment-active" : ""}`}
+              onClick={() => navigate(t.to)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
         <SearchInput value={search} onChange={onSearch} placeholder="Search by name or email…" />
         <select value={hours} onChange={(e) => onHours(e.target.value)}>
           <option value="24">Last 24 hours</option>
