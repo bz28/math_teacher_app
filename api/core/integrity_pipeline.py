@@ -2022,6 +2022,14 @@ async def finalize_if_abandoned(
     """
     if check.status not in (STATUS_AWAITING_STUDENT, STATUS_IN_PROGRESS):
         return False
+    # An admin reading a teacher's data runs in a read-only transaction
+    # (see middleware.auth.resolve_view_as). This finalization is a real,
+    # TERMINAL write — it stamps a teacher-facing verdict on a student's
+    # integrity record — and an observer must not cause it. Skipping is
+    # harmless: the teacher's own next read performs it, which is the
+    # trigger this was always designed around.
+    if db.info.get("view_as_read_only"):
+        return False
     last_activity = check.updated_at or check.created_at
     if last_activity is None:
         return False

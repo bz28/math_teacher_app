@@ -209,3 +209,206 @@ async def test_a_normal_teacher_request_is_completely_unchanged(
     r = await client.get("/v1/teacher/courses", headers=_h(w.teacher_tok))
     assert r.status_code == 200
     assert [c for c in r.json()["courses"] if c["id"] == str(w.course_id)]
+
+
+async def test_the_client_identity_is_scoped_too_not_just_the_data(
+    client: AsyncClient,
+) -> None:
+    """The bug a screenshot caught and no test did.
+
+    The first cut scoped only the 74 data routes, so `/auth/me` still
+    returned the ADMIN. That endpoint is the single source of the client's
+    `user` object, which drives the app shell and 22 role gates — so the
+    admin saw the teacher's courses rendered inside the SELF-STUDY nav
+    (Home / History / Review / Account), because their own role is
+    `admin` and matches neither the teacher nor the school-student shell.
+
+    "Show me exactly what she sees" was therefore only half true: her
+    data, someone else's chrome. Identity has to be scoped alongside the
+    data or the two disagree.
+    """
+    w = await _seed()
+
+    plain = await client.get("/v1/auth/me", headers=_h(w.admin_tok))
+    assert plain.status_code == 200
+    assert plain.json()["role"] == "admin"
+
+    scoped = await client.get(
+        f"/v1/auth/me?as_teacher={w.teacher_id}", headers=_h(w.admin_tok),
+    )
+    assert scoped.status_code == 200
+    body = scoped.json()
+    assert body["role"] == "teacher", "the shell would render the wrong nav"
+    assert body["id"] == str(w.teacher_id)
+
+
+async def test_identity_scoping_obeys_the_same_guards(
+    client: AsyncClient,
+) -> None:
+    """Scoping identity must not be a softer door than scoping data —
+    otherwise a teacher could read another teacher's name and school off
+    /auth/me even though every data route refused them."""
+    w = await _seed()
+
+    r = await client.get(
+        f"/v1/auth/me?as_teacher={w.teacher_id}", headers=_h(w.other_tok),
+    )
+    assert r.status_code == 403
+
+    r = await client.get(
+        f"/v1/auth/me?as_teacher={w.student_id}", headers=_h(w.admin_tok),
+    )
+    assert r.status_code == 404
+
+
+async def test_a_mutating_GET_cannot_change_data_in_read_as_mode(
+    client: AsyncClient,
+) -> None:
+    """The finding that broke the first design, and the reason the
+    guarantee moved from the HTTP verb to the database transaction.
+
+    `GET /teacher/assignments/{id}/submissions` finalizes abandoned
+    integrity checks on read and commits them (teacher_assignments.py,
+    "lazy on-read finalization"). That is a TERMINAL write stamping a
+    teacher-facing verdict — "Interview incomplete" — onto a child's
+    academic-integrity record. A cold security review drove it with a
+    plain GET and flipped a real check from `awaiting_student` to
+    `complete`, while the banner told the operator "read only. Nothing
+    you click here can change her data."
+
+    "GET" is a convention, not an enforcement. The transaction is now
+    READ ONLY in this mode, so Postgres refuses every write — ORM or raw
+    SQL, on this route or the 29th one someone adds next year.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from api.models.assignment import Assignment, AssignmentSection, Submission
+    from api.models.integrity_check import IntegrityCheckSubmission
+    from api.models.section import Section
+    from api.models.section_enrollment import SectionEnrollment
+
+    w = await _seed()
+    async with get_session_factory()() as s:
+        student = User(
+            email=f"rat_st_{uuid.uuid4().hex[:8]}@t.com",
+            password_hash=hash_password("x"), grade_level=9,
+            role="student", name="Abandoning Student",
+        )
+        s.add(student)
+        section = Section(course_id=w.course_id, name="P1")
+        s.add(section)
+        await s.flush()
+        s.add(SectionEnrollment(
+            section_id=section.id, course_id=w.course_id, student_id=student.id,
+        ))
+        hw = Assignment(
+            course_id=w.course_id, unit_ids=[], teacher_id=w.teacher_id,
+            title="HW", type="homework", status="published",
+            content={"problems": []}, integrity_check_enabled=True,
+        )
+        s.add(hw)
+        await s.flush()
+        s.add(AssignmentSection(
+            assignment_id=hw.id, section_id=section.id,
+            published_at=datetime.now(UTC),
+        ))
+        sub = Submission(
+            assignment_id=hw.id, student_id=student.id,
+            section_id=section.id, status="submitted",
+        )
+        s.add(sub)
+        await s.flush()
+        # Stranded well past ABANDONED_INTERVIEW_DEADLINE (12h), so the
+        # next read WOULD finalize it.
+        stale = datetime.now(UTC) - timedelta(hours=48)
+        check = IntegrityCheckSubmission(
+            submission_id=sub.id, status="awaiting_student",
+            created_at=stale, updated_at=stale,
+        )
+        s.add(check)
+        await s.commit()
+        hw_id, check_id = hw.id, check.id
+
+    r = await client.get(
+        f"/v1/teacher/assignments/{hw_id}/submissions?as_teacher={w.teacher_id}",
+        headers=_h(w.admin_tok),
+    )
+    assert r.status_code == 200, f"the read itself must still work: {r.text[:200]}"
+
+    async with get_session_factory()() as s:
+        after = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.id == check_id)
+        )).scalar_one()
+    assert after.status == "awaiting_student", (
+        "an admin READING as a teacher finalized a student's integrity "
+        f"check (now {after.status!r}) — the read-only guarantee is broken"
+    )
+    assert after.headline is None
+    assert after.overall_summary is None
+
+
+async def test_the_teachers_own_read_still_finalizes(
+    client: AsyncClient,
+) -> None:
+    """The counterpart. Skipping the lazy write for an observer must not
+    disable it for the person it was built for — otherwise abandoned
+    checks would hide from the teacher forever, which is the bug the
+    lazy finalization exists to prevent."""
+    from datetime import UTC, datetime, timedelta
+
+    from api.models.assignment import Assignment, AssignmentSection, Submission
+    from api.models.integrity_check import IntegrityCheckSubmission
+    from api.models.section import Section
+    from api.models.section_enrollment import SectionEnrollment
+
+    w = await _seed()
+    async with get_session_factory()() as s:
+        student = User(
+            email=f"rat_st2_{uuid.uuid4().hex[:8]}@t.com",
+            password_hash=hash_password("x"), grade_level=9,
+            role="student", name="Abandoning Student 2",
+        )
+        s.add(student)
+        section = Section(course_id=w.course_id, name="P2")
+        s.add(section)
+        await s.flush()
+        s.add(SectionEnrollment(
+            section_id=section.id, course_id=w.course_id, student_id=student.id,
+        ))
+        hw = Assignment(
+            course_id=w.course_id, unit_ids=[], teacher_id=w.teacher_id,
+            title="HW2", type="homework", status="published",
+            content={"problems": []}, integrity_check_enabled=True,
+        )
+        s.add(hw)
+        await s.flush()
+        s.add(AssignmentSection(
+            assignment_id=hw.id, section_id=section.id,
+            published_at=datetime.now(UTC),
+        ))
+        sub = Submission(
+            assignment_id=hw.id, student_id=student.id,
+            section_id=section.id, status="submitted",
+        )
+        s.add(sub)
+        await s.flush()
+        stale = datetime.now(UTC) - timedelta(hours=48)
+        s.add(IntegrityCheckSubmission(
+            submission_id=sub.id, status="awaiting_student",
+            created_at=stale, updated_at=stale,
+        ))
+        await s.commit()
+        hw_id, sub_id = hw.id, sub.id
+
+    r = await client.get(
+        f"/v1/teacher/assignments/{hw_id}/submissions", headers=_h(w.teacher_tok),
+    )
+    assert r.status_code == 200
+
+    async with get_session_factory()() as s:
+        after = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == sub_id)
+        )).scalar_one()
+    assert after.status == "complete", "the teacher's own read must still finalize"

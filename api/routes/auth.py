@@ -50,7 +50,12 @@ from api.core.mfa import (
     verify_code,
 )
 from api.database import get_db
-from api.middleware.auth import get_current_user_full
+from api.middleware.auth import (
+    CurrentUser,
+    get_current_user,
+    get_current_user_full,
+    resolve_view_as,
+)
 from api.middleware.rate_limit import limiter
 from api.models.app_stat import AppStat
 from api.models.course import Course, CourseTeacher
@@ -624,9 +629,33 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)) -> T
 
 @router.get("/me", response_model=UserResponse)
 async def me(
+    request: Request,
     user: User = Depends(get_current_user_full),
+    current: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
+    """Who the client should render as.
+
+    Honours `?as_teacher=` for the same reason the data routes do. This
+    endpoint is the single source of the client's `user` object, which
+    drives the app shell and 22 role gates — so if only the data routes
+    scope, an admin reading a teacher gets HER data inside the wrong
+    shell (the self-study nav, because their own role is `admin`). That
+    was the first bug this feature shipped with, caught by eye in a
+    screenshot rather than by any test.
+
+    The guards are `resolve_view_as`'s, not repeated here: admin-only,
+    GET-only, target must be a teacher. Identity is not authority — this
+    changes what the UI renders, never what the caller may do.
+    """
+    target = await resolve_view_as(request, current, db)
+    if target is not None:
+        scoped = (await db.execute(
+            select(User).where(User.id == target[0])
+        )).scalar_one_or_none()
+        if scoped is not None:
+            user = scoped
+
     school_name = None
     if user.school_id:
         school = (await db.execute(select(School.name).where(School.id == user.school_id))).scalar_one_or_none()

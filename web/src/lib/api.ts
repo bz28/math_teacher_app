@@ -317,6 +317,13 @@ export function saveTokens(tokens: TokenPair) {
 export function clearTokens() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_KEY);
+  // Clear the admin read-as mode too. sessionStorage is per-TAB, not
+  // per-login, so without this a logout left the key behind — and the
+  // next person to sign in on that tab (a real teacher) got
+  // ?as_teacher= appended to every request and a 403 on all 77 teacher
+  // routes. It fails closed, but it bricks the app for the hero user
+  // after an entirely ordinary logout.
+  setViewAsTeacher(null);
 }
 
 export function hasStoredTokens(): boolean {

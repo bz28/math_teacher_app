@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.auth import decode_access_token
@@ -165,9 +165,34 @@ async def require_teacher(
     if current_user.role not in ("teacher", "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Teacher access required")
 
+    target = await resolve_view_as(request, current_user, db)
+    if target is None:
+        return current_user
+    return CurrentUser(
+        user_id=target[0],
+        role="teacher",
+        name=target[1],
+        acting_admin_id=current_user.user_id,
+    )
+
+
+async def resolve_view_as(
+    request: Request, current_user: CurrentUser, db: AsyncSession,
+) -> tuple[uuid.UUID, str] | None:
+    """Resolve `?as_teacher=` to (teacher_id, name), or None when absent.
+
+    Shared by `require_teacher` (which scopes the 74 data routes) and
+    `/auth/me` (which drives the CLIENT's identity — the app shell and 22
+    role gates). Both must agree: if only the data routes honour the
+    parameter, the admin sees her data rendered inside the WRONG shell,
+    which was the first bug this feature shipped with.
+
+    Returns None when the parameter is absent. Raises on every invalid
+    use, so the guards live in exactly one place.
+    """
     raw = request.query_params.get("as_teacher")
     if not raw:
-        return current_user
+        return None
 
     if current_user.role != "admin":
         raise HTTPException(
@@ -204,12 +229,32 @@ async def require_teacher(
         )
 
     await _log_view_as(db, current_user, row.id, row.name or "")
-    return CurrentUser(
-        user_id=row.id,
-        role="teacher",
-        name=row.name or "",
-        acting_admin_id=current_user.user_id,
-    )
+
+    # ── The actual read-only guarantee ──────────────────────────────
+    #
+    # The GET-only check above is a cheap early gate with a clear
+    # message. It is NOT what makes this safe, and treating it as such
+    # was the first design's mistake: "GET" is a convention, not an
+    # enforcement, and this codebase has GET routes that legitimately
+    # write. `teacher_assignments.list_submissions` finalizes abandoned
+    # integrity checks on read and commits them — a terminal, teacher-
+    # facing verdict on a child's integrity record, written by a plain
+    # GET. Auditing all 28 GET routes today would not help either,
+    # because nothing stops the 29th from writing tomorrow.
+    #
+    # So the guarantee is moved to where writes actually happen. Postgres
+    # refuses every INSERT/UPDATE/DELETE on this transaction — ORM and
+    # raw SQL alike, on any route, known or not, now or later. Audit
+    # writes are unaffected: they run on their own sessions (see
+    # _log_view_as and log_student_record_access).
+    #
+    # `db.info` carries the flag so a handler that KNOWS it does a lazy
+    # write can skip it cleanly instead of erroring (see
+    # integrity_pipeline.finalize_if_abandoned). Anything that does not
+    # know fails loudly, which is the correct direction to fail.
+    db.info["view_as_read_only"] = True
+    await db.execute(text("SET TRANSACTION READ ONLY"))
+    return row.id, row.name or ""
 
 
 async def _log_view_as(
@@ -224,16 +269,32 @@ async def _log_view_as(
     last = _view_as_logged.get(key)
     if last is not None and now - last < _VIEW_AS_LOG_TTL:
         return
-    _view_as_logged[key] = now
+
+    # Its OWN session and its OWN commit. `record_activity` only calls
+    # db.add() and leaves committing to the caller, so on a pure-read
+    # request — which is most of this feature — nothing ever committed and
+    # the row died with the session. The audit trail for "an admin read a
+    # whole class" was therefore usually EMPTY, saved only by the accident
+    # of some other handler committing for its own reasons.
+    #
+    # The request session is also read-only in this mode, so it could not
+    # carry this write even if someone did commit it.
     try:
         from api.core.audit_log import record_activity
+        from api.database import get_session_factory
 
-        await record_activity(
-            db, admin,
-            action="admin.view_as_teacher",
-            target_type="user",
-            target_id=teacher_id,
-            metadata={"teacher_name": teacher_name},
-        )
+        async with get_session_factory()() as audit_db:
+            await record_activity(
+                audit_db, admin,
+                action="admin.view_as_teacher",
+                target_type="user",
+                target_id=teacher_id,
+                metadata={"teacher_name": teacher_name},
+            )
+            await audit_db.commit()
     except Exception:  # noqa: BLE001
         logger.exception("failed to log view-as for teacher %s", teacher_id)
+        return
+    # Set the suppression key ONLY after the row is durable. Setting it
+    # first meant one failed write silenced logging for a full hour.
+    _view_as_logged[key] = now

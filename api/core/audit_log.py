@@ -78,21 +78,38 @@ async def log_student_record_access(
     On any failure the row is rolled back and the read proceeds — a
     logging error must not 500 an already-authorized read.
     """
+    entry = StudentRecordAccessLog(
+        accessor_user_id=_as_uuid(accessor_user_id),
+        accessor_role=accessor_role,
+        target_student_id=_as_uuid(target_student_id),
+        record_type=record_type,
+        record_id=_as_uuid(record_id),
+        school_id=_as_uuid(accessor_school_id),
+        ip_address=_client_ip(request),
+    )
+    # Its OWN session, deliberately, not the request's.
+    #
+    # This used to be `db.add(entry); await db.commit()` on the caller's
+    # session, which coupled the audit row to the request transaction in
+    # two harmful ways:
+    #
+    #   1. That commit flushed EVERYTHING else pending on the session, not
+    #      just this row — so an incidental write elsewhere in a GET
+    #      handler got committed as a side effect of logging a read.
+    #   2. It made the audit row un-writable from a read-only transaction,
+    #      which is what an admin reading another teacher's data runs in.
+    #
+    # A separate session also makes the docstring's promise literally
+    # true: a logging failure now cannot roll back, or accidentally
+    # commit, anything belonging to the read it is describing.
     try:
-        entry = StudentRecordAccessLog(
-            accessor_user_id=_as_uuid(accessor_user_id),
-            accessor_role=accessor_role,
-            target_student_id=_as_uuid(target_student_id),
-            record_type=record_type,
-            record_id=_as_uuid(record_id),
-            school_id=_as_uuid(accessor_school_id),
-            ip_address=_client_ip(request),
-        )
-        db.add(entry)
-        await db.commit()
+        from api.database import get_session_factory
+
+        async with get_session_factory()() as audit_db:
+            audit_db.add(entry)
+            await audit_db.commit()
     except Exception:
         logger.exception("Failed to log student record access")
-        await db.rollback()
 
 
 async def record_activity(
@@ -136,8 +153,12 @@ async def record_activity(
             logger.warning("activity school lookup failed", exc_info=True)
 
         entry = ActivityLog(
-            actor_user_id=_as_uuid(actor.user_id),
-            actor_role=actor.role,
+            # accessor_*, not user_id/role. When an admin acts under a
+            # teacher's scope `user_id` is HERS — recording that would
+            # forge an activity row in her name for something she did not
+            # do.
+            actor_user_id=_as_uuid(actor.accessor_id),
+            actor_role=actor.accessor_role,
             school_id=school_id,
             action=action,
             target_type=target_type,
