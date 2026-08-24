@@ -212,8 +212,12 @@ async def register(
         )).scalar_one_or_none()
         if not join_section_obj:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid join code")
-        if join_section_obj.join_code_expires_at and join_section_obj.join_code_expires_at < datetime.now(UTC):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Join code expired")
+        if not join_section_obj.enrollment_open:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This class is closed to new students right now. "
+                       "Ask your teacher to reopen it or send you an invite.",
+            )
         join_course = (await db.execute(
             select(Course).where(Course.id == join_section_obj.course_id)
         )).scalar_one_or_none()

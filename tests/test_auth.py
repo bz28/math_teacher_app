@@ -236,7 +236,6 @@ async def test_join_code_with_teacher_role_forces_student(client: AsyncClient) -
     a leaked code to escalate into a teacher attached to that school.
     """
     import uuid
-    from datetime import UTC, datetime, timedelta
 
     from sqlalchemy import select
 
@@ -254,7 +253,6 @@ async def test_join_code_with_teacher_role_forces_student(client: AsyncClient) -
             course_id=course.id,
             name="Period 1",
             join_code=f"JC{tag}",
-            join_code_expires_at=datetime.now(UTC) + timedelta(days=7),
         )
         s.add(section)
         await s.commit()
@@ -288,7 +286,6 @@ async def test_indie_teacher_join_code_stamps_student_with_individual_school(
     consumer homepage instead of /school/student.
     """
     import uuid
-    from datetime import UTC, datetime, timedelta
 
     from sqlalchemy import select
 
@@ -332,7 +329,6 @@ async def test_indie_teacher_join_code_stamps_student_with_individual_school(
             course_id=course.id,
             name="Period 1",
             join_code=f"IND{tag.upper()}",
-            join_code_expires_at=datetime.now(UTC) + timedelta(days=7),
         )
         s.add(section)
         await s.commit()

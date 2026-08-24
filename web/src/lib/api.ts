@@ -819,7 +819,7 @@ export interface TeacherSection {
   name: string;
   student_count: number;
   join_code: string | null;
-  join_code_expires_at: string | null;
+  enrollment_open: boolean;
 }
 
 export interface TeacherSectionInvite {
@@ -834,7 +834,7 @@ export interface TeacherSectionDetail {
   id: string;
   name: string;
   join_code: string | null;
-  join_code_expires_at: string | null;
+  enrollment_open: boolean;
   students: { id: string; name: string; email: string }[];
   pending_invites: TeacherSectionInvite[];
 }
@@ -1242,6 +1242,12 @@ export const teacher = {
     return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/sections/${sectionId}`, {
       method: "PATCH",
       body: JSON.stringify({ name }),
+    });
+  },
+  setEnrollmentOpen(courseId: string, sectionId: string, open: boolean) {
+    return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/sections/${sectionId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enrollment_open: open }),
     });
   },
   inviteStudent(courseId: string, sectionId: string, email: string) {

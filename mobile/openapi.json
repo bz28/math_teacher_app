@@ -5273,6 +5273,17 @@
       },
       "UpdateSectionRequest": {
         "properties": {
+          "enrollment_open": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrollment Open"
+          },
           "name": {
             "anyOf": [
               {

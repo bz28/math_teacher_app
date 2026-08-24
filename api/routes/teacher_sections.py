@@ -8,7 +8,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import AfterValidator, BaseModel, EmailStr
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
@@ -18,6 +18,7 @@ from api.config import settings
 from api.core.email import send_email
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user, require_teacher
+from api.middleware.rate_limit import limiter
 from api.models.course import Course
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
@@ -31,7 +32,6 @@ router = APIRouter()
 
 JOIN_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 JOIN_CODE_LENGTH = 6
-JOIN_CODE_EXPIRY_DAYS = 7
 INVITE_EXPIRY_DAYS = 14
 
 
@@ -56,6 +56,7 @@ class CreateSectionRequest(BaseModel):
 
 class UpdateSectionRequest(BaseModel):
     name: SectionName | None = None
+    enrollment_open: bool | None = None
 
 
 class InviteStudentRequest(BaseModel):
@@ -91,7 +92,6 @@ async def create_section(
         course_id=course_id,
         name=body.name,
         join_code=await _generate_unique_join_code(db),
-        join_code_expires_at=datetime.now(UTC) + timedelta(days=JOIN_CODE_EXPIRY_DAYS),
     )
     db.add(section)
     await db.commit()
@@ -127,7 +127,7 @@ async def list_sections(
         "id": str(r.Section.id), "name": r.Section.name,
         "student_count": r.student_count,
         "join_code": r.Section.join_code,
-        "join_code_expires_at": r.Section.join_code_expires_at.isoformat() if r.Section.join_code_expires_at else None,
+        "enrollment_open": r.Section.enrollment_open,
     } for r in rows]}
 
 
@@ -153,7 +153,7 @@ async def get_section(
     return {
         "id": str(section.id), "name": section.name,
         "join_code": section.join_code,
-        "join_code_expires_at": section.join_code_expires_at.isoformat() if section.join_code_expires_at else None,
+        "enrollment_open": section.enrollment_open,
         "students": [{"id": str(s.id), "name": s.name, "email": s.email} for s in students],
         "pending_invites": [_serialize_invite(i) for i in invites],
     }
@@ -187,14 +187,21 @@ async def update_section(
 ) -> dict[str, str]:
     await get_teacher_course(db, course_id, current_user.user_id)
     section = await _get_section_in_course(db, section_id, course_id)
-    if body.name is None:
-        return {"status": "ok"}
-    section.name = body.name
+    if body.name is not None:
+        section.name = body.name
+    if body.enrollment_open is not None:
+        section.enrollment_open = body.enrollment_open
     await db.commit()
-    logger.info(
-        "AUDIT: teacher=%s renamed section=%s",
-        current_user.user_id, section_id,
-    )
+    if body.name is not None:
+        logger.info(
+            "AUDIT: teacher=%s renamed section=%s",
+            current_user.user_id, section_id,
+        )
+    if body.enrollment_open is not None:
+        logger.info(
+            "AUDIT: teacher=%s set enrollment_open=%s on section=%s",
+            current_user.user_id, body.enrollment_open, section_id,
+        )
     return {"status": "ok"}
 
 
@@ -423,17 +430,18 @@ async def generate_join_code(
     await get_teacher_course(db, course_id, current_user.user_id)
     section = await _get_section_in_course(db, section_id, course_id)
     section.join_code = await _generate_unique_join_code(db)
-    section.join_code_expires_at = datetime.now(UTC) + timedelta(days=JOIN_CODE_EXPIRY_DAYS)
     await db.commit()
     logger.info(
         "AUDIT: teacher=%s rotated join_code on section=%s",
         current_user.user_id, section_id,
     )
-    return {"join_code": section.join_code, "expires_at": section.join_code_expires_at.isoformat()}
+    return {"join_code": section.join_code}
 
 
 @router.post("/join")
+@limiter.limit("10/minute")
 async def join_section(
+    request: Request,
     body: JoinSectionRequest,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -444,8 +452,23 @@ async def join_section(
     )).scalar_one_or_none()
     if not section:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid join code")
-    if section.join_code_expires_at and section.join_code_expires_at < datetime.now(UTC):
-        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Join code expired")
+    # Scope, deliberate and load-bearing: closing enrollment shuts the
+    # JOIN CODE only. A code is a broadcast channel — it leaks to group
+    # chats and whiteboards, and shutting it is the whole point. The
+    # teacher's own routes in stay open (sending an invite, a student
+    # redeeming one at /auth/register or /auth/invite/section/claim, and
+    # adding an already-registered student below at invite_student),
+    # because each is addressed to one student and already has its own
+    # revoke. `test_closed_enrollment_still_honours_email_invites` and
+    # `test_closed_enrollment_still_admits_an_invited_existing_student`
+    # pin this — if you decide closure should be absolute, those are the
+    # tests to change, and there are four call sites, not two.
+    if not section.enrollment_open:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This class is closed to new students right now. "
+                   "Ask your teacher to reopen it or send you an invite.",
+        )
     already_in_section = (await db.execute(
         select(SectionEnrollment.id).where(
             SectionEnrollment.section_id == section.id,
