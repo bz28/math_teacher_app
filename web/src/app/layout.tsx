@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import ServiceStatusBanner from "@/components/service-status-banner";
+import ErrorReporting from "@/components/error-reporting";
 import { MotionConfig } from "framer-motion";
 import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
@@ -179,6 +180,7 @@ export default function RootLayout({
             Routes without an FAQ simply omit the script. */}
       </head>
       <body className="min-h-full flex flex-col font-sans">
+        <ErrorReporting />
         <ServiceStatusBanner />
         {/* reducedMotion="user" makes every framer-motion animation in the app
             honor prefers-reduced-motion automatically (transforms collapse to

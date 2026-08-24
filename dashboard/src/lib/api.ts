@@ -447,6 +447,33 @@ export interface GenerationQualitySummary {
   tracking_since: string;
 }
 
+
+/** One group of identical client-side errors (same fingerprint). */
+export interface ClientErrorGroup {
+  fingerprint: string;
+  kind: string;
+  message: string;
+  stack: string | null;
+  component_stack: string | null;
+  route: string | null;
+  user_agent: string | null;
+  context: Record<string, unknown> | null;
+  count: number;
+  user_count: number;
+  sample_user: string | null;
+  first_seen: string;
+  last_seen: string;
+}
+
+export interface ClientErrorsData {
+  groups: ClientErrorGroup[];
+  total_events: number;
+  /** Distinct people affected in the window (server-computed on ids). */
+  distinct_users: number;
+  /** True when the scan cap bit — counts are a floor, not a total. */
+  truncated: boolean;
+}
+
 export const api = {
   overview: (params?: Record<string, string>) => request<OverviewData>("/admin/overview", params),
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
@@ -476,6 +503,8 @@ export const api = {
     request<StudentAccessLogData>("/admin/audit-logs/student-access", params),
   activityLog: (params?: Record<string, string>) =>
     request<ActivityLogData>("/admin/activity", params),
+  clientErrors: (params?: Record<string, string>) =>
+    request<ClientErrorsData>("/admin/client-errors", params),
   auditTimeline: (params?: Record<string, string>) =>
     request<TimelineData>("/admin/audit-logs/timeline", params),
   downloadAuditTimelineCsv: (params?: Record<string, string>) =>

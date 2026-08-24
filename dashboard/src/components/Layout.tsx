@@ -46,6 +46,7 @@ const NAV_GROUPS: NavGroup[] = [
       // preset is reached via the in-page segmented filter (role=admin).
       { to: "/users", label: "Users" },
       { to: "/audit-logs", label: "Audit log" },
+      { to: "/client-errors", label: "Client errors" },
     ],
   },
 ];

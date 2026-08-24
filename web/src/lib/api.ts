@@ -13,6 +13,8 @@ import type { components } from "./api-schema.gen";
 
 type Schemas = components["schemas"];
 
+import { reportClientError } from "./report-error";
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/v1";
 const DEFAULT_TIMEOUT = 15_000;
 const LLM_TIMEOUT = 30_000;
@@ -435,6 +437,17 @@ async function apiFetch<T>(
     clearTimeout(timer);
     const isTimeout = (e as { name?: string }).name === "AbortError";
     setApiHealth(true);
+    // Report the reachability failure, but never the reporter's own
+    // endpoint — that would loop the moment the API goes down, which is
+    // precisely when this fires. (report-error.ts also guards, so this
+    // is belt and braces.)
+    if (!path.startsWith("/client-errors")) {
+      reportClientError({
+        kind: "api",
+        message: `${isTimeout ? "timeout" : "fetch_failed"}: ${path}`,
+        context: { path, reason: isTimeout ? "timeout" : "fetch_failed" },
+      });
+    }
     throw new NetworkError(isTimeout ? "timeout" : "fetch_failed");
   }
 
@@ -466,6 +479,16 @@ async function apiFetch<T>(
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
+      // 5xx only. A 4xx is an expected application outcome here (401
+      // expiry, 403 entitlement, 404 not-yours, 409 already-submitted);
+      // reporting those would bury genuine crashes in routine traffic.
+      if (res.status >= 500 && !path.startsWith("/client-errors")) {
+        reportClientError({
+          kind: "api",
+          message: `HTTP ${res.status}: ${path}`,
+          context: { path, status: res.status, detail: body?.detail ?? null },
+        });
+      }
       if (res.status === 403 && body.error === "entitlement_required") {
         throw new EntitlementError(res.status, body);
       }

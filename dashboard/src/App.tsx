@@ -22,6 +22,7 @@ import IndependentStudents from "./pages/IndependentStudents";
 import IndependentTeachers from "./pages/IndependentTeachers";
 import TeacherDetail from "./pages/TeacherDetail";
 import AuditLogs from "./pages/AuditLogs";
+import ClientErrors from "./pages/ClientErrors";
 import SubmissionTrace from "./pages/SubmissionTrace";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -67,6 +68,7 @@ export default function App() {
 
           {/* Diagnostics. */}
           <Route path="/audit-logs" element={<AuditLogs />} />
+          <Route path="/client-errors" element={<ClientErrors />} />
           <Route path="/llm-calls" element={<LLMCalls />} />
           <Route path="/harness-runs" element={<HarnessRuns />} />
           <Route path="/quality" element={<Quality />} />

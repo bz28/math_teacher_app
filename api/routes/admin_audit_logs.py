@@ -45,6 +45,7 @@ from sqlalchemy.sql.selectable import Subquery
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.activity_log import ActivityLog
+from api.models.client_error import ClientError
 from api.models.student_record_access_log import StudentRecordAccessLog
 from api.models.user import User
 
@@ -579,3 +580,113 @@ async def audit_timeline_csv(
             "Cache-Control": "no-store",
         },
     )
+
+
+# ── Client errors ────────────────────────────────────────────────────
+#
+# Browser crashes reported by the web app (see api/routes/client_errors.py
+# for why they exist at all). Grouped rather than listed flat: one render
+# crash-loop can produce dozens of identical rows, and a teacher hitting
+# the same bug forty times is ONE thing to fix, not forty. The dashboard
+# reads this to answer "what is actually breaking for our pilot?"
+
+
+@router.get("/client-errors")
+async def client_errors(
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+    user_id: uuid.UUID | None = Query(None),
+    school_id: uuid.UUID | None = Query(None),
+    kind: str | None = Query(None),
+    hours: int | None = Query(None, ge=1, le=8760),
+    limit: int = Query(100, ge=1, le=500),
+) -> dict[str, Any]:
+    """Client-side errors, grouped by fingerprint, worst-recent first.
+
+    Each group carries its occurrence count, first/last seen, how many
+    distinct users hit it, and one representative row (the most recent)
+    for the stack. Ordered by last-seen so a bug that is happening NOW
+    outranks one that happened more often last week — during a pilot,
+    recency is the signal that matters.
+    """
+    base = select(ClientError)
+    if user_id is not None:
+        base = base.where(ClientError.user_id == user_id)
+    if school_id is not None:
+        base = base.where(ClientError.school_id == school_id)
+    if kind:
+        base = base.where(ClientError.kind == kind)
+    if hours is not None:
+        cutoff = datetime.now(UTC) - timedelta(hours=hours)
+        base = base.where(ClientError.created_at >= cutoff)
+
+    # Pull a bounded window of raw rows and group in Python. At pilot
+    # volume this is far simpler than a windowed SQL aggregate, and the
+    # cap keeps it honest if volume ever grows — `truncated` tells the
+    # dashboard when it is looking at a partial picture rather than
+    # silently showing less than the truth.
+    scan_cap = 2000
+    rows = (await db.execute(
+        base.order_by(ClientError.created_at.desc()).limit(scan_cap)
+    )).scalars().all()
+
+    # Resolve reporter names in one query rather than per group.
+    user_ids = {r.user_id for r in rows if r.user_id is not None}
+    names: dict[uuid.UUID, str] = {}
+    if user_ids:
+        names = {
+            u.id: (u.name or u.email)
+            for u in (await db.execute(
+                select(User.id, User.name, User.email).where(User.id.in_(user_ids))
+            )).all()
+        }
+
+    groups: dict[str, dict[str, Any]] = {}
+    for r in rows:  # newest-first, so the first row seen is the newest
+        g = groups.get(r.fingerprint)
+        if g is None:
+            groups[r.fingerprint] = {
+                "fingerprint": r.fingerprint,
+                "kind": r.kind,
+                "message": r.message,
+                "stack": r.stack,
+                "component_stack": r.component_stack,
+                "route": r.route,
+                "user_agent": r.user_agent,
+                "context": r.context,
+                "count": 1,
+                "last_seen": r.created_at.isoformat(),
+                "first_seen": r.created_at.isoformat(),
+                "user_ids": {str(r.user_id)} if r.user_id else set(),
+                "sample_user": names.get(r.user_id) if r.user_id else None,
+            }
+            continue
+        g["count"] += 1
+        # rows are descending, so every later row is older
+        g["first_seen"] = r.created_at.isoformat()
+        if r.user_id:
+            g["user_ids"].add(str(r.user_id))
+            if g["sample_user"] is None:
+                g["sample_user"] = names.get(r.user_id)
+
+    out = []
+    all_uids: set[str] = set()
+    for g in groups.values():
+        uids = g.pop("user_ids")
+        g["user_count"] = len(uids)
+        all_uids |= uids
+        out.append(g)
+    out.sort(key=lambda g: g["last_seen"], reverse=True)
+
+    return {
+        "groups": out[:limit],
+        "total_events": len(rows),
+        # Distinct people affected across the whole window. Computed here
+        # from user ids — the dashboard cannot derive it, because two
+        # different users routinely share a display name and deduping on
+        # the name silently under-reports.
+        "distinct_users": len(all_uids),
+        # True when the scan cap bit, i.e. counts below are a floor
+        # rather than the whole story. Never silently under-report.
+        "truncated": len(rows) >= scan_cap,
+    }

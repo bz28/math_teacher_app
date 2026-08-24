@@ -1,6 +1,7 @@
 "use client";
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { reportClientError } from "@/lib/report-error";
 import { PageErrorState } from "./page-error-state";
 
 interface Props {
@@ -41,6 +42,17 @@ export class ErrorBoundary extends Component<Props, State> {
     if (process.env.NODE_ENV !== "production") {
       console.error(error, info.componentStack);
     }
+    // Ship it. Previously this branch was the whole handler, so in
+    // production every render crash was discarded — the user got a retry
+    // card and we got nothing. The component stack is the valuable half:
+    // a minified JS stack rarely names the broken component, and this
+    // does.
+    reportClientError({
+      kind: "render",
+      message: error.message || String(error),
+      stack: error.stack,
+      componentStack: info.componentStack,
+    });
   }
 
   reset = () => {

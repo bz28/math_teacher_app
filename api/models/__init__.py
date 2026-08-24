@@ -9,6 +9,7 @@ from api.models import (  # noqa: F401
     activity_log,
     app_stat,
     assignment,
+    client_error,
     contact_lead,
     course,
     golden_case,
