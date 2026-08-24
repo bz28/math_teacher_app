@@ -150,3 +150,91 @@ async def test_the_component_stack_survives(client: AsyncClient) -> None:
     assert row is not None
     assert row.component_stack is not None
     assert "GradesTab" in row.component_stack
+
+
+# ── Regression guards for the blockers a cold review caught ──────────
+#
+# Each of these is a bug that shipped in the first cut of this endpoint
+# and that the original tests missed. They are grouped here because they
+# share a root cause: the first pass tested the fields that happened to be
+# safe, and not the ones that weren't.
+
+
+async def test_a_long_user_agent_does_not_destroy_the_report(
+    client: AsyncClient,
+) -> None:
+    """The bug that mattered most.
+
+    `_clip` used to append a 13-char marker AFTER slicing to the limit,
+    producing 525 characters for a varchar(512) column. The INSERT raised,
+    the endpoint 500'd, and the crash report vanished — in the one code
+    path whose entire purpose is to stop reports vanishing.
+
+    `user_agent` is the sharp edge because it is a REQUEST HEADER, not
+    anything the page chooses: corporate/AV-injected agent strings on
+    locked-down school laptops routinely exceed 512 characters. The
+    machines this feature exists to serve were the ones guaranteed to hit
+    it, and the original suite only ever tested an oversized `stack` — a
+    Text column, which is immune.
+    """
+    body = _body()
+    r = await client.post(
+        "/v1/client-errors", json=body,
+        headers={"User-Agent": "Mozilla/5.0 CorpProxy/" + "x" * 900},
+    )
+    assert r.status_code == 204, f"report lost: {r.status_code} {r.text[:200]}"
+
+    row = await _fetch(str(body["fingerprint"]))
+    assert row is not None, "the report was silently dropped"
+    assert row.user_agent is not None
+    assert len(row.user_agent) <= 512
+
+
+async def test_a_long_route_does_not_destroy_the_report(
+    client: AsyncClient,
+) -> None:
+    """Same overflow, via the other varchar(512) column — and this one is
+    attacker-settable on a public endpoint."""
+    body = _body(route="/school/teacher/" + "z" * 900)
+    r = await client.post("/v1/client-errors", json=body)
+    assert r.status_code == 204
+
+    row = await _fetch(str(body["fingerprint"]))
+    assert row is not None
+    assert row.route is not None
+    assert len(row.route) <= 512
+
+
+async def test_an_oversized_context_is_dropped_not_stored(
+    client: AsyncClient,
+) -> None:
+    """This endpoint takes no credentials. Without a bound on the one
+    free-form field, anyone on the internet could write unbounded JSON into
+    the production database at 300 requests/minute, with no retention to
+    reclaim it. Verified before the fix: a 2MB blob was accepted and stored
+    in full.
+
+    Dropped rather than refused, on the same principle as clipping: a
+    report without its extra detail still names the bug.
+    """
+    body = _body(context={"junk": "x" * 500_000})
+    r = await client.post("/v1/client-errors", json=body)
+    assert r.status_code == 204
+
+    row = await _fetch(str(body["fingerprint"]))
+    assert row is not None
+    assert row.context is not None
+    assert "_dropped" in row.context
+    assert len(str(row.context)) < 1_000
+
+
+async def test_a_normal_context_survives_intact(client: AsyncClient) -> None:
+    """The bound must not eat the ordinary case it exists to protect —
+    an API path and a status code are what `api`-kind reports carry."""
+    body = _body(kind="api", context={"path": "/teacher/x", "status": 500})
+    r = await client.post("/v1/client-errors", json=body)
+    assert r.status_code == 204
+
+    row = await _fetch(str(body["fingerprint"]))
+    assert row is not None
+    assert row.context == {"path": "/teacher/x", "status": 500}

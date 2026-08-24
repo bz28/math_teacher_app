@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { PageErrorState } from "@/components/ui";
+import { reportClientError } from "@/lib/report-error";
 import "./globals.css";
 
 /**
@@ -20,6 +21,17 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error(error);
+    // Covers the unauthenticated surfaces — /login, /register, /invite,
+    // /set-password, marketing. A crash nobody is signed in for is
+    // precisely the one we'd otherwise never hear about, and it cannot
+    // reach the window listeners: this component replaces the ROOT
+    // layout, which unmounts <ErrorReporting /> and removes them.
+    reportClientError({
+      kind: "render",
+      message: error.message || String(error),
+      stack: error.stack,
+      context: error.digest ? { digest: error.digest } : undefined,
+    });
   }, [error]);
 
   return (
