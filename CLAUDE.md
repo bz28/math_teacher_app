@@ -9,7 +9,8 @@
 ## Ground truth
 
 - Ground every claim in the actual code. Before stating how something works, read the file and cite `file:line`. When memory or an earlier turn conflicts with what you observe now, trust what you observe and update/drop the stale recollection.
-- Pre-launch: no real users yet. Skip legacy-compat engineering — no backwards-compatibility shims, no migration backfills for "old" rows, no deprecation wrappers, no feature flags gating changes. Change the code directly.
+- **Live: we have real users.** Their data is real and must survive every change. A schema change that adds a column existing rows need comes with a **backfill** in the same migration — don't ship a column that's silently NULL for all history. Don't break or drop data a teacher is mid-term depending on.
+- That said, keep the code clean: still no backwards-compatibility shims, no deprecation wrappers, no feature flags gating changes. Change the code directly, migrate the data with it.
 
 ## Workflow
 
