@@ -8,7 +8,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import AfterValidator, BaseModel, EmailStr
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
@@ -18,6 +18,7 @@ from api.config import settings
 from api.core.email import send_email
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user, require_teacher
+from api.middleware.rate_limit import limiter
 from api.models.course import Course
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
@@ -188,17 +189,19 @@ async def update_section(
     section = await _get_section_in_course(db, section_id, course_id)
     if body.name is not None:
         section.name = body.name
+    if body.enrollment_open is not None:
+        section.enrollment_open = body.enrollment_open
+    await db.commit()
+    if body.name is not None:
         logger.info(
             "AUDIT: teacher=%s renamed section=%s",
             current_user.user_id, section_id,
         )
     if body.enrollment_open is not None:
-        section.enrollment_open = body.enrollment_open
         logger.info(
             "AUDIT: teacher=%s set enrollment_open=%s on section=%s",
             current_user.user_id, body.enrollment_open, section_id,
         )
-    await db.commit()
     return {"status": "ok"}
 
 
@@ -436,7 +439,9 @@ async def generate_join_code(
 
 
 @router.post("/join")
+@limiter.limit("10/minute")
 async def join_section(
+    request: Request,
     body: JoinSectionRequest,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -447,6 +452,17 @@ async def join_section(
     )).scalar_one_or_none()
     if not section:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid join code")
+    # Scope, deliberate and load-bearing: closing enrollment shuts the
+    # JOIN CODE only. A code is a broadcast channel — it leaks to group
+    # chats and whiteboards, and shutting it is the whole point. The
+    # teacher's own routes in stay open (sending an invite, a student
+    # redeeming one at /auth/register or /auth/invite/section/claim, and
+    # adding an already-registered student below at invite_student),
+    # because each is addressed to one student and already has its own
+    # revoke. `test_closed_enrollment_still_honours_email_invites` and
+    # `test_closed_enrollment_still_admits_an_invited_existing_student`
+    # pin this — if you decide closure should be absolute, those are the
+    # tests to change, and there are four call sites, not two.
     if not section.enrollment_open:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

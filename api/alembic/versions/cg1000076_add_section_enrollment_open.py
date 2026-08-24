@@ -38,6 +38,12 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # Guarded because downgrade() deliberately leaves the column in
+    # place (see below), so a downgrade/re-upgrade cycle would otherwise
+    # hit "column already exists" instead of being a no-op.
+    columns = {c["name"] for c in sa.inspect(op.get_bind()).get_columns("sections")}
+    if "enrollment_open" in columns:
+        return
     op.add_column(
         "sections",
         sa.Column(
@@ -48,4 +54,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("sections", "enrollment_open")
+    # Deliberately a no-op, matching bp1000059's "kept on downgrade"
+    # precedent. Dropping the column would erase every deliberate
+    # `enrollment_open = false` a teacher had set, and re-upgrading
+    # would silently reopen all of those sections to anyone holding the
+    # code — a rollback of unrelated code would quietly undo a teacher's
+    # decision, with no record it was ever made.
+    #
+    # Leaving it is safe in the other direction: the column is NOT NULL
+    # with a server default, so pre-migration code (which doesn't know
+    # about it) still INSERTs sections successfully.
+    pass

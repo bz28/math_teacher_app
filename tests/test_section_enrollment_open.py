@@ -216,3 +216,79 @@ async def test_closed_enrollment_still_honours_email_invites(
         "section_invite_token": token,
     })
     assert signup.status_code == 201, signup.text
+
+
+@pytest.mark.asyncio
+async def test_closed_enrollment_still_admits_an_invited_existing_student(
+    client: AsyncClient, open_section: dict[str, str],
+) -> None:
+    """The other teacher-driven way in: inviting someone who already has
+    an account enrolls them on the spot, no email. Closing the code
+    doesn't take that away either."""
+    teacher = auth_headers(open_section["teacher_token"])
+    await client.patch(
+        _patch_url(open_section), headers=teacher, json={"enrollment_open": False},
+    )
+
+    existing = await client.post(REGISTER_URL, json={
+        "email": f"eo_existing_{open_section['tag'].lower()}@t.com",
+        "password": "StrongPass1",
+        "name": "Already Registered",
+        "grade_level": 9,
+    })
+    assert existing.status_code == 201, existing.text
+
+    added = await client.post(
+        f"/v1/teacher/courses/{open_section['course_id']}"
+        f"/sections/{open_section['section_id']}/invites",
+        headers=teacher,
+        json={"email": f"eo_existing_{open_section['tag'].lower()}@t.com"},
+    )
+    assert added.status_code == 200, added.text
+    assert added.json()["status"] == "enrolled"
+
+
+@pytest.mark.asyncio
+async def test_closing_enrollment_does_not_disturb_enrolled_students(
+    client: AsyncClient, open_section: dict[str, str],
+) -> None:
+    """Closing is about who may still arrive, never about who's already
+    here. The flag is read at the door and nowhere else — this pins that,
+    because it's exactly the invariant a later change would break."""
+    teacher = auth_headers(open_section["teacher_token"])
+    joined = await client.post(
+        JOIN_URL,
+        headers=auth_headers(open_section["student_token"]),
+        json={"join_code": open_section["code"]},
+    )
+    assert joined.status_code == 200, joined.text
+
+    await client.patch(
+        _patch_url(open_section), headers=teacher, json={"enrollment_open": False},
+    )
+
+    roster = await client.get(_patch_url(open_section), headers=teacher)
+    assert roster.status_code == 200, roster.text
+    assert len(roster.json()["students"]) == 1, "closing must not unenrol anyone"
+
+
+@pytest.mark.asyncio
+async def test_created_sections_come_back_open(
+    client: AsyncClient, open_section: dict[str, str],
+) -> None:
+    """The fixture inserts its section through the ORM, so it only proves
+    the Python-side default. This drives the real creation endpoint."""
+    teacher = auth_headers(open_section["teacher_token"])
+    created = await client.post(
+        f"/v1/teacher/courses/{open_section['course_id']}/sections",
+        headers=teacher, json={"name": "Period 9"},
+    )
+    assert created.status_code == 201, created.text
+
+    listed = await client.get(
+        f"/v1/teacher/courses/{open_section['course_id']}/sections", headers=teacher,
+    )
+    section = next(
+        s for s in listed.json()["sections"] if s["id"] == created.json()["id"]
+    )
+    assert section["enrollment_open"] is True
