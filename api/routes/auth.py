@@ -215,7 +215,8 @@ async def register(
         if not join_section_obj.enrollment_open:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="This class isn't accepting new students. Ask your teacher to reopen it.",
+                detail="This class is closed to new students right now. "
+                       "Ask your teacher to reopen it or send you an invite.",
             )
         join_course = (await db.execute(
             select(Course).where(Course.id == join_section_obj.course_id)
@@ -417,11 +418,6 @@ async def _load_section_invite(
     )).scalar_one_or_none()
     if not section:
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Section no longer exists")
-    if not section.enrollment_open:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This class isn't accepting new students. Ask your teacher to reopen it.",
-        )
     course = (await db.execute(
         select(Course).where(Course.id == section.course_id)
     )).scalar_one_or_none()

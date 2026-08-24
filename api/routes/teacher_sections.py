@@ -450,7 +450,8 @@ async def join_section(
     if not section.enrollment_open:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This class isn't accepting new students. Ask your teacher to reopen it.",
+            detail="This class is closed to new students right now. "
+                   "Ask your teacher to reopen it or send you an invite.",
         )
     already_in_section = (await db.execute(
         select(SectionEnrollment.id).where(

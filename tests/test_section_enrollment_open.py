@@ -115,7 +115,7 @@ async def test_closing_enrollment_blocks_join_and_reopening_restores_it(
         json={"join_code": open_section["code"]},
     )
     assert blocked.status_code == 403, blocked.text
-    assert "accepting new students" in blocked.json()["detail"]
+    assert "closed to new students" in blocked.json()["detail"]
 
     reopened = await client.patch(
         _patch_url(open_section), headers=teacher, json={"enrollment_open": True},
@@ -150,7 +150,7 @@ async def test_closed_enrollment_blocks_signup_with_join_code(
         "join_code": open_section["code"],
     })
     assert resp.status_code == 400, resp.text
-    assert "accepting new students" in resp.json()["detail"]
+    assert "closed to new students" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -172,13 +172,12 @@ async def test_rename_does_not_disturb_enrollment_state(
 
 
 @pytest.mark.asyncio
-async def test_closed_enrollment_blocks_pending_email_invites(
+async def test_closed_enrollment_still_honours_email_invites(
     client: AsyncClient, open_section: dict[str, str],
 ) -> None:
-    """Closing enrollment has to shut every door, not just the code.
-    A pending emailed invite is still a way in, so the shared invite
-    loader gates on the same flag — which covers validating the link,
-    signing up through it, and claiming it while already logged in."""
+    """Closing enrollment shuts the broadcast channel, not the teacher's
+    per-person invites. A code can leak to anyone; an invite is addressed
+    to one student and can be revoked on its own, so it keeps working."""
     teacher = auth_headers(open_section["teacher_token"])
     invited_email = f"eo_invited_{open_section['tag'].lower()}@t.com"
 
@@ -195,23 +194,25 @@ async def test_closed_enrollment_blocks_pending_email_invites(
             select(SectionInvite.token).where(SectionInvite.email == invited_email)
         )).scalar_one()
 
-    # Still open: the link validates.
-    ok = await client.get(f"/v1/auth/invite/section/{token}")
-    assert ok.status_code == 200, ok.text
-
     await client.patch(
         _patch_url(open_section), headers=teacher, json={"enrollment_open": False},
     )
 
-    blocked = await client.get(f"/v1/auth/invite/section/{token}")
+    # The code is shut...
+    blocked = await client.post(
+        JOIN_URL,
+        headers=auth_headers(open_section["student_token"]),
+        json={"join_code": open_section["code"]},
+    )
     assert blocked.status_code == 403, blocked.text
-    assert "accepting new students" in blocked.json()["detail"]
 
+    # ...but the invited student still gets in.
+    assert (await client.get(f"/v1/auth/invite/section/{token}")).status_code == 200
     signup = await client.post(REGISTER_URL, json={
         "email": invited_email,
         "password": "StrongPass1",
-        "name": "Invited But Late",
+        "name": "Invited Student",
         "grade_level": 9,
         "section_invite_token": token,
     })
-    assert signup.status_code == 403, signup.text
+    assert signup.status_code == 201, signup.text
