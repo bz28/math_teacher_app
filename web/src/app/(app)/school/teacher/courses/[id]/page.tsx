@@ -17,10 +17,10 @@ import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
 import { HomeworkTab } from "@/components/school/teacher/homework-tab";
 import { PracticeTab } from "@/components/school/teacher/practice-tab";
-import { StudentInsightsTab } from "@/components/school/teacher/student-insights-tab";
 import { SubmissionsTab } from "@/components/school/teacher/submissions-tab";
 import { GradesTab } from "@/components/school/teacher/grades-tab";
 import { SettingsTab } from "@/components/school/teacher/settings-tab";
+import { EmptyState } from "@/components/school/shared/empty-state";
 import { ErrorBoundary } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -36,12 +36,15 @@ type TabKey =
 
 // Tabs in the visible nav row. Settings is intentionally excluded —
 // it's reachable via the gear icon in the header.
-const TABS: { key: TabKey; label: string }[] = [
+const TABS: { key: TabKey; label: string; comingSoon?: boolean }[] = [
   { key: "sections", label: "Sections" },
   { key: "materials", label: "Materials" },
   { key: "homework", label: "Homework" },
   { key: "practice", label: "Practice" },
-  { key: "insights", label: "Student Insights" },
+  // Gated while the surface is rebuilt on graded + understanding-check
+  // signal. Still reachable — it lands on StudentInsightsComingSoon,
+  // which explains why it's dark and where the signal lives meanwhile.
+  { key: "insights", label: "Student Insights", comingSoon: true },
   { key: "submissions", label: "Submissions" },
   { key: "grades", label: "Grades" },
 ];
@@ -248,7 +251,6 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   useTourAction(TOUR_ACTIONS.gotoMaterials, () => setTab("materials"));
   useTourAction(TOUR_ACTIONS.gotoHomework, () => setTab("homework"));
   useTourAction(TOUR_ACTIONS.gotoPractice, () => setTab("practice"));
-  useTourAction(TOUR_ACTIONS.gotoInsights, () => setTab("insights"));
   useTourAction(TOUR_ACTIONS.gotoSubmissions, () => setTab("submissions"));
   useTourAction(TOUR_ACTIONS.gotoGrades, () => setTab("grades"));
 
@@ -340,6 +342,14 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
                 </span>
               )}
+              {/* Quiet "Soon" stamp on a gated tab. Muted, not primary —
+                  it marks a hold, and must not compete with the primary-
+                  tinted generation dot above for the same glance. */}
+              {t.comingSoon && (
+                <span className="rounded-[--radius-pill] border border-border-light px-1.5 py-[1px] font-mono text-[9px] uppercase tracking-[0.08em] text-text-muted">
+                  Soon
+                </span>
+              )}
             </span>
             {tab === t.key && (
               <span
@@ -402,7 +412,16 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
           />
         )}
         {tab === "practice" && <PracticeTab courseId={course.id} />}
-        {tab === "insights" && <StudentInsightsTab courseId={course.id} />}
+        {/* Gated: the tab read practice activity alone, which measures
+            effort rather than understanding — a struggling student who
+            never opens practice showed as "No activity". Dark until it
+            reads graded work + the understanding checks too. */}
+        {tab === "insights" && (
+          <EmptyState
+            title="Coming soon"
+            description="We're rebuilding Student Insights."
+          />
+        )}
         {tab === "submissions" && <SubmissionsTab courseId={course.id} />}
         {tab === "grades" && <GradesTab courseId={course.id} />}
         {tab === "settings" && <SettingsTab course={course} onChanged={reloadCourse} />}
