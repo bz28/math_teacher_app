@@ -6,8 +6,10 @@
  * nothing: step 1 creates their first course (on the courses list), the
  * tour carries across the navigation into that course, then it walks
  * EVERY workspace tab left-to-right — section → invite → materials →
- * homework → practice → student insights → submissions → grades. The
- * later tabs (practice/insights/submissions/grades) are empty for a
+ * homework → practice → submissions → grades. Student Insights is
+ * skipped while that tab is gated behind its coming-soon panel; there's
+ * nothing to teach until it's rebuilt. The later tabs
+ * (practice/submissions/grades) are empty for a
  * fresh teacher, so each step spotlights a stable anchor that exists in
  * the from-zero state (a header or a primary control, never a data row)
  * and the copy EXPLAINS what the tab is for and what will fill it in.
@@ -125,17 +127,6 @@ const TEACHER_TOUR: TourDefinition = {
       // mounted, so it anchors cleanly even with zero practice sets yet.
       placement: "left",
       onEnter: TOUR_ACTIONS.gotoPractice,
-    },
-    {
-      id: "insights",
-      target: TOUR_IDS.teacherInsights,
-      eyebrow: "Student Insights",
-      title: "Who's thriving, who needs a nudge",
-      body: "This is where each student's practice signal shows up once they get going — effort, first-try rate, and trend — so you can see who to check on. It fills in as your class starts practicing.",
-      // Anchors the always-mounted section header, which renders before
-      // any roster data — so this lands cleanly on an empty class.
-      placement: "bottom",
-      onEnter: TOUR_ACTIONS.gotoInsights,
     },
     {
       id: "grade",

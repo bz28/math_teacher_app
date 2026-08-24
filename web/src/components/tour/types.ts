@@ -85,7 +85,6 @@ export const TOUR_ACTIONS = {
   gotoMaterials: "teacher.goto-materials",
   gotoHomework: "teacher.goto-homework",
   gotoPractice: "teacher.goto-practice",
-  gotoInsights: "teacher.goto-insights",
   gotoSubmissions: "teacher.goto-submissions",
   gotoGrades: "teacher.goto-grades",
 } as const;
