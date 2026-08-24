@@ -38,7 +38,7 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[dev]" -c constraints.txt
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
 

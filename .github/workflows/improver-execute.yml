@@ -54,7 +54,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[dev]" -c constraints.txt
 
       - name: Acknowledge
         run: gh issue comment "${{ github.event.issue.number }}" --body "On it — implementing and opening a draft PR. 🤖"
