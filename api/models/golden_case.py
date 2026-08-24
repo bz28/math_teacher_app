@@ -16,7 +16,7 @@ so the dashboard can open its full HTML failure report in-app.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, Text, func
+from sqlalchemy import Boolean, DateTime, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,6 +31,12 @@ STATUS_PENDING = "pending"
 
 class GoldenCase(Base):
     __tablename__ = "golden_cases"
+
+    # A case is identified by (probe, name); the corpus loader relies on
+    # that being unique.
+    __table_args__ = (
+        UniqueConstraint("probe", "name", name="uq_golden_cases_probe_name"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
