@@ -261,7 +261,7 @@ async def test_identity_scoping_obeys_the_same_guards(
     assert r.status_code == 404
 
 
-async def test_a_mutating_GET_cannot_change_data_in_read_as_mode(
+async def test_a_mutating_get_cannot_change_data_in_read_as_mode(
     client: AsyncClient,
 ) -> None:
     """The finding that broke the first design, and the reason the

@@ -18,26 +18,34 @@ import { getViewAsTeacher, setViewAsTeacher } from "@/lib/api";
  * admin comes back to tomorrow.
  */
 export default function ViewAsBanner() {
-  const [teacherId, setTeacherId] = useState<string | null>(null);
+  // A render counter, not a copy of the value. The mode itself lives in
+  // sessionStorage (the single source of truth that apiFetch also reads);
+  // duplicating it into state would let the two disagree. This just
+  // forces one re-render after the effect has consumed the URL.
+  const [, bump] = useState(0);
 
   useEffect(() => {
     // Consume ?view_as= once, then strip it from the URL so the mode
     // isn't re-armed by a later back-navigation to this entry point.
     const params = new URLSearchParams(window.location.search);
     const incoming = params.get("view_as");
-    if (incoming) {
-      setViewAsTeacher(incoming);
-      params.delete("view_as");
-      const qs = params.toString();
-      window.history.replaceState(
-        {},
-        "",
-        window.location.pathname + (qs ? `?${qs}` : ""),
-      );
-    }
-    setTeacherId(getViewAsTeacher());
+    if (!incoming) return;
+    setViewAsTeacher(incoming);
+    params.delete("view_as");
+    const qs = params.toString();
+    window.history.replaceState(
+      {},
+      "",
+      window.location.pathname + (qs ? `?${qs}` : ""),
+    );
+    // The mode was armed from the URL after this component's first
+    // render, so one re-render is required for the banner to appear at
+    // all. Same disable (and same reason) as TeacherDetail's reset.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    bump((n) => n + 1);
   }, []);
 
+  const teacherId = getViewAsTeacher();
   if (!teacherId) return null;
 
   return (
