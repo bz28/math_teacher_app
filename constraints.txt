@@ -1,0 +1,46 @@
+# Pinned versions for every DIRECT dependency declared in pyproject.toml.
+#
+# Why this file exists: pyproject declares lower bounds only (`stripe>=10.0.0`
+# and so on), so CI resolved whatever was current on the day it ran while a
+# developer's venv kept whatever it resolved months ago. On 2026-08-24 that
+# drift turned main red — stripe shipped type annotations for
+# `Webhook.construct_event`, which made a `# type: ignore[no-untyped-call]`
+# unused, and `strict = true` turns an unused ignore into an error. A
+# third-party release broke CI on a file nobody had edited.
+#
+# Installing with `-c constraints.txt` makes CI reproducible: the same commit
+# resolves the same versions today and in six months. Upgrades become a
+# deliberate PR that shows the version change in the diff, rather than a
+# surprise on an unrelated branch.
+#
+# Scope: direct dependencies only. Transitive ones still float, which is a
+# smaller surface (they rarely change our type-checking or lint results) and
+# avoids pinning a resolution made on one contributor's platform.
+#
+# To upgrade a package: bump it here, run the backend checks, and open a PR.
+# To regenerate wholesale, from a venv with the dev extra installed:
+#   pip freeze | grep -iE '^(alembic|anthropic|asyncpg|bcrypt|email-validator|fastapi|httpx|mypy|pillow|playwright|pydantic-settings|pyjwt|pytest|pytest-asyncio|python-jose|resend|ruff|sentry-sdk|slowapi|sqlalchemy|stripe|types-python-jose|uvicorn)=='
+
+alembic==1.18.5
+anthropic==0.116.0
+asyncpg==0.31.0
+bcrypt==5.0.0
+email-validator==2.3.0
+fastapi==0.139.0
+httpx==0.28.1
+mypy==2.2.0
+pillow==12.3.0
+playwright==1.61.0
+pydantic-settings==2.14.2
+pyjwt==2.13.0
+pytest==9.1.1
+pytest-asyncio==1.4.0
+python-jose==3.5.0
+resend==2.32.2
+ruff==0.15.21
+sentry-sdk==2.64.0
+slowapi==0.1.10
+sqlalchemy==2.0.51
+stripe==15.5.1
+types-python-jose==3.5.0.20260408
+uvicorn==0.51.0

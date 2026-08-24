@@ -31,7 +31,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install production dependencies only (no [dev])
-        run: pip install .
+        run: pip install . -c constraints.txt
       - name: App imports with production deps only
         env:
           DATABASE_URL: postgresql+asyncpg://x:x@localhost:5432/x
@@ -66,7 +66,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev]" -c constraints.txt
 
       - name: Run migrations
         env:

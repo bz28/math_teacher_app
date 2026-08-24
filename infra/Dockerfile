@@ -4,9 +4,13 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir uv
 
-COPY pyproject.toml .
+COPY pyproject.toml constraints.txt ./
 # First install pulls dependencies declared in pyproject — fast and cacheable.
-RUN uv pip install --system -e .
+# `-c constraints.txt` pins every direct dependency so a production image
+# built today and one built in six months resolve the same versions. Without
+# it, pyproject's lower bounds mean an upstream release lands in prod on the
+# next deploy, unreviewed.
+RUN uv pip install --system -e . -c constraints.txt
 
 COPY . .
 
@@ -14,7 +18,7 @@ COPY . .
 # previous install ran with only pyproject.toml on disk, so setuptools'
 # packages.find discovered no packages and wrote an empty MAPPING into
 # the editable finder. Without this step `import api` fails at runtime.
-RUN uv pip install --system -e .
+RUN uv pip install --system -e . -c constraints.txt
 
 # Create and switch to non-root user. A container escape from a root
 # process inherits root on the host kernel namespace; running as an
