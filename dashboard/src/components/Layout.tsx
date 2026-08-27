@@ -34,7 +34,10 @@ interface NavGroup {
  * around, which is how a reviewable diff turns into an unreviewable one.
  */
 const SCHOOL_LINKS: { to: (id: string) => string; label: string }[] = [
-  { to: (id) => `/schools/${id}`, label: "Overview" },
+  // Named for what the page actually leads with, not "Overview" — the
+  // platform group already has an Overview, and two identical labels in
+  // one rail is a coin toss every time you look for either.
+  { to: (id) => `/schools/${id}`, label: "Teachers & classes" },
 ];
 
 const NAV_GROUPS: NavGroup[] = [
@@ -49,7 +52,9 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: "AI quality",
+    // "Quality" as the group, "AI quality" as the page inside it. Naming
+    // both the same would repeat the Overview collision one group down.
+    label: "Quality",
     items: [
       // Five sibling pages collapsed to one. "Generation quality" and
       // "Generation QA" were indistinguishable from the rail, and the URLs
