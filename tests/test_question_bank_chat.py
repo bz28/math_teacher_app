@@ -152,7 +152,7 @@ class TestQuestionRewriteReSolve:
     ) -> None:
         new_q = "arcs (8x+6) and (4x-2), exterior angle 47, find arc TB."
         # Chat proposes a rewrite with a FUDGED inline answer (the bug).
-        monkeypatch.setattr(qbc, "fetch_document_images", AsyncMock(return_value=[]))
+        monkeypatch.setattr(qbc, "fetch_source_documents", AsyncMock(return_value=[]))
         monkeypatch.setattr(
             qbc,
             "call_claude_json",
@@ -204,7 +204,7 @@ class TestQuestionRewriteReSolve:
     ) -> None:
         # Teacher asks to tweak only the solution wording; question unchanged.
         # We must NOT override their edit with a fresh solve.
-        monkeypatch.setattr(qbc, "fetch_document_images", AsyncMock(return_value=[]))
+        monkeypatch.setattr(qbc, "fetch_source_documents", AsyncMock(return_value=[]))
         monkeypatch.setattr(
             qbc,
             "call_claude_json",

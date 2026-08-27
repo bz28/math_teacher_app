@@ -13,8 +13,10 @@ interface FilePreviewModalProps {
 
 /**
  * Lightbox for a single uploaded document. Fetches image_data lazily —
- * the list endpoint omits the payload to keep responses lean. PDFs
- * show a placeholder for now; inline PDF rendering is a separate lift.
+ * the list endpoint omits the payload to keep responses lean. Images
+ * render inline; PDFs go through <embed> with an "Open in new tab"
+ * fallback for browsers (mobile Safari, sandboxed iframes) that don't
+ * render inline PDFs — same pattern as the student submission viewer.
  */
 export function FilePreviewModal({ courseId, doc, onClose }: FilePreviewModalProps) {
   const kind = fileKind(doc);
@@ -22,7 +24,6 @@ export function FilePreviewModal({ courseId, doc, onClose }: FilePreviewModalPro
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (kind !== "image") return;
     let cancelled = false;
     teacher
       .document(courseId, doc.id)
@@ -36,7 +37,7 @@ export function FilePreviewModal({ courseId, doc, onClose }: FilePreviewModalPro
     return () => {
       cancelled = true;
     };
-  }, [courseId, doc.id, kind]);
+  }, [courseId, doc.id]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -83,16 +84,27 @@ export function FilePreviewModal({ courseId, doc, onClose }: FilePreviewModalPro
         </div>
 
         <div className="flex flex-1 items-center justify-center overflow-auto bg-bg-subtle p-4">
-          {kind === "pdf" ? (
-            <div className="max-w-sm text-center text-sm text-text-muted">
-              PDF preview isn&rsquo;t available yet.
-              <div className="mt-1 text-[11px]">
-                For now, download the file from your source to view it.
-              </div>
-            </div>
-          ) : error ? (
+          {error ? (
             <p className="text-sm text-red-600">{error}</p>
-          ) : src ? (
+          ) : !src ? (
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          ) : kind === "pdf" ? (
+            <div className="w-full self-stretch">
+              <embed
+                src={src}
+                type="application/pdf"
+                className="h-[75vh] w-full rounded-[--radius-md] bg-white"
+              />
+              <a
+                href={src}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"
+              >
+                Open PDF in new tab
+              </a>
+            </div>
+          ) : (
             // Base64 data URL, not optimize-able by next/image.
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -100,8 +112,6 @@ export function FilePreviewModal({ courseId, doc, onClose }: FilePreviewModalPro
               alt={doc.filename}
               className="max-h-[75vh] max-w-full object-contain"
             />
-          ) : (
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           )}
         </div>
       </div>

@@ -232,7 +232,7 @@ async def generate_questions(
 
     Args:
         images: Optional list of {"filename", "base64", "media_type"} from
-                fetch_document_images. When provided, Claude reads the actual
+                fetch_source_documents. When provided, Claude reads the actual
                 document content — that's the priority-2 grounding (notation,
                 grade level, what students have already seen).
         extra_instructions: Optional natural-language brief from the teacher

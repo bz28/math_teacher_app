@@ -43,7 +43,7 @@ async def suggest_units(
         course_subject: The course subject (math, physics, etc.).
         user_id: For LLM call logging.
         images: Optional list of {"filename", "base64", "media_type"} from
-                fetch_document_images. When provided, Claude reads document
+                fetch_source_documents. When provided, Claude reads document
                 content instead of guessing from filenames alone.
 
     Returns:
@@ -87,7 +87,7 @@ Documents to organize:
 {batch_files_str}"""
                 vision_prompt = (
                     f"{_SUGGEST_UNITS_PROMPT}\n\n"
-                    "Document images are attached below. Read the actual content "
+                    "Source documents are attached below. Read the actual content "
                     "to determine which unit each document belongs to — do not rely "
                     "solely on the filename.\n\n"
                     f"{batch_message}"
@@ -111,9 +111,9 @@ Documents to organize:
                             if name and name not in discovered_units:
                                 discovered_units.append(name)
 
-            # Handle any filenames that had no image (PDFs, missing data)
-            image_filenames = {img["filename"] for img in images}
-            text_only_filenames = [f for f in filenames if f not in image_filenames]
+            # Handle any filenames with no readable payload (missing data)
+            attached_filenames = {img["filename"] for img in images}
+            text_only_filenames = [f for f in filenames if f not in attached_filenames]
             if text_only_filenames:
                 text_files_str = "\n".join(f"- {f}" for f in text_only_filenames)
                 all_units = list(existing_units) + discovered_units
