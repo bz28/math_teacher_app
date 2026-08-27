@@ -223,7 +223,11 @@ export default function DataTable<T>({
             <tr>
               <td colSpan={colCount}>
                 <div className="dt-state">
-                  {query.trim() ? (
+                  {/* canSearch, not query alone: `query` survives the row
+                      count dropping below the threshold, so a stale term
+                      would otherwise suppress the caller's own empty state
+                      and offer a Clear button with no search box above it. */}
+                  {canSearch && query.trim() ? (
                     <>
                       <span className="dt-state-title">
                         No {searchLabel} match &ldquo;{query.trim()}&rdquo;.
@@ -231,7 +235,7 @@ export default function DataTable<T>({
                       <div className="dt-state-sub">
                         <button
                           type="button"
-                          className="dt-retry"
+                          className="dt-clear"
                           onClick={() => setQuery("")}
                         >
                           Clear search

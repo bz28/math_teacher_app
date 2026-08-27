@@ -81,10 +81,16 @@ export function useSelectedSchool(): SelectedSchool {
   }, []);
 
   const id = useMemo(() => {
+    // The URL wins UNCONDITIONALLY when there is one, even if the school
+    // isn't in the switcher's list. `api.schools()` returns only
+    // institutional schools, while GET /schools/{id} has no such filter —
+    // so an indie teacher's synthetic school (reachable from a submission
+    // trace) renders a page the list has never heard of. Falling through
+    // there would leave the rail confidently naming a DIFFERENT school
+    // than the page is showing, which is the one outcome this ordering
+    // exists to prevent.
+    if (routeId) return routeId;
     if (!schools || schools.length === 0) return null;
-    // A URL only wins if it names a school we actually have, so a stale
-    // link to a deleted school falls through instead of selecting nothing.
-    if (routeId && schools.some((s) => s.id === routeId)) return routeId;
     const saved = remembered();
     if (saved && schools.some((s) => s.id === saved)) return saved;
     return schools[0].id;

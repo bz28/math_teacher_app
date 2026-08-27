@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
 import { apiHealth, getToken, setToken } from "../lib/api";
 import SchoolSwitcher from "./SchoolSwitcher";
 import { useSelectedSchool } from "../lib/useSelectedSchool";
@@ -7,6 +7,8 @@ import { useSelectedSchool } from "../lib/useSelectedSchool";
 interface NavItem {
   to: string;
   label: string;
+  /** Match the path exactly, not as a prefix. */
+  end?: boolean;
 }
 
 interface NavGroup {
@@ -45,7 +47,10 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Platform",
     items: [
       { to: "/overview", label: "Overview" },
-      { to: "/schools", label: "All schools" },
+      // `end`: without it NavLink treats /schools as a prefix of
+      // /schools/abc, so this lit up at the same time as the school
+      // entry above — two active items, one rail.
+      { to: "/schools", label: "All schools", end: true },
       { to: "/leads", label: "Leads" },
       { to: "/teachers/independent", label: "Independent teachers" },
       { to: "/students/independent", label: "Independent students" },
@@ -82,7 +87,6 @@ export default function Layout() {
   useEffect(() => apiHealth.subscribe(setApiDown), []);
 
   const school = useSelectedSchool();
-  const location = useLocation();
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -100,12 +104,7 @@ export default function Layout() {
             {SCHOOL_LINKS.map((l) => {
               const to = l.to(school.id!);
               return (
-                <NavLink
-                  key={l.label}
-                  to={to}
-                  end
-                  className={`nav-link ${location.pathname === to ? "active" : ""}`}
-                >
+                <NavLink key={l.label} to={to} end className="nav-link">
                   {l.label}
                 </NavLink>
               );
@@ -120,6 +119,7 @@ export default function Layout() {
               <NavLink
                 key={n.to}
                 to={n.to}
+                end={n.end}
                 className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
               >
                 {n.label}

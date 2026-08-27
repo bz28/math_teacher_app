@@ -1,36 +1,64 @@
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { rememberSchool, type SelectedSchool } from "../lib/useSelectedSchool";
+
+/**
+ * Name plus place. School names repeat heavily in the real data — the
+ * current list holds fourteen "Lincoln High School" — so a name-only
+ * picker is fourteen identical rows with nothing to choose between them.
+ */
+function schoolLabel(s: {
+  name: string;
+  city: string | null;
+  state: string | null;
+}): string {
+  const where = [s.city, s.state].filter(Boolean).join(", ");
+  return where ? `${s.name} — ${where}` : s.name;
+}
 
 /**
  * The console's scope control, directly under the wordmark because
  * everything in "This school" below it is scoped by what's named here.
  *
- * Two shapes, deliberately:
+ * Three shapes, and the third is the important one:
  *
- *   • With one school it renders the NAME, not a dropdown. The name is
- *     context worth keeping on screen; a select of one is a control with
- *     nothing to control.
- *   • With two or more it becomes a native <select> — keyboard- and
+ *   • Two or more schools → a native <select>. Keyboard- and
  *     screen-reader-correct for free, inheriting the console's existing
- *     select styling. A hand-rolled menu would earn nothing here beyond a
+ *     select styling; a hand-rolled menu would earn nothing beyond a
  *     custom caret.
+ *   • Exactly one → the NAME, not a dropdown. The name is context worth
+ *     keeping on screen; a select of one is a control with nothing to
+ *     control.
+ *   • The page is showing a school this list doesn't contain → NOTHING.
+ *     `api.schools()` returns institutional schools only, while
+ *     GET /schools/{id} has no such filter, so an indie teacher's
+ *     synthetic school (reachable from a submission trace) is a real page
+ *     the list has never heard of. A <select> whose value matches no
+ *     option silently displays the FIRST one, which would have the rail
+ *     confidently naming the wrong school. Saying nothing is right.
  *
  * Selection logic lives in `lib/useSelectedSchool` so the rail can read it
  * without this component owning shared state.
  */
 export default function SchoolSwitcher({ selected }: { selected: SelectedSchool }) {
   const navigate = useNavigate();
-  const location = useLocation();
 
   if (selected.loading || selected.schools.length === 0) return null;
 
+  // `selected.name` is resolved from the list, so a null name here means
+  // the current school isn't one we can name — see the third case above.
+  const known = selected.name !== null;
+  if (!known) return null;
+
   const onPick = (nextId: string) => {
     rememberSchool(nextId);
-    // Stay on the same sub-page. Switching schools while looking at
-    // Teachers should show the OTHER school's teachers, not bounce to its
-    // overview and make you find your place again.
-    const tab = new URLSearchParams(location.search).get("tab");
-    navigate(`/schools/${nextId}${tab ? `?tab=${tab}` : ""}`);
+    // Straight to the school page, carrying nothing over. An earlier cut
+    // forwarded `?tab=` so a switch would keep your place — but
+    // SchoolDetail has no tabs and never reads it, and the only page that
+    // WRITES `?tab=` is AI quality, so switching school from
+    // /ai-quality?tab=harness produced /schools/<id>?tab=harness: a
+    // foreign key on a page with no tabs. Carrying a param the
+    // destination can't use is worse than dropping it.
+    navigate(`/schools/${nextId}`);
   };
 
   return (
@@ -49,7 +77,7 @@ export default function SchoolSwitcher({ selected }: { selected: SelectedSchool 
         >
           {selected.schools.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.name}
+              {schoolLabel(s)}
             </option>
           ))}
         </select>

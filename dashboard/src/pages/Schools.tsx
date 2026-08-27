@@ -318,6 +318,13 @@ export default function Schools() {
           drill
           loading={loading}
           minWidth={860}
+          // Client-side, unlike the server-paged tables elsewhere: this
+          // endpoint returns every school in one payload. Names repeat
+          // heavily in the real data, so city/state are searchable too —
+          // typing "Lincoln" alone would match fourteen rows.
+          searchKeys={(s) => [s.name, s.city, s.state, s.contact_email]}
+          searchLabel="schools"
+          pageSize={25}
           rowStatus={(s) =>
             s.failed_calls_24h > 0
               ? "var(--danger)"
