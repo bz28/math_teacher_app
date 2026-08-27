@@ -44,3 +44,16 @@ export const WORKSHOP_UNDO_GRACE_MS = 30_000;
 /** Materials tab upload size caps (match backend MAX_IMAGE_BYTES / MAX_PDF_BYTES). */
 export const MATERIAL_UPLOAD_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MATERIAL_UPLOAD_MAX_PDF_BYTES = 25 * 1024 * 1024;
+
+/** How many source documents one generation call sends (matches backend
+ *  MAX_VISION_IMAGES). Selecting more is allowed — the extras are just
+ *  not sent, so the picker says so rather than dropping them silently. */
+export const GENERATION_MAX_SOURCE_DOCS = 5;
+/** Combined size cap for those documents, as raw bytes.
+ *
+ *  The backend budgets the *base64* payload at 31MB
+ *  (MAX_TOTAL_SOURCE_B64_BYTES) to stay under Anthropic's 32MB request
+ *  limit. Base64 inflates bytes by 4/3, so the equivalent raw-file
+ *  budget is ~23MB — and raw bytes are what `file_size` reports, which
+ *  is what the picker can actually compare against. */
+export const GENERATION_MAX_SOURCE_BYTES = Math.floor((31 * 1024 * 1024 * 3) / 4);
