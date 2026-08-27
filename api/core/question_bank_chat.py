@@ -18,7 +18,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.document_vision import MAX_VISION_IMAGES, build_vision_content, fetch_document_images
+from api.core.document_vision import MAX_VISION_IMAGES, build_vision_content, fetch_source_documents
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import BANK_CHAT_REPLY_SCHEMA
 from api.core.subjects import get_config
@@ -289,7 +289,7 @@ async def chat_with_bank_item(
     history = _strip_internal_fields(pending_history[-CHAT_CONTEXT_WINDOW:])
 
     doc_ids = [uuid.UUID(d) for d in (item.source_doc_ids or [])]
-    images = await fetch_document_images(
+    images = await fetch_source_documents(
         db, doc_ids, item.course_id, max_images=MAX_VISION_IMAGES,
     )
 

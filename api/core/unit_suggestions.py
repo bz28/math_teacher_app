@@ -43,7 +43,7 @@ async def suggest_units(
         course_subject: The course subject (math, physics, etc.).
         user_id: For LLM call logging.
         images: Optional list of {"filename", "base64", "media_type"} from
-                fetch_document_images. When provided, Claude reads document
+                fetch_source_documents. When provided, Claude reads document
                 content instead of guessing from filenames alone.
 
     Returns:

@@ -24,7 +24,7 @@ from api.core.document_vision import (
     MAX_VISION_IMAGES,
     build_attachment_metadata,
     build_vision_content,
-    fetch_document_images,
+    fetch_source_documents,
 )
 from api.core.geometry import render_figure_or_none
 from api.core.image_utils import to_content_block
@@ -285,7 +285,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
     else:
         # Generate mode: AI invents new questions
         doc_ids = [uuid.UUID(d) for d in (job.source_doc_ids or [])]
-        images = await fetch_document_images(
+        images = await fetch_source_documents(
             db, doc_ids, job.course_id, max_images=MAX_VISION_IMAGES,
         )
         # Observability only: record which docs (and how many of N
@@ -515,7 +515,7 @@ async def regenerate_one(
     unit_name = unit.name if unit else course.name
 
     doc_ids = [uuid.UUID(d) for d in (item.source_doc_ids or [])]
-    images = await fetch_document_images(
+    images = await fetch_source_documents(
         db, doc_ids, item.course_id, max_images=MAX_VISION_IMAGES,
     )
     # Observability only: which attached docs (of N) reached the model.

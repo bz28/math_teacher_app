@@ -8,7 +8,7 @@ metadata does NOT change the prompt / vision content the model receives.
 
 Covers:
 - build_attachment_metadata's shape (filenames + two ints).
-- fetch_document_images truncates the selection at MAX_VISION_IMAGES —
+- fetch_source_documents truncates the selection at MAX_VISION_IMAGES —
   the exact spot "used M of N" is measured.
 - generate_questions forwards call_metadata to the model call AND leaves
   the vision content byte-identical whether or not metadata is logged.
@@ -29,7 +29,7 @@ from api.core.document_vision import (
     MAX_VISION_IMAGES,
     build_attachment_metadata,
     build_vision_content,
-    fetch_document_images,
+    fetch_source_documents,
 )
 from api.core.question_bank_generation import _run_generation
 from api.database import get_session_factory
@@ -164,11 +164,11 @@ async def _seed(num_docs: int) -> dict[str, Any]:
 
 
 @pytest.mark.asyncio
-async def test_fetch_document_images_caps_selection_at_max() -> None:
+async def test_fetch_source_documents_caps_selection_at_max() -> None:
     k = MAX_VISION_IMAGES + 2
     seed = await _seed(k)
     async with get_session_factory()() as s:
-        images = await fetch_document_images(
+        images = await fetch_source_documents(
             s, seed["doc_ids"], seed["course_id"], max_images=MAX_VISION_IMAGES,
         )
     assert len(images) == MAX_VISION_IMAGES  # cap truncated the selection

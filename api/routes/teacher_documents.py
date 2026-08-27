@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.document_vision import fetch_document_images
+from api.core.document_vision import fetch_source_documents
 from api.core.image_utils import validate_and_decode_upload
 from api.core.unit_suggestions import suggest_units
 from api.database import get_db
@@ -177,7 +177,7 @@ async def suggest_document_units(
     # Fetch document images if IDs provided
     images = None
     if body.document_ids:
-        images = await fetch_document_images(db, body.document_ids, course_id)
+        images = await fetch_source_documents(db, body.document_ids, course_id)
 
     suggestions = await suggest_units(
         filenames=body.filenames,
