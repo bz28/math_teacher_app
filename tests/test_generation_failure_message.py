@@ -14,20 +14,24 @@ Two changes are pinned here:
 - when documents were left behind, the message says so.
 """
 
-import inspect
-
 import pytest
 
 from api.core import assignment_generation
-from api.core.question_bank_generation import _empty_result_message
+from api.core.document_vision import MAX_TOTAL_SOURCE_B64_BYTES, MAX_VISION_IMAGES
+from api.core.question_bank_generation import (
+    TeacherFacingGenerationError,
+    _empty_result_message,
+)
 
 
-def test_message_names_skipped_files_as_the_likely_cause() -> None:
+def test_message_names_skipped_files_as_a_likely_cause() -> None:
     msg = _empty_result_message(docs_selected=8, docs_used=5)
     assert "3 of your 8 source files weren't sent" in msg
-    # It must point at the selection, not at her wording.
-    assert "adjusting your instructions" not in msg
     assert "fewer or smaller files" in msg
+    # Offered as *a* cause, not *the* cause: the model can also return
+    # nothing on a selection that fit fine, so keep the other lead.
+    assert "may be why" in msg
+    assert "adjust your instructions" in msg
 
 
 def test_message_falls_back_when_every_file_was_sent() -> None:
@@ -42,18 +46,6 @@ def test_message_is_generic_when_no_documents_were_attached() -> None:
     assert "adjusting your instructions" in msg
 
 
-def test_generate_questions_no_longer_swallows_api_errors() -> None:
-    """A raised API error must reach the caller, not become [].
-
-    Masking it made an oversized request, a page-count rejection and a
-    timeout all arrive as "the AI didn't return any questions".
-    """
-    source = inspect.getsource(assignment_generation.generate_questions)
-    tail = source[source.rindex("except Exception:"):]
-    assert "raise" in tail, "generate_questions must re-raise"
-    assert "return []" not in tail, "generate_questions must not mask the error"
-
-
 @pytest.mark.asyncio
 async def test_generate_questions_propagates_the_underlying_error(
     monkeypatch: pytest.MonkeyPatch,
@@ -65,3 +57,31 @@ async def test_generate_questions_propagates_the_underlying_error(
     monkeypatch.setattr(assignment_generation, "call_claude_json", boom)
     with pytest.raises(RuntimeError, match="request too large"):
         await assignment_generation.generate_questions("Trig/Precalculus", 3)
+
+
+def test_message_size_is_derived_from_the_real_budget() -> None:
+    """The MB figure must track the constant, not a hand-typed number —
+    changing the budget shouldn't silently make the message lie."""
+    msg = _empty_result_message(docs_selected=8, docs_used=5)
+    expected_mb = round(MAX_TOTAL_SOURCE_B64_BYTES * 3 / 4 / 1024 / 1024)
+    assert f"about {expected_mb}MB" in msg
+    assert f"carries {MAX_VISION_IMAGES} files" in msg
+
+
+def test_provider_errors_are_not_shown_to_the_teacher() -> None:
+    """job.error_message renders verbatim in the UI.
+
+    Letting the real exception through is right for OUR copy and wrong
+    for a provider's: "Claude Vision API error: Error code: 400 -
+    {'type': 'error', ...}" tells a teacher nothing and puts our
+    internals in a red banner.
+    """
+    provider = RuntimeError(
+        "Claude Vision API error: Error code: 400 - {'type': 'error'}"
+    )
+    assert not isinstance(provider, TeacherFacingGenerationError)
+
+    ours = TeacherFacingGenerationError(_empty_result_message(8, 5))
+    assert isinstance(ours, TeacherFacingGenerationError)
+    # ...and still a RuntimeError, so _run_job's handler still catches it.
+    assert isinstance(ours, RuntimeError)
