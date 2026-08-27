@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePdfBlobUrl } from "@/hooks/use-pdf-blob-url";
 import { teacher, type TeacherDocument } from "@/lib/api";
 import { formatFileSize } from "@/lib/utils";
 import { fileKind } from "./types";
@@ -48,6 +49,11 @@ export function FilePreviewModal({ courseId, doc, onClose }: FilePreviewModalPro
   }, [onClose]);
 
   const src = imageData ? toDataUrl(imageData, doc.file_type) : null;
+  // PDFs render and open from a blob: URL — a data: link is inert in
+  // Chrome/Firefox, and that link is the whole fallback. Falls back to
+  // `src` if the blob can't be built.
+  const blobUrl = usePdfBlobUrl(kind === "pdf" ? imageData : null);
+  const pdfUrl = blobUrl ?? src;
 
   return (
     <div
@@ -91,12 +97,12 @@ export function FilePreviewModal({ courseId, doc, onClose }: FilePreviewModalPro
           ) : kind === "pdf" ? (
             <div className="w-full self-stretch">
               <embed
-                src={src}
+                src={pdfUrl ?? undefined}
                 type="application/pdf"
                 className="h-[75vh] w-full rounded-[--radius-md] bg-white"
               />
               <a
-                href={src}
+                href={pdfUrl ?? undefined}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"
