@@ -22,7 +22,13 @@ from sqlalchemy import text
 
 from api.core import document_vision as dv
 from api.core.auth import hash_password
-from api.core.document_vision import build_vision_content, fetch_source_documents
+from api.core.constants import MAX_IMAGE_BYTES
+from api.core.document_vision import (
+    MAX_TOTAL_SOURCE_B64_BYTES,
+    MAX_VISION_IMAGES,
+    build_vision_content,
+    fetch_source_documents,
+)
 from api.database import get_session_factory
 from api.models.course import Course, CourseTeacher, Document
 from api.models.school import SCHOOL_KIND_INSTITUTIONAL, School
@@ -194,3 +200,41 @@ async def test_fetch_source_documents_budget_admits_what_fits(
         docs = await fetch_source_documents(s, seed["doc_ids"], seed["course_id"])
     # Two fit (20 <= 25); the third would reach 30 and is skipped.
     assert len(docs) == 2
+
+
+# ── the budget's real value, not a monkeypatched stub ──
+#
+# The budget tests above shrink the constant so they can run on tiny
+# rows. These two pin the SHIPPED number against the two limits it sits
+# between, because an over-conservative budget silently drops a document
+# the API would have taken — the exact failure this module prevents.
+
+_B64_GROWTH = 4 / 3
+
+
+def test_budget_admits_a_realistic_full_size_image_selection() -> None:
+    """Four full-size (5MB) materials images encode to ~26.7MB.
+
+    Materials images are stored at full size — neither the client
+    (`upload-document.ts`) nor this path downscales them — so this is an
+    ordinary selection, and it was sent fine before any budget existed.
+    A budget that rejects it is a regression, not a safeguard.
+    """
+    four_full_size = 4 * MAX_IMAGE_BYTES * _B64_GROWTH
+    assert four_full_size <= MAX_TOTAL_SOURCE_B64_BYTES
+
+
+def test_budget_stays_under_the_anthropic_request_cap() -> None:
+    """...while still leaving room for the prompt and tool schema."""
+    assert MAX_TOTAL_SOURCE_B64_BYTES < dv._ANTHROPIC_MAX_REQUEST_BYTES
+    headroom = dv._ANTHROPIC_MAX_REQUEST_BYTES - MAX_TOTAL_SOURCE_B64_BYTES
+    # Prompt + schema + JSON envelope are kilobytes; base64 needs no
+    # escaping. A megabyte is already generous.
+    assert headroom >= 512 * 1024
+
+
+def test_max_images_ceiling_cannot_be_silently_capped_by_the_budget() -> None:
+    """MAX_VISION_IMAGES images only exceed the budget when the request
+    would genuinely have failed — document the crossover explicitly."""
+    at_ceiling = MAX_VISION_IMAGES * MAX_IMAGE_BYTES * _B64_GROWTH
+    assert at_ceiling > dv._ANTHROPIC_MAX_REQUEST_BYTES

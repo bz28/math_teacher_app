@@ -111,9 +111,9 @@ Documents to organize:
                             if name and name not in discovered_units:
                                 discovered_units.append(name)
 
-            # Handle any filenames that had no image (PDFs, missing data)
-            image_filenames = {img["filename"] for img in images}
-            text_only_filenames = [f for f in filenames if f not in image_filenames]
+            # Handle any filenames with no readable payload (missing data)
+            attached_filenames = {img["filename"] for img in images}
+            text_only_filenames = [f for f in filenames if f not in attached_filenames]
             if text_only_filenames:
                 text_files_str = "\n".join(f"- {f}" for f in text_only_filenames)
                 all_units = list(existing_units) + discovered_units

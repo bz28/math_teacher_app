@@ -28,14 +28,25 @@ _SUPPORTED_SOURCE_TYPES = {"image/jpeg", "image/png", "application/pdf"}
 # Cap documents per call to avoid token limits
 MAX_VISION_IMAGES = 5
 
-# Anthropic caps a single request at 32MB, and base64 inflates bytes by
-# ~4/3 — so one max-size upload (MAX_PDF_BYTES, 25MB) is ~33MB on the
-# wire and would blow the request on its own. Budget the cumulative
-# encoded size and skip whatever doesn't fit, leaving headroom for the
-# prompt and tool schema. An oversized selection degrades to "fewer
-# documents" (visible in the attachment metadata) rather than an opaque
-# API error.
-MAX_TOTAL_SOURCE_B64_BYTES = 24 * 1024 * 1024
+# Anthropic caps a single request at 32MB. Budget the cumulative encoded
+# size so an oversized selection degrades to "fewer documents" (visible
+# in the attachment metadata) instead of an opaque API error.
+#
+# Keep the headroom tight. Everything else in the request — prompt, tool
+# schema, JSON envelope — is kilobytes, and base64 needs no JSON
+# escaping, so a megabyte is already generous. An over-conservative
+# budget is not "safe": it silently drops a document the API would have
+# accepted, which is the exact failure this module exists to prevent.
+# Five 5MB images (the MAX_VISION_IMAGES ceiling) encode to ~33MB, so
+# the cap can still bite — but only where the request would genuinely
+# have failed.
+#
+# Note the residual gap: base64 inflates by ~4/3, so this admits ~23MB
+# of raw bytes while uploads accept a 25MB PDF (MAX_PDF_BYTES). A PDF
+# between those two sizes is stored and previewable but can't be sent.
+# Surfacing that to the teacher is the follow-up to this fix.
+_ANTHROPIC_MAX_REQUEST_BYTES = 32 * 1024 * 1024
+MAX_TOTAL_SOURCE_B64_BYTES = _ANTHROPIC_MAX_REQUEST_BYTES - 1024 * 1024
 
 
 async def fetch_source_documents(
@@ -58,6 +69,11 @@ async def fetch_source_documents(
     rows = (await db.execute(
         select(Document.id, Document.filename, Document.file_type, Document.image_data)
         .where(Document.id.in_(document_ids), Document.course_id == course_id)
+        # Without this the row order is arbitrary, so which document the
+        # cap or the budget drops changes between identical runs — and a
+        # teacher reporting "it ignored my main worksheet" isn't
+        # reproducible.
+        .order_by(Document.created_at)
     )).all()
 
     documents = []

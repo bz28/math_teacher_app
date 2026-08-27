@@ -46,14 +46,15 @@ ask you about it, or both. You can:
 2. Propose a scoped revision: only set the fields they want changed; leave other
    fields as null.
 
-About the attached images (IMPORTANT):
-- Any images attached to this conversation are the SOURCE MATERIALS the
-  question was originally generated from (e.g. a textbook page, a worksheet,
-  the teacher's class notes). They are NOT the question you are revising.
+About the attached source documents (IMPORTANT):
+- Any documents attached to this conversation — images or PDFs — are the
+  SOURCE MATERIALS the question was originally generated from (e.g. a textbook
+  page, a worksheet, the teacher's class notes). They are NOT the question you
+  are revising.
 - The question you are revising is in the "Current question:" text below.
-- Use the images ONLY as REFERENCE for style, notation, vocabulary, difficulty
+- Use them ONLY as REFERENCE for style, notation, vocabulary, difficulty
   level, and topic scope. Match the textbook's voice when you propose changes.
-- Do NOT treat problems shown in the source images as the question to edit.
+- Do NOT treat problems shown in the source documents as the question to edit.
   The teacher's question to edit is the one in the "Current question:" text.
 
 Rules for proposals:
@@ -306,8 +307,8 @@ async def chat_with_bank_item(
             # call_claude_vision doesn't take a separate system prompt — inline
             # the workshop role into the user content prefix. The image
             # preamble is loud on purpose: without it Claude tends to read the
-            # images as "the question to edit" rather than reference material.
-            image_preamble = (
+            # source docs as "the question to edit" rather than reference material.
+            source_preamble = (
                 "The attached documents are the SOURCE MATERIALS the question "
                 "was originally generated from — textbook pages, worksheets, "
                 "or notes. They are reference for style/notation/topic only. "
@@ -315,7 +316,7 @@ async def chat_with_bank_item(
                 "revise is in the 'Current question:' text further down."
             )
             content = build_vision_content(
-                images, f"{system_prompt}\n\n{image_preamble}\n\n{seed}",
+                images, f"{system_prompt}\n\n{source_preamble}\n\n{seed}",
             )
             result = await call_claude_vision(
                 content,
