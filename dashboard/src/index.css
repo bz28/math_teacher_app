@@ -2078,6 +2078,62 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 /* Long-list toolbar — the search box + result count DataTable grows for
    itself once a list passes LONG_LIST_THRESHOLD. Sits above the table's
    own scroll container so it stays put while the table scrolls sideways. */
+/* Expanded LLM call — the exchange itself, in place. Monospace because
+   it's a prompt, capped in height because a system prompt can run to
+   thousands of characters and the point is to scan it, not to be buried
+   by it. */
+.call-body {
+  background: var(--paper);
+  padding: 4px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.io {
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.io-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 11px;
+  background: var(--paper-2);
+  border-bottom: 1px solid var(--rule);
+}
+
+.io-who {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+}
+
+.io-len {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--muted-2);
+}
+
+.io-pre {
+  margin: 0;
+  padding: 11px 13px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
 .dt-toolbar {
   display: flex;
   align-items: center;

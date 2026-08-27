@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useLocation } from "react-router-dom";
 import { api, type SchoolListItem } from "./api";
 
@@ -22,12 +22,52 @@ import { api, type SchoolListItem } from "./api";
 
 const STORAGE_KEY = "veradic_admin_school";
 
+/**
+ * The scope, as an external store.
+ *
+ * A page that shows something belonging to a school — a teacher, say —
+ * publishes that school here, and the rail follows. Without it the rail
+ * asserted whatever it last remembered: open a Riverside teacher from a
+ * platform-wide list and the switcher still said "Holy Ghost Prep",
+ * directly contradicting the breadcrumb an inch away. Two school names on
+ * one screen meaning different things is the confusion this whole
+ * restructure exists to remove.
+ *
+ * An external store rather than state-in-a-parent because the publisher
+ * (a deep page) and the reader (the rail) have no component relationship;
+ * `useSyncExternalStore` is the same pattern `apiHealth` already uses.
+ */
+let current: string | null = null;
+const listeners = new Set<() => void>();
+
+function subscribe(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+function snapshot(): string | null {
+  return current;
+}
+
 export function rememberSchool(id: string): void {
   try {
     localStorage.setItem(STORAGE_KEY, id);
   } catch {
     // Non-fatal: the switcher still works, it just won't persist.
   }
+  if (current === id) return;
+  current = id;
+  listeners.forEach((fn) => fn());
+}
+
+/**
+ * Publish the school a non-school-scoped page is showing, so the rail
+ * agrees with the page. Call it from an effect, not during render.
+ */
+export function useScopeToSchool(schoolId: string | null | undefined): void {
+  useEffect(() => {
+    if (schoolId) rememberSchool(schoolId);
+  }, [schoolId]);
 }
 
 function remembered(): string | null {
@@ -61,6 +101,7 @@ export interface SelectedSchool {
 export function useSelectedSchool(): SelectedSchool {
   const { pathname } = useLocation();
   const routeId = routeSchoolId(pathname);
+  const published = useSyncExternalStore(subscribe, snapshot, snapshot);
   const [schools, setSchools] = useState<SchoolListItem[] | null>(null);
 
   useEffect(() => {
@@ -90,11 +131,13 @@ export function useSelectedSchool(): SelectedSchool {
     // than the page is showing, which is the one outcome this ordering
     // exists to prevent.
     if (routeId) return routeId;
+    // What the current page says it is showing beats anything remembered.
+    if (published) return published;
     if (!schools || schools.length === 0) return null;
     const saved = remembered();
     if (saved && schools.some((s) => s.id === saved)) return saved;
     return schools[0].id;
-  }, [schools, routeId]);
+  }, [schools, routeId, published]);
 
   return {
     id,

@@ -7,6 +7,8 @@ import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
 import TeacherActivitySection from "../components/TeacherActivitySection";
+import TeacherLLMCalls from "../components/TeacherLLMCalls";
+import { useScopeToSchool } from "../lib/useSelectedSchool";
 
 // Per-teacher drill-in — the "what is this pilot teacher actually doing"
 // view. Lives at /teachers/:teacherId, reachable from the Independent
@@ -38,6 +40,14 @@ export default function TeacherDetail() {
       .then(setData)
       .catch((e: Error) => setError(e.message));
   }, [teacherId]);
+
+  // Tell the rail which school this page is showing, so the switcher
+  // can't sit there naming a different one an inch from the breadcrumb.
+  // Institutional only: an indie teacher's synthetic school isn't in the
+  // switcher's list, and publishing it would just move the contradiction.
+  useScopeToSchool(
+    data?.teacher.school?.kind === "institutional" ? data.teacher.school.id : null,
+  );
 
   const sectionNames = useMemo(
     () => Object.fromEntries((data?.sections ?? []).map((s) => [s.id, s.name])),
@@ -191,6 +201,29 @@ export default function TeacherDetail() {
 
       {/* ── ③ AI generations + activity timeline (richest surface) ── */}
       <TeacherActivitySection teacherId={t.id} />
+
+      {/* Every model call she caused, openable in place. The page already
+          linked out to a pre-filtered /llm-calls, which answers "how much
+          did she cost" but not the question you actually have when she
+          reports something odd: what did we send, and what came back. That
+          was one click into another page with the filter to re-apply. */}
+      <section className="table-card" style={{ marginBottom: 24 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            padding: "12px 16px",
+            borderBottom: "1px solid var(--rule)",
+          }}
+        >
+          <h3 style={{ margin: 0 }}>Model calls</h3>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted-2)" }}>
+            click a row for the full exchange
+          </span>
+        </div>
+        <TeacherLLMCalls teacherId={t.id} />
+      </section>
 
       {/* ── Sections (compact, click to filter the roster) ───────── */}
       <SectionsCard

@@ -88,6 +88,11 @@ export default function Overview() {
   // A chart needs two days to be a trend. One point is a dot with axes;
   // zero is an empty box with a grid in it — 240px of chrome saying less
   // than the stat tile above it already said.
+  // Nothing in the breakdown means nothing worth a 90px strip.
+  const hasBreakdown =
+    (data?.by_mode ?? []).some((m) => m.count > 0) ||
+    (data?.by_subject ?? []).some((x) => x.count > 0);
+
   const hasTrend =
     (data?.sessions_by_day ?? []).filter((d) => d.count > 0).length >= 2 ||
     (data?.cost_by_day ?? []).filter((d) => d.cost > 0).length >= 2;
@@ -130,11 +135,10 @@ export default function Overview() {
   if (!data) return <p className="loading">Loading…</p>;
 
   const modeMap = Object.fromEntries(data.by_mode.map((m) => [m.mode, m.count]));
-  const fmtLatency = (ms: number) =>
-    ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
-  // p95 leads the tile: an average hides the slow tail that actually
-  // hurts users. Avg is kept as a secondary reference in the subline.
-  const latencyStr = fmtLatency(data.p95_latency_ms);
+  // Latency is still folded into the health pill below — a call that is
+  // slow ENOUGH to be failing is worth knowing. The standalone p95 tile
+  // is gone: there is no action you take at 15s that you don't take at
+  // 13s, so it was a number to look at rather than a number to use.
   const errTone = data.error_rate >= 5 ? "danger" : data.error_rate > 0 ? "warn" : "ok";
   const dailyRate = Number(hours) > 0 ? data.total_cost / (Number(hours) / 24) : 0;
   const health = healthPill(data.error_rate, data.avg_latency_ms);
@@ -241,11 +245,6 @@ export default function Overview() {
           sub={`${data.failed_calls}/${data.total_calls} calls · ${win}`}
         />
         <StatTile
-          label="p95 latency"
-          value={latencyStr}
-          sub={`avg ${fmtLatency(data.avg_latency_ms)} · successful calls · ${win}`}
-        />
-        <StatTile
           label={`Cost (${win})`}
           value={fmtCost(data.total_cost)}
           sub={`≈ ${fmtCost(dailyRate)}/day run-rate`}
@@ -300,6 +299,12 @@ export default function Overview() {
       </div>
       )}
 
+      {/* Breakdown by mode and subject renders only when something is in
+          it. The mode row hardcodes learn / practice / mock_test, so on a
+          school deployment it was a permanent row of three zeros
+          describing the self-study product this console is not here to
+          watch. */}
+      {hasBreakdown && (
       <div style={{
         display: "flex", gap: 28, marginBottom: 28, padding: "18px 0",
         borderTop: "1px solid var(--rule)", borderBottom: "1px solid var(--rule)",
@@ -331,6 +336,7 @@ export default function Overview() {
           ))}
         </div>
       </div>
+      )}
 
       {/* ── Usage — demoted below the fold. Deleted-accounts vanity
              metric dropped entirely. ─────────────────────────────── */}
@@ -347,10 +353,6 @@ export default function Overview() {
         <div className="mini-metric">
           <span className="mini-metric-label">New users</span>
           <span className="mini-metric-value">{data.new_users.toLocaleString()}</span>
-        </div>
-        <div className="mini-metric">
-          <span className="mini-metric-label">Total users (all-time)</span>
-          <span className="mini-metric-value">{data.total_users.toLocaleString()}</span>
         </div>
       </div>
     </div>
