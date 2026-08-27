@@ -85,3 +85,31 @@ def test_provider_errors_are_not_shown_to_the_teacher() -> None:
     assert isinstance(ours, TeacherFacingGenerationError)
     # ...and still a RuntimeError, so _run_job's handler still catches it.
     assert isinstance(ours, RuntimeError)
+
+
+def test_every_teacher_worded_raise_is_marked_teacher_facing() -> None:
+    """Copy written for the teacher must carry the type that shows it.
+
+    The type gates whether `job.error_message` reaches her or gets
+    swapped for generic text. A message written in her language but
+    raised as a plain RuntimeError is silently downgraded — which is
+    exactly what happened to the parent-deleted message when the type
+    was introduced. Anything phrased for her belongs on the left.
+    """
+    import re
+    from pathlib import Path
+
+    source = Path("api/core/question_bank_generation.py").read_text()
+    # Only inspect the async worker path, whose raises land in
+    # error_message via _run_job.
+    worker = source[source.index("async def _run_generation("):source.index("async def _revise")] \
+        if "async def _revise" in source else source[source.index("async def _run_generation("):]
+
+    plain = re.findall(r'raise RuntimeError\(\s*\n?\s*"([^"]{20,})"', worker)
+    # Phrases that address the teacher rather than describe our internals.
+    teacher_words = ("your", "Try ", "Make sure", "could be generated")
+    leaked = [m for m in plain if any(w in m for w in teacher_words)]
+    assert not leaked, (
+        "these read as teacher-facing but are raised as plain RuntimeError, "
+        f"so she'd see generic copy instead: {leaked}"
+    )

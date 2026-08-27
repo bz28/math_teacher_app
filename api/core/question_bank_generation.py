@@ -351,7 +351,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
                 select(QuestionBankItem).where(QuestionBankItem.id == job.parent_question_id)
             )).scalar_one_or_none()
             if not parent:
-                raise RuntimeError(
+                raise TeacherFacingGenerationError(
                     "Parent question was deleted before its variations could be generated"
                 )
             seed_block = (
