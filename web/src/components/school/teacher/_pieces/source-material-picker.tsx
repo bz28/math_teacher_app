@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { teacher, type TeacherDocument, type TeacherUnit } from "@/lib/api";
+import {
+  GENERATION_MAX_SOURCE_BYTES,
+  GENERATION_MAX_SOURCE_DOCS,
+} from "@/lib/constants";
 import { topUnitIdOf, topUnits } from "@/lib/units";
 import { formatFileSize } from "@/lib/utils";
 import type { PendingUpload } from "@/hooks/use-document-uploads";
@@ -257,6 +261,18 @@ export function SourceMaterialPicker({
   const selectedCount = selectedDocs.size;
   const hasContent = totalDocs > 0 || pending.length > 0;
 
+  // What the generation call can actually carry. Going over either
+  // limit isn't an error — the backend just sends fewer documents — but
+  // it used to happen in silence, so the teacher's homework quietly
+  // missed the material she thought she'd attached. Say it here, while
+  // she can still change the selection.
+  const selectedBytes = docs.reduce(
+    (sum, d) => (selectedDocs.has(d.id) ? sum + (d.file_size ?? 0) : sum),
+    0,
+  );
+  const overDocLimit = selectedCount > GENERATION_MAX_SOURCE_DOCS;
+  const overSizeLimit = selectedBytes > GENERATION_MAX_SOURCE_BYTES;
+
   return (
     <div>
       <div className="flex items-end justify-between gap-3">
@@ -297,6 +313,25 @@ export function SourceMaterialPicker({
           disabled={disabled}
         />
       </div>
+
+      {(overDocLimit || overSizeLimit) && (
+        <p
+          role="status"
+          className="mt-2 rounded-[--radius-md] border border-[color:var(--color-warning)] bg-[color:var(--color-warning-bg)] px-2.5 py-1.5 text-[11px] leading-snug text-[color:var(--color-warning-dark)]"
+        >
+          {overDocLimit && (
+            <>
+              {`Only ${GENERATION_MAX_SOURCE_DOCS} files are sent per generation — you\u2019ve picked ${selectedCount}. Unselect ${selectedCount - GENERATION_MAX_SOURCE_DOCS} to choose which ones are used.`}
+            </>
+          )}
+          {overDocLimit && overSizeLimit && <br />}
+          {overSizeLimit && (
+            <>
+              {`These files total ${formatFileSize(selectedBytes)}, over the ${formatFileSize(GENERATION_MAX_SOURCE_BYTES)} limit for one generation. Unselect a few — the largest count most.`}
+            </>
+          )}
+        </p>
+      )}
 
       {!docsLoaded ? (
         <div
