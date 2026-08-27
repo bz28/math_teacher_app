@@ -1996,6 +1996,25 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 .stat-tile-spark { display: block; margin-top: 12px; }
 
 /* ── DataTable — canonical table ──────────────────────────────────── */
+/* Long-list toolbar — the search box + result count DataTable grows for
+   itself once a list passes LONG_LIST_THRESHOLD. Sits above the table's
+   own scroll container so it stays put while the table scrolls sideways. */
+.dt-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.dt-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+
 .dt-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
