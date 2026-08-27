@@ -233,6 +233,28 @@ async def _extract_from_files(
     return normalized
 
 
+def _empty_result_message(docs_selected: int, docs_used: int) -> str:
+    """What to tell the teacher when generation returns nothing.
+
+    The old copy always blamed her instructions. When some of her source
+    documents were left behind — over the per-call count or the request
+    size budget — that is the far likelier cause and the one she can act
+    on, so say that instead of sending her to rewrite a prompt that was
+    probably fine.
+    """
+    if docs_used < docs_selected:
+        skipped = docs_selected - docs_used
+        return (
+            f"The AI didn't return any questions, and {skipped} of your "
+            f"{docs_selected} source files weren't sent (a generation "
+            f"carries {MAX_VISION_IMAGES} files, up to about 23MB total). "
+            "Try again with fewer or smaller files selected."
+        )
+    return (
+        "The AI didn't return any questions. Try adjusting your "
+        "instructions or selecting different source documents."
+    )
+
 async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
     """Run the actual Claude calls and persist results.
 
@@ -348,9 +370,11 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             generation_job_id=str(job.id),
         )
         if not question_dicts:
+            # Reached only when the call SUCCEEDED and came back empty —
+            # a real API failure now propagates with its own cause
+            # rather than arriving here disguised as "no questions".
             raise RuntimeError(
-                "The AI didn't return any questions. Try adjusting your "
-                "instructions or selecting different source documents."
+                _empty_result_message(len(doc_ids), len(images))
             )
 
     # 2. Solve each question in parallel (capped concurrency inside)
