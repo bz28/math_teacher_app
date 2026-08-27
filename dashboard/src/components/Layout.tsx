@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { apiHealth, getToken, setToken } from "../lib/api";
+import SchoolSwitcher from "./SchoolSwitcher";
+import { useSelectedSchool } from "../lib/useSelectedSchool";
 
 interface NavItem {
   to: string;
@@ -12,31 +14,49 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// The pages grouped by the operator's job, in the order they're worked:
-// MONITOR first (is anything broken?), then CUSTOMERS (who are my users,
-// what are they doing), then SYSTEM (internal management). Detail pages
-// (school/lead/teacher/submission drill-ins) stay off the rail — they're
-// reached by clicking a row, not navigating here.
+// Grouped on ONE axis: scope. Previously the three groups each used a
+// different one — "Monitor" was a verb, "Customers" an entity, "System" a
+// layer — so nothing told you which axis to think along and you learned
+// the rail by memory instead of predicting it.
+//
+// Now: what is scoped to the school you have selected, what is platform-
+// wide, and what is the console's own plumbing. Detail pages (lead /
+// teacher / submission drill-ins) stay off the rail — they're reached by
+// clicking a row, not by navigating here.
+
+/**
+ * Pages scoped to the selected school.
+ *
+ * One entry today, because one is all that exists: SchoolDetail is a
+ * single 1,300-line page holding teachers, activity, cost and health. It
+ * grows entries as those become real routes — deliberately NOT by
+ * splitting that page in the same change that moves the navigation
+ * around, which is how a reviewable diff turns into an unreviewable one.
+ */
+const SCHOOL_LINKS: { to: (id: string) => string; label: string }[] = [
+  { to: (id) => `/schools/${id}`, label: "Overview" },
+];
+
 const NAV_GROUPS: NavGroup[] = [
   {
-    label: "Monitor",
+    label: "Platform",
     items: [
       { to: "/overview", label: "Overview" },
-      { to: "/llm-calls", label: "LLM calls" },
-      { to: "/grading-quality", label: "Grading quality" },
-      { to: "/generation-quality", label: "Generation quality" },
-      { to: "/quality", label: "Solution quality" },
-      { to: "/harness-runs", label: "Harness runs" },
-      { to: "/golden-set", label: "Generation QA" },
-    ],
-  },
-  {
-    label: "Customers",
-    items: [
-      { to: "/schools", label: "Schools" },
+      { to: "/schools", label: "All schools" },
       { to: "/leads", label: "Leads" },
       { to: "/teachers/independent", label: "Independent teachers" },
       { to: "/students/independent", label: "Independent students" },
+    ],
+  },
+  {
+    label: "AI quality",
+    items: [
+      // Five sibling pages collapsed to one. "Generation quality" and
+      // "Generation QA" were indistinguishable from the rail, and the URLs
+      // never matched the labels (Solution quality lived at /quality,
+      // Generation QA at /golden-set). One entry, tabs inside.
+      { to: "/ai-quality", label: "AI quality" },
+      { to: "/llm-calls", label: "LLM calls" },
     ],
   },
   {
@@ -56,6 +76,9 @@ export default function Layout() {
   const [apiDown, setApiDown] = useState(apiHealth.isDown());
   useEffect(() => apiHealth.subscribe(setApiDown), []);
 
+  const school = useSelectedSchool();
+  const location = useLocation();
+
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <nav className="sidebar">
@@ -63,6 +86,27 @@ export default function Layout() {
           <div className="sidebar-brand">Veradic</div>
           <div className="sidebar-brand-sub">Operations</div>
         </div>
+
+        <SchoolSwitcher selected={school} />
+
+        {school.id && (
+          <div>
+            <div className="nav-section-label">This school</div>
+            {SCHOOL_LINKS.map((l) => {
+              const to = l.to(school.id!);
+              return (
+                <NavLink
+                  key={l.label}
+                  to={to}
+                  end
+                  className={`nav-link ${location.pathname === to ? "active" : ""}`}
+                >
+                  {l.label}
+                </NavLink>
+              );
+            })}
+          </div>
+        )}
 
         {NAV_GROUPS.map((group) => (
           <div key={group.label}>

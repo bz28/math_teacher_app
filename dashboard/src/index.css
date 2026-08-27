@@ -127,6 +127,55 @@ select:focus-visible {
    Nav
    ────────────────────────────────────────────────────────────────── */
 
+/* School switcher — the console's scope control, sitting directly under
+   the wordmark because everything in "This school" below it is scoped by
+   what's chosen here. Styled flush with the rail rather than as a card:
+   it's part of the chrome, not a widget floating on it. */
+.school-switcher {
+  padding: 0 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.school-switcher-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted-2);
+}
+
+.school-switcher select {
+  width: 100%;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 7px 9px;
+  cursor: pointer;
+}
+
+.school-switcher select:hover { border-color: var(--ink-soft); }
+
+/* One school: the name is context, not a control. Rendered flush and
+   unclickable so it reads as a heading rather than a disabled dropdown. */
+.school-switcher-single {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 1px 0;
+}
+
+.school-switcher select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .nav-section-label {
   font-size: 10px;
   text-transform: uppercase;
