@@ -85,6 +85,13 @@ export default function Overview() {
 
   const win = windowLabel(Number(hours));
 
+  // A chart needs two days to be a trend. One point is a dot with axes;
+  // zero is an empty box with a grid in it — 240px of chrome saying less
+  // than the stat tile above it already said.
+  const hasTrend =
+    (data?.sessions_by_day ?? []).filter((d) => d.count > 0).length >= 2 ||
+    (data?.cost_by_day ?? []).filter((d) => d.cost > 0).length >= 2;
+
   const attention: AttentionItem[] = useMemo(() => {
     if (!data) return [];
     const items: AttentionItem[] = [];
@@ -259,6 +266,11 @@ export default function Overview() {
         />
       </div>
 
+      {/* A chart needs at least two days to be a trend. Below that it is a
+          dot with axes — 240px of chrome saying less than the stat tile
+          above it already said. Both series are hidden until there is
+          something to draw a line between. */}
+      {hasTrend && (
       <div className="chart-row">
         <div className="chart-card">
           <h3>Sessions / day</h3>
@@ -286,6 +298,7 @@ export default function Overview() {
           </ResponsiveContainer>
         </div>
       </div>
+      )}
 
       <div style={{
         display: "flex", gap: 28, marginBottom: 28, padding: "18px 0",

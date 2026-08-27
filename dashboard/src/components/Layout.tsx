@@ -11,73 +11,49 @@ interface NavItem {
   end?: boolean;
 }
 
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
-
-// Grouped on ONE axis: scope. Previously the three groups each used a
-// different one — "Monitor" was a verb, "Customers" an entity, "System" a
-// layer — so nothing told you which axis to think along and you learned
-// the rail by memory instead of predicting it.
+// The rail is a HIERARCHY, not a list of equals.
 //
-// Now: what is scoped to the school you have selected, what is platform-
-// wide, and what is the console's own plumbing. Detail pages (lead /
-// teacher / submission drill-ins) stay off the rail — they're reached by
-// clicking a row, not by navigating here.
+// This console has one job that gets done daily — inspect what the system
+// actually did for a real teacher, and judge whether the AI's output was
+// any good — and a long tail of things consulted occasionally. Giving all
+// eleven destinations the same weight made the daily work compete with
+// billing plumbing for the same glance.
+//
+// So the primary tier is the work; everything else sits below a rule in
+// muted type. Nothing is hidden — demoted is not deleted — but the eye
+// lands on the two or three things that are actually why you opened this.
 
-/**
- * Pages scoped to the selected school.
- *
- * One entry today, because one is all that exists: SchoolDetail is a
- * single 1,300-line page holding teachers, activity, cost and health. It
- * grows entries as those become real routes — deliberately NOT by
- * splitting that page in the same change that moves the navigation
- * around, which is how a reviewable diff turns into an unreviewable one.
- */
+/** Pages scoped to the selected school. The daily work starts here. */
 const SCHOOL_LINKS: { to: (id: string) => string; label: string }[] = [
-  // Named for what the page actually leads with, not "Overview" — the
-  // platform group already has an Overview, and two identical labels in
-  // one rail is a coin toss every time you look for either.
+  // Named for what the page leads with, not "Overview" — a platform
+  // Overview also exists, and two identical labels in one rail is a coin
+  // toss every time you look for either.
   { to: (id) => `/schools/${id}`, label: "Teachers & classes" },
 ];
 
-const NAV_GROUPS: NavGroup[] = [
-  {
-    label: "Platform",
-    items: [
-      { to: "/overview", label: "Overview" },
-      // `end`: without it NavLink treats /schools as a prefix of
-      // /schools/abc, so this lit up at the same time as the school
-      // entry above — two active items, one rail.
-      { to: "/schools", label: "All schools", end: true },
-      { to: "/leads", label: "Leads" },
-      { to: "/teachers/independent", label: "Independent teachers" },
-      { to: "/students/independent", label: "Independent students" },
-    ],
-  },
-  {
-    // "Quality" as the group, "AI quality" as the page inside it. Naming
-    // both the same would repeat the Overview collision one group down.
-    label: "Quality",
-    items: [
-      // Five sibling pages collapsed to one. "Generation quality" and
-      // "Generation QA" were indistinguishable from the rail, and the URLs
-      // never matched the labels (Solution quality lived at /quality,
-      // Generation QA at /golden-set). One entry, tabs inside.
-      { to: "/ai-quality", label: "AI quality" },
-      { to: "/llm-calls", label: "LLM calls" },
-    ],
-  },
-  {
-    label: "System",
-    items: [
-      // Users + Admins consolidated: one role-filtered tab. The Admins
-      // preset is reached via the in-page segmented filter (role=admin).
-      { to: "/users", label: "Users" },
-      { to: "/audit-logs", label: "Audit log" },
-    ],
-  },
+/**
+ * Tier one. Deliberately short, and deliberately only things that EXIST:
+ * a primary slot pointing at an unbuilt page is worse than no slot. The
+ * student-conversation viewer and the rollout-state teacher list join
+ * this tier as they land.
+ */
+const PRIMARY: NavItem[] = [
+  { to: "/ai-quality", label: "Quality" },
+];
+
+/**
+ * Tier two: real, reachable, and quiet. Business and platform plumbing —
+ * consulted, not worked in.
+ */
+const SECONDARY: NavItem[] = [
+  { to: "/overview", label: "Platform health" },
+  { to: "/schools", label: "Schools", end: true },
+  { to: "/leads", label: "Leads" },
+  { to: "/teachers/independent", label: "Independent teachers" },
+  { to: "/students/independent", label: "Independent students" },
+  { to: "/llm-calls", label: "LLM calls & spend" },
+  { to: "/users", label: "Users" },
+  { to: "/audit-logs", label: "Audit log" },
 ];
 
 export default function Layout() {
@@ -98,35 +74,46 @@ export default function Layout() {
 
         <SchoolSwitcher selected={school} />
 
-        {school.id && (
-          <div>
-            <div className="nav-section-label">This school</div>
-            {SCHOOL_LINKS.map((l) => {
-              const to = l.to(school.id!);
-              return (
-                <NavLink key={l.label} to={to} end className="nav-link">
-                  {l.label}
-                </NavLink>
-              );
-            })}
-          </div>
-        )}
-
-        {NAV_GROUPS.map((group) => (
-          <div key={group.label}>
-            <div className="nav-section-label">{group.label}</div>
-            {group.items.map((n) => (
+        {/* ── Tier one — the work ─────────────────────────────────── */}
+        <div className="nav-primary">
+          {school.id &&
+            SCHOOL_LINKS.map((l) => (
               <NavLink
-                key={n.to}
-                to={n.to}
-                end={n.end}
-                className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+                key={l.label}
+                to={l.to(school.id!)}
+                end
+                className="nav-link nav-link-primary"
               >
-                {n.label}
+                {l.label}
               </NavLink>
             ))}
-          </div>
-        ))}
+          {PRIMARY.map((n) => (
+            <NavLink
+              key={n.to}
+              to={n.to}
+              end={n.end}
+              className={({ isActive }) =>
+                `nav-link nav-link-primary ${isActive ? "active" : ""}`
+              }
+            >
+              {n.label}
+            </NavLink>
+          ))}
+        </div>
+
+        {/* ── Tier two — reference ────────────────────────────────── */}
+        <div className="nav-secondary">
+          {SECONDARY.map((n) => (
+            <NavLink
+              key={n.to}
+              to={n.to}
+              end={n.end}
+              className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+            >
+              {n.label}
+            </NavLink>
+          ))}
+        </div>
 
         <div className="rail-foot">
           <div className={`rail-status ${apiDown ? "rail-status-down" : "rail-status-ok"}`}>

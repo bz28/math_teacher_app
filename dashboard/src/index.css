@@ -176,6 +176,36 @@ select:focus-visible {
   outline-offset: 1px;
 }
 
+/* Two tiers, and the difference has to be visible at a glance or the
+   hierarchy is only in the source. Primary carries ink and size; the rule
+   is the horizon, and everything under it is quiet reference. */
+.nav-primary {
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.nav-link-primary {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.nav-secondary .nav-link {
+  font-size: 12.5px;
+  color: var(--muted);
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.nav-secondary .nav-link:hover { color: var(--ink-soft); }
+
+/* An active secondary item still reads as secondary — it gets the accent,
+   not primary's weight, so selecting one can't fake its way up a tier. */
+.nav-secondary .nav-link.active { color: var(--accent); font-weight: 500; }
+
 .nav-section-label {
   font-size: 10px;
   text-transform: uppercase;
