@@ -308,7 +308,7 @@ async def chat_with_bank_item(
             # preamble is loud on purpose: without it Claude tends to read the
             # images as "the question to edit" rather than reference material.
             image_preamble = (
-                "The following images are the SOURCE MATERIALS the question "
+                "The attached documents are the SOURCE MATERIALS the question "
                 "was originally generated from — textbook pages, worksheets, "
                 "or notes. They are reference for style/notation/topic only. "
                 "They are NOT the question you are revising. The question to "

@@ -87,7 +87,7 @@ Documents to organize:
 {batch_files_str}"""
                 vision_prompt = (
                     f"{_SUGGEST_UNITS_PROMPT}\n\n"
-                    "Document images are attached below. Read the actual content "
+                    "Source documents are attached below. Read the actual content "
                     "to determine which unit each document belongs to — do not rely "
                     "solely on the filename.\n\n"
                     f"{batch_message}"
