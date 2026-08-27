@@ -1,0 +1,7 @@
+1. Find the domain of the function $f(x) = \sqrt{2x - 10}$. Write your answer in interval notation.
+
+2. Find the domain of the function $\displaystyle h(x) = \frac{x + 1}{\sqrt{9 - x^2}}$. Write your answer in interval notation.
+
+3. Let $f(x) = 3x^2 - x$. Compute and fully simplify the difference quotient $\dfrac{f(x+h) - f(x)}{h}$, where $h \neq 0$.
+
+4. Let $f(x) = \dfrac{1}{x}$. Compute and fully simplify the difference quotient $\dfrac{f(x+h)-f(x)}{h}$, where $h \neq 0$. Your final answer should contain no compound fractions.
