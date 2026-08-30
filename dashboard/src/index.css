@@ -2090,6 +2090,32 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   gap: 12px;
 }
 
+/* The numbers that explain a call, shown once you've picked one. In the
+   row they truncated everything that mattered; here they have room. */
+.call-metrics {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  padding: 10px 2px 2px;
+}
+
+.call-metric-k {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-2);
+}
+
+.call-metric-v {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.call-metric-v.good { color: var(--ok); }
+
 .io {
   border: 1px solid var(--rule);
   border-radius: 4px;

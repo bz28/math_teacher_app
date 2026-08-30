@@ -62,16 +62,20 @@ export default function TeacherLLMCalls({ teacherId }: { teacherId: string }) {
 
   return (
     <div className="dt-scroll">
-      <table className="dt" style={{ minWidth: 760 }}>
+      {/* Five columns, not nine. `table.dt td` ellipsizes, so nine
+          columns in this panel truncated every field that mattered —
+          "practice…" is indistinguishable from "practice_eval". Widening
+          the table instead just pushed cost and status off-screen.
+          Tokens, cache traffic and latency are DETAIL: you want them once
+          you've picked a call, not while scanning for it. They moved into
+          the expansion, which has room and already holds the exchange. */}
+      <table className="dt" style={{ minWidth: 560 }}>
         <thead>
           <tr>
-            <th style={{ width: 18 }} aria-hidden="true" />
+            <th style={{ width: 28 }} aria-hidden="true" />
             <th>When</th>
             <th>Function</th>
             <th>Model</th>
-            <th style={{ textAlign: "right" }}>Tokens</th>
-            <th style={{ textAlign: "right" }}>Cached</th>
-            <th style={{ textAlign: "right" }}>Latency</th>
             <th style={{ textAlign: "right" }}>Cost</th>
             <th />
           </tr>
@@ -80,7 +84,7 @@ export default function TeacherLLMCalls({ teacherId }: { teacherId: string }) {
           {data === null
             ? Array.from({ length: 4 }).map((_, i) => (
                 <tr key={`sk-${i}`} className="dt-row dt-row-skeleton">
-                  {Array.from({ length: 9 }).map((__, j) => (
+                  {Array.from({ length: 6 }).map((__, j) => (
                     <td key={j}>
                       <span className="dt-shimmer" style={{ width: "60%" }} />
                     </td>
@@ -133,21 +137,15 @@ function CallRows({
           {isOpen ? "▾" : "▸"}
         </td>
         <td className="mono">{formatRelativeDate(call.created_at)}</td>
-        <td className="mono">{call.function}</td>
-        <td className="mono">{call.model.replace(/^claude-/, "")}</td>
-        <td className="num">
-          {call.input_tokens.toLocaleString()} → {call.output_tokens.toLocaleString()}
+        {/* Longest names still clip at narrow widths; the full one is
+            one hover away rather than one column wider. */}
+        <td className="mono" title={call.function}>{call.function}</td>
+        <td className="mono" title={call.model}>
+          {/* "claude-sonnet-4-6" -> "sonnet-4-6"; the date suffix on
+              dated snapshots ("haiku-4-5-20251001") adds width and never
+              disambiguates anything you'd act on. Full id on hover. */}
+          {call.model.replace(/^claude-/, "").replace(/-\d{8}$/, "")}
         </td>
-        <td className="num">
-          {/* Reads earn the discount; a write paid to create the prefix.
-              0/0 means the call touched no cache at all. */}
-          {call.cache_read_tokens > 0
-            ? `${call.cache_read_tokens.toLocaleString()} r`
-            : call.cache_write_tokens > 0
-              ? `${call.cache_write_tokens.toLocaleString()} w`
-              : "—"}
-        </td>
-        <td className="num">{Math.round(call.latency_ms).toLocaleString()}ms</td>
         <td className="num">{fmtCost(call.cost_usd)}</td>
         <td>
           {call.success ? (
@@ -163,8 +161,27 @@ function CallRows({
       </tr>
       {isOpen && (
         <tr>
-          <td colSpan={9} style={{ padding: 0 }}>
+          <td colSpan={6} style={{ padding: 0 }}>
             <div className="call-body">
+              <div className="call-metrics">
+                <Metric k="Input" v={call.input_tokens.toLocaleString()} />
+                <Metric k="Output" v={call.output_tokens.toLocaleString()} />
+                {/* A read earns the discount; a write paid to create the
+                    prefix. Neither means the call touched no cache. */}
+                <Metric
+                  k="Cache"
+                  v={
+                    call.cache_read_tokens > 0
+                      ? `${call.cache_read_tokens.toLocaleString()} read`
+                      : call.cache_write_tokens > 0
+                        ? `${call.cache_write_tokens.toLocaleString()} written`
+                        : "none"
+                  }
+                  good={call.cache_read_tokens > 0}
+                />
+                <Metric k="Latency" v={`${Math.round(call.latency_ms).toLocaleString()}ms`} />
+                <Metric k="Retries" v={String(call.retry_count)} />
+              </div>
               <IOBlock
                 who="Input"
                 body={call.input_text}
@@ -183,6 +200,15 @@ function CallRows({
         </tr>
       )}
     </>
+  );
+}
+
+function Metric({ k, v, good }: { k: string; v: string; good?: boolean }) {
+  return (
+    <div className="call-metric">
+      <div className="call-metric-k">{k}</div>
+      <div className={`call-metric-v${good ? " good" : ""}`}>{v}</div>
+    </div>
   );
 }
 
