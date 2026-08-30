@@ -1,36 +1,77 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, type LLMCallsData } from "../lib/api";
-import { fmtCost, formatRelativeDate } from "../lib/format";
+import { fmtClockTime, fmtCost, shortModel } from "../lib/format";
+import { Pagination } from "./Pagination";
 import StatusPill from "./StatusPill";
 
 /**
  * Every model call this teacher caused, opened in place.
  *
- * The teacher page already linked out to /llm-calls pre-filtered, which
- * answered "how much did she cost" but not the question you actually have
- * when she reports something odd: *what did we send, and what came back?*
- * That is one click away into a different page, with the filter to
- * re-apply and her name to re-find.
+ * The teacher page used to link out to /llm-calls pre-filtered, which
+ * answered "how much did this teacher cost" but not the question you
+ * actually have when they report something odd: *what did we send, and
+ * what came back?* That was one click into a different page, with the
+ * filter to re-apply and the name to re-find.
  *
- * So the calls live here, and expanding one shows the whole exchange —
- * system prompt, user message, raw output — plus the numbers that explain
- * a bad one: tokens, cache traffic, latency, retries, cost. Nothing new is
- * stored; `llm_calls` has carried `input_text` / `output_text` all along.
+ * So the calls live here, and expanding one shows the exchange plus the
+ * numbers that explain a bad one: tokens, cache traffic, latency, retries,
+ * cost. Nothing new is stored; `llm_calls` has carried `input_text` /
+ * `output_text` all along.
+ *
+ * Two things this panel got wrong on its first pass, both of the same
+ * kind — it displayed a subset while implying it was the whole:
+ *
+ *   1. It sent no `hours`, so it silently took the endpoint's 168h
+ *      default while the cost figure beside it was 30-day. A teacher
+ *      quiet for eight days rendered "No model calls yet" directly under
+ *      a non-zero cost. Now explicitly `WINDOW_HOURS`, matching the page.
+ *   2. It took the first 25 rows with no total, no pager and no filters,
+ *      while the response already carried `total_count_window`,
+ *      `failure_count` and `by_function`. All three are read now, and the
+ *      header states the bounds instead of leaving them to be inferred.
  */
 
 const PAGE = 25;
+const WINDOW_HOURS = 720; // 30d — matches the cost window on this page.
 
 export default function TeacherLLMCalls({ teacherId }: { teacherId: string }) {
   const [data, setData] = useState<LLMCallsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [fn, setFn] = useState<string>("");
+  const [failuresOnly, setFailuresOnly] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // A filter change invalidates the current page — page 3 of "all calls"
+  // is not page 3 of "failures only" — so both setters reset the offset
+  // at the control rather than in an effect reacting to them.
+  const pickFunction = (next: string) => {
+    setFn(next);
+    setOffset(0);
+  };
+  const pickFailuresOnly = (next: boolean) => {
+    setFailuresOnly(next);
+    setOffset(0);
+  };
 
   useEffect(() => {
     let cancelled = false;
+    const params: Record<string, string> = {
+      user_id: teacherId,
+      hours: String(WINDOW_HOURS),
+      limit: String(PAGE),
+      offset: String(offset),
+    };
+    if (fn) params.function = fn;
+    if (failuresOnly) params.success = "false";
     api
-      .llmCalls({ user_id: teacherId, limit: String(PAGE) })
+      .llmCalls(params)
       .then((d) => {
-        if (!cancelled) setData(d);
+        if (cancelled) return;
+        setData(d);
+        setError(null);
       })
       .catch((e: Error) => {
         if (!cancelled) setError(e.message);
@@ -38,51 +79,114 @@ export default function TeacherLLMCalls({ teacherId }: { teacherId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [teacherId]);
+  }, [teacherId, offset, fn, failuresOnly, reloadKey]);
 
   if (error) {
     return (
       <div className="empty-state">
-        <div className="empty-state-title">Couldn&rsquo;t load her calls</div>
+        <div className="empty-state-title">Couldn&rsquo;t load model calls</div>
         <div>{error}</div>
+        <button
+          type="button"
+          className="btn-secondary"
+          style={{ marginTop: 10 }}
+          onClick={() => setReloadKey((k) => k + 1)}
+        >
+          Try again
+        </button>
       </div>
     );
   }
 
   const calls = data?.calls ?? [];
+  const filtering = Boolean(fn) || failuresOnly;
 
-  if (data && calls.length === 0) {
+  // With no filters applied and nothing returned, this teacher genuinely
+  // caused no calls in the window. With filters, the window isn't empty —
+  // the filter is — and saying "no calls yet" would be false.
+  if (data && calls.length === 0 && !filtering) {
     return (
       <div className="empty-state">
-        <div className="empty-state-title">No model calls yet</div>
-        <div>Every call she causes lands here, with its full input and output.</div>
+        <div className="empty-state-title">No model calls in the last 30 days</div>
       </div>
     );
   }
 
+  const functions = data?.by_function ?? [];
+  const failures = data?.failure_count ?? 0;
+
   return (
-    <div className="dt-scroll">
-      {/* Five columns, not nine. `table.dt td` ellipsizes, so nine
-          columns in this panel truncated every field that mattered —
-          "practice…" is indistinguishable from "practice_eval". Widening
-          the table instead just pushed cost and status off-screen.
-          Tokens, cache traffic and latency are DETAIL: you want them once
-          you've picked a call, not while scanning for it. They moved into
-          the expansion, which has room and already holds the exchange. */}
-      <table className="dt" style={{ minWidth: 560 }}>
-        <thead>
-          <tr>
-            <th style={{ width: 28 }} aria-hidden="true" />
-            <th>When</th>
-            <th>Function</th>
-            <th>Model</th>
-            <th style={{ textAlign: "right" }}>Cost</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {data === null
-            ? Array.from({ length: 4 }).map((_, i) => (
+    <>
+      {data && (
+        <div className="panel-bar">
+          {/* The bounds, stated. `total_count_window` is the count for the
+              whole window; `calls.length` is what's on this page. */}
+          <div className="panel-bar-facts">
+            <span>
+              <strong>{data.total_count_window.toLocaleString()}</strong> call
+              {data.total_count_window === 1 ? "" : "s"}
+            </span>
+            <span className={failures > 0 ? "bad" : undefined}>
+              <strong>{failures.toLocaleString()}</strong> failed
+            </span>
+            <span className="muted">{fmtCost(data.total_cost_window)}</span>
+            <span className="muted">last 30 days</span>
+          </div>
+          <div className="panel-bar-controls">
+            {functions.length > 1 && (
+              <select
+                className="mini-select"
+                value={fn}
+                onChange={(e) => pickFunction(e.target.value)}
+                aria-label="Filter by function"
+              >
+                <option value="">All functions</option>
+                {functions.map((f) => (
+                  <option key={f.function} value={f.function}>
+                    {f.function} ({f.count})
+                  </option>
+                ))}
+              </select>
+            )}
+            {/* Only offered when there is something to isolate — a
+                failures-only toggle on a teacher with zero failures is a
+                control that can only ever empty the table. */}
+            {(failures > 0 || failuresOnly) && (
+              <label className="mini-check">
+                <input
+                  type="checkbox"
+                  checked={failuresOnly}
+                  onChange={(e) => pickFailuresOnly(e.target.checked)}
+                />
+                Failures only
+              </label>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="dt-scroll">
+        {/* Five columns, not nine. `table.dt td` ellipsizes, so nine
+            columns in this panel truncated every field that mattered —
+            "practice…" is indistinguishable from "practice_eval". Widening
+            the table instead just pushed cost and status off-screen.
+            Tokens, cache traffic and latency are DETAIL: you want them once
+            you've picked a call, not while scanning for it. They moved into
+            the expansion, which has room and already holds the exchange. */}
+        <table className="dt" style={{ minWidth: 620 }}>
+          <thead>
+            <tr>
+              <th style={{ width: 28 }} aria-hidden="true" />
+              <th>When</th>
+              <th>Function</th>
+              <th>Model</th>
+              <th style={{ textAlign: "right" }}>Cost</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {data === null ? (
+              Array.from({ length: 4 }).map((_, i) => (
                 <tr key={`sk-${i}`} className="dt-row dt-row-skeleton">
                   {Array.from({ length: 6 }).map((__, j) => (
                     <td key={j}>
@@ -91,7 +195,14 @@ export default function TeacherLLMCalls({ teacherId }: { teacherId: string }) {
                   ))}
                 </tr>
               ))
-            : calls.map((c) => {
+            ) : calls.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="dt-state">
+                  No calls match this filter.
+                </td>
+              </tr>
+            ) : (
+              calls.map((c) => {
                 const isOpen = open === c.id;
                 return (
                   <CallRows
@@ -101,10 +212,21 @@ export default function TeacherLLMCalls({ teacherId }: { teacherId: string }) {
                     onToggle={() => setOpen(isOpen ? null : c.id)}
                   />
                 );
-              })}
-        </tbody>
-      </table>
-    </div>
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {data && data.total_count > PAGE && (
+        <Pagination
+          offset={offset}
+          limit={PAGE}
+          total={data.total_count}
+          onChange={setOffset}
+        />
+      )}
+    </>
   );
 }
 
@@ -136,16 +258,17 @@ function CallRows({
         <td className="mono" style={{ color: "var(--muted-2)" }}>
           {isOpen ? "▾" : "▸"}
         </td>
-        <td className="mono">{formatRelativeDate(call.created_at)}</td>
+        {/* Absolute, not relative. Nine calls from one grading run all read
+            "3d ago"; the reason you look at this column is to line a call
+            up against a submission and a teacher action, which needs a
+            clock. Full ISO timestamp on hover. */}
+        <td className="mono" title={call.created_at}>
+          {fmtClockTime(call.created_at)}
+        </td>
         {/* Longest names still clip at narrow widths; the full one is
             one hover away rather than one column wider. */}
         <td className="mono" title={call.function}>{call.function}</td>
-        <td className="mono" title={call.model}>
-          {/* "claude-sonnet-4-6" -> "sonnet-4-6"; the date suffix on
-              dated snapshots ("haiku-4-5-20251001") adds width and never
-              disambiguates anything you'd act on. Full id on hover. */}
-          {call.model.replace(/^claude-/, "").replace(/-\d{8}$/, "")}
-        </td>
+        <td className="mono" title={call.model}>{shortModel(call.model)}</td>
         <td className="num">{fmtCost(call.cost_usd)}</td>
         <td>
           {call.success ? (
@@ -164,8 +287,11 @@ function CallRows({
           <td colSpan={6} style={{ padding: 0 }}>
             <div className="call-body">
               <div className="call-metrics">
-                <Metric k="Input" v={call.input_tokens.toLocaleString()} />
-                <Metric k="Output" v={call.output_tokens.toLocaleString()} />
+                {/* Labelled "Prompt", not "Input": the block below is also
+                    called Input and is measured in characters, so two
+                    different quantities shared one word 40px apart. */}
+                <Metric k="Prompt" v={`${call.input_tokens.toLocaleString()} tok`} />
+                <Metric k="Output" v={`${call.output_tokens.toLocaleString()} tok`} />
                 {/* A read earns the discount; a write paid to create the
                     prefix. Neither means the call touched no cache. */}
                 <Metric
@@ -181,11 +307,22 @@ function CallRows({
                 />
                 <Metric k="Latency" v={`${Math.round(call.latency_ms).toLocaleString()}ms`} />
                 <Metric k="Retries" v={String(call.retry_count)} />
+                {call.submission_id && (
+                  <div className="call-metric">
+                    <div className="call-metric-k">Submission</div>
+                    <div className="call-metric-v">
+                      <Link to={`/submissions/${call.submission_id}/trace`}>
+                        Open trace →
+                      </Link>
+                    </div>
+                  </div>
+                )}
               </div>
               <IOBlock
-                who="Input"
+                who="User message"
                 body={call.input_text}
                 missing="Not recorded for this call."
+                note={promptGapNote(call)}
               />
               <IOBlock
                 who="Output"
@@ -203,6 +340,29 @@ function CallRows({
   );
 }
 
+/**
+ * Say out loud how much of the prompt is missing.
+ *
+ * `llm_client` persists `input_text=user_message` (llm_client.py:577) and,
+ * for multi-turn calls, only the LAST user message (`_summarize_last_user_
+ * message`, :853). The system prompt — sent on every call at :550, and the
+ * part that carries the grading rubric, the tutoring guardrails and the
+ * generation spec — is never stored at all.
+ *
+ * Measured across the call log that is 0.7%–15% of what was actually sent,
+ * ~4% typically. A panel that renders that fragment under the heading
+ * "Input" and stops is not just incomplete, it is misleading: you would
+ * conclude the prompt was tiny. Until the prompt is recorded properly,
+ * this states the gap on every call so nobody reasons from the fragment.
+ */
+function promptGapNote(call: Call): string | undefined {
+  const sent = call.input_tokens + Math.max(call.cache_read_tokens, call.cache_write_tokens);
+  if (sent <= 0) return undefined;
+  const stored = Math.round((call.input_text?.length ?? 0) / 4);
+  if (stored >= sent * 0.9) return undefined;
+  return `System prompt not recorded — this is the user message only, roughly ${stored.toLocaleString()} of the ${sent.toLocaleString()} tokens actually sent.`;
+}
+
 function Metric({ k, v, good }: { k: string; v: string; good?: boolean }) {
   return (
     <div className="call-metric">
@@ -216,10 +376,12 @@ function IOBlock({
   who,
   body,
   missing,
+  note,
 }: {
   who: string;
   body: string | null;
   missing?: string;
+  note?: string;
 }) {
   return (
     <div className="io">
@@ -227,6 +389,7 @@ function IOBlock({
         <span className="io-who">{who}</span>
         {body && <span className="io-len">{body.length.toLocaleString()} chars</span>}
       </div>
+      {note && <div className="io-note">{note}</div>}
       <pre className="io-pre">{body ?? missing ?? "—"}</pre>
     </div>
   );

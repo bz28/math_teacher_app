@@ -97,6 +97,12 @@ select:focus-visible {
   left: 0;
   bottom: 0;
   border-right: 1px solid var(--rule);
+  /* The rail is `fixed` top-to-bottom and its content is ~600px tall, so
+     below a ~600px viewport the foot — API status and SIGN OUT — fell
+     under the fold with no way to reach it. 500px of viewport is what you
+     get with devtools docked to the bottom of a 1080p screen, i.e. the
+     posture you're in while debugging. */
+  overflow-y: auto;
 }
 
 .sidebar-header {
@@ -132,48 +138,59 @@ select:focus-visible {
    what's chosen here. Styled flush with the rail rather than as a card:
    it's part of the chrome, not a widget floating on it. */
 .school-switcher {
-  padding: 0 18px 18px;
+  /* Sits directly above the school-scoped rail link and reads as its
+     heading, so the gap below is tighter than the gap above. */
+  padding: 0 18px 10px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 2px;
 }
 
 .school-switcher-label {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--muted-2);
 }
 
-.school-switcher select {
-  width: 100%;
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--rule-strong);
-  border-radius: 3px;
-  padding: 7px 9px;
-  cursor: pointer;
-}
-
-.school-switcher select:hover { border-color: var(--ink-soft); }
-
-/* One school: the name is context, not a control. Rendered flush and
-   unclickable so it reads as a heading rather than a disabled dropdown. */
+/* A heading you can change — not a form field.
+   The previous rule painted a filled, bordered box, which made the school
+   name the loudest element in a rail whose every other item is flat text,
+   and put chrome on the context while the work below it had none. Worse,
+   a global reset sets `appearance: none`, so the native caret was stripped
+   and nothing replaced it: the control had no affordance at all and read
+   as a disabled text input or as a twin of the SIGN OUT button. */
+.school-switcher-select,
 .school-switcher-single {
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
+  line-height: 1.3;
   color: var(--ink);
+  background: transparent;
+  border: 0;
   padding: 1px 0;
+  margin: 0;
 }
 
-.school-switcher select:focus-visible {
+.school-switcher-select {
+  /* Room for the caret, which is drawn rather than inherited because
+     `appearance: none` removed the native one. */
+  padding-right: 16px;
+  width: 100%;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='%237d7669' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 2px center;
+}
+
+.school-switcher-select:hover { color: var(--accent); }
+
+.school-switcher-select:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 1px;
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
 /* Two tiers, and the difference has to be visible at a glance or the
@@ -1684,7 +1701,7 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 }
 
 .empty-state {
-  padding: 80px 0;
+  padding: 28px 0;
   text-align: center;
   color: var(--muted);
 }
@@ -2238,7 +2255,10 @@ table.dt th {
 table.dt th[style*="right"] .dt-sort { flex-direction: row; }
 
 table.dt td {
-  padding: 12px 14px 12px 0;
+  /* Left padding is NOT optional: `.dt-row td:first-child` draws the
+     row-status bar as a 3px inset shadow, and at padding-left 0 that bar
+     sat directly on top of the first character of every row. */
+  padding: 12px 14px 12px 10px;
   border-bottom: 1px solid var(--rule);
   font-size: 13.5px;
   color: var(--ink-soft);
@@ -2272,6 +2292,11 @@ table.dt tr:last-child td { border-bottom: none; }
 }
 .dt-row:hover .dt-drill { opacity: 1; color: var(--accent); }
 
+/* Keyboard users never saw the row was drillable: the arrow is
+   `opacity: 0` and only hover revealed it, so tabbing through rows gave
+   no hint that Enter goes somewhere. */
+.dt-row:focus-visible .dt-drill { opacity: 1; }
+
 /* Loading shimmer */
 @keyframes dt-shimmer {
   0%   { background-position: -320px 0; }
@@ -2293,7 +2318,7 @@ table.dt tr:last-child td { border-bottom: none; }
 
 /* Empty / error slot */
 .dt-state {
-  padding: 56px 0;
+  padding: 24px 0;
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -2972,4 +2997,81 @@ table.dt tr:last-child td { border-bottom: none; }
 @media (max-width: 700px) {
   .gq-detail { padding: 20px 18px 24px; }
   .gq-step-when { margin-left: 0; }
+}
+
+/* ── Panel bar ──────────────────────────────────────────────────────────
+   A section's own facts and controls, above its table. The teacher's
+   model-calls panel used to open straight onto rows, which meant the
+   bounds of what you were looking at (how many calls, over what window,
+   how many failed) were nowhere on screen and had to be inferred from the
+   rows themselves — so a truncated list read as a complete one. */
+.panel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.panel-bar-facts {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.panel-bar-facts strong {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-bar-facts .muted { color: var(--muted); }
+.panel-bar-facts .bad { color: var(--danger); }
+
+.panel-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Secondary controls: present, operable, and quieter than the data. */
+.mini-select {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 4px 7px;
+  cursor: pointer;
+}
+
+.mini-select:hover { border-color: var(--ink-soft); }
+.mini-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.mini-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.mini-check input { cursor: pointer; margin: 0; }
+
+/* A stated caveat about the block below it — not an error, not a label.
+   Sits between the heading and the content it qualifies. */
+.io-note {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+  background: var(--paper-2);
+  border-left: 2px solid var(--rule-strong);
+  padding: 6px 9px;
+  margin-bottom: 6px;
 }

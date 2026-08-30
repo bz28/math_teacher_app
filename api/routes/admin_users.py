@@ -1290,14 +1290,42 @@ async def teacher_students(
         if srow:
             school = {"id": str(srow.id), "name": srow.name, "kind": srow.kind}
 
-    # Teacher's own recency. Sessions are a student concept; a teacher's
-    # footprint lives in ActivityLog (create / publish / grade), so that's
-    # the honest "last active" signal driving the header health verdict.
-    last_active_at = (await db.execute(
-        select(func.max(ActivityLog.performed_at)).where(
-            ActivityLog.actor_user_id == teacher.id
-        )
-    )).scalar()
+    # Teacher's own recency — ONE definition, because the page renders it
+    # in three places (header verdict, caption, activity timeline) and they
+    # have to agree.
+    #
+    # This used to be `max(ActivityLog.performed_at)` alone, described in a
+    # comment as "the honest last active signal". It isn't. ActivityLog
+    # records 16 explicit write actions, and a teacher generates work that
+    # produces none of them: AI grading runs in the durable queue long after
+    # `grade.save`, question generation bills calls under a job, and any row
+    # created outside the API (import, backfill) is invisible to it. The
+    # result was a header pill reading NOT STARTED on a teacher whose own
+    # page listed nine model calls and a generation job three days earlier —
+    # the one at-a-glance verdict on the page, contradicted by the page.
+    #
+    # So take the latest of every footprint a teacher actually leaves:
+    # a logged action, something she created, or a call she caused.
+    last_action_at = max(
+        (t for t in (
+            (await db.execute(
+                select(func.max(ActivityLog.performed_at)).where(
+                    ActivityLog.actor_user_id == teacher.id
+                )
+            )).scalar(),
+            (await db.execute(
+                select(func.max(Assignment.created_at)).where(
+                    Assignment.teacher_id == teacher.id
+                )
+            )).scalar(),
+            (await db.execute(
+                select(func.max(LLMCall.created_at)).where(
+                    LLMCall.user_id == teacher.id
+                )
+            )).scalar(),
+        ) if t is not None),
+        default=None,
+    )
 
     usage = await _teacher_usage(db, teacher.id)
 
@@ -1310,7 +1338,7 @@ async def teacher_students(
             "subscription_status": teacher.subscription_status,
             "school_id": str(teacher.school_id) if teacher.school_id else None,
             "school": school,
-            "last_active_at": last_active_at.isoformat() if last_active_at else None,
+            "last_active_at": last_action_at.isoformat() if last_action_at else None,
             "call_count_30d": int(llm_stats.call_count),
             "total_cost_30d": round(float(llm_stats.total_cost), 6),
         },

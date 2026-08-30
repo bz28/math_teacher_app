@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type TeacherRosterStudent, type TeacherStudentsData } from "../lib/api";
-import { fmtCost, formatRelativeDate } from "../lib/format";
+import { formatRelativeDate } from "../lib/format";
 import { activityPill, activityStatus, costWindowLabel } from "../lib/definitions";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
@@ -134,16 +134,19 @@ export default function TeacherDetail() {
           </p>
         </div>
 
-        {/* Headline numbers: active (verdict, above) · cost · students ·
-            generations — the at-a-glance "is this teacher real" scan. */}
+        {/* Headline numbers: what this teacher DID. Cost used to lead this
+            row — the largest number in the largest slot on the console's
+            hero page — which put spend ahead of the work on the one screen
+            you open when a teacher reports a problem. It moved down beside
+            the calls it describes; the calls panel header carries it now. */}
         <div style={{ display: "flex", gap: 28, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <HeadlineStat
-            label={`Cost · ${costWindowLabel(30)}`}
-            value={fmtCost(t.total_cost_30d)}
-            muted={t.total_cost_30d === 0}
-            sub={`${t.call_count_30d.toLocaleString()} call${t.call_count_30d === 1 ? "" : "s"}`}
-          />
           <HeadlineStat label="Students" value={data.total_students.toLocaleString()} />
+          <HeadlineStat
+            label="Model calls"
+            value={t.call_count_30d.toLocaleString()}
+            muted={t.call_count_30d === 0}
+            sub={costWindowLabel(30)}
+          />
           <HeadlineStat label="Generations" value={u.generations.toLocaleString()} />
         </div>
       </div>
@@ -154,19 +157,19 @@ export default function TeacherDetail() {
           label="Homeworks"
           value={u.homeworks_created.toLocaleString()}
           sub={
-            u.problems_per_homework !== null
-              ? `${u.problems_per_homework} problems/HW avg`
-              : "no homeworks yet"
+            u.homeworks_per_week !== null && u.problems_per_homework !== null
+              ? `${u.problems_per_homework} problems each · ≈${u.homeworks_per_week}/week`
+              : undefined
           }
         />
+        {/* `homeworks_per_week` belongs to homeworks, and rendering it here
+            put "≈ 1 HW/week" under a practice-set count of 0 — a number
+            about a different thing entirely. Practice sets have no cadence
+            of their own in the payload, so this tile carries no subline
+            rather than borrowing a wrong one. */}
         <StatTile
           label="Practice sets"
           value={u.practice_sets.toLocaleString()}
-          sub={
-            u.homeworks_per_week !== null
-              ? `≈ ${u.homeworks_per_week} HW/week`
-              : "creation cadence"
-          }
         />
         <StatTile
           label="Published"
@@ -181,12 +184,12 @@ export default function TeacherDetail() {
         <StatTile
           label="Graded"
           value={u.graded.toLocaleString()}
-          sub={gradedPct !== null ? `${gradedPct}% of submissions` : "of submissions"}
+          sub={gradedPct !== null ? `${gradedPct}% of submissions` : undefined}
         />
         <StatTile
           label="Students reached"
           value={u.students_reached.toLocaleString()}
-          sub={reachPct !== null ? `${reachPct}% of ${data.total_students} enrolled` : "have submitted"}
+          sub={reachPct !== null ? `${reachPct}% of ${data.total_students} enrolled` : undefined}
         />
       </div>
 

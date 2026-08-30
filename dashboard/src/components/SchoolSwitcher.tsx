@@ -16,8 +16,16 @@ function schoolLabel(s: {
 }
 
 /**
- * The console's scope control, directly under the wordmark because
- * everything in "This school" below it is scoped by what's named here.
+ * Which school the school-scoped rail links point at.
+ *
+ * This used to describe itself as "the console's scope control… everything
+ * below it is scoped by what's named here." That was false on nine of ten
+ * destinations: no page filters its data by this value — Overview, Schools,
+ * Leads, Users, Audit log and LLM calls are all platform-wide — and only
+ * `Layout` reads it, to build one href. A prominent, persistent scope claim
+ * that is wrong almost everywhere is worse than no claim at all, so the
+ * copy now says what it does: it selects the school that "Teachers &
+ * classes" opens. It is grouped with that link for the same reason.
  *
  * Three shapes, and the third is the important one:
  *
@@ -61,28 +69,38 @@ export default function SchoolSwitcher({ selected }: { selected: SelectedSchool 
     navigate(`/schools/${nextId}`);
   };
 
+  const many = selected.schools.length > 1;
+
   return (
     <div className="school-switcher">
-      <label
-        className="school-switcher-label"
-        htmlFor={selected.schools.length > 1 ? "school-switcher" : undefined}
-      >
-        School
-      </label>
-      {selected.schools.length > 1 ? (
-        <select
-          id="school-switcher"
-          value={selected.id ?? ""}
-          onChange={(e) => onPick(e.target.value)}
-        >
-          {selected.schools.map((s) => (
-            <option key={s.id} value={s.id}>
-              {schoolLabel(s)}
-            </option>
-          ))}
-        </select>
+      {/* One school and many render as the SAME object — a name in ink,
+          with a caret when there is something to choose. They are the same
+          thing; the box, fill and border the select used to wear made it
+          the loudest element in a rail of flat text, so the chrome sat on
+          the context while the actual work below it had none. */}
+      {many ? (
+        <>
+          <label className="school-switcher-label" htmlFor="school-switcher">
+            School
+          </label>
+          <select
+            id="school-switcher"
+            className="school-switcher-select"
+            value={selected.id ?? ""}
+            onChange={(e) => onPick(e.target.value)}
+          >
+            {selected.schools.map((s) => (
+              <option key={s.id} value={s.id}>
+                {schoolLabel(s)}
+              </option>
+            ))}
+          </select>
+        </>
       ) : (
-        <div className="school-switcher-single">{selected.name}</div>
+        <>
+          <span className="school-switcher-label">School</span>
+          <div className="school-switcher-single">{selected.name}</div>
+        </>
       )}
     </div>
   );

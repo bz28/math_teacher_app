@@ -62,13 +62,26 @@ export function shortId(id: string): string {
   return idx > 0 ? id.slice(0, idx) : id.slice(0, 8);
 }
 
-// Human-readable Claude model label — collapses the "claude-…-YYYYMMDD"
-// IDs into a generation+tier label.
+/**
+ * Human-readable Claude model label.
+ *
+ * Reads the version out of the id instead of hardcoding it per tier. The
+ * previous version mapped any id containing "sonnet" to the literal
+ * "Sonnet 4", so `claude-sonnet-4-6` — every sonnet call we make — was
+ * displayed as Sonnet 4. On a console whose job is judging AI output that
+ * is the worst possible field to round off: "the same prompt got worse"
+ * and "we moved a minor version" are the first two hypotheses for a
+ * quality regression, and the label silently erased the second one.
+ *
+ * The dated-snapshot suffix IS dropped — `-20251001` never disambiguates
+ * anything you'd act on, and the full id is one hover away at every call
+ * site.
+ */
 export function shortModel(model: string): string {
-  if (model.includes("sonnet")) return "Sonnet 4";
-  if (model.includes("haiku")) return "Haiku 4.5";
-  if (model.includes("opus")) return "Opus 4";
-  return model.replace(/-\d{8}$/, "").replace(/^claude-/, "");
+  const m = /^claude-(opus|sonnet|haiku)-(\d+)(?:-(\d+))?/.exec(model);
+  if (!m) return model.replace(/-\d{8}$/, "").replace(/^claude-/, "");
+  const tier = m[1][0].toUpperCase() + m[1].slice(1);
+  return `${tier} ${m[3] ? `${m[2]}.${m[3]}` : m[2]}`;
 }
 
 // JSON-stringify nested values so a chip never shows "[object Object]"
@@ -84,4 +97,31 @@ export function renderChipValue(v: unknown): string {
     }
   }
   return String(v);
+}
+
+/**
+ * Absolute wall-clock time for a log row.
+ *
+ * Relative dates ("3d ago") are right for "when was this teacher last
+ * seen" and wrong for a call log: at day granularity nine consecutive
+ * calls all read "3d ago", so the column that should order and correlate
+ * them carries no information at all. Debugging needs to line a call up
+ * against a submission and a teacher action, which needs a clock.
+ *
+ * Today collapses to the time alone; anything older keeps its date.
+ */
+export function fmtClockTime(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "—";
+  const time = d.toLocaleTimeString(undefined, {
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  });
+  const today = new Date();
+  const sameDay =
+    d.getDate() === today.getDate() &&
+    d.getMonth() === today.getMonth() &&
+    d.getFullYear() === today.getFullYear();
+  if (sameDay) return time;
+  const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${date} ${time}`;
 }

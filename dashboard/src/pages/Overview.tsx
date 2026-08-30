@@ -215,7 +215,9 @@ export default function Overview() {
         <div className={`attention${attention.some((a) => a.severity === "danger") ? " attention-alert" : ""}`}>
           <div className="attention-head">
             <div className="attention-title">
-              {attention.length} thing{attention.length === 1 ? "" : "s"} need you
+              {attention.length === 1
+                ? "1 thing needs you"
+                : `${attention.length} things need you`}
             </div>
             {/* No aggregate window label here: items span different
                 windows (error 24h, at-risk 14d, harness 7d) and each
