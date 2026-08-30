@@ -1044,6 +1044,9 @@ function SectionRow({
               rowKey={(s) => s.id}
               defaultSort={{ key: "student", dir: "asc" }}
               minWidth={520}
+              searchKeys={(s) => [s.name, s.email]}
+              searchLabel="Search students"
+              pageSize={25}
             />
           )}
         </div>

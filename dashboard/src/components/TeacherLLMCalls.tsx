@@ -176,7 +176,7 @@ export default function TeacherLLMCalls({ teacherId }: { teacherId: string }) {
         <table className="dt" style={{ minWidth: 620 }}>
           <thead>
             <tr>
-              <th style={{ width: 28 }} aria-hidden="true" />
+              <th style={{ width: 38 }} aria-hidden="true" />
               <th>When</th>
               <th>Function</th>
               <th>Model</th>

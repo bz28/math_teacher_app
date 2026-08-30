@@ -251,7 +251,9 @@ export default function TeacherDetail() {
             content she generated · click for the exchange
           </span>
         </div>
-        <TeacherLLMCalls teacherId={t.id} />
+        <div style={{ padding: "12px 16px 4px" }}>
+          <TeacherLLMCalls teacherId={t.id} />
+        </div>
       </section>
 
       {/* ── Sections (compact, click to filter the roster) ───────── */}
@@ -499,6 +501,9 @@ function StudentsCard({
         onRowClick={(s) => onDrill(s.id)}
         drill
         minWidth={560}
+        searchKeys={(s) => [s.name, s.email]}
+        searchLabel="Search students"
+        pageSize={25}
         empty={
           <div className="empty-state">
             <div className="empty-state-title">
