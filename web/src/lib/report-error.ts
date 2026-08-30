@@ -18,9 +18,11 @@
  *   moment the API goes down — exactly when it fires. Note there is
  *   deliberately NO in-flight lock: two distinct errors firing at once
  *   must BOTH be reported, and a lock would silently drop the second.
- * - **De-dupes per page load.** A render crash-loop can fire hundreds of
- *   times a second. Each distinct fingerprint is sent once per load; the
- *   server's rate limit is the backstop, not the primary defence.
+ * - **De-dupes on a rolling window.** A render crash-loop can fire
+ *   hundreds of times a second, so each fingerprint is reported at most
+ *   once per DEDUPE_WINDOW_MS. Deliberately NOT "once per page load":
+ *   this is a client-routed app, module state never resets on navigation,
+ *   and a tab left open all day would otherwise go permanently silent.
  * - **Fire and forget.** Nothing awaits it and nothing surfaces to the
  *   user. A failed report is simply lost — the alternative is an error
  *   dialog about the error dialog.
@@ -39,17 +41,30 @@ interface ReportInput {
   context?: Record<string, unknown>;
 }
 
-// Fingerprints already sent this page load. Cleared by navigation, which
-// is the right lifetime: a crash that recurs after a reload is genuinely
-// new information ("it's still broken"), while the same crash firing in a
-// render loop is not.
-const seen = new Set<string>();
+// How long one fingerprint stays suppressed after being reported.
+//
+// This used to be "once per page load", which is not a thing in this app:
+// Next's App Router navigates on the client, so module state never resets.
+// A teacher who keeps one tab open all day — which is exactly what a
+// teacher does — stopped reporting entirely after 25 distinct errors, and
+// a crash that recurred after a route change was never heard from again.
+// Silently, and while the comment claimed navigation cleared it.
+//
+// A rolling window fixes both halves without coupling to navigation at
+// all: a render loop firing hundreds of times a second still collapses to
+// one report, while the same bug an hour later is genuinely new
+// information ("still broken") and gets through.
+const DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 
-// Hard ceiling per page load, in case fingerprinting somehow varies per
-// occurrence (a stack containing a timestamp or a random id would defeat
-// the Set). Cheap insurance against flooding the table from one browser.
-const MAX_PER_LOAD = 25;
-let sentCount = 0;
+// fingerprint -> when it was last reported.
+const lastSent = new Map<string, number>();
+
+// Ceiling on reports per window, in case fingerprinting somehow varies
+// per occurrence (a stack carrying a timestamp or a random id would
+// defeat the map). Insurance against one browser flooding the table.
+const MAX_PER_WINDOW = 25;
+let windowStart = 0;
+let sentInWindow = 0;
 
 // `keepalive` requests are capped at 64KB of body by the browser, and a
 // request that exceeds it fails SILENTLY — which is precisely the failure
@@ -65,14 +80,44 @@ function clip(v: string | null | undefined, limit: number): string | null {
 }
 
 /**
- * Stable-ish id for "the same crash". Message plus the first few stack
- * frames: enough that two different bugs don't collide, few enough frames
- * that the same bug reached by slightly different paths still groups.
- * Not cryptographic — it only has to be consistent within a deployment.
+ * Stable id for "the same crash". Message plus the first few stack SYMBOL
+ * names — enough that two different bugs don't collide, few enough frames
+ * that the same bug reached by slightly different paths still groups, and
+ * free of the file paths and line numbers that move on every build.
+ * Not cryptographic; it only has to be consistent.
  */
+/**
+ * Reduce a stack to the parts that survive a deploy.
+ *
+ * Production frames look like
+ *   at GradesTab (https://app/_next/static/chunks/4823-a1b2c3d4.js:1:9214)
+ * where the chunk hash, the line and the column all move whenever
+ * anything in that bundle changes. Hashing them raw gave the SAME bug a
+ * new fingerprint after every release, so groups fragmented and "first
+ * seen" reset to today — the history was reporting our deploy cadence,
+ * not the bug's.
+ *
+ * The symbol name is the stable part, so keep only that.
+ */
+function stableFrames(stack: string | null | undefined): string {
+  return (stack ?? "")
+    .split("\n")
+    .slice(0, 5)
+    .map((line) => {
+      // "at Name (url:line:col)" / "at Name@url:line:col" / "Name@url"
+      const named = /(?:at\s+)?([A-Za-z0-9_$.<>]+)\s*[(@]/.exec(line.trim());
+      if (named) return named[1];
+      // Anonymous frame — keep a marker so depth still differentiates,
+      // but nothing position-dependent.
+      return line.includes("(") || line.includes("@") ? "<anon>" : "";
+    })
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(">");
+}
+
 function fingerprint(message: string, stack?: string | null): string {
-  const frames = (stack ?? "").split("\n").slice(0, 3).join("\n");
-  const basis = `${message}\n${frames}`;
+  const basis = `${message}\n${stableFrames(stack)}`;
   let h1 = 0x811c9dc5;
   let h2 = 0x01000193;
   for (let i = 0; i < basis.length; i++) {
@@ -98,15 +143,24 @@ function accessToken(): string | null {
 export function reportClientError(input: ReportInput): void {
   try {
     if (typeof window === "undefined") return; // SSR — nothing to report
-    if (sentCount >= MAX_PER_LOAD) return;
 
     const message = String(input.message ?? "").slice(0, MAX_MESSAGE);
     if (!message) return;
 
+    const now = Date.now();
+    if (now - windowStart > DEDUPE_WINDOW_MS) {
+      // A fresh window: forget what was suppressed and reset the ceiling.
+      windowStart = now;
+      sentInWindow = 0;
+      lastSent.clear();
+    }
+    if (sentInWindow >= MAX_PER_WINDOW) return;
+
     const fp = fingerprint(message, input.stack);
-    if (seen.has(fp)) return;
-    seen.add(fp);
-    sentCount += 1;
+    const previous = lastSent.get(fp);
+    if (previous !== undefined && now - previous < DEDUPE_WINDOW_MS) return;
+    lastSent.set(fp, now);
+    sentInWindow += 1;
 
     const token = accessToken();
 
