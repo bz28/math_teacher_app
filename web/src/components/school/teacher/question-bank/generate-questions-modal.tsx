@@ -124,24 +124,12 @@ export function GenerateQuestionsModal({
     else setCountDraft(String(clamp(v)));
   };
 
-  const readableSelectedCount = Array.from(selectedDocs).filter((id) => {
-    const d = docs.find((x) => x.id === id);
-    return d && d.file_type !== "application/pdf";
-  }).length;
-  const onlyPdfsSelected = selectedDocs.size > 0 && readableSelectedCount === 0;
-
   const hasChosenSavedTo = savedTo !== undefined;
-  const canSubmit = !submitting && hasChosenSavedTo && !onlyPdfsSelected;
+  const canSubmit = !submitting && hasChosenSavedTo;
 
   const submit = async () => {
     if (savedTo === undefined) {
       setError("Pick a unit to save these questions to");
-      return;
-    }
-    if (onlyPdfsSelected) {
-      setError(
-        "Selected documents are all PDFs (skipped). Pick at least one image, or unselect all to generate from the unit name only.",
-      );
       return;
     }
     setSubmitting(true);
@@ -330,13 +318,6 @@ export function GenerateQuestionsModal({
             />
           )}
 
-          {onlyPdfsSelected && (
-            <p className="text-[11px] text-[color:var(--color-warning-dark)]">
-              Heads up: every selected doc is a PDF, which isn&apos;t
-              readable yet. Pick at least one image or unselect everything.
-            </p>
-          )}
-
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
 
@@ -347,9 +328,7 @@ export function GenerateQuestionsModal({
             title={
               !hasChosenSavedTo
                 ? "Pick a unit to save these questions to"
-                : onlyPdfsSelected
-                  ? "Selected docs are all PDFs — pick at least one image"
-                  : ""
+                : ""
             }
             className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
           >

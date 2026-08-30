@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { teacher, type TeacherDocument, type TeacherUnit } from "@/lib/api";
+import {
+  GENERATION_MAX_SOURCE_BYTES,
+  GENERATION_MAX_SOURCE_DOCS,
+} from "@/lib/constants";
 import { topUnitIdOf, topUnits } from "@/lib/units";
 import { formatFileSize } from "@/lib/utils";
 import type { PendingUpload } from "@/hooks/use-document-uploads";
@@ -257,6 +261,50 @@ export function SourceMaterialPicker({
   const selectedCount = selectedDocs.size;
   const hasContent = totalDocs > 0 || pending.length > 0;
 
+  // What the generation call will actually carry. Going over a limit
+  // isn't an error — the backend just sends fewer documents — but it
+  // used to happen in silence, so the teacher's homework quietly missed
+  // the material she thought she'd attached. Say it here, while the
+  // selection is still hers to change.
+  //
+  // This mirrors `fetch_source_documents` rather than just totalling the
+  // selection: the backend walks the docs oldest-first, skips any that
+  // would bust the byte budget, and stops once it has
+  // GENERATION_MAX_SOURCE_DOCS. Summing everything instead would claim
+  // "over the size limit" for eight small files whose first five fit
+  // fine — a warning that lies is worse than no warning.
+  const sendPlan = useMemo(() => {
+    const selected = docs
+      .filter((d) => selectedDocs.has(d.id))
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const skippedForSize: TeacherDocument[] = [];
+    let sentCount = 0;
+    let bytes = 0;
+    for (const doc of selected) {
+      if (sentCount >= GENERATION_MAX_SOURCE_DOCS) break;
+      const size = doc.file_size ?? 0;
+      if (bytes + size > GENERATION_MAX_SOURCE_BYTES) {
+        skippedForSize.push(doc);
+        continue;
+      }
+      bytes += size;
+      sentCount += 1;
+    }
+    return { total: selected.length, sentCount, skippedForSize };
+  }, [docs, selectedDocs]);
+
+  const overDocLimit = sendPlan.total > GENERATION_MAX_SOURCE_DOCS;
+  const skipped = sendPlan.skippedForSize;
+  // A file bigger than the whole budget can never be sent, with or
+  // without company — "unselect a few to make room" would be false
+  // advice, so it gets its own sentence.
+  const unsendable = skipped.filter(
+    (d) => (d.file_size ?? 0) > GENERATION_MAX_SOURCE_BYTES,
+  );
+  const crowdedOut = skipped.filter(
+    (d) => (d.file_size ?? 0) <= GENERATION_MAX_SOURCE_BYTES,
+  );
+
   return (
     <div>
       <div className="flex items-end justify-between gap-3">
@@ -297,6 +345,35 @@ export function SourceMaterialPicker({
           disabled={disabled}
         />
       </div>
+
+      {(overDocLimit || skipped.length > 0) && (
+        <p
+          role="status"
+          className="mt-2 rounded-[--radius-md] border border-[color:var(--color-warning)] bg-[color:var(--color-warning-bg)] px-2.5 py-1.5 text-[11px] leading-snug text-[color:var(--color-warning-dark)]"
+        >
+          {overDocLimit && (
+            <>
+              {`Only ${GENERATION_MAX_SOURCE_DOCS} files are sent per generation — you\u2019ve picked ${sendPlan.total}. Unselect ${sendPlan.total - GENERATION_MAX_SOURCE_DOCS} to choose which ones are used.`}
+            </>
+          )}
+          {overDocLimit && skipped.length > 0 && <br />}
+          {unsendable.length > 0 && (
+            <>
+              {unsendable.length === 1
+                ? `\u201C${unsendable[0].filename}\u201D (${formatFileSize(unsendable[0].file_size ?? 0)}) is too large to send in a generation, which carries about ${formatFileSize(GENERATION_MAX_SOURCE_BYTES)} of source material in total.`
+                : `${unsendable.length} of these files are each too large to send in a generation, which carries about ${formatFileSize(GENERATION_MAX_SOURCE_BYTES)} of source material in total.`}
+            </>
+          )}
+          {unsendable.length > 0 && crowdedOut.length > 0 && <br />}
+          {crowdedOut.length > 0 && (
+            <>
+              {crowdedOut.length === 1
+                ? `\u201C${crowdedOut[0].filename}\u201D won\u2019t fit alongside the rest — unselect something else to make room for it.`
+                : `${crowdedOut.length} files won\u2019t fit alongside the rest — unselect something else to make room for them.`}
+            </>
+          )}
+        </p>
+      )}
 
       {!docsLoaded ? (
         <div
