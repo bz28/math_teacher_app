@@ -8,6 +8,7 @@ import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
 import TeacherActivitySection from "../components/TeacherActivitySection";
 import TeacherLLMCalls from "../components/TeacherLLMCalls";
+import TeacherSubmissions from "../components/TeacherSubmissions";
 import { useScopeToSchool } from "../lib/useSelectedSchool";
 
 // Per-teacher drill-in — the "what is this pilot teacher actually doing"
@@ -210,6 +211,31 @@ export default function TeacherDetail() {
           did she cost" but not the question you actually have when she
           reports something odd: what did we send, and what came back. That
           was one click into another page with the filter to re-apply. */}
+      {/* ── Work handed in ───────────────────────────────────────
+          Above Model calls deliberately. A complaint is about a GRADE far
+          more often than about a generation, and grading/integrity calls
+          are billed to the student who submitted — so they are absent
+          from the panel below and reachable only through here. */}
+      <section className="table-card" style={{ marginBottom: 24 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            padding: "12px 16px",
+            borderBottom: "1px solid var(--rule)",
+          }}
+        >
+          <h3 style={{ margin: 0 }}>Work handed in</h3>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted-2)" }}>
+            click a row for its full trace
+          </span>
+        </div>
+        <div style={{ padding: "12px 16px 4px" }}>
+          <TeacherSubmissions teacherId={t.id} />
+        </div>
+      </section>
+
       <section className="table-card" style={{ marginBottom: 24 }}>
         <div
           style={{
@@ -222,7 +248,7 @@ export default function TeacherDetail() {
         >
           <h3 style={{ margin: 0 }}>Model calls</h3>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted-2)" }}>
-            click a row for the full exchange
+            content she generated · click for the exchange
           </span>
         </div>
         <TeacherLLMCalls teacherId={t.id} />

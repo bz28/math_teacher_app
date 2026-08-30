@@ -29,6 +29,7 @@ from api.middleware.auth import CurrentUser, require_admin
 from api.models.activity_log import ActivityLog
 from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.course import CourseTeacher
+from api.models.integrity_check import IntegrityCheckSubmission
 from api.models.llm_call import LLMCall
 from api.models.question_bank import QuestionBankGenerationJob
 from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
@@ -1128,6 +1129,141 @@ async def _teacher_usage(db: AsyncSession, teacher_id: uuid.UUID) -> dict[str, A
         "students_reached": int(sub_stats[1]),
         "generations": int(generations),
     }
+
+
+@router.get("/users/{teacher_id}/submissions")
+async def teacher_submissions(
+    teacher_id: uuid.UUID,
+    limit: int = Query(default=25, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    overridden_only: bool = Query(default=False),
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Work handed in to this teacher, newest first — the bridge from a
+    teacher to the thing that actually went wrong.
+
+    A teacher reports a problem and you open her page. Everything there
+    describes what SHE did: sections, roster, and the model calls she
+    caused. But the calls she causes are only generation — `decompose`,
+    `generate_questions`, `practice_eval`. Grading and the integrity
+    check are billed to the STUDENT who submitted, because that's whose
+    request they serve, so `ai_grading` and all four integrity functions
+    are attributed to student ids and never appear on the teacher page
+    at all. On this data that is 120 of 138 calls: the teacher page
+    could show 13% of the model traffic her classroom generates, and the
+    complaint is almost always about the other 87%.
+
+    There was also no admin submissions endpoint of any kind — the only
+    way into `/submissions/{id}/trace`, which assembles the whole case
+    file, was to type a UUID into the address bar.
+
+    So: her assignments' submissions, each row a link into that trace.
+    `ai_score` vs `final_score` is the column worth sorting on — where a
+    teacher CHANGED the AI's score is where the AI was wrong, and it's
+    the only quality signal in the system that doesn't need a judge.
+    """
+    # Every submission against an assignment this teacher owns.
+    base = (
+        select(Submission.id)
+        .join(Assignment, Assignment.id == Submission.assignment_id)
+        .where(Assignment.teacher_id == teacher_id)
+    )
+    if overridden_only:
+        base = base.join(
+            SubmissionGrade, SubmissionGrade.submission_id == Submission.id
+        ).where(
+            SubmissionGrade.final_score.isnot(None),
+            SubmissionGrade.ai_score.isnot(None),
+            SubmissionGrade.final_score != SubmissionGrade.ai_score,
+        )
+
+    total = (await db.execute(
+        select(func.count()).select_from(base.subquery())
+    )).scalar() or 0
+
+    # Calls per submission, so a row can say whether there is anything to
+    # look at before you click into the trace.
+    calls_sq = (
+        select(
+            LLMCall.submission_id.label("submission_id"),
+            func.count().label("call_count"),
+            func.count().filter(LLMCall.success.is_(False)).label("failed_count"),
+        )
+        .where(LLMCall.submission_id.isnot(None))
+        .group_by(LLMCall.submission_id)
+        .subquery()
+    )
+
+    rows_q = (
+        select(
+            Submission.id,
+            Submission.status,
+            Submission.submitted_at,
+            Submission.is_late,
+            User.name.label("student_name"),
+            Assignment.title.label("assignment_title"),
+            Assignment.type.label("assignment_type"),
+            SubmissionGrade.ai_score,
+            SubmissionGrade.final_score,
+            SubmissionGrade.ai_grading_status,
+            SubmissionGrade.reviewed_at,
+            SubmissionGrade.grade_published_at,
+            IntegrityCheckSubmission.status.label("integrity_status"),
+            IntegrityCheckSubmission.disposition.label("integrity_disposition"),
+            func.coalesce(calls_sq.c.call_count, 0).label("call_count"),
+            func.coalesce(calls_sq.c.failed_count, 0).label("failed_count"),
+        )
+        .join(Assignment, Assignment.id == Submission.assignment_id)
+        .outerjoin(User, User.id == Submission.student_id)
+        .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .outerjoin(
+            IntegrityCheckSubmission,
+            IntegrityCheckSubmission.submission_id == Submission.id,
+        )
+        .outerjoin(calls_sq, calls_sq.c.submission_id == Submission.id)
+        .where(Submission.id.in_(base))
+        .order_by(Submission.submitted_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = (await db.execute(rows_q)).all()
+
+    def _row(r: Any) -> dict[str, Any]:
+        # "Overridden" needs BOTH scores: a submission the teacher graded
+        # by hand with no AI attempt has a final_score and no ai_score,
+        # and calling that a disagreement would invent a defect.
+        overridden = (
+            r.ai_score is not None
+            and r.final_score is not None
+            and r.ai_score != r.final_score
+        )
+        return {
+            "id": str(r.id),
+            "status": r.status,
+            "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
+            "is_late": r.is_late,
+            "student_name": r.student_name,
+            "assignment_title": r.assignment_title,
+            "assignment_type": r.assignment_type,
+            "ai_score": r.ai_score,
+            "final_score": r.final_score,
+            "overridden": overridden,
+            "score_delta": (
+                round(r.final_score - r.ai_score, 2) if overridden else None
+            ),
+            "ai_grading_status": r.ai_grading_status,
+            "reviewed_at": r.reviewed_at.isoformat() if r.reviewed_at else None,
+            "grade_published_at": (
+                r.grade_published_at.isoformat() if r.grade_published_at else None
+            ),
+            "integrity_status": r.integrity_status,
+            "integrity_disposition": r.integrity_disposition,
+            "call_count": int(r.call_count),
+            "failed_count": int(r.failed_count),
+        }
+
+    return {"total": int(total), "submissions": [_row(r) for r in rows]}
 
 
 @router.get("/users/{teacher_id}/students")

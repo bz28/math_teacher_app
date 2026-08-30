@@ -3075,3 +3075,8 @@ table.dt tr:last-child td { border-bottom: none; }
   padding: 6px 9px;
   margin-bottom: 6px;
 }
+
+/* An AI score the teacher changed. The arrow carries the disagreement;
+   the final figure is what stands, so it takes the weight. */
+.score-override { color: var(--ink); white-space: nowrap; }
+.score-override strong { font-weight: 600; }

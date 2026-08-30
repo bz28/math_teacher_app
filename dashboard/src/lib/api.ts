@@ -503,6 +503,12 @@ export const api = {
     mutate<{ status: string; call_id: string }>(`/admin/llm-calls/${callId}/debug`, "POST"),
   inviteAdmin: (email: string, name: string) => mutate<{ status: string }>("/admin/users/invite", "POST", { email, name }),
   resendInvite: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}/resend-invite`, "POST"),
+  /** Work handed in to a teacher's assignments — the bridge into
+   *  /submissions/:id/trace. See `teacher_submissions` in admin_users.py
+   *  for why a teacher's own LLM calls don't answer this. */
+  teacherSubmissions: (teacherId: string, params?: Record<string, string>) =>
+    request<TeacherSubmissionsData>(`/admin/users/${teacherId}/submissions`, params),
+
   teacherStudents: (teacherId: string, params?: Record<string, string>) =>
     request<TeacherStudentsData>(`/admin/users/${teacherId}/students`, params),
   // Leads
@@ -1346,3 +1352,30 @@ export interface DocumentContent {
   image_data: string | null;
 }
 
+
+export interface TeacherSubmissionsData {
+  total: number;
+  submissions: {
+    id: string;
+    status: string;
+    submitted_at: string | null;
+    is_late: boolean;
+    student_name: string | null;
+    assignment_title: string | null;
+    assignment_type: string | null;
+    /** The AI's grade, and what the teacher settled on. When both are
+     *  present and differ, the teacher disagreed with the model — the
+     *  only quality signal in the product that needs no judge. */
+    ai_score: number | null;
+    final_score: number | null;
+    overridden: boolean;
+    score_delta: number | null;
+    ai_grading_status: string | null;
+    reviewed_at: string | null;
+    grade_published_at: string | null;
+    integrity_status: string | null;
+    integrity_disposition: string | null;
+    call_count: number;
+    failed_count: number;
+  }[];
+}
