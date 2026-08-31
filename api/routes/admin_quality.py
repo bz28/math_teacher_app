@@ -124,12 +124,17 @@ async def solution_quality(
     # created before edits were recorded — otherwise a complete
     # denominator over a partial numerator publishes a confident rate
     # that means "we were not watching".
+    # generate-similar output is stamped source='practice', so the source
+    # filter alone already excludes every variation and toggling
+    # parent_question_id would have done nothing — the flag returned a
+    # byte-identical set. Widen the source instead. Same fix as the
+    # generation board; missing it here left the two pages disagreeing
+    # about what the same parameter means.
+    sources = ["generated", "practice"] if include_variations else ["generated"]
     scope = [
-        QuestionBankItem.source == "generated",
+        QuestionBankItem.source.in_(sources),
         QuestionBankItem.created_at >= TRACKING_SINCE,
     ]
-    if not include_variations:
-        scope.append(QuestionBankItem.parent_question_id.is_(None))
 
     # Approved only. A rejected question's solution never got a real
     # look, and a pending one has not been judged yet — counting either

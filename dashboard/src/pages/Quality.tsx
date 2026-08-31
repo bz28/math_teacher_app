@@ -191,8 +191,9 @@ export default function Quality() {
 
       {data && (
         <p className="gq-tracking" role="note">
-          Counting repairs since {formatDate(data.tracking_since)}. Anything a
-          teacher changed before then isn&rsquo;t recorded.
+          Counting questions generated since {formatDate(data.tracking_since)} —
+          repairs are only recorded from that date, so earlier solutions
+          would look clean whether or not anyone fixed them.
         </p>
       )}
 
@@ -208,7 +209,7 @@ export default function Quality() {
         // appears to apply, the old numbers stay put, and nothing says
         // they are stale.
         <div className="callout-warn" role="alert">
-          <StatusPill tone="danger" label="STALE" />
+          <StatusPill tone="warn" label="STALE" />
           <span>
             {error} The numbers below are from the last successful load.{" "}
             <button
