@@ -169,10 +169,9 @@ function DroppedNotice({ summary }: { summary: GradingSummary }) {
       <StatusPill tone="neutral" label="EXCLUDED" />
       <span>
         {n} reviewed submission{n === 1 ? "" : "s"} could not be compared at
-        all — the AI and teacher grade lists don&rsquo;t line up, so
-        {n === 1 ? " it is" : " they are"} excluded from every override
-        figure above. Other tiles count{n === 1 ? " it" : " them"} on their
-        own terms.
+        all — the AI and teacher grade lists don&rsquo;t line up. No
+        override figure on this page includes
+        {n === 1 ? " it" : " them"}.
       </span>
     </div>
   );
