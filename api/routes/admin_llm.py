@@ -10,10 +10,11 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import Date, and_, cast, func, or_, select
+from sqlalchemy import Date, and_, cast, delete, func, or_, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
+from api.core.audit_log import record_activity
 from api.core.llm_client import _CORRUPTION_CHARS
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user, require_admin
@@ -708,3 +709,100 @@ async def llm_payload(
         "first_seen_at": row.first_seen_at.isoformat(),
         "used_by": int(used_by),
     }
+
+
+@router.delete("/llm-payloads/{payload_id}")
+async def delete_llm_payload(
+    payload_id: uuid_lib.UUID,
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Erase a stored payload, keeping every call that referenced it.
+
+    The reason this exists: payload rows outlive everything else. The FK
+    is `ondelete="SET NULL"`, so removing an assignment, a submission, a
+    student or a school leaves the text behind, and nothing else in the
+    codebase deletes an `LLMCall`. Most of what's stored is curriculum —
+    rubrics, questions, answer keys — but `rubric["notes"]` and
+    `rubric["common_mistakes"]` are unvalidated teacher free text
+    (`teacher_assignments.py:78` accepts the rubric as a bare dict), and
+    the natural phrasing of a "common mistake" is per-student: "Jamie
+    drops the negative". Recording something with no way to un-record it
+    is not a decision a logging change gets to make on a product holding
+    children's records.
+
+    Deleting the payload does NOT delete the calls. `SET NULL` fires, the
+    ledger keeps its cost, latency, tokens and outputs, and every surface
+    renders the prompt exactly as it renders one from before this feature
+    existed: "not recorded". That is the point — the honest empty state
+    already exists, so erasing text degrades to it instead of leaving a
+    hole.
+
+    Returns how many calls were unlinked, so a deletion that reaches
+    further than expected is visible rather than silent.
+    """
+    row = (await db.execute(
+        select(LLMPayload).where(LLMPayload.id == payload_id)
+    )).scalars().one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Payload not found")
+
+    unlinked = (await db.execute(
+        select(func.count()).select_from(LLMCall).where(
+            or_(
+                LLMCall.system_prompt_id == payload_id,
+                LLMCall.tool_schema_id == payload_id,
+            )
+        )
+    )).scalar() or 0
+
+    await db.delete(row)
+    await db.commit()
+
+    await record_activity(
+        db, current_user,
+        action="llm_payload.delete",
+        target_type="llm_payload",
+        target_id=payload_id,
+        metadata={
+            "sha256": row.sha256,
+            "kind": row.kind,
+            "char_len": row.char_len,
+            "calls_unlinked": int(unlinked),
+        },
+    )
+    return {"deleted": str(payload_id), "calls_unlinked": int(unlinked)}
+
+
+@router.post("/llm-payloads/purge-orphans")
+async def purge_orphan_payloads(
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Drop payloads no surviving call references.
+
+    A payload is only ever reachable through a call, so once the last one
+    referencing it is gone the text is unreachable but still stored. This
+    makes "delete the calls" actually reclaim the prompts, which is what
+    anyone deleting them would assume already happens.
+    """
+    referenced = union(
+        select(LLMCall.system_prompt_id).where(LLMCall.system_prompt_id.isnot(None)),
+        select(LLMCall.tool_schema_id).where(LLMCall.tool_schema_id.isnot(None)),
+    )
+    orphans = (await db.execute(
+        select(LLMPayload.id).where(LLMPayload.id.notin_(referenced))
+    )).scalars().all()
+
+    for oid in orphans:
+        await db.execute(delete(LLMPayload).where(LLMPayload.id == oid))
+    await db.commit()
+
+    if orphans:
+        await record_activity(
+            db, current_user,
+            action="llm_payload.purge_orphans",
+            target_type="llm_payload",
+            metadata={"deleted": len(orphans)},
+        )
+    return {"deleted": len(orphans)}

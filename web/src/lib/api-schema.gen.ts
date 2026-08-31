@@ -570,6 +570,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/llm-payloads/purge-orphans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Purge Orphan Payloads
+         * @description Drop payloads no surviving call references.
+         *
+         *     A payload is only ever reachable through a call, so once the last one
+         *     referencing it is gone the text is unreachable but still stored. This
+         *     makes "delete the calls" actually reclaim the prompts, which is what
+         *     anyone deleting them would assume already happens.
+         */
+        post: operations["purge_orphan_payloads_v1_admin_llm_payloads_purge_orphans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/llm-payloads/{payload_id}": {
         parameters: {
             query?: never;
@@ -596,7 +621,33 @@ export interface paths {
         get: operations["llm_payload_v1_admin_llm_payloads__payload_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Llm Payload
+         * @description Erase a stored payload, keeping every call that referenced it.
+         *
+         *     The reason this exists: payload rows outlive everything else. The FK
+         *     is `ondelete="SET NULL"`, so removing an assignment, a submission, a
+         *     student or a school leaves the text behind, and nothing else in the
+         *     codebase deletes an `LLMCall`. Most of what's stored is curriculum —
+         *     rubrics, questions, answer keys — but `rubric["notes"]` and
+         *     `rubric["common_mistakes"]` are unvalidated teacher free text
+         *     (`teacher_assignments.py:78` accepts the rubric as a bare dict), and
+         *     the natural phrasing of a "common mistake" is per-student: "Jamie
+         *     drops the negative". Recording something with no way to un-record it
+         *     is not a decision a logging change gets to make on a product holding
+         *     children's records.
+         *
+         *     Deleting the payload does NOT delete the calls. `SET NULL` fires, the
+         *     ledger keeps its cost, latency, tokens and outputs, and every surface
+         *     renders the prompt exactly as it renders one from before this feature
+         *     existed: "not recorded". That is the point — the honest empty state
+         *     already exists, so erasing text degrades to it instead of leaving a
+         *     hole.
+         *
+         *     Returns how many calls were unlinked, so a deletion that reaches
+         *     further than expected is visible rather than silent.
+         */
+        delete: operations["delete_llm_payload_v1_admin_llm_payloads__payload_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -7269,7 +7320,62 @@ export interface operations {
             };
         };
     };
+    purge_orphan_payloads_v1_admin_llm_payloads_purge_orphans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
     llm_payload_v1_admin_llm_payloads__payload_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_llm_payload_v1_admin_llm_payloads__payload_id__delete: {
         parameters: {
             query?: never;
             header?: never;

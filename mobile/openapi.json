@@ -8352,7 +8352,85 @@
         ]
       }
     },
+    "/v1/admin/llm-payloads/purge-orphans": {
+      "post": {
+        "description": "Drop payloads no surviving call references.\n\nA payload is only ever reachable through a call, so once the last one\nreferencing it is gone the text is unreachable but still stored. This\nmakes \"delete the calls\" actually reclaim the prompts, which is what\nanyone deleting them would assume already happens.",
+        "operationId": "purge_orphan_payloads_v1_admin_llm_payloads_purge_orphans_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Purge Orphan Payloads V1 Admin Llm Payloads Purge Orphans Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Purge Orphan Payloads",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/llm-payloads/{payload_id}": {
+      "delete": {
+        "description": "Erase a stored payload, keeping every call that referenced it.\n\nThe reason this exists: payload rows outlive everything else. The FK\nis `ondelete=\"SET NULL\"`, so removing an assignment, a submission, a\nstudent or a school leaves the text behind, and nothing else in the\ncodebase deletes an `LLMCall`. Most of what's stored is curriculum \u2014\nrubrics, questions, answer keys \u2014 but `rubric[\"notes\"]` and\n`rubric[\"common_mistakes\"]` are unvalidated teacher free text\n(`teacher_assignments.py:78` accepts the rubric as a bare dict), and\nthe natural phrasing of a \"common mistake\" is per-student: \"Jamie\ndrops the negative\". Recording something with no way to un-record it\nis not a decision a logging change gets to make on a product holding\nchildren's records.\n\nDeleting the payload does NOT delete the calls. `SET NULL` fires, the\nledger keeps its cost, latency, tokens and outputs, and every surface\nrenders the prompt exactly as it renders one from before this feature\nexisted: \"not recorded\". That is the point \u2014 the honest empty state\nalready exists, so erasing text degrades to it instead of leaving a\nhole.\n\nReturns how many calls were unlinked, so a deletion that reaches\nfurther than expected is visible rather than silent.",
+        "operationId": "delete_llm_payload_v1_admin_llm_payloads__payload_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "payload_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Payload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Llm Payload V1 Admin Llm Payloads  Payload Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Llm Payload",
+        "tags": [
+          "admin"
+        ]
+      },
       "get": {
         "description": "The system prompt or tool schema behind a call, fetched on expand.\n\nSplit from the call list rather than inlined because these are large\n(~18KB for a grading prompt) and heavily shared: one row serves every\nsubmission in a class, so a list of 50 calls may reference only two\nor three distinct prompts. Sending each row its own copy would move\nthe better part of a megabyte to render text nobody has opened.\n\n`used_by` is the diagnostic that falls out of content-addressing.\nBecause a system prompt is built to be byte-identical across a class\n(that IS the caching contract), a prompt used once where you expected\nthirty means something student-specific leaked into the cached half\nand silently killed the cache hit for every submission after it.",
         "operationId": "llm_payload_v1_admin_llm_payloads__payload_id__get",

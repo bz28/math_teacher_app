@@ -274,3 +274,109 @@ async def test_endpoint_requires_admin(client) -> None:
     student reaching this would be reading the marking scheme."""
     r = await client.get(f"/v1/admin/llm-payloads/{__import__('uuid').uuid4()}")
     assert r.status_code in (401, 403)
+
+
+# ── deleting a recorded payload ────────────────────────────────────────
+# Payload rows outlive everything: the FK is `ondelete="SET NULL"`, so
+# removing an assignment, submission, student or school leaves the text,
+# and nothing else in the codebase deletes an LLMCall. Most of what's
+# stored is curriculum, but `rubric["notes"]` and `common_mistakes` are
+# unvalidated teacher free text whose natural phrasing is per-student.
+# Recording something with no way to un-record it isn't a decision a
+# logging change gets to make on a product holding children's records.
+
+async def test_deleting_a_payload_keeps_the_call(client) -> None:
+    """The ledger must survive erasing the prompt.
+
+    Deleting a payload degrades the call to exactly the state every
+    pre-feature call is already in — "not recorded" — instead of leaving
+    a hole. That honest empty state already exists, which is what makes
+    erasing safe.
+    """
+    from tests.conftest import auth_headers
+
+    await _persist("ai_grading", GRADING_PROMPT, "marker-delete")
+    call = await _call_by_marker("marker-delete")
+    payload_id = call.system_prompt_id
+    assert payload_id is not None
+
+    token = await _admin_token()
+    r = await client.delete(
+        f"/v1/admin/llm-payloads/{payload_id}", headers=auth_headers(token)
+    )
+    assert r.status_code == 200
+    # Reported, so a deletion reaching further than expected is visible.
+    assert r.json()["calls_unlinked"] >= 1
+
+    async with get_session_factory()() as db:
+        gone = (await db.execute(
+            select(LLMPayload).where(LLMPayload.id == payload_id)
+        )).scalars().one_or_none()
+    assert gone is None
+
+    # The call itself is untouched apart from the link.
+    after = await _call_by_marker("marker-delete")
+    assert after.system_prompt_id is None
+    assert after.cost_usd == 0.001
+    assert after.input_tokens == 100
+    assert after.output_text == "ok"
+
+
+async def test_delete_404s_on_an_unknown_payload(client) -> None:
+    import uuid as _uuid
+
+    from tests.conftest import auth_headers
+
+    token = await _admin_token()
+    r = await client.delete(
+        f"/v1/admin/llm-payloads/{_uuid.uuid4()}", headers=auth_headers(token)
+    )
+    assert r.status_code == 404
+
+
+async def test_delete_requires_admin(client) -> None:
+    import uuid as _uuid
+
+    r = await client.delete(f"/v1/admin/llm-payloads/{_uuid.uuid4()}")
+    assert r.status_code in (401, 403)
+
+
+async def test_purge_orphans_removes_only_unreferenced_payloads(client) -> None:
+    """Deleting calls should actually reclaim their prompts.
+
+    A payload is reachable only through a call, so once the last one
+    referencing it is gone the text is unreachable but still stored —
+    which is not what anyone deleting calls would assume.
+    """
+    from sqlalchemy import delete as sa_delete
+
+    from tests.conftest import auth_headers
+
+    await _persist("ai_grading", GRADING_PROMPT, "marker-keep")
+    await _persist("tutor", "A PROMPT THAT WILL BE ORPHANED", "marker-orphan")
+    kept = (await _call_by_marker("marker-keep")).system_prompt_id
+    orphaned = (await _call_by_marker("marker-orphan")).system_prompt_id
+    assert kept is not None and orphaned is not None
+
+    # Drop the only call referencing the second payload.
+    async with get_session_factory()() as db:
+        await db.execute(
+            sa_delete(LLMCall).where(LLMCall.input_text == "marker-orphan")
+        )
+        await db.commit()
+
+    token = await _admin_token()
+    r = await client.post(
+        "/v1/admin/llm-payloads/purge-orphans", headers=auth_headers(token)
+    )
+    assert r.status_code == 200
+    assert r.json()["deleted"] >= 1
+
+    async with get_session_factory()() as db:
+        assert (await db.execute(
+            select(LLMPayload).where(LLMPayload.id == orphaned)
+        )).scalars().one_or_none() is None
+        # The still-referenced one must survive.
+        assert (await db.execute(
+            select(LLMPayload).where(LLMPayload.id == kept)
+        )).scalars().one_or_none() is not None
