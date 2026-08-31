@@ -10,22 +10,48 @@ chronological list would make you do the analysis; ranking by how much
 human repair a question needed makes the page do it — the same
 "what's broken" framing the admin Overview already uses.
 
+## The board has a denominator, and that is the whole point
+
+The old page could only ever show bad news: a question appeared ONLY
+after someone edited it, so a perfect question was invisible and "0
+repairs" had nothing to divide by. `/generation-quality/board` reports
+every settled generated question and what became of it:
+
+- CLEAN     approved, question never edited
+- REPAIRED  edited by hand, in the workshop, or regenerated WITH
+            direction — the teacher salvaged it
+- REDONE    regenerated with NO direction, which makes the prompt builder
+            drop the original entirely and start over. The teacher judged
+            the output unusable, which is a different claim from "needed
+            a tweak" and must not average into it.
+- REJECTED  binned outright — the strongest evidence the prompt is wrong
+- AWAITING  still pending review, EXCLUDED from the rate
+
+Severity is preserved rather than summed: one rejection is not four
+edits. The headline is CLEAN / settled, with the three failure modes
+reported as their own counts.
+
 ## Honesty about what isn't known
 
 `question_edits` starts empty and only ever records forward: the
 intermediate states of every edit made before it shipped are genuinely
 gone (see `api.models.question_edit`). Every response therefore carries
 `tracking_since`, so the UI can say "tracking began …" instead of
-letting a zero read as "never edited". Without that, the page would
-quietly assert the opposite of the truth about historical questions —
-on the one surface built to make quality legible.
+letting a zero read as "never edited".
+
+The denominator is scoped to items CREATED since tracking began, for the
+same reason. Question status reaches back forever while edits only reach
+back to TRACKING_SINCE, and dividing a complete denominator by a partial
+numerator would publish a confident "100% clean" that actually means "we
+were not watching" — the precise misreading the constant exists to
+prevent, reintroduced through the back door.
 """
 
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import desc, func, select
+from sqlalchemy import Integer, case, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
@@ -34,6 +60,8 @@ from api.models.question_bank import QuestionBankItem
 from api.models.question_edit import (
     EDIT_KINDS,
     FIELD_QUESTION,
+    REGEN_FRESH,
+    REGEN_GUIDED,
     TRACKING_SINCE,
     QuestionEdit,
 )
@@ -257,5 +285,175 @@ async def generation_quality_summary(
         "total_edits": total_edits,
         "questions_touched": questions_touched,
         "by_kind": by_kind,
+        "tracking_since": TRACKING_SINCE.isoformat(),
+    }
+
+
+# ── The board ────────────────────────────────────────────────────────
+
+_CLEAN = "clean"
+_REPAIRED = "repaired"
+_REDONE = "redone"
+_REJECTED = "rejected"
+_OUTCOMES = (_CLEAN, _REPAIRED, _REDONE, _REJECTED)
+
+# Below this many settled questions the percentage is noise. Same floor
+# the grading and handwriting reports use, so all three agree on what
+# "too few to trust" means rather than each inventing its own.
+THIN_SAMPLE = 30
+
+# Statuses that represent a verdict. `pending` is a question nobody has
+# ruled on yet and `archived` is lifecycle rather than a generation
+# defect — neither belongs in a rate about prompt quality.
+_SETTLED_STATUSES = ("approved", "rejected")
+
+
+def _has_kind(*kinds: str) -> Any:
+    """EXISTS a question-field edit of any of these kinds on this item."""
+    return (
+        select(QuestionEdit.id)
+        .where(
+            QuestionEdit.bank_item_id == QuestionBankItem.id,
+            QuestionEdit.field == FIELD_QUESTION,
+            QuestionEdit.kind.in_(kinds),
+        )
+        .exists()
+    )
+
+
+def _outcome_expr() -> Any:
+    """Worst outcome wins.
+
+    A question regenerated from scratch AND then rejected is reported as
+    rejected; one edited twice then regenerated blind is reported as
+    redone. Taking maximum severity rather than the last event keeps the
+    buckets disjoint, so they always sum to the denominator and the board
+    can never show more outcomes than questions.
+    """
+    return case(
+        (QuestionBankItem.status == "rejected", _REJECTED),
+        (_has_kind(REGEN_FRESH), _REDONE),
+        (_has_kind(*EDIT_KINDS, REGEN_GUIDED), _REPAIRED),
+        else_=_CLEAN,
+    )
+
+
+@router.get("/generation-quality/board")
+async def generation_board(
+    include_variations: bool = Query(
+        default=False,
+        description="Include practice variations (generate-similar output)",
+    ),
+    outcome: str | None = Query(
+        default=None, description="clean | repaired | redone | rejected",
+    ),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Every generated question and what became of it.
+
+    The denominator this page never had. See the module docstring for why
+    it is scoped to items created since tracking began, and why the three
+    failure modes are counted separately rather than summed.
+    """
+    if outcome is not None and outcome not in _OUTCOMES:
+        # Silently ignoring an unknown value returns the UNFILTERED list,
+        # which reads as "no such questions exist" — the opposite of the
+        # truth on a page whose only job is to be trustworthy.
+        raise HTTPException(
+            status_code=400,
+            detail=f"outcome must be one of: {', '.join(_OUTCOMES)}",
+        )
+
+    # Only AI-written questions: a teacher's own hand-written question
+    # says nothing about the generation prompt. Variations come from a
+    # different prompt path (generate-similar) and are off by default so
+    # they cannot dilute the primary signal.
+    scope = [
+        QuestionBankItem.source == "generated",
+        QuestionBankItem.created_at >= TRACKING_SINCE,
+    ]
+    if not include_variations:
+        scope.append(QuestionBankItem.parent_question_id.is_(None))
+
+    settled_scope = [*scope, QuestionBankItem.status.in_(_SETTLED_STATUSES)]
+
+    o = _outcome_expr()
+    counts = (await db.execute(
+        select(
+            func.count().label("settled"),
+            *[
+                func.sum(case((o == name, 1), else_=0)).label(name)
+                for name in _OUTCOMES
+            ],
+        ).select_from(QuestionBankItem).where(*settled_scope)
+    )).one()
+
+    settled = counts.settled or 0
+    buckets = {name: int(getattr(counts, name) or 0) for name in _OUTCOMES}
+
+    # Awaiting review. Reported beside the rate, never inside it: a
+    # question nobody has ruled on is not a pass and not a failure.
+    awaiting = (await db.execute(
+        select(func.count()).select_from(QuestionBankItem)
+        .where(*scope, QuestionBankItem.status == "pending")
+    )).scalar_one() or 0
+
+    list_filters = list(settled_scope)
+    if outcome is not None:
+        list_filters.append(o == outcome)
+
+    list_total = (await db.execute(
+        select(func.count()).select_from(QuestionBankItem).where(*list_filters)
+    )).scalar_one() or 0
+
+    rows = (await db.execute(
+        select(
+            QuestionBankItem.id,
+            QuestionBankItem.title,
+            QuestionBankItem.question,
+            QuestionBankItem.status,
+            QuestionBankItem.generation_prompt,
+            QuestionBankItem.created_at,
+            o.label("outcome"),
+        )
+        .where(*list_filters)
+        # Worst first, so what needs reading is on top.
+        .order_by(
+            case(
+                (o == _REJECTED, 0), (o == _REDONE, 1), (o == _REPAIRED, 2),
+                else_=3,
+            ).cast(Integer),
+            desc(QuestionBankItem.created_at),
+        )
+        .offset(offset)
+        .limit(limit)
+    )).all()
+
+    return {
+        "summary": {
+            "settled": settled,
+            **buckets,
+            "awaiting": awaiting,
+            "clean_rate": (
+                round(buckets[_CLEAN] / settled * 100, 1) if settled else 0.0
+            ),
+            "thin": settled < THIN_SAMPLE,
+        },
+        "questions": [
+            {
+                "id": str(r.id),
+                "title": r.title,
+                "question": r.question,
+                "status": r.status,
+                "outcome": r.outcome,
+                "generation_prompt": r.generation_prompt,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ],
+        "total_count": list_total,
         "tracking_since": TRACKING_SINCE.isoformat(),
     }

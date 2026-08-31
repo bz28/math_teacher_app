@@ -34,6 +34,7 @@ from api.models.question_edit import (
     FIELD_SOLUTION,
     REGEN_FRESH,
     REJECT,
+    TRACKING_SINCE,
     QuestionEdit,
 )
 from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
@@ -272,3 +273,195 @@ async def test_a_teacher_cannot_read_the_admin_console(
         "/v1/admin/generation-quality/questions", headers=_auth(teacher_token),
     )
     assert r.status_code == 403
+
+
+# ── The board ────────────────────────────────────────────────────────
+#
+# The old page could only show bad news: a question appeared ONLY once
+# someone edited it, so a perfect question was invisible and "0 repairs"
+# had nothing to divide by. These pin the denominator and the rules that
+# decide what counts toward it.
+
+BOARD = "/v1/admin/generation-quality/board"
+
+
+async def _board_world() -> dict[str, Any]:
+    """One question per outcome, plus the rows that must NOT count."""
+    async with get_session_factory()() as s:
+        await s.execute(text(
+            "TRUNCATE TABLE question_edits, question_bank_items, units, "
+            "courses, schools, sessions, users RESTART IDENTITY CASCADE"
+        ))
+        admin = User(
+            email=f"a_{uuid.uuid4().hex[:6]}@t.com",
+            password_hash=hash_password("x"),
+            grade_level=99, role="admin", name="A",
+        )
+        school = School(
+            name="Lincoln High", kind=SCHOOL_KIND_INDIVIDUAL,
+            contact_name="Admin", contact_email="admin@lincoln.edu",
+        )
+        s.add_all([admin, school])
+        await s.flush()
+        teacher = User(
+            email=f"t_{uuid.uuid4().hex[:6]}@t.com",
+            password_hash=hash_password("x"),
+            grade_level=12, role="teacher", name="Ms Rivera",
+            school_id=school.id,
+        )
+        course = Course(name="Algebra", subject="math")
+        s.add_all([teacher, course])
+        await s.flush()
+        unit = Unit(course_id=course.id, name="U", position=0)
+        s.add(unit)
+        await s.flush()
+        assignment = Assignment(
+            course_id=course.id, unit_ids=[unit.id], teacher_id=teacher.id,
+            title="HW", type="homework", status="published",
+            content={"problem_ids": []},
+        )
+        s.add(assignment)
+        await s.flush()
+
+        after_tracking = TRACKING_SINCE + timedelta(days=1)
+
+        def _item(**kw: Any) -> QuestionBankItem:
+            base: dict[str, Any] = dict(
+                course_id=course.id, unit_id=unit.id,
+                originating_assignment_id=assignment.id,
+                question="q", solution_steps=[], final_answer="x",
+                source="generated", created_at=after_tracking,
+            )
+            base.update(kw)
+            return QuestionBankItem(**base)
+
+        items = {
+            "clean": _item(title="Clean", status="approved"),
+            "repaired": _item(title="Repaired", status="approved"),
+            "redone": _item(title="Redone", status="approved"),
+            "rejected": _item(title="Rejected", status="rejected"),
+            # Excluded from the rate — nobody has ruled on it.
+            "pending": _item(title="Pending", status="pending"),
+            # A teacher's own question says nothing about the prompt.
+            "manual": _item(title="Hand written", status="approved",
+                            source="manual"),
+            # Generated BEFORE edits were recorded: including it would
+            # divide a complete denominator by a partial numerator and
+            # publish a confident "clean" that means "we weren't watching".
+            "ancient": _item(title="Pre-tracking", status="approved",
+                             created_at=TRACKING_SINCE - timedelta(days=1)),
+        }
+        s.add_all(list(items.values()))
+        await s.flush()
+
+        def _edit(item: QuestionBankItem, kind: str, field: str) -> QuestionEdit:
+            return QuestionEdit(
+                bank_item_id=item.id, edited_by_id=teacher.id,
+                school_id=school.id, kind=kind, field=field,
+                before="b", after="a",
+            )
+
+        s.add_all([
+            _edit(items["repaired"], EDIT_MANUAL, FIELD_QUESTION),
+            _edit(items["redone"], REGEN_FRESH, FIELD_QUESTION),
+            _edit(items["rejected"], REJECT, FIELD_QUESTION),
+            # A SOLUTION repair on the clean question. It indicts the
+            # solve prompt, not the generation prompt, so this board must
+            # still call the question clean.
+            _edit(items["clean"], EDIT_MANUAL, FIELD_SOLUTION),
+        ])
+        await s.commit()
+        return {
+            "token": create_access_token(str(admin.id), "admin"),
+            "items": {k: str(v.id) for k, v in items.items()},
+        }
+
+
+async def test_the_board_reports_every_settled_question_not_just_the_edited(
+    client: AsyncClient,
+) -> None:
+    """The defect this replaces: a clean question used to be invisible,
+    so the page could only ever show bad news and had no denominator."""
+    w = await _board_world()
+    r = await client.get(BOARD, headers=_auth(w["token"]))
+    assert r.status_code == 200, r.text
+    summary = r.json()["summary"]
+
+    # clean + repaired + redone + rejected. NOT the pending one, NOT the
+    # hand-written one, NOT the pre-tracking one.
+    assert summary["settled"] == 4
+    assert summary["clean"] == 1
+    assert summary["repaired"] == 1
+    assert summary["redone"] == 1
+    assert summary["rejected"] == 1
+    assert summary["awaiting"] == 1
+    assert summary["clean_rate"] == 25.0
+
+
+async def test_a_solution_repair_does_not_make_the_question_dirty(
+    client: AsyncClient,
+) -> None:
+    """The whole reason `field` exists. A teacher fixing the worked
+    answer indicts the SOLVE prompt; blaming the generation prompt for it
+    would send you to change the wrong thing."""
+    w = await _board_world()
+    r = await client.get(
+        BOARD, params={"outcome": "clean"}, headers=_auth(w["token"]),
+    )
+    assert r.status_code == 200, r.text
+    titles = [q["title"] for q in r.json()["questions"]]
+    assert titles == ["Clean"]
+
+
+async def test_the_denominator_stops_at_tracking_since(
+    client: AsyncClient,
+) -> None:
+    """Status reaches back forever; edits only reach back to
+    TRACKING_SINCE. Mixing them publishes a confident 100% that actually
+    means 'we were not watching' — the exact misreading the constant
+    exists to prevent."""
+    w = await _board_world()
+    r = await client.get(BOARD, headers=_auth(w["token"]))
+    assert r.status_code == 200, r.text
+    titles = {q["title"] for q in r.json()["questions"]}
+    assert "Pre-tracking" not in titles
+    assert r.json()["tracking_since"]
+
+
+async def test_hand_written_questions_are_not_generation_evidence(
+    client: AsyncClient,
+) -> None:
+    w = await _board_world()
+    r = await client.get(BOARD, headers=_auth(w["token"]))
+    titles = {q["title"] for q in r.json()["questions"]}
+    assert "Hand written" not in titles
+
+
+async def test_worst_outcome_wins_and_the_list_leads_with_it(
+    client: AsyncClient,
+) -> None:
+    """Buckets stay disjoint so they sum to the denominator, and the
+    rows worth reading are on top."""
+    w = await _board_world()
+    r = await client.get(BOARD, headers=_auth(w["token"]))
+    outcomes = [q["outcome"] for q in r.json()["questions"]]
+    assert outcomes == ["rejected", "redone", "repaired", "clean"]
+
+
+async def test_an_unknown_outcome_is_rejected_not_ignored(
+    client: AsyncClient,
+) -> None:
+    """Ignoring it returns the UNFILTERED list, which reads as 'no such
+    questions exist' — the opposite of the truth."""
+    w = await _board_world()
+    r = await client.get(
+        BOARD, params={"outcome": "nonsense"}, headers=_auth(w["token"]),
+    )
+    assert r.status_code == 400, r.text
+
+
+async def test_a_thin_board_says_so(client: AsyncClient) -> None:
+    """Four settled questions cannot support a percentage."""
+    w = await _board_world()
+    r = await client.get(BOARD, headers=_auth(w["token"]))
+    assert r.json()["summary"]["thin"] is True

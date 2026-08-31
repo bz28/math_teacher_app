@@ -440,6 +440,48 @@ export interface QuestionEditHistory {
   tracking_since: string;
 }
 
+// ── Generation quality board ─────────────────────────────────────────
+// Every generated question and what became of it. The page it replaces
+// listed only questions someone had edited, so a perfect question was
+// invisible and the count had nothing to divide by.
+//
+// The three failure modes are counted separately rather than summed:
+// one rejection is not four edits, and averaging them would hide which
+// kind of wrong the prompt is.
+
+export type GenerationOutcome = "clean" | "repaired" | "redone" | "rejected";
+
+export interface GenerationBoardSummary {
+  settled: number;
+  clean: number;
+  repaired: number;
+  redone: number;
+  rejected: number;
+  /** Still pending review — excluded from the rate, never folded in. */
+  awaiting: number;
+  clean_rate: number;
+  /** Too few settled questions for the rate to mean anything. */
+  thin: boolean;
+}
+
+export interface GenerationBoardQuestion {
+  id: string;
+  title: string;
+  question: string;
+  status: string;
+  outcome: GenerationOutcome;
+  generation_prompt: string | null;
+  created_at: string | null;
+}
+
+export interface GenerationBoardData {
+  summary: GenerationBoardSummary;
+  questions: GenerationBoardQuestion[];
+  total_count: number;
+  tracking_since: string;
+}
+
+
 export interface GenerationQualitySummary {
   total_edits: number;
   questions_touched: number;
@@ -549,6 +591,8 @@ export const api = {
     request<EditedQuestionsData>("/admin/generation-quality/questions", params),
   questionEditHistory: (id: string) =>
     request<QuestionEditHistory>(`/admin/generation-quality/questions/${id}`),
+  generationBoard: (params?: Record<string, string>) =>
+    request<GenerationBoardData>("/admin/generation-quality/board", params),
   generationQualitySummary: (params?: Record<string, string>) =>
     request<GenerationQualitySummary>("/admin/generation-quality/summary", params),
   extractionQuality: (params?: Record<string, string>) =>
