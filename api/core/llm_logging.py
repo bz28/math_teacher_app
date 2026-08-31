@@ -117,12 +117,28 @@ async def _payload_row_id(
             .on_conflict_do_nothing(index_elements=["sha256"])
             .returning(LLMPayload.id)
         )
+        # Read first. Payloads are content-addressed and heavily shared —
+        # a class of submissions resolves the same row every time — so the
+        # steady state is a HIT, and insert-then-reselect paid for a
+        # guaranteed-conflicting INSERT plus the SELECT on every single
+        # call. That took persisting one LLM call from 2 statements to 12,
+        # forever, on a change that argues its own design on cost grounds.
+        #
+        # This is not a race trade-off: the INSERT below is still
+        # ON CONFLICT DO NOTHING, so a miss that turns into a concurrent
+        # insert is handled exactly as before. Read-first only skips work
+        # in the case that is almost always true.
+        async with db.begin_nested():
+            row_id = (await db.execute(
+                select(LLMPayload.id).where(LLMPayload.sha256 == digest)
+            )).scalar_one_or_none()
+        if row_id is not None:
+            return row_id
+
         async with db.begin_nested():
             row_id = (await db.execute(stmt)).scalar_one_or_none()
         if row_id is None:
-            # Seen before, or lost the insert race — read the winner.
-            # Outside the savepoint: the insert has either landed or been
-            # rolled back, and this read must not be undone with it.
+            # Lost the insert race — the winner's row is committed by now.
             async with db.begin_nested():
                 row_id = (await db.execute(
                     select(LLMPayload.id).where(LLMPayload.sha256 == digest)
@@ -181,10 +197,20 @@ async def persist_llm_call(
                 # for any reason (deleted user, schema drift), the row
                 # still gets logged with school_id=None and lands in
                 # the Internal bucket.
+                # SAVEPOINT for the same reason the payload writes use
+                # one, and this comment used to be wrong about it: a
+                # Python `except` does not survive a Postgres statement
+                # error, because the error aborts the whole transaction
+                # and every later statement — including the `LLMCall`
+                # insert below — fails with InFailedSQLTransactionError,
+                # which the outer handler then swallows. Reproduced by
+                # renaming `users` (the "schema drift" case this comment
+                # names): the warning logged, and the ledger row vanished.
                 try:
-                    school_id = (await db.execute(
-                        select(User.school_id).where(User.id == user_uuid)
-                    )).scalar_one_or_none()
+                    async with db.begin_nested():
+                        school_id = (await db.execute(
+                            select(User.school_id).where(User.id == user_uuid)
+                        )).scalar_one_or_none()
                 except Exception as lookup_err:
                     logger.warning(
                         "school_id lookup failed for user %s: %s",

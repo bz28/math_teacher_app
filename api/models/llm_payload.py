@@ -56,13 +56,28 @@ class LLMPayload(Base):
 
     ## What this stores, and what it does NOT
 
-    Verified by reading every call site that supplies a system prompt: no
-    path interpolates a student name, id, email, grade level, section,
-    school, teacher name, or the student's own work into one.
-    `_build_system_prompt`'s claim to exclude everything student-specific
-    holds — the extraction goes only into the user message. That is what
-    makes the dedupe work at all, so the two properties stand or fall
-    together.
+    Verified across all 15 call sites that supply a system prompt: **no
+    OCR-extracted handwriting, student answer, chat turn, name, email, id,
+    section or school** reaches one. `_build_system_prompt`'s claim to
+    keep the extraction in the user message holds, and that is what makes
+    the dedupe work at all, so the two properties stand or fall together.
+
+    Two narrower things DO get in, and an earlier version of this comment
+    wrongly denied both:
+
+    * **Student-derived, not student-identifying.** `integrity_ai`
+      interpolates a `posture` fragment into its agent system prompt
+      (`integrity_ai.py:489-496`), derived from whether *this* student got
+      anything right and how much they wrote — e.g. "got every final
+      answer wrong AND barely wrote anything". It is a three-value enum,
+      so a row identifies no one, but it is student-derived text.
+    * **Unvalidated teacher free text.** `rubric["notes"]` and
+      `rubric["common_mistakes"]` are rendered verbatim
+      (`grading_ai.py:183-189`), and `Assignment.rubric` is accepted as a
+      bare dict with no key whitelist, value validation or length cap
+      (`teacher_assignments.py:78`). `common_mistakes` is the riskier of
+      the two — its natural phrasing is per-student ("Jamie drops the
+      negative").
 
     What it DOES newly persist is assessment content: every problem's
     `question` and `Answer key`, plus the teacher-authored `full_credit` /

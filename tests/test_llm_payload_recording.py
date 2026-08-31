@@ -205,3 +205,72 @@ async def test_call_with_no_tool_schema_links_to_nothing() -> None:
     await _persist("tutor", TUTOR_PROMPT, "marker-no-tools")
     call = await _call_by_marker("marker-no-tools")
     assert call.tool_schema_id is None
+
+
+# ── the read endpoint ──────────────────────────────────────────────────
+# The API surface had no coverage at all: not the body, not the 404, not
+# the admin gate. It is the only way the recorded prompt ever reaches a
+# human, so an unguarded regression there silently returns the whole
+# feature to invisibility.
+
+async def _admin_token() -> str:
+    import uuid as _uuid
+
+    from api.core.auth import create_access_token, hash_password
+    from api.models.user import User
+
+    async with get_session_factory()() as s:
+        admin = User(
+            email=f"pl_{_uuid.uuid4().hex[:8]}@t.com",
+            password_hash=hash_password("x"),
+            grade_level=99, role="admin", name="A",
+        )
+        s.add(admin)
+        await s.flush()
+        token = create_access_token(str(admin.id), "admin")
+        await s.commit()
+    return token
+
+
+async def test_endpoint_returns_the_recorded_prompt(client) -> None:
+    from tests.conftest import auth_headers
+
+    await _persist("ai_grading", GRADING_PROMPT, "marker-endpoint")
+    call = await _call_by_marker("marker-endpoint")
+    token = await _admin_token()
+
+    r = await client.get(
+        f"/v1/admin/llm-payloads/{call.system_prompt_id}",
+        headers=auth_headers(token),
+    )
+    assert r.status_code == 200
+    body = r.json()
+    # Byte-identical. A prompt you can only read approximately is not
+    # evidence you can debug a grade with.
+    assert body["text"] == GRADING_PROMPT
+    assert body["kind"] == "system_prompt"
+    assert body["char_len"] == len(GRADING_PROMPT)
+    assert body["used_by"] >= 1
+    # Named for what it holds — a payload can be shared across call sites
+    # and only the first writer's function is recorded.
+    assert "first_seen_from" in body
+    assert "function" not in body
+
+
+async def test_endpoint_404s_on_an_unknown_id(client) -> None:
+    import uuid as _uuid
+
+    from tests.conftest import auth_headers
+
+    token = await _admin_token()
+    r = await client.get(
+        f"/v1/admin/llm-payloads/{_uuid.uuid4()}", headers=auth_headers(token)
+    )
+    assert r.status_code == 404
+
+
+async def test_endpoint_requires_admin(client) -> None:
+    """Prompts carry answer keys and teacher rubric notes. A teacher or
+    student reaching this would be reading the marking scheme."""
+    r = await client.get(f"/v1/admin/llm-payloads/{__import__('uuid').uuid4()}")
+    assert r.status_code in (401, 403)
