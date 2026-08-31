@@ -6457,7 +6457,7 @@
             }
           },
           {
-            "description": "manual | chat",
+            "description": "edit_manual | edit_workshop",
             "in": "query",
             "name": "kind",
             "required": false,
@@ -6470,7 +6470,7 @@
                   "type": "null"
                 }
               ],
-              "description": "manual | chat",
+              "description": "edit_manual | edit_workshop",
               "title": "Kind"
             }
           },

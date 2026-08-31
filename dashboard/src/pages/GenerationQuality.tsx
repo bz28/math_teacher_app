@@ -34,8 +34,8 @@ import { EditorialModal } from "../components/EditorialModal";
 // ────────────────────────────────────────────────────────────────────
 
 const KIND_LABEL: Record<string, string> = {
-  manual: "Rewrote it",
-  chat: "Used the workshop",
+  edit_manual: "Rewrote it",
+  edit_workshop: "Used the workshop",
 };
 
 // How hard a teacher had to fight a question. Drives the row's status
@@ -81,7 +81,7 @@ function RepairStep({
         <div className="gq-step-meta">
           <StatusPill
             label={KIND_LABEL[entry.kind] ?? entry.kind}
-            tone={entry.kind === "chat" ? "info" : "neutral"}
+            tone={entry.kind === "edit_workshop" ? "info" : "neutral"}
           />
           <span className="gq-step-who">
             {entry.editor ?? "Unknown"}
@@ -263,12 +263,12 @@ export default function GenerationQuality() {
         />
         <StatTile
           label="Rewritten by hand"
-          value={summary ? String(summary.by_kind.manual ?? 0) : "—"}
+          value={summary ? String(summary.by_kind.edit_manual ?? 0) : "—"}
           sub="teacher typed the fix"
         />
         <StatTile
           label="Fixed in the workshop"
-          value={summary ? String(summary.by_kind.chat ?? 0) : "—"}
+          value={summary ? String(summary.by_kind.edit_workshop ?? 0) : "—"}
           sub="teacher asked the AI to redo it"
         />
       </div>
@@ -290,8 +290,8 @@ export default function GenerationQuality() {
           <span>How it was fixed</span>
           <select value={kind} onChange={(e) => setKind(e.target.value)}>
             <option value="">Either way</option>
-            <option value="manual">Rewritten by hand</option>
-            <option value="chat">Fixed in the workshop</option>
+            <option value="edit_manual">Rewritten by hand</option>
+            <option value="edit_workshop">Fixed in the workshop</option>
           </select>
         </label>
         <span className="gq-result-count">

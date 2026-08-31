@@ -31,7 +31,13 @@ from api.middleware.auth import CurrentUser, get_current_user_full, require_teac
 from api.middleware.rate_limit import limiter
 from api.models.course import Course
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
-from api.models.question_edit import EDIT_CHAT, EDIT_MANUAL
+from api.models.question_edit import (
+    EDIT_MANUAL,
+    EDIT_WORKSHOP,
+    REGEN_FRESH,
+    REGEN_GUIDED,
+    REJECT,
+)
 from api.models.user import User
 from api.routes.teacher_assignments import get_teacher_assignment
 from api.routes.teacher_courses import get_teacher_course
@@ -522,7 +528,11 @@ async def update_bank_item(
     if body.solution_steps is not None:
         item.solution_steps = body.solution_steps
     if body.final_answer is not None:
-        item.final_answer = body.final_answer
+        # Stripped like `question` above. Unstripped, a re-save differing
+        # only in trailing whitespace counts as a repair and inflates the
+        # quality signal — the equivalent question edit already records
+        # nothing, so this was an inconsistency waiting to mislead.
+        item.final_answer = body.final_answer.strip()
     if body.distractors is not None:
         # MCQ rendering relies on exactly 3 distractors so the
         # composed [correct, ...wrong] gives 4 choices. Reject
@@ -665,7 +675,19 @@ async def reject_bank_item(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     _ensure_unlocked(item)
+    already_rejected = item.status == "rejected"
     item.status = "rejected"
+    # A teacher binning the question outright is the strongest evidence
+    # the generation prompt is wrong — stronger than any edit, because
+    # nothing about the output was worth keeping. Recorded as an event
+    # rather than read from `status` alone, because status carries no
+    # timestamp and the report needs one to trend.
+    #
+    # Guarded on the prior status so a repeated POST (a double-click, a
+    # retried request) records one rejection rather than several. The
+    # endpoint is otherwise idempotent and the signal must be too.
+    if not already_rejected:
+        await record_question_edit(db, item, REJECT, current_user)
     await record_activity(
         db, current_user, "bank_item.reject", "bank_item", item.id,
         {"title": item.title},
@@ -698,6 +720,17 @@ async def regenerate_bank_item(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Regeneration failed: {e}",
         ) from e
+
+    # Two different signals wear the same button. With instructions,
+    # `regenerate_one` keeps the original as an anchor and revises it —
+    # the teacher salvaged the output. Without, it DROPS the original
+    # entirely and asks for a fresh take — the teacher judged the output
+    # unusable, which is evidence against the prompt in a way a guided
+    # revision is not. Recorded separately so they can't average away.
+    kind = REGEN_GUIDED if (body.instructions or "").strip() else REGEN_FRESH
+    await record_question_edit(db, item, kind, current_user)
+    await db.commit()
+
     return _serialize_item(item, await used_in_for_item(db, item))
 
 
@@ -854,7 +887,10 @@ async def accept_chat_proposal(
                 cleaned_steps.append(step)
             item.solution_steps = _render_step_figures(cleaned_steps)
     if proposal.get("final_answer") is not None:
-        item.final_answer = str(proposal["final_answer"])
+        # Stripped, matching the PATCH path and the question field beside
+        # it. Whitespace-only difference is not a repair, and recording it
+        # as one inflates the very signal the quality reports read.
+        item.final_answer = str(proposal["final_answer"]).strip()
     # Top-level question-figure on the proposal. Three cases:
     #   1. Proposal includes a NEW figure_spec → render + persist.
     #   2. Proposal rewrites the question but omits figure_spec →
@@ -896,7 +932,7 @@ async def accept_chat_proposal(
         else m
         for i, m in enumerate(existing)
     ]
-    await record_question_edit(db, item, EDIT_CHAT, current_user)
+    await record_question_edit(db, item, EDIT_WORKSHOP, current_user)
     await db.commit()
     return _serialize_item(item, await used_in_for_item(db, item))
 

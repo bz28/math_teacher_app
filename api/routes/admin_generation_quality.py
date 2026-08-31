@@ -31,7 +31,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.question_bank import QuestionBankItem
-from api.models.question_edit import TRACKING_SINCE, QuestionEdit
+from api.models.question_edit import (
+    EDIT_KINDS,
+    FIELD_QUESTION,
+    TRACKING_SINCE,
+    QuestionEdit,
+)
 from api.models.school import School
 from api.models.user import User
 
@@ -51,7 +56,7 @@ def _parse_uuid(label: str, value: str | None) -> uuid.UUID | None:
 async def edited_questions(
     teacher_id: str | None = Query(default=None),
     school_id: str | None = Query(default=None),
-    kind: str | None = Query(default=None, description="manual | chat"),
+    kind: str | None = Query(default=None, description="edit_manual | edit_workshop"),
     min_edits: int = Query(default=1, ge=1, le=50),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
@@ -73,6 +78,20 @@ async def edited_questions(
             QuestionEdit.bank_item_id.label("item_id"),
             func.count().label("edit_count"),
             func.max(QuestionEdit.created_at).label("last_edited_at"),
+        )
+        # Scoped so `edit_count` still counts what it counted before the
+        # recorder learned to write solution, regenerate and reject rows.
+        # Without this the number silently changes meaning: one PATCH can
+        # now emit a row per changed field, a regenerate rewrites all
+        # three at once, and a reject records a row for a question that
+        # was never repaired at all — so a single click would outrank
+        # four genuine hand-edits against thresholds (2 = a pattern,
+        # 4 = arrived wrong) calibrated on one-row-per-edit. Widening
+        # what this page counts is a deliberate redesign, not a
+        # side-effect of widening what gets recorded.
+        .where(
+            QuestionEdit.field == FIELD_QUESTION,
+            QuestionEdit.kind.in_(EDIT_KINDS),
         )
         .group_by(QuestionEdit.bank_item_id)
     )
@@ -160,7 +179,17 @@ async def question_edit_history(
         )
         .outerjoin(User, User.id == QuestionEdit.edited_by_id)
         .outerjoin(School, School.id == QuestionEdit.school_id)
-        .where(QuestionEdit.bank_item_id == item_id)
+        # Same scope as the list above, and for a second reason: this
+        # drill-in labels its two columns "The AI wrote" and "The teacher
+        # changed it to". A solution row would put step prose under a
+        # question label, and a reject row writes the item's CURRENT text
+        # as `before` — which, if the teacher edited it before binning
+        # it, is the teacher's own words displayed as the AI's.
+        .where(
+            QuestionEdit.bank_item_id == item_id,
+            QuestionEdit.field == FIELD_QUESTION,
+            QuestionEdit.kind.in_(EDIT_KINDS),
+        )
         # Oldest first: you read a repair history forward, watching what
         # the teacher kept fighting with.
         .order_by(QuestionEdit.created_at.asc())
@@ -201,7 +230,14 @@ async def generation_quality_summary(
     """Headline counters for the page's stat row."""
     school_uuid = _parse_uuid("school_id", school_id)
 
-    base = select(QuestionEdit)
+    # Scoped like the list: these tiles say "a teacher changed the
+    # wording" and "across every question", so counting solution repairs
+    # or a reject (where nothing was repaired at all) would make them
+    # assert something untrue.
+    base = select(QuestionEdit).where(
+        QuestionEdit.field == FIELD_QUESTION,
+        QuestionEdit.kind.in_(EDIT_KINDS),
+    )
     if school_uuid is not None:
         base = base.where(QuestionEdit.school_id == school_uuid)
     sub = base.subquery()

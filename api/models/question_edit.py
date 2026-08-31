@@ -25,24 +25,32 @@ zero read as "this question was never touched" — which would quietly
 mislead exactly the analysis this table exists to support. Admin
 responses carry `TRACKING_SINCE`; the UI shows "tracking began …".
 
-## One row per edit, keyed by kind
+## One row per changed FIELD, not per request
 
-Two ways a question changes are recorded, at the two route call sites
-that perform them (NOT inside `snapshot_history`, which only fills the
-one-level undo):
+A bank item is produced by two separate LLM calls — `generate_questions`
+writes the prose, `generate_solutions` (via `decompose`) works the
+answer — plus `generate_distractors` for MCQ choices. So "a teacher
+changed this item" is not one signal, and a row carries both:
 
-- `manual`     — teacher edited the fields directly (PATCH)
-- `chat`       — teacher accepted a proposal from the workshop agent
+- `kind`  — WHAT they did (typed a fix, used the workshop, asked for a
+  redo, binned it)
+- `field` — WHICH call it indicts (question / solution / final_answer /
+  distractors)
 
-`regenerate` is defined but not yet wired — a teacher rejecting the
-output outright is arguably the purest prompt-quality signal, so it is
-worth adding, and its absence should not be mistaken for "no one
-regenerates".
+One PATCH that rewrites both the question and the solution emits TWO
+rows, because it is evidence against two different prompts.
 
-`before`/`after` hold the question text only. Not the whole item: the
-question is what the prompt produced and what the teacher judged, and
-storing solution steps and figures too would multiply the row size for
-something no analysis reads.
+This is why the earlier question-only design under-reported so badly:
+the writer compared `previous_question` to `question` and returned early
+when they matched, so a teacher who fixed only the solution produced no
+row at all — despite `snapshot_history` having saved the before-value
+one line earlier. The evidence was collected and then dropped.
+
+Recorded at the route call sites that perform the mutation, never inside
+`snapshot_history` (which only fills the one-level undo).
+
+Figures are still out of scope: `figure_spec`/`figure_svg` are rendered
+artifacts of the question, and the harness probes already cover them.
 """
 
 import uuid
@@ -54,9 +62,44 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from api.database import Base
 
-EDIT_MANUAL = "manual"
-EDIT_CHAT = "chat"
-EDIT_REGENERATE = "regenerate"
+# ── kind: WHAT the teacher did ──────────────────────────────────────
+# Ordered by severity. A repair says the output was salvageable; a
+# fresh regeneration says it wasn't; a rejection says it was wrong
+# enough to bin. They must not average into one number.
+EDIT_MANUAL = "edit_manual"          # typed the correction themselves
+EDIT_WORKSHOP = "edit_workshop"      # accepted a workshop-agent proposal
+REGEN_GUIDED = "regen_guided"        # asked for a redo AND said how
+REGEN_FRESH = "regen_fresh"          # asked for a redo with no direction
+REJECT = "reject"                    # binned the question outright
+
+# `regen_guided` vs `regen_fresh` is not a distinction we invented for
+# reporting — `regenerate_one` already branches on it. With no
+# instructions it DROPS the "original question to revise" anchor and
+# asks for a fresh take; with instructions it keeps the original and
+# revises it. Only the first is evidence the prompt produced something
+# unusable, so collapsing them would blunt the signal.
+# The two kinds that existed before actions were recorded. The generation
+# report counts ONLY these, so its numbers keep meaning what they meant
+# before regenerate and reject became recordable — a reporting change
+# belongs in the commit that redesigns the report, not in the one that
+# widens what gets written.
+EDIT_KINDS = (EDIT_MANUAL, EDIT_WORKSHOP)
+
+# ── field: WHICH LLM call the row indicts ───────────────────────────
+# A bank item is the output of two separate calls (three with MCQ), so
+# "a teacher changed this item" is not one signal. Question edits
+# indict `generate_questions`; solution and final-answer edits indict
+# `decompose`; distractor edits indict `generate_distractors`.
+#
+# Distractors are NOT tracked, and the omission is deliberate:
+# `snapshot_history` has no `previous_distractors`, so there is no
+# before-value to diff against. Recording them means first extending
+# the teacher-facing one-level undo — a separate change with its own
+# revert semantics. Until then, `generate_distractors` has no signal,
+# and that gap should not be mistaken for "teachers never fix choices".
+FIELD_QUESTION = "question"
+FIELD_SOLUTION = "solution"
+FIELD_FINAL_ANSWER = "final_answer"
 
 # When recording began. Deliberately a constant rather than a stored
 # row: it is a fact about the deploy, not about any question, and the
@@ -101,12 +144,20 @@ class QuestionEdit(Base):
         index=True,
     )
 
-    # manual / chat / regenerate — see the module docstring.
+    # What the teacher did — one of the EDIT_/REGEN_/REJECT constants
+    # above, ordered by severity. See the module docstring.
     kind: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
 
-    # The question text either side of the change. `before` is null on a
-    # regenerate that had no prior text. Question only, not the whole
-    # item — see the module docstring.
+    # Which LLM call this row indicts — one of the FIELD_ constants.
+    # A bank item comes from two calls, so without this a solution
+    # repair and a question repair are indistinguishable.
+    field: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+
+    # The text either side of the change, for the `field` named above.
+    # `before` is null when there was no prior value; `after` is null on
+    # a reject, where nothing replaced it. Solution steps and distractors
+    # are serialized to text — these are read by a human debugging a
+    # prompt, not re-parsed.
     before: Mapped[str | None] = mapped_column(Text, nullable=True)
     after: Mapped[str | None] = mapped_column(Text, nullable=True)
 
