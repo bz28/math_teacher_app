@@ -309,6 +309,11 @@ export default function GenerationQuality() {
       return;
     }
     let cancelled = false;
+    // Cleared at the START of every fetch, not only when the modal
+    // closes. Opening row B directly from row A otherwise left A's error
+    // in state, and once B loaded the guard below was true again — a
+    // stale failure rendered over content that had loaded fine.
+    setDetailError(null);
     setDetailLoading(true);
     api
       .questionEditHistory(openId)
