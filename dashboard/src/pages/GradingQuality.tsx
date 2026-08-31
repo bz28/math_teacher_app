@@ -170,8 +170,10 @@ function DroppedNotice({ summary }: { summary: GradingSummary }) {
       <span>
         {n} reviewed submission{n === 1 ? "" : "s"} could not be compared at
         all — the AI and teacher grade lists don&rsquo;t line up, so
-        {n === 1 ? " it is" : " they are"} left out of every number on this
-        page.
+        {n === 1 ? " it is" : " they are"} excluded from the override
+        figures. Review coverage still counts{n === 1 ? " it" : " them"},
+        because that tile asks a different question: did a teacher look at
+        this grade, not could we compare it.
       </span>
     </div>
   );
@@ -662,10 +664,18 @@ export default function GradingQuality() {
             number computed and then thrown away. */}
         <DroppedNotice summary={summary} />
         <div className="empty-state">
-          <div className="empty-state-title">No reviewed grades yet</div>
+          <div className="empty-state-title">
+            {summary.unalignable_submissions > 0
+              ? "Nothing here could be compared"
+              : "No reviewed grades yet"}
+          </div>
           <div className="empty-state-sub">
-            Once teachers review or publish AI-graded submissions in this window,
-            their overrides will surface here.
+            {summary.unalignable_submissions > 0
+              // Saying "no reviewed grades yet" directly under a notice
+              // counting reviewed grades was a flat contradiction — and
+              // this is precisely the case that notice exists for.
+              ? "Teachers have reviewed grades in this window, but none of them could be lined up against the AI's original call, so there is no override figure to show."
+              : "Once teachers review or publish AI-graded submissions in this window, their overrides will surface here."}
           </div>
         </div>
         </>
