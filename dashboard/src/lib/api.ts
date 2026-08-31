@@ -447,6 +447,90 @@ export interface GenerationQualitySummary {
   tracking_since: string;
 }
 
+
+// ── Handwriting extraction quality ───────────────────────────────────
+// Scores `image_extract` — the Vision call that reads a photo of
+// handwritten work — judged by the student who wrote the page. Unlike
+// every other quality report this needs no new recording: the confirm
+// screen already stores what the AI read and what the student corrected.
+//
+// `awaiting` is reported beside the rate, never inside it. A submission
+// nobody has ruled on is not a pass or a fail, and a large awaiting
+// count is its own finding: students abandoning the confirm step.
+
+export type ExtractionBucket = "clean" | "repaired" | "flagged" | "empty";
+
+export interface ExtractionSummary {
+  settled: number;
+  clean: number;
+  repaired: number;
+  flagged: number;
+  /** Read came back with no steps and no answers — a total failure that
+   *  a student can still confirm, so it must not count as clean. */
+  empty: number;
+  awaiting: number;
+  clean_rate: number;
+  /** Too few settled reads for the rate to mean anything. */
+  thin: boolean;
+}
+
+export interface ExtractionCase {
+  submission_id: string;
+  course: string;
+  subject: string;
+  bucket: ExtractionBucket;
+  ruled_at: string | null;
+  corrected_rows: number;
+  steps_read: number;
+}
+
+export interface ExtractionSubjectRow {
+  subject: string;
+  settled: number;
+  clean: number;
+  flagged: number;
+  clean_rate: number;
+  thin: boolean;
+}
+
+export interface ExtractionQualityData {
+  summary: ExtractionSummary;
+  trend: { day: string; settled: number; clean_rate: number }[];
+  by_subject: ExtractionSubjectRow[];
+  cases: ExtractionCase[];
+  total_count: number;
+}
+
+export interface ExtractionRow {
+  key: string;
+  problem_position: number | null;
+  step_num: number | null;
+  kind: "step" | "final_answer";
+  /** Vision could not tie this row to a problem, so the student was
+   *  never asked to confirm it. */
+  unattributed: boolean;
+  ai_read: string | null;
+  student_said: string | null;
+  /** Student cleared the row — a deletion, not a blank. */
+  deleted: boolean;
+  changed: boolean;
+}
+
+export interface ExtractionDetail {
+  submission_id: string;
+  course: string;
+  subject: string;
+  bucket: ExtractionBucket | "awaiting";
+  submitted_at: string | null;
+  confirmed_at: string | null;
+  flagged_at: string | null;
+  /** One score for the whole read; Vision does not rate rows. */
+  confidence: number | null;
+  rows: ExtractionRow[];
+  /** The strokes themselves — base64, drill-in only, never in the list. */
+  files: { data: string; media_type: string; filename?: string }[];
+}
+
 export const api = {
   overview: (params?: Record<string, string>) => request<OverviewData>("/admin/overview", params),
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
@@ -467,6 +551,10 @@ export const api = {
     request<QuestionEditHistory>(`/admin/generation-quality/questions/${id}`),
   generationQualitySummary: (params?: Record<string, string>) =>
     request<GenerationQualitySummary>("/admin/generation-quality/summary", params),
+  extractionQuality: (params?: Record<string, string>) =>
+    request<ExtractionQualityData>("/admin/extraction-quality", params),
+  extractionDetail: (submissionId: string) =>
+    request<ExtractionDetail>(`/admin/extraction-quality/${submissionId}`),
   gradingQuality: (params?: Record<string, string>) =>
     request<GradingQualityData>("/admin/grading-quality", params),
   gradingQualityOverrides: (params?: Record<string, string>) =>

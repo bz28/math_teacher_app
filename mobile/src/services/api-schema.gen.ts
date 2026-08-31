@@ -110,6 +110,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/extraction-quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Extraction Quality */
+        get: operations["extraction_quality_v1_admin_extraction_quality_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/extraction-quality/{submission_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Extraction Detail
+         * @description One submission: the photo, what the AI read, and what the student
+         *     said it should have said — row by row.
+         *
+         *     This is the only surface where a misread can actually be diagnosed.
+         *     A count tells you the reader is struggling; only the strokes beside
+         *     the transcription tell you *how*.
+         */
+        get: operations["extraction_detail_v1_admin_extraction_quality__submission_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/generation-quality/questions": {
         parameters: {
             query?: never;
@@ -6269,6 +6311,77 @@ export interface operations {
             header?: never;
             path: {
                 document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extraction_quality_v1_admin_extraction_quality_get: {
+        parameters: {
+            query?: {
+                hours?: number;
+                subject?: string | null;
+                /** @description clean | repaired | flagged | empty */
+                bucket?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extraction_detail_v1_admin_extraction_quality__submission_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
             };
             cookie?: never;
         };

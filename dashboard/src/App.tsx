@@ -12,6 +12,7 @@ import Quality from "./pages/Quality";
 import SessionQuality from "./pages/SessionQuality";
 import GenerationQuality from "./pages/GenerationQuality";
 import GradingQuality from "./pages/GradingQuality";
+import ExtractionQuality from "./pages/ExtractionQuality";
 import GoldenSet from "./pages/GoldenSet";
 import Users from "./pages/Users";
 import LeadDetail from "./pages/LeadDetail";
@@ -77,6 +78,7 @@ export default function App() {
           <Route path="/quality" element={<Quality />} />
           <Route path="/quality/:sessionId" element={<SessionQuality />} />
           <Route path="/grading-quality" element={<GradingQuality />} />
+          <Route path="/extraction-quality" element={<ExtractionQuality />} />
           <Route path="/generation-quality" element={<GenerationQuality />} />
           <Route path="/golden-set" element={<GoldenSet />} />
           <Route
