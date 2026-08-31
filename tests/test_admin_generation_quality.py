@@ -26,7 +26,12 @@ from api.database import get_session_factory
 from api.models.assignment import Assignment
 from api.models.course import Course
 from api.models.question_bank import QuestionBankItem
-from api.models.question_edit import EDIT_CHAT, EDIT_MANUAL, QuestionEdit
+from api.models.question_edit import (
+    EDIT_MANUAL,
+    EDIT_WORKSHOP,
+    FIELD_QUESTION,
+    QuestionEdit,
+)
 from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
 from api.models.unit import Unit
 from api.models.user import User
@@ -93,7 +98,8 @@ async def _seed(edit_plan: list[tuple[str, int]]) -> dict[str, Any]:
                 s.add(QuestionEdit(
                     bank_item_id=item.id, edited_by_id=teacher.id,
                     school_id=school.id,
-                    kind=EDIT_MANUAL if i % 2 == 0 else EDIT_CHAT,
+                    kind=EDIT_MANUAL if i % 2 == 0 else EDIT_WORKSHOP,
+                    field=FIELD_QUESTION,
                     before=f"{title} v{i}", after=f"{title} v{i + 1}",
                     created_at=base + timedelta(minutes=i),
                 ))
@@ -190,7 +196,7 @@ async def test_filters_scope_to_a_school_and_a_kind(client: AsyncClient) -> None
     assert other.json()["questions"] == []
 
     chat_only = await client.get(
-        f"/v1/admin/generation-quality/questions?kind={EDIT_CHAT}",
+        f"/v1/admin/generation-quality/questions?kind={EDIT_WORKSHOP}",
         headers=_auth(w["token"]),
     )
     assert chat_only.status_code == 200

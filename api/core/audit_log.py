@@ -169,20 +169,58 @@ async def record_question_edit(
     them there would degrade a surface someone else depends on to serve
     an analysis it was never shaped for.
 
-    Records nothing when the question text didn't actually change — a
-    teacher fixing a typo in the TITLE is not evidence about the
-    generation prompt, and counting it would dilute the signal the
-    admin page exists to surface.
+    Emits ONE ROW PER CHANGED FIELD, because a bank item is the output
+    of two different LLM calls: the question comes from
+    `generate_questions`, the solution and final answer from `decompose`.
+    A single PATCH that rewrites both is evidence against both prompts
+    and must not collapse into one row.
+
+    Records nothing for a field that didn't actually change — a teacher
+    fixing a typo in the TITLE is not evidence about any prompt, and
+    counting it would dilute the signal the admin pages exist to
+    surface. A request that changed no tracked field records nothing at
+    all.
 
     Never raises: the edit already happened, and failing to log it must
     not fail the teacher's request.
     """
-    from api.models.question_edit import QuestionEdit
+    from api.models.question_edit import (
+        FIELD_FINAL_ANSWER,
+        FIELD_QUESTION,
+        FIELD_SOLUTION,
+        REJECT,
+        QuestionEdit,
+    )
 
     try:
-        before = item.previous_question
-        after = item.question
-        if before == after:
+        # (field, before, after) for every tracked field. `snapshot_history`
+        # has already written each previous_* value, so both halves are on
+        # the item and no caller carries them around.
+        pairs: list[tuple[str, str | None, str | None]] = [
+            (FIELD_QUESTION, item.previous_question, item.question),
+            (
+                FIELD_SOLUTION,
+                _steps_text(item.previous_solution_steps),
+                _steps_text(item.solution_steps),
+            ),
+            (FIELD_FINAL_ANSWER, item.previous_final_answer, item.final_answer),
+            # Distractors are deliberately absent: `snapshot_history` has
+            # no `previous_distractors`, so there is no before-value to
+            # diff against. Treating a missing snapshot as "changed"
+            # would mint a spurious row on every edit of any MCQ item.
+            # Tracking them means extending the teacher-facing one-level
+            # undo, which is a separate change.
+        ]
+
+        if kind == REJECT:
+            # Nothing changed — the teacher binned the question as written.
+            # Record the rejected text with no replacement, so the drill-in
+            # can still show what was thrown out.
+            changed = [(FIELD_QUESTION, item.question, None)]
+        else:
+            changed = [(f, b, a) for f, b, a in pairs if b != a]
+
+        if not changed:
             return
 
         school_id: uuid.UUID | None = None
@@ -197,13 +235,39 @@ async def record_question_edit(
             except Exception:  # noqa: BLE001 — same savepoint guard record_activity uses
                 logger.exception("question-edit school lookup failed")
 
-        db.add(QuestionEdit(
-            bank_item_id=item.id,
-            edited_by_id=actor_id,
-            school_id=school_id,
-            kind=kind,
-            before=before,
-            after=after,
-        ))
+        for field, before, after in changed:
+            db.add(QuestionEdit(
+                bank_item_id=item.id,
+                edited_by_id=actor_id,
+                school_id=school_id,
+                kind=kind,
+                field=field,
+                before=before,
+                after=after,
+            ))
     except Exception:  # noqa: BLE001
         logger.exception("could not record question edit for item %s", item.id)
+
+
+def _steps_text(steps: Any) -> str | None:
+    """Flatten solution steps to the text a human reads when debugging.
+
+    Stored as text rather than JSON because the only consumer is the
+    admin drill-in's before/after diff — nothing re-parses it, and prose
+    diffs far more legibly than a re-serialized object whose key order
+    could change the string without the solution changing at all.
+    """
+    if not steps:
+        return None
+    if not isinstance(steps, list):
+        return str(steps)
+    parts: list[str] = []
+    for i, s in enumerate(steps, start=1):
+        if isinstance(s, dict):
+            title = str(s.get("title") or "").strip()
+            body = str(s.get("description") or "").strip()
+            head = f"{i}. {title}" if title else f"{i}."
+            parts.append(f"{head}\n{body}".strip())
+        else:
+            parts.append(f"{i}. {s}")
+    return "\n\n".join(parts) or None

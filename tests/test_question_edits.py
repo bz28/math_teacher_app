@@ -22,7 +22,14 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from api.database import get_session_factory
-from api.models.question_edit import EDIT_MANUAL, QuestionEdit
+from api.models.question_edit import (
+    EDIT_MANUAL,
+    FIELD_FINAL_ANSWER,
+    FIELD_QUESTION,
+    FIELD_SOLUTION,
+    REJECT,
+    QuestionEdit,
+)
 from tests.conftest import auth_headers as _auth
 
 pytestmark = pytest.mark.asyncio
@@ -166,3 +173,99 @@ async def test_resaving_identical_question_text_is_not_recorded(
     r = await _patch(client, world["teacher_token"], item_id, question=current)
     assert r.status_code == 200, r.text
     assert await _edits(uuid.UUID(str(item_id))) == []
+
+
+# ── Field attribution ────────────────────────────────────────────────
+#
+# A bank item is the output of TWO LLM calls: `generate_questions` writes
+# the prose, `generate_solutions` (via `decompose`) works the answer. The
+# original recorder compared only `previous_question` to `question` and
+# returned early when they matched, so a teacher fixing ONLY the solution
+# recorded nothing at all — even though `snapshot_history` had saved the
+# before-value one line earlier. The evidence was collected, then dropped.
+#
+# These pin that a row now names the call it indicts.
+
+
+async def test_a_solution_only_edit_is_recorded(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """The defect this whole change exists for. Fixing the worked answer
+    says the SOLVE prompt is wrong, and it used to leave no trace at all
+    because the question text was untouched."""
+    await _own_course(world)
+    item_id = world["primary_id"]
+    r = await _patch(
+        client, world["teacher_token"], item_id,
+        solution_steps=[
+            {"title": "Isolate x", "description": "Subtract 7 from both sides."},
+        ],
+    )
+    assert r.status_code == 200, r.text
+
+    edits = await _edits(uuid.UUID(str(item_id)))
+    assert len(edits) == 1
+    assert edits[0].field == FIELD_SOLUTION
+    assert edits[0].kind == EDIT_MANUAL
+    # The diff is the payload — a count tells you WHICH solution to look
+    # at, only the before/after tells you what the prompt got wrong.
+    assert "Subtract 7 from both sides." in (edits[0].after or "")
+
+
+async def test_a_final_answer_only_edit_is_recorded(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    await _own_course(world)
+    item_id = world["primary_id"]
+    r = await _patch(
+        client, world["teacher_token"], item_id, final_answer="x = 5",
+    )
+    assert r.status_code == 200, r.text
+
+    edits = await _edits(uuid.UUID(str(item_id)))
+    assert len(edits) == 1
+    assert edits[0].field == FIELD_FINAL_ANSWER
+    assert edits[0].after == "x = 5"
+
+
+async def test_one_patch_touching_both_records_a_row_each(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """Two prompts are implicated, so two rows. Collapsing them would
+    make a solve defect indistinguishable from a question defect — the
+    exact confusion the `field` column exists to prevent."""
+    await _own_course(world)
+    item_id = world["primary_id"]
+    r = await _patch(
+        client, world["teacher_token"], item_id,
+        question="Solve 2x = 10.",
+        final_answer="x = 5",
+    )
+    assert r.status_code == 200, r.text
+
+    edits = await _edits(uuid.UUID(str(item_id)))
+    assert {e.field for e in edits} == {FIELD_QUESTION, FIELD_FINAL_ANSWER}
+
+
+async def test_rejecting_a_question_is_recorded(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """A teacher binning the output outright is the STRONGEST evidence
+    the prompt is wrong — nothing about it was worth keeping. It used to
+    write only an activity-log line, which the quality report cannot
+    read, so the purest signal in the product was invisible."""
+    await _own_course(world)
+    item_id = world["primary_id"]
+    r = await client.post(
+        f"/v1/teacher/question-bank/{item_id}/reject",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+
+    edits = await _edits(uuid.UUID(str(item_id)))
+    assert len(edits) == 1
+    assert edits[0].kind == REJECT
+    assert edits[0].field == FIELD_QUESTION
+    # What was thrown out is kept; nothing replaced it.
+    assert edits[0].before is not None
+    assert edits[0].after is None
