@@ -6579,6 +6579,100 @@
         ]
       }
     },
+    "/v1/admin/generation-quality/board": {
+      "get": {
+        "description": "Every generated question and what became of it.\n\nThe denominator this page never had. See the module docstring for why\nit is scoped to items created since tracking began, and why the three\nfailure modes are counted separately rather than summed.",
+        "operationId": "generation_board_v1_admin_generation_quality_board_get",
+        "parameters": [
+          {
+            "description": "Include practice variations (generate-similar output)",
+            "in": "query",
+            "name": "include_variations",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include practice variations (generate-similar output)",
+              "title": "Include Variations",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "clean | repaired | redone | rejected",
+            "in": "query",
+            "name": "outcome",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "clean | repaired | redone | rejected",
+              "title": "Outcome"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Generation Board V1 Admin Generation Quality Board Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Generation Board",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/generation-quality/questions": {
       "get": {
         "description": "Generated questions ranked by how much repair a teacher had to do.\n\n`min_edits` defaults to 1 rather than 0 on purpose: a question\nnobody touched is not evidence about the prompt, and including the\nwhole bank would bury the eleven rows that matter under thousands\nthat don't.",

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   api,
-  type EditedQuestion,
-  type GenerationQualitySummary,
+  type GenerationBoardData,
+  type GenerationBoardQuestion,
+  type GenerationOutcome,
   type QuestionEditHistory,
 } from "../lib/api";
+import { formatRelativeDate } from "../lib/format";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
@@ -36,22 +38,6 @@ import { EditorialModal } from "../components/EditorialModal";
 const KIND_LABEL: Record<string, string> = {
   edit_manual: "Rewrote it",
   edit_workshop: "Used the workshop",
-};
-
-// How hard a teacher had to fight a question. Drives the row's status
-// bar and the count's tone. Thresholds are judgements, not maths: one
-// edit is ordinary polish, two is a pattern worth a look, four means
-// the question arrived wrong.
-function repairTone(count: number): "default" | "warn" | "bad" {
-  if (count >= 4) return "bad";
-  if (count >= 2) return "warn";
-  return "default";
-}
-
-const TONE_VAR: Record<string, string> = {
-  default: "var(--ok)",
-  warn: "var(--warn)",
-  bad: "var(--accent)",
 };
 
 function formatDate(iso: string | null): string {
@@ -109,41 +95,208 @@ function RepairStep({
   );
 }
 
+// ── The board ────────────────────────────────────────────────────────
+//
+// Every generated question and what became of it. What this replaces
+// could only show bad news: a question appeared ONLY once someone had
+// edited it, so a perfect question was invisible and "0 repairs" had
+// nothing to divide by.
+//
+// The three failure modes are shown as their own counts rather than
+// summed into one "problem" number. A teacher binning a question and a
+// teacher fixing a typo are not the same evidence, and averaging them
+// would hide which kind of wrong the prompt is.
+
+const OUTCOME_META: Record<
+  GenerationOutcome,
+  { label: string; tone: "ok" | "warn" | "danger"; color: string; blurb: string }
+> = {
+  clean: {
+    label: "Kept as written", tone: "ok", color: "var(--ok)",
+    blurb: "approved, never edited",
+  },
+  repaired: {
+    label: "Repaired", tone: "warn", color: "var(--warn)",
+    blurb: "edited, or redone with direction",
+  },
+  redone: {
+    label: "Redone", tone: "danger", color: "var(--accent)",
+    blurb: "attempt discarded, regenerated from scratch",
+  },
+  rejected: {
+    label: "Rejected", tone: "danger", color: "var(--danger)",
+    blurb: "binned outright",
+  },
+};
+
+function boardTone(rate: number): "ok" | "warn" | "danger" {
+  if (rate >= 90) return "ok";
+  if (rate >= 75) return "warn";
+  return "danger";
+}
+
+function GenerationBoard({
+  data, outcome, onOutcome, onOpen,
+}: {
+  data: GenerationBoardData;
+  outcome: string;
+  onOutcome: (v: string) => void;
+  onOpen: (id: string) => void;
+}) {
+  const { summary } = data;
+  const settled = summary.settled;
+
+  const cols: Column<GenerationBoardQuestion>[] = [
+    {
+      key: "outcome", header: "Outcome", width: "18%",
+      sortValue: (q) => q.outcome,
+      render: (q) => (
+        <StatusPill
+          tone={OUTCOME_META[q.outcome].tone}
+          label={OUTCOME_META[q.outcome].label}
+        />
+      ),
+    },
+    {
+      key: "question", header: "Question", width: "52%",
+      render: (q) => (
+        <div className="gq-cell-q">
+          <span className="gq-cell-title">{q.title}</span>
+          <span className="gq-cell-text">{q.question}</span>
+        </div>
+      ),
+    },
+    {
+      key: "created_at", header: "Generated", numeric: true, width: "18%",
+      sortValue: (q) => (q.created_at ? new Date(q.created_at).getTime() : 0),
+      render: (q) => (
+        <span className="gq-when">
+          {q.created_at ? formatRelativeDate(q.created_at) : "—"}
+        </span>
+      ),
+    },
+  ];
+
+  if (settled === 0) {
+    // Honest empty state. A new school sees this for weeks, so it says
+    // what is true — nothing has been ruled on — rather than rendering
+    // 0% and letting an unmeasured prompt read as a broken one.
+    return (
+      <div className="empty-state">
+        <div className="empty-state-title">No questions ruled on yet</div>
+        <div className="empty-state-sub">
+          {summary.awaiting > 0
+            ? `${summary.awaiting.toLocaleString()} generated question${summary.awaiting === 1 ? " is" : "s are"} waiting for a teacher to approve or bin. The score appears once they do.`
+            : "Once teachers approve or reject generated questions, the score appears here."}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="tile-grid">
+        <StatTile
+          label="Kept as written"
+          // A percentage over a handful of questions is noise. Below the
+          // floor it is shown without a health colour rather than
+          // asserting a problem the data cannot support.
+          tone={summary.thin ? "default" : boardTone(summary.clean_rate)}
+          value={<span style={{ fontSize: 44, letterSpacing: -1 }}>{summary.clean_rate}%</span>}
+          sub={`${summary.clean}/${settled} approved untouched`}
+        />
+        <StatTile
+          label="Repaired"
+          tone={summary.repaired > 0 ? "warn" : "default"}
+          value={summary.repaired.toLocaleString()}
+          sub={OUTCOME_META.repaired.blurb}
+        />
+        <StatTile
+          label="Redone"
+          tone={summary.redone > 0 ? "danger" : "default"}
+          value={summary.redone.toLocaleString()}
+          sub={OUTCOME_META.redone.blurb}
+        />
+        <StatTile
+          label="Rejected"
+          tone={summary.rejected > 0 ? "danger" : "default"}
+          value={summary.rejected.toLocaleString()}
+          sub={OUTCOME_META.rejected.blurb}
+        />
+        <StatTile
+          label="Awaiting review"
+          value={summary.awaiting.toLocaleString()}
+          sub="not ruled on — excluded from the score"
+        />
+      </div>
+
+      {summary.thin && (
+        <div className="callout-warn">
+          <StatusPill tone="warn" label="THIN" />
+          <span>
+            Only {settled} question{settled === 1 ? " has" : "s have"} been
+            ruled on since counting began — too few for the percentage above
+            to mean much.
+          </span>
+        </div>
+      )}
+
+      <div className="gq-filters">
+        <label className="gq-filter">
+          <span>Show</span>
+          <select value={outcome} onChange={(e) => onOutcome(e.target.value)}>
+            <option value="">Every outcome</option>
+            <option value="rejected">Rejected only</option>
+            <option value="redone">Redone only</option>
+            <option value="repaired">Repaired only</option>
+            <option value="clean">Kept as written only</option>
+          </select>
+        </label>
+        <span className="gq-result-count">
+          {data.total_count} question{data.total_count === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      <DataTable
+        columns={cols}
+        rows={data.questions}
+        rowKey={(q) => q.id}
+        onRowClick={(q) => onOpen(q.id)}
+        rowStatus={(q) => OUTCOME_META[q.outcome].color}
+        drill
+        minWidth={680}
+        empty={<span className="dt-state-title">No questions match this filter.</span>}
+      />
+    </>
+  );
+}
+
+
 export default function GenerationQuality() {
-  const [data, setData] = useState<EditedQuestion[]>([]);
-  const [total, setTotal] = useState(0);
+  const [board, setBoard] = useState<GenerationBoardData | null>(null);
   const [trackingSince, setTrackingSince] = useState<string | null>(null);
-  const [summary, setSummary] = useState<GenerationQualitySummary | null>(null);
+  const [outcome, setOutcome] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const [minEdits, setMinEdits] = useState(1);
-  const [kind, setKind] = useState<string>("");
 
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<QuestionEditHistory | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params: Record<string, string> = { min_edits: String(minEdits) };
-      if (kind) params.kind = kind;
-      const [list, sum] = await Promise.all([
-        api.editedQuestions(params),
-        api.generationQualitySummary(),
-      ]);
-      setData(list.questions);
-      setTotal(list.total);
-      setTrackingSince(list.tracking_since);
-      setSummary(sum);
+      const brd = await api.generationBoard(outcome ? { outcome } : undefined);
+      setBoard(brd);
+      setTrackingSince(brd.tracking_since);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't load generation quality");
     } finally {
       setLoading(false);
     }
-  }, [minEdits, kind]);
+  }, [outcome]);
 
   useEffect(() => {
     void load();
@@ -152,17 +305,31 @@ export default function GenerationQuality() {
   useEffect(() => {
     if (!openId) {
       setDetail(null);
+      setDetailError(null);
       return;
     }
     let cancelled = false;
+    // Cleared at the START of every fetch, not only when the modal
+    // closes. Opening row B directly from row A otherwise left A's error
+    // in state, and once B loaded the guard below was true again — a
+    // stale failure rendered over content that had loaded fine.
+    setDetailError(null);
     setDetailLoading(true);
     api
       .questionEditHistory(openId)
       .then((d) => {
         if (!cancelled) setDetail(d);
       })
-      .catch(() => {
-        if (!cancelled) setDetail(null);
+      .catch((e) => {
+        if (!cancelled) {
+          setDetail(null);
+          // Without this the modal opened, showed its title, and sat
+          // completely blank — a failed fetch that looked like a question
+          // with no repair history. The sibling page surfaces it.
+          setDetailError(
+            e instanceof Error ? e.message : "Couldn't load this repair history.",
+          );
+        }
       })
       .finally(() => {
         if (!cancelled) setDetailLoading(false);
@@ -171,47 +338,6 @@ export default function GenerationQuality() {
       cancelled = true;
     };
   }, [openId]);
-
-  const columns: Column<EditedQuestion>[] = [
-    {
-      key: "question",
-      header: "Question",
-      width: "48%",
-      render: (r) => (
-        <div className="gq-cell-q">
-          <span className="gq-cell-title">{r.title}</span>
-          <span className="gq-cell-text">{r.question}</span>
-        </div>
-      ),
-    },
-    {
-      key: "edit_count",
-      header: "Repairs",
-      numeric: true,
-      sortValue: (r) => r.edit_count,
-      render: (r) => (
-        <span
-          className="gq-count"
-          style={{ color: TONE_VAR[repairTone(r.edit_count)] }}
-        >
-          {r.edit_count}
-        </span>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      render: (r) => <StatusPill label={r.status} tone="neutral" />,
-    },
-    {
-      key: "last_edited_at",
-      header: "Last touched",
-      sortValue: (r) => r.last_edited_at ?? "",
-      render: (r) => (
-        <span className="gq-when">{formatDate(r.last_edited_at)}</span>
-      ),
-    },
-  ];
 
   return (
     <div>
@@ -227,9 +353,9 @@ export default function GenerationQuality() {
           <span className="eyebrow">Diagnostic</span>
           <h1>Generation quality</h1>
           <p>
-            Questions the AI wrote and a teacher had to fix. One teacher
-            fixing one question is taste — the same fix showing up across
-            teachers is a prompt worth changing.
+            Every question the AI wrote, and what a teacher did with it.
+            One fix is taste; the same fix showing up across teachers is a
+            prompt worth changing.
           </p>
         </div>
         <StatusPill
@@ -245,82 +371,54 @@ export default function GenerationQuality() {
           ever changed a question", which is the opposite of the truth. */}
       {trackingSince && (
         <p className="gq-tracking" role="note">
-          Counting edits since {formatDate(trackingSince)}. Anything a teacher
-          changed before then isn&rsquo;t recorded.
+          Counting questions generated since {formatDate(trackingSince)} —
+          repairs are only recorded from that date, so earlier questions
+          would look clean whether or not anyone touched them.
         </p>
       )}
 
-      <div className="tile-grid">
-        <StatTile
-          label="Questions with repairs"
-          value={summary ? String(summary.questions_touched) : "—"}
-          sub="a teacher changed the wording"
-        />
-        <StatTile
-          label="Total repairs"
-          value={summary ? String(summary.total_edits) : "—"}
-          sub="across every question"
-        />
-        <StatTile
-          label="Rewritten by hand"
-          value={summary ? String(summary.by_kind.edit_manual ?? 0) : "—"}
-          sub="teacher typed the fix"
-        />
-        <StatTile
-          label="Fixed in the workshop"
-          value={summary ? String(summary.by_kind.edit_workshop ?? 0) : "—"}
-          sub="teacher asked the AI to redo it"
-        />
-      </div>
+      {loading && !board && <p className="loading">Loading…</p>}
 
-      <div className="gq-filters">
-        <label className="gq-filter">
-          <span>Show questions repaired</span>
-          <select
-            value={minEdits}
-            onChange={(e) => setMinEdits(Number(e.target.value))}
-          >
-            <option value={1}>once or more</option>
-            <option value={2}>twice or more</option>
-            <option value={3}>3+ times</option>
-            <option value={4}>4+ times</option>
-          </select>
-        </label>
-        <label className="gq-filter">
-          <span>How it was fixed</span>
-          <select value={kind} onChange={(e) => setKind(e.target.value)}>
-            <option value="">Either way</option>
-            <option value="edit_manual">Rewritten by hand</option>
-            <option value="edit_workshop">Fixed in the workshop</option>
-          </select>
-        </label>
-        <span className="gq-result-count">
-          {loading ? "…" : `${total} question${total === 1 ? "" : "s"}`}
-        </span>
-      </div>
+      {/* Two DIFFERENT states, and collapsing them was a real defect.
+          With no board there is nothing to be stale — saying "the numbers
+          below are from the last successful load" over an empty page is
+          both wrong and confusing. With a board, the failure must be
+          announced ABOVE the numbers it applies to, or the sentence
+          points at nothing. */}
+      {error && !board && (
+        <div className="empty-state">
+          <div className="empty-state-title">Couldn&rsquo;t load generation quality</div>
+          <div className="empty-state-sub">{error}</div>
+        </div>
+      )}
+      {error && board && (
+        <div className="callout-warn" role="alert">
+          <StatusPill tone="warn" label="STALE" />
+          <span>
+            {error} The numbers below are from the last successful load.{" "}
+            <button
+              type="button"
+              onClick={() => void load()}
+              style={{
+                background: "none", border: "none", padding: 0,
+                color: "var(--accent)", cursor: "pointer",
+                font: "inherit", textDecoration: "underline",
+              }}
+            >
+              Retry
+            </button>
+          </span>
+        </div>
+      )}
 
-      <DataTable
-        columns={columns}
-        rows={data}
-        rowKey={(r) => r.id}
-        onRowClick={(r) => setOpenId(r.id)}
-        rowStatus={(r) => TONE_VAR[repairTone(r.edit_count)]}
-        drill
-        loading={loading}
-        error={error}
-        onRetry={() => void load()}
-        defaultSort={{ key: "edit_count", dir: "desc" }}
-        empty={
-          <div className="gq-empty">
-            <p className="gq-empty-head">No repairs recorded yet.</p>
-            <p>
-              Either the generated questions are landing well, or nobody has
-              edited one since counting began. Come back after a few rounds of
-              generation.
-            </p>
-          </div>
-        }
-      />
+      {board && (
+        <GenerationBoard
+          data={board}
+          outcome={outcome}
+          onOutcome={setOutcome}
+          onOpen={setOpenId}
+        />
+      )}
 
       {openId !== null && (
         <EditorialModal
@@ -330,6 +428,9 @@ export default function GenerationQuality() {
           maxWidth={760}
         >
           {detailLoading && <p className="gq-loading">Loading…</p>}
+          {detailError && !detailLoading && (
+            <p className="empty-mini">{detailError}</p>
+          )}
           {!detailLoading && detail && (
             <div className="gq-detail">
               {/* The prompt first. It's the thing you actually change once

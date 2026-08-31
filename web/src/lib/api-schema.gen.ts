@@ -152,6 +152,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/generation-quality/board": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Generation Board
+         * @description Every generated question and what became of it.
+         *
+         *     The denominator this page never had. See the module docstring for why
+         *     it is scoped to items created since tracking began, and why the three
+         *     failure modes are counted separately rather than summed.
+         */
+        get: operations["generation_board_v1_admin_generation_quality_board_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/generation-quality/questions": {
         parameters: {
             query?: never;
@@ -6383,6 +6407,44 @@ export interface operations {
             path: {
                 submission_id: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generation_board_v1_admin_generation_quality_board_get: {
+        parameters: {
+            query?: {
+                /** @description Include practice variations (generate-similar output) */
+                include_variations?: boolean;
+                /** @description clean | repaired | redone | rejected */
+                outcome?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

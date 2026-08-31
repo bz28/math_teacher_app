@@ -1,5 +1,10 @@
 """Seed a realistic generation-quality world and screenshot the page.
 
+NOTE: the page now leads with a board over every settled generated
+question (clean / repaired / redone / rejected), not a list ranked by
+repair count. This script still seeds the repair histories that back the
+drill-in; the ranking it describes below no longer drives the page.
+
 Standalone (not a durable test) — drives the running stack:
     dashboard :5173, API :8000
 
