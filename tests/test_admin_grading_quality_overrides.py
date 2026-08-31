@@ -205,3 +205,40 @@ async def test_requires_admin(
 ) -> None:
     r = await client.get(URL, headers=auth_headers(seeded["student_token"]))
     assert r.status_code == 403
+
+
+async def test_the_report_admits_what_it_could_not_compare(
+    seeded: dict[str, Any], client: AsyncClient,
+) -> None:
+    """A report that discards records has to say so.
+
+    `compare_grade` returns None for a submission whose AI and teacher
+    grade lists don't line up, and the whole submission is dropped. That
+    happened in silence, which let the page print "across 19 reviewed
+    submissions" beside a coverage tile reading 281 — the same screen,
+    15x apart, with nothing explaining the gap. Silence turns the
+    denominator into a lie of omission.
+    """
+    async with get_session_factory()() as s:
+        # A reviewed grade the report cannot align: two AI grades against
+        # one teacher entry. Positional comparison is unsound, so the
+        # submission is excluded entirely.
+        sub = (await s.execute(
+            Submission.__table__.select().limit(1)
+        )).first()
+        assert sub is not None
+        await s.execute(
+            SubmissionGrade.__table__.update()
+            .where(SubmissionGrade.submission_id == sub.id)
+            .values(
+                ai_breakdown=_ai(("full", 100), ("partial", 60)),
+                breakdown=_final(("full", 100)),
+            )
+        )
+        await s.commit()
+
+    r = await client.get(
+        "/v1/admin/grading-quality", headers=auth_headers(seeded["admin_token"]),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["summary"]["unalignable_submissions"] == 1

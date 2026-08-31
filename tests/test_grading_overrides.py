@@ -9,6 +9,7 @@ breakdown, a sub-tolerance nudge, a length mismatch.
 
 from api.services.grading_overrides import (
     OVERRIDE_PERCENT_TOLERANCE,
+    ProblemDelta,
     compare_grade,
     normalize_percent,
     status_matrix,
@@ -161,7 +162,10 @@ def test_empty_summary_is_safe() -> None:
     summary = summarize([])
     assert summary["graded_problems"] == 0
     assert summary["override_rate"] == 0.0
-    assert summary["direction"] == "balanced"
+    # Was "balanced", which is what let the console announce "AI grades
+    # are well-calibrated" over an empty table. Nothing compared is not a
+    # verdict about calibration, and the direction now says so.
+    assert summary["direction"] == "unmeasured"
 
 
 # ── status matrix ──────────────────────────────────────────────────
@@ -181,3 +185,40 @@ def test_status_matrix_counts_transitions() -> None:
     changes = {(c["from"], c["to"]) for c in matrix if c["is_change"]}
     assert ("zero", "partial") in changes
     assert ("full", "full") not in changes
+
+
+# ── A verdict needs evidence ─────────────────────────────────────────
+
+
+def test_no_overrides_is_unmeasured_not_balanced() -> None:
+    """The page said "AI grades are well-calibrated" from an empty set.
+
+    Zero overrides makes the mean delta trivially 0.0, and the old code
+    read that as balanced — so the console announced the AI was
+    well-calibrated when the truth was that nobody had checked it. On the
+    one surface whose job is to be trustworthy, that is the worst
+    possible failure: a confident claim with no evidence behind it.
+    """
+    # Two problems, both graded, neither overridden.
+    agreed = [
+        ProblemDelta("full", "full", 100.0, 100.0, 0.0, False),
+        ProblemDelta("partial", "partial", 60.0, 60.0, 0.0, False),
+    ]
+    out = summarize(agreed)
+    assert out["overridden_problems"] == 0
+    assert out["mean_delta"] == 0.0
+    assert out["direction"] == "unmeasured"
+
+
+def test_real_agreement_is_still_balanced() -> None:
+    """The guard must not swallow the genuine case. Overrides that cancel
+    out ARE evidence of calibration — a teacher raised one problem and
+    lowered another by the same amount, and the AI came out even."""
+    cancelling = [
+        ProblemDelta("partial", "partial", 50.0, 60.0, 10.0, True),
+        ProblemDelta("partial", "partial", 60.0, 50.0, -10.0, True),
+    ]
+    out = summarize(cancelling)
+    assert out["overridden_problems"] == 2
+    assert out["mean_delta"] == 0.0
+    assert out["direction"] == "balanced"
