@@ -1,0 +1,185 @@
+"""What every LLM call sent is recorded, and deduped by content.
+
+`llm_calls.input_text` has only ever held the user message, so the log
+carried roughly 4% of what was actually sent — and the missing 96% is the
+part that decides behaviour (the grading rubric, the tutoring guardrails,
+the generation spec). These tests pin the three properties that make
+recording it viable rather than ruinous:
+
+  1. it is stored, and linked to its call;
+  2. the SAME prompt across many calls costs ONE row — which is what
+     makes this affordable on the fastest-growing table in the schema,
+     and is guaranteed by the caching contract (`_build_system_prompt`
+     excludes everything student-specific so a class shares one prefix);
+  3. a call with no system prompt links to nothing rather than to a
+     placeholder, so "not recorded" stays distinguishable from "empty".
+"""
+
+from __future__ import annotations
+
+import hashlib
+
+import pytest
+from sqlalchemy import func, select
+
+from api.core.llm_logging import persist_llm_call
+from api.database import get_session_factory
+from api.models.llm_call import LLMCall
+from api.models.llm_payload import LLMPayload
+
+pytestmark = pytest.mark.anyio
+
+GRADING_PROMPT = (
+    "You are grading Algebra I homework.\n\nRUBRIC:\n"
+    "- Full credit for a correct final answer with shown work.\n"
+    "- Half credit for a correct method with an arithmetic slip.\n"
+)
+TUTOR_PROMPT = "You are a tutor. Guide, never give the answer outright."
+
+
+async def _persist(
+    function: str,
+    system_prompt: str | None,
+    marker: str,
+    tool_schema_text: str | None = None,
+) -> None:
+    await persist_llm_call(
+        model="claude-sonnet-4-6",
+        function=function,
+        input_tokens=100,
+        output_tokens=20,
+        latency_ms=123.0,
+        cost_usd=0.001,
+        input_text=marker,
+        output_text="ok",
+        system_prompt=system_prompt,
+        tool_schema_text=tool_schema_text,
+    )
+
+
+async def _call_by_marker(marker: str) -> LLMCall:
+    async with get_session_factory()() as db:
+        return (await db.execute(
+            select(LLMCall).where(LLMCall.input_text == marker)
+        )).scalars().one()
+
+
+async def test_system_prompt_is_stored_and_linked() -> None:
+    await _persist("ai_grading", GRADING_PROMPT, "marker-linked")
+    call = await _call_by_marker("marker-linked")
+    assert call.system_prompt_id is not None
+
+    async with get_session_factory()() as db:
+        tpl = (await db.execute(
+            select(LLMPayload).where(LLMPayload.id == call.system_prompt_id)
+        )).scalars().one()
+
+    # The whole point: the text we can now read back is the text that was
+    # sent, not a summary of it.
+    assert tpl.text == GRADING_PROMPT
+    assert tpl.char_len == len(GRADING_PROMPT)
+    assert tpl.function == "ai_grading"
+    assert tpl.kind == "system_prompt"
+    assert tpl.sha256 == hashlib.sha256(GRADING_PROMPT.encode()).hexdigest()
+
+
+async def test_identical_prompt_across_calls_costs_one_row() -> None:
+    """A class of submissions shares one cached prefix — and one row.
+
+    Without this, recording the prompt would duplicate ~18KB per call on
+    `llm_calls`. With it, a term of grading costs about one row per
+    rubric.
+    """
+    for i in range(5):
+        await _persist("ai_grading", GRADING_PROMPT, f"marker-dedupe-{i}")
+
+    digest = hashlib.sha256(GRADING_PROMPT.encode()).hexdigest()
+    async with get_session_factory()() as db:
+        rows = (await db.execute(
+            select(func.count()).select_from(LLMPayload)
+            .where(LLMPayload.sha256 == digest)
+        )).scalar()
+    assert rows == 1
+
+    ids = {(await _call_by_marker(f"marker-dedupe-{i}")).system_prompt_id
+           for i in range(5)}
+    assert len(ids) == 1 and None not in ids
+
+
+async def test_different_prompts_get_different_rows() -> None:
+    """Two calls in one class carrying different ids is the signal that
+    something student-specific leaked into the cached half and silently
+    killed the cache hit. That only works if distinct text distinguishes.
+    """
+    await _persist("tutor", TUTOR_PROMPT, "marker-distinct-a")
+    await _persist("tutor", TUTOR_PROMPT + " Be brief.", "marker-distinct-b")
+
+    a = await _call_by_marker("marker-distinct-a")
+    b = await _call_by_marker("marker-distinct-b")
+    assert a.system_prompt_id is not None
+    assert b.system_prompt_id is not None
+    assert a.system_prompt_id != b.system_prompt_id
+
+
+async def test_no_system_prompt_links_to_nothing() -> None:
+    """NULL has to keep meaning "not recorded".
+
+    Every historical row is NULL and deliberately un-backfilled, and the
+    console renders that as an explicit "not recorded" note. If an absent
+    prompt were stored as an empty row instead, that honest distinction
+    would collapse.
+    """
+    await _persist("vision_extract", None, "marker-none")
+    call = await _call_by_marker("marker-none")
+    assert call.system_prompt_id is None
+
+
+async def test_persistence_survives_a_prompt_failure(monkeypatch) -> None:
+    """Linking the prompt must never cost us the call row.
+
+    Persistence runs fire-and-forget; if the template insert fails for
+    any reason the call itself still has to land, because a missing cost
+    row is a worse outcome than a missing prompt link.
+    """
+    import api.core.llm_logging as mod
+
+    async def boom(*_a: object, **_k: object) -> None:
+        raise RuntimeError("template table unavailable")
+
+    monkeypatch.setattr(mod, "_payload_row_id", boom)
+    await _persist("ai_grading", GRADING_PROMPT, "marker-resilient")
+
+    call = await _call_by_marker("marker-resilient")
+    assert call.system_prompt_id is None
+    assert call.cost_usd == 0.001
+
+
+async def test_tool_schema_is_recorded_separately() -> None:
+    """The output contract is part of what was sent.
+
+    On a measured grading call the tool schema was 656 of 962 input
+    tokens — larger than the system prompt — and it defines the shape of
+    the answer. Recording the system prompt alone still left the majority
+    of the payload unaccounted for.
+    """
+    tools = '{"name":"grade","input_schema":{"properties":{"score":{}}}}'
+    await _persist("ai_grading", GRADING_PROMPT, "marker-tools", tools)
+    call = await _call_by_marker("marker-tools")
+
+    assert call.system_prompt_id is not None
+    assert call.tool_schema_id is not None
+    # Two payloads, two rows — never conflated.
+    assert call.system_prompt_id != call.tool_schema_id
+
+    async with get_session_factory()() as db:
+        row = (await db.execute(
+            select(LLMPayload).where(LLMPayload.id == call.tool_schema_id)
+        )).scalars().one()
+    assert row.kind == "tool_schema"
+    assert row.text == tools
+
+
+async def test_call_with_no_tool_schema_links_to_nothing() -> None:
+    await _persist("tutor", TUTOR_PROMPT, "marker-no-tools")
+    call = await _call_by_marker("marker-no-tools")
+    assert call.tool_schema_id is None

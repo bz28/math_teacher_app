@@ -570,6 +570,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/llm-payloads/{payload_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Llm Payload
+         * @description The system prompt or tool schema behind a call, fetched on expand.
+         *
+         *     Split from the call list rather than inlined because these are large
+         *     (~18KB for a grading prompt) and heavily shared: one row serves every
+         *     submission in a class, so a list of 50 calls may reference only two
+         *     or three distinct prompts. Sending each row its own copy would move
+         *     the better part of a megabyte to render text nobody has opened.
+         *
+         *     `used_by` is the diagnostic that falls out of content-addressing.
+         *     Because a system prompt is built to be byte-identical across a class
+         *     (that IS the caching contract), a prompt used once where you expected
+         *     thirty means something student-specific leaked into the cached half
+         *     and silently killed the cache hit for every submission after it.
+         */
+        get: operations["llm_payload_v1_admin_llm_payloads__payload_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/overview": {
         parameters: {
             query?: never;
@@ -7182,6 +7214,39 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    llm_payload_v1_admin_llm_payloads__payload_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
                     };
                 };
             };

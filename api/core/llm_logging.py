@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 from typing import Any
@@ -46,6 +47,63 @@ def _safe_metadata(metadata: dict[str, Any] | None) -> dict[str, Any] | None:
     return metadata
 
 
+async def _payload_row_id(
+    db: Any, function: str, kind: str, body: str | None,
+) -> Any:
+    """Content-address one static call payload into `llm_payloads`.
+
+    Returns the row id for `body`, inserting it the first time that exact
+    text is seen and reusing the row every time after. `kind` is
+    "system_prompt" or "tool_schema".
+
+    Dedupe is near-total by design rather than by luck: system prompts are
+    built to be byte-identical across a class so one cached prefix serves
+    a whole set of submissions (see `grading_ai._build_system_prompt`). So
+    a term of grading generates roughly one row per rubric, not one per
+    call.
+
+    `ON CONFLICT DO NOTHING` rather than a read-then-write: these run as
+    fire-and-forget background tasks, so two calls sharing a prompt race
+    on first use. The conflict path then re-selects to get the winner's
+    id.
+
+    Never raises. Persisting the call matters more than linking its
+    prompt, so a failure here logs and returns None, which the UI already
+    renders as "not recorded".
+    """
+    if not body:
+        return None
+    try:
+        from sqlalchemy import select
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        from api.models.llm_payload import LLMPayload
+
+        digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+        stmt = (
+            pg_insert(LLMPayload)
+            .values(
+                sha256=digest,
+                text=body,
+                char_len=len(body),
+                kind=kind,
+                function=function,
+            )
+            .on_conflict_do_nothing(index_elements=["sha256"])
+            .returning(LLMPayload.id)
+        )
+        row_id = (await db.execute(stmt)).scalar_one_or_none()
+        if row_id is None:
+            # Lost the race (or seen before) — read the existing row.
+            row_id = (await db.execute(
+                select(LLMPayload.id).where(LLMPayload.sha256 == digest)
+            )).scalar_one_or_none()
+        return row_id
+    except Exception as err:
+        logger.warning("%s persistence failed: %s", kind, err)
+        return None
+
+
 async def persist_llm_call(
     model: str,
     function: str,
@@ -64,6 +122,8 @@ async def persist_llm_call(
     call_metadata: dict[str, Any] | None = None,
     cache_read_tokens: int = 0,
     cache_write_tokens: int = 0,
+    system_prompt: str | None = None,
+    tool_schema_text: str | None = None,
 ) -> None:
     """Write an LLM call record to the database. Looks up school_id
     from users.school_id at write time so the dashboard can filter
@@ -102,6 +162,31 @@ async def persist_llm_call(
                         user_id, lookup_err,
                     )
 
+            # Resolve (and insert-if-new) the system prompt before the
+            # call row, so the FK is set on the first write rather than
+            # needing a second UPDATE.
+            #
+            # Guarded a second time at the call site, not just inside the
+            # helper. The enclosing `except` swallows anything raised here
+            # and drops the ENTIRE call row — so a fault while linking the
+            # prompt would silently cost us the cost/latency/token record
+            # too. A missing prompt link is recoverable; a missing call is
+            # a hole in the ledger. The helper already defends itself; this
+            # makes the invariant hold no matter what it does later.
+            try:
+                system_prompt_id = await _payload_row_id(
+                    db, function, "system_prompt", system_prompt,
+                )
+                tool_schema_id = await _payload_row_id(
+                    db, function, "tool_schema", tool_schema_text,
+                )
+            except Exception as payload_err:
+                logger.warning(
+                    "payload link failed, persisting call without it: %s",
+                    payload_err,
+                )
+                system_prompt_id = tool_schema_id = None
+
             record = LLMCall(
                 function=function,
                 model=model,
@@ -121,6 +206,8 @@ async def persist_llm_call(
                 input_text=_truncate(input_text),
                 output_text=_truncate(output_text),
                 call_metadata=_safe_metadata(call_metadata),
+                system_prompt_id=system_prompt_id,
+                tool_schema_id=tool_schema_id,
             )
             db.add(record)
             await db.commit()

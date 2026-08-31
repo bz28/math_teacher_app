@@ -253,6 +253,22 @@ def _usage_cache_tokens(usage: Any) -> tuple[int, int]:
     )
 
 
+def _tool_schema_text(tool_schema: Any) -> str | None:
+    """Canonical JSON for a tool schema, for content-addressing.
+
+    `sort_keys` because two structurally identical schemas built in
+    different key orders must hash to ONE row — otherwise the payload
+    table grows a row per process restart and the dedupe that makes this
+    affordable quietly stops working.
+    """
+    if not tool_schema:
+        return None
+    try:
+        return json.dumps(tool_schema, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        return None
+
+
 async def _log_and_persist(
     model: str,
     mode: str,
@@ -270,8 +286,17 @@ async def _log_and_persist(
     call_metadata: dict[str, Any] | None = None,
     cache_read_tokens: int = 0,
     cache_write_tokens: int = 0,
+    system_prompt: str | None = None,
+    tool_schema_text: str | None = None,
 ) -> None:
-    """Track cost, log, and persist an LLM call to the database."""
+    """Track cost, log, and persist an LLM call to the database.
+
+    `system_prompt` is the cached half of the prompt — the rubric, the
+    guardrails, the spec. It was previously sent and never stored, which
+    left the log holding ~4% of what was actually transmitted. It is
+    content-addressed into `llm_payloads`, so passing it here costs
+    one row per DISTINCT prompt rather than one per call.
+    """
     cost = _calc_cost(
         model, input_tokens, output_tokens,
         cache_read_tokens, cache_write_tokens,
@@ -315,6 +340,8 @@ async def _log_and_persist(
         submission_id=submission_id,
         generation_job_id=generation_job_id,
         call_metadata=call_metadata,
+        system_prompt=system_prompt,
+        tool_schema_text=tool_schema_text,
     )
 
 
@@ -578,6 +605,8 @@ async def call_claude_json(
                 submission_id=submission_id,
                 generation_job_id=generation_job_id, call_metadata=call_metadata,
                 cache_read_tokens=cache_read, cache_write_tokens=cache_write,
+                system_prompt=_with_safety(system_prompt),
+                tool_schema_text=_tool_schema_text(tools),
             )
             _circuit.record_success()
             return result
@@ -593,6 +622,8 @@ async def call_claude_json(
                 input_text=user_message, output_text=str(e),
                 submission_id=submission_id,
                 generation_job_id=generation_job_id, call_metadata=call_metadata,
+                system_prompt=_with_safety(system_prompt),
+                tool_schema_text=_tool_schema_text(tools),
             )
         except ValueError as e:
             latency_ms = round((time.monotonic() - start) * 1000, 2)
@@ -610,6 +641,8 @@ async def call_claude_json(
                 submission_id=submission_id,
                 generation_job_id=generation_job_id, call_metadata=call_metadata,
                 cache_read_tokens=cache_read, cache_write_tokens=cache_write,
+                system_prompt=_with_safety(system_prompt),
+                tool_schema_text=_tool_schema_text(tools),
             )
 
         if attempt < max_retries - 1:
@@ -896,6 +929,8 @@ async def call_claude_conversation(
             output_text="\n".join(out_parts) or None,
             submission_id=submission_id, call_metadata=call_metadata,
             cache_read_tokens=cache_read, cache_write_tokens=cache_write,
+            system_prompt=_with_safety(system_prompt),
+            tool_schema_text=_tool_schema_text(tools),
         )
         _circuit.record_success()
         return _serialize_content_blocks(list(response.content))
@@ -908,6 +943,8 @@ async def call_claude_conversation(
             success=False,
             input_text=input_summary, output_text=str(e),
             submission_id=submission_id, call_metadata=call_metadata,
+            system_prompt=_with_safety(system_prompt),
+            tool_schema_text=_tool_schema_text(tools),
         )
         raise RuntimeError(f"Claude conversation error: {e}") from e
 
@@ -1012,6 +1049,8 @@ async def call_claude_vision(
             submission_id=submission_id,
             generation_job_id=generation_job_id, call_metadata=call_metadata,
             cache_read_tokens=cache_read, cache_write_tokens=cache_write,
+            system_prompt=_with_safety(None),
+            tool_schema_text=_tool_schema_text(tools),
         )
         _circuit.record_success()
         return result
@@ -1025,6 +1064,8 @@ async def call_claude_vision(
             input_text=input_summary, output_text=str(e),
             submission_id=submission_id,
             generation_job_id=generation_job_id, call_metadata=call_metadata,
+            system_prompt=_with_safety(None),
+            tool_schema_text=_tool_schema_text(tools),
         )
         raise RuntimeError(f"Claude Vision API error: {e}") from e
     except ValueError as e:
@@ -1042,5 +1083,7 @@ async def call_claude_vision(
             input_text=input_summary, output_text=str(e),
             submission_id=submission_id,
             generation_job_id=generation_job_id, call_metadata=call_metadata,
+            system_prompt=_with_safety(None),
+            tool_schema_text=_tool_schema_text(tools),
         )
         raise RuntimeError(f"Failed to parse Claude Vision response: {e}") from e
