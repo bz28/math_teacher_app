@@ -51,6 +51,20 @@ async def _actions() -> list[ActivityLog]:
         )).scalars().all())
 
 
+def _envelope(row: ActivityLog) -> tuple[str, str, str, str]:
+    """The four fields the admin reader filters and groups on.
+
+    Returned as a tuple so every test compares all of them at once.
+    `target_type` in particular had nothing asserting it, and it is a
+    query filter (`admin_audit_logs`) — a wrong value does not render
+    something visibly wrong, it silently drops the row out of a filtered
+    view. `actor_user_id` is who did it, which is most of the point.
+    """
+    return (
+        row.action, row.target_type, str(row.target_id), str(row.actor_user_id),
+    )
+
+
 async def _clear() -> None:
     async with get_session_factory()() as s:
         for row in (await s.execute(select(ActivityLog))).scalars().all():
@@ -67,7 +81,7 @@ async def _own_course(world: dict[str, Any]) -> uuid.UUID:
     its permissions could quietly weaken an authorization assertion
     somewhere else. Same approach as tests/test_question_edits.py.
     """
-    from api.models.course import Course, CourseTeacher
+    from api.models.course import CourseTeacher
     from api.models.question_bank import QuestionBankItem
 
     async with get_session_factory()() as s:
@@ -86,11 +100,6 @@ async def _own_course(world: dict[str, Any]) -> uuid.UUID:
             s.add(CourseTeacher(
                 course_id=course_id, teacher_id=world["teacher_id"],
             ))
-        course = (await s.execute(
-            select(Course).where(Course.id == course_id)
-        )).scalar_one()
-        if getattr(course, "teacher_id", None) is None:
-            course.teacher_id = world["teacher_id"]
         await s.commit()
         return course_id
 
@@ -128,7 +137,9 @@ async def test_creating_a_section_is_recorded(
     assert rows[0].actor_role == "teacher"
     # Without a target the entry cannot be linked back to the section it
     # is about, which is most of what makes a feed row useful.
-    assert str(rows[0].target_id) == r.json()["id"]
+    assert _envelope(rows[0]) == (
+        "section.create", "section", r.json()["id"], str(world["teacher_id"]),
+    )
 
 
 async def test_deleting_a_section_is_recorded_with_its_name(
@@ -160,7 +171,18 @@ async def test_deleting_a_section_is_recorded_with_its_name(
     assert rows[0].action_metadata == {
         "name": "Doomed", "course_id": str(course_id),
     }
-    assert str(rows[0].target_id) == section_id
+    assert _envelope(rows[0]) == (
+        "section.delete", "section", section_id, str(world["teacher_id"]),
+    )
+    # The entry claims the section is gone, so the section has to be gone.
+    # Without this a handler that logs the delete and never performs it
+    # passes: the audit row is then a lie, and this table is the only
+    # record left of what happened.
+    missing = await client.get(
+        f"/v1/teacher/courses/{course_id}/sections/{section_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert missing.status_code == 404, missing.text
 
 
 async def test_deleting_a_course_is_recorded_with_its_name(
@@ -189,7 +211,9 @@ async def test_deleting_a_course_is_recorded_with_its_name(
     rows = [a for a in await _actions() if a.action == "course.delete"]
     assert len(rows) == 1
     assert rows[0].action_metadata == {"name": "Doomed Class"}
-    assert str(rows[0].target_id) == course_id
+    assert _envelope(rows[0]) == (
+        "course.delete", "course", course_id, str(world["teacher_id"]),
+    )
     # The class is genuinely gone — this is not a soft delete, which is
     # exactly why the entry is the only remaining record of it.
     gone = await client.get(
@@ -256,7 +280,10 @@ async def test_an_integrity_ruling_is_recorded(
     assert rows[0].action_metadata == {
         "resolution": "cleared", "ai_disposition": "flag_for_review",
     }
-    assert str(rows[0].target_id) == str(submission_id)
+    assert _envelope(rows[0]) == (
+        "integrity.resolve", "submission", str(submission_id),
+        str(world["teacher_id"]),
+    )
 
 
 async def test_creating_a_course_is_recorded(
@@ -275,7 +302,9 @@ async def test_creating_a_course_is_recorded(
     # Subject too: a feed line that cannot say what is being taught is
     # most of the way to saying nothing.
     assert rows[0].action_metadata == {"name": "Geometry", "subject": "math"}
-    assert str(rows[0].target_id) == r.json()["id"]
+    assert _envelope(rows[0]) == (
+        "course.create", "course", r.json()["id"], str(world["teacher_id"]),
+    )
 
 
 async def test_a_roster_removal_records_an_id_and_no_identity(
@@ -308,7 +337,56 @@ async def test_a_roster_removal_records_an_id_and_no_identity(
     rows = [a for a in await _actions() if a.action == "section.remove_student"]
     assert len(rows) == 1
     assert rows[0].action_metadata == {"student_id": str(enrollment.student_id)}
-    assert str(rows[0].target_id) == str(enrollment.section_id)
+    assert _envelope(rows[0]) == (
+        "section.remove_student", "section", str(enrollment.section_id),
+        str(world["teacher_id"]),
+    )
+    # The student has to actually be off the roster; otherwise the entry
+    # reports a removal that never happened.
+    async with get_session_factory()() as s:
+        left = (await s.execute(
+            select(SectionEnrollment.id).where(
+                SectionEnrollment.section_id == enrollment.section_id,
+                SectionEnrollment.student_id == enrollment.student_id,
+            )
+        )).scalar_one_or_none()
+    assert left is None, "the roster entry the log claims to have removed is still there"
+
+
+async def test_removing_a_student_who_is_not_there_records_nothing(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """The mirror of the removal test, and the half that matters more.
+
+    A removal that did not happen must not leave an entry saying it did.
+    Asserting only the happy path lets the `rowcount == 0` guard be
+    deleted with a green suite — the endpoint then returns 200 for a
+    student who was never on the roster and logs a phantom removal. An
+    audit table whose rows can describe work nobody did is worse than no
+    audit table, because it is believed.
+    """
+    from api.models.section_enrollment import SectionEnrollment
+
+    course_id = await _own_course(world)
+    async with get_session_factory()() as s:
+        enrollment = (await s.execute(
+            select(SectionEnrollment).where(
+                SectionEnrollment.course_id == course_id,
+            ).limit(1)
+        )).scalar_one_or_none()
+    if enrollment is None:
+        pytest.skip("fixture has no section to remove from")
+
+    await _clear()
+    # The outsider student exists but was never enrolled anywhere.
+    r = await client.delete(
+        f"/v1/teacher/courses/{course_id}/sections/{enrollment.section_id}"
+        f"/students/{world['outsider_id']}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 404, r.text
+    assert [a for a in await _actions()
+            if a.action == "section.remove_student"] == []
 
 
 async def test_inviting_a_new_student_is_recorded(
@@ -345,7 +423,10 @@ async def test_inviting_a_new_student_is_recorded(
     # make the entry legible, and this table is a compliance surface — so
     # the payload is pinned exactly rather than searched for one string.
     assert rows[0].action_metadata == {"course_id": str(course_id)}
-    assert str(rows[0].target_id) == section_id
+    assert _envelope(rows[0]) == (
+        "section.invite_student", "section", section_id,
+        str(world["teacher_id"]),
+    )
 
 
 async def test_enrolling_an_existing_student_records_an_id_and_nothing_else(
@@ -389,7 +470,10 @@ async def test_enrolling_an_existing_student_records_an_id_and_nothing_else(
     rows = [a for a in await _actions() if a.action == "section.enroll_student"]
     assert len(rows) == 1
     assert rows[0].action_metadata == {"student_id": str(student_id)}
-    assert str(rows[0].target_id) == section_id
+    assert _envelope(rows[0]) == (
+        "section.enroll_student", "section", section_id,
+        str(world["teacher_id"]),
+    )
 
 
 async def test_resending_an_invite_does_not_log_a_second_student(
@@ -468,7 +552,9 @@ async def test_uploading_and_deleting_a_document_are_both_recorded(
     }
     # The id comes from a `db.flush()` before the record: without it the
     # row lands with a NULL target and points at nothing.
-    assert str(rows[0].target_id) == document_id
+    assert _envelope(rows[0]) == (
+        "document.upload", "document", document_id, str(world["teacher_id"]),
+    )
 
     await _clear()
     gone = await client.delete(
@@ -480,7 +566,56 @@ async def test_uploading_and_deleting_a_document_are_both_recorded(
     rows = [a for a in await _actions() if a.action == "document.delete"]
     assert len(rows) == 1
     assert rows[0].action_metadata == {"filename": "chapter-3.png"}
-    assert str(rows[0].target_id) == document_id
+    assert _envelope(rows[0]) == (
+        "document.delete", "document", document_id, str(world["teacher_id"]),
+    )
+    # And it is genuinely gone, not merely logged as gone.
+    missing = await client.get(
+        f"/v1/teacher/courses/{course_id}/documents/{document_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert missing.status_code == 404, missing.text
+
+
+async def test_an_entry_carries_the_actors_school(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """`record_activity` snapshots `school_id` from the actor at write
+    time, and the admin console scopes every query by it — a NULL there
+    means the school's own feed cannot see its own activity.
+
+    Nothing exercised this: the shared fixture's teacher has no school, so
+    every row the other tests write has `school_id` NULL and would pass
+    whether the lookup worked or not. This test attaches one.
+    """
+    from api.models.school import School
+    from api.models.user import User
+
+    course_id = await _own_course(world)
+    async with get_session_factory()() as s:
+        school = School(
+            name="Verified School District",
+            contact_name="Head of Maths", contact_email="head@vsd.example",
+        )
+        s.add(school)
+        await s.flush()
+        school_id = school.id
+        teacher = (await s.execute(
+            select(User).where(User.id == world["teacher_id"])
+        )).scalar_one()
+        teacher.school_id = school_id
+        await s.commit()
+
+    await _clear()
+    r = await client.post(
+        f"/v1/teacher/courses/{course_id}/sections",
+        headers=_auth(world["teacher_token"]), json={"name": "Scoped"},
+    )
+    assert r.status_code == 201, r.text
+
+    rows = [a for a in await _actions() if a.action == "section.create"]
+    assert len(rows) == 1
+    assert rows[0].school_id == school_id
 
 
 # ── The audit row must never break the action ────────────────────────
