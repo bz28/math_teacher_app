@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.audit_log import record_activity
 from api.core.document_vision import fetch_source_documents
 from api.core.image_utils import validate_and_decode_upload
 from api.core.unit_suggestions import suggest_units
@@ -55,6 +56,14 @@ async def upload_document(
         unit_id=body.unit_id,
     )
     db.add(doc)
+    # Uploading a textbook chapter or worksheet is real setup work that
+    # read as inactivity — a teacher could spend an afternoon on it and
+    # the school would look idle. Filename and size only; never the file.
+    await db.flush()
+    await record_activity(
+        db, current_user, "document.upload", "document", doc.id,
+        {"filename": body.filename, "bytes": len(raw)},
+    )
     await db.commit()
     await db.refresh(doc)
     return {
@@ -122,6 +131,12 @@ async def delete_document(
     )).scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    # Before the delete — the filename is what makes this readable once
+    # the row is gone.
+    await record_activity(
+        db, current_user, "document.delete", "document", document_id,
+        {"filename": doc.filename},
+    )
     await db.delete(doc)
     await db.commit()
     return {"status": "ok"}

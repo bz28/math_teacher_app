@@ -10,6 +10,7 @@ from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.audit_log import record_activity
 from api.core.integrity_pipeline import ABANDONED_INTERVIEW_DEADLINE
 from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
@@ -302,6 +303,13 @@ async def create_course(
     db.add(course)
     await db.flush()
     db.add(CourseTeacher(course_id=course.id, teacher_id=current_user.user_id, role="owner"))
+    # Creating a class is frequently a school's very first action, so its
+    # absence made a school that had just started look like one that had
+    # done nothing.
+    await record_activity(
+        db, current_user, "course.create", "course", course.id,
+        {"name": body.name, "subject": body.subject},
+    )
     await db.commit()
     await db.refresh(course)
     return {"id": str(course.id), "name": course.name, "status": course.status}
@@ -643,6 +651,12 @@ async def delete_course(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     course = await get_teacher_course(db, course_id, current_user.user_id)
+    # Recorded BEFORE the delete: the row is about to be gone, and the
+    # name is the only thing that makes the entry readable afterwards.
+    await record_activity(
+        db, current_user, "course.delete", "course", course_id,
+        {"name": course.name},
+    )
     await db.delete(course)
     await db.commit()
     return {"status": "ok"}

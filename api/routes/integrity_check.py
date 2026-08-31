@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.audit_log import log_student_record_access
+from api.core.audit_log import log_student_record_access, record_activity
 from api.core.integrity_pipeline import (
     MAX_STUDENT_TURNS,
     PROBLEM_STATUS_DIAGNOSIS_ONLY,
@@ -891,4 +891,19 @@ async def teacher_resolve_integrity(
     check.resolution = body.resolution
     check.resolved_by = current_user.user_id
     check.resolved_at = datetime.now(UTC)
+
+    # The most consequential judgment anyone makes in this product: a
+    # teacher deciding whether a student was dishonest. It was already
+    # stamped on the check row (who / what / when), but only there — so
+    # it could not appear in any timeline, and you had to know to go
+    # looking for it. Recorded here so the decision has an audit trail
+    # that reads chronologically alongside everything else.
+    #
+    # `disposition` rides along because the interesting cases are the
+    # disagreements: the agent flagged it and the teacher cleared it, or
+    # the reverse. Outcome alone loses that.
+    await record_activity(
+        db, current_user, "integrity.resolve", "submission", submission_id,
+        {"resolution": body.resolution, "ai_disposition": check.disposition},
+    )
     await db.commit()

@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
+from api.core.audit_log import record_activity
 from api.core.email import send_email
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user, require_teacher
@@ -94,6 +95,14 @@ async def create_section(
         join_code=await _generate_unique_join_code(db),
     )
     db.add(section)
+    # Opening a class period is often a school's first real action, and
+    # it was only ever written to stdout as an AUDIT log line — real, but
+    # not queryable, so no timeline could show it.
+    await db.flush()
+    await record_activity(
+        db, current_user, "section.create", "section", section.id,
+        {"name": body.name, "course_id": str(course_id)},
+    )
     await db.commit()
     await db.refresh(section)
     logger.info(
@@ -170,6 +179,14 @@ async def delete_section(
     # Cascades to enrollments, invites, assignment_sections, and ALL student
     # submissions for assignments in this section. Student accounts survive —
     # only their work in this section is lost.
+    #
+    # Recorded BEFORE the delete, and the destructiveness is why: this is
+    # the one roster action that discards student work, and the name is
+    # the only thing that makes the entry readable once the row is gone.
+    await record_activity(
+        db, current_user, "section.delete", "section", section_id,
+        {"name": section.name, "course_id": str(course_id)},
+    )
     await db.delete(section)
     await db.commit()
     logger.info(
@@ -277,6 +294,14 @@ async def invite_student(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Student is already enrolled in another section of this class.",
                 ) from None
+        # Recorded AFTER the commit and its rollback/retry branch above,
+        # so an enrollment that raced and did not land is never logged as
+        # if it had. Its own commit for the same reason.
+        await record_activity(
+            db, current_user, "section.enroll_student", "section", section_id,
+            {"student_id": str(existing_user.id)},
+        )
+        await db.commit()
         logger.info(
             "AUDIT: teacher=%s enrolled existing user=%s into section=%s",
             current_user.user_id, existing_user.id, section_id,
@@ -410,6 +435,13 @@ async def remove_student(
     )
     if deleted.rowcount == 0:  # type: ignore[attr-defined]
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not in section")
+    # Ids only — no name, no email. The activity log is a compliance
+    # surface with a keep-it-small contract, and a roster change does not
+    # need to carry a student's identity to be legible.
+    await record_activity(
+        db, current_user, "section.remove_student", "section", section_id,
+        {"student_id": str(student_id)},
+    )
     await db.commit()
     logger.info(
         "AUDIT: teacher=%s removed student=%s from section=%s",
