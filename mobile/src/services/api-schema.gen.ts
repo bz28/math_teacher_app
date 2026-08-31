@@ -6301,7 +6301,7 @@ export interface operations {
             query?: {
                 teacher_id?: string | null;
                 school_id?: string | null;
-                /** @description manual | chat */
+                /** @description edit_manual | edit_workshop */
                 kind?: string | null;
                 min_edits?: number;
                 limit?: number;
