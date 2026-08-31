@@ -37,16 +37,16 @@ Every existing row is a question edit by construction — that is the only
 thing the old writer could produce — so `field` backfills to 'question'
 with certainty, not assumption. The column is then made NOT NULL.
 
-Revision ID: ci1000078
-Revises: ch1000077
+Revision ID: cj1000079
+Revises: ci1000078
 """
 from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "ci1000078"
-down_revision: str | None = "ch1000077"
+revision: str = "cj1000079"
+down_revision: str | None = "ci1000078"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
