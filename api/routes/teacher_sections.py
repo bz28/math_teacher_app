@@ -356,24 +356,29 @@ async def invite_student(
     # swallows it and logs an unrelated message, leaving the session
     # unusable so the IntegrityError handler below never runs and the
     # request 500s with a misleading trail.
-    # Only a genuinely NEW invite is worth a line. `_create_or_refresh_invite`
-    # is idempotent — re-inviting a still-pending email just refreshes the
-    # token — and logging that as a fresh invite would let one email
-    # clicked twice read as two students being onboarded. The dedicated
-    # /resend endpoint records nothing for the same reason.
-    already_pending = (await db.execute(
-        select(SectionInvite.id).where(
-            SectionInvite.section_id == section_id,
-            SectionInvite.email == email,
-            SectionInvite.status == "pending",
-        )
-    )).scalar_one_or_none() is not None
+    # Captured BEFORE the try, because the IntegrityError branch below
+    # rolls back — and a rollback expires EVERY instance in the session,
+    # not just the ones it wrote. `invite` survives only because it is
+    # explicitly refreshed afterwards; `section` and `course` are not,
+    # so reading their names later is a lazy load, i.e. IO, i.e.
+    # MissingGreenlet in async. An earlier version of this fix hoisted
+    # these above the AUDIT rollback but not this one, which left the
+    # same 500 thirty lines further up.
+    invite_section_name = section.name
+    invite_course_name = course.name
 
     is_new_invite = False
     try:
-        invite = await _create_or_refresh_invite(db, section_id, email, current_user.user_id)
+        # Only a genuinely NEW invite is worth a line. The helper is
+        # idempotent — re-inviting a still-pending email refreshes the
+        # token — and logging that as a fresh invite would let one email
+        # clicked twice read as two students onboarded. The helper reports
+        # which it did, so no second SELECT (which was racy both ways).
+        invite, created = await _create_or_refresh_invite(
+            db, section_id, email, current_user.user_id,
+        )
         await db.commit()
-        is_new_invite = not already_pending
+        is_new_invite = created
     except IntegrityError:
         # Raced with another invite. The partial unique index on
         # (section_id, email) WHERE status='pending' ensures exactly
@@ -389,16 +394,12 @@ async def invite_student(
         )).scalar_one()
     await db.refresh(invite)
 
-    # Everything the rest of this handler needs, read out of the ORM
-    # BEFORE any rollback can expire it. The audit commit below can roll
-    # back, and a rollback expires the whole session — so `invite.token`,
-    # `section.name` and the serialized invite all have to be captured
-    # here or they become IO in an async context and raise MissingGreenlet.
+    # `invite` is safe to read here — it was just refreshed — but read it
+    # out now anyway, because the audit commit below can also roll back.
+    # The section and course names were captured before the try.
     invite_payload = _serialize_invite(invite)
     invite_token = invite.token
     invite_id = invite.id
-    invite_section_name = section.name
-    invite_course_name = course.name
 
     if is_new_invite:
         # After the invite's own commit, so this needs its own — and the
@@ -651,8 +652,15 @@ async def _get_section_in_course(db: AsyncSession, section_id: uuid.UUID, course
 
 async def _create_or_refresh_invite(
     db: AsyncSession, section_id: uuid.UUID, email: str, invited_by: uuid.UUID,
-) -> SectionInvite:
-    """Create a new pending invite or refresh an existing one (idempotent resend)."""
+) -> tuple[SectionInvite, bool]:
+    """Create a new pending invite or refresh an existing one.
+
+    Returns (invite, created). The flag exists so the caller can tell a
+    genuinely new invite from an idempotent resend without running its
+    own second SELECT — which was racy in both directions: a concurrent
+    accept between the two queries made a new invite log nothing, and a
+    concurrent create made a refresh log as new.
+    """
     existing_invite = (await db.execute(
         select(SectionInvite).where(
             SectionInvite.section_id == section_id,
@@ -665,7 +673,7 @@ async def _create_or_refresh_invite(
         existing_invite.token = secrets.token_urlsafe(32)
         existing_invite.expires_at = expires
         existing_invite.invited_by = invited_by
-        return existing_invite
+        return existing_invite, False
     invite = SectionInvite(
         section_id=section_id,
         email=email,
@@ -674,7 +682,7 @@ async def _create_or_refresh_invite(
         expires_at=expires,
     )
     db.add(invite)
-    return invite
+    return invite, True
 
 
 def _stamp_school_id(user: User, course: Course) -> None:

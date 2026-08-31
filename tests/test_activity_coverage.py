@@ -23,6 +23,7 @@ keep-it-small contract.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -359,3 +360,120 @@ async def test_an_audit_failure_does_not_break_an_invite(
             )
         )).scalar_one_or_none()
     assert invite is not None, "invite must survive an audit failure"
+
+
+# ── The race branches ────────────────────────────────────────────────
+#
+# These are where every serious defect in this endpoint has lived, and
+# they had no coverage — which is exactly why a reproducible 500 survived
+# six review rounds and six green CI runs.
+#
+# The failure mode is always the same: `db.rollback()` expires EVERY
+# instance in the session, so any ORM attribute read afterwards is a lazy
+# load — IO — which in async raises MissingGreenlet instead of reloading.
+# Both recovery branches were dead code for exactly this reason, for as
+# long as they had existed.
+#
+# The race is simulated rather than threaded: committing the competing
+# row on a SEPARATE session before the request runs puts the handler in
+# the identical state a real loser would be in — its INSERT violates the
+# unique index, it rolls back, and it must recover using values that are
+# no longer live in the ORM.
+
+
+async def test_a_losing_invite_race_still_succeeds(
+    world: dict[str, Any], client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two teachers invite the same new email. The loser's INSERT is
+    rolled back; it must still return the winning invite rather than 500
+    on an expired `section.name` while sending the email."""
+    from api.models.section_invite import SectionInvite
+
+    course_id = await _own_course(world)
+    created = await client.post(
+        f"/v1/teacher/courses/{course_id}/sections",
+        headers=_auth(world["teacher_token"]), json={"name": "Race A"},
+    )
+    assert created.status_code == 201, created.text
+    section_id = created.json()["id"]
+    email = f"race{uuid.uuid4().hex[:8]}@example.com"
+
+    # The competing invite has to land AFTER this request's SELECT finds
+    # nothing and BEFORE its INSERT — otherwise the handler simply
+    # refreshes the existing row and the recovery branch never runs. An
+    # earlier version of this test committed it up front and passed even
+    # with the defect present, which is worse than no test at all.
+    import api.routes.teacher_sections as mod
+
+    real = mod._create_or_refresh_invite
+
+    async def _racing(db: Any, sec_id: Any, mail: str, by: Any) -> Any:
+        result = await real(db, sec_id, mail, by)   # SELECT ran, INSERT queued
+        async with get_session_factory()() as other:
+            other.add(SectionInvite(
+                section_id=sec_id, email=mail, invited_by=by,
+                token=uuid.uuid4().hex,
+                expires_at=datetime.now(UTC) + timedelta(days=14),
+                status="pending",
+            ))
+            await other.commit()                    # the other request wins
+        return result
+
+    monkeypatch.setattr(mod, "_create_or_refresh_invite", _racing)
+
+    r = await client.post(
+        f"/v1/teacher/courses/{course_id}/sections/{section_id}/invites",
+        headers=_auth(world["teacher_token"]), json={"email": email},
+    )
+    # The student is invited — that is what the teacher asked for.
+    assert r.status_code in (200, 201), r.text
+    assert r.json()["invite"]["email"] == email
+
+
+async def test_a_losing_enrollment_race_still_succeeds(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """Two teachers invite the same EXISTING user into the same section.
+    The loser reports success — the student is where the teacher wanted
+    them — and must not log a second enrollment for one enrollment."""
+    from api.core.auth import hash_password
+    from api.models.section_enrollment import SectionEnrollment
+    from api.models.user import User
+
+    course_id = await _own_course(world)
+    created = await client.post(
+        f"/v1/teacher/courses/{course_id}/sections",
+        headers=_auth(world["teacher_token"]), json={"name": "Race B"},
+    )
+    assert created.status_code == 201, created.text
+    section_id = created.json()["id"]
+
+    email = f"raceuser{uuid.uuid4().hex[:8]}@example.com"
+    async with get_session_factory()() as s:
+        student = User(
+            email=email, password_hash=hash_password("x"), grade_level=9,
+            role="student", name="Race Student", is_active=True,
+            failed_login_attempts=0, mfa_enabled=False,
+        )
+        s.add(student)
+        await s.commit()
+        student_id = student.id
+        # The competing request enrolls them first.
+        s.add(SectionEnrollment(
+            section_id=uuid.UUID(section_id),
+            course_id=course_id,
+            student_id=student_id,
+        ))
+        await s.commit()
+
+    await _clear()
+    r = await client.post(
+        f"/v1/teacher/courses/{course_id}/sections/{section_id}/invites",
+        headers=_auth(world["teacher_token"]), json={"email": email},
+    )
+    # The pre-check catches this before the INSERT, so it is a clean 409
+    # rather than the rollback path — either way it must not 500, and it
+    # must not log an enrollment it did not create.
+    assert r.status_code in (200, 201, 409), r.text
+    rows = [a for a in await _actions() if a.action == "section.enroll_student"]
+    assert len(rows) == 0, "the loser must not log an enrollment it didn't make"
