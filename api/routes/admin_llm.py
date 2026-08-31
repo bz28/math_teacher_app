@@ -20,6 +20,7 @@ from api.middleware.auth import CurrentUser, get_current_user, require_admin
 from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.integrity_check import IntegrityCheckSubmission
 from api.models.llm_call import LLMCall
+from api.models.llm_payload import LLMPayload
 from api.models.school import School
 from api.models.user import User
 from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL, time_range
@@ -371,6 +372,20 @@ async def llm_calls(
                 "school_id": str(c.school_id) if c.school_id else None,
                 "submission_id": str(c.submission_id) if c.submission_id else None,
                 "metadata": c.call_metadata,
+                # The ID of the system prompt this call sent, not its
+                # text: prompts run to ~18KB and dedupe heavily, so
+                # inlining one per row would put close to a megabyte on
+                # a 50-row page to render text nobody has expanded yet.
+                # The body comes from /admin/llm-payloads/{id} when a
+                # row is opened. Null means genuinely not recorded —
+                # every call predating this column, which is deliberately
+                # not backfilled because the text was never captured.
+                "system_prompt_id": (
+                    str(c.system_prompt_id) if c.system_prompt_id else None
+                ),
+                "tool_schema_id": (
+                    str(c.tool_schema_id) if c.tool_schema_id else None
+                ),
                 "created_at": c.created_at.isoformat(),
             }
             for c, user_email, user_name in calls
@@ -642,3 +657,54 @@ async def debug_llm_call(
     }
     await db.commit()
     return {"status": "dispatched", "call_id": str(call.id)}
+
+
+@router.get("/llm-payloads/{payload_id}")
+async def llm_payload(
+    payload_id: uuid_lib.UUID,
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """The system prompt or tool schema behind a call, fetched on expand.
+
+    Split from the call list rather than inlined because these are large
+    (~18KB for a grading prompt) and heavily shared: one row serves every
+    submission in a class, so a list of 50 calls may reference only two
+    or three distinct prompts. Sending each row its own copy would move
+    the better part of a megabyte to render text nobody has opened.
+
+    `used_by` is the diagnostic that falls out of content-addressing.
+    Because a system prompt is built to be byte-identical across a class
+    (that IS the caching contract), a prompt used once where you expected
+    thirty means something student-specific leaked into the cached half
+    and silently killed the cache hit for every submission after it.
+    """
+    row = (await db.execute(
+        select(LLMPayload).where(LLMPayload.id == payload_id)
+    )).scalars().one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Payload not found")
+
+    used_by = (await db.execute(
+        select(func.count()).select_from(LLMCall).where(
+            or_(
+                LLMCall.system_prompt_id == payload_id,
+                LLMCall.tool_schema_id == payload_id,
+            )
+        )
+    )).scalar() or 0
+
+    return {
+        "id": str(row.id),
+        "sha256": row.sha256,
+        "text": row.text,
+        "char_len": row.char_len,
+        "kind": row.kind,
+        # Named for what it is. A payload can be shared across call sites
+        # (every vision call sends the same safety preamble), and only the
+        # first writer's function is recorded, so calling this "function"
+        # would assert an ownership that doesn't hold.
+        "first_seen_from": row.function,
+        "first_seen_at": row.first_seen_at.isoformat(),
+        "used_by": int(used_by),
+    }

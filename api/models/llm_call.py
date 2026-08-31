@@ -56,6 +56,29 @@ class LLMCall(Base):
         nullable=True, index=True,
     )
 
+    # The system prompt this call sent, content-addressed in
+    # `llm_payloads` so ~18KB isn't duplicated per row. NULL means
+    # "not recorded" — either a call from before this column existed, or
+    # one that genuinely sends no system prompt. It is deliberately NOT
+    # backfilled: the text was never captured, so inventing a value would
+    # be worse than an honest null, and every surface that reads it says
+    # so rather than rendering a blank.
+    system_prompt_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("llm_payloads.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+
+    # The tool schema forced on this call — the output contract. Measured
+    # at 656 of 962 input tokens on a real grading call, larger than the
+    # system prompt, and it is what determines the SHAPE of the answer
+    # (the deduction ledger, the score fields). Same NULL semantics.
+    tool_schema_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("llm_payloads.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+
     function: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
     # UNCACHED input tokens only — Anthropic reports cache traffic in the

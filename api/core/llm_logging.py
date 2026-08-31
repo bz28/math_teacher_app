@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 from typing import Any
@@ -46,6 +47,108 @@ def _safe_metadata(metadata: dict[str, Any] | None) -> dict[str, Any] | None:
     return metadata
 
 
+async def _payload_row_id(
+    db: Any, function: str, kind: str, body: str | None,
+) -> Any:
+    """Content-address one static call payload into `llm_payloads`.
+
+    Returns the row id for `body`, inserting it the first time that exact
+    text is seen and reusing the row every time after. `kind` is
+    "system_prompt" or "tool_schema".
+
+    Dedupe is near-total by design rather than by luck: system prompts are
+    built to be byte-identical across a class so one cached prefix serves
+    a whole set of submissions (see `grading_ai._build_system_prompt`). So
+    a term of grading generates roughly one row per rubric, not one per
+    call.
+
+    `ON CONFLICT DO NOTHING` rather than a read-then-write: these run as
+    fire-and-forget background tasks, so two calls sharing a prompt race
+    on first use. The conflict path then re-selects to get the winner's
+    id.
+
+    Runs inside a SAVEPOINT, deliberately — this is the whole safety
+    property, and a Python `try/except` cannot provide it.
+
+    Postgres aborts an entire transaction on a statement error. The first
+    version ran this insert directly on the caller's transaction, so a bad
+    payload (a NUL byte in extracted text, a lock cancellation under
+    `statement_timeout`, a deadlock, the table absent mid-deploy) poisoned
+    the transaction the `LLMCall` insert was about to use: the `except`
+    here caught the original error and returned None, then `db.add(record)`
+    failed with `InFailedSQLTransactionError`, the outer handler swallowed
+    THAT, and the call row vanished — cost, latency, tokens and text with
+    it. Reproduced against a live database, and pinned by
+    `test_persistence_survives_a_database_error_on_the_payload`.
+
+    That was a regression: before payload recording existed, nothing about
+    prompt CONTENT could cost you a ledger entry. A missing prompt link is
+    recoverable; a hole in the cost ledger is not.
+
+    `begin_nested()` issues a real SAVEPOINT, so a failed payload insert
+    rolls back to it and leaves the surrounding transaction usable. The
+    obvious alternative — a second session — also isolates the failure but
+    opens another connection per payload, i.e. two more per logged call.
+    Under `NullPool` (which the test config uses, `database.py:16-23`)
+    every session is a fresh connection, and that exhausted Postgres
+    `max_connections` across a full suite run: 44 unrelated tests failed.
+    A savepoint costs no connection.
+
+    Never raises.
+    """
+    if not body:
+        return None
+    try:
+        from sqlalchemy import select
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        from api.models.llm_payload import LLMPayload
+
+        digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+        stmt = (
+            pg_insert(LLMPayload)
+            .values(
+                sha256=digest,
+                text=body,
+                char_len=len(body),
+                kind=kind,
+                function=function,
+            )
+            .on_conflict_do_nothing(index_elements=["sha256"])
+            .returning(LLMPayload.id)
+        )
+        # Read first. Payloads are content-addressed and heavily shared —
+        # a class of submissions resolves the same row every time — so the
+        # steady state is a HIT, and insert-then-reselect paid for a
+        # guaranteed-conflicting INSERT plus the SELECT on every single
+        # call. That took persisting one LLM call from 2 statements to 12,
+        # forever, on a change that argues its own design on cost grounds.
+        #
+        # This is not a race trade-off: the INSERT below is still
+        # ON CONFLICT DO NOTHING, so a miss that turns into a concurrent
+        # insert is handled exactly as before. Read-first only skips work
+        # in the case that is almost always true.
+        async with db.begin_nested():
+            row_id = (await db.execute(
+                select(LLMPayload.id).where(LLMPayload.sha256 == digest)
+            )).scalar_one_or_none()
+        if row_id is not None:
+            return row_id
+
+        async with db.begin_nested():
+            row_id = (await db.execute(stmt)).scalar_one_or_none()
+        if row_id is None:
+            # Lost the insert race — the winner's row is committed by now.
+            async with db.begin_nested():
+                row_id = (await db.execute(
+                    select(LLMPayload.id).where(LLMPayload.sha256 == digest)
+                )).scalar_one_or_none()
+        return row_id
+    except Exception as err:
+        logger.warning("%s persistence failed: %s", kind, err)
+        return None
+
+
 async def persist_llm_call(
     model: str,
     function: str,
@@ -64,6 +167,8 @@ async def persist_llm_call(
     call_metadata: dict[str, Any] | None = None,
     cache_read_tokens: int = 0,
     cache_write_tokens: int = 0,
+    system_prompt: str | None = None,
+    tool_schema_text: str | None = None,
 ) -> None:
     """Write an LLM call record to the database. Looks up school_id
     from users.school_id at write time so the dashboard can filter
@@ -92,15 +197,47 @@ async def persist_llm_call(
                 # for any reason (deleted user, schema drift), the row
                 # still gets logged with school_id=None and lands in
                 # the Internal bucket.
+                # SAVEPOINT for the same reason the payload writes use
+                # one, and this comment used to be wrong about it: a
+                # Python `except` does not survive a Postgres statement
+                # error, because the error aborts the whole transaction
+                # and every later statement — including the `LLMCall`
+                # insert below — fails with InFailedSQLTransactionError,
+                # which the outer handler then swallows. Reproduced by
+                # renaming `users` (the "schema drift" case this comment
+                # names): the warning logged, and the ledger row vanished.
                 try:
-                    school_id = (await db.execute(
-                        select(User.school_id).where(User.id == user_uuid)
-                    )).scalar_one_or_none()
+                    async with db.begin_nested():
+                        school_id = (await db.execute(
+                            select(User.school_id).where(User.id == user_uuid)
+                        )).scalar_one_or_none()
                 except Exception as lookup_err:
                     logger.warning(
                         "school_id lookup failed for user %s: %s",
                         user_id, lookup_err,
                     )
+
+            # Resolve (and insert-if-new) both payloads before the call
+            # row, so the FKs are set on the first write rather than
+            # needing a second UPDATE.
+            #
+            # Each runs inside a SAVEPOINT (see `_payload_row_id`), so a
+            # statement error while storing a payload rolls back to that
+            # savepoint and leaves this transaction usable for the call
+            # row. The `try` is a second belt, not the mechanism.
+            try:
+                system_prompt_id = await _payload_row_id(
+                    db, function, "system_prompt", system_prompt,
+                )
+                tool_schema_id = await _payload_row_id(
+                    db, function, "tool_schema", tool_schema_text,
+                )
+            except Exception as payload_err:
+                logger.warning(
+                    "payload link failed, persisting call without it: %s",
+                    payload_err,
+                )
+                system_prompt_id = tool_schema_id = None
 
             record = LLMCall(
                 function=function,
@@ -121,6 +258,8 @@ async def persist_llm_call(
                 input_text=_truncate(input_text),
                 output_text=_truncate(output_text),
                 call_metadata=_safe_metadata(call_metadata),
+                system_prompt_id=system_prompt_id,
+                tool_schema_id=tool_schema_id,
             )
             db.add(record)
             await db.commit()
