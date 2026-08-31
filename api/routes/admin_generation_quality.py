@@ -368,15 +368,20 @@ async def generation_board(
         )
 
     # Only AI-written questions: a teacher's own hand-written question
-    # says nothing about the generation prompt. Variations come from a
-    # different prompt path (generate-similar) and are off by default so
-    # they cannot dilute the primary signal.
+    # (source='manual') and a PDF extraction (source='imported') say
+    # nothing about the generation prompt. Practice variations come from
+    # a different prompt path (generate-similar) and are off by default
+    # so they cannot dilute the primary signal.
+    # generate-similar output is stamped source='practice', NOT
+    # 'generated' — so the source filter alone already excludes it, and
+    # toggling parent_question_id would have done nothing. Widen the
+    # source instead, or the flag is dead API surface that silently
+    # returns an identical result set.
+    sources = ["generated", "practice"] if include_variations else ["generated"]
     scope = [
-        QuestionBankItem.source == "generated",
+        QuestionBankItem.source.in_(sources),
         QuestionBankItem.created_at >= TRACKING_SINCE,
     ]
-    if not include_variations:
-        scope.append(QuestionBankItem.parent_question_id.is_(None))
 
     settled_scope = [*scope, QuestionBankItem.status.in_(_SETTLED_STATUSES)]
 

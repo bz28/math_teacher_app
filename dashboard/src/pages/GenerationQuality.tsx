@@ -338,9 +338,9 @@ export default function GenerationQuality() {
           <span className="eyebrow">Diagnostic</span>
           <h1>Generation quality</h1>
           <p>
-            Questions the AI wrote and a teacher had to fix. One teacher
-            fixing one question is taste — the same fix showing up across
-            teachers is a prompt worth changing.
+            Every question the AI wrote, and what a teacher did with it.
+            One fix is taste; the same fix showing up across teachers is a
+            prompt worth changing.
           </p>
         </div>
         <StatusPill
@@ -356,8 +356,9 @@ export default function GenerationQuality() {
           ever changed a question", which is the opposite of the truth. */}
       {trackingSince && (
         <p className="gq-tracking" role="note">
-          Counting edits since {formatDate(trackingSince)}. Anything a teacher
-          changed before then isn&rsquo;t recorded.
+          Counting questions generated since {formatDate(trackingSince)} —
+          repairs are only recorded from that date, so earlier questions
+          would look clean whether or not anyone touched them.
         </p>
       )}
 
@@ -370,10 +371,27 @@ export default function GenerationQuality() {
         />
       )}
       {loading && !board && <p className="loading">Loading…</p>}
-      {error && !board && (
-        <div className="empty-state">
-          <div className="empty-state-title">Couldn't load generation quality</div>
-          <div className="empty-state-sub">{error}</div>
+      {error && (
+        // Shown even when a previous board is still on screen. Rendering
+        // this only when there is no data at all left a failed refetch
+        // silent: the filter appeared to apply, the old numbers stayed
+        // put, and nothing said they were stale.
+        <div className="callout-warn" role="alert">
+          <StatusPill tone="danger" label="STALE" />
+          <span>
+            {error} The numbers below are from the last successful load.{" "}
+            <button
+              type="button"
+              onClick={() => void load()}
+              style={{
+                background: "none", border: "none", padding: 0,
+                color: "var(--accent)", cursor: "pointer",
+                font: "inherit", textDecoration: "underline",
+              }}
+            >
+              Retry
+            </button>
+          </span>
         </div>
       )}
 
