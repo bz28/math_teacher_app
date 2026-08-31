@@ -244,10 +244,22 @@ async def invite_student(
 
     existing_user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
     if existing_user is not None:
+        # Read the ids we need OUT of the ORM now, into plain locals.
+        #
+        # `db.rollback()` expires every instance in the session, so any
+        # attribute read after one triggers a lazy refresh — which is IO,
+        # and in async that raises MissingGreenlet rather than reloading.
+        # Both IntegrityError recovery branches below run after a
+        # rollback, so every one of them was dead code: the losing side of
+        # a race 500'd on the first `existing_user.id` it touched instead
+        # of recovering. Same for the audit-failure path, which is why
+        # wrapping that commit did not actually stop a landed enrollment
+        # from returning a 500.
+        student_id = existing_user.id
         already_enrolled = (await db.execute(
             select(SectionEnrollment.id).where(
                 SectionEnrollment.section_id == section_id,
-                SectionEnrollment.student_id == existing_user.id,
+                SectionEnrollment.student_id == student_id,
             )
         )).scalar_one_or_none() is not None
         if already_enrolled:
@@ -257,7 +269,7 @@ async def invite_student(
             select(Section.name)
             .join(SectionEnrollment, SectionEnrollment.section_id == Section.id)
             .where(
-                SectionEnrollment.student_id == existing_user.id,
+                SectionEnrollment.student_id == student_id,
                 SectionEnrollment.course_id == course_id,
             )
         )).scalar_one_or_none()
@@ -269,7 +281,7 @@ async def invite_student(
         db.add(SectionEnrollment(
             section_id=section_id,
             course_id=course_id,
-            student_id=existing_user.id,
+            student_id=student_id,
         ))
         _stamp_school_id(existing_user, course)
         # Did THIS request create the enrollment? Only the winner of a race
@@ -295,7 +307,7 @@ async def invite_student(
             landed_in_requested_section = (await db.execute(
                 select(SectionEnrollment.id).where(
                     SectionEnrollment.section_id == section_id,
-                    SectionEnrollment.student_id == existing_user.id,
+                    SectionEnrollment.student_id == student_id,
                 )
             )).scalar_one_or_none() is not None
             if not landed_in_requested_section:
@@ -311,7 +323,7 @@ async def invite_student(
             # `record_activity` and `log_student_record_access` both hold.
             await record_activity(
                 db, current_user, "section.enroll_student", "section", section_id,
-                {"student_id": str(existing_user.id)},
+                {"student_id": str(student_id)},
             )
             try:
                 await db.commit()
@@ -323,9 +335,9 @@ async def invite_student(
                 )
         logger.info(
             "AUDIT: teacher=%s enrolled existing user=%s into section=%s",
-            current_user.user_id, existing_user.id, section_id,
+            current_user.user_id, student_id, section_id,
         )
-        return {"status": "enrolled", "student_id": str(existing_user.id)}
+        return {"status": "enrolled", "student_id": str(student_id)}
 
     # Inviting is the TEACHER's action, and for a student who does not yet
     # have an account it is the only one — the enrollment itself happens
@@ -336,13 +348,32 @@ async def invite_student(
     #
     # No email in the metadata. The activity log is a compliance surface
     # and an invitee's address is not needed to make the entry legible.
+    # NOT inside the try below. `record_activity` opens a nested
+    # transaction, and SQLAlchemy flushes the session when it takes that
+    # savepoint — which would push the pending invite INSERT out early,
+    # in the OUTER transaction with no savepoint protecting it. On a race
+    # the unique-index violation then fires INSIDE record_activity, which
+    # swallows it and logs an unrelated message, leaving the session
+    # unusable so the IntegrityError handler below never runs and the
+    # request 500s with a misleading trail.
+    # Only a genuinely NEW invite is worth a line. `_create_or_refresh_invite`
+    # is idempotent — re-inviting a still-pending email just refreshes the
+    # token — and logging that as a fresh invite would let one email
+    # clicked twice read as two students being onboarded. The dedicated
+    # /resend endpoint records nothing for the same reason.
+    already_pending = (await db.execute(
+        select(SectionInvite.id).where(
+            SectionInvite.section_id == section_id,
+            SectionInvite.email == email,
+            SectionInvite.status == "pending",
+        )
+    )).scalar_one_or_none() is not None
+
+    is_new_invite = False
     try:
         invite = await _create_or_refresh_invite(db, section_id, email, current_user.user_id)
-        await record_activity(
-            db, current_user, "section.invite_student", "section", section_id,
-            {"course_id": str(course_id)},
-        )
         await db.commit()
+        is_new_invite = not already_pending
     except IntegrityError:
         # Raced with another invite. The partial unique index on
         # (section_id, email) WHERE status='pending' ensures exactly
@@ -358,20 +389,47 @@ async def invite_student(
         )).scalar_one()
     await db.refresh(invite)
 
+    # Everything the rest of this handler needs, read out of the ORM
+    # BEFORE any rollback can expire it. The audit commit below can roll
+    # back, and a rollback expires the whole session — so `invite.token`,
+    # `section.name` and the serialized invite all have to be captured
+    # here or they become IO in an async context and raise MissingGreenlet.
+    invite_payload = _serialize_invite(invite)
+    invite_token = invite.token
+    invite_id = invite.id
+    invite_section_name = section.name
+    invite_course_name = course.name
+
+    if is_new_invite:
+        # After the invite's own commit, so this needs its own — and the
+        # invite has already landed, so an audit-row failure must not turn
+        # it into a 500.
+        await record_activity(
+            db, current_user, "section.invite_student", "section", section_id,
+            {"course_id": str(course_id)},
+        )
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            logger.exception(
+                "could not commit invite activity for section=%s", section_id,
+            )
+
     _send_invite_email(
         email=email,
-        token=invite.token,
-        section_name=section.name,
-        course_name=course.name,
+        token=invite_token,
+        section_name=invite_section_name,
+        course_name=invite_course_name,
         teacher_name=current_user.name,
     )
     logger.info(
         "AUDIT: teacher=%s invited email=%s to section=%s, invite=%s",
-        current_user.user_id, email, section_id, invite.id,
+        current_user.user_id, email, section_id, invite_id,
     )
     return {
         "status": "invited",
-        "invite": _serialize_invite(invite),
+        "invite": invite_payload,
     }
 
 
