@@ -131,8 +131,9 @@ async def delete_document(
     )).scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-    # Before the delete — the filename is what makes this readable once
-    # the row is gone.
+    # Before the delete so the audit row shares its transaction: a delete
+    # that fails takes the row with it, and the filename is read while the
+    # document is unambiguously live.
     await record_activity(
         db, current_user, "document.delete", "document", document_id,
         {"filename": doc.filename},

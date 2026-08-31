@@ -12,12 +12,19 @@ Two of these are load-bearing beyond the feed:
   stamped on the check row, so it was recoverable — but only if you knew
   to go looking, and it could never appear in a timeline.
 - **Deletes.** A section delete discards student work and a course delete
-  takes the class with it. Those must be recorded BEFORE the row goes,
-  or the entry is unreadable afterwards.
+  takes the class with it. Both record BEFORE the row goes, so the audit
+  row shares the delete's transaction and a failed delete takes it with
+  them. Not for readability: `expire_on_commit=False` would keep the name
+  readable after the delete too — which is exactly why no test here
+  asserts that ordering. It cannot fail.
 
 These tests assert the trace exists and carries no student identity
 beyond an id — `activity_log` is a compliance surface with an explicit
-keep-it-small contract.
+keep-it-small contract. Every payload is asserted as an EQUALITY, never
+with `not in`: a leak is a field being added, and `"email" not in meta`
+tests dict keys, so it never sees one named `student_email`. Each entry's
+`target_id` is asserted too — without it a row cannot be linked to what
+it is about, which is most of what makes it useful.
 """
 
 from __future__ import annotations
@@ -115,7 +122,9 @@ async def test_creating_a_section_is_recorded(
 
     rows = [a for a in await _actions() if a.action == "section.create"]
     assert len(rows) == 1
-    assert rows[0].action_metadata["name"] == "Period 7"
+    assert rows[0].action_metadata == {
+        "name": "Period 7", "course_id": str(course_id),
+    }
     assert rows[0].actor_role == "teacher"
     # Without a target the entry cannot be linked back to the section it
     # is about, which is most of what makes a feed row useful.
@@ -148,7 +157,10 @@ async def test_deleting_a_section_is_recorded_with_its_name(
     assert len(rows) == 1
     # The entry has to name the class a human would recognise; an id alone
     # is unreadable once the row it points at is gone.
-    assert rows[0].action_metadata["name"] == "Doomed"
+    assert rows[0].action_metadata == {
+        "name": "Doomed", "course_id": str(course_id),
+    }
+    assert str(rows[0].target_id) == section_id
 
 
 async def test_deleting_a_course_is_recorded_with_its_name(
@@ -176,7 +188,7 @@ async def test_deleting_a_course_is_recorded_with_its_name(
 
     rows = [a for a in await _actions() if a.action == "course.delete"]
     assert len(rows) == 1
-    assert rows[0].action_metadata["name"] == "Doomed Class"
+    assert rows[0].action_metadata == {"name": "Doomed Class"}
     assert str(rows[0].target_id) == course_id
     # The class is genuinely gone — this is not a soft delete, which is
     # exactly why the entry is the only remaining record of it.
@@ -237,14 +249,14 @@ async def test_an_integrity_ruling_is_recorded(
 
     rows = [a for a in await _actions() if a.action == "integrity.resolve"]
     assert len(rows) == 1
-    assert rows[0].action_metadata["resolution"] == "cleared"
-    # Both halves of the disagreement, which is the point.
-    assert rows[0].action_metadata["ai_disposition"] == "flag_for_review"
+    # Both halves of the disagreement, which is the point — and pinned as
+    # an equality, which is the only form that catches a field being ADDED.
+    # This assertion used to be `"email" not in metadata`, which tests dict
+    # KEYS: a payload carrying `student_email` passed it untouched.
+    assert rows[0].action_metadata == {
+        "resolution": "cleared", "ai_disposition": "flag_for_review",
+    }
     assert str(rows[0].target_id) == str(submission_id)
-    # Compliance contract: an id identifies the student, never a name or
-    # an email, and never a word of their actual work.
-    assert "name" not in rows[0].action_metadata
-    assert "email" not in rows[0].action_metadata
 
 
 async def test_creating_a_course_is_recorded(
@@ -260,7 +272,10 @@ async def test_creating_a_course_is_recorded(
 
     rows = [a for a in await _actions() if a.action == "course.create"]
     assert len(rows) == 1
-    assert rows[0].action_metadata["name"] == "Geometry"
+    # Subject too: a feed line that cannot say what is being taught is
+    # most of the way to saying nothing.
+    assert rows[0].action_metadata == {"name": "Geometry", "subject": "math"}
+    assert str(rows[0].target_id) == r.json()["id"]
 
 
 async def test_a_roster_removal_records_an_id_and_no_identity(
@@ -292,9 +307,8 @@ async def test_a_roster_removal_records_an_id_and_no_identity(
 
     rows = [a for a in await _actions() if a.action == "section.remove_student"]
     assert len(rows) == 1
-    meta = rows[0].action_metadata
-    assert meta == {"student_id": str(enrollment.student_id)}
-    assert "email" not in str(meta) and "name" not in meta
+    assert rows[0].action_metadata == {"student_id": str(enrollment.student_id)}
+    assert str(rows[0].target_id) == str(enrollment.section_id)
 
 
 async def test_inviting_a_new_student_is_recorded(
@@ -327,9 +341,11 @@ async def test_inviting_a_new_student_is_recorded(
 
     rows = [a for a in await _actions() if a.action == "section.invite_student"]
     assert len(rows) == 1
-    # No email. An invitee's address is not needed to make the entry
-    # legible, and this table is a compliance surface.
-    assert "brand.new.student" not in str(rows[0].action_metadata)
+    # No email, and no name either. An invitee's identity is not needed to
+    # make the entry legible, and this table is a compliance surface — so
+    # the payload is pinned exactly rather than searched for one string.
+    assert rows[0].action_metadata == {"course_id": str(course_id)}
+    assert str(rows[0].target_id) == section_id
 
 
 async def test_enrolling_an_existing_student_records_an_id_and_nothing_else(
@@ -411,6 +427,60 @@ async def test_resending_an_invite_does_not_log_a_second_student(
 
     rows = [a for a in await _actions() if a.action == "section.invite_student"]
     assert len(rows) == 1, "a resend is not a second student onboarded"
+
+
+async def test_uploading_and_deleting_a_document_are_both_recorded(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """Uploading a chapter is real setup work that read as inactivity — a
+    teacher could spend an afternoon on it and the school would look idle.
+
+    Both halves in one test because the delete needs an upload anyway. The
+    payloads carry a filename and a size and never the file itself: the
+    document is student-adjacent teaching material, and this table is a
+    compliance surface, not a place to mirror content.
+    """
+    import base64
+
+    png = base64.b64encode(base64.b64decode(
+        b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
+        b"/x8AAusB9YpO3vQAAAAASUVORK5CYII="
+    )).decode()
+
+    course_id = await _own_course(world)
+    await _clear()
+    up = await client.post(
+        f"/v1/teacher/courses/{course_id}/documents",
+        headers=_auth(world["teacher_token"]),
+        json={
+            "file_base64": png,
+            "filename": "chapter-3.png",
+            "unit_id": str(world["unit_id"]),
+        },
+    )
+    assert up.status_code == 201, up.text
+    document_id = up.json()["id"]
+
+    rows = [a for a in await _actions() if a.action == "document.upload"]
+    assert len(rows) == 1
+    assert rows[0].action_metadata == {
+        "filename": "chapter-3.png", "bytes": up.json()["file_size"],
+    }
+    # The id comes from a `db.flush()` before the record: without it the
+    # row lands with a NULL target and points at nothing.
+    assert str(rows[0].target_id) == document_id
+
+    await _clear()
+    gone = await client.delete(
+        f"/v1/teacher/courses/{course_id}/documents/{document_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert gone.status_code == 200, gone.text
+
+    rows = [a for a in await _actions() if a.action == "document.delete"]
+    assert len(rows) == 1
+    assert rows[0].action_metadata == {"filename": "chapter-3.png"}
+    assert str(rows[0].target_id) == document_id
 
 
 # ── The audit row must never break the action ────────────────────────
