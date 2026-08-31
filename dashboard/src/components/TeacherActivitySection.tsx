@@ -223,19 +223,15 @@ function GenerationsPanel({ teacherId }: { teacherId: string }) {
 
   return (
     <section className="table-card" style={{ marginBottom: 24 }}>
+      {/* The "View all LLM calls (30d) →" link used to live here, in the
+          AI-GENERATIONS header — a link about model calls on the card that
+          isn't about model calls, pointing at a page whose data now sits
+          one section below in the Model calls panel. Two surfaces for one
+          question, and they disagreed on the window (this said 30d, the
+          panel silently queried 7d). The panel won; the link is gone. */}
       {sectionHeader(
         "AI generations",
-        <span style={{ display: "inline-flex", gap: 12, alignItems: "baseline" }}>
-          {data && <span>{data.total} job{data.total === 1 ? "" : "s"}</span>}
-          <Link
-            to={`/llm-calls?user=${teacherId}&hours=720`}
-            className="link-btn"
-            style={{ fontSize: 12 }}
-            title="Every LLM call this teacher made in the last 30 days"
-          >
-            View all LLM calls (30d) →
-          </Link>
-        </span>,
+        data ? <span>{data.total} job{data.total === 1 ? "" : "s"}</span> : null,
       )}
       {error && <p className="error" style={{ padding: "12px 16px" }}>{error}</p>}
       {!data && !error && <p className="loading" style={{ padding: "12px 16px" }}>Loading…</p>}

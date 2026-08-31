@@ -1,53 +1,59 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { apiHealth, getToken, setToken } from "../lib/api";
+import SchoolSwitcher from "./SchoolSwitcher";
+import { useSelectedSchool } from "../lib/useSelectedSchool";
 
 interface NavItem {
   to: string;
   label: string;
+  /** Match the path exactly, not as a prefix. */
+  end?: boolean;
 }
 
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
+// The rail is a HIERARCHY, not a list of equals.
+//
+// This console has one job that gets done daily — inspect what the system
+// actually did for a real teacher, and judge whether the AI's output was
+// any good — and a long tail of things consulted occasionally. Giving all
+// eleven destinations the same weight made the daily work compete with
+// billing plumbing for the same glance.
+//
+// So the primary tier is the work; everything else sits below a rule in
+// muted type. Nothing is hidden — demoted is not deleted — but the eye
+// lands on the two or three things that are actually why you opened this.
 
-// The pages grouped by the operator's job, in the order they're worked:
-// MONITOR first (is anything broken?), then CUSTOMERS (who are my users,
-// what are they doing), then SYSTEM (internal management). Detail pages
-// (school/lead/teacher/submission drill-ins) stay off the rail — they're
-// reached by clicking a row, not navigating here.
-const NAV_GROUPS: NavGroup[] = [
-  {
-    label: "Monitor",
-    items: [
-      { to: "/overview", label: "Overview" },
-      { to: "/llm-calls", label: "LLM calls" },
-      { to: "/grading-quality", label: "Grading quality" },
-      { to: "/generation-quality", label: "Generation quality" },
-      { to: "/quality", label: "Solution quality" },
-      { to: "/harness-runs", label: "Harness runs" },
-      { to: "/golden-set", label: "Generation QA" },
-    ],
-  },
-  {
-    label: "Customers",
-    items: [
-      { to: "/schools", label: "Schools" },
-      { to: "/leads", label: "Leads" },
-      { to: "/teachers/independent", label: "Independent teachers" },
-      { to: "/students/independent", label: "Independent students" },
-    ],
-  },
-  {
-    label: "System",
-    items: [
-      // Users + Admins consolidated: one role-filtered tab. The Admins
-      // preset is reached via the in-page segmented filter (role=admin).
-      { to: "/users", label: "Users" },
-      { to: "/audit-logs", label: "Audit log" },
-    ],
-  },
+/** Pages scoped to the selected school. The daily work starts here. */
+const SCHOOL_LINKS: { to: (id: string) => string; label: string }[] = [
+  // Named for what the page leads with, not "Overview" — a platform
+  // Overview also exists, and two identical labels in one rail is a coin
+  // toss every time you look for either.
+  { to: (id) => `/schools/${id}`, label: "Teachers & classes" },
+];
+
+/**
+ * Tier one. Deliberately short, and deliberately only things that EXIST:
+ * a primary slot pointing at an unbuilt page is worse than no slot. The
+ * student-conversation viewer and the rollout-state teacher list join
+ * this tier as they land.
+ */
+const PRIMARY: NavItem[] = [
+  { to: "/ai-quality", label: "Quality" },
+];
+
+/**
+ * Tier two: real, reachable, and quiet. Business and platform plumbing —
+ * consulted, not worked in.
+ */
+const SECONDARY: NavItem[] = [
+  { to: "/overview", label: "Platform health" },
+  { to: "/schools", label: "Schools", end: true },
+  { to: "/leads", label: "Leads" },
+  { to: "/teachers/independent", label: "Independent teachers" },
+  { to: "/students/independent", label: "Independent students" },
+  { to: "/llm-calls", label: "LLM calls & spend" },
+  { to: "/users", label: "Users" },
+  { to: "/audit-logs", label: "Audit log" },
 ];
 
 export default function Layout() {
@@ -55,6 +61,8 @@ export default function Layout() {
   // operator always sees at a glance whether the backend is reachable.
   const [apiDown, setApiDown] = useState(apiHealth.isDown());
   useEffect(() => apiHealth.subscribe(setApiDown), []);
+
+  const school = useSelectedSchool();
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -64,20 +72,48 @@ export default function Layout() {
           <div className="sidebar-brand-sub">Operations</div>
         </div>
 
-        {NAV_GROUPS.map((group) => (
-          <div key={group.label}>
-            <div className="nav-section-label">{group.label}</div>
-            {group.items.map((n) => (
+        <SchoolSwitcher selected={school} />
+
+        {/* ── Tier one — the work ─────────────────────────────────── */}
+        <div className="nav-primary">
+          {school.id &&
+            SCHOOL_LINKS.map((l) => (
               <NavLink
-                key={n.to}
-                to={n.to}
-                className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+                key={l.label}
+                to={l.to(school.id!)}
+                end
+                className="nav-link nav-link-primary"
               >
-                {n.label}
+                {l.label}
               </NavLink>
             ))}
-          </div>
-        ))}
+          {PRIMARY.map((n) => (
+            <NavLink
+              key={n.to}
+              to={n.to}
+              end={n.end}
+              className={({ isActive }) =>
+                `nav-link nav-link-primary ${isActive ? "active" : ""}`
+              }
+            >
+              {n.label}
+            </NavLink>
+          ))}
+        </div>
+
+        {/* ── Tier two — reference ────────────────────────────────── */}
+        <div className="nav-secondary">
+          {SECONDARY.map((n) => (
+            <NavLink
+              key={n.to}
+              to={n.to}
+              end={n.end}
+              className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+            >
+              {n.label}
+            </NavLink>
+          ))}
+        </div>
 
         <div className="rail-foot">
           <div className={`rail-status ${apiDown ? "rail-status-down" : "rail-status-ok"}`}>

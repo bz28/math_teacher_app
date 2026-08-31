@@ -503,6 +503,12 @@ export const api = {
     mutate<{ status: string; call_id: string }>(`/admin/llm-calls/${callId}/debug`, "POST"),
   inviteAdmin: (email: string, name: string) => mutate<{ status: string }>("/admin/users/invite", "POST", { email, name }),
   resendInvite: (userId: string) => mutate<{ status: string }>(`/admin/users/${userId}/resend-invite`, "POST"),
+  /** Work handed in to a teacher's assignments — the bridge into
+   *  /submissions/:id/trace. See `teacher_submissions` in admin_users.py
+   *  for why a teacher's own LLM calls don't answer this. */
+  teacherSubmissions: (teacherId: string, params?: Record<string, string>) =>
+    request<TeacherSubmissionsData>(`/admin/users/${teacherId}/submissions`, params),
+
   teacherStudents: (teacherId: string, params?: Record<string, string>) =>
     request<TeacherStudentsData>(`/admin/users/${teacherId}/students`, params),
   // Leads
@@ -1097,10 +1103,18 @@ export interface TeacherStudentsData {
      *  "institutional" (→ School page) or "individual" (indie → the
      *  Independent Teachers list). Null for a school-less teacher. */
     school: { id: string; name: string; kind: string } | null;
-    /** Teacher's own last action (from ActivityLog) — drives the header
-     *  active/dormant verdict. Null if they've never acted. */
+    /** Latest of: a logged action, something they created, or a call
+     *  they caused — drives the header active/dormant verdict. Was
+     *  ActivityLog alone, which read NOT STARTED on teachers whose own
+     *  page listed recent work. Null if they've genuinely never acted. */
     last_active_at: string | null;
+    /** Every call this teacher's CLASSROOM caused in 30d, including the
+     *  grading and integrity calls billed to the students who
+     *  submitted. */
     call_count_30d: number;
+    /** The generation half only — all the Content generation panel can
+     *  show, since it filters on the teacher's own user id. */
+    generated_call_count_30d: number;
     total_cost_30d: number;
   };
   usage: TeacherUsage;
@@ -1346,3 +1360,30 @@ export interface DocumentContent {
   image_data: string | null;
 }
 
+
+export interface TeacherSubmissionsData {
+  total: number;
+  submissions: {
+    id: string;
+    status: string;
+    submitted_at: string | null;
+    is_late: boolean;
+    student_name: string | null;
+    assignment_title: string | null;
+    assignment_type: string | null;
+    /** The AI's grade, and what the teacher settled on. When both are
+     *  present and differ, the teacher disagreed with the model — the
+     *  only quality signal in the product that needs no judge. */
+    ai_score: number | null;
+    final_score: number | null;
+    overridden: boolean;
+    score_delta: number | null;
+    ai_grading_status: string | null;
+    reviewed_at: string | null;
+    grade_published_at: string | null;
+    integrity_status: string | null;
+    integrity_disposition: string | null;
+    call_count: number;
+    failed_count: number;
+  }[];
+}

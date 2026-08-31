@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type TeacherRosterStudent, type TeacherStudentsData } from "../lib/api";
-import { fmtCost, formatRelativeDate } from "../lib/format";
+import { formatRelativeDate } from "../lib/format";
 import { activityPill, activityStatus, costWindowLabel } from "../lib/definitions";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
 import TeacherActivitySection from "../components/TeacherActivitySection";
+import TeacherLLMCalls from "../components/TeacherLLMCalls";
+import TeacherSubmissions from "../components/TeacherSubmissions";
+import { useScopeToSchool } from "../lib/useSelectedSchool";
 
 // Per-teacher drill-in — the "what is this pilot teacher actually doing"
 // view. Lives at /teachers/:teacherId, reachable from the Independent
@@ -38,6 +41,14 @@ export default function TeacherDetail() {
       .then(setData)
       .catch((e: Error) => setError(e.message));
   }, [teacherId]);
+
+  // Tell the rail which school this page is showing, so the switcher
+  // can't sit there naming a different one an inch from the breadcrumb.
+  // Institutional only: an indie teacher's synthetic school isn't in the
+  // switcher's list, and publishing it would just move the contradiction.
+  useScopeToSchool(
+    data?.teacher.school?.kind === "institutional" ? data.teacher.school.id : null,
+  );
 
   const sectionNames = useMemo(
     () => Object.fromEntries((data?.sections ?? []).map((s) => [s.id, s.name])),
@@ -124,16 +135,21 @@ export default function TeacherDetail() {
           </p>
         </div>
 
-        {/* Headline numbers: active (verdict, above) · cost · students ·
-            generations — the at-a-glance "is this teacher real" scan. */}
+        {/* Headline numbers: what this teacher DID. Cost used to lead this
+            row — the largest number in the largest slot on the console's
+            hero page — which put spend ahead of the work on the one screen
+            you open when a teacher reports a problem. It moved down beside
+            the calls it describes; the calls panel header carries it now. */}
         <div style={{ display: "flex", gap: 28, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <HeadlineStat
-            label={`Cost · ${costWindowLabel(30)}`}
-            value={fmtCost(t.total_cost_30d)}
-            muted={t.total_cost_30d === 0}
-            sub={`${t.call_count_30d.toLocaleString()} call${t.call_count_30d === 1 ? "" : "s"}`}
-          />
           <HeadlineStat label="Students" value={data.total_students.toLocaleString()} />
+          {/* The classroom total, not the calls billed to her user id.
+              The generation split lives on the panel below. */}
+          <HeadlineStat
+            label="Model calls"
+            value={t.call_count_30d.toLocaleString()}
+            muted={t.call_count_30d === 0}
+            sub={costWindowLabel(30)}
+          />
           <HeadlineStat label="Generations" value={u.generations.toLocaleString()} />
         </div>
       </div>
@@ -144,19 +160,19 @@ export default function TeacherDetail() {
           label="Homeworks"
           value={u.homeworks_created.toLocaleString()}
           sub={
-            u.problems_per_homework !== null
-              ? `${u.problems_per_homework} problems/HW avg`
-              : "no homeworks yet"
+            u.homeworks_per_week !== null && u.problems_per_homework !== null
+              ? `${u.problems_per_homework} problems each · ≈${u.homeworks_per_week}/week`
+              : undefined
           }
         />
+        {/* `homeworks_per_week` belongs to homeworks, and rendering it here
+            put "≈ 1 HW/week" under a practice-set count of 0 — a number
+            about a different thing entirely. Practice sets have no cadence
+            of their own in the payload, so this tile carries no subline
+            rather than borrowing a wrong one. */}
         <StatTile
           label="Practice sets"
           value={u.practice_sets.toLocaleString()}
-          sub={
-            u.homeworks_per_week !== null
-              ? `≈ ${u.homeworks_per_week} HW/week`
-              : "creation cadence"
-          }
         />
         <StatTile
           label="Published"
@@ -171,12 +187,12 @@ export default function TeacherDetail() {
         <StatTile
           label="Graded"
           value={u.graded.toLocaleString()}
-          sub={gradedPct !== null ? `${gradedPct}% of submissions` : "of submissions"}
+          sub={gradedPct !== null ? `${gradedPct}% of submissions` : undefined}
         />
         <StatTile
           label="Students reached"
           value={u.students_reached.toLocaleString()}
-          sub={reachPct !== null ? `${reachPct}% of ${data.total_students} enrolled` : "have submitted"}
+          sub={reachPct !== null ? `${reachPct}% of ${data.total_students} enrolled` : undefined}
         />
       </div>
 
@@ -191,6 +207,59 @@ export default function TeacherDetail() {
 
       {/* ── ③ AI generations + activity timeline (richest surface) ── */}
       <TeacherActivitySection teacherId={t.id} />
+
+      {/* Every model call she caused, openable in place. The page already
+          linked out to a pre-filtered /llm-calls, which answers "how much
+          did she cost" but not the question you actually have when she
+          reports something odd: what did we send, and what came back. That
+          was one click into another page with the filter to re-apply. */}
+      {/* ── Work handed in ───────────────────────────────────────
+          Above Model calls deliberately. A complaint is about a GRADE far
+          more often than about a generation, and grading/integrity calls
+          are billed to the student who submitted — so they are absent
+          from the panel below and reachable only through here. */}
+      <section className="table-card" style={{ marginBottom: 24 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            padding: "12px 16px",
+            borderBottom: "1px solid var(--rule)",
+          }}
+        >
+          <h3 style={{ margin: 0 }}>Work handed in</h3>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted-2)" }}>
+            click a row for its full trace
+          </span>
+        </div>
+        <div style={{ padding: "12px 16px 4px" }}>
+          <TeacherSubmissions key={t.id} teacherId={t.id} />
+        </div>
+      </section>
+
+      <section className="table-card" style={{ marginBottom: 24 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            padding: "12px 16px",
+            borderBottom: "1px solid var(--rule)",
+          }}
+        >
+          <h3 style={{ margin: 0 }}>Content generation</h3>
+          {/* Only when there is a row to click. */}
+          {t.generated_call_count_30d > 0 && (
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>
+              click a row for the exchange
+            </span>
+          )}
+        </div>
+        <div style={{ padding: "12px 16px 4px" }}>
+          <TeacherLLMCalls key={t.id} teacherId={t.id} />
+        </div>
+      </section>
 
       {/* ── Sections (compact, click to filter the roster) ───────── */}
       <SectionsCard
@@ -437,6 +506,9 @@ function StudentsCard({
         onRowClick={(s) => onDrill(s.id)}
         drill
         minWidth={560}
+        searchKeys={(s) => [s.name, s.email]}
+        searchLabel="students"
+        pageSize={25}
         empty={
           <div className="empty-state">
             <div className="empty-state-title">

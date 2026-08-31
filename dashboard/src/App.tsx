@@ -22,6 +22,7 @@ import IndependentStudents from "./pages/IndependentStudents";
 import IndependentTeachers from "./pages/IndependentTeachers";
 import TeacherDetail from "./pages/TeacherDetail";
 import AuditLogs from "./pages/AuditLogs";
+import AIQuality from "./pages/AIQuality";
 import SubmissionTrace from "./pages/SubmissionTrace";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -69,6 +70,10 @@ export default function App() {
           <Route path="/audit-logs" element={<AuditLogs />} />
           <Route path="/llm-calls" element={<LLMCalls />} />
           <Route path="/harness-runs" element={<HarnessRuns />} />
+          {/* One front door for the five AI-quality pages. Each still
+              renders at its original route below, so existing links and
+              bookmarks keep working. */}
+          <Route path="/ai-quality" element={<AIQuality />} />
           <Route path="/quality" element={<Quality />} />
           <Route path="/quality/:sessionId" element={<SessionQuality />} />
           <Route path="/grading-quality" element={<GradingQuality />} />

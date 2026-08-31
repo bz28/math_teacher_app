@@ -1,5 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 
+import { Pagination, SearchInput } from "./Pagination";
+
 /**
  * DataTable — the canonical table for every tab. Hairline row rules (no
  * zebra, no card chrome), a sticky mono-uppercase header with sortable
@@ -10,7 +12,19 @@ import { useMemo, useState, type ReactNode } from "react";
  *
  * Generic over the row type; drive it with a columns config so a tab is
  * just data + column definitions. Sorting is internal (click a header).
+ *
+ * Long lists: pass `searchKeys` and/or `pageSize` and the table grows a
+ * search box and a pager ON ITS OWN, but only once the list is long enough
+ * to need them (see LONG_LIST_THRESHOLD). Both used to be wired by hand per
+ * page, which meant most tables never got them at all — a roster reads fine
+ * at six teachers and is unusable at sixty, and nobody notices until the day
+ * it happens. Owning the behaviour here means every table crosses that line
+ * correctly without anyone remembering to.
  */
+
+// Below this many rows a search box and pager are noise: the list already
+// fits on screen and the eye beats typing.
+export const LONG_LIST_THRESHOLD = 10;
 
 export interface Column<T> {
   /** Stable key; also the sort identity. */
@@ -49,11 +63,18 @@ export interface DataTableProps<T> {
   minWidth?: number;
   /** Rows rendered by the shimmer loader. Default 6. */
   loadingRows?: number;
+  /** Fields a search query matches against. Omit for no search. */
+  searchKeys?: (row: T) => (string | null | undefined)[];
+  /** Rows per page. Omit to render every row. */
+  pageSize?: number;
+  /** Noun used in the search placeholder and empty copy, e.g. "teachers". */
+  searchLabel?: string;
 }
 
 export default function DataTable<T>({
   columns, rows, rowKey, onRowClick, rowStatus, drill,
   loading, error, onRetry, empty, defaultSort, minWidth = 640, loadingRows = 6,
+  searchKeys, pageSize, searchLabel = "rows",
 }: DataTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(defaultSort?.key ?? null);
   const [sortDir, setSortDir] = useState<SortDir>(defaultSort?.dir ?? "desc");
@@ -73,6 +94,40 @@ export default function DataTable<T>({
     });
   }, [rows, columns, sortKey, sortDir]);
 
+  // Both affordances stay hidden until the list is genuinely long, so a
+  // caller opting in doesn't force chrome onto a table of three.
+  const longEnough = rows.length > LONG_LIST_THRESHOLD;
+  const canSearch = !!searchKeys && longEnough;
+  const canPage = !!pageSize && longEnough;
+
+  const [query, setQuery] = useState("");
+  const [offset, setOffset] = useState(0);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!canSearch || !q) return sorted;
+    return sorted.filter((row) =>
+      searchKeys!(row).some((v) => (v ?? "").toLowerCase().includes(q)),
+    );
+  }, [sorted, query, canSearch, searchKeys]);
+
+  // Clamp rather than reset-in-an-effect. The stored offset can outrun the
+  // list whenever it shrinks under you — a search narrowing the results, a
+  // parent refetch returning fewer rows — and slicing past the end renders
+  // an empty table that reads as "no results" instead of "wrong page".
+  // Deriving it during render also means there is no cascading re-render,
+  // and no window where the two disagree.
+  const maxOffset =
+    canPage && filtered.length > 0
+      ? Math.floor((filtered.length - 1) / pageSize!) * pageSize!
+      : 0;
+  const safeOffset = Math.min(offset, maxOffset);
+
+  const visible = useMemo(
+    () => (canPage ? filtered.slice(safeOffset, safeOffset + pageSize!) : filtered),
+    [filtered, canPage, safeOffset, pageSize],
+  );
+
   const toggleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === "desc" ? "asc" : "desc"));
     else { setSortKey(key); setSortDir("desc"); }
@@ -82,7 +137,26 @@ export default function DataTable<T>({
     c.align ?? (c.numeric ? "right" : "left");
 
   return (
-    <div className="dt-scroll">
+    <>
+      {canSearch && !loading && !error && (
+        <div className="dt-toolbar">
+          <SearchInput
+            value={query}
+            onChange={(v) => {
+              setQuery(v);
+              setOffset(0);
+            }}
+            placeholder={`Search ${searchLabel}\u2026`}
+            ariaLabel={`Search ${searchLabel}`}
+          />
+          <span className="dt-count">
+            {filtered.length === rows.length
+              ? `${rows.length} ${searchLabel}`
+              : `${filtered.length} of ${rows.length}`}
+          </span>
+        </div>
+      )}
+      <div className="dt-scroll">
       <table className="dt" style={{ minWidth }}>
         <colgroup>
           {columns.map((c) => (
@@ -145,14 +219,37 @@ export default function DataTable<T>({
                 </div>
               </td>
             </tr>
-          ) : sorted.length === 0 ? (
+          ) : visible.length === 0 ? (
             <tr>
               <td colSpan={colCount}>
-                <div className="dt-state">{empty ?? <span className="dt-state-title">Nothing here yet.</span>}</div>
+                <div className="dt-state">
+                  {/* canSearch, not query alone: `query` survives the row
+                      count dropping below the threshold, so a stale term
+                      would otherwise suppress the caller's own empty state
+                      and offer a Clear button with no search box above it. */}
+                  {canSearch && query.trim() ? (
+                    <>
+                      <span className="dt-state-title">
+                        No {searchLabel} match &ldquo;{query.trim()}&rdquo;.
+                      </span>
+                      <div className="dt-state-sub">
+                        <button
+                          type="button"
+                          className="dt-clear"
+                          onClick={() => setQuery("")}
+                        >
+                          Clear search
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    empty ?? <span className="dt-state-title">Nothing here yet.</span>
+                  )}
+                </div>
               </td>
             </tr>
           ) : (
-            sorted.map((row) => {
+            visible.map((row) => {
               const status = rowStatus?.(row);
               return (
                 <tr
@@ -200,6 +297,15 @@ export default function DataTable<T>({
           )}
         </tbody>
       </table>
-    </div>
+      </div>
+      {canPage && !loading && !error && filtered.length > pageSize! && (
+        <Pagination
+          offset={safeOffset}
+          limit={pageSize!}
+          total={filtered.length}
+          onChange={setOffset}
+        />
+      )}
+    </>
   );
 }
