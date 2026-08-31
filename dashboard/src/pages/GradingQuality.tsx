@@ -73,6 +73,11 @@ function severeFlips(matrix: GradingQualityData["status_matrix"]): number {
 /** Signed direction chip — the at-a-glance "which way does the AI lean". */
 function DirectionTag({ bucket }: { bucket: GradingBucket }) {
   const meta = DIRECTION_META[bucket.direction];
+  // With no overrides the mean delta still averages over every COMPARED
+  // problem, so a sub-tolerance nudge leaves it non-zero. Printing it
+  // beside "not yet measured" would show a bias figure under a label
+  // saying there is nothing to measure.
+  const showDelta = bucket.direction !== "unmeasured";
   return (
     <span
       style={{
@@ -82,7 +87,9 @@ function DirectionTag({ bucket }: { bucket: GradingBucket }) {
         textTransform: "uppercase", fontFamily: "var(--font-sans)", whiteSpace: "nowrap",
       }}
     >
-      <span className="num" style={{ fontWeight: 500 }}>{fmtPts(bucket.mean_delta, true)}</span>
+      {showDelta && (
+        <span className="num" style={{ fontWeight: 500 }}>{fmtPts(bucket.mean_delta, true)}</span>
+      )}
       {meta.word}
     </span>
   );
@@ -104,7 +111,7 @@ function VerdictHero({ summary }: { summary: GradingSummary }) {
     // corrected the AI is not evidence that the AI is right — it is
     // evidence that nobody has checked.
     headline = "Nobody has overridden a grade yet.";
-    detail = `Teachers reviewed ${summary.reviewed_submissions} submission${summary.reviewed_submissions === 1 ? "" : "s"} without changing a single mark. That is not the same as the AI being right — until someone disagrees, there is nothing to measure calibration against.`;
+    detail = `Teachers reviewed ${summary.reviewed_submissions} submission${summary.reviewed_submissions === 1 ? "" : "s"} and overrode nothing. That is not the same as the AI being right — until someone disagrees, there is nothing to measure calibration against.`;
   } else if (summary.direction === "too_harsh") {
     headline = `The AI grades about ${magnitude} points too harsh.`;
     detail = `Teachers raised the score on ${summary.raised} of the ${summary.overridden_problems} problems they changed — the model under-credits student work.`;
@@ -139,6 +146,37 @@ function VerdictHero({ summary }: { summary: GradingSummary }) {
   );
 }
 
+/** Records the report could not compare at all, and therefore dropped.
+ *
+ *  Deliberately its OWN component rather than a line inside ThinCaveat,
+ *  which early-returns when the sample and coverage are healthy — so the
+ *  disclosure disappeared in exactly the case it matters most: a
+ *  confident-looking page quietly built on fewer records than it claims.
+ *  A report that discards records has to say so, or its denominator is a
+ *  lie of omission. */
+function DroppedNotice({ summary }: { summary: GradingSummary }) {
+  if (summary.unalignable_submissions < 1) return null;
+  const n = summary.unalignable_submissions;
+  return (
+    <div
+      style={{
+        display: "flex", alignItems: "center", gap: 12,
+        background: "var(--paper-2)", borderLeft: "3px solid var(--muted-2)",
+        padding: "12px 16px", marginBottom: 24, fontSize: 13,
+        color: "var(--ink-soft)", fontFamily: "var(--font-sans)",
+      }}
+    >
+      <StatusPill tone="neutral" label="EXCLUDED" />
+      <span>
+        {n} reviewed submission{n === 1 ? "" : "s"} could not be compared at
+        all — the AI and teacher grade lists don&rsquo;t line up, so
+        {n === 1 ? " it is" : " they are"} left out of every number on this
+        page.
+      </span>
+    </div>
+  );
+}
+
 /** Thin-coverage caveat — the override rate rests on too few problems, or
  *  teachers have reviewed too small a slice of what the AI graded. */
 function ThinCaveat({ summary }: { summary: GradingSummary }) {
@@ -156,13 +194,7 @@ function ThinCaveat({ summary }: { summary: GradingSummary }) {
   if (thinCoverage) {
     parts.push(`teachers have reviewed just ${Math.round(coverage! * 100)}% of the ${summary.ai_graded_submissions} grades the AI produced`);
   }
-  if (summary.unalignable_submissions > 0) {
-    // Previously dropped in silence, which let the page report "across 19
-    // reviewed submissions" beside a coverage tile saying 281 — the same
-    // screen, 15x apart, unexplained. A report that discards records has
-    // to say so, or its denominator is a lie of omission.
-    parts.push(`${summary.unalignable_submissions} reviewed submission${summary.unalignable_submissions === 1 ? "" : "s"} could not be compared at all (the AI and teacher grade lists don't line up) and ${summary.unalignable_submissions === 1 ? "is" : "are"} excluded entirely`);
-  }
+
   return (
     <div
       style={{
@@ -623,6 +655,12 @@ export default function GradingQuality() {
       </div>
 
       {!hasData ? (
+        <>
+        {/* Shown ABOVE the empty state: if every reviewed submission was
+            un-alignable, the page would otherwise say "no reviewed grades
+            yet" while the API reports a non-zero excluded count — the
+            number computed and then thrown away. */}
+        <DroppedNotice summary={summary} />
         <div className="empty-state">
           <div className="empty-state-title">No reviewed grades yet</div>
           <div className="empty-state-sub">
@@ -630,11 +668,13 @@ export default function GradingQuality() {
             their overrides will surface here.
           </div>
         </div>
+        </>
       ) : (
         <>
           {/* ── Band 1 — Verdict ─────────────────────────────────────── */}
           <VerdictHero summary={summary} />
           <ThinCaveat summary={summary} />
+          <DroppedNotice summary={summary} />
 
           <div className="tile-grid">
             <StatTile
