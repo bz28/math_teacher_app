@@ -20,7 +20,6 @@ from api.models import (  # noqa: F401
     llm_call,
     llm_payload,
     practice_activity,
-    quality_score,
     question_bank,
     question_edit,
     school,

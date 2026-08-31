@@ -27,6 +27,9 @@ first" that judges the attempt + hints before revealing.
 action + a step-attempt judge + a hint ladder), and "reveal vs coach" is a
 pedagogy/product call the user wants to make deliberately, not have inferred.
 
-**Related dead code:** `api/core/judge.py` (`fire_and_forget_judge`) — a quality
-gate for decompositions — has **no call sites** (verified). Decide whether to
-wire it in (observability/gate on the decomposition) or delete it.
+**Resolved:** `api/core/judge.py` (`fire_and_forget_judge`) is **deleted**. It
+never ran — the call site shipped commented out and was removed later — so its
+`quality_scores` table was empty by construction. Solution quality now scores
+the same `decompose` call from teacher repairs to the worked answer, which
+costs nothing and is real. A step-attempt judge for the Socratic loop, if it
+happens, is a separate build.

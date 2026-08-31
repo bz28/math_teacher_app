@@ -1,204 +1,174 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from "recharts";
-import { api, type QualityData, type QualityBucket, type QualityScoreRow } from "../lib/api";
-import { formatRelativeDate } from "../lib/format";
-import { windowLabel } from "../lib/definitions";
+  api,
+  type SolutionQualityData,
+  type SolutionQuestion,
+  type SolutionOutcome,
+  type SolutionRepairHistory,
+} from "../lib/api";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
-import { Checkbox } from "../components/Checkbox";
-import { Pagination } from "../components/Pagination";
-import ErrorState from "../components/ErrorState";
-import { MetaChip } from "../components/MetaChip";
-import { SUBJECT_LABEL, MODE_LABEL } from "../lib/quality";
+import { EditorialModal } from "../components/EditorialModal";
+import { formatRelativeDate } from "../lib/format";
 
-const PAGE_SIZE = 25;
+// ────────────────────────────────────────────────────────────────────
+// Solution quality — scoring the solve call.
+//
+// This page read an LLM judge's verdict for its whole life, and the
+// judge never ran once: the call site shipped commented out and was
+// later deleted, so the table was empty by construction. The page
+// rendered a red "WEAK" pill and 0.0/5 on every dimension — asserting
+// the AI was bad at something nobody had ever measured. That is worse
+// than showing nothing.
+//
+// It now reads what teachers actually did to the worked answer, which
+// costs nothing and is real. `decompose` runs behind five surfaces and
+// the question bank is the only one where a human corrects it, so this
+// is the only evidence available about that prompt.
+//
+// Solutions have no "rejected" of their own — binning belongs to the
+// question that owns the solution. So the two exclusions are labelled by
+// REASON. "Never assessed" describes our bookkeeping; "the question was
+// rejected" describes what actually happened to it.
+// ────────────────────────────────────────────────────────────────────
 
-// Pass rate is the health headline — tone it like a status light.
-function rateTone(rate: number): "ok" | "warn" | "danger" | "default" {
+const OUTCOME_META: Record<
+  SolutionOutcome,
+  { label: string; tone: "ok" | "warn"; color: string }
+> = {
+  clean: { label: "Held up", tone: "ok", color: "var(--ok)" },
+  repaired: { label: "Teacher fixed it", tone: "warn", color: "var(--warn)" },
+};
+
+function rateTone(rate: number): "ok" | "warn" | "danger" {
   if (rate >= 90) return "ok";
-  if (rate >= 75) return "default";
-  if (rate >= 60) return "warn";
+  if (rate >= 75) return "warn";
   return "danger";
 }
 
-function ScoreBadge({ score }: { score: number }) {
-  const color = score >= 4 ? "var(--ok)" : score >= 3 ? "var(--warn)" : "var(--danger)";
-  return (
-    <span style={{ fontFamily: "var(--font-mono)", fontWeight: 500, color }}>{score}</span>
-  );
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short", day: "numeric", year: "numeric",
+  });
 }
 
-/** One breakdown table (by subject or by mode). Rows arrive worst-first
- *  from the backend; the pass-rate bar makes the weak buckets pop. */
-function BreakdownTable({
-  title, rows, labelOf,
+/** One solution repair, shown as what changed. The diff is the payload:
+ *  a count tells you WHICH solution to look at, only the before/after
+ *  tells you what the solve prompt got wrong. */
+function RepairStep({
+  index, entry,
 }: {
-  title: "Subject" | "Mode";
-  rows: QualityBucket[];
-  labelOf: (name: string) => string;
+  index: number;
+  entry: SolutionRepairHistory["edits"][number];
 }) {
-  const maxEval = Math.max(1, ...rows.map((r) => r.evaluated));
-  const kind = title === "Subject" ? "subject" : "mode";
-  const cols: Column<QualityBucket>[] = [
-    {
-      key: "name", header: title, width: "34%",
-      sortValue: (b) => b.name,
-      render: (b) => <MetaChip label={labelOf(b.name)} kind={kind} value={b.name} />,
-    },
-    {
-      key: "pass_rate", header: "Pass rate", width: "42%",
-      sortValue: (b) => b.pass_rate,
-      render: (b) => {
-        const tone = rateTone(b.pass_rate);
-        return (
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ flex: 1, height: 7, background: "var(--paper-2)", overflow: "hidden" }}>
-              <div style={{
-                width: `${b.pass_rate}%`, height: "100%",
-                background: `var(--${tone === "default" ? "ink" : tone})`,
-                minWidth: b.pass_rate > 0 ? 2 : 0,
-              }} />
-            </div>
-            <span className="num" style={{ fontSize: 13, minWidth: 44, textAlign: "right" }}>
-              {b.pass_rate}%
-            </span>
-          </div>
-        );
-      },
-    },
-    {
-      key: "avg_score", header: "Avg", numeric: true, width: "12%",
-      sortValue: (b) => b.avg_score,
-      render: (b) => <span className="num">{b.avg_score.toFixed(1)}</span>,
-    },
-    {
-      key: "evaluated", header: "n", numeric: true, width: "12%",
-      sortValue: (b) => b.evaluated,
-      render: (b) => (
-        <span title={`${b.evaluated} evaluated`} style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
-          <span aria-hidden style={{
-            width: `${8 + (b.evaluated / maxEval) * 18}px`, height: 3,
-            background: "var(--muted-2)", display: "inline-block",
-          }} />
-          <span className="num" style={{ color: "var(--muted)", fontSize: 12 }}>{b.evaluated}</span>
-        </span>
-      ),
-    },
-  ];
   return (
-    <div className="table-card" style={{ flex: 1, minWidth: 320 }}>
-      <h3>Quality by {kind}</h3>
-      <DataTable
-        columns={cols}
-        rows={rows}
-        rowKey={(b) => b.name}
-        rowStatus={(b) => (b.pass_rate < 60 ? "var(--danger)" : b.pass_rate < 75 ? "var(--warn)" : undefined)}
-        minWidth={340}
-        empty={<span className="dt-state-title">No {kind} data in this window.</span>}
-      />
-    </div>
+    <li className="gq-step">
+      <div className="gq-step-rail" aria-hidden>
+        <span className="gq-step-num">{index + 1}</span>
+      </div>
+      <div className="gq-step-body">
+        <div className="gq-step-meta">
+          <StatusPill
+            label={entry.field === "final_answer" ? "Final answer" : "Steps"}
+            tone={entry.field === "final_answer" ? "info" : "neutral"}
+          />
+          <span className="gq-step-who">
+            {entry.editor ?? "Unknown"}
+            {entry.school ? ` · ${entry.school}` : ""}
+          </span>
+          <span className="gq-step-when">{formatDate(entry.created_at)}</span>
+        </div>
+        <div className="gq-diff">
+          <div className="gq-diff-side gq-diff-before">
+            <span className="gq-diff-label">The AI solved it as</span>
+            <p>{entry.before ?? <em>nothing recorded</em>}</p>
+          </div>
+          <div className="gq-diff-side gq-diff-after">
+            <span className="gq-diff-label">The teacher corrected it to</span>
+            <p>{entry.after ?? <em>nothing recorded</em>}</p>
+          </div>
+        </div>
+      </div>
+    </li>
   );
 }
 
 export default function Quality() {
-  const navigate = useNavigate();
-  const [data, setData] = useState<QualityData | null>(null);
+  const [data, setData] = useState<SolutionQualityData | null>(null);
+  const [outcome, setOutcome] = useState<string>("");
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [hours, setHours] = useState("168");
-  const [onlyFailed, setOnlyFailed] = useState(false);
-  const [offset, setOffset] = useState(0);
+
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<SolutionRepairHistory | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await api.solutionQuality(outcome ? { outcome } : undefined));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't load solution quality");
+    } finally {
+      setLoading(false);
+    }
+  }, [outcome]);
+
+  useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
-    // Guard against a slow earlier request resolving after a newer one
-    // and overwriting the view with data for a stale filter/page.
+    if (!openId) { setDetail(null); setDetailError(null); return; }
     let cancelled = false;
+    setDetailLoading(true);
     api
-      .quality({
-        hours,
-        only_failed: onlyFailed ? "true" : "",
-        limit: String(PAGE_SIZE),
-        offset: String(offset),
+      .solutionRepairs(openId)
+      .then((d) => { if (!cancelled) { setDetail(d); setDetailError(null); } })
+      .catch((e) => {
+        if (!cancelled) {
+          setDetail(null);
+          setDetailError(e instanceof Error ? e.message : "Couldn't load this repair history.");
+        }
       })
-      .then((d) => { if (!cancelled) { setData(d); setError(null); } })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load solution quality."); });
+      .finally(() => { if (!cancelled) setDetailLoading(false); });
     return () => { cancelled = true; };
-  }, [hours, onlyFailed, offset, reloadKey]);
+  }, [openId]);
 
-  const handleHoursChange = (v: string) => { setHours(v); setOffset(0); };
-  const handleFailedToggle = (v: boolean) => { setOnlyFailed(v); setOffset(0); };
-
-  if (!data && error) {
-    return <ErrorState message={error} onRetry={() => { setError(null); setReloadKey((k) => k + 1); }} />;
-  }
-  if (!data) return <p className="loading">Loading…</p>;
-
-  const { summary } = data;
-  const win = windowLabel(Number(hours));
-
-  // Delta vs the prior equal-length window — relative % change of the
-  // pass rate, so the tile's "%" reads correctly. Omitted when the prior
-  // window had no passes (the ratio is undefined) or no data at all.
-  const delta = summary.prior_total > 0 && summary.prior_pass_rate > 0
-    ? {
-        pct: ((summary.pass_rate - summary.prior_pass_rate) / summary.prior_pass_rate) * 100,
-        goodWhen: "up" as const,
-        note: `vs prev ${win}`,
-      }
-    : undefined;
-
-  const dims = [
-    { label: "Correctness", value: summary.avg_correctness },
-    { label: "Optimality", value: summary.avg_optimality },
-    { label: "Clarity", value: summary.avg_clarity },
-    { label: "Flow", value: summary.avg_flow },
-  ];
-
-  const healthTone = rateTone(summary.pass_rate);
-
-  const scoreCols: Column<QualityScoreRow>[] = [
+  const cols: Column<SolutionQuestion>[] = [
     {
-      key: "problem", header: "Problem", width: "42%",
-      render: (s) => (
-        <div style={{ minWidth: 0 }}>
-          <div style={{ color: "var(--ink)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {s.problem}
-          </div>
-          <div style={{ display: "flex", gap: 6, marginTop: 5, alignItems: "center", flexWrap: "wrap" }}>
-            <MetaChip label={SUBJECT_LABEL[s.subject] ?? s.subject} kind="subject" value={s.subject} />
-            <MetaChip label={MODE_LABEL[s.mode] ?? s.mode} kind="mode" value={s.mode} />
-            {!s.passed && s.issues && (
-              <span style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 280 }}>
-                {s.issues}
-              </span>
-            )}
-          </div>
+      key: "outcome", header: "Solution", width: "20%",
+      sortValue: (q) => q.outcome,
+      render: (q) => (
+        <StatusPill
+          tone={OUTCOME_META[q.outcome].tone}
+          label={OUTCOME_META[q.outcome].label}
+        />
+      ),
+    },
+    {
+      key: "question", header: "Question", width: "50%",
+      render: (q) => (
+        <div className="gq-cell-q">
+          <span className="gq-cell-title">{q.title}</span>
+          <span className="gq-cell-text">{q.question}</span>
         </div>
       ),
     },
-    { key: "correctness", header: "Corr", numeric: true, width: "8%", sortValue: (s) => s.correctness, render: (s) => <ScoreBadge score={s.correctness} /> },
-    { key: "optimality", header: "Opt", numeric: true, width: "8%", sortValue: (s) => s.optimality, render: (s) => <ScoreBadge score={s.optimality} /> },
-    { key: "clarity", header: "Clar", numeric: true, width: "8%", sortValue: (s) => s.clarity, render: (s) => <ScoreBadge score={s.clarity} /> },
-    { key: "flow", header: "Flow", numeric: true, width: "8%", sortValue: (s) => s.flow, render: (s) => <ScoreBadge score={s.flow} /> },
     {
-      key: "passed", header: "Verdict", width: "12%", align: "center",
-      sortValue: (s) => (s.passed ? 1 : 0),
-      render: (s) => <StatusPill tone={s.passed ? "ok" : "danger"} label={s.passed ? "PASS" : "FAIL"} />,
-    },
-    {
-      key: "created_at", header: "When", numeric: true, width: "14%",
-      sortValue: (s) => new Date(s.created_at).getTime(),
-      render: (s) => (
-        <span title={new Date(s.created_at).toLocaleString()} style={{ color: "var(--muted)", fontSize: 12.5 }}>
-          {formatRelativeDate(s.created_at)}
+      key: "created_at", header: "Generated", numeric: true, width: "18%",
+      sortValue: (q) => (q.created_at ? new Date(q.created_at).getTime() : 0),
+      render: (q) => (
+        <span className="gq-when">
+          {q.created_at ? formatRelativeDate(q.created_at) : "—"}
         </span>
       ),
     },
   ];
+
+  const summary = data?.summary;
 
   return (
     <div>
@@ -206,114 +176,183 @@ export default function Quality() {
         <div className="page-header" style={{ marginBottom: 0 }}>
           <span className="eyebrow">Diagnostic</span>
           <h1>Solution quality</h1>
-          <p>How good the AI-generated solutions are — an LLM judge scores a sample of solver runs. Always read the score next to its sample size.</p>
+          <p>
+            Whether the AI's worked answers held up — measured by the teachers
+            who had to fix them. The same solve prompt runs in tutoring and
+            practice, where nobody corrects it.
+          </p>
         </div>
         <StatusPill
-          tone={healthTone === "danger" ? "danger" : healthTone === "warn" ? "warn" : "ok"}
-          label={summary.pass_rate >= 75 ? "HEALTHY" : summary.pass_rate >= 60 ? "SLIPPING" : "WEAK"}
+          tone="info"
+          label="REPAIR SIGNAL"
+          title="A teacher correcting the worked answer is a human saying the solve was wrong"
         />
       </div>
 
-      <div className="filters">
-        <select value={hours} onChange={(e) => handleHoursChange(e.target.value)}>
-          <option value="24">Last 24 hours</option>
-          <option value="168">Last 7 days</option>
-          <option value="720">Last 30 days</option>
-          <option value="2160">Last 90 days</option>
-        </select>
-        <Checkbox checked={onlyFailed} onChange={handleFailedToggle} label="Failing only (list)" />
-      </div>
+      {data && (
+        <p className="gq-tracking" role="note">
+          Counting questions generated since {formatDate(data.tracking_since)} —
+          repairs are only recorded from that date, so earlier solutions
+          would look clean whether or not anyone fixed them.
+        </p>
+      )}
 
-      {/* ── ① Headline band ─────────────────────────────────────────── */}
-      <div className="tile-grid">
-        <StatTile
-          label="Pass rate"
-          tone={healthTone}
-          value={<span style={{ fontSize: 44, letterSpacing: -1 }}>{summary.pass_rate}%</span>}
-          delta={delta}
-          sub={`${summary.passed}/${summary.total} solutions cleared the bar · ${win}`}
-          spark={data.trend.map((t) => t.pass_rate)}
-        />
-        <StatTile
-          label="Evaluated"
-          value={summary.total.toLocaleString()}
-          sub={`${summary.coverage_pct}% of ${summary.total_sessions.toLocaleString()} sessions sampled · ${win}`}
-        />
-        <StatTile
-          label="Failing now"
-          tone={summary.failed > 0 ? "danger" : "ok"}
-          value={summary.failed.toLocaleString()}
-          sub={summary.failed > 0 ? "solutions scored below the bar" : "no failures in this window"}
-        />
-      </div>
-
-      {/* ── ② Trend (primary visual) ────────────────────────────────── */}
-      <div className="chart-card">
-        <h3>Pass rate over time</h3>
-        {data.trend.length > 1 ? (
-          <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={data.trend}>
-              <CartesianGrid strokeDasharray="2 4" />
-              <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-              <YAxis unit="%" domain={[0, 100]} />
-              <Tooltip
-                formatter={(v, _n, p) => [`${Number(v).toFixed(1)}% · ${p?.payload?.evaluated ?? 0} evaluated`, "Pass rate"]}
-              />
-              <Area type="monotone" dataKey="pass_rate" stroke="#4a6b3a" fill="#4a6b3a1a" strokeWidth={1.5} />
-            </AreaChart>
-          </ResponsiveContainer>
-        ) : (
-          <p className="empty-mini">Not enough history yet to plot a trend.</p>
-        )}
-      </div>
-
-      {/* Compact dimension strip — the 4 averages, not a full chart. */}
-      <div style={{
-        display: "flex", gap: 28, marginBottom: 28, padding: "16px 0",
-        borderTop: "1px solid var(--rule)", borderBottom: "1px solid var(--rule)",
-        flexWrap: "wrap", alignItems: "center",
-      }}>
-        <h3 style={{ marginBottom: 0, whiteSpace: "nowrap" }}>Avg by dimension</h3>
-        {dims.map((d) => (
-          <div key={d.label} style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{ fontSize: 13, color: "var(--ink-soft)" }}>{d.label}</span>
-            <span className="num" style={{
-              fontSize: 17,
-              color: d.value >= 4 ? "var(--ok)" : d.value >= 3 ? "var(--warn)" : "var(--danger)",
-            }}>
-              {d.value.toFixed(1)}
-            </span>
-            <span style={{ fontSize: 11, color: "var(--muted-2)" }}>/5</span>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Breakdown by subject + mode ─────────────────────────────── */}
-      <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 28 }}>
-        <BreakdownTable title="Subject" rows={data.by_subject} labelOf={(n) => SUBJECT_LABEL[n] ?? n} />
-        <BreakdownTable title="Mode" rows={data.by_mode} labelOf={(n) => MODE_LABEL[n] ?? n} />
-      </div>
-
-      {/* ── ③ Evaluations (worst-first, drill into the bad ones) ────── */}
-      <div className="table-card">
-        <h3>
-          Evaluations — worst first
-          <span style={{ color: "var(--muted)", fontWeight: 400, fontSize: 13 }}>
-            {" · "}{data.total_count.toLocaleString()}{onlyFailed ? " failing" : ""}
+      {loading && !data && <p className="loading">Loading…</p>}
+      {error && !data && (
+        <div className="empty-state">
+          <div className="empty-state-title">Couldn&rsquo;t load solution quality</div>
+          <div className="empty-state-sub">{error}</div>
+        </div>
+      )}
+      {error && data && (
+        // A failed REFETCH must not be silent. Without this the filter
+        // appears to apply, the old numbers stay put, and nothing says
+        // they are stale.
+        <div className="callout-warn" role="alert">
+          <StatusPill tone="warn" label="STALE" />
+          <span>
+            {error} The numbers below are from the last successful load.{" "}
+            <button
+              type="button"
+              onClick={() => void load()}
+              style={{
+                background: "none", border: "none", padding: 0,
+                color: "var(--accent)", cursor: "pointer",
+                font: "inherit", textDecoration: "underline",
+              }}
+            >
+              Retry
+            </button>
           </span>
-        </h3>
-        <DataTable
-          columns={scoreCols}
-          rows={data.scores}
-          rowKey={(s) => s.id}
-          onRowClick={(s) => navigate(`/quality/${s.session_id}`)}
-          rowStatus={(s) => (s.passed ? undefined : "var(--danger)")}
-          drill
-          minWidth={720}
-          empty={<span className="dt-state-title">{onlyFailed ? "No failing solutions in this window." : "No evaluations in this window."}</span>}
-        />
-        <Pagination offset={offset} limit={PAGE_SIZE} total={data.total_count} onChange={setOffset} />
-      </div>
+        </div>
+      )}
+
+      {summary && summary.judged === 0 && (
+        // Honest empty state. The page this replaces rendered 0% in red
+        // and called the AI "WEAK" off an empty table — a verdict from no
+        // evidence, which is the one thing a quality page must never do.
+        <div className="empty-state">
+          <div className="empty-state-title">No solutions judged yet</div>
+          <div className="empty-state-sub">
+            {summary.awaiting > 0
+              ? `${summary.awaiting.toLocaleString()} generated question${summary.awaiting === 1 ? " is" : "s are"} still waiting for a teacher. A solution is only judged once its question is approved.`
+              : "Once teachers approve generated questions, whether they had to fix the worked answer appears here."}
+          </div>
+        </div>
+      )}
+
+      {data && summary && summary.judged > 0 && (
+        <>
+          <div className="tile-grid">
+            <StatTile
+              label="Solutions that held"
+              tone={summary.thin ? "default" : rateTone(summary.clean_rate)}
+              value={<span style={{ fontSize: 44, letterSpacing: -1 }}>{summary.clean_rate}%</span>}
+              sub={`${summary.clean}/${summary.judged} approved with the answer untouched`}
+            />
+            <StatTile
+              label="Teacher fixed it"
+              tone={summary.repaired > 0 ? "warn" : "default"}
+              value={summary.repaired.toLocaleString()}
+              sub="steps or final answer corrected"
+            />
+            <StatTile
+              label="Question rejected"
+              value={summary.question_rejected.toLocaleString()}
+              sub="excluded — the solution never got a look"
+            />
+            <StatTile
+              label="Awaiting review"
+              value={summary.awaiting.toLocaleString()}
+              sub="excluded — not judged yet"
+            />
+          </div>
+
+          {summary.thin && (
+            <div className="callout-warn">
+              <StatusPill tone="warn" label="THIN" />
+              <span>
+                Only {summary.judged} solution
+                {summary.judged === 1 ? " has" : "s have"} been judged since
+                counting began — too few for the percentage above to mean much.
+              </span>
+            </div>
+          )}
+
+          <div className="gq-filters">
+            <label className="gq-filter">
+              <span>Show</span>
+              <select value={outcome} onChange={(e) => setOutcome(e.target.value)}>
+                <option value="">Every solution</option>
+                <option value="repaired">Fixed by a teacher</option>
+                <option value="clean">Held up</option>
+              </select>
+            </label>
+            <span className="gq-result-count">
+              {data.total_count} solution{data.total_count === 1 ? "" : "s"}
+            </span>
+          </div>
+
+          <DataTable
+            columns={cols}
+            rows={data.questions}
+            rowKey={(q) => q.id}
+            onRowClick={(q) => setOpenId(q.id)}
+            rowStatus={(q) => OUTCOME_META[q.outcome].color}
+            drill
+            minWidth={640}
+            empty={<span className="dt-state-title">No solutions match this filter.</span>}
+          />
+        </>
+      )}
+
+      {openId !== null && (
+        <EditorialModal
+          eyebrow="Solution quality"
+          title={detail?.title ?? "Repair history"}
+          onClose={() => setOpenId(null)}
+          maxWidth={760}
+        >
+          {detailLoading && <p className="gq-loading">Loading…</p>}
+          {detailError && !detailLoading && (
+            <p className="empty-mini">{detailError}</p>
+          )}
+          {!detailLoading && detail && (
+            <div className="gq-detail">
+              <section className="gq-current">
+                <h3>The question</h3>
+                <p className="gq-current-q">{detail.question}</p>
+                {detail.final_answer && (
+                  <p className="gq-current-a">
+                    <span>Answer key</span> {detail.final_answer}
+                  </p>
+                )}
+              </section>
+
+              <section>
+                <h3>
+                  What the teacher corrected
+                  <span className="gq-trail-count">
+                    {detail.edits.length} repair
+                    {detail.edits.length === 1 ? "" : "s"}
+                  </span>
+                </h3>
+                {detail.edits.length === 0 ? (
+                  <p className="gq-muted">
+                    This solution was approved as written — nothing to show.
+                  </p>
+                ) : (
+                  <ol className="gq-trail">
+                    {detail.edits.map((e, i) => (
+                      <RepairStep key={e.id} index={i} entry={e} />
+                    ))}
+                  </ol>
+                )}
+              </section>
+            </div>
+          )}
+        </EditorialModal>
+      )}
     </div>
   );
 }

@@ -8727,28 +8727,35 @@
     },
     "/v1/admin/quality": {
       "get": {
-        "operationId": "quality_scores_v1_admin_quality_get",
+        "description": "Every approved generated question, and whether its solution held.",
+        "operationId": "solution_quality_v1_admin_quality_get",
         "parameters": [
           {
             "in": "query",
-            "name": "hours",
-            "required": false,
-            "schema": {
-              "default": 168,
-              "maximum": 2160,
-              "minimum": 1,
-              "title": "Hours",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "only_failed",
+            "name": "include_variations",
             "required": false,
             "schema": {
               "default": false,
-              "title": "Only Failed",
+              "title": "Include Variations",
               "type": "boolean"
+            }
+          },
+          {
+            "description": "clean | repaired",
+            "in": "query",
+            "name": "outcome",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "clean | repaired",
+              "title": "Outcome"
             }
           },
           {
@@ -8781,7 +8788,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Quality Scores V1 Admin Quality Get",
+                  "title": "Response Solution Quality V1 Admin Quality Get",
                   "type": "object"
                 }
               }
@@ -8804,24 +8811,24 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Quality Scores",
+        "summary": "Solution Quality",
         "tags": [
           "admin"
         ]
       }
     },
-    "/v1/admin/quality/{session_id}": {
+    "/v1/admin/quality/{item_id}": {
       "get": {
-        "description": "Drill-in for a single evaluated session: the problem, the exact\ndecomposition steps shown to the student, and the judge's verdict.\nThis is the destination the evaluations table deep-links into.",
-        "operationId": "quality_session_detail_v1_admin_quality__session_id__get",
+        "description": "One question's solution repairs, oldest first.\n\nThe diffs are the payload. A count tells you WHICH solution to look\nat; only the before/after tells you what the solve prompt got wrong.",
+        "operationId": "solution_repair_history_v1_admin_quality__item_id__get",
         "parameters": [
           {
             "in": "path",
-            "name": "session_id",
+            "name": "item_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Session Id",
+              "title": "Item Id",
               "type": "string"
             }
           }
@@ -8832,7 +8839,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Quality Session Detail V1 Admin Quality  Session Id  Get",
+                  "title": "Response Solution Repair History V1 Admin Quality  Item Id  Get",
                   "type": "object"
                 }
               }
@@ -8855,7 +8862,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Quality Session Detail",
+        "summary": "Solution Repair History",
         "tags": [
           "admin"
         ]

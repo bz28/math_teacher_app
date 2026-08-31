@@ -30,7 +30,7 @@ Internal ops + sales + AI-quality console (Vite 7, React Router, Recharts). Defa
 FastAPI (Python 3.12, SQLAlchemy 2 async, Alembic, asyncpg) serving everything under `/v1`. Anthropic Claude for all AI. Auth is JWT + refresh-token rotation (bcrypt, email-OTP MFA, brute-force lockout).
 - **Data model** (`api/models/`): users (roles: student / teacher / admin); schools (institutional vs individual/indie-teacher) → courses → units → sections → enrollments/invites; assignments → submissions → grades; integrity-check submissions/problems/conversation-turns; question bank + generation jobs; self-study sessions; practice activity; billing (Stripe events, subscriptions); and ops tables (contact leads, lead notes/meetings, LLM calls, harness runs, quality scores, audit logs).
 - **Endpoint groups** (`api/routes/`, mounted in `api/main.py`): `auth`, `session` (learn/practice/mock-test), `practice`, `image` (extraction), `work` (work diagnosis), `integrity_check`, `weak_spots`, `teacher/*` (courses, sections, units, assignments, grades, documents, question-bank, practice-activity, preview, visibility), `school_student_practice`, `billing` + `webhook`, `contact`, and `admin/*` (leads, schools, users, overview, quality, grading-quality, harness, llm) + `admin_audit_logs`.
-- **AI core** (`api/core/`): step decomposition, tutor, grading (`grading_ai`), integrity (`integrity_ai` + `integrity_pipeline`), document vision + image extraction, assignment/question-bank generation, an LLM judge, subjects, a geometry figure engine, cost tracking + LLM logging.
+- **AI core** (`api/core/`): step decomposition, tutor, grading (`grading_ai`), integrity (`integrity_ai` + `integrity_pipeline`), document vision + image extraction, assignment/question-bank generation, subjects, a geometry figure engine, cost tracking + LLM logging.
 
 ### Harness & improver — `tests/harness/`
 An autonomous browser harness (Playwright + cached Chromium, token injection, isolated seed, cassette `$0` replay, cost tracker) that drives the **real running app** to test AI-generated surfaces (figures, solutions, grading). On top of it sits the **autonomous improver**: it scans the app, produces ranked/deduped improvement proposals, and — on approval — implements, reviews, and opens a PR. The route catalog it walks lives in `tests/harness/improver/surfaces.py`. See [`tests/harness/improver/README.md`](tests/harness/improver/README.md).
@@ -70,7 +70,7 @@ Tests & checks: `pytest tests/ -m "not integration"` (unit), `ruff check api/ te
               web/ (Next.js) ───┼──▶  api/ (FastAPI, /v1)  ──▶  PostgreSQL
   Teachers ──▶ web/ (Next.js) ──┘            │
                                              ├──▶  Anthropic Claude  (grading, integrity,
-  Ops/sales ─▶ dashboard/ (Vite) ────────────┘        tutoring, generation, judge)
+  Ops/sales ─▶ dashboard/ (Vite) ────────────┘        tutoring, generation)
                                              ├──▶  Stripe (web) / RevenueCat (mobile)  — billing
   Sales ─────▶ demo/ (Vite SPA, no API) ──▶ bundled JSON (self-contained)
 ```

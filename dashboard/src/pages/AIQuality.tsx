@@ -45,7 +45,7 @@ const TABS = [
   {
     key: "solutions",
     label: "Solutions",
-    hint: "Step-by-step solution pass rate",
+    hint: "Worked answers teachers had to fix",
     render: () => <Quality />,
   },
   {

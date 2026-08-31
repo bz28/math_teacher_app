@@ -250,17 +250,17 @@ async def _drain_fire_and_forget_pools() -> None:
 
     Beyond the integrity pipeline's own tasks, every real Claude call
     schedules an untracked background task to write its call-log /
-    quality-judge row to the DB (see llm_logging.fire_and_forget_persist
-    and judge.fire_and_forget_judge). Each opens its OWN session, so if
+    call-log row to the DB (see llm_logging.fire_and_forget_persist).
+    Each opens its OWN session, so if
     one leaks past the test that spawned it, it can hit the DB mid-way
     through a later test — writing an LLMCall row against a user/session
     the next test just truncated, or contending on the shared Postgres.
     Drain them here so they can't cross a test boundary.
     """
-    from api.core import judge, llm_logging
+    from api.core import llm_logging
 
     for _ in range(10):
-        tasks = list(llm_logging._background_tasks) + list(judge._background_tasks)
+        tasks = list(llm_logging._background_tasks)
         if not tasks:
             return
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -272,7 +272,7 @@ async def _drain_integrity_tasks() -> AsyncIterator[None]:
 
     Runs AFTER the test body so any fire-and-forget tasks — the submit
     pipeline's extraction/integrity/diagnosis tasks AND the LLM
-    telemetry/judge persistence tasks — finish (or fail) cleanly before
+    telemetry persistence tasks — finish (or fail) cleanly before
     the next test starts. Prevents tasks from leaking across tests and
     hitting a session/row that's about to be truncated, or racing the
     next test on a contended local Postgres.

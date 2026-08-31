@@ -12,6 +12,8 @@ export const LLM_MODES = {
   PRACTICE_EVAL: "practice_eval",
   IMAGE_EXTRACT: "image_extract",
   DIAGNOSE_WORK: "diagnose_work",
+  // Test-harness grading label. Kept in sync with LLMMode.JUDGE, which
+  // the harness uses; no product surface emits it.
   JUDGE: "judge",
   SUGGEST_UNITS: "suggest_units",
   GENERATE_QUESTIONS: "generate_questions",
