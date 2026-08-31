@@ -802,6 +802,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/users/{teacher_id}/submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Teacher Submissions
+         * @description Work handed in to this teacher, newest first — the bridge from a
+         *     teacher to the thing that actually went wrong.
+         *
+         *     A teacher reports a problem and you open her page. Everything there
+         *     describes what SHE did: sections, roster, and the model calls she
+         *     caused. But the calls she causes are only generation — `decompose`,
+         *     `generate_questions`, `practice_eval`. Grading and the integrity
+         *     check are billed to the STUDENT who submitted, because that's whose
+         *     request they serve, so `ai_grading` and all four integrity functions
+         *     are attributed to student ids and never appear on the teacher page
+         *     at all. On this data that is 120 of 138 calls: the teacher page
+         *     could show 13% of the model traffic her classroom generates, and the
+         *     complaint is almost always about the other 87%.
+         *
+         *     There was also no admin submissions endpoint of any kind — the only
+         *     way into `/submissions/{id}/trace`, which assembles the whole case
+         *     file, was to type a UUID into the address bar.
+         *
+         *     So: her assignments' submissions, each row a link into that trace.
+         *     `ai_score` vs `final_score` is the column worth sorting on — where a
+         *     teacher CHANGED the AI's score is where the AI was wrong, and it's
+         *     the only quality signal in the system that doesn't need a judge.
+         */
+        get: operations["teacher_submissions_v1_admin_users__teacher_id__submissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/users/{user_id}": {
         parameters: {
             query?: never;
@@ -7650,6 +7691,43 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+            };
+            header?: never;
+            path: {
+                teacher_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    teacher_submissions_v1_admin_users__teacher_id__submissions_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                overridden_only?: boolean;
             };
             header?: never;
             path: {
