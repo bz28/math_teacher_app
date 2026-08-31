@@ -9305,6 +9305,90 @@
         ]
       }
     },
+    "/v1/admin/users/{teacher_id}/submissions": {
+      "get": {
+        "description": "Work handed in to this teacher, newest first \u2014 the bridge from a\nteacher to the thing that actually went wrong.\n\nA teacher reports a problem and you open her page. Everything there\ndescribes what SHE did: sections, roster, and the model calls she\ncaused. But the calls she causes are only generation \u2014 `decompose`,\n`generate_questions`, `practice_eval`. Grading and the integrity\ncheck are billed to the STUDENT who submitted, because that's whose\nrequest they serve, so `ai_grading` and all four integrity functions\nare attributed to student ids and never appear on the teacher page\nat all. On this data that is 120 of 138 calls: the teacher page\ncould show 13% of the model traffic her classroom generates, and the\ncomplaint is almost always about the other 87%.\n\nThere was also no admin submissions endpoint of any kind \u2014 the only\nway into `/submissions/{id}/trace`, which assembles the whole case\nfile, was to type a UUID into the address bar.\n\nSo: her assignments' submissions, each row a link into that trace.\n`ai_score` vs `final_score` is the column worth sorting on \u2014 where a\nteacher CHANGED the AI's score is where the AI was wrong, and it's\nthe only quality signal in the system that doesn't need a judge.",
+        "operationId": "teacher_submissions_v1_admin_users__teacher_id__submissions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "teacher_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Teacher Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "overridden_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Overridden Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Teacher Submissions V1 Admin Users  Teacher Id  Submissions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Teacher Submissions",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/users/{user_id}": {
       "delete": {
         "operationId": "delete_user_v1_admin_users__user_id__delete",
