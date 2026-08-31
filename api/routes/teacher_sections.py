@@ -272,6 +272,9 @@ async def invite_student(
             student_id=existing_user.id,
         ))
         _stamp_school_id(existing_user, course)
+        # Did THIS request create the enrollment? Only the winner of a race
+        # should log one — see the rollback branch below.
+        this_request_enrolled = True
         try:
             await db.commit()
         except IntegrityError:
@@ -283,6 +286,12 @@ async def invite_student(
             #   Surface the same 409 the pre-check would have raised so the
             #   audit + response don't lie about which section won.
             await db.rollback()
+            # Our INSERT was rolled back, so whatever is there now was
+            # written by the request we raced. We report success (the
+            # student is where the teacher wanted them) but must not log
+            # a second enrollment for one enrollment — the winner already
+            # logged it.
+            this_request_enrolled = False
             landed_in_requested_section = (await db.execute(
                 select(SectionEnrollment.id).where(
                     SectionEnrollment.section_id == section_id,
@@ -294,22 +303,45 @@ async def invite_student(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Student is already enrolled in another section of this class.",
                 ) from None
-        # Recorded AFTER the commit and its rollback/retry branch above,
-        # so an enrollment that raced and did not land is never logged as
-        # if it had. Its own commit for the same reason.
-        await record_activity(
-            db, current_user, "section.enroll_student", "section", section_id,
-            {"student_id": str(existing_user.id)},
-        )
-        await db.commit()
+        if this_request_enrolled:
+            # Recorded after the enrollment's own commit, so this needs a
+            # commit of its own — wrapped, because the enrollment has
+            # ALREADY landed and an audit-row failure must not turn a
+            # successful enrollment into a 500. Same contract
+            # `record_activity` and `log_student_record_access` both hold.
+            await record_activity(
+                db, current_user, "section.enroll_student", "section", section_id,
+                {"student_id": str(existing_user.id)},
+            )
+            try:
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                logger.exception(
+                    "could not commit enrollment activity for section=%s",
+                    section_id,
+                )
         logger.info(
             "AUDIT: teacher=%s enrolled existing user=%s into section=%s",
             current_user.user_id, existing_user.id, section_id,
         )
         return {"status": "enrolled", "student_id": str(existing_user.id)}
 
+    # Inviting is the TEACHER's action, and for a student who does not yet
+    # have an account it is the only one — the enrollment itself happens
+    # later, when the student claims the invite, which is a student action
+    # and deliberately stays out of this log. Without recording the invite,
+    # a school onboarding thirty new students produced zero roster
+    # activity: exactly the "idle school" reading this exists to prevent.
+    #
+    # No email in the metadata. The activity log is a compliance surface
+    # and an invitee's address is not needed to make the entry legible.
     try:
         invite = await _create_or_refresh_invite(db, section_id, email, current_user.user_id)
+        await record_activity(
+            db, current_user, "section.invite_student", "section", section_id,
+            {"course_id": str(course_id)},
+        )
         await db.commit()
     except IntegrityError:
         # Raced with another invite. The partial unique index on
