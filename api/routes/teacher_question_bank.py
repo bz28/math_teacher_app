@@ -887,7 +887,10 @@ async def accept_chat_proposal(
                 cleaned_steps.append(step)
             item.solution_steps = _render_step_figures(cleaned_steps)
     if proposal.get("final_answer") is not None:
-        item.final_answer = str(proposal["final_answer"])
+        # Stripped, matching the PATCH path and the question field beside
+        # it. Whitespace-only difference is not a repair, and recording it
+        # as one inflates the very signal the quality reports read.
+        item.final_answer = str(proposal["final_answer"]).strip()
     # Top-level question-figure on the proposal. Three cases:
     #   1. Proposal includes a NEW figure_spec → render + persist.
     #   2. Proposal rewrites the question but omits figure_spec →

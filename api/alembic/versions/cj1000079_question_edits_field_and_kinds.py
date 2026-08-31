@@ -99,14 +99,21 @@ def downgrade() -> None:
     # to be an accurate quality signal would have been left quietly
     # lying, with no way to find the affected rows afterwards.
     #
-    # These rows only exist post-upgrade, so deleting them returns the
-    # table to exactly what the old code wrote. Losing a few audit rows
-    # on a rollback is strictly better than keeping mislabelled ones.
+    # Rows are deleted only where the old schema has NO honest home for
+    # them. Both regen kinds have one: the old model defined
+    # EDIT_REGENERATE = 'regenerate', so they collapse back to it rather
+    # than being destroyed. That also protects a legacy 'regenerate' row
+    # that PRE-DATES the upgrade — a blanket delete of the regen kinds
+    # would have taken a row we never created with it.
+    #
+    # `reject` and every non-question field have no old equivalent at all,
+    # so those are deleted.
     op.execute("DELETE FROM question_edits WHERE field <> 'question'")
     op.execute(
-        "DELETE FROM question_edits "
-        "WHERE kind IN ('regen_guided', 'regen_fresh', 'reject')"
+        "UPDATE question_edits SET kind = 'regenerate' "
+        "WHERE kind IN ('regen_guided', 'regen_fresh')"
     )
+    op.execute("DELETE FROM question_edits WHERE kind = 'reject'")
     op.execute("UPDATE question_edits SET kind = 'manual' WHERE kind = 'edit_manual'")
     op.execute("UPDATE question_edits SET kind = 'chat' WHERE kind = 'edit_workshop'")
     op.drop_index("ix_question_edits_field", table_name="question_edits")
