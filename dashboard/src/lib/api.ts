@@ -1103,10 +1103,18 @@ export interface TeacherStudentsData {
      *  "institutional" (→ School page) or "individual" (indie → the
      *  Independent Teachers list). Null for a school-less teacher. */
     school: { id: string; name: string; kind: string } | null;
-    /** Teacher's own last action (from ActivityLog) — drives the header
-     *  active/dormant verdict. Null if they've never acted. */
+    /** Latest of: a logged action, something they created, or a call
+     *  they caused — drives the header active/dormant verdict. Was
+     *  ActivityLog alone, which read NOT STARTED on teachers whose own
+     *  page listed recent work. Null if they've genuinely never acted. */
     last_active_at: string | null;
+    /** Every call this teacher's CLASSROOM caused in 30d, including the
+     *  grading and integrity calls billed to the students who
+     *  submitted. */
     call_count_30d: number;
+    /** The generation half only — all the Content generation panel can
+     *  show, since it filters on the teacher's own user id. */
+    generated_call_count_30d: number;
     total_cost_30d: number;
   };
   usage: TeacherUsage;

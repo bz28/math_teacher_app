@@ -1411,16 +1411,44 @@ async def teacher_students(
     # is generating real usage. Coalesced so zero-activity teachers
     # show as 0 rather than NULL.
     since_30d = datetime.now(UTC) - timedelta(days=30)
+
+    # Every call this teacher's CLASSROOM caused, not just the ones billed
+    # to her user id.
+    #
+    # Grading and integrity calls are billed to the student whose request
+    # they serve, so `user_id == teacher.id` sees only content generation —
+    # `decompose`, `generate_questions`, `practice_eval`. On a teacher who
+    # generated nothing but whose class submitted work, that count is 0
+    # while the submissions table on the same screen shows 45. The page
+    # contradicted itself in the one number that says whether the AI is
+    # doing anything for her at all.
+    teacher_submission_ids = (
+        select(Submission.id)
+        .join(Assignment, Assignment.id == Submission.assignment_id)
+        .where(Assignment.teacher_id == teacher.id)
+    )
     llm_stats = (await db.execute(
         select(
             func.count().label("call_count"),
             func.coalesce(func.sum(LLMCall.cost_usd), 0).label("total_cost"),
         )
         .where(
-            LLMCall.user_id == teacher.id,
+            or_(
+                LLMCall.user_id == teacher.id,
+                LLMCall.submission_id.in_(teacher_submission_ids),
+            ),
             LLMCall.created_at >= since_30d,
         )
     )).one()
+
+    # The generation half on its own, because the panel below the header
+    # only shows those and has to be able to say so honestly.
+    generated_calls = (await db.execute(
+        select(func.count()).where(
+            LLMCall.user_id == teacher.id,
+            LLMCall.created_at >= since_30d,
+        )
+    )).scalar() or 0
 
     # School context for the header breadcrumb. `kind` disambiguates the
     # back-link: an `institutional` teacher links to their School page,
@@ -1485,6 +1513,7 @@ async def teacher_students(
             "school": school,
             "last_active_at": last_action_at.isoformat() if last_action_at else None,
             "call_count_30d": int(llm_stats.call_count),
+            "generated_call_count_30d": int(generated_calls),
             "total_cost_30d": round(float(llm_stats.total_cost), 6),
         },
         "usage": usage,

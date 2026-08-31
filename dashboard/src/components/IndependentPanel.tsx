@@ -113,12 +113,23 @@ export default function IndependentPanel({
     {
       key: "activity", header: "Activity", width: "20%",
       render: (u) => {
-        const pill = activityPill(activityStatus(u.last_active));
+        // `last_active` is SESSIONS only — a student concept. A teacher
+        // who spent the week creating homework and publishing grades has
+        // no sessions at all, so this column rendered "NOT STARTED /
+        // never" beside a teacher whose own page reads ACTIVE with ten
+        // submissions and nine grades. On the column you triage by,
+        // that's the worst possible place for it.
+        //
+        // `last_active_at` is the unified max(session, logged action) the
+        // endpoint already returns, and whose own comment says to prefer
+        // it here (admin_users.py:568-572).
+        const recency = u.last_active_at ?? u.last_active;
+        const pill = activityPill(activityStatus(recency));
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
             <StatusPill tone={pill.tone} label={pill.label} />
             <span style={{ fontSize: 11.5, color: "var(--muted)" }}>
-              {u.last_active ? formatRelativeDate(u.last_active) : "never"}
+              {recency ? formatRelativeDate(recency) : "never"}
             </span>
           </div>
         );

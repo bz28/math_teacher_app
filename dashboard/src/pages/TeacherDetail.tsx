@@ -142,6 +142,8 @@ export default function TeacherDetail() {
             the calls it describes; the calls panel header carries it now. */}
         <div style={{ display: "flex", gap: 28, alignItems: "flex-start", flexWrap: "wrap" }}>
           <HeadlineStat label="Students" value={data.total_students.toLocaleString()} />
+          {/* The classroom total, not the calls billed to her user id.
+              The generation split lives on the panel below. */}
           <HeadlineStat
             label="Model calls"
             value={t.call_count_30d.toLocaleString()}
@@ -246,10 +248,13 @@ export default function TeacherDetail() {
             borderBottom: "1px solid var(--rule)",
           }}
         >
-          <h3 style={{ margin: 0 }}>Model calls</h3>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted-2)" }}>
-            content she generated · click for the exchange
-          </span>
+          <h3 style={{ margin: 0 }}>Content generation</h3>
+          {/* Only when there is a row to click. */}
+          {t.generated_call_count_30d > 0 && (
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted)" }}>
+              click a row for the exchange
+            </span>
+          )}
         </div>
         <div style={{ padding: "12px 16px 4px" }}>
           <TeacherLLMCalls key={t.id} teacherId={t.id} />

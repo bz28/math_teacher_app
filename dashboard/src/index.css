@@ -28,7 +28,11 @@
   --accent-soft: #fae9dc;
   --ok: #4a6b3a;            /* moss — healthy, active, success */
   --ok-soft: #e8ead9;
-  --warn: #a66b15;
+  /* Darkened from #a66b15, which measured 3.64:1 against --warn-soft —
+     below AA — and carries the REVIEW pill, the single most important
+     badge in the console: the flag that says "look at this submission".
+     Now 5.09:1 on the pill ground. */
+  --warn: #8a5510;
   --warn-soft: #f5e8c7;
   --danger: #8a2317;
   --danger-soft: #f0d7d1;

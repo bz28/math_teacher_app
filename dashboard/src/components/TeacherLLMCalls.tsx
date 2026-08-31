@@ -105,9 +105,20 @@ export default function TeacherLLMCalls({ teacherId }: { teacherId: string }) {
   // caused no calls in the window. With filters, the window isn't empty —
   // the filter is — and saying "no calls yet" would be false.
   if (data && calls.length === 0 && !filtering) {
+    // "No model calls" was false and provably so: this panel filters on
+    // the teacher's own user id, and grading/integrity calls are billed
+    // to the student, so a teacher whose class submitted 45 calls' worth
+    // of work rendered this empty state directly beneath a table counting
+    // them. Say which calls are missing and where they are.
     return (
       <div className="empty-state">
-        <div className="empty-state-title">No model calls in the last 30 days</div>
+        <div className="empty-state-title">
+          Nothing generated in the last 30 days
+        </div>
+        <div>
+          Grading and integrity calls are billed to the student who
+          submitted — open a row in Work handed in for those.
+        </div>
       </div>
     );
   }
