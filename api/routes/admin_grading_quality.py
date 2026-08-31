@@ -116,6 +116,12 @@ async def grading_quality(
     since = time_range(hours)
     rows = await _reviewed_rows(db, since, subject)
 
+    # Submissions compare_grade could not align at all. They were dropped
+    # silently before, so the page could report "across 19 reviewed
+    # submissions" beside a coverage tile saying 281 — the same screen,
+    # 15x apart, unexplained. A report that discards records must say so.
+    unalignable = 0
+
     all_deltas: list[ProblemDelta] = []
     by_subject: dict[str, list[ProblemDelta]] = defaultdict(list)
     by_course: dict[tuple[str, str], list[ProblemDelta]] = defaultdict(list)
@@ -129,6 +135,7 @@ async def grading_quality(
     for ai_breakdown, breakdown, at, subj, course_name in rows:
         deltas = compare_grade(ai_breakdown, breakdown)
         if deltas is None:
+            unalignable += 1
             continue
         reviewed_submissions += 1
         day = at.date().isoformat() if at is not None else "unknown"
@@ -152,6 +159,8 @@ async def grading_quality(
     coverage = await _coverage_counts(db, since, subject)
     summary["ai_graded_submissions"] = coverage["total"]
     summary["reviewed_ai_grades"] = coverage["reviewed"]
+    # What the numbers above do NOT speak for.
+    summary["unalignable_submissions"] = unalignable
 
     # Subjects sorted by how weak the AI is there (highest override rate
     # first) — the lede an admin wants is "where is grading worst."

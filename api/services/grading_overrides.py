@@ -181,7 +181,16 @@ def summarize(deltas: Iterable[ProblemDelta]) -> dict[str, Any]:
         round(override_abs_sum / overridden, 1) if overridden else 0.0
     )
 
-    if mean_delta > OVERRIDE_PERCENT_TOLERANCE:
+    # "balanced" is a CLAIM about calibration, and it needs evidence.
+    # With no overrides at all the mean delta is trivially 0.0, and the
+    # old code called that balanced — so the page announced "AI grades
+    # are well-calibrated" from an empty set. Nobody having overridden
+    # anything is a different statement from the AI being right, and on
+    # a page whose only job is to be trustworthy the difference is the
+    # whole point.
+    if not overridden:
+        direction = "unmeasured"
+    elif mean_delta > OVERRIDE_PERCENT_TOLERANCE:
         direction = "too_harsh"
     elif mean_delta < -OVERRIDE_PERCENT_TOLERANCE:
         direction = "too_generous"

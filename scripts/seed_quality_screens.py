@@ -28,6 +28,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -35,7 +36,7 @@ from sqlalchemy import select, text
 
 from api.core.auth import hash_password
 from api.database import get_session_factory
-from api.models.assignment import Assignment, Submission
+from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.course import Course
 from api.models.question_bank import QuestionBankItem
 from api.models.question_edit import (
@@ -148,7 +149,7 @@ async def main() -> None:
         # or grading tables — other boards read those and wiping them would
         # trade one empty screen for another.
         await s.execute(text(
-            "TRUNCATE question_edits, question_bank_items, submissions, "
+            "TRUNCATE question_edits, question_bank_items, submission_grades, submissions, "
             "assignments, sections, units, courses, schools, "
             "users RESTART IDENTITY CASCADE"
         ))
@@ -197,6 +198,7 @@ async def main() -> None:
             await s.flush()
             courses.append((course, asg, section))
 
+        made_subs: list[Submission] = []
         for i, (label, extraction, edits, outcome, age) in enumerate(CASES):
             # Chemistry gets the two flagged reads plus one clean, so it
             # ranks below math and the ordering is visibly doing something.
@@ -227,8 +229,36 @@ async def main() -> None:
                 sub.extraction_flagged_at = at
             # "awaiting" leaves both stamps null on purpose.
             s.add(sub)
+            made_subs.append(sub)
 
         await s.commit()
+
+
+        # ── Grading quality: AI grades a teacher published without
+        #    changing a mark. Zero overrides is the case the report used
+        #    to call "well-calibrated" — a verdict from an empty set —
+        #    so seeding it is how that fix stays visible on screen.
+        graded_at = NOW - timedelta(hours=8)
+        for i, sub in enumerate(made_subs[:6]):
+            ai = {"grades": [
+                {"problem_position": 1, "score_status": "full", "percent": 100},
+                {"problem_position": 2, "score_status": "partial", "percent": 60},
+            ]}
+            s.add(SubmissionGrade(
+                submission_id=sub.id,
+                ai_breakdown=ai,
+                # Byte-identical to the AI's call: the teacher published
+                # without touching anything.
+                breakdown=[
+                    {"problem_id": str(uuid.uuid4()), "score_status": "full",
+                     "percent": 100},
+                    {"problem_id": str(uuid.uuid4()), "score_status": "partial",
+                     "percent": 60},
+                ],
+                ai_score=80.0, final_score=80.0,
+                graded_at=graded_at,
+                grade_published_at=graded_at + timedelta(minutes=i),
+            ))
 
         # ── Generation quality: bank items with a repair history, so the
         #    page that reads `question_edits` can be seen and screenshotted

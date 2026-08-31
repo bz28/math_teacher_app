@@ -877,7 +877,12 @@ export interface SolutionRepairHistory {
 
 // ── AI grading quality (teacher-override analytics) ──
 
-export type GradingDirection = "too_harsh" | "too_generous" | "balanced";
+/** "unmeasured" means NO overrides exist — deliberately not a verdict.
+ *  Zero overrides makes the mean delta trivially 0.0, and reading that as
+ *  "balanced" had the page announce the AI was well-calibrated from an
+ *  empty set. */
+export type GradingDirection =
+  | "too_harsh" | "too_generous" | "balanced" | "unmeasured";
 
 /** Headline metrics shared by the global summary and every group bucket
  *  (subject, course, day). `mean_delta` is the signed direction signal:
@@ -901,6 +906,10 @@ export type GradingSummary = GradingBucket & {
   reviewed_submissions: number;
   ai_graded_submissions: number;
   reviewed_ai_grades: number;
+  /** Reviewed submissions the report could not compare at all, because
+   *  the AI and teacher grade lists don't line up. Dropped entirely —
+   *  reported so the denominator isn't a lie of omission. */
+  unalignable_submissions: number;
 };
 
 export interface GradingQualityData {

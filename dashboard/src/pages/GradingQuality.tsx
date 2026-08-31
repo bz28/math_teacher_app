@@ -39,6 +39,8 @@ const DIRECTION_META: Record<
   too_harsh: { color: "var(--accent)", soft: "var(--accent-soft)", word: "too harsh" },
   too_generous: { color: "var(--info)", soft: "var(--info-soft)", word: "too generous" },
   balanced: { color: "var(--ok)", soft: "var(--ok-soft)", word: "well-calibrated" },
+  // No overrides at all. Deliberately NOT a verdict — see VerdictHero.
+  unmeasured: { color: "var(--muted)", soft: "var(--paper-2)", word: "not yet measured" },
 };
 
 const SUBJECT_LABEL: Record<string, string> = {
@@ -71,6 +73,11 @@ function severeFlips(matrix: GradingQualityData["status_matrix"]): number {
 /** Signed direction chip — the at-a-glance "which way does the AI lean". */
 function DirectionTag({ bucket }: { bucket: GradingBucket }) {
   const meta = DIRECTION_META[bucket.direction];
+  // With no overrides the mean delta still averages over every COMPARED
+  // problem, so a sub-tolerance nudge leaves it non-zero. Printing it
+  // beside "not yet measured" would show a bias figure under a label
+  // saying there is nothing to measure.
+  const showDelta = bucket.direction !== "unmeasured";
   return (
     <span
       style={{
@@ -80,7 +87,9 @@ function DirectionTag({ bucket }: { bucket: GradingBucket }) {
         textTransform: "uppercase", fontFamily: "var(--font-sans)", whiteSpace: "nowrap",
       }}
     >
-      <span className="num" style={{ fontWeight: 500 }}>{fmtPts(bucket.mean_delta, true)}</span>
+      {showDelta && (
+        <span className="num" style={{ fontWeight: 500 }}>{fmtPts(bucket.mean_delta, true)}</span>
+      )}
       {meta.word}
     </span>
   );
@@ -94,7 +103,16 @@ function VerdictHero({ summary }: { summary: GradingSummary }) {
 
   let headline: string;
   let detail: string;
-  if (summary.direction === "too_harsh") {
+  if (summary.direction === "unmeasured") {
+    // This branch replaces a real defect: the page used to announce "AI
+    // grades are well-calibrated" here, because zero overrides makes the
+    // mean delta trivially 0.0 and the old code read that as balanced.
+    // It was a confident verdict from an empty set. Nobody having
+    // corrected the AI is not evidence that the AI is right — it is
+    // evidence that nobody has checked.
+    headline = "Nobody has overridden a grade yet.";
+    detail = `Teachers reviewed ${summary.reviewed_submissions} submission${summary.reviewed_submissions === 1 ? "" : "s"} and overrode nothing. That is not the same as the AI being right — until someone disagrees, there is nothing to measure calibration against.`;
+  } else if (summary.direction === "too_harsh") {
     headline = `The AI grades about ${magnitude} points too harsh.`;
     detail = `Teachers raised the score on ${summary.raised} of the ${summary.overridden_problems} problems they changed — the model under-credits student work.`;
   } else if (summary.direction === "too_generous") {
@@ -128,6 +146,37 @@ function VerdictHero({ summary }: { summary: GradingSummary }) {
   );
 }
 
+/** Records the report could not compare at all, and therefore dropped.
+ *
+ *  Deliberately its OWN component rather than a line inside ThinCaveat,
+ *  which early-returns when the sample and coverage are healthy — so the
+ *  disclosure disappeared in exactly the case it matters most: a
+ *  confident-looking page quietly built on fewer records than it claims.
+ *  A report that discards records has to say so, or its denominator is a
+ *  lie of omission. */
+function DroppedNotice({ summary }: { summary: GradingSummary }) {
+  if (summary.unalignable_submissions < 1) return null;
+  const n = summary.unalignable_submissions;
+  return (
+    <div
+      style={{
+        display: "flex", alignItems: "center", gap: 12,
+        background: "var(--paper-2)", borderLeft: "3px solid var(--muted-2)",
+        padding: "12px 16px", marginBottom: 24, fontSize: 13,
+        color: "var(--ink-soft)", fontFamily: "var(--font-sans)",
+      }}
+    >
+      <StatusPill tone="neutral" label="EXCLUDED" />
+      <span>
+        {n} reviewed submission{n === 1 ? "" : "s"} could not be compared at
+        all — the AI and teacher grade lists don&rsquo;t line up. No
+        override figure on this page includes
+        {n === 1 ? " it" : " them"}.
+      </span>
+    </div>
+  );
+}
+
 /** Thin-coverage caveat — the override rate rests on too few problems, or
  *  teachers have reviewed too small a slice of what the AI graded. */
 function ThinCaveat({ summary }: { summary: GradingSummary }) {
@@ -145,6 +194,7 @@ function ThinCaveat({ summary }: { summary: GradingSummary }) {
   if (thinCoverage) {
     parts.push(`teachers have reviewed just ${Math.round(coverage! * 100)}% of the ${summary.ai_graded_submissions} grades the AI produced`);
   }
+
   return (
     <div
       style={{
@@ -605,18 +655,34 @@ export default function GradingQuality() {
       </div>
 
       {!hasData ? (
+        <>
+        {/* Shown ABOVE the empty state: if every reviewed submission was
+            un-alignable, the page would otherwise say "no reviewed grades
+            yet" while the API reports a non-zero excluded count — the
+            number computed and then thrown away. */}
+        <DroppedNotice summary={summary} />
         <div className="empty-state">
-          <div className="empty-state-title">No reviewed grades yet</div>
+          <div className="empty-state-title">
+            {summary.unalignable_submissions > 0
+              ? "Nothing here could be compared"
+              : "No reviewed grades yet"}
+          </div>
           <div className="empty-state-sub">
-            Once teachers review or publish AI-graded submissions in this window,
-            their overrides will surface here.
+            {summary.unalignable_submissions > 0
+              // Saying "no reviewed grades yet" directly under a notice
+              // counting reviewed grades was a flat contradiction — and
+              // this is precisely the case that notice exists for.
+              ? "Teachers have reviewed grades in this window, but none of them could be lined up against the AI's original call, so there is no override figure to show."
+              : "Once teachers review or publish AI-graded submissions in this window, their overrides will surface here."}
           </div>
         </div>
+        </>
       ) : (
         <>
           {/* ── Band 1 — Verdict ─────────────────────────────────────── */}
           <VerdictHero summary={summary} />
           <ThinCaveat summary={summary} />
+          <DroppedNotice summary={summary} />
 
           <div className="tile-grid">
             <StatTile
@@ -671,13 +737,25 @@ export default function GradingQuality() {
 
           {/* ── Band 3 — Weak spots (above the matrix) ───────────────── */}
           <div className="table-card">
-            <h3>Weakest by subject — click a row for the cases</h3>
+            {/* "Weakest" is a ranking claim, and it needs something to
+                rank. Over one subject it is a superlative against
+                nothing — and the course table below repeated the same
+                row verbatim. Only promise an ordering when there is one. */}
+            <h3>
+              {subjectRows.length > 1
+                ? "Weakest by subject — click a row for the cases"
+                : "By subject — click a row for the cases"}
+            </h3>
             <WeakSpotsTable rows={subjectRows} onDrill={openWeakDrill} />
           </div>
 
           {courseRows.length > 0 && (
             <div className="table-card">
-              <h3>Weakest by course — click a row for the cases</h3>
+              <h3>
+                {courseRows.length > 1
+                  ? "Weakest by course — click a row for the cases"
+                  : "By course — click a row for the cases"}
+              </h3>
               <WeakSpotsTable rows={courseRows} onDrill={openWeakDrill} />
             </div>
           )}
