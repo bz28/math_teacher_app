@@ -193,3 +193,38 @@ async def test_a_roster_removal_records_an_id_and_no_identity(
     meta = rows[0].action_metadata
     assert meta == {"student_id": str(enrollment.student_id)}
     assert "email" not in str(meta) and "name" not in meta
+
+
+async def test_inviting_a_new_student_is_recorded(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """The onboarding path that was silent.
+
+    `section.enroll_student` only fires when the invited email ALREADY has
+    an account. For a brand-new student the flow is invite -> claim, and
+    the claim is a student action that deliberately stays out of this log.
+    Without recording the invite, a school onboarding thirty new students
+    produced zero roster activity — the exact idle-school reading this
+    instrumentation exists to prevent.
+    """
+    course_id = await _own_course(world)
+    created = await client.post(
+        f"/v1/teacher/courses/{course_id}/sections",
+        headers=_auth(world["teacher_token"]), json={"name": "Period 9"},
+    )
+    assert created.status_code == 201, created.text
+    section_id = created.json()["id"]
+    await _clear()
+
+    r = await client.post(
+        f"/v1/teacher/courses/{course_id}/sections/{section_id}/invites",
+        headers=_auth(world["teacher_token"]),
+        json={"email": "brand.new.student@example.com"},
+    )
+    assert r.status_code in (200, 201), r.text
+
+    rows = [a for a in await _actions() if a.action == "section.invite_student"]
+    assert len(rows) == 1
+    # No email. An invitee's address is not needed to make the entry
+    # legible, and this table is a compliance surface.
+    assert "brand.new.student" not in str(rows[0].action_metadata)
