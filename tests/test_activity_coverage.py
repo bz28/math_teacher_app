@@ -123,8 +123,9 @@ async def test_deleting_a_section_is_recorded_before_the_row_goes(
     world: dict[str, Any], client: AsyncClient,
 ) -> None:
     """A section delete discards every submission in it. Recording after
-    the delete would leave an entry naming a row that no longer exists —
-    so the name has to be captured first."""
+    the delete would still read a live `section.name`, because the session
+    factory sets `expire_on_commit=False` — so what this pins is the record
+    being made at all and carrying a readable name, not the ordering."""
     course_id = await _own_course(world)
     created = await client.post(
         f"/v1/teacher/courses/{course_id}/sections",
@@ -142,8 +143,105 @@ async def test_deleting_a_section_is_recorded_before_the_row_goes(
 
     rows = [a for a in await _actions() if a.action == "section.delete"]
     assert len(rows) == 1
-    # Readable after the fact, which is the whole point of recording early.
+    # The entry has to name the class a human would recognise; an id alone
+    # is unreadable once the row it points at is gone.
     assert rows[0].action_metadata["name"] == "Doomed"
+
+
+async def test_deleting_a_course_is_recorded_with_its_name(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """A course delete takes the whole class with it — sections, roster,
+    assignments, student work. It is the most destructive thing a teacher
+    can do here, so it has to leave an entry, and the entry has to name
+    the class: the course row is gone, so an id alone resolves to
+    nothing anyone can read."""
+    created = await client.post(
+        "/v1/teacher/courses",
+        headers=_auth(world["teacher_token"]),
+        json={"name": "Doomed Class", "subject": "math", "grade_level": 9},
+    )
+    assert created.status_code in (200, 201), created.text
+    course_id = created.json()["id"]
+    await _clear()
+
+    r = await client.delete(
+        f"/v1/teacher/courses/{course_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+
+    rows = [a for a in await _actions() if a.action == "course.delete"]
+    assert len(rows) == 1
+    assert rows[0].action_metadata["name"] == "Doomed Class"
+    assert str(rows[0].target_id) == course_id
+    # The class is genuinely gone — this is not a soft delete, which is
+    # exactly why the entry is the only remaining record of it.
+    gone = await client.get(
+        f"/v1/teacher/courses/{course_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert gone.status_code == 404, gone.text
+
+
+async def test_an_integrity_ruling_is_recorded(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """A teacher deciding whether a student was dishonest is the most
+    consequential judgment in the product. It was stamped on the check
+    row and nowhere else, so it could never appear in a timeline.
+
+    The AI's disposition rides along because the interesting cases are
+    the disagreements — the agent flagged it, the teacher cleared it.
+    Without both halves the entry cannot show one.
+    """
+    from api.models.assignment import Submission
+    from api.models.integrity_check import IntegrityCheckSubmission
+    from api.models.section_enrollment import SectionEnrollment
+
+    await _own_course(world)
+    async with get_session_factory()() as s:
+        section_id = (await s.execute(
+            select(SectionEnrollment.section_id).where(
+                SectionEnrollment.student_id == world["student_id"],
+            )
+        )).scalars().first()
+        assert section_id is not None, "world fixture should enroll the student"
+        sub = Submission(
+            assignment_id=world["assignment_id"],
+            student_id=world["student_id"],
+            section_id=section_id,
+            status="submitted",
+        )
+        s.add(sub)
+        await s.flush()
+        submission_id = sub.id
+        # The agent flagged it; the teacher is about to disagree.
+        s.add(IntegrityCheckSubmission(
+            submission_id=submission_id,
+            status="complete",
+            disposition="flag_for_review",
+        ))
+        await s.commit()
+
+    await _clear()
+    r = await client.post(
+        f"/v1/teacher/integrity/submissions/{submission_id}/resolve",
+        headers=_auth(world["teacher_token"]),
+        json={"resolution": "cleared"},
+    )
+    assert r.status_code == 204, r.text
+
+    rows = [a for a in await _actions() if a.action == "integrity.resolve"]
+    assert len(rows) == 1
+    assert rows[0].action_metadata["resolution"] == "cleared"
+    # Both halves of the disagreement, which is the point.
+    assert rows[0].action_metadata["ai_disposition"] == "flag_for_review"
+    assert str(rows[0].target_id) == str(submission_id)
+    # Compliance contract: an id identifies the student, never a name or
+    # an email, and never a word of their actual work.
+    assert "name" not in rows[0].action_metadata
+    assert "email" not in rows[0].action_metadata
 
 
 async def test_creating_a_course_is_recorded(
@@ -374,11 +472,14 @@ async def test_an_audit_failure_does_not_break_an_invite(
 # Both recovery branches were dead code for exactly this reason, for as
 # long as they had existed.
 #
-# The race is simulated rather than threaded: committing the competing
-# row on a SEPARATE session before the request runs puts the handler in
-# the identical state a real loser would be in — its INSERT violates the
-# unique index, it rolls back, and it must recover using values that are
-# no longer live in the ORM.
+# The race is simulated rather than threaded, and WHERE the competing row
+# lands is the whole game. Committing it before the request runs does not
+# reproduce anything: the handler's own pre-check SELECT finds it and
+# returns early, so the recovery branch never executes and the test passes
+# with the defect fully present. Both tests below therefore inject the
+# competing row from inside the handler's own call stack — after its
+# SELECT, before its INSERT — which is the only arrangement that makes its
+# commit raise IntegrityError and drive the branch.
 
 
 async def test_a_losing_invite_race_still_succeeds(
@@ -431,11 +532,15 @@ async def test_a_losing_invite_race_still_succeeds(
 
 
 async def test_a_losing_enrollment_race_still_succeeds(
-    world: dict[str, Any], client: AsyncClient,
+    world: dict[str, Any], client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Two teachers invite the same EXISTING user into the same section.
-    The loser reports success — the student is where the teacher wanted
-    them — and must not log a second enrollment for one enrollment."""
+    The loser's INSERT is rolled back; it must still report success — the
+    student is where the teacher wanted them — without 500ing on an
+    expired `existing_user.id`, and without logging a second enrollment
+    for one enrollment."""
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from api.core.auth import hash_password
     from api.models.section_enrollment import SectionEnrollment
     from api.models.user import User
@@ -458,22 +563,68 @@ async def test_a_losing_enrollment_race_still_succeeds(
         s.add(student)
         await s.commit()
         student_id = student.id
-        # The competing request enrolls them first.
-        s.add(SectionEnrollment(
-            section_id=uuid.UUID(section_id),
-            course_id=course_id,
-            student_id=student_id,
-        ))
-        await s.commit()
+
+    # The competing enrollment has to land after the handler's
+    # `already_enrolled` SELECT and before its INSERT reaches the database.
+    # The handler stages its row with `db.add` and only flushes at
+    # `commit()`, so commit is the seam — but the request commits more than
+    # once, and injecting at the first one lands the row before the
+    # pre-check, which then returns a clean 409 and never runs the branch
+    # (an earlier version of this test committed it up front and failed the
+    # same way, except silently, by asserting 409 was acceptable).
+    #
+    # So arm on `_stamp_school_id`: the handler calls it between `db.add`
+    # and `db.commit()`, which makes the very next commit the enrollment's.
+    import api.routes.teacher_sections as mod
+
+    real_stamp = mod._stamp_school_id
+    real_commit = AsyncSession.commit
+    armed = False
+    raced = False
+
+    def _arming_stamp(user: Any, course: Any) -> None:
+        nonlocal armed
+        armed = True
+        real_stamp(user, course)
+
+    async def _racing_commit(self: Any) -> None:
+        nonlocal armed, raced
+        if armed and not raced:
+            # Cleared FIRST: the competing session's commit re-enters here.
+            armed = False
+            raced = True
+            async with get_session_factory()() as other:
+                other.add(SectionEnrollment(
+                    section_id=uuid.UUID(section_id),
+                    course_id=course_id,
+                    student_id=student_id,
+                ))
+                await other.commit()
+        await real_commit(self)
+
+    monkeypatch.setattr(mod, "_stamp_school_id", _arming_stamp)
+    monkeypatch.setattr(AsyncSession, "commit", _racing_commit)
 
     await _clear()
     r = await client.post(
         f"/v1/teacher/courses/{course_id}/sections/{section_id}/invites",
         headers=_auth(world["teacher_token"]), json={"email": email},
     )
-    # The pre-check catches this before the INSERT, so it is a clean 409
-    # rather than the rollback path — either way it must not 500, and it
-    # must not log an enrollment it did not create.
-    assert r.status_code in (200, 201, 409), r.text
-    rows = [a for a in await _actions() if a.action == "section.enroll_student"]
-    assert len(rows) == 0, "the loser must not log an enrollment it didn't make"
+    monkeypatch.undo()
+
+    assert raced, "the competing row never landed — the race was not exercised"
+    # The student is in the section the teacher asked for, so the teacher
+    # sees success, not the 500 the expired-attribute read used to produce.
+    assert r.status_code in (200, 201), r.text
+
+    async with get_session_factory()() as s:
+        rows_in_db = (await s.execute(
+            select(SectionEnrollment.id).where(
+                SectionEnrollment.section_id == uuid.UUID(section_id),
+                SectionEnrollment.student_id == student_id,
+            )
+        )).scalars().all()
+    assert len(rows_in_db) == 1, "one enrollment, not two"
+
+    logged = [a for a in await _actions() if a.action == "section.enroll_student"]
+    assert len(logged) == 0, "the loser must not log an enrollment it didn't make"
