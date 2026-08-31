@@ -362,22 +362,23 @@ export default function GenerationQuality() {
         </p>
       )}
 
-      {board && (
-        <GenerationBoard
-          data={board}
-          outcome={outcome}
-          onOutcome={setOutcome}
-          onOpen={setOpenId}
-        />
-      )}
       {loading && !board && <p className="loading">Loading…</p>}
-      {error && (
-        // Shown even when a previous board is still on screen. Rendering
-        // this only when there is no data at all left a failed refetch
-        // silent: the filter appeared to apply, the old numbers stayed
-        // put, and nothing said they were stale.
+
+      {/* Two DIFFERENT states, and collapsing them was a real defect.
+          With no board there is nothing to be stale — saying "the numbers
+          below are from the last successful load" over an empty page is
+          both wrong and confusing. With a board, the failure must be
+          announced ABOVE the numbers it applies to, or the sentence
+          points at nothing. */}
+      {error && !board && (
+        <div className="empty-state">
+          <div className="empty-state-title">Couldn&rsquo;t load generation quality</div>
+          <div className="empty-state-sub">{error}</div>
+        </div>
+      )}
+      {error && board && (
         <div className="callout-warn" role="alert">
-          <StatusPill tone="danger" label="STALE" />
+          <StatusPill tone="warn" label="STALE" />
           <span>
             {error} The numbers below are from the last successful load.{" "}
             <button
@@ -393,6 +394,15 @@ export default function GenerationQuality() {
             </button>
           </span>
         </div>
+      )}
+
+      {board && (
+        <GenerationBoard
+          data={board}
+          outcome={outcome}
+          onOutcome={setOutcome}
+          onOpen={setOpenId}
+        />
       )}
 
       {openId !== null && (
