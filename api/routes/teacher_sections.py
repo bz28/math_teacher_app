@@ -180,9 +180,12 @@ async def delete_section(
     # submissions for assignments in this section. Student accounts survive —
     # only their work in this section is lost.
     #
-    # Recorded BEFORE the delete, and the destructiveness is why: this is
-    # the one roster action that discards student work, and the name is
-    # the only thing that makes the entry readable once the row is gone.
+    # Recorded BEFORE the delete so the audit row is written while the
+    # section is unambiguously live, and so a delete that fails takes the
+    # row with it — both share this transaction. Not because the name
+    # would otherwise be unreadable: `expire_on_commit=False` would keep
+    # it readable after the delete too. That is session configuration,
+    # though, and this ordering does not depend on it staying true.
     await record_activity(
         db, current_user, "section.delete", "section", section_id,
         {"name": section.name, "course_id": str(course_id)},

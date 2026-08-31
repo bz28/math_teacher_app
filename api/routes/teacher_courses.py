@@ -651,8 +651,11 @@ async def delete_course(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     course = await get_teacher_course(db, course_id, current_user.user_id)
-    # Recorded BEFORE the delete: the row is about to be gone, and the
-    # name is the only thing that makes the entry readable afterwards.
+    # Recorded BEFORE the delete, sharing its transaction: a delete that
+    # fails takes the audit row with it, and the name is read while the
+    # course is unambiguously live. `expire_on_commit=False` happens to
+    # keep that name readable afterwards too, but this ordering should
+    # not depend on that staying true.
     await record_activity(
         db, current_user, "course.delete", "course", course_id,
         {"name": course.name},

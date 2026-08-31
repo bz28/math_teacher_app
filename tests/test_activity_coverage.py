@@ -117,9 +117,12 @@ async def test_creating_a_section_is_recorded(
     assert len(rows) == 1
     assert rows[0].action_metadata["name"] == "Period 7"
     assert rows[0].actor_role == "teacher"
+    # Without a target the entry cannot be linked back to the section it
+    # is about, which is most of what makes a feed row useful.
+    assert str(rows[0].target_id) == r.json()["id"]
 
 
-async def test_deleting_a_section_is_recorded_before_the_row_goes(
+async def test_deleting_a_section_is_recorded_with_its_name(
     world: dict[str, Any], client: AsyncClient,
 ) -> None:
     """A section delete discards every submission in it. Recording after
@@ -329,6 +332,87 @@ async def test_inviting_a_new_student_is_recorded(
     assert "brand.new.student" not in str(rows[0].action_metadata)
 
 
+async def test_enrolling_an_existing_student_records_an_id_and_nothing_else(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """Inviting an email that already has an account enrolls immediately,
+    and this is the only new payload assembled from a live `User` row —
+    every neighbouring field on it (name, email) is exactly what this
+    table must never carry. Asserted as an equality, not a membership
+    test: a leak is something being ADDED, which `in` cannot catch."""
+    from api.core.auth import hash_password
+    from api.models.user import User
+
+    course_id = await _own_course(world)
+    created = await client.post(
+        f"/v1/teacher/courses/{course_id}/sections",
+        headers=_auth(world["teacher_token"]), json={"name": "Period 11"},
+    )
+    assert created.status_code == 201, created.text
+    section_id = created.json()["id"]
+
+    email = f"existing{uuid.uuid4().hex[:8]}@example.com"
+    async with get_session_factory()() as s:
+        student = User(
+            email=email, password_hash=hash_password("x"), grade_level=9,
+            role="student", name="Enrolled Student", is_active=True,
+            failed_login_attempts=0, mfa_enabled=False,
+        )
+        s.add(student)
+        await s.commit()
+        student_id = student.id
+
+    await _clear()
+    r = await client.post(
+        f"/v1/teacher/courses/{course_id}/sections/{section_id}/invites",
+        headers=_auth(world["teacher_token"]), json={"email": email},
+    )
+    assert r.status_code in (200, 201), r.text
+    assert r.json()["status"] == "enrolled"
+
+    rows = [a for a in await _actions() if a.action == "section.enroll_student"]
+    assert len(rows) == 1
+    assert rows[0].action_metadata == {"student_id": str(student_id)}
+    assert str(rows[0].target_id) == section_id
+
+
+async def test_resending_an_invite_does_not_log_a_second_student(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """Re-inviting a still-pending email refreshes its token rather than
+    creating a second invite, and only a genuinely new one is worth a
+    line. This is the whole reason `_create_or_refresh_invite` reports
+    whether it created: without it, one teacher clicking a button twice
+    reads as two students onboarded, which is precisely the false signal
+    this instrumentation exists to avoid."""
+    course_id = await _own_course(world)
+    created = await client.post(
+        f"/v1/teacher/courses/{course_id}/sections",
+        headers=_auth(world["teacher_token"]), json={"name": "Period 12"},
+    )
+    assert created.status_code == 201, created.text
+    section_id = created.json()["id"]
+    email = f"resend{uuid.uuid4().hex[:8]}@example.com"
+    url = f"/v1/teacher/courses/{course_id}/sections/{section_id}/invites"
+
+    await _clear()
+    first = await client.post(
+        url, headers=_auth(world["teacher_token"]), json={"email": email},
+    )
+    assert first.status_code in (200, 201), first.text
+    assert len([a for a in await _actions()
+                if a.action == "section.invite_student"]) == 1
+
+    # Same email, still pending: a refresh, not a new invite.
+    again = await client.post(
+        url, headers=_auth(world["teacher_token"]), json={"email": email},
+    )
+    assert again.status_code in (200, 201), again.text
+
+    rows = [a for a in await _actions() if a.action == "section.invite_student"]
+    assert len(rows) == 1, "a resend is not a second student onboarded"
+
+
 # ── The audit row must never break the action ────────────────────────
 #
 # `record_activity` swallows its own errors precisely so a logging
@@ -529,6 +613,11 @@ async def test_a_losing_invite_race_still_succeeds(
     # The student is invited — that is what the teacher asked for.
     assert r.status_code in (200, 201), r.text
     assert r.json()["invite"]["email"] == email
+    # The winner logged the invite; the loser created nothing and must
+    # not claim it did. Without this, `is_new_invite` could be set before
+    # the commit that decides the race and nothing would notice.
+    logged = [a for a in await _actions() if a.action == "section.invite_student"]
+    assert len(logged) == 0, "the loser must not log an invite it didn't create"
 
 
 async def test_a_losing_enrollment_race_still_succeeds(
