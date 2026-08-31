@@ -1,6 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import Quality from "./Quality";
 import GradingQuality from "./GradingQuality";
+import ExtractionQuality from "./ExtractionQuality";
 import GenerationQuality from "./GenerationQuality";
 import GoldenSet from "./GoldenSet";
 import HarnessRuns from "./HarnessRuns";
@@ -20,6 +21,15 @@ import HarnessRuns from "./HarnessRuns";
  */
 
 const TABS = [
+  {
+    // First because it runs first. Every grade, every solution check and
+    // every integrity call downstream is built on this read being right,
+    // so a defect here is the one that contaminates everything after it.
+    key: "handwriting",
+    label: "Handwriting",
+    hint: "Whether the AI read the student's work correctly",
+    render: () => <ExtractionQuality />,
+  },
   {
     key: "grading",
     label: "Grading",

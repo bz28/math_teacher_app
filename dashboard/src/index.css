@@ -3087,3 +3087,110 @@ table.dt tr:last-child td { border-bottom: none; }
    the final figure is what stands, so it takes the weight. */
 .score-override { color: var(--ink); white-space: nowrap; }
 .score-override strong { font-weight: 600; }
+/* ── Handwriting extraction quality ─────────────────────────────────
+   The drill-in puts the strokes beside the transcription, because a
+   misread can only be diagnosed by seeing what was actually written.
+   The photo column is fixed and the rows scroll beside it, so the
+   evidence stays on screen while you read down the transcription. */
+
+.callout-warn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--warn-soft);
+  border-left: 3px solid var(--warn);
+  padding: 12px 16px;
+  margin-bottom: 24px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.xq-detail {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) 1.6fr;
+  gap: 22px;
+  align-items: start;
+}
+
+.xq-shot {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.xq-shot img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--rule);
+  background: var(--paper-2);
+}
+.xq-shot-empty {
+  border: 1px dashed var(--rule-strong);
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--muted-2);
+}
+
+.xq-rows { list-style: none; margin: 0; padding: 0; }
+
+.xq-row {
+  border-left: 2px solid var(--rule);
+  padding: 0 0 0 14px;
+  margin-bottom: 18px;
+}
+
+.xq-row-key {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  margin-bottom: 7px;
+}
+.xq-unplaced {
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--warn);
+  background: var(--warn-soft);
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+
+.xq-row-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.xq-read-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  margin-bottom: 4px;
+}
+.xq-read p {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  word-break: break-word;
+}
+.xq-read-fixed .xq-read-label { color: var(--warn); }
+.xq-read-fixed p { color: var(--ink); }
+.xq-agree { color: var(--muted-2) !important; }
+
+@media (max-width: 720px) {
+  .xq-detail { grid-template-columns: 1fr; }
+  .xq-shot { position: static; }
+  .xq-row-pair { grid-template-columns: 1fr; gap: 8px; }
+}

@@ -2,6 +2,9 @@
 
 from fastapi import APIRouter
 
+from api.routes.admin_extraction_quality import (
+    router as extraction_quality_router,
+)
 from api.routes.admin_generation import router as generation_router
 from api.routes.admin_generation_quality import (
     router as generation_quality_router,
@@ -19,6 +22,7 @@ from api.routes.admin_users import router as users_router
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+router.include_router(extraction_quality_router)
 router.include_router(generation_router)
 router.include_router(generation_quality_router)
 router.include_router(golden_router)

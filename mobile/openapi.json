@@ -6419,6 +6419,166 @@
         ]
       }
     },
+    "/v1/admin/extraction-quality": {
+      "get": {
+        "operationId": "extraction_quality_v1_admin_extraction_quality_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "hours",
+            "required": false,
+            "schema": {
+              "default": 2160,
+              "maximum": 87600,
+              "minimum": 1,
+              "title": "Hours",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "subject",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subject"
+            }
+          },
+          {
+            "description": "clean | repaired | flagged | empty",
+            "in": "query",
+            "name": "bucket",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "clean | repaired | flagged | empty",
+              "title": "Bucket"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Extraction Quality V1 Admin Extraction Quality Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Extraction Quality",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/extraction-quality/{submission_id}": {
+      "get": {
+        "description": "One submission: the photo, what the AI read, and what the student\nsaid it should have said \u2014 row by row.\n\nThis is the only surface where a misread can actually be diagnosed.\nA count tells you the reader is struggling; only the strokes beside\nthe transcription tell you *how*.",
+        "operationId": "extraction_detail_v1_admin_extraction_quality__submission_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Extraction Detail V1 Admin Extraction Quality  Submission Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Extraction Detail",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/generation-quality/questions": {
       "get": {
         "description": "Generated questions ranked by how much repair a teacher had to do.\n\n`min_edits` defaults to 1 rather than 0 on purpose: a question\nnobody touched is not evidence about the prompt, and including the\nwhole bank would bury the eleven rows that matter under thousands\nthat don't.",
