@@ -78,7 +78,11 @@ export function shortId(id: string): string {
  * site.
  */
 export function shortModel(model: string): string {
-  const m = /^claude-(opus|sonnet|haiku)-(\d+)(?:-(\d+))?/.exec(model);
+  // The minor group is bounded to 1-2 digits so an 8-digit dated
+  // snapshot can't be read as a minor version:
+  //   claude-sonnet-4-20250514  -> Sonnet 4    (not "Sonnet 4.20250514")
+  //   claude-opus-4-1-20250805  -> Opus 4.1
+  const m = /^claude-(opus|sonnet|haiku)-(\d+)(?:-(\d{1,2})(?!\d))?/.exec(model);
   if (!m) return model.replace(/-\d{8}$/, "").replace(/^claude-/, "");
   const tier = m[1][0].toUpperCase() + m[1].slice(1);
   return `${tier} ${m[3] ? `${m[2]}.${m[3]}` : m[2]}`;
@@ -108,7 +112,13 @@ export function renderChipValue(v: unknown): string {
  * them carries no information at all. Debugging needs to line a call up
  * against a submission and a teacher action, which needs a clock.
  *
- * Today collapses to the time alone; anything older keeps its date.
+ * Today collapses to the time alone; anything older keeps its date, and
+ * a different year keeps that too.
+ *
+ * Rendered in the VIEWER'S timezone. Call sites pair it with the raw ISO
+ * timestamp in `title`, which is UTC — across midnight the two disagree
+ * by a day, so anything comparing against a server log should read the
+ * hover, not the cell.
  */
 export function fmtClockTime(dateStr: string): string {
   const d = new Date(dateStr);
@@ -122,6 +132,12 @@ export function fmtClockTime(dateStr: string): string {
     d.getMonth() === today.getMonth() &&
     d.getFullYear() === today.getFullYear();
   if (sameDay) return time;
-  const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  // Carry the year once the row is from a different one — submissions
+  // spanning school years were otherwise indistinguishable.
+  const date = d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(d.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),
+  });
   return `${date} ${time}`;
 }

@@ -25,6 +25,25 @@ import StatusPill from "./StatusPill";
 
 const PAGE = 25;
 
+/**
+ * How many rows to pull so `DataTable` can search, sort and page across
+ * the WHOLE set rather than a slice of it.
+ *
+ * The first version fetched `limit=25` and handed those to a table with
+ * `pageSize={25}`. `DataTable` only renders a pager when
+ * `filtered.length > pageSize`, so 25 rows never produced one: the panel
+ * read "62 submissions" above 25 rows with no pager, 37 unreachable,
+ * client sort surfacing the biggest override *on page one* rather than
+ * overall, and search reporting "no match" for a student who exists in
+ * rows 26-62. Exactly the defect the calls panel one section below was
+ * rewritten to remove, reintroduced above it.
+ *
+ * Fetching the set and paging it locally keeps sort and search honest.
+ * The ceiling is real, so when it bites the panel says so rather than
+ * quietly showing a prefix.
+ */
+const FETCH_LIMIT = 500;
+
 type Row = TeacherSubmissionsData["submissions"][number];
 
 export default function TeacherSubmissions({ teacherId }: { teacherId: string }) {
@@ -36,7 +55,7 @@ export default function TeacherSubmissions({ teacherId }: { teacherId: string })
 
   useEffect(() => {
     let cancelled = false;
-    const params: Record<string, string> = { limit: String(PAGE) };
+    const params: Record<string, string> = { limit: String(FETCH_LIMIT) };
     if (overriddenOnly) params.overridden_only = "true";
     api
       .teacherSubmissions(teacherId, params)
@@ -54,7 +73,11 @@ export default function TeacherSubmissions({ teacherId }: { teacherId: string })
   }, [teacherId, overriddenOnly, reloadKey]);
 
   const rows = data?.submissions ?? [];
-  const overrides = rows.filter((r) => r.overridden).length;
+  const truncated = data !== null && data.total > rows.length;
+  // Counted over the rows actually held. Under `overriddenOnly` the
+  // server total IS the override count, so deriving it again from a
+  // partial page would contradict the number beside it.
+  const overrides = overriddenOnly ? (data?.total ?? 0) : rows.filter((r) => r.overridden).length;
 
   const columns: Column<Row>[] = [
     {
@@ -138,9 +161,14 @@ export default function TeacherSubmissions({ teacherId }: { teacherId: string })
               <strong>{data.total.toLocaleString()}</strong> submission
               {data.total === 1 ? "" : "s"}
             </span>
-            {overrides > 0 && (
+            {overrides > 0 && !overriddenOnly && (
               <span>
                 <strong>{overrides}</strong> with a changed score
+              </span>
+            )}
+            {truncated && (
+              <span className="muted">
+                showing the most recent {rows.length.toLocaleString()}
               </span>
             )}
           </div>
@@ -174,7 +202,7 @@ export default function TeacherSubmissions({ teacherId }: { teacherId: string })
         }
         defaultSort={{ key: "submitted", dir: "desc" }}
         searchKeys={(r) => [r.student_name, r.assignment_title]}
-        searchLabel="Search student or assignment"
+        searchLabel="submissions"
         pageSize={PAGE}
         minWidth={720}
         empty={

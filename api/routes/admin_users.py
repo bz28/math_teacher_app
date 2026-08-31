@@ -1134,7 +1134,11 @@ async def _teacher_usage(db: AsyncSession, teacher_id: uuid.UUID) -> dict[str, A
 @router.get("/users/{teacher_id}/submissions")
 async def teacher_submissions(
     teacher_id: uuid.UUID,
-    limit: int = Query(default=25, ge=1, le=200),
+    # Ceiling is 500 because the panel pulls the set and pages it in the
+    # browser: searching and sorting a slice silently answers the wrong
+    # question ("the biggest override on page one" is not "the biggest
+    # override"). Past 500 the panel says it is showing a prefix.
+    limit: int = Query(default=25, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     overridden_only: bool = Query(default=False),
     current_user: CurrentUser = Depends(require_admin),
@@ -1184,13 +1188,18 @@ async def teacher_submissions(
 
     # Calls per submission, so a row can say whether there is anything to
     # look at before you click into the trace.
+    # Correlated to THIS teacher's submissions. Without the `in_(base)`
+    # bound the planner seq-scans `llm_calls` and hash-aggregates every
+    # row in the table before joining the ~25 it needs — invisible at 138
+    # rows and a full scan of the fastest-growing table in the schema on
+    # a hot admin page once it isn't.
     calls_sq = (
         select(
             LLMCall.submission_id.label("submission_id"),
             func.count().label("call_count"),
             func.count().filter(LLMCall.success.is_(False)).label("failed_count"),
         )
-        .where(LLMCall.submission_id.isnot(None))
+        .where(LLMCall.submission_id.in_(base))
         .group_by(LLMCall.submission_id)
         .subquery()
     )

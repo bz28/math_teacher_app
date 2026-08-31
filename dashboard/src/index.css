@@ -2220,7 +2220,10 @@ table.dt {
 }
 table.dt th {
   text-align: left;
-  padding: 10px 14px 10px 0;
+  /* Must track `table.dt td` exactly. When only `td` gained left padding
+     (for the row-status bar), every left-aligned column's body text sat
+     10px right of its own header label across all 19 tables. */
+  padding: 10px 14px 10px 10px;
   font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 600;

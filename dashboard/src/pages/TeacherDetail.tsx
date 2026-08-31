@@ -232,7 +232,7 @@ export default function TeacherDetail() {
           </span>
         </div>
         <div style={{ padding: "12px 16px 4px" }}>
-          <TeacherSubmissions teacherId={t.id} />
+          <TeacherSubmissions key={t.id} teacherId={t.id} />
         </div>
       </section>
 
@@ -252,7 +252,7 @@ export default function TeacherDetail() {
           </span>
         </div>
         <div style={{ padding: "12px 16px 4px" }}>
-          <TeacherLLMCalls teacherId={t.id} />
+          <TeacherLLMCalls key={t.id} teacherId={t.id} />
         </div>
       </section>
 
@@ -502,7 +502,7 @@ function StudentsCard({
         drill
         minWidth={560}
         searchKeys={(s) => [s.name, s.email]}
-        searchLabel="Search students"
+        searchLabel="students"
         pageSize={25}
         empty={
           <div className="empty-state">

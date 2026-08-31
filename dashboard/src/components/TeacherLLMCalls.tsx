@@ -122,15 +122,28 @@ export default function TeacherLLMCalls({ teacherId }: { teacherId: string }) {
           {/* The bounds, stated. `total_count_window` is the count for the
               whole window; `calls.length` is what's on this page. */}
           <div className="panel-bar-facts">
+            {/* `total_count` respects the active filter; the `_window`
+                figures do not. Showing the filtered count keeps the strip
+                and the table describing the same set — the cost and
+                failure totals stay window-wide and are labelled as such
+                only when nothing is filtering them out. */}
             <span>
-              <strong>{data.total_count_window.toLocaleString()}</strong> call
-              {data.total_count_window === 1 ? "" : "s"}
+              <strong>{data.total_count.toLocaleString()}</strong> call
+              {data.total_count === 1 ? "" : "s"}
             </span>
-            <span className={failures > 0 ? "bad" : undefined}>
-              <strong>{failures.toLocaleString()}</strong> failed
+            {!filtering && (
+              <>
+                <span className={failures > 0 ? "bad" : undefined}>
+                  <strong>{failures.toLocaleString()}</strong> failed
+                </span>
+                <span className="muted">{fmtCost(data.total_cost_window)}</span>
+              </>
+            )}
+            <span className="muted">
+              {filtering
+                ? `of ${data.total_count_window.toLocaleString()} in the last 30 days`
+                : "last 30 days"}
             </span>
-            <span className="muted">{fmtCost(data.total_cost_window)}</span>
-            <span className="muted">last 30 days</span>
           </div>
           <div className="panel-bar-controls">
             {functions.length > 1 && (
@@ -197,8 +210,13 @@ export default function TeacherLLMCalls({ teacherId }: { teacherId: string }) {
               ))
             ) : calls.length === 0 ? (
               <tr>
-                <td colSpan={6} className="dt-state">
-                  No calls match this filter.
+                {/* The state class goes on a DIV inside the cell, never on
+                    the <td>: `.dt-state` is `display: flex`, which
+                    overrides `table-cell` and makes the browser ignore
+                    colSpan entirely. `DataTable` already does it this
+                    way. */}
+                <td colSpan={6}>
+                  <div className="dt-state">No calls match this filter.</div>
                 </td>
               </tr>
             ) : (
