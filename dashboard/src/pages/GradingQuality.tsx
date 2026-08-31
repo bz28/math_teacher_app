@@ -170,10 +170,9 @@ function DroppedNotice({ summary }: { summary: GradingSummary }) {
       <span>
         {n} reviewed submission{n === 1 ? "" : "s"} could not be compared at
         all — the AI and teacher grade lists don&rsquo;t line up, so
-        {n === 1 ? " it is" : " they are"} excluded from the override
-        figures. Review coverage still counts{n === 1 ? " it" : " them"},
-        because that tile asks a different question: did a teacher look at
-        this grade, not could we compare it.
+        {n === 1 ? " it is" : " they are"} excluded from every override
+        figure above. Other tiles count{n === 1 ? " it" : " them"} on their
+        own terms.
       </span>
     </div>
   );
