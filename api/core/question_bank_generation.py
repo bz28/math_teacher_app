@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
 from api.core.document_vision import (
+    MAX_TOTAL_SOURCE_B64_BYTES,
     MAX_VISION_IMAGES,
     build_attachment_metadata,
     build_vision_content,
@@ -132,7 +133,18 @@ async def _run_job(job_id: uuid.UUID) -> None:
         except Exception as e:
             logger.exception("Generation job %s failed", job_id)
             job.status = "failed"
-            job.error_message = str(e)[:1000]
+            # error_message is rendered to the teacher verbatim. Only our
+            # own copy is written for her — a provider error reads
+            # "Claude Vision API error: Error code: 400 - {'type': ...}",
+            # which tells her nothing and leaks our internals into a red
+            # banner. The real text is in the log above.
+            job.error_message = (
+                str(e)[:1000]
+                if isinstance(e, TeacherFacingGenerationError)
+                else "Generation failed before any questions came back. "
+                     "Try again — if it keeps failing on the same files, "
+                     "try fewer or smaller ones."
+            )
             job.updated_at = datetime.now(UTC)
             await db.commit()
 
@@ -233,6 +245,45 @@ async def _extract_from_files(
     return normalized
 
 
+class TeacherFacingGenerationError(RuntimeError):
+    """A generation failure whose message is written for the teacher.
+
+    `job.error_message` is rendered to her verbatim, so the type marks
+    which failures are safe to show. Anything else — a provider 400, a
+    parse failure, a timeout — carries wording aimed at us ("Claude
+    Vision API error: Error code: 400 - {'type': ...}") and gets replaced
+    before it reaches her.
+    """
+
+
+def _empty_result_message(docs_selected: int, docs_used: int) -> str:
+    """What to tell the teacher when generation returns nothing.
+
+    The old copy always blamed her instructions. When some of her source
+    documents were left behind — over the per-call count or the request
+    size budget — that is worth naming, because it's the part she can
+    act on and she was never shown those limits. It's offered as a
+    likely cause rather than the cause: the model can also return
+    nothing on a selection that fit perfectly well, so the instructions
+    hint stays.
+    """
+    raw_budget_mb = round(MAX_TOTAL_SOURCE_B64_BYTES * 3 / 4 / 1024 / 1024)
+    if docs_used < docs_selected:
+        skipped = docs_selected - docs_used
+        return (
+            f"The AI didn't return any questions. {skipped} of your "
+            f"{docs_selected} source files weren't sent — a generation "
+            f"carries {MAX_VISION_IMAGES} files, up to about "
+            f"{raw_budget_mb}MB in total — which may be why. Try again "
+            "with fewer or smaller files selected, or adjust your "
+            "instructions."
+        )
+    return (
+        "The AI didn't return any questions. Try adjusting your "
+        "instructions or selecting different source documents."
+    )
+
+
 async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
     """Run the actual Claude calls and persist results.
 
@@ -276,7 +327,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             generation_job_id=str(job.id),
         )
         if not question_dicts:
-            raise RuntimeError(
+            raise TeacherFacingGenerationError(
                 "No problems could be extracted from the uploaded pages. "
                 "Make sure the photos or PDF are clear and contain readable problems."
             )
@@ -300,7 +351,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
                 select(QuestionBankItem).where(QuestionBankItem.id == job.parent_question_id)
             )).scalar_one_or_none()
             if not parent:
-                raise RuntimeError(
+                raise TeacherFacingGenerationError(
                     "Parent question was deleted before its variations could be generated"
                 )
             seed_block = (
@@ -348,9 +399,11 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             generation_job_id=str(job.id),
         )
         if not question_dicts:
-            raise RuntimeError(
-                "The AI didn't return any questions. Try adjusting your "
-                "instructions or selecting different source documents."
+            # Reached only when the call SUCCEEDED and came back empty —
+            # a real API failure now propagates with its own cause
+            # rather than arriving here disguised as "no questions".
+            raise TeacherFacingGenerationError(
+                _empty_result_message(len(doc_ids), len(images))
             )
 
     # 2. Solve each question in parallel (capped concurrency inside)

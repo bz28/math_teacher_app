@@ -330,8 +330,14 @@ async def generate_questions(
         return normalized[:count]
 
     except Exception:
+        # Deliberately not swallowed. Returning [] here made every API
+        # failure — an oversized request, a page-count rejection, a
+        # timeout — indistinguishable from "the model returned nothing",
+        # and the only caller then told the teacher to go rewrite her
+        # instructions. The real cause reaches her via the job's
+        # error_message instead.
         logger.exception("Failed to generate questions")
-        return []
+        raise
 
 
 # ── Solution generation (reuses decompose_problem) ──

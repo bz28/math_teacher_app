@@ -15,6 +15,7 @@ import {
   type IntegrityActivityNotableTurnLite,
 } from "@/components/school/teacher/_pieces/submissions-panel";
 import { Skeleton } from "@/components/ui";
+import { PdfView } from "@/components/ui/pdf-view";
 import {
   teacher,
   type AiGradeEntry,
@@ -5266,10 +5267,9 @@ function WorkLightbox({
           const src = `data:${f.media_type};base64,${f.data}`;
           if (f.media_type === "application/pdf") {
             return (
-              <embed
+              <PdfView
                 key={i}
-                src={src}
-                type="application/pdf"
+                data={f.data}
                 className="h-[70vh] w-full rounded-[--radius-md] border border-border-light bg-white"
               />
             );
@@ -5397,10 +5397,9 @@ function PinnedWorkRail({
               const src = `data:${f.media_type};base64,${f.data}`;
               if (f.media_type === "application/pdf") {
                 return (
-                  <embed
+                  <PdfView
                     key={i}
-                    src={src}
-                    type="application/pdf"
+                    data={f.data}
                     className="h-[420px] w-full rounded-[--radius-sm] border border-border-light bg-white"
                   />
                 );
