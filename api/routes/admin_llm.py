@@ -700,7 +700,11 @@ async def llm_payload(
         "text": row.text,
         "char_len": row.char_len,
         "kind": row.kind,
-        "function": row.function,
+        # Named for what it is. A payload can be shared across call sites
+        # (every vision call sends the same safety preamble), and only the
+        # first writer's function is recorded, so calling this "function"
+        # would assert an ownership that doesn't hold.
+        "first_seen_from": row.function,
         "first_seen_at": row.first_seen_at.isoformat(),
         "used_by": int(used_by),
     }

@@ -67,9 +67,34 @@ async def _payload_row_id(
     on first use. The conflict path then re-selects to get the winner's
     id.
 
-    Never raises. Persisting the call matters more than linking its
-    prompt, so a failure here logs and returns None, which the UI already
-    renders as "not recorded".
+    Runs inside a SAVEPOINT, deliberately — this is the whole safety
+    property, and a Python `try/except` cannot provide it.
+
+    Postgres aborts an entire transaction on a statement error. The first
+    version ran this insert directly on the caller's transaction, so a bad
+    payload (a NUL byte in extracted text, a lock cancellation under
+    `statement_timeout`, a deadlock, the table absent mid-deploy) poisoned
+    the transaction the `LLMCall` insert was about to use: the `except`
+    here caught the original error and returned None, then `db.add(record)`
+    failed with `InFailedSQLTransactionError`, the outer handler swallowed
+    THAT, and the call row vanished — cost, latency, tokens and text with
+    it. Reproduced against a live database, and pinned by
+    `test_persistence_survives_a_database_error_on_the_payload`.
+
+    That was a regression: before payload recording existed, nothing about
+    prompt CONTENT could cost you a ledger entry. A missing prompt link is
+    recoverable; a hole in the cost ledger is not.
+
+    `begin_nested()` issues a real SAVEPOINT, so a failed payload insert
+    rolls back to it and leaves the surrounding transaction usable. The
+    obvious alternative — a second session — also isolates the failure but
+    opens another connection per payload, i.e. two more per logged call.
+    Under `NullPool` (which the test config uses, `database.py:16-23`)
+    every session is a fresh connection, and that exhausted Postgres
+    `max_connections` across a full suite run: 44 unrelated tests failed.
+    A savepoint costs no connection.
+
+    Never raises.
     """
     if not body:
         return None
@@ -92,12 +117,16 @@ async def _payload_row_id(
             .on_conflict_do_nothing(index_elements=["sha256"])
             .returning(LLMPayload.id)
         )
-        row_id = (await db.execute(stmt)).scalar_one_or_none()
+        async with db.begin_nested():
+            row_id = (await db.execute(stmt)).scalar_one_or_none()
         if row_id is None:
-            # Lost the race (or seen before) — read the existing row.
-            row_id = (await db.execute(
-                select(LLMPayload.id).where(LLMPayload.sha256 == digest)
-            )).scalar_one_or_none()
+            # Seen before, or lost the insert race — read the winner.
+            # Outside the savepoint: the insert has either landed or been
+            # rolled back, and this read must not be undone with it.
+            async with db.begin_nested():
+                row_id = (await db.execute(
+                    select(LLMPayload.id).where(LLMPayload.sha256 == digest)
+                )).scalar_one_or_none()
         return row_id
     except Exception as err:
         logger.warning("%s persistence failed: %s", kind, err)
@@ -162,17 +191,14 @@ async def persist_llm_call(
                         user_id, lookup_err,
                     )
 
-            # Resolve (and insert-if-new) the system prompt before the
-            # call row, so the FK is set on the first write rather than
+            # Resolve (and insert-if-new) both payloads before the call
+            # row, so the FKs are set on the first write rather than
             # needing a second UPDATE.
             #
-            # Guarded a second time at the call site, not just inside the
-            # helper. The enclosing `except` swallows anything raised here
-            # and drops the ENTIRE call row — so a fault while linking the
-            # prompt would silently cost us the cost/latency/token record
-            # too. A missing prompt link is recoverable; a missing call is
-            # a hole in the ledger. The helper already defends itself; this
-            # makes the invariant hold no matter what it does later.
+            # Each runs inside a SAVEPOINT (see `_payload_row_id`), so a
+            # statement error while storing a payload rolls back to that
+            # savepoint and leaves this transaction usable for the call
+            # row. The `try` is a second belt, not the mechanism.
             try:
                 system_prompt_id = await _payload_row_id(
                     db, function, "system_prompt", system_prompt,

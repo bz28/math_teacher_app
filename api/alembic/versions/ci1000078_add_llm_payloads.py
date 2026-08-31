@@ -56,7 +56,13 @@ def upgrade() -> None:
         # persistence runs as fire-and-forget background tasks, so two
         # calls sharing a prompt race on its first use and must converge
         # on one row rather than duplicating it.
-        sa.Column("sha256", sa.String(64), nullable=False, unique=True),
+        # NOT `unique=True` — the unique INDEX below is the constraint.
+        # Declaring both makes Postgres build two unique b-trees on one
+        # column, doubling write cost and disk on the table this change
+        # argues into existence on cost grounds, and leaves the model
+        # (which renders only the index) permanently out of sync so every
+        # future autogenerate emits a spurious drop_constraint.
+        sa.Column("sha256", sa.String(64), nullable=False),
         sa.Column("text", sa.Text(), nullable=False),
         sa.Column("char_len", sa.Integer(), nullable=False),
         sa.Column("kind", sa.String(20), nullable=False),

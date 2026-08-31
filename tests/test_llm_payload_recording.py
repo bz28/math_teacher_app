@@ -134,17 +134,12 @@ async def test_no_system_prompt_links_to_nothing() -> None:
     assert call.system_prompt_id is None
 
 
-async def test_persistence_survives_a_prompt_failure(monkeypatch) -> None:
-    """Linking the prompt must never cost us the call row.
-
-    Persistence runs fire-and-forget; if the template insert fails for
-    any reason the call itself still has to land, because a missing cost
-    row is a worse outcome than a missing prompt link.
-    """
+async def test_persistence_survives_a_python_error_in_the_helper(monkeypatch) -> None:
+    """A Python fault while linking must not cost the call row."""
     import api.core.llm_logging as mod
 
     async def boom(*_a: object, **_k: object) -> None:
-        raise RuntimeError("template table unavailable")
+        raise RuntimeError("payload store unavailable")
 
     monkeypatch.setattr(mod, "_payload_row_id", boom)
     await _persist("ai_grading", GRADING_PROMPT, "marker-resilient")
@@ -152,6 +147,33 @@ async def test_persistence_survives_a_prompt_failure(monkeypatch) -> None:
     call = await _call_by_marker("marker-resilient")
     assert call.system_prompt_id is None
     assert call.cost_usd == 0.001
+
+
+async def test_persistence_survives_a_database_error_on_the_payload() -> None:
+    """The case a Python `try/except` cannot cover, and the reason the
+    payload write needs its own session.
+
+    Postgres aborts an entire transaction on a statement error. While the
+    payload insert shared the caller's session, a bad payload poisoned the
+    transaction the `LLMCall` insert was about to use: the original error
+    was caught and swallowed, then `db.add(record)` failed with
+    `InFailedSQLTransactionError`, the outer handler swallowed THAT, and
+    the call row vanished — cost, latency, tokens and text with it.
+
+    A NUL byte is the cheapest real trigger (Postgres rejects `\x00` in
+    `text`), and it is genuinely reachable: prompts embed extracted
+    handwriting and teacher-authored rubric notes.
+
+    The earlier version of this test raised a Python `RuntimeError`, which
+    the call-site guard does catch — so it passed green while the real
+    failure shipped. Assert the ledger row, not the guard.
+    """
+    await _persist("ai_grading", "rubric with a NUL\x00 byte", "marker-db-error")
+
+    # The call MUST still be recorded. The payload link may be null.
+    call = await _call_by_marker("marker-db-error")
+    assert call.cost_usd == 0.001
+    assert call.input_tokens == 100
 
 
 async def test_tool_schema_is_recorded_separately() -> None:

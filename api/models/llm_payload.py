@@ -54,6 +54,32 @@ class LLMPayload(Base):
     `llm_calls` would duplicate ~18KB per row across the fastest-growing
     table in the schema.
 
+    ## What this stores, and what it does NOT
+
+    Verified by reading every call site that supplies a system prompt: no
+    path interpolates a student name, id, email, grade level, section,
+    school, teacher name, or the student's own work into one.
+    `_build_system_prompt`'s claim to exclude everything student-specific
+    holds — the extraction goes only into the user message. That is what
+    makes the dedupe work at all, so the two properties stand or fall
+    together.
+
+    What it DOES newly persist is assessment content: every problem's
+    `question` and `Answer key`, plus the teacher-authored `full_credit` /
+    `partial_credit` / `common_mistakes` / `notes` off `Assignment.rubric`.
+    Those already live indefinitely in `assignments.rubric`, so this is a
+    duplicate of retained data rather than a new category — but a
+    duplicate with no deletion path: `ondelete="SET NULL"` means removing
+    the assignment, submission, student, school or call row leaves this
+    row untouched.
+
+    **Open decision, deliberately not made here:** rubric `notes` is an
+    unfiltered teacher free-text field, so a teacher writing "watch
+    Jamie's usual sign flips" puts a student name in a row nothing
+    deletes. Retention, and whether payload rows should be purged when
+    their last referencing call goes, is a product/compliance call rather
+    than something to decide inside a logging change.
+
     ## The diagnostic that falls out for free
 
     Because the hash IS the cache key in everything but name, two calls in
@@ -90,8 +116,17 @@ class LLMPayload(Base):
     # "system_prompt" or "tool_schema".
     kind: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
 
-    # Which call site produced it, e.g. "ai_grading". Not unique — the
-    # same function has as many payloads as it has rubrics.
+    # The call site that FIRST stored this payload, e.g. "ai_grading".
+    #
+    # Not authoritative, and deliberately named on the read endpoint as
+    # "first seen from". The relationship runs both ways: one function has
+    # as many payloads as it has rubrics, AND one payload can be shared by
+    # many functions. The `SAFETY_PREAMBLE` row is the extreme case — every
+    # `call_claude_vision` site sends exactly that as its system prompt, so
+    # a single row backs `image_extract`, `bank_extract`, `suggest_units`,
+    # `generate_questions`, `bank_chat` and more. Recording only the first
+    # writer would be a quiet lie if the column were presented as "the
+    # function this belongs to".
     function: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
 
     first_seen_at: Mapped[datetime] = mapped_column(
