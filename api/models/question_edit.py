@@ -78,7 +78,12 @@ REJECT = "reject"                    # binned the question outright
 # asks for a fresh take; with instructions it keeps the original and
 # revises it. Only the first is evidence the prompt produced something
 # unusable, so collapsing them would blunt the signal.
-REPAIR_KINDS = (EDIT_MANUAL, EDIT_WORKSHOP, REGEN_GUIDED)
+# The two kinds that existed before actions were recorded. The generation
+# report counts ONLY these, so its numbers keep meaning what they meant
+# before regenerate and reject became recordable — a reporting change
+# belongs in the commit that redesigns the report, not in the one that
+# widens what gets written.
+EDIT_KINDS = (EDIT_MANUAL, EDIT_WORKSHOP)
 
 # ── field: WHICH LLM call the row indicts ───────────────────────────
 # A bank item is the output of two separate calls (three with MCQ), so
@@ -95,10 +100,6 @@ REPAIR_KINDS = (EDIT_MANUAL, EDIT_WORKSHOP, REGEN_GUIDED)
 FIELD_QUESTION = "question"
 FIELD_SOLUTION = "solution"
 FIELD_FINAL_ANSWER = "final_answer"
-
-# The fields produced by the solve call, grouped because the Solution
-# quality report reads them together.
-SOLUTION_FIELDS = (FIELD_SOLUTION, FIELD_FINAL_ANSWER)
 
 # When recording began. Deliberately a constant rather than a stored
 # row: it is a fact about the deploy, not about any question, and the

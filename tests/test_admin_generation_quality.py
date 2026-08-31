@@ -29,7 +29,11 @@ from api.models.question_bank import QuestionBankItem
 from api.models.question_edit import (
     EDIT_MANUAL,
     EDIT_WORKSHOP,
+    FIELD_FINAL_ANSWER,
     FIELD_QUESTION,
+    FIELD_SOLUTION,
+    REGEN_FRESH,
+    REJECT,
     QuestionEdit,
 )
 from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
@@ -203,6 +207,60 @@ async def test_filters_scope_to_a_school_and_a_kind(client: AsyncClient) -> None
     # 2 edits: one manual, one chat — so it survives a chat-only filter
     # but with a lower count.
     assert chat_only.json()["questions"][0]["edit_count"] == 1
+
+
+async def test_only_question_edits_count_toward_the_repair_ranking(
+    client: AsyncClient,
+) -> None:
+    """The recorder now writes solution repairs, regenerates and rejects
+    into the same table. This report must keep counting ONLY question
+    edits, or `edit_count` silently changes meaning: one PATCH can emit a
+    row per field and a regenerate rewrites all three at once, so a
+    single click would outrank four genuine hand-edits against thresholds
+    calibrated on one-row-per-edit.
+
+    Widening what this page counts is a deliberate redesign — not a
+    side-effect of widening what gets recorded.
+    """
+    w = await _seed([("A", 1)])
+    item_id = uuid.UUID(w["items"]["A"])
+
+    async with get_session_factory()() as s:
+        # Same item, same teacher: one solution repair, one regenerate,
+        # one rejection. None of them is a question edit.
+        for kind, field in (
+            (EDIT_MANUAL, FIELD_SOLUTION),
+            (EDIT_MANUAL, FIELD_FINAL_ANSWER),
+            (REGEN_FRESH, FIELD_QUESTION),
+            (REJECT, FIELD_QUESTION),
+        ):
+            s.add(QuestionEdit(
+                bank_item_id=item_id,
+                kind=kind, field=field,
+                before="before", after="after",
+            ))
+        await s.commit()
+
+    r = await client.get(
+        "/v1/admin/generation-quality/questions",
+        headers=_auth(w["token"]),
+    )
+    assert r.status_code == 200, r.text
+    q = r.json()["questions"][0]
+    # Still 1 — the four extra rows are not question edits by a teacher.
+    assert q["edit_count"] == 1
+
+    summary = await client.get(
+        "/v1/admin/generation-quality/summary",
+        headers=_auth(w["token"]),
+    )
+    assert summary.status_code == 200, summary.text
+    body = summary.json()
+    assert body["total_edits"] == 1
+    assert body["questions_touched"] == 1
+    # The stat tiles read by_kind with the NEW vocabulary. Reading the old
+    # keys here would show 0 forever while the data sits one key away.
+    assert body["by_kind"] == {EDIT_MANUAL: 1}
 
 
 async def test_a_teacher_cannot_read_the_admin_console(

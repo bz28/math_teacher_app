@@ -25,7 +25,12 @@ from api.database import get_session_factory
 from api.models.assignment import Assignment
 from api.models.course import Course
 from api.models.question_bank import QuestionBankItem
-from api.models.question_edit import EDIT_CHAT, EDIT_MANUAL, QuestionEdit
+from api.models.question_edit import (
+    EDIT_MANUAL,
+    EDIT_WORKSHOP,
+    FIELD_QUESTION,
+    QuestionEdit,
+)
 from api.models.school import SCHOOL_KIND_INSTITUTIONAL, School
 from api.models.unit import Unit
 from api.models.user import User
@@ -60,7 +65,7 @@ WORLD = [
                 "working.",
             ),
             (
-                EDIT_CHAT,
+                EDIT_WORKSHOP,
                 "Differentiate f(x) = 3x^2 ln(x). Show each step and state "
                 "the domain of the derivative.",
             ),
@@ -76,7 +81,7 @@ WORLD = [
         "Solve x^2 - 5x + 6 = 0.",
         [
             (EDIT_MANUAL, "Solve x^2 - 5x + 6 = 0 for x."),
-            (EDIT_CHAT, "Solve x^2 - 5x + 6 = 0 by factoring. Show the factors."),
+            (EDIT_WORKSHOP, "Solve x^2 - 5x + 6 = 0 by factoring. Show the factors."),
         ],
     ),
     (
@@ -145,6 +150,7 @@ async def seed() -> dict[str, str]:
                 s.add(QuestionEdit(
                     bank_item_id=item.id, edited_by_id=teacher.id,
                     school_id=school.id, kind=kind,
+                    field=FIELD_QUESTION,
                     before=prev, after=after,
                     created_at=base + timedelta(hours=i * 5),
                 ))

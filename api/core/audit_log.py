@@ -216,7 +216,9 @@ async def record_question_edit(
             # Nothing changed — the teacher binned the question as written.
             # Record the rejected text with no replacement, so the drill-in
             # can still show what was thrown out.
-            changed = [(FIELD_QUESTION, item.question, None)]
+            changed: list[tuple[str, str | None, str | None]] = [
+                (FIELD_QUESTION, item.question, None)
+            ]
         else:
             changed = [(f, b, a) for f, b, a in pairs if b != a]
 

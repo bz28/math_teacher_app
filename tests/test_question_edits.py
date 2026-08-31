@@ -247,6 +247,44 @@ async def test_one_patch_touching_both_records_a_row_each(
     assert {e.field for e in edits} == {FIELD_QUESTION, FIELD_FINAL_ANSWER}
 
 
+async def test_a_whitespace_only_final_answer_resave_is_not_recorded(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """`final_answer` is stripped on write like `question`. Unstripped, a
+    re-save differing only in trailing whitespace would count as a repair
+    and inflate the quality signal."""
+    await _own_course(world)
+    item_id = world["primary_id"]
+    r = await _patch(client, world["teacher_token"], item_id, final_answer="x = 9")
+    assert r.status_code == 200, r.text
+    assert len(await _edits(uuid.UUID(str(item_id)))) == 1
+
+    r = await _patch(
+        client, world["teacher_token"], item_id, final_answer="  x = 9  ",
+    )
+    assert r.status_code == 200, r.text
+    # Still one — the whitespace re-save added nothing.
+    assert len(await _edits(uuid.UUID(str(item_id)))) == 1
+
+
+async def test_rejecting_twice_records_one_rejection(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """Reject is idempotent, so its signal must be too — a double-click
+    should not make one binned question look like two."""
+    await _own_course(world)
+    item_id = world["primary_id"]
+    for _ in range(2):
+        r = await client.post(
+            f"/v1/teacher/question-bank/{item_id}/reject",
+            headers=_auth(world["teacher_token"]),
+        )
+        assert r.status_code == 200, r.text
+
+    edits = await _edits(uuid.UUID(str(item_id)))
+    assert [e.kind for e in edits] == [REJECT]
+
+
 async def test_rejecting_a_question_is_recorded(
     world: dict[str, Any], client: AsyncClient,
 ) -> None:

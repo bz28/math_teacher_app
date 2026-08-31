@@ -528,7 +528,11 @@ async def update_bank_item(
     if body.solution_steps is not None:
         item.solution_steps = body.solution_steps
     if body.final_answer is not None:
-        item.final_answer = body.final_answer
+        # Stripped like `question` above. Unstripped, a re-save differing
+        # only in trailing whitespace counts as a repair and inflates the
+        # quality signal — the equivalent question edit already records
+        # nothing, so this was an inconsistency waiting to mislead.
+        item.final_answer = body.final_answer.strip()
     if body.distractors is not None:
         # MCQ rendering relies on exactly 3 distractors so the
         # composed [correct, ...wrong] gives 4 choices. Reject
@@ -671,13 +675,19 @@ async def reject_bank_item(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     _ensure_unlocked(item)
+    already_rejected = item.status == "rejected"
     item.status = "rejected"
     # A teacher binning the question outright is the strongest evidence
     # the generation prompt is wrong — stronger than any edit, because
     # nothing about the output was worth keeping. Recorded as an event
     # rather than read from `status` alone, because status carries no
     # timestamp and the report needs one to trend.
-    await record_question_edit(db, item, REJECT, current_user)
+    #
+    # Guarded on the prior status so a repeated POST (a double-click, a
+    # retried request) records one rejection rather than several. The
+    # endpoint is otherwise idempotent and the signal must be too.
+    if not already_rejected:
+        await record_question_edit(db, item, REJECT, current_user)
     await record_activity(
         db, current_user, "bank_item.reject", "bank_item", item.id,
         {"title": item.title},
