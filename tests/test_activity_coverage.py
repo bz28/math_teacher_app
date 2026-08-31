@@ -228,3 +228,134 @@ async def test_inviting_a_new_student_is_recorded(
     # No email. An invitee's address is not needed to make the entry
     # legible, and this table is a compliance surface.
     assert "brand.new.student" not in str(rows[0].action_metadata)
+
+
+# ── The audit row must never break the action ────────────────────────
+#
+# `record_activity` swallows its own errors precisely so a logging
+# failure cannot fail a teacher's request. But on the two paths where the
+# audit row needs its OWN commit — because the action already committed —
+# that guarantee has to be reproduced by hand, and getting it wrong is
+# not hypothetical: an earlier version of this file wrapped the commit in
+# try/except and STILL returned a 500, because `db.rollback()` expires
+# every ORM instance in the session and the next line read an expired
+# attribute. In async SQLAlchemy that lazy refresh raises MissingGreenlet
+# rather than reloading.
+#
+# The same expiry had silently made both IntegrityError recovery branches
+# in this endpoint dead code for as long as they had existed.
+#
+# CI cannot see any of this: the failure only appears when the audit
+# commit fails, which no ordinary run does. These tests force it.
+
+
+async def _break_activity_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the audit row fail at COMMIT, the way a real DB error would.
+
+    Patched at the route's own reference, and deliberately fails on flush
+    rather than raising immediately — raising inside `record_activity`
+    would be swallowed by its own try/except and prove nothing. This
+    leaves a poisoned session that only errors when the handler commits.
+    """
+    import api.routes.teacher_sections as mod
+
+    async def _poison(db: Any, *a: Any, **kw: Any) -> None:
+        # Queued, not executed: the ORM flushes this at COMMIT, where the
+        # dangling actor FK fails. Executing it here instead would raise
+        # inside record_activity, which is a different code path and not
+        # the one the wrapper guards.
+        db.add(ActivityLog(
+            actor_user_id=uuid.uuid4(),   # no such user -> FK violation
+            actor_role="teacher",
+            action="poison",
+            target_type="section",
+        ))
+
+    monkeypatch.setattr(mod, "record_activity", _poison)
+
+
+async def test_an_audit_failure_does_not_break_an_enrollment(
+    world: dict[str, Any], client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The enrollment has already committed by the time the audit row is
+    written. A failure there must not turn a landed enrollment into a 500
+    — the teacher would see an error for work that actually succeeded."""
+    from api.models.section_enrollment import SectionEnrollment
+    from api.models.user import User
+
+    course_id = await _own_course(world)
+    created = await client.post(
+        f"/v1/teacher/courses/{course_id}/sections",
+        headers=_auth(world["teacher_token"]), json={"name": "Audit fail A"},
+    )
+    assert created.status_code == 201, created.text
+    section_id = created.json()["id"]
+
+    # An email that already has an account takes the enroll-immediately
+    # path. A FRESH student, because the fixture's own student is already
+    # in a section of this course and would 409 before reaching the audit.
+    from api.core.auth import hash_password
+
+    student_email = f"audit{uuid.uuid4().hex[:8]}@example.com"
+    async with get_session_factory()() as s:
+        student = User(
+            email=student_email, password_hash=hash_password("x"),
+            grade_level=9, role="student", name="Audit Student",
+            is_active=True, failed_login_attempts=0, mfa_enabled=False,
+        )
+        s.add(student)
+        await s.commit()
+        student_id = student.id
+
+    await _break_activity_commit(monkeypatch)
+    r = await client.post(
+        f"/v1/teacher/courses/{course_id}/sections/{section_id}/invites",
+        headers=_auth(world["teacher_token"]), json={"email": student_email},
+    )
+
+    # The whole point: the action succeeded, so the response must say so.
+    assert r.status_code in (200, 201), r.text
+
+    async with get_session_factory()() as s:
+        landed = (await s.execute(
+            select(SectionEnrollment.id).where(
+                SectionEnrollment.section_id == uuid.UUID(section_id),
+                SectionEnrollment.student_id == student_id,
+            )
+        )).scalar_one_or_none()
+    assert landed is not None, "enrollment must survive an audit failure"
+
+
+async def test_an_audit_failure_does_not_break_an_invite(
+    world: dict[str, Any], client: AsyncClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same contract on the invite path, which also commits before its
+    audit row and then reads ORM attributes to send the email."""
+    from api.models.section_invite import SectionInvite
+
+    course_id = await _own_course(world)
+    created = await client.post(
+        f"/v1/teacher/courses/{course_id}/sections",
+        headers=_auth(world["teacher_token"]), json={"name": "Audit fail B"},
+    )
+    assert created.status_code == 201, created.text
+    section_id = created.json()["id"]
+
+    await _break_activity_commit(monkeypatch)
+    r = await client.post(
+        f"/v1/teacher/courses/{course_id}/sections/{section_id}/invites",
+        headers=_auth(world["teacher_token"]),
+        json={"email": "audit.fail.invite@example.com"},
+    )
+    assert r.status_code in (200, 201), r.text
+    # The response still carries the invite it created — proving nothing
+    # downstream tripped over an expired ORM attribute.
+    assert r.json()["invite"]["email"] == "audit.fail.invite@example.com"
+
+    async with get_session_factory()() as s:
+        invite = (await s.execute(
+            select(SectionInvite).where(
+                SectionInvite.section_id == uuid.UUID(section_id),
+            )
+        )).scalar_one_or_none()
+    assert invite is not None, "invite must survive an audit failure"
