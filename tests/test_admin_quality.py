@@ -1,22 +1,30 @@
-"""Integration tests for the admin solution-quality report.
+"""Solution quality — scoring the solve call.
 
-Seeds sessions (across subjects + modes) with judge scores — some
-passing, some failing, plus one weak subject and a score in the prior
-window — then exercises /v1/admin/quality and the drill-in detail
-endpoint:
+`GET /v1/admin/quality` reports whether the AI's worked answers held up,
+judged by whether a teacher had to fix them.
 
-- Window summary: pass rate, prior-window delta, coverage, failed count
-- Trend buckets and by-subject / by-mode breakdowns (worst-first)
-- Evaluations list defaults worst-first (failures on top)
-- only_failed scopes the list but NOT the headline summary
-- Detail endpoint returns problem + steps + judge verdict; 404 on miss
-- Non-admin tokens are rejected
+This replaced an LLM judge that never ran once. The call site shipped
+commented out and was later deleted, so `quality_scores` was empty by
+construction and the page rendered a red "WEAK" verdict with 0.0/5 on
+every dimension — a confident verdict from no evidence, which is the one
+thing a quality page must never do.
+
+The rules pinned here:
+
+- A solution is judged only once its QUESTION is approved. A rejected
+  question's solution never got a real look, and a pending one has not
+  been judged — counting either would put an unexamined solution in the
+  numerator or the denominator.
+- A QUESTION edit does not make the solution dirty, and vice versa. They
+  indict two different prompts, and confusing them sends you to change
+  the wrong one.
+- The two exclusions are reported by reason, not lumped together.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -25,171 +33,218 @@ from sqlalchemy import text
 
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
-from api.models.quality_score import QualityScore
-from api.models.session import Session
+from api.models.assignment import Assignment
+from api.models.course import Course
+from api.models.question_bank import QuestionBankItem
+from api.models.question_edit import (
+    EDIT_MANUAL,
+    FIELD_FINAL_ANSWER,
+    FIELD_QUESTION,
+    FIELD_SOLUTION,
+    TRACKING_SINCE,
+    QuestionEdit,
+)
+from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
+from api.models.unit import Unit
 from api.models.user import User
-from tests.conftest import auth_headers
+from tests.conftest import auth_headers as _auth
+
+pytestmark = pytest.mark.asyncio
+
+URL = "/v1/admin/quality"
 
 
-async def _wipe() -> None:
+async def _world() -> dict[str, Any]:
+    """One question per solution outcome, plus the rows that must not count."""
     async with get_session_factory()() as s:
-        await s.execute(text("TRUNCATE TABLE quality_scores, sessions, users RESTART IDENTITY CASCADE"))
-        await s.commit()
-
-
-def _session(
-    *, subject: str, mode: str, problem: str, created_at: datetime,
-    problem_type: str = "algebra",
-) -> Session:
-    return Session(
-        problem=problem,
-        problem_type=problem_type,
-        subject=subject,
-        mode=mode,
-        steps=[{"title": "Step 1", "description": "Do the thing", "final_answer": "42"}],
-        total_steps=1,
-        created_at=created_at,
-    )
-
-
-def _score(*, session_id: uuid.UUID, dims: tuple[int, int, int, int], created_at: datetime) -> QualityScore:
-    c, o, cl, f = dims
-    return QualityScore(
-        session_id=session_id,
-        correctness=c, optimality=o, clarity=cl, flow=f,
-        passed=all(x >= 4 for x in dims),
-        issues=None if all(x >= 4 for x in dims) else "weak reasoning",
-        created_at=created_at,
-    )
-
-
-@pytest.fixture
-async def quality_world() -> dict[str, Any]:
-    """Seed: 3 math sessions (2 pass, 1 fail), 1 chemistry session (fail —
-    the weak subject), all in the last 24h, plus one passing math score in
-    the prior 24-48h window so the delta has something to compare to."""
-    await _wipe()
-    now = datetime.now(UTC)
-    in_window = now - timedelta(hours=2)
-    prior_window = now - timedelta(hours=36)
-
-    async with get_session_factory()() as s:
-        admin = User(email=f"a_{uuid.uuid4().hex[:6]}@t.com", password_hash=hash_password("x"),
-                     grade_level=12, role="admin", name="Admin")
-        student = User(email=f"s_{uuid.uuid4().hex[:6]}@t.com", password_hash=hash_password("x"),
-                       grade_level=8, role="student", name="Stu")
-        s.add_all([admin, student])
+        await s.execute(text(
+            "TRUNCATE TABLE question_edits, question_bank_items, units, "
+            "courses, schools, sessions, users RESTART IDENTITY CASCADE"
+        ))
+        admin = User(
+            email=f"a_{uuid.uuid4().hex[:6]}@t.com",
+            password_hash=hash_password("x"),
+            grade_level=99, role="admin", name="A",
+        )
+        school = School(
+            name="Lincoln High", kind=SCHOOL_KIND_INDIVIDUAL,
+            contact_name="Admin", contact_email="admin@lincoln.edu",
+        )
+        s.add_all([admin, school])
+        await s.flush()
+        teacher = User(
+            email=f"t_{uuid.uuid4().hex[:6]}@t.com",
+            password_hash=hash_password("x"),
+            grade_level=12, role="teacher", name="Ms Rivera",
+            school_id=school.id,
+        )
+        course = Course(name="Algebra", subject="math")
+        s.add_all([teacher, course])
+        await s.flush()
+        unit = Unit(course_id=course.id, name="U", position=0)
+        s.add(unit)
+        await s.flush()
+        assignment = Assignment(
+            course_id=course.id, unit_ids=[unit.id], teacher_id=teacher.id,
+            title="HW", type="homework", status="published",
+            content={"problem_ids": []},
+        )
+        s.add(assignment)
         await s.flush()
 
-        sessions = [
-            _session(subject="math", mode="learn", problem="Solve x^2-5x+6=0", created_at=in_window),
-            _session(subject="math", mode="practice", problem="Differentiate x^3", created_at=in_window),
-            _session(subject="math", mode="learn", problem="Bad math solution", created_at=in_window),
-            _session(subject="chemistry", mode="learn", problem="Balance H2 + O2", created_at=in_window),
-            _session(subject="math", mode="learn", problem="Older passing session", created_at=prior_window),
-        ]
-        s.add_all(sessions)
+        after = TRACKING_SINCE + timedelta(days=1)
+
+        def _item(**kw: Any) -> QuestionBankItem:
+            base: dict[str, Any] = dict(
+                course_id=course.id, unit_id=unit.id,
+                originating_assignment_id=assignment.id,
+                question="q", solution_steps=[], final_answer="x",
+                source="generated", created_at=after,
+            )
+            base.update(kw)
+            return QuestionBankItem(**base)
+
+        items = {
+            "held": _item(title="Held up", status="approved"),
+            "steps_fixed": _item(title="Steps fixed", status="approved"),
+            "answer_fixed": _item(title="Answer fixed", status="approved"),
+            # The question text was rewritten but the solution was not —
+            # that indicts the GENERATION prompt, not the solve.
+            "question_only": _item(title="Question only", status="approved"),
+            "rejected": _item(title="Binned", status="rejected"),
+            "pending": _item(title="Pending", status="pending"),
+        }
+        s.add_all(list(items.values()))
         await s.flush()
 
-        scores = [
-            _score(session_id=sessions[0].id, dims=(5, 5, 5, 5), created_at=in_window),  # pass
-            _score(session_id=sessions[1].id, dims=(4, 4, 4, 4), created_at=in_window),  # pass
-            _score(session_id=sessions[2].id, dims=(2, 3, 3, 2), created_at=in_window),  # FAIL (worst)
-            _score(session_id=sessions[3].id, dims=(3, 4, 4, 3), created_at=in_window),  # FAIL (chemistry)
-            _score(session_id=sessions[4].id, dims=(5, 5, 5, 5), created_at=prior_window),  # prior pass
-        ]
-        s.add_all(scores)
-        await s.commit()
+        def _edit(item: QuestionBankItem, field: str) -> QuestionEdit:
+            return QuestionEdit(
+                bank_item_id=item.id, edited_by_id=teacher.id,
+                school_id=school.id, kind=EDIT_MANUAL, field=field,
+                before="b", after="a",
+            )
 
+        s.add_all([
+            _edit(items["steps_fixed"], FIELD_SOLUTION),
+            _edit(items["answer_fixed"], FIELD_FINAL_ANSWER),
+            _edit(items["question_only"], FIELD_QUESTION),
+        ])
+        await s.commit()
         return {
-            "admin_token": create_access_token(str(admin.id), "admin"),
-            "student_token": create_access_token(str(student.id), "student"),
-            "worst_session_id": str(sessions[2].id),
-            "bare_session_id": str(sessions[3].id),
+            "token": create_access_token(str(admin.id), "admin"),
+            "items": {k: str(v.id) for k, v in items.items()},
         }
 
 
-async def test_quality_summary_and_delta(client: AsyncClient, quality_world: dict[str, Any]) -> None:
-    r = await client.get("/v1/admin/quality", params={"hours": 24},
-                         headers=auth_headers(quality_world["admin_token"]))
-    assert r.status_code == 200
+async def test_only_approved_questions_have_a_judged_solution(
+    client: AsyncClient,
+) -> None:
+    """A binned question's solution never got a real look and a pending
+    one has not been judged. Counting either would put an unexamined
+    solution in the numerator or the denominator."""
+    w = await _world()
+    r = await client.get(URL, headers=_auth(w["token"]))
+    assert r.status_code == 200, r.text
     summary = r.json()["summary"]
-    # 4 in-window scores, 2 passing → 50%.
-    assert summary["total"] == 4
-    assert summary["passed"] == 2
-    assert summary["failed"] == 2
-    assert summary["pass_rate"] == 50.0
-    # Prior window: 1 score, passing → 100%. Delta is negative.
-    assert summary["prior_pass_rate"] == 100.0
-    assert summary["prior_total"] == 1
-    # Coverage: 4 evaluated of 4 sessions created in-window (100%).
-    assert summary["total_sessions"] == 4
-    assert summary["coverage_pct"] == 100.0
+
+    # The four approved questions. Not the binned one, not the pending one.
+    assert summary["judged"] == 4
+    assert summary["clean"] == 2      # held up + question-only
+    assert summary["repaired"] == 2   # steps + final answer
+    assert summary["clean_rate"] == 50.0
+    # Reported by REASON, not lumped into one "not counted" figure.
+    assert summary["question_rejected"] == 1
+    assert summary["awaiting"] == 1
 
 
-async def test_breakdowns_worst_first(client: AsyncClient, quality_world: dict[str, Any]) -> None:
-    r = await client.get("/v1/admin/quality", params={"hours": 24},
-                         headers=auth_headers(quality_world["admin_token"]))
-    body = r.json()
-    subjects = {b["name"]: b for b in body["by_subject"]}
-    assert subjects["chemistry"]["pass_rate"] == 0.0
-    assert subjects["math"]["pass_rate"] == pytest.approx(66.7, abs=0.1)
-    # Worst subject (chemistry, 0%) sorts first.
-    assert body["by_subject"][0]["name"] == "chemistry"
-    # Mode breakdown present with both learn and practice.
-    modes = {b["name"] for b in body["by_mode"]}
-    assert {"learn", "practice"} <= modes
-    # Trend has at least one day bucket.
-    assert len(body["trend"]) >= 1
-    assert all("pass_rate" in d and "evaluated" in d for d in body["trend"])
+async def test_a_question_edit_does_not_make_the_solution_dirty(
+    client: AsyncClient,
+) -> None:
+    """The whole reason `field` exists. Rewriting the question indicts
+    the GENERATION prompt; blaming the solve for it would send you to
+    change the wrong prompt."""
+    w = await _world()
+    r = await client.get(
+        URL, params={"outcome": "clean"}, headers=_auth(w["token"]),
+    )
+    assert r.status_code == 200, r.text
+    titles = sorted(q["title"] for q in r.json()["questions"])
+    assert titles == ["Held up", "Question only"]
 
 
-async def test_scores_worst_first_and_chips(client: AsyncClient, quality_world: dict[str, Any]) -> None:
-    r = await client.get("/v1/admin/quality", params={"hours": 24},
-                         headers=auth_headers(quality_world["admin_token"]))
-    scores = r.json()["scores"]
-    assert len(scores) == 4
-    # Failures on top; the very worst (summed 10) is first.
-    assert scores[0]["passed"] is False
-    assert scores[0]["session_id"] == quality_world["worst_session_id"]
-    # Rows carry subject/mode chips + the session deep-link.
-    assert scores[0]["subject"] in {"math", "chemistry"}
-    assert scores[0]["mode"] in {"learn", "practice"}
+async def test_both_solve_fields_count_as_a_repair(
+    client: AsyncClient,
+) -> None:
+    """`decompose` produces the steps AND the final answer, so a teacher
+    fixing either is saying the same thing: the solve was wrong."""
+    w = await _world()
+    r = await client.get(
+        URL, params={"outcome": "repaired"}, headers=_auth(w["token"]),
+    )
+    assert r.status_code == 200, r.text
+    titles = sorted(q["title"] for q in r.json()["questions"])
+    assert titles == ["Answer fixed", "Steps fixed"]
 
 
-async def test_only_failed_scopes_list_not_summary(client: AsyncClient, quality_world: dict[str, Any]) -> None:
-    r = await client.get("/v1/admin/quality", params={"hours": 24, "only_failed": "true"},
-                         headers=auth_headers(quality_world["admin_token"]))
-    body = r.json()
-    # List is filtered to the 2 failures…
-    assert body["total_count"] == 2
-    assert all(s["passed"] is False for s in body["scores"])
-    # …but the summary still reflects the whole window.
-    assert body["summary"]["total"] == 4
-    assert body["summary"]["pass_rate"] == 50.0
+async def test_repairs_lead_the_list(client: AsyncClient) -> None:
+    """A solution nobody touched has nothing to debug."""
+    w = await _world()
+    r = await client.get(URL, headers=_auth(w["token"]))
+    outcomes = [q["outcome"] for q in r.json()["questions"]]
+    assert outcomes[:2] == ["repaired", "repaired"]
+    assert set(outcomes[2:]) == {"clean"}
 
 
-async def test_session_detail_drill_in(client: AsyncClient, quality_world: dict[str, Any]) -> None:
-    sid = quality_world["worst_session_id"]
-    r = await client.get(f"/v1/admin/quality/{sid}",
-                         headers=auth_headers(quality_world["admin_token"]))
-    assert r.status_code == 200
-    body = r.json()
-    assert body["session"]["id"] == sid
-    assert body["session"]["problem"] == "Bad math solution"
-    assert len(body["session"]["steps"]) == 1
-    assert body["session"]["steps"][0]["description"] == "Do the thing"
-    assert body["score"]["passed"] is False
-    assert body["score"]["issues"] == "weak reasoning"
+async def test_the_drill_in_shows_only_solution_repairs(
+    client: AsyncClient,
+) -> None:
+    """The diff is the payload — and it must be the SOLVE diff. Showing a
+    question rewrite under 'The AI solved it as' would misattribute the
+    defect to the wrong prompt."""
+    w = await _world()
+    r = await client.get(
+        f"{URL}/{w['items']['question_only']}", headers=_auth(w["token"]),
+    )
+    assert r.status_code == 200, r.text
+    # The item HAS an edit, but it is a question edit — not this page's.
+    assert r.json()["edits"] == []
+
+    r2 = await client.get(
+        f"{URL}/{w['items']['steps_fixed']}", headers=_auth(w["token"]),
+    )
+    assert r2.status_code == 200, r2.text
+    edits = r2.json()["edits"]
+    assert len(edits) == 1
+    assert edits[0]["field"] == FIELD_SOLUTION
 
 
-async def test_session_detail_404(client: AsyncClient, quality_world: dict[str, Any]) -> None:
-    r = await client.get(f"/v1/admin/quality/{uuid.uuid4()}",
-                         headers=auth_headers(quality_world["admin_token"]))
-    assert r.status_code == 404
+async def test_an_unknown_outcome_is_rejected_not_ignored(
+    client: AsyncClient,
+) -> None:
+    w = await _world()
+    r = await client.get(
+        URL, params={"outcome": "nonsense"}, headers=_auth(w["token"]),
+    )
+    assert r.status_code == 400, r.text
 
 
-async def test_requires_admin(client: AsyncClient, quality_world: dict[str, Any]) -> None:
-    r = await client.get("/v1/admin/quality",
-                         headers=auth_headers(quality_world["student_token"]))
-    assert r.status_code == 403
+async def test_a_thin_sample_says_so(client: AsyncClient) -> None:
+    """Four judged solutions cannot support a percentage."""
+    w = await _world()
+    r = await client.get(URL, headers=_auth(w["token"]))
+    assert r.json()["summary"]["thin"] is True
+
+
+async def test_a_teacher_cannot_read_the_admin_console(
+    client: AsyncClient,
+) -> None:
+    w = await _world()
+    async with get_session_factory()() as s:
+        teacher_id = (await s.execute(
+            text("SELECT id FROM users WHERE role = 'teacher' LIMIT 1")
+        )).scalar_one()
+    r = await client.get(
+        URL, headers=_auth(create_access_token(str(teacher_id), "teacher")),
+    )
+    assert r.status_code == 403, r.text
+    assert w  # fixture used

@@ -9,7 +9,6 @@ import Overview from "./pages/Overview";
 import LLMCalls from "./pages/LLMCalls";
 import HarnessRuns from "./pages/HarnessRuns";
 import Quality from "./pages/Quality";
-import SessionQuality from "./pages/SessionQuality";
 import GenerationQuality from "./pages/GenerationQuality";
 import GradingQuality from "./pages/GradingQuality";
 import ExtractionQuality from "./pages/ExtractionQuality";
@@ -76,7 +75,6 @@ export default function App() {
               bookmarks keep working. */}
           <Route path="/ai-quality" element={<AIQuality />} />
           <Route path="/quality" element={<Quality />} />
-          <Route path="/quality/:sessionId" element={<SessionQuality />} />
           <Route path="/grading-quality" element={<GradingQuality />} />
           <Route path="/extraction-quality" element={<ExtractionQuality />} />
           <Route path="/generation-quality" element={<GenerationQuality />} />

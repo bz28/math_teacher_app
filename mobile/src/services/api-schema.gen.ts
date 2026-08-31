@@ -692,8 +692,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Quality Scores */
-        get: operations["quality_scores_v1_admin_quality_get"];
+        /**
+         * Solution Quality
+         * @description Every approved generated question, and whether its solution held.
+         */
+        get: operations["solution_quality_v1_admin_quality_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -702,7 +705,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/quality/{session_id}": {
+    "/v1/admin/quality/{item_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -710,12 +713,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Quality Session Detail
-         * @description Drill-in for a single evaluated session: the problem, the exact
-         *     decomposition steps shown to the student, and the judge's verdict.
-         *     This is the destination the evaluations table deep-links into.
+         * Solution Repair History
+         * @description One question's solution repairs, oldest first.
+         *
+         *     The diffs are the payload. A count tells you WHICH solution to look
+         *     at; only the before/after tells you what the solve prompt got wrong.
          */
-        get: operations["quality_session_detail_v1_admin_quality__session_id__get"];
+        get: operations["solution_repair_history_v1_admin_quality__item_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7511,11 +7515,12 @@ export interface operations {
             };
         };
     };
-    quality_scores_v1_admin_quality_get: {
+    solution_quality_v1_admin_quality_get: {
         parameters: {
             query?: {
-                hours?: number;
-                only_failed?: boolean;
+                include_variations?: boolean;
+                /** @description clean | repaired */
+                outcome?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -7547,12 +7552,12 @@ export interface operations {
             };
         };
     };
-    quality_session_detail_v1_admin_quality__session_id__get: {
+    solution_repair_history_v1_admin_quality__item_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                session_id: string;
+                item_id: string;
             };
             cookie?: never;
         };

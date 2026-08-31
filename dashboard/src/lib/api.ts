@@ -584,9 +584,10 @@ export const api = {
     mutate<GoldenCase>(`/admin/golden-set/${id}/retire`, "PATCH", { retired }),
   rerunGoldenEval: (ids: string[] = []) =>
     mutate<{ requested: number }>("/admin/golden-set/rerun", "POST", { ids }),
-  quality: (params?: Record<string, string>) => request<QualityData>("/admin/quality", params),
-  qualitySession: (sessionId: string) =>
-    request<QualitySessionDetail>(`/admin/quality/${sessionId}`),
+  solutionQuality: (params?: Record<string, string>) =>
+    request<SolutionQualityData>("/admin/quality", params),
+  solutionRepairs: (itemId: string) =>
+    request<SolutionRepairHistory>(`/admin/quality/${itemId}`),
   editedQuestions: (params?: Record<string, string>) =>
     request<EditedQuestionsData>("/admin/generation-quality/questions", params),
   questionEditHistory: (id: string) =>
@@ -781,30 +782,6 @@ export interface LLMCallsData {
 }
 
 /** One subject/mode bucket in the quality breakdown, worst-first. */
-export interface QualityBucket {
-  name: string;
-  evaluated: number;
-  passed: number;
-  pass_rate: number;
-  avg_score: number;
-}
-
-export interface QualityScoreRow {
-  id: string;
-  session_id: string;
-  problem: string;
-  subject: string;
-  mode: string;
-  problem_type: string;
-  correctness: number;
-  optimality: number;
-  clarity: number;
-  flow: number;
-  passed: boolean;
-  issues: string | null;
-  created_at: string;
-}
-
 /** The DECISIONS one graded submission produced — joined from the
  *  submission / grade / integrity-check tables so the SubmissionTrace
  *  header can read as a case file instead of a raw UUID. Scores are
@@ -830,52 +807,73 @@ export interface SubmissionSummary {
   integrity_resolution: string | null;
 }
 
-export interface QualityData {
-  summary: {
-    total: number;
-    passed: number;
-    failed: number;
-    pass_rate: number;
-    prior_pass_rate: number;
-    prior_total: number;
-    total_sessions: number;
-    coverage_pct: number;
-    avg_correctness: number;
-    avg_optimality: number;
-    avg_clarity: number;
-    avg_flow: number;
-  };
-  trend: { day: string; evaluated: number; pass_rate: number }[];
-  by_subject: QualityBucket[];
-  by_mode: QualityBucket[];
-  scores: QualityScoreRow[];
-  total_count: number;
+
+// ── Solution quality ─────────────────────────────────────────────────
+// Scores `decompose`, the call that works a question's step-by-step
+// solution, judged by whether a teacher had to fix the answer.
+//
+// This replaced an LLM judge that never ran once: the table it read was
+// empty by construction, so the page rendered a red "WEAK" verdict and
+// 0.0/5 on every dimension — asserting the AI was bad at a job nobody
+// had ever measured.
+//
+// Solutions have no rejection of their own; binning belongs to the
+// QUESTION that owns the solution. The two exclusions are therefore
+// reported by reason rather than lumped together — "the question was
+// rejected" says what happened, "never assessed" only describes our
+// bookkeeping.
+
+export type SolutionOutcome = "clean" | "repaired";
+
+export interface SolutionQualitySummary {
+  judged: number;
+  clean: number;
+  repaired: number;
+  /** Excluded — the question was binned, so its solution never got a look. */
+  question_rejected: number;
+  /** Excluded — still pending review. */
+  awaiting: number;
+  clean_rate: number;
+  thin: boolean;
 }
 
-/** Drill-in: a single evaluated session — problem, the exact steps shown
- *  to the student, and the judge's verdict. */
-export interface QualitySessionDetail {
-  session: {
-    id: string;
-    problem: string;
-    problem_type: string;
-    subject: string;
-    mode: string;
-    status: string;
-    total_steps: number;
-    created_at: string | null;
-    steps: { title: string; description: string; final_answer: string | null }[];
-  };
-  score: {
-    correctness: number;
-    optimality: number;
-    clarity: number;
-    flow: number;
-    passed: boolean;
-    issues: string | null;
-    created_at: string | null;
-  } | null;
+export interface SolutionQuestion {
+  id: string;
+  title: string;
+  question: string;
+  final_answer: string | null;
+  outcome: SolutionOutcome;
+  created_at: string | null;
 }
+
+export interface SolutionQualityData {
+  summary: SolutionQualitySummary;
+  questions: SolutionQuestion[];
+  total_count: number;
+  tracking_since: string;
+}
+
+export interface SolutionRepairEntry {
+  id: string;
+  kind: string;
+  field: string;
+  before: string | null;
+  after: string | null;
+  created_at: string;
+  editor: string | null;
+  school: string | null;
+}
+
+export interface SolutionRepairHistory {
+  id: string;
+  title: string;
+  question: string;
+  final_answer: string | null;
+  status: string;
+  edits: SolutionRepairEntry[];
+  tracking_since: string;
+}
+
 
 // ── AI grading quality (teacher-override analytics) ──
 
