@@ -282,6 +282,7 @@ export default function GenerationQuality() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<QuestionEditHistory | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -304,6 +305,7 @@ export default function GenerationQuality() {
   useEffect(() => {
     if (!openId) {
       setDetail(null);
+      setDetailError(null);
       return;
     }
     let cancelled = false;
@@ -313,8 +315,16 @@ export default function GenerationQuality() {
       .then((d) => {
         if (!cancelled) setDetail(d);
       })
-      .catch(() => {
-        if (!cancelled) setDetail(null);
+      .catch((e) => {
+        if (!cancelled) {
+          setDetail(null);
+          // Without this the modal opened, showed its title, and sat
+          // completely blank — a failed fetch that looked like a question
+          // with no repair history. The sibling page surfaces it.
+          setDetailError(
+            e instanceof Error ? e.message : "Couldn't load this repair history.",
+          );
+        }
       })
       .finally(() => {
         if (!cancelled) setDetailLoading(false);
@@ -413,6 +423,9 @@ export default function GenerationQuality() {
           maxWidth={760}
         >
           {detailLoading && <p className="gq-loading">Loading…</p>}
+          {detailError && !detailLoading && (
+            <p className="empty-mini">{detailError}</p>
+          )}
           {!detailLoading && detail && (
             <div className="gq-detail">
               {/* The prompt first. It's the thing you actually change once
