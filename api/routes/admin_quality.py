@@ -53,6 +53,7 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.question_bank import QuestionBankItem
 from api.models.question_edit import (
+    EDIT_KINDS,
     FIELD_FINAL_ANSWER,
     FIELD_SOLUTION,
     TRACKING_SINCE,
@@ -77,11 +78,22 @@ _SOLUTION_FIELDS = (FIELD_SOLUTION, FIELD_FINAL_ANSWER)
 
 
 def _solution_repaired() -> Any:
+    """EXISTS a TEACHER repair to this item's solution.
+
+    The kind filter is load-bearing. `regenerate_one` replaces
+    solution_steps and final_answer wholesale, so a regeneration writes
+    solution-field rows too — and without this they counted as repairs.
+    That would contradict this module's own contract (a regeneration is a
+    generation-side event; this page judges the solution that survived),
+    inflate `repaired`, depress the rate, and label AI-written text as
+    "what the teacher corrected it to" in the drill-in.
+    """
     return (
         select(QuestionEdit.id)
         .where(
             QuestionEdit.bank_item_id == QuestionBankItem.id,
             QuestionEdit.field.in_(_SOLUTION_FIELDS),
+            QuestionEdit.kind.in_(EDIT_KINDS),
         )
         .exists()
     )
@@ -237,9 +249,14 @@ async def solution_repair_history(
         )
         .outerjoin(User, User.id == QuestionEdit.edited_by_id)
         .outerjoin(School, School.id == QuestionEdit.school_id)
+        # Same kind filter as the board, and for a second reason: this
+        # drill-in labels its columns "The AI solved it as" and "The
+        # teacher corrected it to". A regeneration row would put the
+        # AI's own new text under the teacher's label.
         .where(
             QuestionEdit.bank_item_id == item_id,
             QuestionEdit.field.in_(_SOLUTION_FIELDS),
+            QuestionEdit.kind.in_(EDIT_KINDS),
         )
         .order_by(QuestionEdit.created_at.asc())
     )).all()

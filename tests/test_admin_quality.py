@@ -41,6 +41,8 @@ from api.models.question_edit import (
     FIELD_FINAL_ANSWER,
     FIELD_QUESTION,
     FIELD_SOLUTION,
+    REGEN_FRESH,
+    REGEN_GUIDED,
     TRACKING_SINCE,
     QuestionEdit,
 )
@@ -248,3 +250,41 @@ async def test_a_teacher_cannot_read_the_admin_console(
     )
     assert r.status_code == 403, r.text
     assert w  # fixture used
+
+
+async def test_a_regeneration_is_not_a_teacher_repair(
+    client: AsyncClient,
+) -> None:
+    """`regenerate_one` replaces solution_steps and final_answer wholesale,
+    so a regeneration writes solution-field rows. Counting them here would
+    contradict this page's contract — a regeneration is a generation-side
+    event and this page judges the solution that SURVIVED — inflate the
+    repaired bucket, depress the rate, and label the AI's own new text as
+    "what the teacher corrected it to" in the drill-in.
+    """
+    w = await _world()
+    async with get_session_factory()() as s:
+        item_id = uuid.UUID(w["items"]["held"])
+        teacher_id = (await s.execute(
+            text("SELECT id FROM users WHERE role = 'teacher' LIMIT 1")
+        )).scalar_one()
+        for kind in (REGEN_FRESH, REGEN_GUIDED):
+            s.add(QuestionEdit(
+                bank_item_id=item_id, edited_by_id=teacher_id,
+                kind=kind, field=FIELD_SOLUTION,
+                before="ai wrote this", after="ai wrote this instead",
+            ))
+        await s.commit()
+
+    r = await client.get(URL, headers=_auth(w["token"]))
+    assert r.status_code == 200, r.text
+    # Unchanged: two clean, two repaired. The regenerated item is still
+    # clean, because no teacher corrected its surviving solution.
+    assert r.json()["summary"]["clean"] == 2
+    assert r.json()["summary"]["repaired"] == 2
+
+    # And the drill-in shows no diff, so AI-written text is never
+    # displayed under "The teacher corrected it to".
+    d = await client.get(f"{URL}/{w['items']['held']}", headers=_auth(w["token"]))
+    assert d.status_code == 200, d.text
+    assert d.json()["edits"] == []

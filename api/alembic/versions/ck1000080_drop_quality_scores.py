@@ -74,6 +74,11 @@ def downgrade() -> None:
         sa.ForeignKeyConstraint(["session_id"], ["sessions.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
+    # UNIQUE, matching the original migration and the deleted model: one
+    # judge score per session. Recreating it non-unique would land a
+    # rollback on a table that permits duplicates and show as autogenerate
+    # drift.
     op.create_index(
         "ix_quality_scores_session_id", "quality_scores", ["session_id"],
+        unique=True,
     )

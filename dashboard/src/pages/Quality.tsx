@@ -203,6 +203,28 @@ export default function Quality() {
           <div className="empty-state-sub">{error}</div>
         </div>
       )}
+      {error && data && (
+        // A failed REFETCH must not be silent. Without this the filter
+        // appears to apply, the old numbers stay put, and nothing says
+        // they are stale.
+        <div className="callout-warn" role="alert">
+          <StatusPill tone="danger" label="STALE" />
+          <span>
+            {error} The numbers below are from the last successful load.{" "}
+            <button
+              type="button"
+              onClick={() => void load()}
+              style={{
+                background: "none", border: "none", padding: 0,
+                color: "var(--accent)", cursor: "pointer",
+                font: "inherit", textDecoration: "underline",
+              }}
+            >
+              Retry
+            </button>
+          </span>
+        </div>
+      )}
 
       {summary && summary.judged === 0 && (
         // Honest empty state. The page this replaces rendered 0% in red

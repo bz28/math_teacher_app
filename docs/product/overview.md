@@ -88,7 +88,7 @@ demo content.
   a student's recurring error patterns to review. *Value: study what you actually keep
   getting wrong.*
 
-Supporting AI infrastructure: an **LLM judge** (`api/core/judge.py`), a **geometry figure
+Supporting AI infrastructure: a **geometry figure
 engine** (`api/core/geometry/`), **document vision + image extraction**
 (`document_vision.py`, `image_extract.py`), and full **LLM logging + cost tracking**
 (`llm_logging.py`, `cost_tracker.py`) surfaced in the admin dashboard.
