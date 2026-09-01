@@ -21,8 +21,13 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent
 _REGISTRY = _ROOT / "dashboard/src/lib/activityActions.ts"
 
-# A dotted, lower-snake action name — "bank_item.workshop_accept".
-_ACTION = re.compile(r'"([a-z][a-z_]*\.[a-z][a-z_]*)"')
+# A dotted action name — "bank_item.workshop_accept". Deliberately wider
+# than the names in use (digits and capitals allowed): a pattern that only
+# matched today's spelling would make a new action with a digit in it
+# invisible to BOTH sides of the comparison, and this test would pass
+# while the row rendered from the raw-metadata fallback.
+_ACTION_RE = r"[A-Za-z][A-Za-z0-9_]*\.[A-Za-z][A-Za-z0-9_]*"
+_ACTION = re.compile(f'"({_ACTION_RE})"')
 
 
 def _backend_actions() -> set[str]:
@@ -41,7 +46,10 @@ def _backend_actions() -> set[str]:
                 continue
             window = "\n".join(lines[i : i + 8])
             # Stop at the metadata dict — its keys and values are not
-            # action names and could contain dotted strings.
+            # action names and could contain dotted strings. A consequence:
+            # an action assembled as an f-string would be cut here and
+            # missed. The reverse test below turns that into a failure
+            # rather than a false pass, just with a confusing message.
             window = window.split("{")[0]
             found.update(_ACTION.findall(window))
     return found
@@ -49,7 +57,7 @@ def _backend_actions() -> set[str]:
 
 def _registry_actions() -> set[str]:
     text = _REGISTRY.read_text()
-    return set(re.findall(r'action:\s*"([a-z][a-z_]*\.[a-z][a-z_]*)"', text))
+    return set(re.findall(rf'action:\s*"({_ACTION_RE})"', text))
 
 
 def test_every_logged_action_is_in_the_frontend_registry() -> None:

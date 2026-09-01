@@ -196,7 +196,7 @@ function ActivityRow({ e }: { e: ActivityLogEntry }) {
       </td>
       <td>
         <span className="badge" style={actionBadgeStyle(e.action)} title={e.action}>
-          {actionLabel(e.action)}
+          {actionLabel(e.action, e.metadata)}
         </span>
       </td>
       <td>

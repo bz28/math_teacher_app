@@ -22,10 +22,17 @@ export type ActivityFamily =
 export interface ActivityAction {
   /** The exact `action` string on the log row. */
   action: string;
-  /** Short human name — the dropdown option and the row's badge. */
+  /** Short human name — the dropdown option, and the row's badge unless
+   *  `badgeLabel` overrides it. */
   label: string;
   /** Sentence for the Details column, from the row's small metadata. */
   detail: (m: Meta) => string;
+  /** Optional per-row badge override. One endpoint can be two different
+   *  actions to a teacher — PATCH covers both re-tagging and renaming —
+   *  and a "Retagged" badge over a "Renamed …" sentence contradicts
+   *  itself on the same row. The dropdown still offers only `label`,
+   *  because the backend has one action string to filter on. */
+  badgeLabel?: (m: Meta) => string;
 }
 
 type Meta = Record<string, unknown>;
@@ -158,18 +165,19 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
     {
       action: "bank_item.retag",
       label: "Retagged",
-      detail: (m) => {
-        // A rename and a re-tag are the same endpoint but read very
-        // differently; `renamed_from` is what separates them.
-        if (str(m, "renamed_from")) {
-          return `Renamed "${str(m, "renamed_from")}" → "${str(m, "title")}"`;
-        }
-        return join(
-          quoted(m, "title", "Retagged item"),
+      // A rename and a re-tag are the same endpoint but read very
+      // differently; `renamed_from` is what separates them.
+      badgeLabel: (m) => (str(m, "renamed_from") ? "Renamed" : "Retagged"),
+      detail: (m) =>
+        join(
+          str(m, "renamed_from")
+            ? `Renamed "${str(m, "renamed_from")}" → "${str(m, "title")}"`
+            : quoted(m, "title", "Retagged item"),
+          // Appended rather than returned early, so a request that renames
+          // AND re-tags doesn't silently drop half of what it recorded.
           str(m, "difficulty") && `difficulty ${str(m, "difficulty")}`,
           m.unit_id != null && "moved unit",
-        );
-      },
+        ),
     },
     {
       action: "bank_item.regenerate",
@@ -259,8 +267,10 @@ const BY_ACTION: Map<string, ActivityAction> = new Map(
     .map((a) => [a.action, a]),
 );
 
-export function actionLabel(action: string): string {
-  return BY_ACTION.get(action)?.label ?? action;
+export function actionLabel(action: string, metadata?: Meta | null): string {
+  const entry = BY_ACTION.get(action);
+  if (!entry) return action;
+  return (metadata && entry.badgeLabel?.(metadata)) || entry.label;
 }
 
 /**
