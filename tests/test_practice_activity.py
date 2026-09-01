@@ -319,6 +319,66 @@ async def test_teacher_sees_class_insights(
     assert top["students_struggled"] == 2
 
 
+async def test_preview_shadow_stays_off_every_class_count(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """A teacher rehearsing her own material must not show up as a
+    student anywhere on this panel.
+
+    All four numbers have to agree: the panel renders "N students active"
+    directly above rows reading "X of Y struggled", and the Student
+    Insights roster renders a card per student. Filtering one and not
+    the others gives a header that contradicts the list under it, or a
+    teacher who finds herself on her own roster."""
+    p = await _seed_practice(world)
+    await _record_class_activity(p, world)
+    cid = await _course_id(world)
+
+    # Her shadow, enrolled and practising exactly like a student.
+    async with get_session_factory()() as s:
+        shadow = User(
+            email=f"preview_{uuid.uuid4().hex[:6]}@veradic.ai",
+            password_hash=hash_password("x"), grade_level=12,
+            role="student", name="T (Preview)",
+            is_preview=True, preview_owner_id=world["teacher_id"],
+        )
+        s.add(shadow)
+        await s.flush()
+        s.add(SectionEnrollment(
+            student_id=shadow.id, section_id=p["section_id"],
+            course_id=cid,
+        ))
+        s.add(PracticeActivity(
+            student_id=shadow.id, section_id=p["section_id"],
+            practice_assignment_id=p["practice_id"],
+            bank_item_id=p["item_ids"][0], mode="practice", outcome="retry",
+            tutor_message_count=1,
+        ))
+        await s.commit()
+
+    r = await client.get(
+        f"/v1/teacher/courses/{cid}/sections/{p['section_id']}/practice-insights",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # Unchanged from test_teacher_sees_class_insights — the two real
+    # students, and neither per-item count moved.
+    assert data["students_active"] == 2
+    top = data["items"][0]
+    assert top["bank_item_id"] == str(p["item_ids"][0])
+    assert top["students_struggled"] == 2
+    assert top["students_practiced"] == 2
+
+    r = await client.get(
+        f"/v1/teacher/courses/{cid}/sections/{p['section_id']}/student-insights",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    names = [row["name"] for row in r.json()["students"]]
+    assert "T (Preview)" not in names
+
+
 async def test_non_owning_teacher_blocked(
     client: AsyncClient, world: dict[str, Any],
 ) -> None:
