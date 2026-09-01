@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import func, select, text
 
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
@@ -312,11 +312,15 @@ async def test_republishing_after_a_manual_clear_fans_out_again(
     # Unpublish alone leaves the targeting intact.
     assert await _assigned_section_count(assignment_id) == 2
 
-    async with get_session_factory()() as s:
-        await s.execute(delete(AssignmentSection).where(
-            AssignmentSection.assignment_id == uuid.UUID(assignment_id),
-        ))
-        await s.commit()
+    # Clear it the way a teacher does — deselecting every chip in the
+    # picker, which posts an empty list. Reaching into the table would
+    # skip the endpoint and let a regression there go unnoticed.
+    r = await client.post(
+        f"/v1/teacher/assignments/{assignment_id}/sections", headers=headers,
+        json={"section_ids": []},
+    )
+    assert r.status_code == 200, r.text
+    assert await _assigned_section_count(assignment_id) == 0
 
     await client.post(
         f"/v1/teacher/assignments/{assignment_id}/publish", headers=headers,

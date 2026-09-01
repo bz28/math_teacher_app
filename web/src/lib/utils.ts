@@ -165,29 +165,54 @@ export function formatDuration(seconds: number): string {
 /**
  * How a homework's section targeting reads to a teacher.
  *
- * An empty section list means two opposite things depending on where
- * the homework is in its life, and calling both of them the same thing
- * is what makes teachers distrust the blank default:
+ * An empty section list means three different things depending on
+ * state, and calling them all the same thing is what makes teachers
+ * distrust the blank default:
  *
- *   draft, empty     — the default. Publishing fans the homework out to
- *                      every section in the course, so "All sections"
- *                      is what is actually going to happen.
- *   published, empty — anomalous. It went out to sections that have
- *                      since been deleted, so it now reaches nobody.
- *                      That deserves to read as a problem, not a
- *                      reassurance.
+ *   draft, course has sections — the default. Publishing fans the
+ *       homework out to every section, so "All sections" is what is
+ *       actually going to happen. Reads as a default, not a fact.
+ *   draft, course has none — publishing will be refused outright
+ *       ("This course has no sections yet"). Promising "All sections"
+ *       here is a promise the publish button won't keep.
+ *   published, empty — the sections it went to have since been
+ *       deleted, so it reaches nobody. That is a problem, and should
+ *       look like one.
  *
- * `subdued` marks the states that are a quiet default rather than a
- * fact about real sections, so callers can italicise them.
+ * `courseSectionCount` is null when the caller doesn't know (list
+ * cards don't load the course's sections). The zero case then can't be
+ * told from the ordinary one; the detail page, which is where
+ * publishing actually happens, always knows.
  */
-export function sectionTargetLabel(
-  sectionNames: string[],
-  status: string,
-): { label: string; subdued: boolean } {
-  if (sectionNames.length > 0) {
-    return { label: sectionNames.join(", "), subdued: false };
+export function sectionTargetLabel({
+  selectedNames,
+  status,
+  courseSectionCount = null,
+}: {
+  selectedNames: string[];
+  status: string;
+  courseSectionCount?: number | null;
+}): { label: string; tone: "normal" | "default" | "problem" } {
+  if (selectedNames.length > 0) {
+    return { label: selectedNames.join(", "), tone: "normal" };
   }
-  return status === "published"
-    ? { label: "No sections", subdued: false }
-    : { label: "All sections", subdued: true };
+  if (status === "published") {
+    return { label: "No sections", tone: "problem" };
+  }
+  if (courseSectionCount === 0) {
+    return { label: "No sections in this course", tone: "problem" };
+  }
+  return { label: "All sections", tone: "default" };
+}
+
+/** Tailwind classes for a {@link sectionTargetLabel} tone. A default
+ *  stays quiet; a problem has to interrupt someone skimming. */
+export function sectionToneClass(
+  tone: "normal" | "default" | "problem",
+): string {
+  if (tone === "default") return "italic";
+  if (tone === "problem") {
+    return "font-semibold text-[color:var(--color-warning-dark)]";
+  }
+  return "";
 }
