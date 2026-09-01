@@ -446,7 +446,7 @@ export default function HomeworkDetailPage({
       if (previewLoading) return;
       setPreviewLoading(true);
       try {
-        const tokens = await teacher.previewAsStudent();
+        const tokens = await teacher.previewAsStudent(assignmentId);
         enterPreviewMode(tokens);
         await loadUser();
         const previewUser = useAuthStore.getState().user;

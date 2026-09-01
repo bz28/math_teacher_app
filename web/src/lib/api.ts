@@ -1776,9 +1776,15 @@ export const teacher = {
       body: JSON.stringify({ resolution }),
     });
   },
-  /** Create or reuse a shadow student, return its JWT pair. */
-  previewAsStudent() {
-    return apiFetch<TokenPair>("/teacher/preview-student", { method: "POST" });
+  /** Create or reuse a shadow student, return its JWT pair. Pass the
+   *  homework being previewed so the shadow lands in a section that
+   *  homework was actually assigned to — without it a homework pushed
+   *  to only some sections isn't visible from the shadow's seat. */
+  previewAsStudent(assignmentId?: string) {
+    return apiFetch<TokenPair>("/teacher/preview-student", {
+      method: "POST",
+      body: JSON.stringify(assignmentId ? { assignment_id: assignmentId } : {}),
+    });
   },
 };
 
