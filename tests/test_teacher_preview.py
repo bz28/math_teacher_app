@@ -19,10 +19,11 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
+from api.models.assignment import Submission
 from api.models.question_bank import QuestionBankItem
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
@@ -133,9 +134,42 @@ async def _teacher_with_homework(
         assert r.status_code == 200, r.text
 
     return {
-        "headers": headers, "course_id": course_id,
+        "headers": headers, "course_id": course_id, "unit_id": unit_id,
         "section_ids": section_ids, "assignment_id": assignment_id,
     }
+
+
+async def _second_homework(
+    client: AsyncClient, world: dict[str, Any], *, section_id: str,
+) -> str:
+    """Another published homework in the same course, targeted at one
+    section — for checking what happens when the teacher previews a
+    second homework that lives in a different period than the first."""
+    headers = world["headers"]
+    assignment_id = (await client.post(
+        f"/v1/teacher/courses/{world['course_id']}/assignments", headers=headers,
+        json={
+            "title": "HW 2", "type": "homework",
+            "unit_ids": [world["unit_id"]], "late_policy": "none",
+        },
+    )).json()["id"]
+    r = await client.patch(
+        f"/v1/teacher/assignments/{assignment_id}", headers=headers,
+        json={"bank_item_ids": await _approved_items(
+            world["course_id"], world["unit_id"], assignment_id,
+        )},
+    )
+    assert r.status_code == 200, r.text
+    r = await client.post(
+        f"/v1/teacher/assignments/{assignment_id}/sections", headers=headers,
+        json={"section_ids": [section_id]},
+    )
+    assert r.status_code == 200, r.text
+    r = await client.post(
+        f"/v1/teacher/assignments/{assignment_id}/publish", headers=headers,
+    )
+    assert r.status_code == 200, r.text
+    return assignment_id
 
 
 async def _preview_headers(
@@ -190,9 +224,32 @@ async def test_preview_lands_in_a_targeted_section(client: AsyncClient) -> None:
     assert [str(sid) for sid in enrolled] == [world["section_ids"][1]]
 
 
+async def test_sidebar_preview_leaves_an_existing_seat_alone(client: AsyncClient) -> None:
+    """The sidebar's preview entry point names no homework, so it has no
+    opinion about which section she should sit in — it must not yank her
+    out of the seat a homework preview just put her in."""
+    await _wipe()
+    world = await _teacher_with_homework(client, sections="second_only", status="published")
+    await _preview_headers(client, world)  # seats her in Period 4
+
+    await _preview_headers(client, world, for_assignment=False)  # sidebar
+
+    async with get_session_factory()() as s:
+        shadow = (await s.execute(
+            select(User).where(User.is_preview.is_(True))
+        )).scalar_one()
+        enrolled = (await s.execute(
+            select(SectionEnrollment.section_id).where(
+                SectionEnrollment.student_id == shadow.id,
+            )
+        )).scalars().all()
+
+    assert [str(sid) for sid in enrolled] == [world["section_ids"][1]]
+
+
 async def test_preview_without_an_assignment_still_works(client: AsyncClient) -> None:
-    """The sidebar's "Try as Student" sends no assignment — it must still
-    enroll the shadow and reach the student dashboard."""
+    """The sidebar's preview entry point sends no assignment — it must
+    still enroll the shadow and reach the student dashboard."""
     await _wipe()
     world = await _teacher_with_homework(client, sections="both", status="published")
     headers = await _preview_headers(client, world, for_assignment=False)
@@ -204,20 +261,68 @@ async def test_preview_without_an_assignment_still_works(client: AsyncClient) ->
     assert len(r.json()) == 1
 
 
-async def test_preview_can_turn_in_a_draft(client: AsyncClient) -> None:
-    """A draft has no section rows to attribute a submission to, so the
-    shadow falls back to its own enrollment — otherwise the teacher walks
-    the preview right up to a Turn in button that 403s."""
+@pytest.mark.parametrize("status", ["draft", "published"])
+async def test_preview_cannot_turn_in_work(client: AsyncClient, status: str) -> None:
+    """Submissions are one-shot and nothing deletes one, so a preview
+    that turned work in would permanently cost the teacher the ability
+    to exercise the flow for real on that homework — and bill the
+    extraction + grading run for it. The page renders a read-only notice
+    instead; this is the server-side half of that contract."""
     await _wipe()
-    world = await _teacher_with_homework(client, sections="blank", status="draft")
+    world = await _teacher_with_homework(client, sections="both", status=status)
     headers = await _preview_headers(client, world)
 
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=headers, json={"files": [TINY_PNG]},
     )
+    assert r.status_code == 403, r.text
+    assert r.json()["detail"] == "Preview accounts can't turn in work"
+
+    async with get_session_factory()() as s:
+        count = (await s.execute(
+            select(func.count()).select_from(Submission).where(
+                Submission.assignment_id == uuid.UUID(world["assignment_id"]),
+            )
+        )).scalar_one()
+    assert count == 0
+
+
+async def test_preview_moves_the_seat_to_the_previewed_homework(
+    client: AsyncClient,
+) -> None:
+    """Previewing a homework in a period the shadow isn't sitting in
+    moves its seat. The row is updated in place — one enrollment per
+    (student, course) is a DB constraint, so a second row isn't an
+    option."""
+    await _wipe()
+    world = await _teacher_with_homework(client, sections="first_only", status="published")
+    await _preview_headers(client, world)  # seats her in Period 2
+
+    hw2 = await _second_homework(client, world, section_id=world["section_ids"][1])
+    r = await client.post(
+        "/v1/teacher/preview-student", headers=world["headers"],
+        json={"assignment_id": hw2},
+    )
     assert r.status_code == 200, r.text
-    assert r.json()["submission_id"]
+
+    async with get_session_factory()() as s:
+        shadow = (await s.execute(
+            select(User).where(User.is_preview.is_(True))
+        )).scalar_one()
+        enrolled = (await s.execute(
+            select(SectionEnrollment.section_id).where(
+                SectionEnrollment.student_id == shadow.id,
+            )
+        )).scalars().all()
+
+    # Moved, not duplicated.
+    assert [str(sid) for sid in enrolled] == [world["section_ids"][1]]
+    r = await client.get(
+        f"/v1/school/student/homework/{hw2}",
+        headers=auth_headers(r.json()["access_token"]),
+    )
+    assert r.status_code == 200, r.text
 
 
 # ── The gates still hold for everyone else ──
@@ -266,23 +371,54 @@ async def test_unenrolled_student_still_blocked(client: AsyncClient) -> None:
     assert r.json()["detail"] == "Not enrolled in this assignment"
 
 
-async def test_another_teachers_shadow_is_blocked(client: AsyncClient) -> None:
-    """The waiver is scoped to courses the shadow's owner teaches — one
-    teacher's preview must not reach another teacher's homework."""
-    await _wipe()
-    world = await _teacher_with_homework(client, sections="both", status="draft")
+@pytest.mark.parametrize(
+    "victim_status,expected",
+    [
+        # Exercises the publish waiver...
+        ("draft", "Assignment is not published"),
+        # ...and the enrollment waiver, which a draft never reaches.
+        ("published", "Not enrolled in this assignment"),
+    ],
+)
+async def test_another_teachers_shadow_is_blocked(
+    client: AsyncClient, victim_status: str, expected: str,
+) -> None:
+    """The waiver is scoped to courses the shadow's OWNER teaches.
 
-    r = await client.post("/v1/auth/register", json={
-        "email": f"other_{uuid.uuid4().hex[:8]}@school.edu",
-        "password": "password123", "name": "Other Teacher",
-        "grade_level": 12, "role": "teacher", "signup_school_name": "Springfield High",
-    })
-    other = auth_headers(r.json()["access_token"])
-    r = await client.post("/v1/teacher/preview-student", headers=other, json={})
-    shadow_headers = auth_headers(r.json()["access_token"])
+    The intruding teacher gets a full course of her own, so her
+    `teacher_course_ids` is non-empty and the scoping predicate is what
+    does the blocking. Without that, this passes for the trivial reason
+    that a teacher with no courses reaches nothing — and would still
+    pass with the course scoping deleted entirely."""
+    await _wipe()
+    victim = await _teacher_with_homework(client, sections="both", status=victim_status)
+    other = await _teacher_with_homework(client, sections="both", status="published")
+
+    # Her own preview works, so we know her shadow is live and seated.
+    own = await _preview_headers(client, other)
+    r = await client.get(
+        f"/v1/school/student/homework/{other['assignment_id']}", headers=own,
+    )
+    assert r.status_code == 200, r.text
+
+    # Naming the victim's assignment must not seat her in his course.
+    r = await client.post(
+        "/v1/teacher/preview-student", headers=other["headers"],
+        json={"assignment_id": victim["assignment_id"]},
+    )
+    assert r.status_code == 200, r.text
+    intruder = auth_headers(r.json()["access_token"])
 
     r = await client.get(
-        f"/v1/school/student/homework/{world['assignment_id']}", headers=shadow_headers,
+        f"/v1/school/student/homework/{victim['assignment_id']}", headers=intruder,
     )
     assert r.status_code == 403
-    assert r.json()["detail"] == "Assignment is not published"
+    assert r.json()["detail"] == expected
+
+    async with get_session_factory()() as s:
+        seats = (await s.execute(
+            select(SectionEnrollment.section_id)
+            .join(User, User.id == SectionEnrollment.student_id)
+            .where(User.is_preview.is_(True))
+        )).scalars().all()
+    assert not (set(map(str, seats)) & set(victim["section_ids"]))
