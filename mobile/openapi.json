@@ -2342,6 +2342,25 @@
         "title": "PracticeProblem",
         "type": "object"
       },
+      "PreviewStudentRequest": {
+        "description": "Which homework the teacher is about to open, when they came from\nan assignment's Preview button. We point the shadow at a section\nthat assignment was actually pushed to \u2014 a homework assigned to\nonly *some* sections is invisible from the arbitrary section we'd\notherwise pick. Omitted by the sidebar's \"Try as Student\", which\nisn't previewing anything in particular.",
+        "properties": {
+          "assignment_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Id"
+          }
+        },
+        "title": "PreviewStudentRequest",
+        "type": "object"
+      },
       "PreviewTokenResponse": {
         "properties": {
           "access_token": {
@@ -16346,6 +16365,23 @@
       "post": {
         "description": "Find or create a shadow student for this teacher, sync\nenrollments, and return a JWT pair for the shadow account.",
         "operationId": "get_or_create_preview_student_v1_teacher_preview_student_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PreviewStudentRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -16356,6 +16392,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [

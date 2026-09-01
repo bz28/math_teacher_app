@@ -17,12 +17,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.auth import create_access_token, create_refresh_token, hash_password
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
+from api.models.assignment import Assignment, AssignmentSection
 from api.models.course import CourseTeacher
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
 
 router = APIRouter()
+
+
+class PreviewStudentRequest(BaseModel):
+    """Which homework the teacher is about to open, when they came from
+    an assignment's Preview button. We point the shadow at a section
+    that assignment was actually pushed to — a homework assigned to
+    only *some* sections is invisible from the arbitrary section we'd
+    otherwise pick. Omitted by the sidebar's "Try as Student", which
+    isn't previewing anything in particular."""
+
+    assignment_id: uuid.UUID | None = None
 
 
 class PreviewTokenResponse(BaseModel):
@@ -33,6 +45,7 @@ class PreviewTokenResponse(BaseModel):
 
 @router.post("/preview-student")
 async def get_or_create_preview_student(
+    body: PreviewStudentRequest | None = None,
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> PreviewTokenResponse:
@@ -78,31 +91,60 @@ async def get_or_create_preview_student(
     )).scalars().all()
 
     if teacher_course_ids:
-        # One enrollment per (student, course) — pick the earliest-created
-        # section per course the teacher teaches. A teacher with multiple
-        # sections of the same course sees that course's view from one
-        # of them; flipping between sections isn't a preview concern.
-        picked_sections = (await db.execute(
-            select(Section.id, Section.course_id)
-            .where(Section.course_id.in_(teacher_course_ids))
-            .order_by(Section.course_id, Section.created_at, Section.id)
-            .distinct(Section.course_id)
-        )).all()
+        # One enrollment per (student, course) — default to the
+        # earliest-created section per course the teacher teaches. A
+        # teacher with multiple sections of the same course sees that
+        # course's view from one of them; flipping between sections
+        # isn't a preview concern.
+        picked: dict[uuid.UUID, uuid.UUID] = {
+            course_id: section_id
+            for section_id, course_id in (await db.execute(
+                select(Section.id, Section.course_id)
+                .where(Section.course_id.in_(teacher_course_ids))
+                .order_by(Section.course_id, Section.created_at, Section.id)
+                .distinct(Section.course_id)
+            )).all()
+        }
 
-        existing_course_ids = set((await db.execute(
-            select(SectionEnrollment.course_id).where(
-                SectionEnrollment.student_id == shadow.id,
-            )
-        )).scalars().all())
+        # Previewing a specific homework overrides that course's pick
+        # with a section the homework was actually assigned to.
+        if body is not None and body.assignment_id is not None:
+            target = (await db.execute(
+                select(Section.id, Section.course_id)
+                .join(AssignmentSection, AssignmentSection.section_id == Section.id)
+                .join(Assignment, Assignment.id == AssignmentSection.assignment_id)
+                .where(
+                    Assignment.id == body.assignment_id,
+                    Assignment.course_id.in_(teacher_course_ids),
+                )
+                .order_by(Section.created_at, Section.id)
+                .limit(1)
+            )).first()
+            if target is not None:
+                picked[target.course_id] = target.id
 
-        for section_id, course_id in picked_sections:
-            if course_id in existing_course_ids:
-                continue
-            db.add(SectionEnrollment(
-                student_id=shadow.id,
-                section_id=section_id,
-                course_id=course_id,
-            ))
+        existing = {
+            e.course_id: e
+            for e in (await db.execute(
+                select(SectionEnrollment).where(
+                    SectionEnrollment.student_id == shadow.id,
+                )
+            )).scalars().all()
+        }
+
+        for course_id, section_id in picked.items():
+            row = existing.get(course_id)
+            if row is None:
+                db.add(SectionEnrollment(
+                    student_id=shadow.id,
+                    section_id=section_id,
+                    course_id=course_id,
+                ))
+            elif row.section_id != section_id:
+                # One enrollment per (student, course) is a DB
+                # constraint, so landing the shadow somewhere else means
+                # moving this row, not adding a second one.
+                row.section_id = section_id
 
     await db.commit()
 

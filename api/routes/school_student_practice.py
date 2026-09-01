@@ -48,7 +48,7 @@ from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
-from api.models.course import Course
+from api.models.course import Course, CourseTeacher
 from api.models.practice_activity import (
     MODE_LEARN,
     MODE_PRACTICE,
@@ -634,16 +634,46 @@ def _serialize(item: QuestionBankItem) -> VariationPayload:
     )
 
 
+async def _is_teacher_preview_of_course(
+    db: AsyncSession, user: User, course_id: uuid.UUID,
+) -> bool:
+    """True when `user` is a teacher's preview shadow and that teacher
+    teaches `course_id`.
+
+    A shadow is the teacher looking at their own material, so two
+    student-side gates don't apply to it. Publish state: checking the
+    homework *before* it goes out is the entire point of the Preview
+    button, which sits next to Publish precisely so it can be used
+    first. Section targeting: we invent the shadow's enrollment, so a
+    homework pushed to only some sections would 403 on a roster fact
+    we made up. Both are waived — but only inside courses the owning
+    teacher actually teaches, so a shadow can't reach anything else.
+    """
+    if not user.is_preview or user.preview_owner_id is None:
+        return False
+    return (await db.execute(
+        select(CourseTeacher.course_id)
+        .where(
+            CourseTeacher.course_id == course_id,
+            CourseTeacher.teacher_id == user.preview_owner_id,
+        )
+        .limit(1)
+    )).scalar_one_or_none() is not None
+
+
 async def _load_assignment_for_student(
     db: AsyncSession,
     assignment_id: uuid.UUID,
-    student_id: uuid.UUID,
+    user: User,
     expected_type: str = "homework",
 ) -> Assignment:
-    """Load the assignment, ensuring (a) it exists, (b) it is published,
-    (c) its type matches `expected_type`, and (d) the student is
+    """Load the assignment, ensuring (a) it exists, (b) its type matches
+    `expected_type`, (c) it is published, and (d) the student is
     enrolled in at least one section it's been assigned to. Raises
     HTTPException on any failure.
+
+    (c) and (d) are waived for a teacher previewing their own course —
+    see `_is_teacher_preview_of_course`.
 
     The HW variation loop passes expected_type="homework" (the default);
     the practice-tab endpoints pass expected_type="practice". Quizzes
@@ -654,8 +684,6 @@ async def _load_assignment_for_student(
     )).scalar_one_or_none()
     if assignment is None:
         raise HTTPException(status_code=404, detail="Assignment not found")
-    if assignment.status != "published":
-        raise HTTPException(status_code=403, detail="Assignment is not published")
     if assignment.type != expected_type:
         # Use 404 rather than echoing the actual type — keeps cross-
         # type ids opaque to the student.
@@ -663,6 +691,11 @@ async def _load_assignment_for_student(
             status_code=404,
             detail=f"Not a {expected_type} assignment",
         )
+    if await _is_teacher_preview_of_course(db, user, assignment.course_id):
+        return assignment
+
+    if assignment.status != "published":
+        raise HTTPException(status_code=403, detail="Assignment is not published")
 
     # The student must be enrolled in at least one section this
     # assignment was assigned to. We check via a join — single round trip.
@@ -671,7 +704,7 @@ async def _load_assignment_for_student(
         .join(AssignmentSection, AssignmentSection.section_id == SectionEnrollment.section_id)
         .where(
             AssignmentSection.assignment_id == assignment_id,
-            SectionEnrollment.student_id == student_id,
+            SectionEnrollment.student_id == user.id,
         )
         .limit(1)
     )).scalar_one_or_none()
@@ -679,6 +712,46 @@ async def _load_assignment_for_student(
         raise HTTPException(status_code=403, detail="Not enrolled in this assignment")
 
     return assignment
+
+
+async def _section_for_student_work(
+    db: AsyncSession, user: User, assignment: Assignment,
+) -> uuid.UUID | None:
+    """The section a student's work on `assignment` is attributed to:
+    the section they're enrolled in that the assignment was pushed to.
+
+    Deterministic for a student enrolled in several sections — earliest
+    enrolled wins (section_id tiebreaks) — so attribution is stable
+    across calls rather than arbitrary per call.
+
+    Returns None only when there's no overlap, which for a real student
+    can't happen (the loader already confirmed enrollment). A teacher
+    previewing a draft can land here though: a draft has no section
+    rows to join against yet, so fall back to the shadow's own
+    enrollment in the course and let the teacher walk the whole flow.
+    """
+    section_id = (await db.execute(
+        select(SectionEnrollment.section_id)
+        .join(AssignmentSection, AssignmentSection.section_id == SectionEnrollment.section_id)
+        .where(
+            AssignmentSection.assignment_id == assignment.id,
+            SectionEnrollment.student_id == user.id,
+        )
+        .order_by(SectionEnrollment.enrolled_at.asc(), SectionEnrollment.section_id.asc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if section_id is not None:
+        return section_id
+    if not await _is_teacher_preview_of_course(db, user, assignment.course_id):
+        return None
+    return (await db.execute(
+        select(SectionEnrollment.section_id)
+        .where(
+            SectionEnrollment.student_id == user.id,
+            SectionEnrollment.course_id == assignment.course_id,
+        )
+        .limit(1)
+    )).scalar_one_or_none()
 
 
 def _bank_item_id_belongs_to_assignment(assignment: Assignment, bank_item_id: uuid.UUID) -> bool:
@@ -1176,7 +1249,7 @@ async def homework_detail(
     """Return the full HW detail for the student view: each primary
     problem with its question text and an approved-variation count
     (used by the HW page to disable the loop button when zero)."""
-    assignment = await _load_assignment_for_student(db, assignment_id, user.id)
+    assignment = await _load_assignment_for_student(db, assignment_id, user)
     course = (await db.execute(
         select(Course).where(Course.id == assignment.course_id)
     )).scalar_one()
@@ -1409,7 +1482,7 @@ async def practice_detail(
     order each job's AI output persisted, NOT strictly the source HW's
     problem order. Close enough for v1; revisit when clustering lands."""
     assignment = await _load_assignment_for_student(
-        db, assignment_id, user.id, expected_type="practice",
+        db, assignment_id, user, expected_type="practice",
     )
     course = (await db.execute(
         select(Course).where(Course.id == assignment.course_id)
@@ -1476,7 +1549,7 @@ async def linked_practice_for_homework(
     enrolled); we reuse the standard loader to gate access, which
     doubles as the authz guard against enumerating unrelated HW ids.
     """
-    await _load_assignment_for_student(db, assignment_id, user.id)
+    await _load_assignment_for_student(db, assignment_id, user)
 
     # Find practice sets linked to this HW, filtered to ones visible
     # to the student via section enrollment. Pick the most recently
@@ -1517,7 +1590,7 @@ async def submit_homework(
     is not allowed in v1; a second call returns 409. Soft-locks late
     submissions (sets is_late=true, doesn't reject).
     """
-    assignment = await _load_assignment_for_student(db, assignment_id, user.id)
+    assignment = await _load_assignment_for_student(db, assignment_id, user)
 
     # Already submitted? One-shot enforcement.
     existing = (await db.execute(
@@ -1560,23 +1633,8 @@ async def submit_homework(
             ),
         )
 
-    # Find which section this student is enrolled in for this assignment.
-    # We need a section_id on the row; the existing schema requires it.
-    section_id = (await db.execute(
-        select(SectionEnrollment.section_id)
-        .join(AssignmentSection, AssignmentSection.section_id == SectionEnrollment.section_id)
-        .where(
-            AssignmentSection.assignment_id == assignment_id,
-            SectionEnrollment.student_id == user.id,
-        )
-        # Deterministic attribution when the student is enrolled in
-        # multiple sections of the same course: always pick the
-        # earliest-enrolled section (section_id tiebreaks ties on
-        # enrolled_at) so a submission lands in a stable section
-        # rather than an arbitrary one chosen per call.
-        .order_by(SectionEnrollment.enrolled_at.asc(), SectionEnrollment.section_id.asc())
-        .limit(1)
-    )).scalar_one_or_none()
+    # The submissions schema requires a section_id on the row.
+    section_id = await _section_for_student_work(db, user, assignment)
     if section_id is None:
         # Should be impossible since _load_assignment_for_student already
         # validated enrollment, but defensive.
@@ -1892,7 +1950,7 @@ async def next_variation(
     5. Empty pool → "empty". Empty unseen → "exhausted".
     6. Pick oldest by created_at, insert consumption row, return.
     """
-    assignment = await _load_assignment_for_student(db, assignment_id, user.id)
+    assignment = await _load_assignment_for_student(db, assignment_id, user)
 
     if not _bank_item_id_belongs_to_assignment(assignment, bank_item_id):
         raise HTTPException(status_code=404, detail="Problem is not part of this assignment")
@@ -2051,7 +2109,7 @@ async def flagged_consumptions(
     """Return all flagged consumption rows for this student/anchor.
     Used by the practice summary screen to populate the Learn N flagged
     queue. Re-validates enrollment + assignment publish state."""
-    assignment = await _load_assignment_for_student(db, assignment_id, user.id)
+    assignment = await _load_assignment_for_student(db, assignment_id, user)
     if not _bank_item_id_belongs_to_assignment(assignment, bank_item_id):
         raise HTTPException(status_code=404, detail="Problem is not part of this assignment")
 
@@ -2315,7 +2373,7 @@ async def learn_this_problem(
     # Validate the assignment is one the student can access and the
     # anchor is actually on it — prevents crafted payloads that anchor
     # a Learn row to an unrelated assignment.
-    assignment = await _load_assignment_for_student(db, assignment_uuid, user.id)
+    assignment = await _load_assignment_for_student(db, assignment_uuid, user)
     if not _bank_item_id_belongs_to_assignment(assignment, anchor_id):
         raise HTTPException(status_code=404, detail="Problem is not part of this assignment")
 
@@ -2410,29 +2468,17 @@ async def record_practice_activity(
         raise HTTPException(status_code=400, detail="Too many activity rows")
 
     # Gate: published practice + enrolled. Raises 404/403 on failure.
-    await _load_assignment_for_student(
-        db, assignment_id, user.id, expected_type="practice",
+    assignment = await _load_assignment_for_student(
+        db, assignment_id, user, expected_type="practice",
     )
 
     # Derive the section from enrollment — the section this student is
-    # enrolled in that this practice was pushed to. Guaranteed to exist
-    # because the loader above already confirmed enrollment.
-    section_id = (await db.execute(
-        select(SectionEnrollment.section_id)
-        .join(
-            AssignmentSection,
-            AssignmentSection.section_id == SectionEnrollment.section_id,
-        )
-        .where(
-            AssignmentSection.assignment_id == assignment_id,
-            SectionEnrollment.student_id == user.id,
-        )
-        # Deterministic attribution for a multi-section student: always
-        # the earliest-enrolled section (section_id tiebreaks), so a
-        # recorded activity lands in a stable section per call.
-        .order_by(SectionEnrollment.enrolled_at.asc(), SectionEnrollment.section_id.asc())
-        .limit(1)
-    )).scalar_one()
+    # enrolled in that this practice was pushed to.
+    section_id = await _section_for_student_work(db, user, assignment)
+    if section_id is None:
+        # Should be impossible since the loader above already confirmed
+        # enrollment, but defensive.
+        raise HTTPException(status_code=403, detail="Not enrolled in this practice set")
 
     # The set of approved bank items that belong to this practice set.
     # Items attach via originating_assignment_id (not content) in the

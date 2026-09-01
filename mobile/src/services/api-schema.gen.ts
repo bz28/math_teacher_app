@@ -4967,6 +4967,19 @@ export interface components {
             /** Question */
             question: string;
         };
+        /**
+         * PreviewStudentRequest
+         * @description Which homework the teacher is about to open, when they came from
+         *     an assignment's Preview button. We point the shadow at a section
+         *     that assignment was actually pushed to — a homework assigned to
+         *     only *some* sections is invisible from the arbitrary section we'd
+         *     otherwise pick. Omitted by the sidebar's "Try as Student", which
+         *     isn't previewing anything in particular.
+         */
+        PreviewStudentRequest: {
+            /** Assignment Id */
+            assignment_id?: string | null;
+        };
         /** PreviewTokenResponse */
         PreviewTokenResponse: {
             /** Access Token */
@@ -12082,7 +12095,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PreviewStudentRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -12091,6 +12108,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PreviewTokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
