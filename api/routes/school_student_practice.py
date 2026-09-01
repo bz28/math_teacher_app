@@ -34,6 +34,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator, model_validator
+from sqlalchemy import delete as sql_delete
 from sqlalchemy import distinct, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -465,6 +466,12 @@ class StudentHomeworkDetail(BaseModel):
     # subject — the problem rows don't carry it on their own.
     course_subject: str
     problems: list[StudentHomeworkProblem]
+    # Always true for a real student — the loader refuses anything else.
+    # It's false only for a teacher's preview shadow, which is waived
+    # through the publish gate so she can check the homework before it
+    # goes out; her page uses this to say so, since otherwise nothing on
+    # the student view distinguishes a draft from live work.
+    published: bool
     submitted: bool
     submission_id: str | None
     # Published-grade snapshot. All grade-related fields stay null until
@@ -724,13 +731,16 @@ async def _section_for_student_work(
     enrolled wins (section_id tiebreaks) — so attribution is stable
     across calls rather than arbitrary per call.
 
-    Returns None when the student's enrollment and the assignment's
-    targeting don't overlap. For a real student that can't happen — the
-    loader already confirmed enrollment — but a teacher's preview shadow
-    reaches these endpoints through a waiver, so callers must handle it
-    rather than assume a row.
+    For a real student the join always hits — the loader already
+    confirmed enrollment. A teacher's preview shadow arrives through a
+    waiver instead, so the two can disagree: a draft has no section rows
+    to join against at all. It falls back to the shadow's own seat in
+    the course, which keeps its rehearsal attributable to a real section.
+
+    Returns None only when even that is missing, which callers must
+    still handle rather than assume a row.
     """
-    return (await db.execute(
+    section_id = (await db.execute(
         select(SectionEnrollment.section_id)
         .join(AssignmentSection, AssignmentSection.section_id == SectionEnrollment.section_id)
         .where(
@@ -738,6 +748,18 @@ async def _section_for_student_work(
             SectionEnrollment.student_id == user.id,
         )
         .order_by(SectionEnrollment.enrolled_at.asc(), SectionEnrollment.section_id.asc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if section_id is not None:
+        return section_id
+    if not await _is_teacher_preview_of_course(db, user, assignment.course_id):
+        return None
+    return (await db.execute(
+        select(SectionEnrollment.section_id)
+        .where(
+            SectionEnrollment.student_id == user.id,
+            SectionEnrollment.course_id == assignment.course_id,
+        )
         .limit(1)
     )).scalar_one_or_none()
 
@@ -1347,6 +1369,7 @@ async def homework_detail(
         course_name=course.name,
         course_subject=course.subject,
         problems=problems,
+        published=assignment.status == "published",
         submitted=sub is not None,
         submission_id=str(sub.id) if sub is not None else None,
         submitted_at=sub.submitted_at if sub is not None else None,
@@ -1533,9 +1556,11 @@ async def linked_practice_for_homework(
     CTA in PR 4 — silent when no link exists so the chat UI can render
     a no-nudge terminal.
 
-    The HW itself must also be visible to the student (published +
-    enrolled); we reuse the standard loader to gate access, which
-    doubles as the authz guard against enumerating unrelated HW ids.
+    The HW itself must also be visible to the student — the standard
+    loader gates access, which doubles as the authz guard against
+    enumerating unrelated HW ids. (A teacher's preview shadow is waived
+    through that loader, but the practice set it finds still has to be
+    published and section-visible on its own, below.)
     """
     await _load_assignment_for_student(db, assignment_id, user)
 
@@ -1580,20 +1605,6 @@ async def submit_homework(
     """
     assignment = await _load_assignment_for_student(db, assignment_id, user)
 
-    # A preview shadow is the teacher checking her own homework, and
-    # turning work in is a one-way door: submissions are one-shot (a
-    # second attempt is a hard 409 and nothing can delete one), and the
-    # write fires the real Vision extraction + grading pipeline. Letting
-    # a preview spend that would cost her the ability to ever exercise
-    # the flow on this homework for real, and bill a draft for it. The
-    # student page renders a read-only notice in place of the panel;
-    # this enforces the same contract server-side.
-    if user.is_preview:
-        raise HTTPException(
-            status_code=403,
-            detail="Preview accounts can't turn in work",
-        )
-
     # Already submitted? One-shot enforcement.
     existing = (await db.execute(
         select(Submission.id).where(
@@ -1603,7 +1614,19 @@ async def submit_homework(
         .limit(1)
     )).scalar_one_or_none()
     if existing is not None:
-        raise HTTPException(status_code=409, detail="Already submitted")
+        if not user.is_preview:
+            raise HTTPException(status_code=409, detail="Already submitted")
+        # A teacher's preview is a rehearsal, not a turn-in. One-shot
+        # exists so a student can't resubmit after seeing feedback —
+        # applied to her own shadow it would mean a single rehearsal
+        # permanently burned the flow on this homework, since nothing
+        # deletes a submission. Replace the previous rehearsal instead.
+        # Grade, grading job and integrity rows cascade off this row;
+        # LLM call records are SET NULL, so the spend stays on the books.
+        await db.execute(
+            sql_delete(Submission).where(Submission.id == existing)
+        )
+        await db.flush()
 
     # The work is required and is the source of truth — what the
     # teacher reviews and what the integrity checker reads for per-
@@ -2110,7 +2133,8 @@ async def flagged_consumptions(
 ) -> list[FlaggedConsumption]:
     """Return all flagged consumption rows for this student/anchor.
     Used by the practice summary screen to populate the Learn N flagged
-    queue. Re-validates enrollment + assignment publish state."""
+    queue. Re-runs the standard access gate (enrollment + publish state
+    for a student; the owning teacher's course for a preview shadow)."""
     assignment = await _load_assignment_for_student(db, assignment_id, user)
     if not _bank_item_id_belongs_to_assignment(assignment, bank_item_id):
         raise HTTPException(status_code=404, detail="Problem is not part of this assignment")
@@ -2478,8 +2502,9 @@ async def record_practice_activity(
     # enrolled in that this practice was pushed to.
     section_id = await _section_for_student_work(db, user, assignment)
     if section_id is None:
-        # Should be impossible since the loader above already confirmed
-        # enrollment, but defensive.
+        # Unreachable for a real student (the loader confirmed
+        # enrollment); reachable for a preview shadow with no seat in
+        # this course at all, which has nothing to attribute activity to.
         raise HTTPException(status_code=403, detail="Not enrolled in this practice set")
 
     # The set of approved bank items that belong to this practice set.

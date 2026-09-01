@@ -1937,9 +1937,11 @@ export interface paths {
          *     CTA in PR 4 — silent when no link exists so the chat UI can render
          *     a no-nudge terminal.
          *
-         *     The HW itself must also be visible to the student (published +
-         *     enrolled); we reuse the standard loader to gate access, which
-         *     doubles as the authz guard against enumerating unrelated HW ids.
+         *     The HW itself must also be visible to the student — the standard
+         *     loader gates access, which doubles as the authz guard against
+         *     enumerating unrelated HW ids. (A teacher's preview shadow is waived
+         *     through that loader, but the practice set it finds still has to be
+         *     published and section-visible on its own, below.)
          */
         get: operations["linked_practice_for_homework_v1_school_student_homework__assignment_id__linked_practice_get"];
         put?: never;
@@ -1961,7 +1963,8 @@ export interface paths {
          * Flagged Consumptions
          * @description Return all flagged consumption rows for this student/anchor.
          *     Used by the practice summary screen to populate the Learn N flagged
-         *     queue. Re-validates enrollment + assignment publish state.
+         *     queue. Re-runs the standard access gate (enrollment + publish state
+         *     for a student; the owning teacher's course for a preview shadow).
          */
         get: operations["flagged_consumptions_v1_school_student_homework__assignment_id__problems__bank_item_id__flagged_get"];
         put?: never;
@@ -5274,6 +5277,8 @@ export interface components {
             grade_published_at?: string | null;
             /** Problems */
             problems: components["schemas"]["StudentHomeworkProblem"][];
+            /** Published */
+            published: boolean;
             /** Submission Id */
             submission_id: string | null;
             /** Submitted */

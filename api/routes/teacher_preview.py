@@ -91,11 +91,11 @@ async def get_or_create_preview_student(
     )).scalars().all()
 
     if teacher_course_ids:
-        # One enrollment per (student, course) — default to the
-        # earliest-created section per course the teacher teaches. A
-        # teacher with multiple sections of the same course sees that
-        # course's view from one of them; flipping between sections
-        # isn't a preview concern.
+        # One enrollment per (student, course). A shadow with no seat in
+        # a course gets the earliest-created section; one that already
+        # has a seat keeps it unless the homework being previewed says
+        # otherwise. A teacher with several sections of one course sees
+        # it from a single seat — there's no switcher yet.
         picked: dict[uuid.UUID, uuid.UUID] = {
             course_id: section_id
             for section_id, course_id in (await db.execute(
@@ -114,8 +114,9 @@ async def get_or_create_preview_student(
         # default section every time, undoing the seat a homework
         # preview just put her in.
         movable_course_id: uuid.UUID | None = None
+        targeted: set[uuid.UUID] = set()
         if body is not None and body.assignment_id is not None:
-            target = (await db.execute(
+            targets = (await db.execute(
                 select(Section.id, Section.course_id)
                 .join(AssignmentSection, AssignmentSection.section_id == Section.id)
                 .join(Assignment, Assignment.id == AssignmentSection.assignment_id)
@@ -129,11 +130,11 @@ async def get_or_create_preview_student(
                     Section.course_id == Assignment.course_id,
                 )
                 .order_by(Section.created_at, Section.id)
-                .limit(1)
-            )).first()
-            if target is not None:
-                picked[target.course_id] = target.id
-                movable_course_id = target.course_id
+            )).all()
+            if targets:
+                picked[targets[0].course_id] = targets[0].id
+                movable_course_id = targets[0].course_id
+                targeted = {section_id for section_id, _ in targets}
 
         existing = {
             e.course_id: e
@@ -152,10 +153,14 @@ async def get_or_create_preview_student(
                     section_id=section_id,
                     course_id=course_id,
                 ))
-            elif row.section_id != section_id and course_id == movable_course_id:
+            elif course_id == movable_course_id and row.section_id not in targeted:
                 # One enrollment per (student, course) is a DB
                 # constraint, so landing the shadow somewhere else means
-                # moving this row, not adding a second one.
+                # moving this row, not adding a second one. Only move it
+                # when the seat it already has isn't one the homework
+                # was pushed to — a shadow sitting in a targeted section
+                # can already see it, and churning the row would orphan
+                # its earlier work into a section it no longer occupies.
                 row.section_id = section_id
 
     await db.commit()
