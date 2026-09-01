@@ -4973,7 +4973,7 @@ export interface components {
          *     an assignment's Preview button. We point the shadow at a section
          *     that assignment was actually pushed to — a homework assigned to
          *     only *some* sections is invisible from the arbitrary section we'd
-         *     otherwise pick. Omitted by the sidebar's "Try as Student", which
+         *     otherwise pick. Omitted by the sidebar's preview entry point, which
          *     isn't previewing anything in particular.
          */
         PreviewStudentRequest: {

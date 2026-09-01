@@ -2343,7 +2343,7 @@
         "type": "object"
       },
       "PreviewStudentRequest": {
-        "description": "Which homework the teacher is about to open, when they came from\nan assignment's Preview button. We point the shadow at a section\nthat assignment was actually pushed to \u2014 a homework assigned to\nonly *some* sections is invisible from the arbitrary section we'd\notherwise pick. Omitted by the sidebar's \"Try as Student\", which\nisn't previewing anything in particular.",
+        "description": "Which homework the teacher is about to open, when they came from\nan assignment's Preview button. We point the shadow at a section\nthat assignment was actually pushed to \u2014 a homework assigned to\nonly *some* sections is invisible from the arbitrary section we'd\notherwise pick. Omitted by the sidebar's preview entry point, which\nisn't previewing anything in particular.",
         "properties": {
           "assignment_id": {
             "anyOf": [

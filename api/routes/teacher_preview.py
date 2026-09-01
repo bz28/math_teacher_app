@@ -31,7 +31,7 @@ class PreviewStudentRequest(BaseModel):
     an assignment's Preview button. We point the shadow at a section
     that assignment was actually pushed to — a homework assigned to
     only *some* sections is invisible from the arbitrary section we'd
-    otherwise pick. Omitted by the sidebar's "Try as Student", which
+    otherwise pick. Omitted by the sidebar's preview entry point, which
     isn't previewing anything in particular."""
 
     assignment_id: uuid.UUID | None = None
@@ -107,7 +107,13 @@ async def get_or_create_preview_student(
         }
 
         # Previewing a specific homework overrides that course's pick
-        # with a section the homework was actually assigned to.
+        # with a section the homework was actually assigned to — and is
+        # the ONLY thing that justifies moving a seat the shadow already
+        # has. Without that scoping, the sidebar's preview entry point
+        # — which names no homework — would silently yank her back to the
+        # default section every time, undoing the seat a homework
+        # preview just put her in.
+        movable_course_id: uuid.UUID | None = None
         if body is not None and body.assignment_id is not None:
             target = (await db.execute(
                 select(Section.id, Section.course_id)
@@ -116,12 +122,18 @@ async def get_or_create_preview_student(
                 .where(
                     Assignment.id == body.assignment_id,
                     Assignment.course_id.in_(teacher_course_ids),
+                    # Belt and braces: assignment_sections is written
+                    # only with same-course sections, but the shadow's
+                    # seat is derived from this row, so don't let a bad
+                    # join row seat it outside the teacher's courses.
+                    Section.course_id == Assignment.course_id,
                 )
                 .order_by(Section.created_at, Section.id)
                 .limit(1)
             )).first()
             if target is not None:
                 picked[target.course_id] = target.id
+                movable_course_id = target.course_id
 
         existing = {
             e.course_id: e
@@ -140,7 +152,7 @@ async def get_or_create_preview_student(
                     section_id=section_id,
                     course_id=course_id,
                 ))
-            elif row.section_id != section_id:
+            elif row.section_id != section_id and course_id == movable_course_id:
                 # One enrollment per (student, course) is a DB
                 # constraint, so landing the shadow somewhere else means
                 # moving this row, not adding a second one.

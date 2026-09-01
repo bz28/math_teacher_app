@@ -724,13 +724,13 @@ async def _section_for_student_work(
     enrolled wins (section_id tiebreaks) — so attribution is stable
     across calls rather than arbitrary per call.
 
-    Returns None only when there's no overlap, which for a real student
-    can't happen (the loader already confirmed enrollment). A teacher
-    previewing a draft can land here though: a draft has no section
-    rows to join against yet, so fall back to the shadow's own
-    enrollment in the course and let the teacher walk the whole flow.
+    Returns None when the student's enrollment and the assignment's
+    targeting don't overlap. For a real student that can't happen — the
+    loader already confirmed enrollment — but a teacher's preview shadow
+    reaches these endpoints through a waiver, so callers must handle it
+    rather than assume a row.
     """
-    section_id = (await db.execute(
+    return (await db.execute(
         select(SectionEnrollment.section_id)
         .join(AssignmentSection, AssignmentSection.section_id == SectionEnrollment.section_id)
         .where(
@@ -738,18 +738,6 @@ async def _section_for_student_work(
             SectionEnrollment.student_id == user.id,
         )
         .order_by(SectionEnrollment.enrolled_at.asc(), SectionEnrollment.section_id.asc())
-        .limit(1)
-    )).scalar_one_or_none()
-    if section_id is not None:
-        return section_id
-    if not await _is_teacher_preview_of_course(db, user, assignment.course_id):
-        return None
-    return (await db.execute(
-        select(SectionEnrollment.section_id)
-        .where(
-            SectionEnrollment.student_id == user.id,
-            SectionEnrollment.course_id == assignment.course_id,
-        )
         .limit(1)
     )).scalar_one_or_none()
 
@@ -1591,6 +1579,20 @@ async def submit_homework(
     submissions (sets is_late=true, doesn't reject).
     """
     assignment = await _load_assignment_for_student(db, assignment_id, user)
+
+    # A preview shadow is the teacher checking her own homework, and
+    # turning work in is a one-way door: submissions are one-shot (a
+    # second attempt is a hard 409 and nothing can delete one), and the
+    # write fires the real Vision extraction + grading pipeline. Letting
+    # a preview spend that would cost her the ability to ever exercise
+    # the flow on this homework for real, and bill a draft for it. The
+    # student page renders a read-only notice in place of the panel;
+    # this enforces the same contract server-side.
+    if user.is_preview:
+        raise HTTPException(
+            status_code=403,
+            detail="Preview accounts can't turn in work",
+        )
 
     # Already submitted? One-shot enforcement.
     existing = (await db.execute(

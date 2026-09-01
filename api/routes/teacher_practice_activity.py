@@ -299,9 +299,18 @@ async def get_section_practice_insights(
 
     return {
         "section_id": str(section_id),
+        # Preview shadows are excluded here for the same reason every
+        # other teacher-facing count excludes them: a teacher trying her
+        # own material is not a student who practiced. Without the
+        # filter this numerator can exceed the roster the Student
+        # Insights table renders, which joins enrollment.
         "students_active": int((await db.execute(
             select(func.count(func.distinct(PracticeActivity.student_id)))
-            .where(PracticeActivity.section_id == section_id)
+            .join(User, User.id == PracticeActivity.student_id)
+            .where(
+                PracticeActivity.section_id == section_id,
+                User.is_preview.is_(False),
+            )
         )).scalar() or 0),
         "items": items,
     }
