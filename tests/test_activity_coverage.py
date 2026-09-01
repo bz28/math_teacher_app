@@ -35,7 +35,7 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from api.database import get_session_factory
 from api.models.activity_log import ActivityLog
@@ -67,8 +67,7 @@ def _envelope(row: ActivityLog) -> tuple[str, str, str, str]:
 
 async def _clear() -> None:
     async with get_session_factory()() as s:
-        for row in (await s.execute(select(ActivityLog))).scalars().all():
-            await s.delete(row)
+        await s.execute(delete(ActivityLog))
         await s.commit()
 
 
@@ -616,6 +615,16 @@ async def test_an_entry_carries_the_actors_school(
     rows = [a for a in await _actions() if a.action == "section.create"]
     assert len(rows) == 1
     assert rows[0].school_id == school_id
+
+    # Clean up after ourselves. `_truncate_world_tables` does not cover
+    # `schools`, so without this the row outlives the test and every run
+    # adds another. Nothing breaks today — the school-listing tests
+    # truncate the table themselves precisely because rows accumulate —
+    # but a test that needs downstream tests to defend against it is a
+    # test that will eventually surprise someone.
+    async with get_session_factory()() as s:
+        await s.execute(delete(School).where(School.id == school_id))
+        await s.commit()
 
 
 # ── The audit row must never break the action ────────────────────────
