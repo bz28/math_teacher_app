@@ -154,6 +154,10 @@ async def test_submit_homework_total_payload_guard_rejects() -> None:
 
         user = MagicMock()
         user.id = "00000000-0000-0000-0000-000000000001"
+        # A bare MagicMock attribute is truthy, which would read as a
+        # teacher's preview shadow and get refused before the payload
+        # guard runs. This test is about a real student's upload.
+        user.is_preview = False
 
         try:
             await submit_homework(
