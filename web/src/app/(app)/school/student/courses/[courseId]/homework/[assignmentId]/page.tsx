@@ -11,6 +11,7 @@ import {
   type StudentSubmission,
   type SubmissionFile,
 } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth";
 import { usePracticeStore } from "@/stores/practice";
 import { useSessionStore, type Subject } from "@/stores/learn";
 import { formatDue } from "@/lib/utils";
@@ -18,6 +19,7 @@ import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
 import { PageErrorState } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AlertTriangleIcon } from "@/components/ui/icons";
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
 import { SubmittedView } from "@/components/school/student/submitted-view";
 import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
@@ -45,6 +47,9 @@ type Mode =
 export default function HomeworkPage() {
   const { courseId, assignmentId } = useParams<{ courseId: string; assignmentId: string }>();
   const router = useRouter();
+  // A teacher previewing her own homework. She sees the whole student
+  // page, but turning work in is withheld — see PreviewSubmitNotice.
+  const isPreview = useAuthStore((s) => s.user?.is_preview ?? false);
   const [hw, setHw] = useState<StudentHomeworkDetail | null>(null);
   const [submission, setSubmission] = useState<StudentSubmission | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -318,6 +323,11 @@ export default function HomeworkPage() {
       >
         ← Back to homework list
       </Link>
+      {isPreview && !hw.published && (
+        <div className="mt-3">
+          <DraftPreviewNotice />
+        </div>
+      )}
       <h1 className="mt-3 text-2xl font-bold text-text-primary">{hw.title}</h1>
       <p className="mt-1 text-sm text-text-secondary">
         {hw.problems.length} {hw.problems.length === 1 ? "problem" : "problems"}
@@ -474,6 +484,8 @@ export default function HomeworkPage() {
           animateEntrance={justSubmitted}
         />
       ) : !hw.submitted ? (
+        <>
+        {isPreview && <PreviewSubmitNote />}
         <SubmissionPanel
           assignmentId={hw.assignment_id}
           dueAt={hw.due_at}
@@ -488,8 +500,55 @@ export default function HomeworkPage() {
             await loadAll(hw.assignment_id);
           }}
         />
+        </>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Draft flag, shown at the top of the page while a teacher previews a
+ * homework she hasn't published.
+ *
+ * Nothing else on the student view distinguishes a draft from live
+ * work — the page is the page — so without this she can look at a
+ * finished-seeming screen and reasonably conclude her class already
+ * has it. Warning tokens and the same strip grammar as the panel's
+ * past-due notice, so it reads as a state, not an error.
+ */
+function DraftPreviewNotice() {
+  return (
+    <div className="mb-6 flex items-start gap-2.5 rounded-[--radius-sm] border border-warning/25 bg-warning-bg/60 p-3 text-sm text-warning-dark">
+      <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={2} />
+      <span>
+        <span className="font-semibold">
+          This is a draft — your students can&rsquo;t see it yet.
+        </span>{" "}
+        It won&rsquo;t appear in their homework list until you publish it.
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Sits above the submission panel while a teacher is previewing, so
+ * she knows a turn-in here is a rehearsal.
+ *
+ * She can run the whole loop — upload, extraction, grading, review —
+ * as often as she likes: her shadow's previous rehearsal is replaced
+ * each time, rather than hitting the one-shot rule that exists to stop
+ * a student resubmitting after seeing feedback.
+ */
+function PreviewSubmitNote() {
+  return (
+    <p className="mt-8 -mb-4 text-sm leading-relaxed text-text-secondary">
+      <span className="font-semibold text-text-primary">
+        Anything you turn in here is a test run.
+      </span>{" "}
+      It shows up in your review queue marked{" "}
+      <span className="font-semibold">Preview</span>, and turning in again
+      replaces it — your students&rsquo; work is untouched.
+    </p>
   );
 }
 

@@ -133,7 +133,7 @@ class UserResponse(BaseModel):
     has_stripe_customer: bool = False
     # Shadow-student preview marker. Lets the student app's layout
     # guard admit preview accounts even when school_id is null (solo
-    # teachers don't have one), so the "Try as Student" flow works
+    # teachers don't have one), so the "Preview as student" flow works
     # for independent teachers too.
     is_preview: bool = False
     # First-run onboarding tours the user has already seen, keyed by

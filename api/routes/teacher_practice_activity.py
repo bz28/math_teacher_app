@@ -244,14 +244,23 @@ async def get_section_practice_insights(
     # Per bank item: distinct students who practiced it, and distinct
     # students who struggled on it. Two grouped queries (one filtered to
     # struggle outcomes) merged in Python — keeps each query simple.
+    #
+    # Every count on this panel joins User to exclude preview shadows: a
+    # teacher rehearsing her own material is not a student who
+    # practiced. They have to agree, because the panel renders
+    # "N students active" directly above rows reading "X of Y
+    # struggled" — filtering one and not the others is how you get a
+    # header that contradicts the list under it.
     practiced_rows = (await db.execute(
         select(
             PracticeActivity.bank_item_id,
             func.count(func.distinct(PracticeActivity.student_id)).label("students"),
         )
+        .join(User, User.id == PracticeActivity.student_id)
         .where(
             PracticeActivity.section_id == section_id,
             PracticeActivity.mode == MODE_PRACTICE,
+            User.is_preview.is_(False),
         )
         .group_by(PracticeActivity.bank_item_id)
     )).all()
@@ -263,10 +272,12 @@ async def get_section_practice_insights(
             func.count(func.distinct(PracticeActivity.student_id)).label("students"),
             func.count().label("events"),
         )
+        .join(User, User.id == PracticeActivity.student_id)
         .where(
             PracticeActivity.section_id == section_id,
             PracticeActivity.mode == MODE_PRACTICE,
             PracticeActivity.outcome.in_(STRUGGLE_OUTCOMES),
+            User.is_preview.is_(False),
         )
         .group_by(PracticeActivity.bank_item_id)
     )).all()
@@ -301,7 +312,11 @@ async def get_section_practice_insights(
         "section_id": str(section_id),
         "students_active": int((await db.execute(
             select(func.count(func.distinct(PracticeActivity.student_id)))
-            .where(PracticeActivity.section_id == section_id)
+            .join(User, User.id == PracticeActivity.student_id)
+            .where(
+                PracticeActivity.section_id == section_id,
+                User.is_preview.is_(False),
+            )
         )).scalar() or 0),
         "items": items,
     }
@@ -501,11 +516,16 @@ async def get_section_student_insights(
 
     # Roster: every enrolled student, name included, ordered for a
     # stable page. Drives the "whole roster" guarantee — students with
-    # zero activity still get a card.
+    # zero activity still get a card. Preview shadows are enrolled like
+    # anyone else, so they're filtered here too — a teacher shouldn't
+    # find herself on her own roster (matches teacher_sections.py).
     roster = (await db.execute(
         select(User.id, User.name)
         .join(SectionEnrollment, SectionEnrollment.student_id == User.id)
-        .where(SectionEnrollment.section_id == section_id)
+        .where(
+            SectionEnrollment.section_id == section_id,
+            User.is_preview.is_(False),
+        )
         .order_by(User.name.asc())
     )).all()
 

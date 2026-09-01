@@ -88,7 +88,7 @@ export default function SchoolStudentDashboard() {
   // Field Guide tour auto-starts — a pure spotlight walk, no handoffs.
   // Mirror the teacher auto-start guards: latch once, never restart a
   // live tour, gate on persona + tours_seen. Skip preview shadows
-  // (a teacher "Try as Student") — their tours_seen is the teacher's.
+  // (a teacher previewing as a student) — their tours_seen is the teacher's.
   const tour = useTour();
   const user = useAuthStore((s) => s.user);
   const autoStartedRef = useRef(false);

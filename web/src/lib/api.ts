@@ -312,11 +312,19 @@ function getRefreshToken(): string | null {
 export function saveTokens(tokens: TokenPair) {
   localStorage.setItem(TOKEN_KEY, tokens.access_token);
   localStorage.setItem(REFRESH_KEY, tokens.refresh_token);
+  // Any stashed teacher session belongs to a preview that is now over.
+  // Leaving it behind makes isInPreviewMode() true for whoever logs in
+  // next — a phantom "Previewing as student" banner over the teacher
+  // app, whose "Back to teacher view" restores someone's stale tokens.
+  // enterPreviewMode writes its stash *after* calling this, so the one
+  // legitimate stash survives.
+  clearPreviewStash();
 }
 
 export function clearTokens() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_KEY);
+  clearPreviewStash();
 }
 
 export function hasStoredTokens(): boolean {
@@ -328,13 +336,20 @@ export function hasStoredTokens(): boolean {
 const TEACHER_TOKEN_KEY = "veradic_teacher_access_token";
 const TEACHER_REFRESH_KEY = "veradic_teacher_refresh_token";
 
+function clearPreviewStash() {
+  localStorage.removeItem(TEACHER_TOKEN_KEY);
+  localStorage.removeItem(TEACHER_REFRESH_KEY);
+}
+
 /** Stash teacher tokens and swap to the preview student tokens. */
 export function enterPreviewMode(studentTokens: TokenPair) {
   const teacherAccess = getAccessToken();
   const teacherRefresh = getRefreshToken();
+  // saveTokens clears the stash (a fresh sign-in ends any preview), so
+  // the swap has to happen before we write ours.
+  saveTokens(studentTokens);
   if (teacherAccess) localStorage.setItem(TEACHER_TOKEN_KEY, teacherAccess);
   if (teacherRefresh) localStorage.setItem(TEACHER_REFRESH_KEY, teacherRefresh);
-  saveTokens(studentTokens);
 }
 
 /** Restore teacher tokens and clear the stash. Returns true if stash existed. */
@@ -342,10 +357,11 @@ export function exitPreviewMode(): boolean {
   const teacherAccess = localStorage.getItem(TEACHER_TOKEN_KEY);
   const teacherRefresh = localStorage.getItem(TEACHER_REFRESH_KEY);
   if (!teacherAccess || !teacherRefresh) return false;
+  // Restore directly rather than via saveTokens — the stash is cleared
+  // here either way, and going through saveTokens would only re-clear it.
   localStorage.setItem(TOKEN_KEY, teacherAccess);
   localStorage.setItem(REFRESH_KEY, teacherRefresh);
-  localStorage.removeItem(TEACHER_TOKEN_KEY);
-  localStorage.removeItem(TEACHER_REFRESH_KEY);
+  clearPreviewStash();
   return true;
 }
 
@@ -1776,9 +1792,15 @@ export const teacher = {
       body: JSON.stringify({ resolution }),
     });
   },
-  /** Create or reuse a shadow student, return its JWT pair. */
-  previewAsStudent() {
-    return apiFetch<TokenPair>("/teacher/preview-student", { method: "POST" });
+  /** Create or reuse a shadow student, return its JWT pair. Pass the
+   *  homework being previewed so the shadow lands in a section that
+   *  homework was actually assigned to — without it a homework pushed
+   *  to only some sections isn't visible from the shadow's seat. */
+  previewAsStudent(assignmentId?: string) {
+    return apiFetch<TokenPair>("/teacher/preview-student", {
+      method: "POST",
+      body: JSON.stringify(assignmentId ? { assignment_id: assignmentId } : {}),
+    });
   },
 };
 
@@ -2167,6 +2189,10 @@ export interface StudentHomeworkDetail {
    *  the right subject — problem rows don't carry it. */
   course_subject: string;
   problems: StudentHomeworkProblem[];
+  /** Always true for a real student. False only for a teacher's preview
+   *  shadow, which is waived through the publish gate so she can check
+   *  the homework before it goes out. */
+  published: boolean;
   submitted: boolean;
   submission_id: string | null;
   /** ISO timestamp — null before submission. */

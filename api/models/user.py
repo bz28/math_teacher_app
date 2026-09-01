@@ -32,7 +32,7 @@ class User(Base):
     # source of truth for school membership.
     signup_school_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
-    # Shadow student for "Try as Student" preview mode.
+    # Shadow student for the teacher's "Preview as student" mode.
     is_preview: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     preview_owner_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),

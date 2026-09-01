@@ -21,7 +21,7 @@ export default function SchoolStudentLayout({
   const router = useRouter();
   const { user, loading } = useAuthStore();
 
-  // Shadow-student previews (Try as Student) get school_id=null when
+  // Shadow-student previews (Preview as student) get school_id=null when
   // the owning teacher is solo (no school). Admit them anyway — the
   // dashboard is enrollment-driven and the outer shell's preview banner
   // gives them a way back.

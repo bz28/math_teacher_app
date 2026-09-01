@@ -1937,9 +1937,11 @@ export interface paths {
          *     CTA in PR 4 — silent when no link exists so the chat UI can render
          *     a no-nudge terminal.
          *
-         *     The HW itself must also be visible to the student (published +
-         *     enrolled); we reuse the standard loader to gate access, which
-         *     doubles as the authz guard against enumerating unrelated HW ids.
+         *     The HW itself must also be visible to the student — the standard
+         *     loader gates access, which doubles as the authz guard against
+         *     enumerating unrelated HW ids. (A teacher's preview shadow is waived
+         *     through that loader, but the practice set it finds still has to be
+         *     published and section-visible on its own, below.)
          */
         get: operations["linked_practice_for_homework_v1_school_student_homework__assignment_id__linked_practice_get"];
         put?: never;
@@ -1961,7 +1963,8 @@ export interface paths {
          * Flagged Consumptions
          * @description Return all flagged consumption rows for this student/anchor.
          *     Used by the practice summary screen to populate the Learn N flagged
-         *     queue. Re-validates enrollment + assignment publish state.
+         *     queue. Re-runs the standard access gate (enrollment + publish state
+         *     for a student; the owning teacher's course for a preview shadow).
          */
         get: operations["flagged_consumptions_v1_school_student_homework__assignment_id__problems__bank_item_id__flagged_get"];
         put?: never;
@@ -4967,6 +4970,19 @@ export interface components {
             /** Question */
             question: string;
         };
+        /**
+         * PreviewStudentRequest
+         * @description Which homework the teacher is about to open, when they came from
+         *     an assignment's Preview button. We point the shadow at a section
+         *     that assignment was actually pushed to — a homework assigned to
+         *     only *some* sections is invisible from the arbitrary section we'd
+         *     otherwise pick. Omitted by the sidebar's preview entry point, which
+         *     isn't previewing anything in particular.
+         */
+        PreviewStudentRequest: {
+            /** Assignment Id */
+            assignment_id?: string | null;
+        };
         /** PreviewTokenResponse */
         PreviewTokenResponse: {
             /** Access Token */
@@ -5261,6 +5277,8 @@ export interface components {
             grade_published_at?: string | null;
             /** Problems */
             problems: components["schemas"]["StudentHomeworkProblem"][];
+            /** Published */
+            published: boolean;
             /** Submission Id */
             submission_id: string | null;
             /** Submitted */
@@ -12082,7 +12100,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PreviewStudentRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -12091,6 +12113,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PreviewTokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
