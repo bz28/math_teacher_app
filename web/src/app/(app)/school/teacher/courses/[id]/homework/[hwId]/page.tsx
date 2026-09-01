@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
-import { formatDue } from "@/lib/utils";
+import { formatDue, sectionTargetLabel } from "@/lib/utils";
 import {
   teacher,
   enterPreviewMode,
@@ -788,11 +788,14 @@ export default function HomeworkDetailPage({
               <span aria-hidden>·</span>
             </>
           )}
-          <span className={hw.section_names.length === 0 ? "italic" : ""}>
-            {hw.section_names.length === 0
-              ? "No sections"
-              : hw.section_names.join(", ")}
-          </span>
+          {(() => {
+            // Same helper as the Configuration summary further down, so
+            // the two can't disagree with each other on the same page.
+            const s = sectionTargetLabel(hw.section_names, hw.status);
+            return (
+              <span className={s.subdued ? "italic" : ""}>{s.label}</span>
+            );
+          })()}
           <span aria-hidden>·</span>
           <span>
             {problems.length} {problems.length === 1 ? "problem" : "problems"}
@@ -1146,9 +1149,9 @@ function configSummary(hw: TeacherAssignment): string {
     }
   }
   parts.push(
-    hw.section_ids.length === 0
-      ? "All sections"
-      : `${hw.section_ids.length} section${hw.section_ids.length === 1 ? "" : "s"}`,
+    hw.section_ids.length > 0
+      ? `${hw.section_ids.length} section${hw.section_ids.length === 1 ? "" : "s"}`
+      : sectionTargetLabel([], hw.status).label,
   );
   return parts.join(" · ");
 }

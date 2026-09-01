@@ -161,3 +161,33 @@ export function formatDuration(seconds: number): string {
   const s = seconds % 60;
   return `${m}m ${s}s`;
 }
+
+/**
+ * How a homework's section targeting reads to a teacher.
+ *
+ * An empty section list means two opposite things depending on where
+ * the homework is in its life, and calling both of them the same thing
+ * is what makes teachers distrust the blank default:
+ *
+ *   draft, empty     — the default. Publishing fans the homework out to
+ *                      every section in the course, so "All sections"
+ *                      is what is actually going to happen.
+ *   published, empty — anomalous. It went out to sections that have
+ *                      since been deleted, so it now reaches nobody.
+ *                      That deserves to read as a problem, not a
+ *                      reassurance.
+ *
+ * `subdued` marks the states that are a quiet default rather than a
+ * fact about real sections, so callers can italicise them.
+ */
+export function sectionTargetLabel(
+  sectionNames: string[],
+  status: string,
+): { label: string; subdued: boolean } {
+  if (sectionNames.length > 0) {
+    return { label: sectionNames.join(", "), subdued: false };
+  }
+  return status === "published"
+    ? { label: "No sections", subdued: false }
+    : { label: "All sections", subdued: true };
+}
