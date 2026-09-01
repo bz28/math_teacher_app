@@ -1,10 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
-import { teacher, enterPreviewMode, exitPreviewMode, isInPreviewMode } from "@/lib/api";
+import {
+  teacher,
+  schoolStudent,
+  enterPreviewMode,
+  exitPreviewMode,
+  isInPreviewMode,
+  type PreviewSeat,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/shared/logo-mark";
 import { SkipToMainLink } from "@/components/shared/skip-to-main-link";
@@ -72,9 +79,107 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Which course the preview is looking at, read off the URL.
+ *
+ * The banner is mounted above every route, so it has no course prop.
+ * Every course-scoped student route is /school/student/courses/<id>/…,
+ * and the seat switcher only means something inside one — on the
+ * dashboard "which period am I in" has no single answer, so it hides.
+ */
+function useCourseIdFromPath(): string | null {
+  const pathname = usePathname();
+  const match = pathname?.match(/^\/school\/student\/courses\/([^/]+)/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Seat switcher — lets a previewing teacher move between her own class
+ * periods.
+ *
+ * Her shadow holds one seat per course (one enrollment per student per
+ * course is a DB constraint), which is the right shape — a real student
+ * sits in one period — but it meant she could only ever see one. The
+ * question she actually has is "did this go to the right class?", and
+ * answering it needs both the period that has the homework AND the one
+ * that shouldn't.
+ *
+ * Renders nothing until it knows there's a real choice to offer: one
+ * section is the common case and a dropdown with a single option is
+ * noise. A failed fetch is silent for the same reason — this is an
+ * affordance, not a task, and a broken one should get out of the way
+ * rather than put an error in the chrome above every page.
+ */
+function SeatSwitcher({ courseId }: { courseId: string }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [seats, setSeats] = useState<PreviewSeat[] | null>(null);
+  const [moving, setMoving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    schoolStudent
+      .previewSeats(courseId)
+      .then((res) => {
+        if (!cancelled) setSeats(res.seats);
+      })
+      .catch(() => {
+        if (!cancelled) setSeats([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  if (seats === null || seats.length < 2) return null;
+  const current = seats.find((s) => s.current);
+
+  return (
+    <label className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em]">
+      <span className="sr-only">Previewing as a student in</span>
+      <span aria-hidden className="opacity-50">
+        ·
+      </span>
+      <select
+        value={current?.section_id ?? ""}
+        disabled={moving}
+        onChange={async (e) => {
+          const next = e.target.value;
+          if (!next || next === current?.section_id) return;
+          setMoving(true);
+          try {
+            await schoolStudent.movePreviewSeat(courseId, next);
+            // Everything on screen — homework list, dashboard, grades —
+            // is rendered for the old seat, so re-fetch the route
+            // rather than patching pieces of it.
+            router.refresh();
+            setSeats((prev) =>
+              prev
+                ? prev.map((s) => ({ ...s, current: s.section_id === next }))
+                : prev,
+            );
+          } catch {
+            toast.error("Couldn't switch section. Try again in a moment.");
+          } finally {
+            setMoving(false);
+          }
+        }}
+        className="rounded-[--radius-sm] border border-[color:var(--color-primary)]/40 bg-surface/70 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.06em] text-[color:var(--color-primary-dark)] disabled:opacity-50"
+      >
+        {seats.map((s) => (
+          <option key={s.section_id} value={s.section_id}>
+            {s.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function PreviewBanner() {
   const router = useRouter();
   const loadUser = useAuthStore((s) => s.loadUser);
+  const courseId = useCourseIdFromPath();
   // Thin warm-paper bar with primary accent rule and small-caps copy.
   // Replaces the prior solid-green bar — restrained, matches dashboard's
   // editorial restraint while still being unmissable.
@@ -83,6 +188,7 @@ function PreviewBanner() {
       <span className="text-[11px] font-semibold uppercase tracking-[0.18em]">
         Previewing as student
       </span>
+      {courseId && <SeatSwitcher courseId={courseId} />}
       <button
         onClick={async () => {
           exitPreviewMode();

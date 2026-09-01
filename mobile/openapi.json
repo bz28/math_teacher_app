@@ -2030,6 +2030,20 @@
         "title": "MfaDisableRequest",
         "type": "object"
       },
+      "MovePreviewSeatRequest": {
+        "properties": {
+          "section_id": {
+            "format": "uuid",
+            "title": "Section Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "section_id"
+        ],
+        "title": "MovePreviewSeatRequest",
+        "type": "object"
+      },
       "NextVariationEmpty": {
         "properties": {
           "status": {
@@ -2340,6 +2354,55 @@
           "answer"
         ],
         "title": "PracticeProblem",
+        "type": "object"
+      },
+      "PreviewSeat": {
+        "properties": {
+          "current": {
+            "title": "Current",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "section_id": {
+            "title": "Section Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "section_id",
+          "name",
+          "current"
+        ],
+        "title": "PreviewSeat",
+        "type": "object"
+      },
+      "PreviewSeatsResponse": {
+        "properties": {
+          "course_id": {
+            "title": "Course Id",
+            "type": "string"
+          },
+          "course_name": {
+            "title": "Course Name",
+            "type": "string"
+          },
+          "seats": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewSeat"
+            },
+            "title": "Seats",
+            "type": "array"
+          }
+        },
+        "required": [
+          "course_id",
+          "course_name",
+          "seats"
+        ],
+        "title": "PreviewSeatsResponse",
         "type": "object"
       },
       "PreviewStudentRequest": {
@@ -12210,6 +12273,118 @@
           }
         ],
         "summary": "Record Practice Activity",
+        "tags": [
+          "school-student"
+        ]
+      }
+    },
+    "/v1/school/student/preview/courses/{course_id}/seat": {
+      "post": {
+        "description": "Move the preview's seat to another section of the same course.",
+        "operationId": "move_preview_seat_v1_school_student_preview_courses__course_id__seat_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MovePreviewSeatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Move Preview Seat V1 School Student Preview Courses  Course Id  Seat Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Move Preview Seat",
+        "tags": [
+          "school-student"
+        ]
+      }
+    },
+    "/v1/school/student/preview/courses/{course_id}/seats": {
+      "get": {
+        "description": "Every section of this course the preview could sit in, and which\none it currently occupies.",
+        "operationId": "list_preview_seats_v1_school_student_preview_courses__course_id__seats_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewSeatsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Preview Seats",
         "tags": [
           "school-student"
         ]

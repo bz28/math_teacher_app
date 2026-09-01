@@ -774,6 +774,125 @@ def _bank_item_id_belongs_to_assignment(assignment: Assignment, bank_item_id: uu
 
 # ── Endpoints ──
 
+# ── Preview seat switching ──
+#
+# A teacher's preview shadow holds one seat per course (one enrollment
+# per student per course is a DB constraint), so it can only ever see
+# one class period at a time. That's the right shape — a real student
+# sits in one period — but it left the teacher unable to check what her
+# *other* period sees, which is exactly the question "did I assign this
+# to the right class?" These two endpoints let her move the seat
+# deliberately, instead of it moving invisibly underneath her when she
+# opens a homework.
+#
+# They live on the student router, not the teacher one, because in
+# preview the browser holds the shadow's tokens — a /teacher/* call
+# would 403. The shadow is acting on its own enrollment; the guard is
+# that its owner teaches the course.
+
+
+class PreviewSeat(BaseModel):
+    section_id: str
+    name: str
+    current: bool
+
+
+class PreviewSeatsResponse(BaseModel):
+    course_id: str
+    course_name: str
+    seats: list[PreviewSeat]
+
+
+class MovePreviewSeatRequest(BaseModel):
+    section_id: uuid.UUID
+
+
+async def _require_preview_of_course(
+    db: AsyncSession, user: User, course_id: uuid.UUID,
+) -> None:
+    """403 unless `user` is a preview shadow of a teacher of this course."""
+    if not await _is_teacher_preview_of_course(db, user, course_id):
+        raise HTTPException(
+            status_code=403, detail="Not a preview of this course",
+        )
+
+
+@router.get("/preview/courses/{course_id}/seats")
+async def list_preview_seats(
+    course_id: uuid.UUID,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> PreviewSeatsResponse:
+    """Every section of this course the preview could sit in, and which
+    one it currently occupies."""
+    await _require_preview_of_course(db, user, course_id)
+
+    course = (await db.execute(
+        select(Course).where(Course.id == course_id)
+    )).scalar_one()
+    sections = (await db.execute(
+        select(Section.id, Section.name)
+        .where(Section.course_id == course_id)
+        .order_by(Section.created_at, Section.id)
+    )).all()
+    seated_in = (await db.execute(
+        select(SectionEnrollment.section_id).where(
+            SectionEnrollment.student_id == user.id,
+            SectionEnrollment.course_id == course_id,
+        )
+    )).scalar_one_or_none()
+
+    return PreviewSeatsResponse(
+        course_id=str(course.id),
+        course_name=course.name,
+        seats=[
+            PreviewSeat(
+                section_id=str(sid), name=name, current=sid == seated_in,
+            )
+            for sid, name in sections
+        ],
+    )
+
+
+@router.post("/preview/courses/{course_id}/seat")
+async def move_preview_seat(
+    course_id: uuid.UUID,
+    body: MovePreviewSeatRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Move the preview's seat to another section of the same course."""
+    await _require_preview_of_course(db, user, course_id)
+
+    target_ok = (await db.execute(
+        select(Section.id).where(
+            Section.id == body.section_id, Section.course_id == course_id,
+        )
+    )).scalar_one_or_none()
+    if target_ok is None:
+        raise HTTPException(
+            status_code=404, detail="Section is not part of this course",
+        )
+
+    # One enrollment per (student, course) is a DB constraint, so this
+    # is a move, not an addition. A shadow with no seat yet (its owner
+    # picked up the course after the shadow was made) gets one here.
+    row = (await db.execute(
+        select(SectionEnrollment).where(
+            SectionEnrollment.student_id == user.id,
+            SectionEnrollment.course_id == course_id,
+        )
+    )).scalar_one_or_none()
+    if row is None:
+        db.add(SectionEnrollment(
+            student_id=user.id, section_id=body.section_id, course_id=course_id,
+        ))
+    else:
+        row.section_id = body.section_id
+    await db.commit()
+    return {"status": "ok"}
+
+
 @router.get("/classes")
 async def list_classes(
     user: User = Depends(get_current_user_full),
