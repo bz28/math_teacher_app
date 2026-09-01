@@ -19,6 +19,7 @@ import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
 import { PageErrorState } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AlertTriangleIcon } from "@/components/ui/icons";
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
 import { SubmittedView } from "@/components/school/student/submitted-view";
 import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
@@ -322,6 +323,11 @@ export default function HomeworkPage() {
       >
         ← Back to homework list
       </Link>
+      {isPreview && !hw.published && (
+        <div className="mt-3">
+          <DraftPreviewNotice />
+        </div>
+      )}
       <h1 className="mt-3 text-2xl font-bold text-text-primary">{hw.title}</h1>
       <p className="mt-1 text-sm text-text-secondary">
         {hw.problems.length} {hw.problems.length === 1 ? "problem" : "problems"}
@@ -477,9 +483,9 @@ export default function HomeworkPage() {
           graded={hw.grade_published_at !== null}
           animateEntrance={justSubmitted}
         />
-      ) : isPreview ? (
-        <PreviewSubmitNotice />
       ) : !hw.submitted ? (
+        <>
+        {isPreview && <PreviewSubmitNote />}
         <SubmissionPanel
           assignmentId={hw.assignment_id}
           dueAt={hw.due_at}
@@ -494,8 +500,55 @@ export default function HomeworkPage() {
             await loadAll(hw.assignment_id);
           }}
         />
+        </>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Draft flag, shown at the top of the page while a teacher previews a
+ * homework she hasn't published.
+ *
+ * Nothing else on the student view distinguishes a draft from live
+ * work — the page is the page — so without this she can look at a
+ * finished-seeming screen and reasonably conclude her class already
+ * has it. Warning tokens and the same strip grammar as the panel's
+ * past-due notice, so it reads as a state, not an error.
+ */
+function DraftPreviewNotice() {
+  return (
+    <div className="mb-6 flex items-start gap-2.5 rounded-[--radius-sm] border border-warning/25 bg-warning-bg/60 p-3 text-sm text-warning-dark">
+      <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={2} />
+      <span>
+        <span className="font-semibold">
+          This is a draft — your students can&rsquo;t see it yet.
+        </span>{" "}
+        It won&rsquo;t appear in their homework list until you publish it.
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Sits above the submission panel while a teacher is previewing, so
+ * she knows a turn-in here is a rehearsal.
+ *
+ * She can run the whole loop — upload, extraction, grading, review —
+ * as often as she likes: her shadow's previous rehearsal is replaced
+ * each time, rather than hitting the one-shot rule that exists to stop
+ * a student resubmitting after seeing feedback.
+ */
+function PreviewSubmitNote() {
+  return (
+    <p className="mt-8 -mb-4 text-sm leading-relaxed text-text-secondary">
+      <span className="font-semibold text-text-primary">
+        Anything you turn in here is a test run.
+      </span>{" "}
+      It shows up in your review queue marked{" "}
+      <span className="font-semibold">Preview</span>, and turning in again
+      replaces it — your students&rsquo; work is untouched.
+    </p>
   );
 }
 
@@ -506,43 +559,6 @@ export default function HomeworkPage() {
  * instead of snapping from a bare "Loading…" line. Display-only; the
  * page's routing (`hw === null`) decides when this shows.
  */
-/**
- * Stands in for the SubmissionPanel while a teacher is previewing.
- *
- * She should see that turning work in is the last step and what it
- * looks like, without being able to spend it: a submission is one-shot
- * (a second attempt is a hard 409, and nothing deletes one) and firing
- * it runs the real extraction + grading pipeline. A preview that burned
- * that would cost her the ability to ever test the flow for real on
- * this homework. Same card grammar as the panel it replaces, minus the
- * controls, so the page still reads as one surface.
- */
-function PreviewSubmitNotice() {
-  return (
-    <div className="mt-8 overflow-hidden rounded-[--radius-lg] border border-border bg-surface shadow-[0_1px_2px_rgba(20,19,15,0.04)]">
-      <div className="border-b border-border-light bg-primary-bg/30 px-6 py-5">
-        <p className="eyebrow text-primary/80">Turn in your work</p>
-        <h2 className="mt-1.5 font-serif text-[1.75rem] leading-tight text-text-primary">
-          Submit your homework
-        </h2>
-        <p className="mt-2 max-w-prose text-sm leading-relaxed text-text-secondary">
-          Your students upload photos or a PDF of their work here, and you
-          see exactly what they turn in.
-        </p>
-      </div>
-      <div className="px-6 py-5">
-        <p className="text-sm leading-relaxed text-text-secondary">
-          <span className="font-semibold text-text-primary">
-            Turning in is off while you preview.
-          </span>{" "}
-          A student can only submit once, so we don&rsquo;t spend that on a
-          practice run — this homework stays ready for your class.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function HomeworkDetailSkeleton() {
   return (
     <div className="mx-auto max-w-3xl" role="status" aria-busy="true">
