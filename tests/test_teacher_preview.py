@@ -140,7 +140,7 @@ async def _teacher_with_homework(
 
 
 async def _second_homework(
-    client: AsyncClient, world: dict[str, Any], *, section_id: str,
+    client: AsyncClient, world: dict[str, Any], *, section_ids: list[str],
 ) -> str:
     """Another published homework in the same course, targeted at one
     section — for checking what happens when the teacher previews a
@@ -162,7 +162,7 @@ async def _second_homework(
     assert r.status_code == 200, r.text
     r = await client.post(
         f"/v1/teacher/assignments/{assignment_id}/sections", headers=headers,
-        json={"section_ids": [section_id]},
+        json={"section_ids": section_ids},
     )
     assert r.status_code == 200, r.text
     r = await client.post(
@@ -201,6 +201,9 @@ async def test_preview_sees_homework_in_every_state(
     assert r.status_code == 200, r.text
     assert r.json()["title"] == "HW 1 — Unit Circle"
     assert len(r.json()["problems"]) == 2
+    # Drives the draft flag on her preview — nothing else on the student
+    # page distinguishes unpublished work from live work.
+    assert r.json()["published"] is (status == "published")
 
 
 async def test_preview_lands_in_a_targeted_section(client: AsyncClient) -> None:
@@ -262,22 +265,31 @@ async def test_preview_without_an_assignment_still_works(client: AsyncClient) ->
 
 
 @pytest.mark.parametrize("status", ["draft", "published"])
-async def test_preview_cannot_turn_in_work(client: AsyncClient, status: str) -> None:
-    """Submissions are one-shot and nothing deletes one, so a preview
-    that turned work in would permanently cost the teacher the ability
-    to exercise the flow for real on that homework — and bill the
-    extraction + grading run for it. The page renders a read-only notice
-    instead; this is the server-side half of that contract."""
+async def test_preview_can_rehearse_turning_in_repeatedly(
+    client: AsyncClient, status: str,
+) -> None:
+    """A teacher has to be able to walk the whole loop — upload through
+    review — and to do it more than once. One-shot exists so a student
+    can't resubmit after seeing feedback; applied to her own shadow it
+    would mean a single rehearsal permanently burned the flow on this
+    homework, since nothing deletes a submission. Her rehearsal is
+    replaced instead, so she never accumulates rows either."""
     await _wipe()
     world = await _teacher_with_homework(client, sections="both", status=status)
     headers = await _preview_headers(client, world)
 
-    r = await client.post(
+    first = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=headers, json={"files": [TINY_PNG]},
     )
-    assert r.status_code == 403, r.text
-    assert r.json()["detail"] == "Preview accounts can't turn in work"
+    assert first.status_code == 200, first.text
+
+    second = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=headers, json={"files": [TINY_PNG]},
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["submission_id"] != first.json()["submission_id"]
 
     async with get_session_factory()() as s:
         count = (await s.execute(
@@ -285,7 +297,66 @@ async def test_preview_cannot_turn_in_work(client: AsyncClient, status: str) -> 
                 Submission.assignment_id == uuid.UUID(world["assignment_id"]),
             )
         )).scalar_one()
-    assert count == 0
+    assert count == 1
+
+
+async def test_real_student_still_gets_one_shot(client: AsyncClient) -> None:
+    """The replace path is scoped to preview shadows — a real student
+    who submits twice still gets the 409."""
+    await _wipe()
+    world = await _teacher_with_homework(client, sections="both", status="published")
+    student_id, token = await _make_student("oneshot@school.edu")
+    async with get_session_factory()() as s:
+        s.add(SectionEnrollment(
+            student_id=student_id,
+            section_id=uuid.UUID(world["section_ids"][0]),
+            course_id=uuid.UUID(world["course_id"]),
+        ))
+        await s.commit()
+
+    first = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=auth_headers(token), json={"files": [TINY_PNG]},
+    )
+    assert first.status_code == 200, first.text
+    second = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=auth_headers(token), json={"files": [TINY_PNG]},
+    )
+    assert second.status_code == 409
+    assert second.json()["detail"] == "Already submitted"
+
+
+async def test_preview_keeps_a_seat_the_homework_already_targets(
+    client: AsyncClient,
+) -> None:
+    """Only a seat the homework does NOT reach justifies moving the row.
+    Churning one that already works would orphan the shadow's earlier
+    rehearsals into a section it no longer occupies."""
+    await _wipe()
+    world = await _teacher_with_homework(client, sections="second_only", status="published")
+    await _preview_headers(client, world)  # seats her in Period 4
+
+    # A second homework that goes to BOTH periods — Period 4 included,
+    # so her existing seat already sees it.
+    both = await _second_homework(client, world, section_ids=world["section_ids"])
+    r = await client.post(
+        "/v1/teacher/preview-student", headers=world["headers"],
+        json={"assignment_id": both},
+    )
+    assert r.status_code == 200, r.text
+
+    async with get_session_factory()() as s:
+        shadow = (await s.execute(
+            select(User).where(User.is_preview.is_(True))
+        )).scalar_one()
+        enrolled = (await s.execute(
+            select(SectionEnrollment.section_id).where(
+                SectionEnrollment.student_id == shadow.id,
+            )
+        )).scalars().all()
+
+    assert [str(sid) for sid in enrolled] == [world["section_ids"][1]]
 
 
 async def test_preview_moves_the_seat_to_the_previewed_homework(
@@ -299,7 +370,7 @@ async def test_preview_moves_the_seat_to_the_previewed_homework(
     world = await _teacher_with_homework(client, sections="first_only", status="published")
     await _preview_headers(client, world)  # seats her in Period 2
 
-    hw2 = await _second_homework(client, world, section_id=world["section_ids"][1])
+    hw2 = await _second_homework(client, world, section_ids=[world["section_ids"][1]])
     r = await client.post(
         "/v1/teacher/preview-student", headers=world["headers"],
         json={"assignment_id": hw2},
