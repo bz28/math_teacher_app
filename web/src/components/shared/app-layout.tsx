@@ -40,7 +40,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // /home would see a sidebar whose nav items point nowhere useful.
   //
   // Preview shadows of solo teachers (no school_id) also belong in
-  // this shell — the whole point of Try as Student is to see the
+  // this shell — the whole point of the student preview is to see the
   // school-student experience, not the personal study app's nav.
   const isSchoolStudent =
     user?.role === "student" && (!!user?.school_id || user.is_preview);
@@ -319,7 +319,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
             className="flex w-full items-center gap-3 px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary disabled:opacity-50"
           >
             <SwitchIcon />
-            {previewLoading ? "Switching…" : "Try as Student"}
+            {previewLoading ? "Switching…" : "Preview as student"}
           </button>
 
           {/* Re-enter the Field Guide tour anytime — never touches data.

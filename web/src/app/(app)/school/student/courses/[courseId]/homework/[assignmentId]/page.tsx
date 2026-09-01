@@ -11,6 +11,7 @@ import {
   type StudentSubmission,
   type SubmissionFile,
 } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth";
 import { usePracticeStore } from "@/stores/practice";
 import { useSessionStore, type Subject } from "@/stores/learn";
 import { formatDue } from "@/lib/utils";
@@ -45,6 +46,9 @@ type Mode =
 export default function HomeworkPage() {
   const { courseId, assignmentId } = useParams<{ courseId: string; assignmentId: string }>();
   const router = useRouter();
+  // A teacher previewing her own homework. She sees the whole student
+  // page, but turning work in is withheld — see PreviewSubmitNotice.
+  const isPreview = useAuthStore((s) => s.user?.is_preview ?? false);
   const [hw, setHw] = useState<StudentHomeworkDetail | null>(null);
   const [submission, setSubmission] = useState<StudentSubmission | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -473,6 +477,8 @@ export default function HomeworkPage() {
           graded={hw.grade_published_at !== null}
           animateEntrance={justSubmitted}
         />
+      ) : isPreview ? (
+        <PreviewSubmitNotice />
       ) : !hw.submitted ? (
         <SubmissionPanel
           assignmentId={hw.assignment_id}
@@ -500,6 +506,43 @@ export default function HomeworkPage() {
  * instead of snapping from a bare "Loading…" line. Display-only; the
  * page's routing (`hw === null`) decides when this shows.
  */
+/**
+ * Stands in for the SubmissionPanel while a teacher is previewing.
+ *
+ * She should see that turning work in is the last step and what it
+ * looks like, without being able to spend it: a submission is one-shot
+ * (a second attempt is a hard 409, and nothing deletes one) and firing
+ * it runs the real extraction + grading pipeline. A preview that burned
+ * that would cost her the ability to ever test the flow for real on
+ * this homework. Same card grammar as the panel it replaces, minus the
+ * controls, so the page still reads as one surface.
+ */
+function PreviewSubmitNotice() {
+  return (
+    <div className="mt-8 overflow-hidden rounded-[--radius-lg] border border-border bg-surface shadow-[0_1px_2px_rgba(20,19,15,0.04)]">
+      <div className="border-b border-border-light bg-primary-bg/30 px-6 py-5">
+        <p className="eyebrow text-primary/80">Turn in your work</p>
+        <h2 className="mt-1.5 font-serif text-[1.75rem] leading-tight text-text-primary">
+          Submit your homework
+        </h2>
+        <p className="mt-2 max-w-prose text-sm leading-relaxed text-text-secondary">
+          Your students upload photos or a PDF of their work here, and you
+          see exactly what they turn in.
+        </p>
+      </div>
+      <div className="px-6 py-5">
+        <p className="text-sm leading-relaxed text-text-secondary">
+          <span className="font-semibold text-text-primary">
+            Turning in is off while you preview.
+          </span>{" "}
+          A student can only submit once, so we don&rsquo;t spend that on a
+          practice run — this homework stays ready for your class.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function HomeworkDetailSkeleton() {
   return (
     <div className="mx-auto max-w-3xl" role="status" aria-busy="true">
