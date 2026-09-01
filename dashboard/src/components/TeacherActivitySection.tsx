@@ -777,6 +777,49 @@ function activityDetail(action: string, meta: Record<string, unknown> | null): s
       return quoted("title", "Approved item");
     case "bank_item.reject":
       return quoted("title", "Rejected item");
+    case "course.create": {
+      const subject = str("subject");
+      const base = quoted("name", "Created class");
+      return subject ? `${base} · ${subject}` : base;
+    }
+    case "course.delete":
+      return quoted("name", "Deleted class");
+    case "section.create":
+      return quoted("name", "Opened section");
+    case "section.delete":
+      return quoted("name", "Deleted section");
+    case "section.enroll_student":
+      // Ids only, by design — this metadata deliberately carries no
+      // student name or email, so the row shows the short id the rest
+      // of this page already uses for records it may not name.
+      return str("student_id") ? `Enrolled student ${shortId(str("student_id"))}` : "Enrolled a student";
+    case "section.remove_student":
+      return str("student_id") ? `Removed student ${shortId(str("student_id"))}` : "Removed a student";
+    case "section.invite_student":
+      // No id at all: an invite predates the account, and the invitee's
+      // email is deliberately not recorded.
+      return "Invited a student";
+    case "document.upload": {
+      const bytes = num("bytes");
+      const size = bytes == null
+        ? ""
+        : bytes >= 1_000_000
+          ? `${(bytes / 1_000_000).toFixed(1)} MB`
+          : `${Math.max(1, Math.round(bytes / 1000))} KB`;
+      const base = quoted("filename", "Uploaded");
+      return size ? `${base} · ${size}` : base;
+    }
+    case "document.delete":
+      return quoted("filename", "Deleted document");
+    case "integrity.resolve": {
+      // Both halves: the disagreements are the interesting rows, and
+      // the outcome alone hides them.
+      const words = (k: string) => str(k).replace(/_/g, " ");
+      const outcome = words("resolution");
+      const ai = words("ai_disposition");
+      if (!outcome) return "Resolved integrity check";
+      return ai ? `Integrity: ${outcome} · AI said ${ai}` : `Integrity: ${outcome}`;
+    }
     default:
       return "—";
   }
@@ -790,6 +833,13 @@ function actionBadgeStyle(action: string): React.CSSProperties {
     grade: ["#e6efe0", "var(--ok)"],
     bank_item: ["#efe3d0", "var(--accent)"],
     user: ["transparent", "var(--muted)"],
+    // Structure — classes and rosters read as one family.
+    course: ["var(--info-soft)", "var(--info)"],
+    section: ["var(--info-soft)", "var(--info)"],
+    document: ["#efe3d0", "var(--accent)"],
+    // The one judgment about a student on this page; it should not look
+    // like a routine roster edit.
+    integrity: ["var(--danger-soft)", "var(--danger)"],
   };
   const [bg, color] = map[family] ?? ["transparent", "var(--muted)"];
   return { background: bg, color };

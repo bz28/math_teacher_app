@@ -157,18 +157,18 @@ async def main() -> None:
     async with get_session_factory()() as s:
         school = School(
             name="Holy Ghost Prep", kind=SCHOOL_KIND_INDIVIDUAL,
-            contact_name="Console Admin", contact_email="admin@veradic.test",
+            contact_name="Console Admin", contact_email="admin@veradic.dev",
         )
         s.add(school)
         await s.flush()
 
         admin = User(
-            email="admin@veradic.test", password_hash=hash_password("admin"),
+            email="admin@veradic.dev", password_hash=hash_password("admin"),
             grade_level=99, role="admin", name="Console Admin",
         )
         # A teacher must belong to a school — ck_users_school_required_for_teacher.
         teacher = User(
-            email="teacher@veradic.test", password_hash=hash_password("teach"),
+            email="teacher@veradic.dev", password_hash=hash_password("teach"),
             grade_level=12, role="teacher", name="R. Alvarez",
             school_id=school.id,
         )
@@ -203,7 +203,7 @@ async def main() -> None:
             _, asg, section = courses[1] if outcome == "flagged" or i == 1 else courses[0]
 
             student = User(
-                email=f"student{i}@veradic.test",
+                email=f"student{i}@veradic.dev",
                 password_hash=hash_password("study"),
                 grade_level=9, role="student", name=f"Student {i + 1}",
             )
@@ -304,7 +304,7 @@ async def main() -> None:
     print(f"  awaiting {sum(1 for c in CASES if c[3] == 'awaiting')} "
           "— excluded from the rate")
     print(f"  expected clean rate {round(clean / settled * 100, 1)}%")
-    print("  admin@veradic.test / admin")
+    print("  admin@veradic.dev / admin")
 
 
 if __name__ == "__main__":
