@@ -13,6 +13,13 @@ import {
   type GenerationJobSummary,
   type GenerationJobsData,
 } from "../lib/api";
+import {
+  ACTIVITY_ACTIONS,
+  ACTIVITY_FAMILIES,
+  actionFamily,
+  actionLabel,
+  activityDetail,
+} from "../lib/activityActions";
 import { fmtCost, formatRelativeDate } from "../lib/format";
 import MathText from "./MathText";
 import { Pagination } from "./Pagination";
@@ -30,6 +37,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 // beyond the admin activity/generation reads.
 
 const PAGE_SIZE = 25;
+// The timeline answers "what did this teacher just do" far more often
+// than "show me everything", so it opens on the last handful and pages
+// back from there. Generations keep the fuller page — that panel is
+// read as a list.
+const TIMELINE_PAGE_SIZE = 5;
 
 const sectionHeader = (title: string, right: React.ReactNode) => (
   <div
@@ -81,7 +93,7 @@ function ActivityTimeline({ teacherId }: { teacherId: string }) {
       .activityLog({
         actor_user_id: teacherId,
         action,
-        limit: String(PAGE_SIZE),
+        limit: String(TIMELINE_PAGE_SIZE),
         offset: String(offset),
       })
       .then((d) => {
@@ -103,15 +115,31 @@ function ActivityTimeline({ teacherId }: { teacherId: string }) {
         data ? `${data.total} action${data.total === 1 ? "" : "s"}` : "",
       )}
       <div className="filters" style={{ display: "flex", gap: 12, padding: "12px 16px" }}>
-        <input
-          placeholder='Filter action (e.g. "grade.*", "assignment.publish")'
+        {/* Was a free-text box. It matched the action string EXACTLY unless
+            you happened to know it also accepted a "family.*" glob, so
+            typing the obvious thing ("approve", "bank") returned nothing
+            and the filter read as broken. Every value here is one the
+            backend can actually match. */}
+        <select
           value={action}
+          aria-label="Filter by action"
           onChange={(e) => {
             setOffset(0);
-            setAction(e.target.value.trim());
+            setAction(e.target.value);
           }}
-          style={{ minWidth: 340 }}
-        />
+        >
+          <option value="">All actions</option>
+          {ACTIVITY_FAMILIES.map(({ family, label, allLabel }) => (
+            <optgroup key={family} label={label}>
+              <option value={`${family}.*`}>{allLabel}</option>
+              {ACTIVITY_ACTIONS[family].map((a) => (
+                <option key={a.action} value={a.action}>
+                  {a.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
       </div>
 
       {error && <p className="error" style={{ padding: "0 16px" }}>{error}</p>}
@@ -130,10 +158,10 @@ function ActivityTimeline({ teacherId }: { teacherId: string }) {
             <div className="table-scroll">
               <table>
                 <colgroup>
+                  <col style={{ width: "13%" }} />
+                  <col style={{ width: "19%" }} />
                   <col style={{ width: "18%" }} />
-                  <col style={{ width: "22%" }} />
-                  <col style={{ width: "26%" }} />
-                  <col style={{ width: "34%" }} />
+                  <col style={{ width: "50%" }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -167,7 +195,9 @@ function ActivityRow({ e }: { e: ActivityLogEntry }) {
         {formatRelativeDate(e.performed_at)}
       </td>
       <td>
-        <span className="badge" style={actionBadgeStyle(e.action)}>{e.action}</span>
+        <span className="badge" style={actionBadgeStyle(e.action)} title={e.action}>
+          {actionLabel(e.action)}
+        </span>
       </td>
       <td>
         <div style={{ fontSize: 12, color: "var(--muted)" }}>{e.target_type}</div>
@@ -190,7 +220,18 @@ function ActivityRow({ e }: { e: ActivityLogEntry }) {
           <span style={{ color: "#888" }}>—</span>
         )}
       </td>
-      <td style={{ fontSize: 12, color: "var(--ink-soft)", overflowWrap: "anywhere" }}>
+      <td
+        style={{
+          fontSize: 12,
+          color: "var(--ink-soft)",
+          // Overrides the global `td` nowrap+ellipsis. That rule clipped
+          // these sentences mid-word, and the clipped tail is the part
+          // that matters — "· status back to rejected" is the entire
+          // reason bank_item.revert is worth logging.
+          whiteSpace: "normal",
+          overflowWrap: "anywhere",
+        }}
+      >
         {activityDetail(e.action, e.metadata)}
       </td>
     </tr>
@@ -728,62 +769,8 @@ function shortId(id: string): string {
   return id.split("-")[0];
 }
 
-// Typed, human-readable rendering of an activity row's metadata — the
-// operator reads "Generated 5 questions", not a raw JSON blob. Each
-// known action maps its small metadata payload (see
-// api/core/audit_log.record_activity call sites) to a sentence; unknown
-// actions fall back to an em-dash rather than dumping JSON.
-function activityDetail(action: string, meta: Record<string, unknown> | null): string {
-  if (!meta) return "—";
-  const str = (k: string) => (meta[k] == null ? "" : String(meta[k]));
-  const num = (k: string) => (typeof meta[k] === "number" ? (meta[k] as number) : undefined);
-  const quoted = (k: string, fallback: string) =>
-    str(k) ? `${fallback} "${str(k)}"` : fallback;
-
-  switch (action) {
-    case "assignment.create":
-      return [str("title"), str("type")].filter(Boolean).join(" · ") || "Created assignment";
-    case "assignment.publish":
-      return quoted("title", "Published");
-    case "assignment.unpublish":
-      return quoted("title", "Unpublished");
-    case "assignment.update":
-      return [str("title"), str("status")].filter(Boolean).join(" · ") || "Edited assignment";
-    case "generation.start": {
-      const mode = str("mode");
-      if (mode === "upload") {
-        const p = num("page_count");
-        return `Uploaded ${p ?? "?"} page${p === 1 ? "" : "s"}`;
-      }
-      const c = num("requested_count");
-      const label = mode === "similar" ? "similar question" : "question";
-      return `Generated ${c ?? "?"} ${label}${c === 1 ? "" : "s"}`;
-    }
-    case "grade.save": {
-      const sc = num("final_score");
-      return sc != null ? `Saved grade · ${sc}` : "Saved grade";
-    }
-    case "grade.mark_reviewed": {
-      const sc = num("final_score");
-      return sc != null ? `Marked reviewed · ${sc}` : "Marked reviewed";
-    }
-    case "grade.unmark_reviewed":
-      return "Reopened for review";
-    case "grade.publish": {
-      const c = num("published_count");
-      return `Published ${c ?? "?"} grade${c === 1 ? "" : "s"}${meta.reviewed_only ? " (reviewed only)" : ""}`;
-    }
-    case "bank_item.approve":
-      return quoted("title", "Approved item");
-    case "bank_item.reject":
-      return quoted("title", "Rejected item");
-    default:
-      return "—";
-  }
-}
-
 function actionBadgeStyle(action: string): React.CSSProperties {
-  const family = action.split(".")[0];
+  const family = actionFamily(action);
   const map: Record<string, [string, string]> = {
     assignment: ["var(--info-soft)", "var(--info)"],
     generation: ["#efe3d0", "var(--accent)"],
