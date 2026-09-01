@@ -17,6 +17,7 @@ contract: ids / titles / counts, never chat text or student content.
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 from httpx import AsyncClient
 from sqlalchemy import text
@@ -243,6 +244,56 @@ async def test_workshop_discard_is_attributed_to_the_teacher(
             {"id": item_id},
         )).scalar_one()
     assert str(actor) == str(world["teacher_id"])
+
+
+async def test_workshop_chat_is_recorded_and_committed(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """The row is recorded AFTER the model call with its own commit, rather
+    than staged before it — staging first autoflushes on the helper's first
+    SELECT and holds a write transaction open across the whole model call.
+    This pins the behaviour so the ordering can't quietly regress."""
+    await _setup(world)
+    item_id = world["pending_sibling_id"]
+
+    with patch(
+        "api.routes.teacher_question_bank.chat_with_bank_item", new=AsyncMock(),
+    ):
+        r = await client.post(
+            f"/v1/teacher/question-bank/{item_id}/chat",
+            json={"message": "make the wording clearer"},
+            headers=_hdr(world),
+        )
+    assert r.status_code == 200, r.text
+
+    rows = await _actions(item_id)
+    assert _names(rows) == ["bank_item.workshop_chat"], rows
+    assert rows[0][1] is not None
+    # Counts both roles, read before the teacher's message is appended.
+    assert rows[0][1]["messages_before"] == 0
+    # The teacher's words must never reach the compliance log.
+    assert "clearer" not in str(rows[0][1])
+
+
+async def test_a_failed_chat_records_nothing(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """No row for work that didn't happen — the timeline must not claim the
+    teacher asked the AI something the AI never answered."""
+    await _setup(world)
+    item_id = world["pending_sibling_id"]
+
+    with patch(
+        "api.routes.teacher_question_bank.chat_with_bank_item",
+        new=AsyncMock(side_effect=RuntimeError("model unavailable")),
+    ):
+        r = await client.post(
+            f"/v1/teacher/question-bank/{item_id}/chat",
+            json={"message": "make the wording clearer"},
+            headers=_hdr(world),
+        )
+    assert r.status_code == 500, r.text
+    assert await _actions(item_id) == []
 
 
 def _names(rows: list[tuple[str, dict[str, Any] | None]]) -> list[str]:

@@ -891,18 +891,7 @@ async def post_chat_message(
     _ensure_unlocked(item)
     course = (await db.execute(select(Course).where(Course.id == item.course_id))).scalar_one()
 
-    # Recorded BEFORE the call because `chat_with_bank_item` owns the commit
-    # for this request (it persists the teacher message and the AI reply
-    # atomically). record_activity only stages a row, so it rides that same
-    # commit — and is rolled back with everything else if Claude fails, which
-    # is exactly the "log lives or dies with the work" contract in
-    # api/core/audit_log. The message text is deliberately not logged: this
-    # surface is compliance reporting, and chat prose is neither small nor
-    # compliance data.
-    await record_activity(
-        db, current_user, "bank_item.workshop_chat", "bank_item", item.id,
-        {"title": item.title, "message_count": len(item.chat_messages or [])},
-    )
+    messages_before = len(item.chat_messages or [])
 
     try:
         await chat_with_bank_item(
@@ -917,6 +906,29 @@ async def post_chat_message(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Chat failed: {e}",
         ) from e
+
+    # Recorded AFTER the call, with its own commit, rather than staged before
+    # it to ride the commit `chat_with_bank_item` already makes. Staging first
+    # would be more atomic, but the session autoflushes: the `select(Unit)` at
+    # the top of that helper would flush this INSERT, turning a read-only
+    # transaction into a writing one held open across a 30-60s model call, and
+    # pinning the vacuum horizon for the length of every workshop chat.
+    #
+    # The trade is one extra commit and a narrow window where the chat is
+    # saved but the log row isn't. That window under-logs, which is where this
+    # endpoint already was; a long write transaction on a live database is the
+    # worse of the two.
+    #
+    # `messages_before` counts BOTH roles and is read before the teacher's
+    # message is appended — deliberately not comparable to CHAT_SOFT_CAP,
+    # which counts teacher turns only. The message text is never logged: this
+    # surface is compliance reporting, and chat prose is neither small nor
+    # compliance data.
+    await record_activity(
+        db, current_user, "bank_item.workshop_chat", "bank_item", item.id,
+        {"title": item.title, "messages_before": messages_before},
+    )
+    await db.commit()
 
     return _serialize_item(item, await used_in_for_item(db, item))
 
