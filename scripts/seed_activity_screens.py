@@ -11,27 +11,79 @@ homework with a completed integrity check, which no teacher endpoint
 creates. Those two rows are inserted directly and the RESOLVE ITSELF still
 goes through the real endpoint — the same split the test suite uses.
 
-Usage:  python -m scripts.seed_activity_screens
+## DESTRUCTIVE — read before running
+
+This **deletes every row in `activity_log`** on the database
+`DATABASE_URL` points at, so the seeded timeline is the only thing on
+screen. `activity_log` is a compliance surface, and in production it is
+the audit trail — deleting it there would be unrecoverable. So this
+refuses to run unless the database is unmistakably local: a loopback host
+AND a database name carrying a dev/test marker. Neither check is clever;
+that is the point.
+
+It also leaves behind the course, unit and assignment it created, so the
+teacher page has something to show. Re-running is safe and additive:
+another course each time, and a fresh timeline.
+
+Usage:  DATABASE_URL=postgresql+asyncpg://…@localhost/mathapp_dev \\
+            python -m scripts.seed_activity_screens
 """
 from __future__ import annotations
 
 import asyncio
 import base64
+import sys
 import uuid
+from urllib.parse import urlparse
 
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, select
 
+from api.config import settings
 from api.database import get_session_factory
 from api.main import app
 from api.models.activity_log import ActivityLog
 from api.models.assignment import Assignment, Submission
 from api.models.integrity_check import IntegrityCheckSubmission
-from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
 
 TEACHER_EMAIL = "teacher@veradic.dev"
 TEACHER_PASSWORD = "teach"
+
+# A database name must contain one of these to be considered disposable.
+LOCAL_DB_MARKERS = ("dev", "test", "local", "quality", "screens", "seed")
+LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1", "")
+
+
+def _refuse_unless_local() -> None:
+    """Refuse to wipe `activity_log` on anything but an obvious dev box.
+
+    Two independent checks, because either alone is too easy to satisfy by
+    accident: a tunnelled production database can be reached on localhost,
+    and a dev database can be hosted remotely.
+    """
+    url = urlparse(settings.database_url.replace("+asyncpg", ""))
+    host = (url.hostname or "").lower()
+    name = (url.path or "").lstrip("/").lower()
+
+    problems = []
+    if host not in LOOPBACK_HOSTS:
+        problems.append(f"host {host!r} is not loopback")
+    if not any(m in name for m in LOCAL_DB_MARKERS):
+        problems.append(
+            f"database {name!r} carries no dev marker "
+            f"({', '.join(LOCAL_DB_MARKERS)})"
+        )
+    if problems:
+        print(
+            "REFUSING TO RUN — this deletes every row in activity_log, which\n"
+            "is the audit trail. Target does not look like a dev database:\n"
+            + "".join(f"  - {p}\n" for p in problems)
+            + f"\n  DATABASE_URL host={host!r} database={name!r}\n",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    print(f"target: {name} on {host or 'local socket'} — wiping activity_log\n")
 
 TINY_PNG = base64.b64encode(base64.b64decode(
     b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
@@ -44,11 +96,17 @@ def _auth(token: str) -> dict[str, str]:
 
 
 async def main() -> None:
+    _refuse_unless_local()
+
     async with get_session_factory()() as s:
         await s.execute(delete(ActivityLog))
         await s.commit()
+        # Ordered, so the same student is borrowed on every run. Without it
+        # the choice is whatever Postgres returns first, which makes the
+        # seeded ids — and therefore the screenshots — differ run to run.
         student = (await s.execute(
-            select(User).where(User.role == "student").limit(1)
+            select(User).where(User.role == "student")
+            .order_by(User.email.asc()).limit(1)
         )).scalar_one()
         student_id, student_email = student.id, student.email
 
@@ -170,11 +228,6 @@ async def main() -> None:
         rows = list((await s.execute(
             select(ActivityLog).order_by(ActivityLog.performed_at.asc())
         )).scalars().all())
-        # Leave the roster intact so the teacher page has something to show.
-        await s.execute(delete(SectionEnrollment).where(
-            SectionEnrollment.student_id == student_id,
-        ))
-        await s.commit()
 
     print(f"{len(rows)} activity rows, written by the real handlers:\n")
     for r_ in rows:

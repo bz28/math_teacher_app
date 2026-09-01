@@ -123,7 +123,8 @@ function ActivityTimeline({ teacherId }: { teacherId: string }) {
             <div className="empty-state">
               <div className="empty-state-title">No activity yet</div>
               <div className="empty-state-sub">
-                This teacher's assignment, generation, and grading actions will appear here.
+                This teacher's classes, rosters, documents, assignments,
+                generations, grading, and integrity rulings will appear here.
               </div>
             </div>
           ) : (
@@ -800,12 +801,18 @@ function activityDetail(action: string, meta: Record<string, unknown> | null): s
       // email is deliberately not recorded.
       return "Invited a student";
     case "document.upload": {
+      // Rounded to KB first, THEN rolled over: comparing the raw byte
+      // count against 1_000_000 renders 999_999 as "1000 KB". Anything
+      // under a kilobyte floors to "1 KB" rather than showing bytes — a
+      // teaching document is never really sub-kilobyte, and "68 B" would
+      // read as a broken upload rather than a small one.
       const bytes = num("bytes");
-      const size = bytes == null
+      const kb = bytes == null ? null : Math.max(1, Math.round(bytes / 1000));
+      const size = kb == null
         ? ""
-        : bytes >= 1_000_000
-          ? `${(bytes / 1_000_000).toFixed(1)} MB`
-          : `${Math.max(1, Math.round(bytes / 1000))} KB`;
+        : kb >= 1000
+          ? `${(kb / 1000).toFixed(1)} MB`
+          : `${kb} KB`;
       const base = quoted("filename", "Uploaded");
       return size ? `${base} · ${size}` : base;
     }
