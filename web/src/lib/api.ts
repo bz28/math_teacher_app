@@ -1968,6 +1968,12 @@ export interface TeacherSubmissionDetail {
    *  rows that pre-date the multi-file column. */
   files: SubmissionFile[] | null;
   problems: TeacherSubmissionDetailProblem[];
+  /** Extracted lines the extractor couldn't tie to any problem on this
+   *  assignment — null `problem_position`, or a position that isn't on
+   *  it. The grader receives these as context, so the review page shows
+   *  them rather than leaving the teacher behind the model. Empty on a
+   *  clean submission. */
+  other_work: TeacherSubmissionStep[];
   breakdown: GradeBreakdownEntry[] | null;
   ai_breakdown: AiGradeEntry[] | null;
   final_score: number | null;

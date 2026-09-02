@@ -5763,6 +5763,11 @@ export interface components {
             grade_published_at: string | null;
             /** Is Late */
             is_late: boolean;
+            /**
+             * Other Work
+             * @default []
+             */
+            other_work: components["schemas"]["TeacherSubmissionStep"][];
             /** Problems */
             problems: components["schemas"]["TeacherSubmissionDetailProblem"][];
             /** Reviewed At */

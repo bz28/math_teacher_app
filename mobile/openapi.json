@@ -4396,6 +4396,14 @@
             "title": "Is Late",
             "type": "boolean"
           },
+          "other_work": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TeacherSubmissionStep"
+            },
+            "title": "Other Work",
+            "type": "array"
+          },
           "problems": {
             "items": {
               "$ref": "#/components/schemas/TeacherSubmissionDetailProblem"

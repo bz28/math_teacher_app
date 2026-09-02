@@ -1662,7 +1662,7 @@ function PublishConfirmDialog({
       : dirtyTotal === 0
         ? "Students will see their scores immediately. Ungraded submissions aren\u2019t affected."
         : "Students will see the new and updated scores immediately. Ungraded submissions aren\u2019t affected.";
-  // Offer the safer path only when there's a meaningful split \u2014 some
+  // Offer the safer path only when there's a meaningful split — some
   // approved AND some not. If everything's approved there's nothing to
   // hold back; if nothing's approved, "only approved" would publish
   // zero, so we don't show it.
@@ -1673,7 +1673,7 @@ function PublishConfirmDialog({
         {verb} {total} {total === 1 ? "grade" : "grades"}?
       </h2>
       <p className="mt-2 text-sm text-text-secondary">{body}</p>
-      {/* Unapproved warning \u2014 make it explicit that grades the teacher
+      {/* Unapproved warning — make it explicit that grades the teacher
        *  hasn't approved are about to go out, so publishing them is an
        *  informed choice, not a blind one. */}
       {unreviewedToPublish > 0 && (
@@ -3361,6 +3361,10 @@ function SubmissionDetailPanel({
             );
           })}
         </div>
+
+        {detail.other_work.length > 0 && (
+          <OtherWorkDisclosure steps={detail.other_work} />
+        )}
       </div>
 
       {cheatsheetOpen && (
@@ -3681,6 +3685,54 @@ function StudentStepRow({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Work the extractor couldn't tie to any problem on this assignment.
+ *
+ * This exists because the grader already sees it. `_build_user_message`
+ * hands the model these exact lines under "Other work" and tells it to
+ * use them as context, so without this block a teacher could read a
+ * verdict shaped by evidence that wasn't on their screen. It is also how
+ * a stale `problem_position` becomes visible instead of silent: after an
+ * unpublish -> edit problems -> republish cycle shifts positions, real
+ * work slides in here rather than vanishing.
+ *
+ * Collapsed by default: a clean submission has none of this, and the
+ * ones that do shouldn't push the grade controls down the page.
+ */
+function OtherWorkDisclosure({ steps }: { steps: TeacherSubmissionStep[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-3 rounded-[--radius-md] border border-dashed border-border bg-[color:var(--color-surface-alt-2)]/50 px-3 py-2.5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-1.5 text-left text-[11px] font-bold uppercase tracking-[0.14em] text-[color:var(--color-text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      >
+        <span aria-hidden>{open ? "▾" : "▸"}</span>
+        Other work
+        <span className="font-normal normal-case tracking-normal text-text-muted">
+          · {steps.length} {steps.length === 1 ? "line" : "lines"}
+        </span>
+      </button>
+      {open && (
+        <>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-text-muted">
+            Couldn&rsquo;t be tied to one problem — scratch work, setup, or
+            work that spans problems. The AI saw these as context when it
+            graded; they don&rsquo;t carry a grade of their own.
+          </p>
+          <div className="mt-2 space-y-2 text-sm text-text-primary">
+            {steps.map((step, i) => (
+              <StudentStepRow key={i} step={step} index={i} />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
