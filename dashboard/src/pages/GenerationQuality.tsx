@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
   type GenerationBoardData,
@@ -295,7 +295,14 @@ export default function GenerationQuality() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
+  // Only the newest load may write state — see the note on the same guard
+  // in Quality.tsx. Paging makes overlapping fetches ordinary, and the
+  // retry button calls load() directly, so a sequence beats a
+  // cancelled-flag scoped to an effect.
+  const loadSeq = useRef(0);
+
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     setError(null);
     try {
@@ -307,12 +314,15 @@ export default function GenerationQuality() {
         offset: String(offset),
         ...(outcome ? { outcome } : {}),
       });
+      if (seq !== loadSeq.current) return;
       setBoard(brd);
       setTrackingSince(brd.tracking_since);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't load generation quality");
+      if (seq === loadSeq.current) {
+        setError(e instanceof Error ? e.message : "Couldn't load generation quality");
+      }
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [outcome, offset]);
 

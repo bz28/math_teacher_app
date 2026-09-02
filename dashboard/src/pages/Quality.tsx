@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
   type SolutionQualityData,
@@ -109,7 +109,16 @@ export default function Quality() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
+  // Only the newest load may write state. Paging makes two fetches in
+  // flight an ordinary thing — click Next twice — and without this the
+  // slower one lands last: the pager says 11-15 while the table shows
+  // 6-10, with nothing on screen admitting it. A sequence rather than the
+  // usual cancelled-flag because the retry button calls load() directly,
+  // outside any effect that could clean itself up.
+  const loadSeq = useRef(0);
+
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     setError(null);
     try {
@@ -118,15 +127,19 @@ export default function Quality() {
       // the true total — so the table showed a prefix and said nothing
       // about it. Sending limit+offset makes the pager's "of N" the real
       // N and every row reachable.
-      setData(await api.solutionQuality({
+      const d = await api.solutionQuality({
         limit: String(PAGE_SIZE),
         offset: String(offset),
         ...(outcome ? { outcome } : {}),
-      }));
+      });
+      if (seq === loadSeq.current) setData(d);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't load solution quality");
+      if (seq === loadSeq.current) {
+        setError(e instanceof Error ? e.message : "Couldn't load solution quality");
+      }
     } finally {
-      setLoading(false);
+      // A superseded load must not clear the spinner the newer one owns.
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [outcome, offset]);
 
