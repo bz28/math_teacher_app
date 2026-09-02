@@ -148,6 +148,32 @@ function confidenceBand(c: number): "high" | "medium" | "low" {
   return "low";
 }
 
+// Strip the `$`/`$$` delimiters an answer carries for rendering, so the
+// text reaching a screen reader or a tooltip is the value rather than its
+// source. `$\frac{3}{4}$` read aloud as "dollar backslash f r a c" is
+// worse than useless. Global rather than outer-pair-only: an answer key
+// is plausibly authored as `$x=1$ or $x=-1$`, and stripping just the ends
+// of that would leave `x=1$ or $x=-1` — mangled rather than plainer.
+// Not a LaTeX-to-speech converter, just not source.
+//
+// An escaped dollar has to survive: `\$0.50` is a literal dollar sign in
+// a word problem, not a delimiter, and a blind global strip turns it into
+// `\0.50` — which is then what gets read out. Park those on a
+// private-use sentinel first, exactly as `math-text.tsx` does for the
+// same shape, and restore them as real dollars afterwards. A regex can't
+// do this: any pattern that looks at the preceding character consumes
+// it, which both blinds it to `\\$` (an escaped backslash before a real
+// delimiter) and lets a stray `$` through on runs of three or more.
+const DOLLAR_SENTINEL = "\uE000";
+function plainAnswer(text: string): string {
+  return text
+    .replace(/\\\$/g, DOLLAR_SENTINEL)
+    .replace(/\$\$?/g, "")
+    .split(DOLLAR_SENTINEL)
+    .join("$")
+    .trim();
+}
+
 // A problem the AI is confident about — high band (>=0.85) on a present
 // AI grade. These COLLAPSE to a one-line confirm row in the triage detail
 // pane; everything else (medium / low / no AI grade) stays fully
@@ -4089,8 +4115,6 @@ function ProblemGradeRow({
   // Same rowRef + focus model as the expanded row so keyboard nav, the
   // focus ring, and screen-reader tracking are identical.
   if (collapsed && aiGrade) {
-    const confPct =
-      aiGrade.confidence != null ? Math.round(aiGrade.confidence * 100) : null;
     const verdict =
       aiGrade.score_status === "full"
         // Was a hard-coded #22a06b that sat outside the palette and put
@@ -4125,32 +4149,80 @@ function ProblemGradeRow({
           type="button"
           onClick={onToggleExpand}
           className="flex min-w-0 flex-1 items-center gap-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-[--radius-sm]"
-          aria-label={`Expand problem ${problem.position} to inspect`}
+          // Spell the comparison out for screen readers rather than
+          // leaving them the bare position. Delimiters stripped: these
+          // values are LaTeX source, not plain text — the API wraps the
+          // extractor's read as `$…$` precisely so it renders as math.
+          aria-label={
+            problem.student_answer
+              ? `Expand problem ${problem.position} to inspect. Student answered ${plainAnswer(problem.student_answer)}; answer key is ${problem.final_answer ? plainAnswer(problem.final_answer) : "not set"}.`
+              : `Expand problem ${problem.position} to inspect. No answer extracted. Answer key is ${problem.final_answer ? plainAnswer(problem.final_answer) : "not set"}.`
+          }
           aria-expanded={false}
         >
           <span className="w-5 shrink-0 text-xs font-bold tabular-nums text-text-muted">
             {problem.position}
           </span>
-          <span className="block min-w-0 flex-1 truncate text-[13px] text-text-primary">
-            <MathText text={problem.question} />
+          {/* The comparison the one-second confirm actually rests on.
+              This row used to show a truncated copy of the QUESTION —
+              which the teacher wrote, and which tells them nothing about
+              whether the AI's call is right. What decides it is the
+              student's answer against the key, so that is what the row
+              carries. The question is one click away on expand. */}
+          {/* Two overrides, both load-bearing, both about keeping this a
+              scannable column of equal-height one-liners:
+                - `[&_span]:!whitespace-nowrap` — MathText sets
+                  `white-space: pre-wrap` as an INLINE style on its text
+                  segments, and an inline style beats `truncate`'s class.
+                - `[&_div]:!my-0 [&_div]:!inline` — an answer in display
+                  math ($$…$$, or a bare \begin{…} environment, which is
+                  exactly the shape the AI grader returns for a matrix)
+                  makes MathText emit a BLOCK div with vertical margins,
+                  dropped into a truncating flex item. That grows the row
+                  well past one line. Inlining keeps the row honest, and
+                  `max-h` hard-caps anything still too tall. */}
+          <span className="flex max-h-6 min-w-0 flex-1 items-baseline gap-1.5 overflow-hidden text-[13px] [&_div]:!my-0 [&_div]:!inline [&_span]:!whitespace-nowrap">
+            {problem.student_answer ? (
+              <span
+                className="min-w-0 max-w-[50%] truncate font-semibold text-text-primary"
+                title={plainAnswer(problem.student_answer)}
+              >
+                <MathText text={problem.student_answer} />
+              </span>
+            ) : (
+              <span className="shrink-0 text-xs font-semibold text-[color:var(--color-warning-dark)]">
+                <span aria-hidden>⚠</span> No answer extracted
+              </span>
+            )}
+            <span aria-hidden className="shrink-0 text-[11px] text-text-muted">
+              →
+            </span>
+            {/* Long values truncate rather than wrap. `title` keeps the
+                full text reachable on hover without expanding the row,
+                and the button's aria-label carries both in full for
+                screen readers. */}
+            <span
+              className="min-w-0 flex-1 truncate text-text-secondary"
+              title={problem.final_answer ? plainAnswer(problem.final_answer) : undefined}
+            >
+              {problem.final_answer ? (
+                <MathText text={problem.final_answer} />
+              ) : (
+                <span className="italic text-text-muted">no key</span>
+              )}
+            </span>
           </span>
           <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold tracking-[0.04em] text-text-muted">
             <span aria-hidden>🤖</span>
-            <span>AI</span>
             <span
               className={`rounded-[--radius-pill] px-1.5 py-0.5 text-[10px] font-extrabold ${verdict.cls}`}
             >
               {verdict.label}
             </span>
-            {confPct != null && (
-              <>
-                <span
-                  aria-hidden
-                  className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--color-success)]"
-                />
-                <span>{confPct}%</span>
-              </>
-            )}
+            {/* Reuse ConfidenceSignal instead of a bare dot + percent.
+                "96%" sitting next to a "Full" badge reads as a score;
+                "AI · High 96%" reads as certainty, which is what it is. */}
+            <ConfidenceSignal confidence={aiGrade.confidence} />
           </span>
         </button>
         {confirmed ? (
