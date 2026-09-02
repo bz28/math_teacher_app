@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FigureDisplay } from "@/components/shared/figure-display";
 import { MathText } from "@/components/shared/math-text";
-import { formatDue } from "@/lib/utils";
+import { formatDue, sectionTargetLabel, sectionToneClass } from "@/lib/utils";
 import {
   teacher,
   enterPreviewMode,
@@ -14,6 +14,7 @@ import {
   type BankJob,
   type SubmissionsInboxRow,
   type TeacherAssignment,
+  type TeacherSection,
   type TeacherRubric,
 } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
@@ -440,6 +441,31 @@ export default function HomeworkDetailPage({
   // teacher isn't stranded with student auth, then throw so run()
   // surfaces the error. Independent local busy flag so the button can
   // show "Switching…" without conflating with other saves.
+  // The course's sections, loaded once here rather than inside the
+  // picker. The header has to name them (section_names off the server
+  // goes stale the moment the picker is touched) and has to know
+  // whether the course has any at all, so parent-owned is the only
+  // version where the two halves of this page can't disagree.
+  const [courseSections, setCourseSections] = useState<TeacherSection[] | null>(
+    null,
+  );
+  useEffect(() => {
+    let cancelled = false;
+    teacher
+      .sections(courseId)
+      .then((res) => {
+        if (!cancelled) setCourseSections(res.sections);
+      })
+      .catch(() => {
+        // Non-fatal: the header falls back to the ordinary draft copy
+        // and the picker renders its own error.
+        if (!cancelled) setCourseSections(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
   const [previewLoading, setPreviewLoading] = useState(false);
   const onPreviewAsStudent = () =>
     run(async () => {
@@ -556,10 +582,25 @@ export default function HomeworkDetailPage({
   const onChangeSections = (next: string[]) => {
     if (!hw) return;
     const prev = hw.section_ids;
+    const prevNames = hw.section_names;
+    // section_names has to move with section_ids. The header reads the
+    // names and the Configuration summary reads the ids; patching only
+    // one leaves them describing different selections on the same
+    // screen — which is how the header ended up promising "All
+    // sections" at the moment a teacher narrowed it to one.
+    const nextNames = next
+      .map((id) => courseSections?.find((s) => s.id === id)?.name)
+      .filter((n): n is string => typeof n === "string");
     void patchField(
       "sections",
-      () => setHw((h) => (h ? { ...h, section_ids: next } : h)),
-      () => setHw((h) => (h ? { ...h, section_ids: prev } : h)),
+      () =>
+        setHw((h) =>
+          h ? { ...h, section_ids: next, section_names: nextNames } : h,
+        ),
+      () =>
+        setHw((h) =>
+          h ? { ...h, section_ids: prev, section_names: prevNames } : h,
+        ),
       () => teacher.assignToSections(assignmentId, next).then(() => undefined),
     );
   };
@@ -788,11 +829,17 @@ export default function HomeworkDetailPage({
               <span aria-hidden>·</span>
             </>
           )}
-          <span className={hw.section_names.length === 0 ? "italic" : ""}>
-            {hw.section_names.length === 0
-              ? "No sections"
-              : hw.section_names.join(", ")}
-          </span>
+          {(() => {
+            // Same helper and the same inputs as the Configuration
+            // summary further down, so the two can't disagree on the
+            // same page.
+            const s = sectionTargetLabel({
+              selectedNames: hw.section_names,
+              status: hw.status,
+              courseSectionCount: courseSections?.length ?? null,
+            });
+            return <span className={sectionToneClass(s.tone)}>{s.label}</span>;
+          })()}
           <span aria-hidden>·</span>
           <span>
             {problems.length} {problems.length === 1 ? "problem" : "problems"}
@@ -1026,12 +1073,13 @@ export default function HomeworkDetailPage({
           <div className="mt-4">
             <CollapsibleSection
               label="Configuration"
-              summary={configSummary(hw)}
+              summary={configSummary(hw, courseSections?.length ?? null)}
               defaultOpen={problems.length === 0 || hw.unit_ids.length === 0}
             >
               <ConfigBlock
                 hw={hw}
                 courseId={courseId}
+                courseSections={courseSections}
                 disabled={isPublished}
                 saveStates={saveStates}
                 saveErrors={saveErrors}
@@ -1130,7 +1178,10 @@ export default function HomeworkDetailPage({
 // collapsed Settings accordion so teachers can see the gist without
 // expanding. Keep it dense; this is a scan line, not a form.
 // ────────────────────────────────────────────────────────────────────
-function configSummary(hw: TeacherAssignment): string {
+function configSummary(
+  hw: TeacherAssignment,
+  courseSectionCount: number | null,
+): string {
   const parts: string[] = [];
   parts.push(`${hw.unit_ids.length} unit${hw.unit_ids.length === 1 ? "" : "s"}`);
   // Practice has no deadline concept — skip the due-date part
@@ -1146,9 +1197,13 @@ function configSummary(hw: TeacherAssignment): string {
     }
   }
   parts.push(
-    hw.section_ids.length === 0
-      ? "All sections"
-      : `${hw.section_ids.length} section${hw.section_ids.length === 1 ? "" : "s"}`,
+    hw.section_ids.length > 0
+      ? `${hw.section_ids.length} section${hw.section_ids.length === 1 ? "" : "s"}`
+      : sectionTargetLabel({
+          selectedNames: [],
+          status: hw.status,
+          courseSectionCount,
+        }).label,
   );
   return parts.join(" · ");
 }
@@ -1322,6 +1377,7 @@ function GenerationStalledBanner({
 function ConfigBlock({
   hw,
   courseId,
+  courseSections,
   disabled,
   saveStates,
   saveErrors,
@@ -1333,6 +1389,7 @@ function ConfigBlock({
 }: {
   hw: TeacherAssignment;
   courseId: string;
+  courseSections: TeacherSection[] | null;
   disabled: boolean;
   saveStates: Record<ConfigField, SaveState>;
   saveErrors: Record<ConfigField, string | null>;
@@ -1417,15 +1474,16 @@ function ConfigBlock({
       <Field
         label="Sections"
         hint={
-          hw.section_ids.length === 0
-            ? "Leave empty to publish to every section in this course"
-            : undefined
+          hw.section_ids.length > 0 || hw.status === "published"
+            ? undefined
+            : "Leave empty to publish to every section in this course"
         }
         saveState={saveStates.sections}
         saveError={saveErrors.sections}
       >
         <SectionMultiSelect
           courseId={courseId}
+          sections={courseSections}
           selected={hw.section_ids}
           onChange={onChangeSections}
           disabled={disabled}

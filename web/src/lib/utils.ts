@@ -161,3 +161,58 @@ export function formatDuration(seconds: number): string {
   const s = seconds % 60;
   return `${m}m ${s}s`;
 }
+
+/**
+ * How a homework's section targeting reads to a teacher.
+ *
+ * An empty section list means three different things depending on
+ * state, and calling them all the same thing is what makes teachers
+ * distrust the blank default:
+ *
+ *   draft, course has sections — the default. Publishing fans the
+ *       homework out to every section, so "All sections" is what is
+ *       actually going to happen. Reads as a default, not a fact.
+ *   draft, course has none — publishing will be refused outright
+ *       ("This course has no sections yet"). Promising "All sections"
+ *       here is a promise the publish button won't keep.
+ *   published, empty — the sections it went to have since been
+ *       deleted, so it reaches nobody. That is a problem, and should
+ *       look like one.
+ *
+ * `courseSectionCount` is null when the caller doesn't know (list
+ * cards don't load the course's sections). The zero case then can't be
+ * told from the ordinary one; the detail page, which is where
+ * publishing actually happens, always knows.
+ */
+export function sectionTargetLabel({
+  selectedNames,
+  status,
+  courseSectionCount = null,
+}: {
+  selectedNames: string[];
+  status: string;
+  courseSectionCount?: number | null;
+}): { label: string; tone: "normal" | "default" | "problem" } {
+  if (selectedNames.length > 0) {
+    return { label: selectedNames.join(", "), tone: "normal" };
+  }
+  if (status === "published") {
+    return { label: "No sections", tone: "problem" };
+  }
+  if (courseSectionCount === 0) {
+    return { label: "No sections in this course", tone: "problem" };
+  }
+  return { label: "All sections", tone: "default" };
+}
+
+/** Tailwind classes for a {@link sectionTargetLabel} tone. A default
+ *  stays quiet; a problem has to interrupt someone skimming. */
+export function sectionToneClass(
+  tone: "normal" | "default" | "problem",
+): string {
+  if (tone === "default") return "italic";
+  if (tone === "problem") {
+    return "font-semibold text-[color:var(--color-warning-dark)]";
+  }
+  return "";
+}
