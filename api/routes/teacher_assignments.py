@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import record_activity
+from api.core.constants import DEFAULT_HOMEWORK_INSTRUCTIONS
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.integrity_pipeline import (
     ABANDONED_INTERVIEW_DEADLINE,
@@ -558,6 +559,13 @@ async def create_assignment(
         content=content, answer_key=body.answer_key,
         unit_ids=body.unit_ids, document_ids=doc_id_strings,
         rubric=body.rubric,
+        # Seeded, not enforced: it lands in the teacher's own
+        # Instructions block, which she can edit or clear like any other
+        # text she wrote. Practice is excluded because it has no
+        # student-visible instructions surface to render it.
+        description=(
+            DEFAULT_HOMEWORK_INSTRUCTIONS if body.type == "homework" else None
+        ),
     )
     db.add(assignment)
     await db.flush()
