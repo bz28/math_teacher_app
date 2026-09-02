@@ -7,7 +7,7 @@ import {
 import { api, type LLMCallsData, type SchoolListItem } from "../lib/api";
 import { formatRelativeDate, shortModel, shortId, fmtCost } from "../lib/format";
 import { windowLabel } from "../lib/definitions";
-import { PAGE_SIZE } from "../lib/pagination";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
@@ -83,7 +83,7 @@ export default function LLMCalls() {
       school_id: schoolFilter,
       search,
       ...(status === "ok" ? { success: "true" } : status === "failed" ? { success: "false" } : {}),
-      limit: String(PAGE_SIZE),
+      limit: String(BOARD_PAGE_SIZE),
       offset: String(offset),
     })
       .then((d) => { if (!cancelled) { setData(d); setError(null); } })
@@ -259,6 +259,8 @@ export default function LLMCalls() {
         <DataTable
           columns={columns}
           rows={data.calls}
+          // Server-paged: this is one page, and <Pagination> below owns it.
+          unpaged
           rowKey={(c) => c.id}
           defaultSort={{ key: "created_at", dir: "desc" }}
           onRowClick={(c) => setSelectedCall(c)}
@@ -266,7 +268,7 @@ export default function LLMCalls() {
           empty={<span className="dt-state-title">No calls match these filters.</span>}
           minWidth={720}
         />
-        <Pagination offset={offset} limit={PAGE_SIZE} total={data.total_count} onChange={setOffset} />
+        <Pagination offset={offset} limit={BOARD_PAGE_SIZE} total={data.total_count} onChange={setOffset} />
       </div>
 
       {/* ── ③ One call, up front — prompt in, response out ───────────── */}

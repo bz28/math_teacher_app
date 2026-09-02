@@ -12,7 +12,7 @@ import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
 import { EditorialModal } from "../components/EditorialModal";
 import { Pagination } from "../components/Pagination";
-import { PAGE_SIZE } from "../lib/pagination";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 
 // ────────────────────────────────────────────────────────────────────
 // Generation quality — which generated questions teachers had to fix.
@@ -264,6 +264,8 @@ function GenerationBoard({
       <DataTable
         columns={cols}
         rows={data.questions}
+        // Server-paged: this is one page, and <Pagination> below owns it.
+        unpaged
         rowKey={(q) => q.id}
         onRowClick={(q) => onOpen(q.id)}
         rowStatus={(q) => OUTCOME_META[q.outcome].color}
@@ -273,7 +275,7 @@ function GenerationBoard({
       />
       <Pagination
         offset={offset}
-        limit={PAGE_SIZE}
+        limit={BOARD_PAGE_SIZE}
         total={data.total_count}
         onChange={onOffset}
       />
@@ -310,7 +312,7 @@ export default function GenerationQuality() {
       // 50 while the count beside the table read the true total, so the
       // table showed a prefix and said nothing about it.
       const brd = await api.generationBoard({
-        limit: String(PAGE_SIZE),
+        limit: String(BOARD_PAGE_SIZE),
         offset: String(offset),
         ...(outcome ? { outcome } : {}),
       });

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type HarnessRun, type HarnessRunsData, type ProbeHealth } from "../lib/api";
 import { fmtCost, formatRelativeDate } from "../lib/format";
 import { HARNESS_STALE_AFTER_HOURS, isHarnessStale } from "../lib/definitions";
-import { PAGE_SIZE } from "../lib/pagination";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import StatusPill, { type PillTone } from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
 import { Pagination } from "../components/Pagination";
@@ -141,7 +141,7 @@ export default function HarnessRuns() {
 
   useEffect(() => {
     let cancelled = false;
-    const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: String(offset) };
+    const params: Record<string, string> = { limit: String(BOARD_PAGE_SIZE), offset: String(offset) };
     if (probe) params.probe = probe;
     if (failedOnly) params.failed_only = "true";
     api
@@ -378,6 +378,8 @@ export default function HarnessRuns() {
         <DataTable
           columns={columns}
           rows={data?.runs ?? []}
+          // Server-paged: this is one page, and <Pagination> below owns it.
+          unpaged
           rowKey={(r) => r.id}
           loading={!data && !error}
           error={data ? null : error}
@@ -392,7 +394,7 @@ export default function HarnessRuns() {
         />
 
         {data && (
-          <Pagination offset={offset} limit={PAGE_SIZE} total={data.total_count} onChange={setOffset} />
+          <Pagination offset={offset} limit={BOARD_PAGE_SIZE} total={data.total_count} onChange={setOffset} />
         )}
       </div>
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type UsersData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
-import { PAGE_SIZE } from "../lib/pagination";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import StatCard from "./StatCard";
 import { Pagination, SearchInput } from "./Pagination";
 import { useConfirm } from "../lib/confirm";
@@ -97,7 +97,7 @@ export default function UserScopePanel({
       .users({
         hours,
         sort_by: sortBy,
-        limit: String(PAGE_SIZE),
+        limit: String(BOARD_PAGE_SIZE),
         offset: String(offset),
         role,
         no_school: "true",
@@ -524,7 +524,7 @@ export default function UserScopePanel({
         </div>
         <Pagination
           offset={offset}
-          limit={PAGE_SIZE}
+          limit={BOARD_PAGE_SIZE}
           total={data.filtered_count}
           onChange={setOffset}
         />

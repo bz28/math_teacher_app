@@ -12,7 +12,7 @@ import DataTable, { type Column } from "../components/DataTable";
 import { EditorialModal } from "../components/EditorialModal";
 import { Pagination } from "../components/Pagination";
 import { formatRelativeDate } from "../lib/format";
-import { PAGE_SIZE } from "../lib/pagination";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 
 // ────────────────────────────────────────────────────────────────────
 // Solution quality — scoring the solve call.
@@ -128,7 +128,7 @@ export default function Quality() {
       // about it. Sending limit+offset makes the pager's "of N" the real
       // N and every row reachable.
       const d = await api.solutionQuality({
-        limit: String(PAGE_SIZE),
+        limit: String(BOARD_PAGE_SIZE),
         offset: String(offset),
         ...(outcome ? { outcome } : {}),
       });
@@ -324,6 +324,8 @@ export default function Quality() {
           <DataTable
             columns={cols}
             rows={data.questions}
+            // Server-paged: this is one page, and <Pagination> below owns it.
+            unpaged
             rowKey={(q) => q.id}
             onRowClick={(q) => setOpenId(q.id)}
             rowStatus={(q) => OUTCOME_META[q.outcome].color}
@@ -333,7 +335,7 @@ export default function Quality() {
           />
           <Pagination
             offset={offset}
-            limit={PAGE_SIZE}
+            limit={BOARD_PAGE_SIZE}
             total={data.total_count}
             onChange={setOffset}
           />

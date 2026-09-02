@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, type UsersData } from "../lib/api";
 import { fmtCost, formatRelativeDate } from "../lib/format";
 import { activityStatus, activityPill, windowLabel } from "../lib/definitions";
-import { PAGE_SIZE } from "../lib/pagination";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import StatTile from "./StatTile";
 import StatusPill from "./StatusPill";
 import DataTable, { type Column } from "./DataTable";
@@ -64,7 +64,7 @@ export default function IndependentPanel({
       .users({
         hours,
         sort_by: sortBy,
-        limit: String(PAGE_SIZE),
+        limit: String(BOARD_PAGE_SIZE),
         offset: String(offset),
         role,
         no_school: "true",
@@ -211,6 +211,8 @@ export default function IndependentPanel({
         <DataTable
           columns={columns}
           rows={data?.users ?? []}
+          // Server-paged: this is one page, and <Pagination> below owns it.
+          unpaged
           rowKey={(u) => u.id}
           onRowClick={(u) => navigate(rowHref(u))}
           drill
@@ -227,7 +229,7 @@ export default function IndependentPanel({
         />
         <Pagination
           offset={offset}
-          limit={PAGE_SIZE}
+          limit={BOARD_PAGE_SIZE}
           total={data?.filtered_count ?? 0}
           onChange={setOffset}
         />

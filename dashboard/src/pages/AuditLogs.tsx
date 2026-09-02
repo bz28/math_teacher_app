@@ -8,7 +8,7 @@ import {
 } from "../lib/api";
 import { renderChipValue, shortId } from "../lib/format";
 import { windowLabel } from "../lib/definitions";
-import { PAGE_SIZE } from "../lib/pagination";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
@@ -77,7 +77,7 @@ export default function AuditLogs() {
   useEffect(() => {
     let cancelled = false;
     api
-      .auditTimeline({ ...filterParams, limit: String(PAGE_SIZE), offset: String(offset) })
+      .auditTimeline({ ...filterParams, limit: String(BOARD_PAGE_SIZE), offset: String(offset) })
       .then((d) => {
         if (!cancelled) {
           setData(d);
@@ -329,6 +329,8 @@ export default function AuditLogs() {
         <DataTable
           columns={columns}
           rows={data?.entries ?? []}
+          // Server-paged: this is one page, and <Pagination> below owns it.
+          unpaged
           rowKey={(e) => `${e.facet}:${e.id}`}
           loading={!data && !error}
           error={error}

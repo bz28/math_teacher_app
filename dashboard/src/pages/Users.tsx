@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, getUserId, type SchoolListItem, type UsersData } from "../lib/api";
 import { formatRelativeDate, fmtCost } from "../lib/format";
-import { PAGE_SIZE } from "../lib/pagination";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import { activityPill, activityStatus, daysSince, windowLabel } from "../lib/definitions";
 import StatTile from "../components/StatTile";
 import StatusPill, { type PillTone } from "../components/StatusPill";
@@ -133,7 +133,7 @@ export default function Users() {
     api
       .users({
         hours,
-        limit: String(PAGE_SIZE),
+        limit: String(BOARD_PAGE_SIZE),
         offset: String(offset),
         ...(role ? { role } : {}),
         // Plan / school selects are hidden on the Admin preset, so
@@ -488,6 +488,8 @@ export default function Users() {
         <DataTable
           columns={columns}
           rows={data?.users ?? []}
+          // Server-paged: this is one page, and <Pagination> below owns it.
+          unpaged
           rowKey={(u) => u.id}
           loading={!data && !error}
           error={!data ? error : null}
@@ -501,7 +503,7 @@ export default function Users() {
           }
         />
         {data && (
-          <Pagination offset={offset} limit={PAGE_SIZE} total={data.filtered_count} onChange={setOffset} />
+          <Pagination offset={offset} limit={BOARD_PAGE_SIZE} total={data.filtered_count} onChange={setOffset} />
         )}
       </div>
 

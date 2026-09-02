@@ -12,7 +12,7 @@ import DataTable, { type Column } from "../components/DataTable";
 import ErrorState from "../components/ErrorState";
 import { EditorialModal } from "../components/EditorialModal";
 import { Pagination } from "../components/Pagination";
-import { PAGE_SIZE } from "../lib/pagination";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import { MetaChip } from "../components/MetaChip";
 import { formatRelativeDate } from "../lib/format";
 import { windowLabel } from "../lib/definitions";
@@ -197,7 +197,7 @@ export default function ExtractionQuality() {
       // Paged on the server. Sending no limit took the endpoint's default
       // 50 while the count in the heading read the true total, so the table
       // showed a prefix and said nothing about it.
-      .extractionQuality({ hours, bucket, limit: String(PAGE_SIZE), offset: String(offset) })
+      .extractionQuality({ hours, bucket, limit: String(BOARD_PAGE_SIZE), offset: String(offset) })
       .then((d) => { if (!cancelled) { setData(d); setError(null); } })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load extraction quality.");
@@ -435,6 +435,8 @@ export default function ExtractionQuality() {
             <DataTable
               columns={cols}
               rows={data.cases}
+              // Server-paged: this is one page, and <Pagination> below owns it.
+              unpaged
               rowKey={(c) => c.submission_id}
               onRowClick={(c) => setOpenId(c.submission_id)}
               rowStatus={(c) => BUCKET_META[c.bucket].color}
@@ -444,7 +446,7 @@ export default function ExtractionQuality() {
             />
             <Pagination
               offset={offset}
-              limit={PAGE_SIZE}
+              limit={BOARD_PAGE_SIZE}
               total={data.total_count}
               onChange={setOffset}
             />

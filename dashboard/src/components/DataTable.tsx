@@ -80,15 +80,21 @@ export interface DataTableProps<T> {
   /** Rows per page. Defaults to the console-wide `PAGE_SIZE`. */
   pageSize?: number;
   /**
-   * Render every row, never a page of them.
+   * Render every row handed in, never a page of them. Two callers want it:
    *
-   * For summary and breakdown cards — "by function", "by subject", a
+   * A summary or breakdown card — "by function", "by subject", a
    * scoreboard — where the whole distribution IS the content and the
    * reader takes it in at a glance. Paging one hides the tail and turns a
    * glance into a click: a card measuring eight things that shows five is
    * worse than no card, because nothing on screen says three are missing.
    *
-   * Not for long lists that merely feel short today — those grow.
+   * A server-paged table, which was handed exactly one page and renders
+   * its own `<Pagination>`. Saying so here is what keeps the second pager
+   * away; leaving it to the fetch limit and `pageSize` happening to be
+   * equal is a coincidence, and it stops being true the first time
+   * someone changes one of them.
+   *
+   * Not for a long list that merely feels short today — those grow.
    */
   unpaged?: boolean;
   /** Noun used in the search placeholder and empty copy, e.g. "teachers". */
