@@ -17,8 +17,9 @@ from httpx import AsyncClient
 from sqlalchemy import select, text
 
 from api.core.auth import create_access_token, hash_password
+from api.core.integrity_ai import UNREADABLE_THRESHOLD
 from api.database import get_session_factory
-from api.models.assignment import Submission
+from api.models.assignment import Submission, SubmissionGrade
 from api.models.user import User
 from api.routes.school_student_practice import drain_integrity_background_tasks
 from tests.conftest import TINY_PNG
@@ -599,6 +600,47 @@ async def test_teacher_submission_detail_surfaces_student_edits(
     assert unedited["plain_english"] == "y equals ten"
 
 
+async def _submit_and_stage_extraction(
+    client: AsyncClient,
+    world: dict[str, Any],
+    extraction: str,
+    edits: str | None = None,
+) -> str:
+    """Submit as the student, then overwrite the persisted extraction.
+
+    Every teacher-view answer-precedence test needs the same setup: a
+    real submission (so ownership and problem hydration are exercised)
+    carrying a hand-authored extraction. Returns the submission id.
+    Leaves no SubmissionGrade row, which is the pre-grading window the
+    answer chain is most load-bearing in.
+    """
+    submit_resp = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"files": [TINY_PNG]},
+    )
+    submission_id = submit_resp.json()["submission_id"]
+    await drain_integrity_background_tasks()
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE submissions SET extraction = :ext, "
+                "extraction_edits = :ed WHERE id = :id"
+            ),
+            {"id": submission_id, "ext": extraction, "ed": edits},
+        )
+        await s.commit()
+    return submission_id
+
+
+# A readable extraction carrying one final answer for problem 1.
+_READABLE_EXTRACTION = (
+    '{"steps": [], "final_answers": ['
+    '{"problem_position": 1, "answer_latex": "5", '
+    '"answer_plain": "five"}], "confidence": 0.9}'
+)
+
+
 async def test_teacher_submission_detail_surfaces_edited_final_pre_grading(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
@@ -607,35 +649,10 @@ async def test_teacher_submission_detail_surfaces_edited_final_pre_grading(
     Without this, the edit only surfaces once the AI grader writes its
     breakdown, which leaves a confusing UI window where the student's
     correction looks lost. Mirrors the priority order documented at
-    teacher_assignments.py: edited > AI-extracted > typed > None."""
-    submit_resp = await client.post(
-        f"/v1/school/student/homework/{world['assignment_id']}/submit",
-        headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG]},
+    teacher_assignments.py: edited > extracted > AI echo > None."""
+    submission_id = await _submit_and_stage_extraction(
+        client, world, _READABLE_EXTRACTION, '{"1:final": "16 apples"}',
     )
-    submission_id = submit_resp.json()["submission_id"]
-    await drain_integrity_background_tasks()
-
-    # Stage an extraction with a final-answer entry, then a sparse
-    # edit overriding it. No SubmissionGrade row will exist (we don't
-    # confirm here) — exactly the pre-grading window we care about.
-    async with get_session_factory()() as s:
-        await s.execute(
-            text(
-                "UPDATE submissions SET extraction = :ext, "
-                "extraction_edits = :ed WHERE id = :id"
-            ),
-            {
-                "id": submission_id,
-                "ext": (
-                    '{"steps": [], "final_answers": ['
-                    '{"problem_position": 1, "answer_latex": "5", '
-                    '"answer_plain": "five"}], "confidence": 0.9}'
-                ),
-                "ed": '{"1:final": "16 apples"}',
-            },
-        )
-        await s.commit()
 
     r = await client.get(
         f"/v1/teacher/submissions/{submission_id}",
@@ -644,6 +661,243 @@ async def test_teacher_submission_detail_surfaces_edited_final_pre_grading(
     assert r.status_code == 200
     p = r.json()["problems"][0]
     assert p["student_answer"] == "16 apples"
+
+
+async def test_teacher_submission_detail_surfaces_unedited_extracted_final(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The common case: the student accepted Vision's read without
+    editing it, and AI grading hasn't run yet (it's deferred to the due
+    date). The extracted final answer must still reach the teacher —
+    before this, the review page showed "No answer extracted" while the
+    answer sat in `Submission.extraction` and the student had already
+    been shown it on their own confirm screen."""
+    submission_id = await _submit_and_stage_extraction(
+        client, world, _READABLE_EXTRACTION,
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200
+    p = r.json()["problems"][0]
+    # `answer_latex` wins over `answer_plain` and arrives `$`-delimited:
+    # the field is raw LaTeX by contract, and the teacher view renders
+    # this string through MathText, which prints undelimited input as
+    # source. Same wrapping the canonical renderer applies
+    # (extraction-view.tsx).
+    assert p["student_answer"] == "$5$"
+
+
+async def test_teacher_submission_detail_falls_back_to_answer_plain(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Vision emits an empty `answer_latex` when the student wrote prose;
+    the plain-language reading is then the only answer there is."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 1, "answer_latex": "", '
+        '"answer_plain": "sixteen apples"}], "confidence": 0.9}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["problems"][0]["student_answer"] == "sixteen apples"
+
+
+async def test_teacher_submission_detail_hides_unreadable_extraction(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Below the unreadable threshold the read is untrustworthy by
+    definition — it is what makes the pipeline skip auto-grading and
+    stamp `skipped_unreadable`. The teacher must keep seeing the honest
+    "no answer extracted" warning rather than confident nonsense, on
+    exactly the submission where they most depend on the photo."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 1, "answer_latex": "5", '
+        '"answer_plain": "five"}], "confidence": 0.1}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["problems"][0]["student_answer"] is None
+
+
+async def test_teacher_submission_detail_unreadable_still_honors_edit(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The confidence gate applies to the machine read, not to the
+    student. A confirm-screen edit is a human claim about what they
+    wrote, so it outranks the gate and surfaces even when Vision rated
+    its own read unreadable."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 1, "answer_latex": "5", '
+        '"answer_plain": "five"}], "confidence": 0.1}',
+        '{"1:final": "16 apples"}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["problems"][0]["student_answer"] == "16 apples"
+
+
+async def test_teacher_submission_detail_ai_echo_outranks_extraction(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Once grading has run, the teacher sees the answer the grade was
+    actually computed against, not the raw read. The echo reflects how
+    the model resolved the extraction (duplicate candidates, blanks) and
+    is delimited for display, so promoting the raw read above it would
+    let the cell disagree with the verdict printed beside it. The
+    extraction fills the cell only when the echo has nothing."""
+    submission_id = await _submit_and_stage_extraction(
+        client, world, _READABLE_EXTRACTION,
+    )
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(
+            submission_id=uuid.UUID(submission_id),
+            breakdown=[{
+                "problem_id": str(world["primary_id"]),
+                "score_status": "full",
+                "percent": 100.0,
+                "student_answer": "$x = 5$",
+            }],
+        ))
+        await s.commit()
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["problems"][0]["student_answer"] == "$x = 5$"
+
+
+async def test_teacher_submission_detail_extraction_fills_null_ai_echo(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A graded submission whose breakdown carries no `student_answer` —
+    the model declined to restate it, or the row is one of the
+    synthesized "no gradeable work" zeros. The extraction is then the
+    only reading of the page there is, and it must still reach the
+    teacher rather than falling to the warning."""
+    submission_id = await _submit_and_stage_extraction(
+        client, world, _READABLE_EXTRACTION,
+    )
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(
+            submission_id=uuid.UUID(submission_id),
+            breakdown=[{
+                "problem_id": str(world["primary_id"]),
+                "score_status": "full",
+                "percent": 100.0,
+                "student_answer": None,
+            }],
+        ))
+        await s.commit()
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["problems"][0]["student_answer"] == "$5$"
+
+
+async def test_teacher_submission_detail_first_non_empty_final_wins(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The extraction schema doesn't enforce one final answer per
+    position. An empty leading entry must not claim the slot and block a
+    later real one, and a non-int position must not be attributed to any
+    problem."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": "1", "answer_latex": "bogus", "answer_plain": ""},'
+        '{"problem_position": 1, "answer_latex": "", "answer_plain": ""},'
+        '{"problem_position": 1, "answer_latex": "7", "answer_plain": "seven"},'
+        '{"problem_position": 1, "answer_latex": "9", "answer_plain": "nine"}'
+        '], "confidence": 0.9}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["problems"][0]["student_answer"] == "$7$"
+
+
+async def test_teacher_submission_detail_survives_odd_extraction_shapes(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The extraction blob is model output persisted verbatim, so the
+    endpoint must not 500 on a shape it didn't expect. Each of these
+    degrades to the "no answer extracted" warning rather than an error
+    the teacher can't get past."""
+    for extraction in (
+        # No final_answers key at all.
+        '{"steps": [], "confidence": 0.9}',
+        # Confidence missing entirely.
+        '{"steps": [], "final_answers": [{"problem_position": 1, '
+        '"answer_latex": "5", "answer_plain": "five"}]}',
+        # Confidence explicitly null.
+        '{"steps": [], "final_answers": [{"problem_position": 1, '
+        '"answer_latex": "5", "answer_plain": "five"}], "confidence": null}',
+        # Position points at a problem that isn't on this assignment.
+        '{"steps": [], "final_answers": [{"problem_position": 99, '
+        '"answer_latex": "5", "answer_plain": "five"}], "confidence": 0.9}',
+    ):
+        submission_id = await _submit_and_stage_extraction(
+            client, world, extraction,
+        )
+        r = await client.get(
+            f"/v1/teacher/submissions/{submission_id}",
+            headers=_auth(world["teacher_token"]),
+        )
+        assert r.status_code == 200, extraction
+        assert r.json()["problems"][0]["student_answer"] is None, extraction
+        async with get_session_factory()() as s:
+            await s.execute(
+                text("DELETE FROM submissions WHERE id = :id"),
+                {"id": submission_id},
+            )
+            await s.commit()
+
+
+async def test_teacher_submission_detail_confidence_at_threshold(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The gate is `>= UNREADABLE_THRESHOLD`, the exact complement of the
+    `< UNREADABLE_THRESHOLD` checks the pipeline skips grading on. A
+    submission sitting exactly on the boundary is readable to both."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 1, "answer_latex": "5", '
+        f'"answer_plain": "five"}}], "confidence": {UNREADABLE_THRESHOLD}}}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["problems"][0]["student_answer"] == "$5$"
 
 
 async def test_teacher_submission_detail_403_for_other_teacher(
