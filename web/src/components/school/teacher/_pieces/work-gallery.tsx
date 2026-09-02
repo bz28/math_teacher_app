@@ -3,117 +3,24 @@
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { useBlobUrl } from "@/hooks/use-blob-url";
-import { FileTextIcon } from "@/components/ui/icons";
 import type { SubmissionFile } from "@/lib/api";
 
 /**
- * The teacher's view of a student's submitted pages — one gallery, used
- * by every teacher surface that shows student work.
+ * The teacher's view of a student's submitted pages.
  *
- * It lives here rather than beside either caller because the two
- * surfaces had drifted into different viewers: the submissions panel
- * had a real gallery (thumbnails, a pager, a live page counter) while
- * the grading page — where a teacher actually spends the hour — stacked
- * every page in one scroll with no page markers and no way back to a
- * specific page. Neither could magnify a photo. A submission can carry
- * ten pages, so that gap is felt on exactly the work that is hardest to
- * read.
+ * The grading page used to stack every page in one scroll with no page
+ * markers, no way back to a specific page, and no way to magnify a
+ * photo. A submission can carry ten pages, so that gap was felt on
+ * exactly the work that is hardest to read. This is the viewer that
+ * replaced it.
  *
- * `WorkGalleryModal` is the whole viewer and is usable on its own (the
- * grading page opens it straight from a button); `SubmittedWorkGallery`
- * adds the inline thumbnail grid the submissions panel shows before you
- * open anything.
+ * Opened from three places on the grading page — the header strip, the
+ * pinned rail, and a problem's page marker — each with its own open
+ * state, so a marker can deep-link to the page its work is on.
  */
 
 function pageLabel(file: SubmissionFile, index: number): string {
   return file.filename ?? `Page ${index + 1}`;
-}
-
-/** Inline thumbnail grid + click-to-open. Two columns on mobile so the
- *  side-by-side layout stays readable. */
-export function SubmittedWorkGallery({
-  files,
-  studentName,
-}: {
-  files: SubmissionFile[];
-  studentName: string;
-}) {
-  const [zoomedIndex, setZoomedIndex] = useState<number | null>(null);
-  return (
-    <div>
-      <div className="text-sm font-semibold text-text-primary">
-        Submitted work{" "}
-        <span className="font-normal text-text-muted">
-          ({files.length} {files.length === 1 ? "page" : "pages"})
-        </span>
-      </div>
-      {files.length === 0 ? (
-        <p className="mt-2 italic text-sm text-text-muted">
-          No files on this submission.
-        </p>
-      ) : (
-        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-          {files.map((f, i) => (
-            <GalleryThumb
-              key={i}
-              file={f}
-              index={i}
-              studentName={studentName}
-              onClick={() => setZoomedIndex(i)}
-            />
-          ))}
-        </div>
-      )}
-      <WorkGalleryModal
-        files={files}
-        studentName={studentName}
-        openAt={zoomedIndex}
-        onClose={() => setZoomedIndex(null)}
-      />
-    </div>
-  );
-}
-
-function GalleryThumb({
-  file,
-  index,
-  studentName,
-  onClick,
-}: {
-  file: SubmissionFile;
-  index: number;
-  studentName: string;
-  onClick: () => void;
-}) {
-  const isPdf = file.media_type === "application/pdf";
-  const dataUrl = `data:${file.media_type};base64,${file.data}`;
-  const label = pageLabel(file, index);
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={`View ${studentName}'s ${label}`}
-      className="overflow-hidden rounded-[--radius-sm] border border-border bg-surface hover:border-primary focus:border-primary focus:outline-none"
-    >
-      {isPdf ? (
-        <div className="flex flex-col items-center gap-1 bg-bg-subtle p-4 text-text-secondary">
-          <FileTextIcon className="h-10 w-10" />
-          <span className="max-w-full truncate text-[10px]">{label}</span>
-          <span className="text-[10px] text-text-muted">PDF</span>
-        </div>
-      ) : (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={dataUrl}
-          alt={`${studentName}'s ${label}`}
-          className="h-[160px] w-full object-cover"
-        />
-      )}
-      <div className="bg-bg-subtle px-2 py-0.5 text-center text-[10px] text-text-muted">
-        Page {index + 1}
-      </div>
-    </button>
-  );
 }
 
 /**

@@ -2424,6 +2424,13 @@ class TeacherSubmissionDetailProblem(BaseModel):
     # extraction lives on Submission.extraction; we slice it here so
     # the frontend doesn't need to filter client-side.
     student_steps: list[TeacherSubmissionStep] = []
+    # 1-based page(s) of `Submission.files` this problem's work was
+    # written on, derived from the extraction's `page_index` and
+    # range-checked against the real file count. Empty when the extractor
+    # didn't tag it (every row from before page labelling) — the UI hides
+    # the marker rather than guessing, because a wrong page number is
+    # worse than none.
+    pages: list[int] = []
 
 
 class TeacherSubmissionDetail(BaseModel):
@@ -2540,6 +2547,24 @@ async def get_submission_detail(
     # auto-grading and stamp `skipped_unreadable`), so surfacing it would
     # replace an honest warning with confident nonsense on exactly the
     # submission where the teacher most depends on the photo.
+    # Pages seen per problem. Range-checked against the real file count:
+    # `page_index` is model output, and a hallucinated 7 on a 3-page
+    # submission must produce NO marker rather than a link to a page that
+    # doesn't exist. Sorted on the way out, so insertion order doesn't
+    # matter.
+    page_count = len(sub.files or [])
+    pages_by_position: dict[int, list[int]] = {}
+
+    def _record_page(position: int, raw: dict[str, Any]) -> None:
+        raw_page = raw.get("page_index")
+        if not isinstance(raw_page, int) or isinstance(raw_page, bool):
+            return
+        if not (1 <= raw_page <= page_count):
+            return
+        seen = pages_by_position.setdefault(position, [])
+        if raw_page not in seen:
+            seen.append(raw_page)
+
     extraction_finals: dict[int, str] = {}
     overlaid = apply_extraction_edits(sub.extraction, sub.extraction_edits)
     # The extraction blob is model output persisted verbatim, so treat its
@@ -2560,12 +2585,6 @@ async def get_submission_detail(
             fa_pos = fa.get("problem_position")
             if not isinstance(fa_pos, int) or isinstance(fa_pos, bool):
                 continue
-            # The tool schema doesn't enforce one entry per position, so
-            # duplicates are possible. The grader renders every candidate;
-            # the teacher's cell is a single line, so the first non-empty
-            # read wins rather than concatenating them into noise.
-            if fa_pos in extraction_finals:
-                continue
             # `answer_latex` is raw LaTeX by contract — the extractor is
             # asked for "the LaTeX representation", not for delimited
             # math — so it has to be wrapped before it reaches a field the
@@ -2576,6 +2595,22 @@ async def get_submission_detail(
             # `answer_plain` bare because it is prose.
             answer_latex = (fa.get("answer_latex") or "").strip()
             answer_plain = (fa.get("answer_plain") or "").strip()
+            # Page before the dedupe below, and gated only on there being
+            # something to point AT. Which read fills the single answer
+            # cell is a display choice; where the work sits is a fact
+            # about the paper, and `pages` is every page the problem's
+            # work is on — the step path records all of them, so a second
+            # read of the same answer on a later page has to count too.
+            # An entry with both fields empty is a read that produced
+            # nothing and points nowhere.
+            if answer_latex or answer_plain:
+                _record_page(fa_pos, fa)
+            # The tool schema doesn't enforce one entry per position, so
+            # duplicates are possible. The grader renders every candidate;
+            # the teacher's cell is a single line, so the first non-empty
+            # read wins rather than concatenating them into noise.
+            if fa_pos in extraction_finals:
+                continue
             if answer_latex:
                 extraction_finals[fa_pos] = f"${answer_latex}$"
             elif answer_plain:
@@ -2704,6 +2739,19 @@ async def get_submission_detail(
                 continue
             built = _overlaid_step(step, position)
             if built is not None:
+                # After the overlay on purpose: a step the student
+                # cleared contributes no page, so a problem whose only
+                # work was deleted doesn't advertise a page holding work
+                # the teacher's own view says isn't there.
+                #
+                # Gated on `readable` for the same reason the final
+                # answers are: under the threshold the extraction is what
+                # triggered the unreadable skip, so its page index is a
+                # guess. The row already shows the warning; adding a
+                # confident-looking "p. 3" to it would be the one thing
+                # worse than no attribution.
+                if readable:
+                    _record_page(position, step)
                 steps_by_position.setdefault(position, []).append(built)
 
         # Final answers the extractor couldn't place either. The grader
@@ -2829,6 +2877,7 @@ async def get_submission_detail(
             final_answer=item.final_answer,
             student_answer=student_answer,
             student_steps=steps_by_position.get(pos, []),
+            pages=sorted(pages_by_position.get(pos, [])),
         ))
 
     # Surface ai_breakdown's grades array for the frontend to show

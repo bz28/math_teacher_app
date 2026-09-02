@@ -808,7 +808,23 @@ INTEGRITY_EXTRACT_SCHEMA: ToolSchema = {
                             "type": "string",
                             "description": "Plain-language description of what the student did.",
                         },
+                        "page_index": {
+                            "type": ["integer", "null"],
+                            "description": (
+                                "1-based page this step was written on — "
+                                "the N from the '--- Page N of M ---' "
+                                "marker directly above the image it came "
+                                "from. Null if you can't tell."
+                            ),
+                        },
                     },
+                    # `page_index` is deliberately NOT required. It is a
+                    # nice-to-have marker, and this call has a documented
+                    # history of losing an entire extraction to
+                    # `max_tokens` (see integrity_ai). Forcing
+                    # `"page_index": null` onto every unattributable item
+                    # spends output tokens against that ceiling for
+                    # nothing — the reader treats absent and null alike.
                     "required": [
                         "step_num", "problem_position", "latex", "plain_english",
                     ],
@@ -839,7 +855,17 @@ INTEGRITY_EXTRACT_SCHEMA: ToolSchema = {
                                 "Empty string if only LaTeX is meaningful."
                             ),
                         },
+                        "page_index": {
+                            "type": ["integer", "null"],
+                            "description": (
+                                "1-based page this answer was written on — "
+                                "the N from the '--- Page N of M ---' "
+                                "marker directly above the image it came "
+                                "from. Null if you can't tell."
+                            ),
+                        },
                     },
+                    # Optional for the same reason as on steps, above.
                     "required": [
                         "problem_position", "answer_latex", "answer_plain",
                     ],

@@ -4495,6 +4495,8 @@ export interface components {
             answer_latex: string;
             /** Answer Plain */
             answer_plain: string;
+            /** Page Index */
+            page_index?: number | null;
             /** Problem Position */
             problem_position: number;
         } & {
@@ -4524,6 +4526,8 @@ export interface components {
         ExtractionStepOut: {
             /** Latex */
             latex: string;
+            /** Page Index */
+            page_index?: number | null;
             /** Plain English */
             plain_english: string;
             /** Problem Position */
@@ -5794,6 +5798,11 @@ export interface components {
             bank_item_id: string;
             /** Final Answer */
             final_answer: string | null;
+            /**
+             * Pages
+             * @default []
+             */
+            pages: number[];
             /** Position */
             position: number;
             /** Question */
