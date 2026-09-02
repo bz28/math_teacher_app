@@ -195,7 +195,7 @@ async def test_a_grade_with_no_snapshot_never_falls_off_the_dashboard(
     gone from the student's dashboard entirely.
 
     That state is what every grade released before `as1000036` looked
-    like. `cl1000081` backfills them, but the two queries must agree on
+    like. `cm1000082` backfills what it safely can, but the two queries must agree on
     their own terms — a dashboard that silently drops a homework is worse
     than one showing it in the wrong place.
     """
@@ -211,8 +211,21 @@ async def test_a_grade_with_no_snapshot_never_falls_off_the_dashboard(
     buckets = ["due_this_week", "overdue", "in_review", "recently_graded"]
     appearances = {b: len(dash[b]) for b in buckets}
     assert sum(appearances.values()) == 1, appearances
-    # Nothing is published, so it belongs with the work awaiting a grade.
+    # No released snapshot, so it belongs with the work awaiting a
+    # grade — which is what all four student surfaces now say.
     assert appearances["in_review"] == 1, appearances
+
+    # The fourth surface. homework_detail gated on grade_published_at
+    # alone, so it handed the page a publish timestamp with no score —
+    # and AssignmentTimeline keys its stage off that field without
+    # consulting the score, so the page announced "Graded" while the
+    # dashboard said the work was still awaiting one.
+    detail = (await client.get(
+        f"/v1/school/student/homework/{w['assignment_id']}",
+        headers=w["student"],
+    )).json()
+    assert detail["final_score"] is None, detail["final_score"]
+    assert detail["grade_published_at"] is None, detail["grade_published_at"]
 
 
 async def test_un_grading_after_release_leaves_the_released_score_standing(

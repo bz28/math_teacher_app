@@ -1556,6 +1556,18 @@ async def homework_detail(
             .where(
                 SubmissionGrade.submission_id == sub.id,
                 SubmissionGrade.grade_published_at.is_not(None),
+                # The snapshot, not just the stamp. A row can carry
+                # grade_published_at with no snapshot — released before
+                # as1000036 added the columns, or released and since
+                # edited, which cm1000082 deliberately leaves alone.
+                # Gating on the stamp alone returned grade_published_at
+                # with a null score, and AssignmentTimeline keys its
+                # stage off that field without looking at the score: the
+                # page read "Graded" with no number on it, while the
+                # dashboard said the work was still awaiting a grade.
+                # This is the fourth surface answering "is it
+                # published?" and it has to answer it the same way.
+                SubmissionGrade.published_final_score.is_not(None),
             )
             .limit(1)
         )).first()
