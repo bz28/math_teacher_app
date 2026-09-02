@@ -1067,6 +1067,63 @@ async def test_other_work_keeps_distinct_answers_sharing_a_position(
     assert [st["latex"] for st in r.json()["other_work"]] == ["42", "7"]
 
 
+async def test_other_work_edit_applies_once_across_shapes(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """One `{position}:final` edit is ONE student correction, however many
+    raw entries carry that position. Routing the edit by each entry's own
+    latex-ness made the same correction hash twice -- once as math, once
+    as prose -- and the teacher saw their single edit listed twice with
+    two different "was:" originals."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 99, "answer_latex": "", '
+        '"answer_plain": "seven"},'
+        '{"problem_position": 99, "answer_latex": "7", '
+        '"answer_plain": ""}'
+        '], "confidence": 0.9}',
+        edits='{"99:final": "7x"}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    other = r.json()["other_work"]
+    assert len(other) == 1, other
+    assert other[0]["edited"] is True
+
+
+async def test_other_work_dedupes_on_what_it_actually_renders(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """`answer_plain` is dropped whenever `answer_latex` is set, so two
+    reads that differ ONLY in their plain text render as the same line.
+    Keying the dedupe on the raw pair let both through and the teacher saw
+    "42" twice, which is exactly the literal repeat the bucket drops."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 99, "answer_latex": "42", '
+        '"answer_plain": "forty-two"},'
+        '{"problem_position": 99, "answer_latex": "42", '
+        '"answer_plain": "42 units"},'
+        '{"problem_position": 99, "answer_latex": "7", "answer_plain": ""}'
+        '], "confidence": 0.9}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    # One "42" — the two entries render identically — and the genuinely
+    # different answer still survives.
+    assert [st["latex"] for st in r.json()["other_work"]] == ["42", "7"]
+
+
 async def test_other_work_empty_duplicate_does_not_hide_a_real_answer(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
