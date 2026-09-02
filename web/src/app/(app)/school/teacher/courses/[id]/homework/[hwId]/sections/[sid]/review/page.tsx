@@ -202,7 +202,7 @@ function ConfidenceSignal({ confidence }: { confidence: number | null }) {
   if (band === "low") {
     return (
       <span
-        className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning)]/10"
+        className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning)]/10"
         title={`AI reported low confidence (${pct}%) — review this one carefully`}
       >
         <span aria-hidden>⚠</span>
@@ -218,7 +218,7 @@ function ConfidenceSignal({ confidence }: { confidence: number | null }) {
   const label = band === "high" ? "High" : "Medium";
   return (
     <span
-      className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted"
+      className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted"
       title={`AI grading confidence: ${label.toLowerCase()} (${pct}%)`}
     >
       <span
@@ -302,6 +302,30 @@ function HomeworkSectionReview({
   const [confirmedBySubmission, setConfirmedBySubmission] = useState<
     ReadonlyMap<string, ReadonlySet<string>>
   >(() => new Map());
+
+  // What the last grade action did, announced politely. Grading is a
+  // keyboard-first flow — 1-5 grades the focused problem and advances —
+  // and it did both silently, so a screen-reader user pressing a key got
+  // no confirmation that anything had happened.
+  //
+  // Owned here, not by the detail panel: that panel unmounts whenever
+  // `detail` goes stale during a post-save refetch, which is exactly
+  // when a grade has just been recorded. The announcement was being
+  // wiped before it could be read.
+  const [gradeAnnouncement, setGradeAnnouncement] = useState("");
+  const announce = useCallback((message: string) => {
+    // Re-announce an identical action by appending an invisible marker:
+    // a live region only speaks when its text CHANGES, and grading three
+    // problems "full credit" in a row is the normal case, not an edge
+    // one.
+    setGradeAnnouncement((prev) =>
+      prev === message ? `${message}\u200B` : message,
+    );
+  }, []);
+  const announceGrade = useCallback(
+    (position: number, label: string) => announce(`Problem ${position}: ${label}.`),
+    [announce],
+  );
 
   const handleConfirmProblems = useCallback(
     (submissionId: string, bankItemIds: string[]) => {
@@ -1465,7 +1489,7 @@ function HomeworkSectionReview({
           {/* Student list — uncertainty-first triage groups */}
           <aside className="self-start rounded-[--radius-xl] border border-border-light bg-surface shadow-sm">
             <div className="flex items-center justify-between gap-2 border-b border-border-light px-4 py-2.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
                 Students · {submittedCount}/{totalRoster} submitted
               </span>
               <VerdictLegendTrigger />
@@ -1545,6 +1569,8 @@ function HomeworkSectionReview({
                   EMPTY_ID_SET
                 }
                 onConfirmProblems={handleConfirmProblems}
+                announceGrade={announceGrade}
+                announce={announce}
               />
             )}
           </section>
@@ -1568,6 +1594,15 @@ function HomeworkSectionReview({
           </aside>
         </div>
       )}
+
+      {/* One polite live region for the whole grading flow, mounted for
+          the life of the page so assistive tech can keep watching the
+          same node. `aria-live` rather than `role="alert"`: a grade is a
+          confirmation, not an interruption, and assertive would talk
+          over the row the teacher just moved to. */}
+      <span aria-live="polite" aria-atomic="true" className="sr-only">
+        {gradeAnnouncement}
+      </span>
 
       <PublishConfirmDialog
         open={publishConfirmOpen}
@@ -1940,7 +1975,7 @@ function RubricDriftBanner({
           <div className="mt-2 space-y-2 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-white/60 p-3 dark:border-[color:var(--color-warning)]/20 ">
             {snapshotFields.map((f) => (
               <div key={f.label}>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)]/70">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)]/70">
                   {f.label}
                 </p>
                 <p className="mt-0.5 whitespace-pre-wrap leading-relaxed text-[color:var(--color-warning-dark)]">
@@ -2214,7 +2249,7 @@ function RosterChip({
       disabled={disabled}
       title={title}
       aria-pressed={active}
-      className={`inline-flex items-center gap-1 rounded-[--radius-pill] border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+      className={`inline-flex items-center gap-1 rounded-[--radius-pill] border px-2 py-0.5 text-[11px] font-semibold transition-colors ${
         active
           ? "border-primary bg-primary-bg text-primary"
           : disabled
@@ -2225,7 +2260,7 @@ function RosterChip({
       {label}
       {count !== undefined && count > 0 && (
         <span
-          className={`rounded-[--radius-pill] px-1 text-[9px] tabular-nums ${
+          className={`rounded-[--radius-pill] px-1 text-[10px] tabular-nums ${
             active ? "bg-primary text-white" : "bg-[color:var(--color-surface-alt-2)] text-text-muted"
           }`}
         >
@@ -2476,7 +2511,7 @@ function RosterGroupHeader({
         </span>
       )}
       <span
-        className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
+        className={`text-[11px] font-bold uppercase tracking-[0.14em] ${
           tone === "eyes"
             ? "text-[color:var(--color-warning-dark)]"
             : "text-text-muted"
@@ -2484,7 +2519,7 @@ function RosterGroupHeader({
       >
         {label}
       </span>
-      <span className="ml-auto text-[10px] font-bold text-text-muted tabular-nums">
+      <span className="ml-auto text-[11px] font-bold text-text-muted tabular-nums">
         {count}
       </span>
     </div>
@@ -2574,7 +2609,7 @@ function StudentRow({
        * status above. */}
       {review && (
         <div
-          className={`flex min-w-0 items-center gap-1 text-[10px] font-semibold ${
+          className={`flex min-w-0 items-center gap-1 text-[11px] font-semibold ${
             review.tone === "reviewed"
               ? "text-[color:var(--color-success)]"
               : "text-text-muted"
@@ -2695,6 +2730,8 @@ function SubmissionDetailPanel({
   onRegradeRequest,
   confirmedIds,
   onConfirmProblems,
+  announceGrade,
+  announce,
 }: {
   detail: TeacherSubmissionDetail;
   integrity: TeacherIntegrityDetail | null;
@@ -2726,6 +2763,13 @@ function SubmissionDetailPanel({
    *  the page so it survives this panel being remounted on a switch. */
   confirmedIds: ReadonlySet<string>;
   onConfirmProblems: (submissionId: string, bankItemIds: string[]) => void;
+  /** Announce a grade action on the page's live region. Owned by the
+   *  page because this panel unmounts during a post-save refetch, and a
+   *  live region that is destroyed and recreated announces nothing. */
+  announceGrade: (position: number, label: string) => void;
+  /** Announce something that isn't about one problem — the bulk confirm.
+   *  Same region, same repeat handling. */
+  announce: (message: string) => void;
 }) {
   const breakdownByProblem = useMemo(() => {
     const map = new Map<string, GradeBreakdownEntry>();
@@ -2873,6 +2917,7 @@ function SubmissionDetailPanel({
   // the same one the header strip and pinned rail use — instead of each
   // row growing its own modal.
   const [galleryPage, setGalleryPage] = useState<number | null>(null);
+  const onOpenWork = useCallback(() => setGalleryPage(0), []);
   // Live DOM handles to each problem row, indexed by position in
   // detail.problems, so keyboard nav can move real focus.
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -2942,6 +2987,13 @@ function SubmissionDetailPanel({
   // partial we preserve an existing partial percent (so re-pressing 2
   // doesn't clobber a deliberate value) and otherwise default to 50,
   // exactly like the Partial button's pickPartial.
+  const gradeLabel = (status: GradeStatus, percent?: number) =>
+    status === "full"
+      ? "full credit"
+      : status === "zero"
+        ? "no credit"
+        : `partial credit, ${percent ?? 50} percent`;
+
   const gradeFocused = useCallback(
     (status: GradeStatus, explicitPercent?: number) => {
       const p = detail.problems[focusedIndex];
@@ -2960,9 +3012,11 @@ function SubmissionDetailPanel({
         }
       }
       onGradeProblem(p.bank_item_id, status, pct);
+      announceGrade(p.position, gradeLabel(status, pct));
       moveFocus(nextUngradedAfter(focusedIndex));
     },
     [
+      announceGrade,
       detail.problems,
       focusedIndex,
       breakdownByProblem,
@@ -2980,8 +3034,20 @@ function SubmissionDetailPanel({
     const p = detail.problems[focusedIndex];
     if (!p) return;
     confirmProblems([p.bank_item_id]);
+    // Announce this path too. On a stack of confident rows it is the
+    // path most keystrokes actually take — pressing the key that matches
+    // the AI confirms rather than re-grades — so leaving it silent would
+    // have meant the common case stayed the silent one.
+    announceGrade(p.position, "confirmed the AI's grade");
     moveFocus(nextUngradedAfter(focusedIndex));
-  }, [detail.problems, focusedIndex, confirmProblems, moveFocus, nextUngradedAfter]);
+  }, [
+    announceGrade,
+    detail.problems,
+    focusedIndex,
+    confirmProblems,
+    moveFocus,
+    nextUngradedAfter,
+  ]);
 
   // Dispatch a grade key (1–5). On a COLLAPSED confident row, the key
   // that matches the AI's suggestion confirms in place; any other grade
@@ -3058,6 +3124,13 @@ function SubmissionDetailPanel({
           e.preventDefault();
           pressGradeKey("5", "zero");
           break;
+        case "w":
+        case "W":
+          // The student's work is what a teacher looks at most and was
+          // the only major affordance without a key.
+          e.preventDefault();
+          onOpenWork();
+          break;
         case "j":
         case "J":
         case "ArrowDown":
@@ -3097,6 +3170,7 @@ function SubmissionDetailPanel({
       focusedIndex,
       nextStudent,
       onSelectNext,
+      onOpenWork,
     ],
   );
 
@@ -3413,7 +3487,7 @@ function SubmissionDetailPanel({
           problem). */}
       <div className="rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             Problems · {totalProblems}
           </p>
           {/* Quiet, discoverable entry point to the keyboard cheatsheet.
@@ -3422,12 +3496,12 @@ function SubmissionDetailPanel({
           <button
             type="button"
             onClick={() => setCheatsheetOpen(true)}
-            className="inline-flex shrink-0 items-center gap-1 rounded-[--radius-sm] px-1.5 py-0.5 text-[10px] font-semibold text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="inline-flex shrink-0 items-center gap-1 rounded-[--radius-sm] px-1.5 py-0.5 text-[11px] font-semibold text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             aria-label="Show keyboard shortcuts"
             aria-haspopup="dialog"
           >
             Press{" "}
-            <kbd className="rounded border border-border-light bg-[color:var(--color-surface-alt-2)] px-1 font-sans text-[10px] font-bold text-text-secondary">
+            <kbd className="rounded border border-border-light bg-[color:var(--color-surface-alt-2)] px-1 font-sans text-[11px] font-bold text-text-secondary">
               ?
             </kbd>{" "}
             for shortcuts
@@ -3472,7 +3546,18 @@ function SubmissionDetailPanel({
             {pendingConfirmIds.length > 0 && (
               <button
                 type="button"
-                onClick={() => confirmProblems(pendingConfirmIds)}
+                onClick={() => {
+                  confirmProblems(pendingConfirmIds);
+                  // The fastest path to a fully graded submission, and
+                  // the one that changes the most state at once — say
+                  // how many, because nothing on screen announces it and
+                  // the rows all collapse to confirmed at the same time.
+                  announce(
+                    `Confirmed ${pendingConfirmIds.length} AI ${
+                      pendingConfirmIds.length === 1 ? "grade" : "grades"
+                    }.`,
+                  );
+                }}
                 className="shrink-0 rounded-[--radius-md] border border-primary/35 bg-primary-bg px-3 py-1.5 text-[11px] font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10"
               >
                 ✓ Confirm all {pendingConfirmIds.length} confident{" "}
@@ -3501,14 +3586,18 @@ function SubmissionDetailPanel({
                 collapsible={meta?.confident ?? false}
                 confirmed={meta?.confirmed ?? false}
                 confirmKey={meta?.confirmKey ?? null}
-                onConfirm={() => confirmProblems([p.bank_item_id])}
+                onConfirm={() => {
+                  confirmProblems([p.bank_item_id]);
+                  announceGrade(p.position, "confirmed the AI's grade");
+                }}
                 onToggleExpand={() => toggleExpand(p.bank_item_id)}
                 rowRef={(el) => {
                   rowRefs.current[i] = el;
                 }}
-                onChange={(status, partialPercent) =>
-                  onGradeProblem(p.bank_item_id, status, partialPercent)
-                }
+                onChange={(status, partialPercent) => {
+                  onGradeProblem(p.bank_item_id, status, partialPercent);
+                  announceGrade(p.position, gradeLabel(status, partialPercent));
+                }}
                 onFeedbackChange={(text) =>
                   onFeedbackChange(p.bank_item_id, text)
                 }
@@ -3576,7 +3665,7 @@ function RubricSection({
       <div className="space-y-2 border-t border-border-light px-3 py-2.5">
         {fields.map((f) => (
           <div key={f.label}>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
               {f.label}
             </p>
             <div className="mt-0.5 text-xs leading-relaxed text-text-primary">
@@ -3634,7 +3723,7 @@ function ItemAnalysisPanel({
           <span aria-hidden className="text-text-muted">
             {open ? "▾" : "▸"}
           </span>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             Class item analysis
           </span>
           <span className="text-[11px] text-text-muted">{sublabel}</span>
@@ -3693,7 +3782,7 @@ function ItemAnalysisRow({
     <li className="rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)]/40 px-4 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">
             Problem {item.problem_index + 1}
           </span>
           <div className="mt-0.5 text-sm leading-relaxed text-text-primary">
@@ -3800,7 +3889,7 @@ function StudentStepRow({
       {a ? (
         <span
           aria-hidden
-          className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] text-[10px] font-extrabold tabular-nums ${a.badge}`}
+          className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] text-[11px] font-extrabold tabular-nums ${a.badge}`}
         >
           {index + 1}
         </span>
@@ -3837,7 +3926,7 @@ function StudentStepRow({
         )}
         {step.edited && hasOriginal && showOriginal && (
           <div className="mt-1 rounded-[--radius-sm] border border-border-light bg-[color:var(--color-surface-alt-2)]/40 px-2 py-1.5 text-xs">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
               Originally read
             </div>
             <div className="mt-0.5 text-text-secondary">
@@ -4269,10 +4358,10 @@ function ProblemGradeRow({
               )}
             </span>
           </span>
-          <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold tracking-[0.04em] text-text-muted">
+          <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.04em] text-text-muted">
             <span aria-hidden>🤖</span>
             <span
-              className={`rounded-[--radius-pill] px-1.5 py-0.5 text-[10px] font-extrabold ${verdict.cls}`}
+              className={`rounded-[--radius-pill] px-1.5 py-0.5 text-[11px] font-extrabold ${verdict.cls}`}
             >
               {verdict.label}
             </span>
@@ -4290,11 +4379,11 @@ function ProblemGradeRow({
           <button
             type="button"
             onClick={onConfirm}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-[--radius-md] border border-primary/35 bg-primary-bg px-2.5 py-1.5 text-[11px] font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10"
+            className="inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-[--radius-md] border border-primary/35 bg-primary-bg px-2.5 py-1.5 text-[11px] font-bold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10"
           >
             Confirm
             {confirmKey && (
-              <kbd className="rounded-[--radius-sm] border border-border-light bg-surface px-1 font-sans text-[10px] font-bold text-text-secondary shadow-sm">
+              <kbd className="rounded-[--radius-sm] border border-border-light bg-surface px-1 font-sans text-[11px] font-bold text-text-secondary shadow-sm">
                 {confirmKey}
               </kbd>
             )}
@@ -4388,7 +4477,7 @@ function ProblemGradeRow({
           <button
             type="button"
             onClick={onToggleExpand}
-            className="shrink-0 rounded-[--radius-sm] border border-border-light bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-text-muted transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="shrink-0 rounded-[--radius-sm] border border-border-light bg-surface px-1.5 py-0.5 text-[11px] font-semibold text-text-muted transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             aria-expanded
             aria-label={`Collapse problem ${problem.position} back to one line`}
           >
@@ -4399,7 +4488,7 @@ function ProblemGradeRow({
           <button
             type="button"
             onClick={onOpenPage}
-            className="shrink-0 rounded-[--radius-sm] border border-border-light bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-text-muted transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="shrink-0 rounded-[--radius-sm] border border-border-light bg-surface px-1.5 py-0.5 text-[11px] font-semibold text-text-muted transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             // Names the pages the way the button DOES, then says where
             // the click lands. The two differ whenever work spans a
             // break, and announcing only the first page dropped exactly
@@ -4416,7 +4505,7 @@ function ProblemGradeRow({
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             Student answer
           </p>
           <div className="mt-1 rounded-[--radius-sm] bg-surface px-2 py-1 text-sm text-text-primary">
@@ -4431,7 +4520,7 @@ function ProblemGradeRow({
           </div>
         </div>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             Answer key
           </p>
           <div className="mt-1 rounded-[--radius-sm] bg-surface px-2 py-1 text-sm text-text-primary">
@@ -4452,7 +4541,7 @@ function ProblemGradeRow({
           this submission. */}
       {stepCount > 0 && (
         <div className="mt-3 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2.5">
-          <p className="flex items-baseline gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+          <p className="flex items-baseline gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             Student&apos;s work
             <span className="font-normal normal-case tracking-normal text-text-muted/80">
               · {stepCount} {stepCount === 1 ? "step" : "steps"}
@@ -4629,7 +4718,7 @@ function ProblemGradeRow({
           teachers can accept, edit, or clear — no UI fanfare either
           way. The published text is the teacher's voice to the student. */}
       <div className="mt-3">
-        <label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+        <label className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           Feedback <span className="font-normal normal-case tracking-normal text-text-muted/80">· shown to student when published</span>
         </label>
         <textarea
@@ -4733,10 +4822,10 @@ function GradeReceipt({
   return (
     <div className="mt-3 overflow-hidden rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt)]">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-dashed border-border px-3 py-2">
-        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--color-text-secondary)]">
+        <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--color-text-secondary)]">
           Why {score}% — itemized
         </span>
-        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold">
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold">
           <span aria-hidden>🤖</span>
           <span className="text-text-muted">AI breakdown</span>
           {confPct != null && (
@@ -4770,7 +4859,7 @@ function GradeReceipt({
           >
             <span
               aria-hidden
-              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-[color:var(--color-success-border)] bg-[color:var(--color-success-light)] text-[10px] font-extrabold text-[color:var(--color-success)]"
+              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-[color:var(--color-success-border)] bg-[color:var(--color-success-light)] text-[11px] font-extrabold text-[color:var(--color-success)]"
             >
               ✓
             </span>
@@ -4807,14 +4896,14 @@ function GradeReceipt({
               {a ? (
                 <span
                   aria-hidden
-                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] text-[10px] font-extrabold ${a.badge}`}
+                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] text-[11px] font-extrabold ${a.badge}`}
                 >
                   {d.step_ref}
                 </span>
               ) : (
                 <span
                   aria-hidden
-                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] text-[10px] font-extrabold text-[color:var(--color-error)]"
+                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] text-[11px] font-extrabold text-[color:var(--color-error)]"
                 >
                   −
                 </span>
@@ -4825,7 +4914,7 @@ function GradeReceipt({
                   <button
                     type="button"
                     onClick={() => onAnchorClick(d.step_ref as number)}
-                    className={`ml-1.5 inline-flex items-center gap-0.5 align-baseline text-[10px] font-bold hover:underline ${
+                    className={`ml-1.5 inline-flex items-center gap-0.5 align-baseline text-[11px] font-bold hover:underline ${
                       tone === "amber"
                         ? "text-[color:var(--color-warning-dark)]"
                         : "text-[color:var(--color-info)]"
@@ -4908,14 +4997,14 @@ function GradeBtn({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`inline-flex items-center gap-1 rounded-[--radius-md] border px-3 py-1.5 text-xs font-bold transition-colors ${
+      className={`inline-flex min-h-[36px] items-center gap-1 rounded-[--radius-md] border px-3.5 py-2 text-xs font-bold transition-colors ${
         active ? activeCls : inactiveCls
       }`}
     >
       {children}
       {aiPick && (
         <span
-          className={`rounded-[--radius-pill] px-1.5 py-0.5 text-[9px] font-bold leading-none ${
+          className={`rounded-[--radius-pill] px-1.5 py-0.5 text-[10px] font-bold leading-none ${
             active ? "bg-white/30 text-white" : "bg-primary/15 text-primary"
           }`}
           aria-label="AI suggestion"
@@ -5045,7 +5134,7 @@ function VerdictLegendTrigger() {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-[--radius-sm] px-1.5 py-0.5 text-[10px] font-semibold text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        className="inline-flex items-center gap-1 rounded-[--radius-sm] px-1.5 py-0.5 text-[11px] font-semibold text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         aria-label="Show integrity verdict legend"
       >
         <span aria-hidden>ℹ</span>
@@ -5200,6 +5289,10 @@ const SHORTCUT_GROUPS: { heading: string; rows: { keys: string[]; label: string 
     rows: [{ keys: ["Enter", "→"], label: "Next student" }],
   },
   {
+    heading: "The work",
+    rows: [{ keys: ["W"], label: "Open the student's pages" }],
+  },
+  {
     heading: "Help",
     rows: [
       { keys: ["?"], label: "Toggle this cheatsheet" },
@@ -5278,7 +5371,7 @@ function KeyboardShortcutsModal({ onClose }: { onClose: () => void }) {
         <div className="mt-4 space-y-4">
           {SHORTCUT_GROUPS.map((group) => (
             <div key={group.heading}>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
                 {group.heading}
               </p>
               <ul className="mt-2 space-y-1.5">
@@ -5292,7 +5385,7 @@ function KeyboardShortcutsModal({ onClose }: { onClose: () => void }) {
                       {row.keys.map((k, i) => (
                         <span key={k} className="flex items-center gap-1">
                           {i > 0 && (
-                            <span className="text-[10px] text-text-muted">or</span>
+                            <span className="text-[11px] text-text-muted">or</span>
                           )}
                           <Kbd>{k}</Kbd>
                         </span>
@@ -5592,7 +5685,7 @@ function TranscriptTurn({
         >
           <MathText text={turn.content} />
           {turn.seconds_on_turn != null && !isAgent && (
-            <span className="mt-1 block text-[10px] text-text-muted">
+            <span className="mt-1 block text-[11px] text-text-muted">
               · {Math.round(turn.seconds_on_turn)}s to reply
             </span>
           )}
@@ -5640,7 +5733,7 @@ function StudentWorkThumbButton({
       >
         <span className="relative block h-7 w-10 shrink-0 overflow-hidden rounded-[--radius-sm] border border-border-light bg-[color:var(--color-surface-alt-2)]">
           {firstIsPdf ? (
-            <span className="flex h-full w-full items-center justify-center text-[9px] font-bold text-text-muted">
+            <span className="flex h-full w-full items-center justify-center text-[10px] font-bold text-text-muted">
               PDF
             </span>
           ) : (
@@ -5689,7 +5782,7 @@ function PinnedWorkRail({
   return (
     <div className="sticky top-3 overflow-hidden rounded-[--radius-xl] border border-border-light bg-surface shadow-md">
       <div className="flex items-center justify-between gap-2 border-b border-border-light px-3 py-2.5">
-        <span className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-[color:var(--color-text-secondary)]">
+        <span className="truncate text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--color-text-secondary)]">
           {firstName ? `${firstName}'s work` : "Student's work"}
           {hasFiles && files!.length > 1 ? ` · ${files!.length} pages` : ""}
         </span>
