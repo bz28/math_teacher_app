@@ -515,6 +515,16 @@ async def update_bank_item(
         _ensure_unlocked(item)
         snapshot_history(item)
 
+    # Captured before the mutations below so the activity row can name the
+    # fields that ACTUALLY changed. A PATCH that re-sends identical values
+    # is not an edit, and logging it as one would put a phantom entry on a
+    # timeline whose whole job is to explain why an item looks the way it
+    # does.
+    prev_title, prev_question = item.title, item.question
+    prev_steps, prev_answer = item.solution_steps, item.final_answer
+    prev_distractors = item.distractors
+    prev_difficulty, prev_unit_id = item.difficulty, item.unit_id
+
     if body.title is not None:
         t = body.title.strip()[:120]
         if not t:
@@ -558,6 +568,41 @@ async def update_bank_item(
     if content_changing:
         await record_question_edit(db, item, EDIT_MANUAL, current_user)
 
+    # One PATCH is one teacher action, so it records at most one row.
+    # Content edits and metadata retags are different signals — rewriting
+    # the question is a claim about the generated problem, re-tagging its
+    # difficulty is filing — so they get different action names, and
+    # content wins when a single request does both.
+    changed_content = [
+        field
+        for field, before, after in (
+            ("question", prev_question, item.question),
+            ("solution", prev_steps, item.solution_steps),
+            ("final_answer", prev_answer, item.final_answer),
+            ("distractors", prev_distractors, item.distractors),
+        )
+        if before != after
+    ]
+    if changed_content:
+        await record_activity(
+            db, current_user, "bank_item.edit", "bank_item", item.id,
+            {"title": item.title, "fields": changed_content},
+        )
+    else:
+        retag: dict[str, Any] = {"title": item.title}
+        # The new title is already in `title`; carrying the old one is what
+        # makes a rename legible as a rename rather than an unexplained row.
+        if item.title != prev_title:
+            retag["renamed_from"] = prev_title
+        if item.difficulty != prev_difficulty:
+            retag["difficulty"] = item.difficulty
+        if item.unit_id != prev_unit_id:
+            retag["unit_id"] = str(item.unit_id) if item.unit_id else None
+        if len(retag) > 1:
+            await record_activity(
+                db, current_user, "bank_item.retag", "bank_item", item.id, retag,
+            )
+
     await db.commit()
     return _serialize_item(item, await used_in_for_item(db, item))
 
@@ -565,6 +610,7 @@ async def update_bank_item(
 @router.post("/question-bank/{item_id}/revert")
 async def revert_bank_item(
     item: QuestionBankItem = Depends(get_bank_item),
+    current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Restore the previous_* snapshot. One level of undo only — after this
@@ -574,6 +620,7 @@ async def revert_bank_item(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No previous version to restore",
         )
+    prior_status = item.status
     item.question = item.previous_question
     item.solution_steps = item.previous_solution_steps
     item.final_answer = item.previous_final_answer or ""
@@ -582,12 +629,22 @@ async def revert_bank_item(
     # Restore the figure alongside the prose so the two stay in sync.
     item.figure_spec = item.previous_figure_spec
     item.figure_svg = item.previous_figure_svg
+    restored_status = item.status if item.status != prior_status else None
     item.previous_question = None
     item.previous_solution_steps = None
     item.previous_final_answer = None
     item.previous_status = None
     item.previous_figure_spec = None
     item.previous_figure_svg = None
+    # Undo restores the snapshot's status alongside its prose, so it can
+    # move an item back to rejected (or approved) with no other trace. That
+    # status is what the generation-quality board reads, so an unlogged
+    # revert makes the board and this timeline disagree about the same item.
+    # `restored_status` is present only when the status actually moved.
+    await record_activity(
+        db, current_user, "bank_item.revert", "bank_item", item.id,
+        {"title": item.title, "restored_status": restored_status},
+    )
     await db.commit()
     return _serialize_item(item, await used_in_for_item(db, item))
 
@@ -729,6 +786,14 @@ async def regenerate_bank_item(
     # revision is not. Recorded separately so they can't average away.
     kind = REGEN_GUIDED if (body.instructions or "").strip() else REGEN_FRESH
     await record_question_edit(db, item, kind, current_user)
+    # The instructions themselves stay out of the activity log — that surface
+    # is compliance reporting with a small-metadata contract, and
+    # `record_question_edit` above already keeps the full before/after for
+    # quality analysis. Only which of the two buttons was pressed is here.
+    await record_activity(
+        db, current_user, "bank_item.regenerate", "bank_item", item.id,
+        {"title": item.title, "mode": "guided" if kind == REGEN_GUIDED else "fresh"},
+    )
     await db.commit()
 
     return _serialize_item(item, await used_in_for_item(db, item))
@@ -789,9 +854,18 @@ async def generate_similar_bank_questions(
 @router.delete("/question-bank/{item_id}")
 async def delete_bank_item(
     item: QuestionBankItem = Depends(get_bank_item),
+    current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     _ensure_unlocked(item)
+    # Recorded BEFORE the delete: the title is the only thing that makes the
+    # row readable afterwards, and it goes with the row. `target_id` is a
+    # plain UUID with no FK, so it survives the delete the same way
+    # `user.delete` does in admin_users.
+    await record_activity(
+        db, current_user, "bank_item.delete", "bank_item", item.id,
+        {"title": item.title, "status": item.status},
+    )
     await db.delete(item)
     await db.commit()
     return {"status": "ok"}
@@ -817,6 +891,8 @@ async def post_chat_message(
     _ensure_unlocked(item)
     course = (await db.execute(select(Course).where(Course.id == item.course_id))).scalar_one()
 
+    messages_before = len(item.chat_messages or [])
+
     try:
         await chat_with_bank_item(
             db, item, course,
@@ -830,6 +906,29 @@ async def post_chat_message(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Chat failed: {e}",
         ) from e
+
+    # Recorded AFTER the call, with its own commit, rather than staged before
+    # it to ride the commit `chat_with_bank_item` already makes. Staging first
+    # would be more atomic, but the session autoflushes: the `select(Unit)` at
+    # the top of that helper would flush this INSERT, turning a read-only
+    # transaction into a writing one held open across a 30-60s model call, and
+    # pinning the vacuum horizon for the length of every workshop chat.
+    #
+    # The trade is one extra commit and a narrow window where the chat is
+    # saved but the log row isn't. That window under-logs, which is where this
+    # endpoint already was; a long write transaction on a live database is the
+    # worse of the two.
+    #
+    # `messages_before` counts BOTH roles and is read before the teacher's
+    # message is appended — deliberately not comparable to CHAT_SOFT_CAP,
+    # which counts teacher turns only. The message text is never logged: this
+    # surface is compliance reporting, and chat prose is neither small nor
+    # compliance data.
+    await record_activity(
+        db, current_user, "bank_item.workshop_chat", "bank_item", item.id,
+        {"title": item.title, "messages_before": messages_before},
+    )
+    await db.commit()
 
     return _serialize_item(item, await used_in_for_item(db, item))
 
@@ -933,6 +1032,16 @@ async def accept_chat_proposal(
         for i, m in enumerate(existing)
     ]
     await record_question_edit(db, item, EDIT_WORKSHOP, current_user)
+    await record_activity(
+        db, current_user, "bank_item.workshop_accept", "bank_item", item.id,
+        {
+            "title": item.title,
+            "fields": [
+                f for f in ("question", "solution_steps", "final_answer")
+                if proposal.get(f) is not None
+            ],
+        },
+    )
     await db.commit()
     return _serialize_item(item, await used_in_for_item(db, item))
 
@@ -941,6 +1050,7 @@ async def accept_chat_proposal(
 async def discard_chat_proposal(
     body: ChatMessageIndexRequest,
     item: QuestionBankItem = Depends(get_bank_item),
+    current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Mark a proposal as discarded. No live content change."""
@@ -960,6 +1070,10 @@ async def discard_chat_proposal(
         if i == body.message_index else m
         for i, m in enumerate(existing)
     ]
+    await record_activity(
+        db, current_user, "bank_item.workshop_discard", "bank_item", item.id,
+        {"title": item.title},
+    )
     await db.commit()
     return _serialize_item(item, await used_in_for_item(db, item))
 
