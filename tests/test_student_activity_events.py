@@ -541,14 +541,15 @@ async def test_a_school_lookup_failure_cannot_strand_a_submission(
 
 @pytest.mark.asyncio
 async def test_school_lookup_swallows_a_db_error_instead_of_propagating() -> None:
-    """The guard inside `_school_id_for`, tested at its own layer.
+    """A failed lookup returns None instead of propagating, and leaves
+    the session still usable.
 
-    It must use a SAVEPOINT, not a bare try/except. A bare except would
-    swallow the error and leave asyncpg's transaction aborted, so the
-    handler's next commit() would fail and roll back the student's real
-    mutation — exactly the hazard `record_activity`'s savepoint comment
-    describes. Degrading to None lets the event be written school-less
-    rather than not at all.
+    Scope note, so this docstring doesn't over-claim: patching `execute`
+    raises before any SQL reaches Postgres, so this does NOT prove the
+    savepoint specifically — a bare try/except would pass it too. What it
+    pins is the contract callers depend on: `_school_id_for` never
+    propagates, and the caller can still commit afterwards. The
+    savepoint's own reason for existing is documented at the function.
     """
     from api.routes.school_student_practice import _school_id_for
 
@@ -558,6 +559,9 @@ async def test_school_lookup_swallows_a_db_error_instead_of_propagating() -> Non
             side_effect=RuntimeError("driver went away"),
         ):
             assert await _school_id_for(s, course_id=uuid.uuid4()) is None
+        # The session must survive the failure — a caller mid-mutation
+        # commits right after this returns.
+        await s.commit()
 
 
 @pytest.mark.asyncio

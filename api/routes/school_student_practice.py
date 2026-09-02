@@ -743,7 +743,15 @@ async def _school_id_for(
         async with db.begin_nested():
             return (await db.execute(stmt)).scalar_one_or_none()
     except Exception:
-        logger.warning("student activity school lookup failed", exc_info=True)
+        # Also catches a flush of the CALLER's pending mutation:
+        # begin_nested() flushes before emitting the SAVEPOINT, so a
+        # constraint error on the student's own row surfaces here first
+        # and again at the handler's commit(). Hence the hedged wording —
+        # the message must not assert the lookup was the culprit.
+        logger.warning(
+            "student activity school lookup failed (or a pending flush "
+            "under it)", exc_info=True,
+        )
         return None
 
 
@@ -2029,8 +2037,12 @@ async def submit_homework(
         )
         await db.commit()
     except Exception:
+        # Deliberately no rollback() here. `get_db` closes the session on
+        # teardown, which rolls back anything pending — so an explicit
+        # call adds nothing, and it is itself unguarded: if IT raised, the
+        # exception would escape and 500 an already-durable submission,
+        # which is the exact stranding this block exists to prevent.
         logger.exception("submission.create activity write failed")
-        await db.rollback()
 
     return response
 
@@ -2717,8 +2729,10 @@ async def bank_item_step_chat(
         )
         await db.commit()
     except Exception:
+        # No rollback — see submission.create. Session teardown handles it,
+        # and an unguarded rollback here could throw away an answer the
+        # student has already been billed for.
         logger.exception("tutor.step_chat activity write failed")
-        await db.rollback()
     return ChatResponse(reply=result.feedback)
 
 
@@ -2751,7 +2765,6 @@ async def bank_item_problem_chat(
         await db.commit()
     except Exception:
         logger.exception("tutor.problem_chat activity write failed")
-        await db.rollback()
     return ChatResponse(reply=result.feedback)
 
 
