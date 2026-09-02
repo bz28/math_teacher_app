@@ -6,14 +6,14 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import record_activity
-from api.core.constants import DEFAULT_HOMEWORK_INSTRUCTIONS
+from api.core.constants import DEFAULT_HOMEWORK_INSTRUCTIONS, MAX_RUBRIC_FIELD_CHARS
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.extraction_edits import apply_extraction_edits
 from api.core.integrity_ai import UNREADABLE_THRESHOLD
@@ -56,6 +56,72 @@ router = APIRouter()
 
 # ── Request schemas ──
 
+
+class AssignmentRubric(BaseModel):
+    """The teacher-authored grading rubric, as the UI actually collects it.
+
+    This used to be a bare `dict[str, Any]`, which meant the API accepted
+    any shape at all — a gap `api/models/llm_payload.py` already called
+    out ("no key whitelist, value validation or length cap"). Two things
+    made it worth closing:
+
+    * Every reader assumes `str`. The teacher review page renders these
+      through `MathText`, the homework page's `normalizeRubric` calls
+      `.trim()` on them, and `grading_ai._build_rubric_block` interpolates
+      them into a prompt. A list or a number reaching any of those is a
+      crash or a garbled prompt, not a graceful degrade — and a crash here
+      takes the whole grading page down behind an error boundary, with no
+      way out of it from the UI.
+    * These four fields are rendered verbatim into an LLM prompt, so an
+      unbounded string is an unbounded prompt.
+
+    `extra="forbid"` rather than ignore: the only writer is the rubric
+    editor, which emits exactly these four keys, so an unexpected key
+    means a client bug and a 422 says so instead of silently dropping the
+    teacher's work. (`grading_mode` appears in a stale comment on
+    `Assignment.rubric` but has never been written.)
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_credit: str | None = None
+    partial_credit: str | None = None
+    common_mistakes: str | None = None
+    notes: str | None = None
+
+    @field_validator("full_credit", "partial_credit", "common_mistakes", "notes")
+    @classmethod
+    def _bounded_text(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if len(v) > MAX_RUBRIC_FIELD_CHARS:
+            raise ValueError(
+                f"Rubric fields are limited to {MAX_RUBRIC_FIELD_CHARS} characters"
+            )
+        return v
+
+    def to_stored(self) -> dict[str, str] | None:
+        """The value written to `Assignment.rubric`.
+
+        Drops empty and whitespace-only fields so the stored shape stays
+        tight, mirroring the frontend's `normalizeRubric` — without this,
+        clearing a field in the UI would persist `""` and every reader
+        would need its own falsy check.
+
+        Returns None rather than `{}` when nothing survives. An empty
+        rubric and no rubric mean the same thing to every reader, and
+        `rubric-sources` already has to filter `{}` back out; writing one
+        would just re-create the shape migration cl1000081 exists to
+        remove.
+        """
+        stored = {
+            k: v.strip()
+            for k, v in self.model_dump().items()
+            if isinstance(v, str) and v.strip()
+        }
+        return stored or None
+
+
 class CreateAssignmentRequest(BaseModel):
     title: str
     type: str  # homework | quiz | test | practice
@@ -75,10 +141,8 @@ class CreateAssignmentRequest(BaseModel):
     # text/solution/answer at create time so future bank edits don't
     # change a homework that's already out in the world.
     bank_item_ids: list[uuid.UUID] | None = None
-    # Structured grading rubric. See Assignment.rubric for shape. The
-    # backend accepts any dict — the frontend shapes it and the AI
-    # grader reads typed fields. None = no rubric authored yet.
-    rubric: dict[str, Any] | None = None
+    # Structured grading rubric. None = no rubric authored yet.
+    rubric: AssignmentRubric | None = None
 
     @field_validator("title")
     @classmethod
@@ -128,11 +192,10 @@ class UpdateAssignmentRequest(BaseModel):
     # When provided, re-snapshot the picked bank items into content.
     # Useful for the "edit problems" flow on a draft homework.
     bank_item_ids: list[uuid.UUID] | None = None
-    # Structured grading rubric. None = leave unchanged. Pass `{}` (or
-    # any dict) to overwrite; the frontend controls the shape. To clear
-    # a previously-authored rubric, set `clear_rubric=true` instead of
-    # passing an empty dict (mirrors the due_at pattern).
-    rubric: dict[str, Any] | None = None
+    # Structured grading rubric. None = leave unchanged. To clear a
+    # previously-authored rubric, set `clear_rubric=true` instead of
+    # passing an empty object (mirrors the due_at pattern).
+    rubric: AssignmentRubric | None = None
     clear_rubric: bool = False
     # Free-form student-visible instructions. None = leave unchanged.
     # Empty string clears it (this field has no "leave unchanged vs
@@ -560,7 +623,7 @@ async def create_assignment(
         due_at=due_at, late_policy=body.late_policy,
         content=content, answer_key=body.answer_key,
         unit_ids=body.unit_ids, document_ids=doc_id_strings,
-        rubric=body.rubric,
+        rubric=body.rubric.to_stored() if body.rubric else None,
         # Seeded, not enforced: it lands in the teacher's own
         # Instructions block, which she can edit or clear like any other
         # text she wrote. Practice is excluded because it has no
@@ -921,7 +984,7 @@ async def update_assignment(
     if body.clear_rubric:
         a.rubric = None
     elif body.rubric is not None:
-        a.rubric = body.rubric
+        a.rubric = body.rubric.to_stored()
 
     if body.description is not None:
         # Strip + collapse-to-null so we don't store all-whitespace
