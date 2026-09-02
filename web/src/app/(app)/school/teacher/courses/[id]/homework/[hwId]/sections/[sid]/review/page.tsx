@@ -13,7 +13,7 @@ import {
   ResolveIntegrityControl,
   RowDispositionPill,
   type IntegrityActivityNotableTurnLite,
-} from "@/components/school/teacher/_pieces/submissions-panel";
+} from "@/components/school/teacher/_pieces/integrity-pieces";
 import { Skeleton } from "@/components/ui";
 import { PdfView } from "@/components/ui/pdf-view";
 import { WorkGalleryModal } from "@/components/school/teacher/_pieces/work-gallery";
@@ -1911,7 +1911,7 @@ function RubricDriftBanner({
           <p className="text-sm font-bold text-[color:var(--color-warning-dark)] ">
             Rubric edited since this was graded
           </p>
-          <p className="mt-1 text-xs text-[color:var(--color-warning-dark)]/80 /80">
+          <p className="mt-1 text-xs text-[color:var(--color-warning-dark)]/80">
             The AI graded against an earlier version of your rubric.
             Regrade to apply your current criteria — your edits on this
             submission will be replaced.
@@ -1940,7 +1940,7 @@ function RubricDriftBanner({
           <div className="mt-2 space-y-2 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-white/60 p-3 dark:border-[color:var(--color-warning)]/20 ">
             {snapshotFields.map((f) => (
               <div key={f.label}>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)]/70 /70">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)]/70">
                   {f.label}
                 </p>
                 <p className="mt-0.5 whitespace-pre-wrap leading-relaxed text-[color:var(--color-warning-dark)]">
@@ -4400,7 +4400,15 @@ function ProblemGradeRow({
             type="button"
             onClick={onOpenPage}
             className="shrink-0 rounded-[--radius-sm] border border-border-light bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-text-muted transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-            aria-label={`Open page ${problem.pages[0]} of the student's work`}
+            // Names the pages the way the button DOES, then says where
+            // the click lands. The two differ whenever work spans a
+            // break, and announcing only the first page dropped exactly
+            // what the list/range label exists to say.
+            aria-label={
+              problem.pages.length > 1
+                ? `Student's work, ${pageLabel!.replace(/^p\. /, "pages ")}. Opens page ${problem.pages[0]}.`
+                : `Open page ${problem.pages[0]} of the student's work`
+            }
           >
             {pageLabel} <span aria-hidden>↗</span>
           </button>
