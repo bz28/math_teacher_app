@@ -247,6 +247,7 @@ export default function LLMCalls() {
             defaultSort={{ key: "count", dir: "desc" }}
             onRowClick={(r) => { setFnFilter(r.function); setParam("status", "failed"); }}
             rowStatus={() => "var(--danger)"}
+            unpaged
             minWidth={360}
           />
         </div>
@@ -353,6 +354,7 @@ export default function LLMCalls() {
             rowKey={(r) => r.function}
             defaultSort={{ key: "total_cost", dir: "desc" }}
             onRowClick={(r) => setFnFilter(r.function)}
+            unpaged
             minWidth={520}
           />
         </div>

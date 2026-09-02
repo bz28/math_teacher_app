@@ -263,6 +263,10 @@ export default function Overview() {
           rowKey={(s) => s.email ?? s.name}
           defaultSort={{ key: "cost", dir: "desc" }}
           empty={<span className="dt-state-title">No spend in this window.</span>}
+          // A leaderboard. The server caps it at three today, so this
+          // changes nothing now — it states the intent so raising that cap
+          // doesn't silently turn the card into a pager.
+          unpaged
           minWidth={360}
         />
       </div>

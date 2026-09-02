@@ -32,7 +32,9 @@ import os
 from pathlib import Path
 
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 
+from api.config import settings
 from api.core.auth import create_access_token
 from api.database import get_session_factory
 from tests.harness.browser import HarnessBrowser
@@ -49,15 +51,45 @@ ADMIN_REFRESH_KEY = "admin_refresh_token"
 # One per paging shape, so the evidence covers both halves of the split:
 # server-paged surfaces fetch a page and render their own <Pagination>,
 # client-paged ones fetch the set and let DataTable page it.
-# `hours` widens the surfaces that default to a 24h window — a local DB
+# `hours` widens the surfaces that default to a short window — a local DB
 # whose activity is older than a day shows an empty table otherwise, which
 # proves nothing about how much a full one displays.
-TARGETS = [
+#
+# Use values these pages actually offer ("" = all-time on the audit log,
+# 720 = 30d on LLM calls). A window outside a page's presets still filters
+# correctly but leaves its <select> showing the default, so the shot would
+# picture one filter while displaying the name of another.
+FIXED_TARGETS = [
     ("users", "/users"),  # server-paged
-    ("audit-logs", "/audit-logs?hours=8760"),  # server-paged
-    ("llm-calls", "/llm-calls?hours=8760"),  # server-paged
+    ("audit-logs", "/audit-logs?hours="),  # server-paged, all-time
+    ("llm-calls", "/llm-calls?hours=720"),  # server-paged, 30d
     ("schools", "/schools"),  # client-paged, DataTable-owned
+    ("quality", "/quality"),  # server-paged
+    ("extraction-quality", "/extraction-quality"),  # server-paged
+    ("generation-quality", "/generation-quality"),  # server-paged
+    ("grading-quality", "/grading-quality"),  # unpaged breakdown card
 ]
+
+
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "postgres", "db", ""}
+
+
+def assert_local_database() -> None:
+    """Refuse to run against anything but a local database.
+
+    This script forges a valid admin JWT from whatever DATABASE_URL and
+    jwt_secret the environment carries. That is fine pointed at a dev box
+    and emphatically not fine pointed anywhere else — sourced with a
+    production env it would mint a live admin credential for a real
+    account and drive a browser through it. Nothing about taking a
+    screenshot needs that reach, so the reach is closed here.
+    """
+    host = (make_url(settings.database_url).host or "").lower()
+    if host not in _LOCAL_HOSTS:
+        raise SystemExit(
+            f"Refusing to run: DATABASE_URL points at {host!r}, not a local database. "
+            "This script mints an admin token and is for local capture only."
+        )
 
 
 async def admin_token() -> str:
@@ -79,12 +111,37 @@ async def admin_token() -> str:
     return create_access_token(str(row[0]), "admin")
 
 
+async def targets() -> list[tuple[str, str]]:
+    """The fixed routes, plus a teacher detail page if the DB has a teacher.
+
+    Teacher detail carries the sections picker and the activity timeline —
+    two of the surfaces this change touches — and its route needs a real
+    id, so it can only be resolved once the database is reachable.
+    """
+    async with get_session_factory()() as s:
+        row = (
+            await s.execute(
+                text("SELECT id FROM users WHERE role = 'teacher' ORDER BY created_at LIMIT 1")
+            )
+        ).first()
+    if row is None:
+        return list(FIXED_TARGETS)
+    return [*FIXED_TARGETS, ("teacher-detail", f"/teachers/{row[0]}")]
+
+
 async def main() -> None:
+    assert_local_database()
     token = await admin_token()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     async with HarnessBrowser(DASH_BASE) as hb:
-        for name, path in TARGETS:
+        for name, path in await targets():
+            # Both slots get the ACCESS token deliberately. A real refresh
+            # token is persisted by create_refresh_token, and writing one
+            # would cost this script the read-only guarantee that is its
+            # whole reason to exist. The cost is that a run outliving the
+            # access token captures a login screen instead of a table —
+            # visible in the output, and a run takes seconds.
             async with hb.authed_page(
                 token, token,
                 access_key=ADMIN_ACCESS_KEY, refresh_key=ADMIN_REFRESH_KEY,

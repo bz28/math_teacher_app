@@ -389,6 +389,10 @@ function SectionsCard({
         onRowClick={(s) => onSelect(s.id)}
         rowStatus={(s) => (s.id === selected ? "var(--accent)" : undefined)}
         drill
+        // A picker, not a list: clicking a row drives everything below it,
+        // and the header counts the sections beside it. Paging would hide
+        // half a teacher's sections behind Next.
+        unpaged
         minWidth={480}
         empty={
           <div className="empty-state">

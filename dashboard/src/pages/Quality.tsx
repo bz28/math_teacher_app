@@ -10,7 +10,9 @@ import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
 import { EditorialModal } from "../components/EditorialModal";
+import { Pagination } from "../components/Pagination";
 import { formatRelativeDate } from "../lib/format";
+import { PAGE_SIZE } from "../lib/pagination";
 
 // ────────────────────────────────────────────────────────────────────
 // Solution quality — scoring the solve call.
@@ -98,6 +100,7 @@ function RepairStep({
 export default function Quality() {
   const [data, setData] = useState<SolutionQualityData | null>(null);
   const [outcome, setOutcome] = useState<string>("");
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,13 +113,22 @@ export default function Quality() {
     setLoading(true);
     setError(null);
     try {
-      setData(await api.solutionQuality(outcome ? { outcome } : undefined));
+      // Paged on the server. This used to send no limit at all and take
+      // the endpoint's default 50 while the count beside the table read
+      // the true total — so the table showed a prefix and said nothing
+      // about it. Sending limit+offset makes the pager's "of N" the real
+      // N and every row reachable.
+      setData(await api.solutionQuality({
+        limit: String(PAGE_SIZE),
+        offset: String(offset),
+        ...(outcome ? { outcome } : {}),
+      }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't load solution quality");
     } finally {
       setLoading(false);
     }
-  }, [outcome]);
+  }, [outcome, offset]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -282,7 +294,10 @@ export default function Quality() {
           <div className="gq-filters">
             <label className="gq-filter">
               <span>Show</span>
-              <select value={outcome} onChange={(e) => setOutcome(e.target.value)}>
+              <select
+                value={outcome}
+                onChange={(e) => { setOffset(0); setOutcome(e.target.value); }}
+              >
                 <option value="">Every solution</option>
                 <option value="repaired">Fixed by a teacher</option>
                 <option value="clean">Held up</option>
@@ -302,6 +317,12 @@ export default function Quality() {
             drill
             minWidth={640}
             empty={<span className="dt-state-title">No solutions match this filter.</span>}
+          />
+          <Pagination
+            offset={offset}
+            limit={PAGE_SIZE}
+            total={data.total_count}
+            onChange={setOffset}
           />
         </>
       )}

@@ -21,6 +21,18 @@ import { Pagination, SearchInput } from "./Pagination";
  * until the day it happens. Owning the behaviour here means every table
  * crosses that line correctly without anyone remembering to.
  *
+ * This component serves two roles, and paging is the difference:
+ *
+ *   A LIST is browsed — a roster, an audit trail, every call. It pages,
+ *   which is the default.
+ *   A CARD is read at a glance — "by function", "by subject", a
+ *   scoreboard whose whole point is the shape of the distribution. It
+ *   passes `unpaged`, because five of eight rows under a Next button is
+ *   a card that quietly lies about what it measured.
+ *
+ * When in doubt it's a list: a card that outgrows a glance was always a
+ * list wearing the wrong clothes.
+ *
  * A server-paged caller hands us exactly one page and renders its own
  * `<Pagination>`; `rows.length` then never exceeds `pageSize`, so the
  * internal pager stays dormant rather than competing with it.
@@ -67,6 +79,18 @@ export interface DataTableProps<T> {
   searchKeys?: (row: T) => (string | null | undefined)[];
   /** Rows per page. Defaults to the console-wide `PAGE_SIZE`. */
   pageSize?: number;
+  /**
+   * Render every row, never a page of them.
+   *
+   * For summary and breakdown cards — "by function", "by subject", a
+   * scoreboard — where the whole distribution IS the content and the
+   * reader takes it in at a glance. Paging one hides the tail and turns a
+   * glance into a click: a card measuring eight things that shows five is
+   * worse than no card, because nothing on screen says three are missing.
+   *
+   * Not for long lists that merely feel short today — those grow.
+   */
+  unpaged?: boolean;
   /** Noun used in the search placeholder and empty copy, e.g. "teachers". */
   searchLabel?: string;
 }
@@ -74,7 +98,7 @@ export interface DataTableProps<T> {
 export default function DataTable<T>({
   columns, rows, rowKey, onRowClick, rowStatus, drill,
   loading, error, onRetry, empty, defaultSort, minWidth = 640, loadingRows = 6,
-  searchKeys, pageSize = PAGE_SIZE, searchLabel = "rows",
+  searchKeys, pageSize = PAGE_SIZE, unpaged = false, searchLabel = "rows",
 }: DataTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(defaultSort?.key ?? null);
   const [sortDir, setSortDir] = useState<SortDir>(defaultSort?.dir ?? "desc");
@@ -98,7 +122,7 @@ export default function DataTable<T>({
   // Deriving the threshold from `pageSize` rather than a separate constant
   // means they appear at exactly the row that first becomes unreachable —
   // a fixed threshold above the page size hides rows behind no pager.
-  const longEnough = rows.length > pageSize;
+  const longEnough = !unpaged && rows.length > pageSize;
   const canSearch = !!searchKeys && longEnough;
   const canPage = longEnough;
 

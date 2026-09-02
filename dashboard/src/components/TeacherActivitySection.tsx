@@ -242,6 +242,11 @@ function GenerationsPanel({ teacherId }: { teacherId: string }) {
 
   useEffect(() => {
     let cancelled = false;
+    // This panel used to page at 25 against the timeline's 5, on the
+    // reasoning that generations are "read as a list" while the timeline
+    // answers "what did they just do". Both are lists you page back
+    // through, and the console now has one answer for that — the size of
+    // a page isn't where those two differ.
     api
       .generationJobs({ teacher_id: teacherId, limit: String(PAGE_SIZE), offset: String(offset) })
       .then((d) => {
