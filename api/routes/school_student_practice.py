@@ -1350,7 +1350,7 @@ async def get_dashboard(
             Assignment.status == "published",
             Assignment.type == "homework",
             SubmissionGrade.grade_published_at.is_not(None),
-            SubmissionGrade.final_score.is_not(None),
+            SubmissionGrade.published_final_score.is_not(None),
         )
         .order_by(SubmissionGrade.grade_published_at.desc())
         .limit(10)
@@ -1367,7 +1367,15 @@ async def get_dashboard(
             course_id=str(grade_meta["course_id"]),
             course_name=grade_meta["course_name"],
             section_name=grade_meta["section_name"],
-            final_score=round(grade.final_score, 1),
+            # The PUBLISHED snapshot, not the live column. Those two
+            # diverge the moment a teacher reopens an already-released
+            # grade: final_score follows her edits immediately, while
+            # published_final_score holds what she actually released.
+            # Reading the live one pushed her in-progress number to this
+            # surface before she had decided to publish it — and left it
+            # disagreeing with the homework page, which reads the
+            # snapshot correctly.
+            final_score=round(grade.published_final_score, 1),
             published_at=grade.grade_published_at,
         ))
 
@@ -1422,7 +1430,7 @@ async def get_all_grades(
             Assignment.status == "published",
             Assignment.type == "homework",
             SubmissionGrade.grade_published_at.is_not(None),
-            SubmissionGrade.final_score.is_not(None),
+            SubmissionGrade.published_final_score.is_not(None),
         )
         .order_by(SubmissionGrade.grade_published_at.desc())
     )).all()
@@ -1437,7 +1445,15 @@ async def get_all_grades(
             course_id=str(grade_meta["course_id"]),
             course_name=grade_meta["course_name"],
             section_name=grade_meta["section_name"],
-            final_score=round(grade.final_score, 1),
+            # The PUBLISHED snapshot, not the live column. Those two
+            # diverge the moment a teacher reopens an already-released
+            # grade: final_score follows her edits immediately, while
+            # published_final_score holds what she actually released.
+            # Reading the live one pushed her in-progress number to this
+            # surface before she had decided to publish it — and left it
+            # disagreeing with the homework page, which reads the
+            # snapshot correctly.
+            final_score=round(grade.published_final_score, 1),
             published_at=grade.grade_published_at,
         ))
 
