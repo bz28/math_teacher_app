@@ -146,7 +146,15 @@ async def activity_log(
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
     actor_user_id: uuid.UUID | None = Query(None),
-    actor_role: str | None = Query(None, description='"admin" or "teacher".'),
+    actor_role: str | None = Query(
+        None, description='"admin", "teacher", or "student".'
+    ),
+    include_preview: bool = Query(
+        False,
+        description="Include events from teachers' preview-as-student "
+        "shadow accounts. Excluded by default so they don't inflate "
+        "student engagement.",
+    ),
     action: str | None = Query(
         None,
         description='Exact action ("grade.publish") or prefix glob ("grade.*").',
@@ -163,6 +171,8 @@ async def activity_log(
         base = base.where(ActivityLog.actor_user_id == actor_user_id)
     if actor_role:
         base = base.where(ActivityLog.actor_role == actor_role)
+    if not include_preview:
+        base = base.where(_not_preview())
     if action:
         if action.endswith(".*"):
             base = base.where(ActivityLog.action.like(f"{action[:-1]}%"))
@@ -243,6 +253,29 @@ def _csv_safe(value: str) -> str:
     return "'" + value if value and value[0] in _CSV_FORMULA_LEAD else value
 
 
+def _not_preview() -> Any:
+    """Predicate excluding events emitted by a teacher's shadow student.
+
+    "Preview as student" mints a REAL student account
+    (`User.is_preview`, see api/routes/teacher_preview.py) whose events
+    are otherwise indistinguishable from a child's — so without this
+    every engagement number silently counts teachers rehearsing their
+    own homework. `record_student_activity` stamps `is_preview` into the
+    metadata; this filters on it.
+
+    Rows are excluded, never deleted: a teacher previewing is real
+    signal, just not student engagement. `include_preview=true` returns
+    them. Written to survive the JSONB key being absent entirely, which
+    is the case for every admin/teacher row and every row predating the
+    student events.
+    """
+    return or_(
+        ActivityLog.action_metadata.is_(None),
+        ~ActivityLog.action_metadata.has_key("is_preview"),
+        ActivityLog.action_metadata["is_preview"].astext != "true",
+    )
+
+
 class TimelineFilters:
     """Shared query params for the merged timeline and its CSV export.
 
@@ -275,6 +308,11 @@ class TimelineFilters:
             None,
             description="Pivot to every event touching this record or student.",
         ),
+        include_preview: bool = Query(
+            False,
+            description="Include events from teachers' preview-as-student "
+            "shadow accounts. Excluded by default.",
+        ),
     ) -> None:
         self.hours = hours
         self.q = (q or "").strip() or None
@@ -282,6 +320,7 @@ class TimelineFilters:
         self.facet = facet if facet in (_ACCESS, _WRITE) else None
         self.type_filter = (type_filter or "").strip() or None
         self.target_id = target_id
+        self.include_preview = include_preview
 
 
 async def _resolve_actor_ids(db: AsyncSession, q: str | None) -> set[uuid.UUID] | None:
@@ -383,6 +422,8 @@ async def _build_timeline_subquery(
             conds.append(w.action.ilike(f"{prefix}%"))
         if f.target_id is not None:
             conds.append(w.target_id == f.target_id)
+        if not f.include_preview:
+            conds.append(_not_preview())
         if conds:
             wr = wr.where(*conds)
         branches.append(wr)
