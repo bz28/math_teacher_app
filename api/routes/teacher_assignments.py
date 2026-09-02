@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.audit_log import record_activity
 from api.core.constants import DEFAULT_HOMEWORK_INSTRUCTIONS
 from api.core.entitlements import Entitlement, check_entitlement
+from api.core.extraction_edits import apply_extraction_edits
+from api.core.integrity_ai import UNREADABLE_THRESHOLD
 from api.core.integrity_pipeline import (
     ABANDONED_INTERVIEW_DEADLINE,
     PROBLEM_STATUS_DIAGNOSIS_ONLY,
@@ -2106,7 +2108,6 @@ async def regrade_submission(
     stored extraction against the current problem list); not worth paying
     for a full Vision read on every regrade to paper over.
     """
-    from api.core.extraction_edits import apply_extraction_edits
     from api.core.grading_ai import run_ai_grading_for_submission
     from api.core.integrity_ai import extract_student_work
     from api.services.bank import load_problems_for_assignment
@@ -2425,6 +2426,63 @@ async def get_submission_detail(
                 ai_answers[pid] = sa
 
     answers_map = sub.final_answers or {}
+    # Per-problem final answers the extractor read off the page, with the
+    # student's confirm-screen corrections overlaid — the same view the
+    # grader consumes (`grading_ai._build_user_message`) and the same one
+    # the student was shown on their confirm screen. Without this the
+    # teacher is the only party who can't see an answer the product
+    # already read: AI grading is deferred to the due date
+    # (`grading_queue.enqueue_for_submission`), so between submit and then
+    # — and permanently on a HW with no due date or with grading off —
+    # `ai_answers` is empty and the review page falls to its "no answer
+    # extracted" warning while the answer sits in `Submission.extraction`.
+    #
+    # Gated on the unreadable threshold: below it the read is
+    # untrustworthy by definition (it is what makes the pipeline skip
+    # auto-grading and stamp `skipped_unreadable`), so surfacing it would
+    # replace an honest warning with confident nonsense on exactly the
+    # submission where the teacher most depends on the photo.
+    extraction_finals: dict[int, str] = {}
+    overlaid = apply_extraction_edits(sub.extraction, sub.extraction_edits)
+    # The extraction blob is model output persisted verbatim, so treat its
+    # confidence as untrusted input rather than a guaranteed float. The
+    # equivalent gates in `grading_queue` and the submit pipeline can
+    # afford a bare comparison because they run inside background tasks
+    # that swallow exceptions; this one is in a request handler with no
+    # such net, and a TypeError here would 500 the teacher's grading page
+    # for that student with no way out of it from the UI.
+    raw_confidence = overlaid.get("confidence") if overlaid else None
+    readable = (
+        isinstance(raw_confidence, (int, float))
+        and not isinstance(raw_confidence, bool)
+        and raw_confidence >= UNREADABLE_THRESHOLD
+    )
+    if overlaid and readable:
+        for fa in overlaid.get("final_answers") or []:
+            fa_pos = fa.get("problem_position")
+            if not isinstance(fa_pos, int) or isinstance(fa_pos, bool):
+                continue
+            # The tool schema doesn't enforce one entry per position, so
+            # duplicates are possible. The grader renders every candidate;
+            # the teacher's cell is a single line, so the first non-empty
+            # read wins rather than concatenating them into noise.
+            if fa_pos in extraction_finals:
+                continue
+            # `answer_latex` is raw LaTeX by contract — the extractor is
+            # asked for "the LaTeX representation", not for delimited
+            # math — so it has to be wrapped before it reaches a field the
+            # teacher view renders through MathText, which only treats
+            # `$...$` as math and prints anything else as source. This
+            # mirrors the canonical renderer of the same field pair,
+            # `extraction-view.tsx:140-146`: wrap the latex, take
+            # `answer_plain` bare because it is prose.
+            answer_latex = (fa.get("answer_latex") or "").strip()
+            answer_plain = (fa.get("answer_plain") or "").strip()
+            if answer_latex:
+                extraction_finals[fa_pos] = f"${answer_latex}$"
+            elif answer_plain:
+                extraction_finals[fa_pos] = answer_plain
+
     # Group the Vision extraction's per-line steps by problem_position
     # once, so each problem's slice is an O(1) dict lookup below
     # rather than a re-scan. None = extraction never ran (pipeline off
@@ -2437,6 +2495,11 @@ async def get_submission_detail(
     # view); the original Vision read travels alongside as
     # `original_*` so the UI can surface a "view original AI read"
     # disclosure on edited steps.
+    #
+    # This hand-rolls the overlay rather than reusing `overlaid` above:
+    # `apply_extraction_edits` returns only the merged view and discards
+    # what was replaced, and the `original_*` disclosure needs both
+    # sides. Keep the two in step if the overlay rules ever change.
     edits = sub.extraction_edits or {}
     steps_by_position: dict[int, list[TeacherSubmissionStep]] = {}
     if sub.extraction:
@@ -2502,20 +2565,35 @@ async def get_submission_detail(
         if not item:
             continue
         # Priority order for the answer the teacher sees:
-        #   1. The student's confirm-screen edit (the most explicit
-        #      claim about what they wrote — also what AI grading uses
-        #      once it runs).
-        #   2. The AI-extracted answer from `grade.breakdown` (which
-        #      already reflects the edit, since the grader reads the
-        #      overlaid extraction). Available only post-grading.
-        #   3. The student's optional typed answer at submit time.
-        # Without (1), an edited :final wouldn't surface to the
-        # teacher view in the window between confirm and AI grading
-        # completion (or at all if `ai_grading_enabled=false`).
+        #   1. The student's confirm-screen edit — a human claim about
+        #      what they wrote, so it outranks any machine read and is
+        #      honored even when Vision's confidence was too low for (3).
+        #   2. The AI grader's echo from `grade.breakdown`. Post-grading
+        #      only, and null whenever the model declined to restate the
+        #      answer — the gap (3) exists to cover.
+        #   3. The extractor's own final answer, readable-confidence
+        #      only. Present from confirm time, which is what makes an
+        #      answer visible in the window before grading runs.
+        #   4. The student's typed answer at submit. The endpoint that
+        #      wrote this column was removed the same day it shipped
+        #      (0967e198 → 2f0e4867, 2026-04-08, ~45 minutes apart) when
+        #      typed answers gave way to required photos, so it is empty
+        #      on effectively every row. Kept because it costs one `or`
+        #      and can only fire when every other source is empty —
+        #      cheaper than being wrong about whether a submission
+        #      exists from that window.
+        #
+        # (2) stays above (3) on purpose. The echo is the answer the
+        # grade was actually computed against — it reflects how the
+        # model resolved duplicate candidates for one position, and it
+        # is normalized to the same problem the score and feedback talk
+        # about. Promoting the raw read above it would let the cell
+        # disagree with the verdict printed beside it.
         edited_final = (edits.get(f"{pos}:final") or "").strip()
         student_answer = (
             edited_final
             or ai_answers.get(str(pid))
+            or extraction_finals.get(pos)
             or answers_map.get(str(pid))
             or None
         )
