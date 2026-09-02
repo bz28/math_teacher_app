@@ -1953,6 +1953,12 @@ export interface TeacherSubmissionDetailProblem {
   /** Step-by-step extracted work for this problem. Empty when the
    *  student left this problem blank or extraction never ran. */
   student_steps: TeacherSubmissionStep[];
+  /** 1-based page(s) of `files` this problem's work was written on,
+   *  derived from the extraction and range-checked against the real file
+   *  count. Empty when the extractor didn't tag it — every row from
+   *  before page labelling — in which case the UI shows no marker rather
+   *  than guessing. */
+  pages: number[];
 }
 
 export interface TeacherSubmissionDetail {

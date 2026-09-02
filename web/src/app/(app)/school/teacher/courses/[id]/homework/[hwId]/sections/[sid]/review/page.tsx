@@ -2868,6 +2868,11 @@ function SubmissionDetailPanel({
   // is keyboard-real — each row is a tabIndex=-1 div that we actually
   // `.focus()`, so screen readers track it and Tab order stays sane.
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
+  // Page the work gallery is open on, or null when closed. Lives here
+  // rather than in each row so every page marker opens the ONE gallery —
+  // the same one the header strip and pinned rail use — instead of each
+  // row growing its own modal.
+  const [galleryPage, setGalleryPage] = useState<number | null>(null);
   // Live DOM handles to each problem row, indexed by position in
   // detail.problems, so keyboard nav can move real focus.
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -3506,6 +3511,9 @@ function SubmissionDetailPanel({
                 onFeedbackChange={(text) =>
                   onFeedbackChange(p.bank_item_id, text)
                 }
+                onOpenPage={() =>
+                  setGalleryPage(p.pages.length > 0 ? p.pages[0]! - 1 : 0)
+                }
               />
             );
           })}
@@ -3519,6 +3527,13 @@ function SubmissionDetailPanel({
       {cheatsheetOpen && (
         <KeyboardShortcutsModal onClose={() => setCheatsheetOpen(false)} />
       )}
+
+      <WorkGalleryModal
+        files={detail.files ?? []}
+        studentName={detail.student_name}
+        openAt={galleryPage}
+        onClose={() => setGalleryPage(null)}
+      />
     </div>
   );
 }
@@ -3886,6 +3901,22 @@ function OtherWorkDisclosure({ steps }: { steps: TeacherSubmissionStep[] }) {
   );
 }
 
+// The page marker's label. "p. 3" for one page, "p. 3-5" for work that
+// runs across a break, and an explicit list when the set has gaps —
+// a student who flipped back leaves pages 1 and 4, and rendering that as
+// "p. 1-4" would claim work on 2 and 3 that isn't there.
+// Null when the extraction didn't tag a page, so the row shows no marker
+// rather than a guess: a wrong page number costs the teacher more than
+// no page number does.
+function pageLabelFor(pages: number[]): string | null {
+  if (pages.length === 0) return null;
+  const first = pages[0]!;
+  const last = pages[pages.length - 1]!;
+  if (first === last) return `p. ${first}`;
+  const contiguous = last - first + 1 === pages.length;
+  return contiguous ? `p. ${first}-${last}` : `p. ${pages.join(", ")}`;
+}
+
 // ────────────────────────────────────────────────────────────────────
 // Per-problem grading row: answer compare + Full/Partial/Zero picker.
 // Partial opens an inline number input; Enter or blur commits with
@@ -3905,6 +3936,7 @@ function ProblemGradeRow({
   rowRef,
   onChange,
   onFeedbackChange,
+  onOpenPage,
 }: {
   problem: TeacherSubmissionDetailProblem;
   entry: GradeBreakdownEntry | null;
@@ -3929,7 +3961,10 @@ function ProblemGradeRow({
   rowRef: (el: HTMLDivElement | null) => void;
   onChange: (status: GradeStatus, partialPercent?: number) => void;
   onFeedbackChange: (text: string) => void;
+  /** Opens the work gallery on this problem's first tagged page. */
+  onOpenPage: () => void;
 }) {
+  const pageLabel = pageLabelFor(problem.pages);
   const current = entry?.score_status ?? null;
   // Show "AI" badge when the active grade matches the AI suggestion
   // (i.e. teacher hasn't overridden it yet).
@@ -4328,6 +4363,20 @@ function ProblemGradeRow({
             </button>
           )}
         </div>
+        {/* After the question in the DOM, not before it: tab order and
+            screen-reader order follow the DOM, and a teacher shouldn't
+            reach "open page 3" before reading the problem it belongs to.
+            Visually it still sits at the right end of the header row. */}
+        {pageLabel && (
+          <button
+            type="button"
+            onClick={onOpenPage}
+            className="shrink-0 rounded-[--radius-sm] border border-border-light bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-text-muted transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            aria-label={`Open page ${problem.pages[0]} of the student's work`}
+          >
+            {pageLabel} <span aria-hidden>↗</span>
+          </button>
+        )}
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div>

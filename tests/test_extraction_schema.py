@@ -22,11 +22,28 @@ def test_producer_shaped_extraction_round_trips_exactly() -> None:
     # Exactly what extract_student_work returns (INTEGRITY_EXTRACT_SCHEMA).
     raw = {
         "steps": [
-            {"step_num": 1, "problem_position": 1, "latex": "x = 5", "plain_english": "solve for x"},
-            {"step_num": 2, "problem_position": None, "latex": "", "plain_english": "scratch"},
+            {
+                "step_num": 1,
+                "problem_position": 1,
+                "latex": "x = 5",
+                "plain_english": "solve for x",
+                "page_index": 1,
+            },
+            {
+                "step_num": 2,
+                "problem_position": None,
+                "latex": "",
+                "plain_english": "scratch",
+                "page_index": None,
+            },
         ],
         "final_answers": [
-            {"problem_position": 1, "answer_latex": "x=5", "answer_plain": "five"},
+            {
+                "problem_position": 1,
+                "answer_latex": "x=5",
+                "answer_plain": "five",
+                "page_index": 2,
+            },
         ],
         "confidence": 0.92,
     }
@@ -42,13 +59,20 @@ def test_extraction_preserves_unforeseen_extra_keys() -> None:
             {
                 "step_num": 1,
                 "problem_position": 1,
+                "page_index": 1,
                 "latex": "x=5",
                 "plain_english": "solve",
                 "confidence_per_step": 0.8,  # unforeseen per-step key
             },
         ],
         "final_answers": [
-            {"problem_position": 1, "answer_latex": "5", "answer_plain": "five", "units": "cm"},
+            {
+                "problem_position": 1,
+                "answer_latex": "5",
+                "answer_plain": "five",
+                "page_index": 1,
+                "units": "cm",
+            },
         ],
         "confidence": 0.5,
         "model_version": "vision-2026-07",  # unforeseen top-level key
