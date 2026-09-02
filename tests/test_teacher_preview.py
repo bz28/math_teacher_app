@@ -641,8 +641,18 @@ async def test_a_rehearsal_stays_out_of_every_teacher_facing_number(
         await s.commit()
         admin_headers = auth_headers(create_access_token(str(admin.id), "admin"))
 
-    r = await client.get("/v1/admin/grading-quality?days=30", headers=admin_headers)
+    r = await client.get("/v1/admin/grading-quality?hours=720", headers=admin_headers)
     assert r.status_code == 200, r.text
-    summary = r.json()["summary"]
+    body = r.json()
+    summary = body["summary"]
+    # Two independent queries feed this page and BOTH have to exclude
+    # her, or it reports override stats over one population beside a
+    # coverage tile counting another. Round 4 asserted only the coverage
+    # pair — both of these come from _coverage_counts — so removing the
+    # other filter still passed. reviewed_submissions and by_subject
+    # come from _reviewed_rows; without its filter her rehearsal shows
+    # up as a fabricated "the AI got 100% of this wrong" signal.
     assert summary["ai_graded_submissions"] == 0, summary
     assert summary["reviewed_ai_grades"] == 0, summary
+    assert summary["reviewed_submissions"] == 0, summary
+    assert body["by_subject"] == [], body["by_subject"]

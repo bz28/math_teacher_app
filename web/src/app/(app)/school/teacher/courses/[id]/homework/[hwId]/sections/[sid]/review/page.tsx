@@ -406,6 +406,15 @@ function HomeworkSectionReview({
                 student_email: r.student_email,
                 submission: r,
               };
+            } else if (r.final_score !== null) {
+              // A rehearsal she left in a SIBLING section. Publishing is
+              // homework-wide, so the button releases it from here too —
+              // dropping it made "Publish N grades" undercount by one
+              // depending on which section page you happened to open.
+              // Action counts only; it stays out of the other-section
+              // graded/flagged tallies, which describe her class.
+              if (r.grade_published_at === null) otherPending += 1;
+              else if (r.grade_dirty) otherDirty += 1;
             }
             continue;
           }
