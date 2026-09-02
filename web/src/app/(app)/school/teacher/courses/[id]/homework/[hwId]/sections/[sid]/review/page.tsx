@@ -2292,7 +2292,17 @@ function TriageRoster({
   const awaitingGrade: RosterEntry[] = [];
   const confident: RosterEntry[] = [];
   const notSubmitted: RosterEntry[] = [];
+  // Her rehearsal is a row, not a member of any triage group. The group
+  // headers count her class — a "Needs your eyes · 1" over her own test
+  // run contradicts the subhead and the chips, which both read
+  // classOnly. Rendered after the groups instead, where the badge is
+  // the whole story.
+  let rehearsal: RosterEntry | null = null;
   for (const e of roster) {
+    if (e.submission?.is_preview) {
+      rehearsal = e;
+      continue;
+    }
     if (!e.submission) notSubmitted.push(e);
     else if (isFlagged(e) || hasLowConfidence(e)) needsEyes.push(e);
     // Ungraded gets its own group. It used to fall into "AI confident"
@@ -2376,6 +2386,12 @@ function TriageRoster({
         />
       )}
       {renderRows(notSubmitted)}
+      {rehearsal && (
+        <>
+          <RosterGroupHeader label="Your test run" count={1} tone="calm" />
+          {renderRows([rehearsal])}
+        </>
+      )}
     </>
   );
 }

@@ -556,3 +556,61 @@ async def test_a_rehearsal_grade_can_be_published_so_she_can_see_it(
     )
     assert row["submitted"] == 0
     assert row["published"] == 0
+
+
+async def test_a_rehearsal_stays_out_of_every_teacher_facing_number(
+    client: AsyncClient,
+) -> None:
+    """Guards the exclusions, not just the release.
+
+    Every one of these was found by review rather than by a test, and
+    two of them contradicted comments claiming they were handled. So
+    each gets an assertion: without them a teacher's own test run
+    inflates a milestone, a class average, an audit entry, or an admin
+    quality metric."""
+    await _wipe()
+    world = await _teacher_with_homework(client, sections="both", status="published")
+    headers = await _preview_headers(client, world)
+
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=headers, json={"files": [TINY_PNG]},
+    )
+    assert r.status_code == 200, r.text
+    submission_id = uuid.UUID(r.json()["submission_id"])
+
+    # Stand in for the grading pipeline (needs an LLM). A breakdown is
+    # what item analysis counts; final_score is what publishing needs.
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(
+            submission_id=submission_id,
+            final_score=92.0,
+            breakdown=[{"problem_id": "x", "score_status": "zero", "percent": 0}],
+        ))
+        await s.commit()
+
+    r = await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
+        headers=world["headers"], json={},
+    )
+    assert r.status_code == 200, r.text
+    # Reports grades that went to students — she is not one.
+    assert r.json()["published_count"] == 0
+
+    # The only average on the review page. "Class item analysis" must
+    # not be a distribution of her own work.
+    r = await client.get(
+        f"/v1/teacher/assignments/{world['assignment_id']}/item-analysis",
+        headers=world["headers"],
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["graded_count"] == 0
+
+    # Setup milestones: she has neither students nor a published grade.
+    r = await client.get(
+        f"/v1/teacher/courses/{world['course_id']}/setup-status",
+        headers=world["headers"],
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["has_student"] is False
+    assert r.json()["has_published_grade"] is False

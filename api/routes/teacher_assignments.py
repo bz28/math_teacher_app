@@ -1625,9 +1625,17 @@ async def item_analysis(
     breakdowns = (await db.execute(
         select(SubmissionGrade.breakdown)
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
+        .join(User, User.id == Submission.student_id)
         .where(
             Submission.assignment_id == a.id,
             SubmissionGrade.breakdown.is_not(None),
+            # This panel is labelled "Class item analysis · Across N
+            # graded submissions" and is the only average on the review
+            # page. A teacher's rehearsal is her own work, written to
+            # test the flow — counting it would show a class score
+            # distribution built out of it, beside a header correctly
+            # reading "0 of 3 submitted".
+            User.is_preview.is_(False),
         )
     )).scalars().all()
 
@@ -2301,7 +2309,15 @@ async def publish_grades(
 
     await record_activity(
         db, current_user, "grade.publish", "assignment", a.id,
-        {"published_count": published_count, "reviewed_only": reviewed_only},
+        {
+            "published_count": published_count,
+            # published_count counts grades that went to students; a
+            # rehearsal of the teacher's own is released in the same
+            # sweep, so record what was actually written too or the
+            # audit trail disagrees with the rows.
+            "rows_written": len(rows),
+            "reviewed_only": reviewed_only,
+        },
     )
     await db.commit()
     return {"status": "ok", "published_count": published_count}
