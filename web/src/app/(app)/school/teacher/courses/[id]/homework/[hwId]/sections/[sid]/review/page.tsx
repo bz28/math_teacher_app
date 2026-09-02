@@ -3572,7 +3572,8 @@ const ANCHOR_STYLE: Record<
 > = {
   amber: {
     wrap: "border-[color:var(--color-warning)]/45 bg-[color:var(--color-warning-bg)]/60",
-    badge: "bg-[color:var(--color-warning)] text-white",
+    // White on `--color-warning` is 4.43:1; the -dark token is 6.08:1.
+    badge: "bg-[color:var(--color-warning-dark)] text-white",
     idRef: (id) => `${id}-amber`,
   },
   info: {
@@ -3914,14 +3915,19 @@ function ProblemGradeRow({
       aiGrade.confidence != null ? Math.round(aiGrade.confidence * 100) : null;
     const verdict =
       aiGrade.score_status === "full"
-        ? { cls: "bg-[#22a06b] text-white", label: "Full" }
+        // Was a hard-coded #22a06b that sat outside the palette and put
+        // white on it at 3.3:1 — under AA for a 10px bold label.
+        ? { cls: "bg-[color:var(--color-success)] text-white", label: "Full" }
         : aiGrade.score_status === "zero"
           ? {
               cls: "border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] text-[color:var(--color-error)]",
               label: "No credit",
             }
           : {
-              cls: "bg-[color:var(--color-warning)] text-white",
+              // `-dark` for the same reason as the Partial grade button:
+              // white on `--color-warning` is 4.43:1, just under AA, and
+              // this label is 10px bold — nowhere near large text.
+              cls: "bg-[color:var(--color-warning-dark)] text-white",
               label: `Partial ${Math.round(aiGrade.percent)}%`,
             };
     return (
@@ -4519,10 +4525,30 @@ function GradeBtn({
    *  recommended this". Always pairs with an inline "AI" pill. */
   aiPick?: boolean;
 }) {
+  // Selected fills carry a white label, so each one is picked to clear
+  // 4.5:1 under white. None of the three did:
+  //   red   → `--color-error-light` (#F0D7D1, a pale pink) at 1.37:1 —
+  //           the label all but vanished the moment a teacher picked it
+  //   green → Tailwind's green-500, outside the palette, at 2.2:1
+  //   amber → `--color-warning` (#A66B15) at 4.43:1, just under
+  // Amber is why this list is `-dark` for one tone and not the others:
+  // `--color-warning` is the lightest of the three status tokens and
+  // misses on its own, so the filled-with-white use takes
+  // `--color-warning-dark` (6.08:1). Red and green clear it at full
+  // strength (9.00:1 and 6.08:1). Check the ratio before adding a tone.
+  //
+  // These are LIGHT-theme ratios, which is what ships: nothing in the app
+  // sets `data-theme`, and there is no `prefers-color-scheme` block, so
+  // the dark token block in globals.css is currently unreachable. Under
+  // those tokens white would sit at 4.19 (error), 3.15 (success) and 3.14
+  // (warning) — all under AA. Fixing that is not a token swap: it needs a
+  // dark-theme foreground decision (dark ink on the lighter fills) taken
+  // across the app rather than guessed at here, so it is deliberately not
+  // done in this file. Whoever turns dark mode on owns it.
   const activeCls = {
-    green: "border-green-500 bg-green-500 text-white",
-    amber: "border-[color:var(--color-warning)] bg-[color:var(--color-warning)] text-white",
-    red: "border-[color:var(--color-error)] bg-[color:var(--color-error-light)] text-white",
+    green: "border-[color:var(--color-success)] bg-[color:var(--color-success)] text-white",
+    amber: "border-[color:var(--color-warning-dark)] bg-[color:var(--color-warning-dark)] text-white",
+    red: "border-[color:var(--color-error)] bg-[color:var(--color-error)] text-white",
   }[tone];
   const inactiveCls = aiPick
     ? "border-primary/40 bg-primary-bg text-text-primary hover:border-primary/60"
