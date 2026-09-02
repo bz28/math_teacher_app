@@ -44,9 +44,8 @@ _SCHOOL_NAME = "Activity Test School"
 
 _ALLOWED_META_KEYS = {
     "is_preview", "assignment_id", "section_id", "file_count", "is_late",
-    "submission_id", "corrections_count", "bank_item_id", "mode",
-    "consumption_id", "context", "flagged", "anchor_bank_item_id",
-    "step_index", "turn_index",
+    "corrections_count", "bank_item_id", "mode", "context", "flagged",
+    "anchor_bank_item_id", "step_index", "turn_index",
 }
 
 
@@ -318,6 +317,38 @@ async def test_complete_is_logged_once_despite_idempotent_recall(
 
 
 @pytest.mark.asyncio
+async def test_flag_is_logged_once_per_state_change(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Flagging toggles, so a repeat call landing on the SAME value is
+    not a second decision — matching complete_consumption's guard."""
+    await _attach_school(world)
+    served = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}"
+        f"/problems/{world['primary_id']}/next-variation",
+        headers=_auth(world["student_token"]),
+    )
+    consumption_id = served.json()["consumption_id"]
+
+    async def _flag(value: bool) -> None:
+        r = await client.post(
+            f"/v1/school/student/bank-consumption/{consumption_id}/flag",
+            headers=_auth(world["student_token"]),
+            json={"flagged": value},
+        )
+        assert r.status_code == 204, r.text
+
+    await _flag(True)
+    await _flag(True)   # double-tap — same value, no new decision
+    assert len(await _rows("consumption.flag")) == 1
+
+    await _flag(False)  # a real change — this one counts
+    rows = await _rows("consumption.flag")
+    assert len(rows) == 2
+    assert [r["action_metadata"]["flagged"] for r in rows] == [True, False]
+
+
+@pytest.mark.asyncio
 async def test_tutor_chat_logs_depth_without_any_content(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
@@ -348,6 +379,17 @@ async def test_tutor_chat_logs_depth_without_any_content(
     )
     assert r.status_code == 200, r.text
 
+    step = await client.post(
+        f"/v1/school/student/bank-item/{bank_item_id}/step-chat",
+        headers=_auth(world["student_token"]),
+        json={
+            "step_index": 0,
+            "question": secret,
+            "prior_messages": [{"role": "user", "content": secret}],
+        },
+    )
+    assert step.status_code == 200, step.text
+
     rows = await _rows("tutor.problem_chat")
     assert len(rows) == 1
     meta = rows[0]["action_metadata"]
@@ -355,6 +397,17 @@ async def test_tutor_chat_logs_depth_without_any_content(
     assert meta["turn_index"] == 2, "depth of questioning is the signal"
     _assert_meta_contract(meta)
     assert secret not in str(meta), "student's words must never reach this table"
+
+    # step_chat is the only action carrying a field the dashboard does
+    # arithmetic on (step_index → "step N+1"), so it needs its own read.
+    step_rows = await _rows("tutor.step_chat")
+    assert len(step_rows) == 1
+    step_meta = step_rows[0]["action_metadata"]
+    assert step_rows[0]["school_id"] == school_id
+    assert step_meta["step_index"] == 0
+    assert step_meta["turn_index"] == 1
+    _assert_meta_contract(step_meta)
+    assert secret not in str(step_meta), "student's words must never reach this table"
 
 
 @pytest.mark.asyncio
@@ -446,6 +499,97 @@ async def test_a_logging_failure_never_breaks_the_submission(
             {"a": world["assignment_id"]},
         )).scalar_one()
     assert count == 1, "the submission itself must still be durable"
+
+
+@pytest.mark.asyncio
+async def test_a_school_lookup_failure_cannot_strand_a_submission(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The regression guard for the real hazard in this change.
+
+    `_school_id_for` is an ARGUMENT expression at every call site, so it
+    runs in the caller's frame — outside `record_activity`'s guard and
+    inside whatever transaction the handler holds. It used to sit
+    between submit's durable commit and the extraction spawn, where a
+    failure meant: 500 on a submission that already landed, retry blocked
+    by the one-shot 409, and extraction never fired — homework turned in
+    and permanently unprocessable.
+
+    The sibling best-effort test patches ActivityLog, which is INSIDE the
+    guard, so it never exercised this. This one patches the lookup.
+    """
+    await _attach_school(world)
+    with patch(
+        "api.routes.school_student_practice._school_id_for",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("driver went away"),
+    ):
+        r = await client.post(
+            f"/v1/school/student/homework/{world['assignment_id']}/submit",
+            headers=_auth(world["student_token"]),
+            json={"files": [TINY_PNG]},
+        )
+    assert r.status_code == 200, "a failed school lookup took the submission down"
+
+    async with get_session_factory()() as s:
+        count = (await s.execute(
+            text("SELECT count(*) FROM submissions WHERE assignment_id = :a"),
+            {"a": world["assignment_id"]},
+        )).scalar_one()
+    assert count == 1, "the submission itself must still be durable"
+
+
+@pytest.mark.asyncio
+async def test_school_lookup_swallows_a_db_error_instead_of_propagating() -> None:
+    """The guard inside `_school_id_for`, tested at its own layer.
+
+    It must use a SAVEPOINT, not a bare try/except. A bare except would
+    swallow the error and leave asyncpg's transaction aborted, so the
+    handler's next commit() would fail and roll back the student's real
+    mutation — exactly the hazard `record_activity`'s savepoint comment
+    describes. Degrading to None lets the event be written school-less
+    rather than not at all.
+    """
+    from api.routes.school_student_practice import _school_id_for
+
+    async with get_session_factory()() as s:
+        with patch.object(
+            s, "execute", new_callable=AsyncMock,
+            side_effect=RuntimeError("driver went away"),
+        ):
+            assert await _school_id_for(s, course_id=uuid.uuid4()) is None
+
+
+@pytest.mark.asyncio
+async def test_an_unresolvable_school_still_records_the_confirmation(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The degradation path end-to-end at the confirm site, where the
+    lookup runs inside the transaction holding the pending conditional
+    UPDATE. A school-less log row is acceptable; a lost confirmation is
+    not."""
+    await _attach_school(world)
+    submission_id = await _submit(client, world)
+    await _mark_extracted(submission_id)
+
+    with patch(
+        "api.routes.school_student_practice._school_id_for",
+        new_callable=AsyncMock, return_value=None,
+    ):
+        r = await client.post(
+            f"/v1/school/student/submissions/{submission_id}/confirm-extraction",
+            headers=_auth(world["student_token"]),
+            json={},
+        )
+    assert r.status_code == 200, r.text
+
+    async with get_session_factory()() as s:
+        confirmed = (await s.execute(
+            text("SELECT extraction_confirmed_at FROM submissions WHERE id = :id"),
+            {"id": submission_id},
+        )).scalar_one()
+    assert confirmed is not None, "the student's confirmation was lost"
+    assert len(await _rows("submission.confirm_extraction")) == 1
 
 
 @pytest.mark.asyncio

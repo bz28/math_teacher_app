@@ -73,7 +73,7 @@ def test_every_logged_action_is_in_the_frontend_registry() -> None:
     backend = _backend_actions()
     # Guard the guard: if the scan silently stops finding anything, the
     # comparison below passes vacuously and this test protects nothing.
-    assert len(backend) >= 25, f"action scan found only {backend} — regex broke?"
+    assert len(backend) >= 33, f"action scan found only {backend} — regex broke?"
 
     missing = backend - _registry_actions()
     assert not missing, (

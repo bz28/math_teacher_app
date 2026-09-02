@@ -726,7 +726,25 @@ async def _school_id_for(
         )
     else:
         return None
-    return (await db.execute(stmt)).scalar_one_or_none()
+    # Guarded, and specifically with a SAVEPOINT rather than a bare
+    # try/except. This runs in the caller's frame — it is an argument
+    # expression at every call site — so it sits OUTSIDE
+    # `record_activity`'s own guard, inside whatever transaction the
+    # handler is holding. A bare except would swallow the error and
+    # leave asyncpg's transaction aborted, so the handler's next
+    # commit() would fail and roll back the student's ACTUAL mutation:
+    # exactly the failure `record_activity`'s savepoint comment
+    # describes. begin_nested() rolls back only this lookup.
+    #
+    # Returning None degrades gracefully — `record_activity` then falls
+    # back to its own guarded lookup, and the event is written without a
+    # school rather than not written at all.
+    try:
+        async with db.begin_nested():
+            return (await db.execute(stmt)).scalar_one_or_none()
+    except Exception:
+        logger.warning("student activity school lookup failed", exc_info=True)
+        return None
 
 
 async def _load_assignment_for_student(
@@ -1966,23 +1984,6 @@ async def submit_homework(
         raise HTTPException(status_code=409, detail="Already submitted") from None
     await db.refresh(submission)
 
-    # Logged AFTER the commit rather than inside it: the INSERT above is
-    # guarded by an IntegrityError→409 race handler, and folding a
-    # best-effort log into that transaction would mean restructuring the
-    # concurrency path. Post-commit, the only thing this can record is
-    # work that actually landed.
-    await record_student_activity(
-        db, user, "submission.create", "submission", submission.id,
-        {
-            "assignment_id": str(assignment_id),
-            "section_id": str(section_id),
-            "file_count": len(validated_files),
-            "is_late": is_late,
-        },
-        school_id=await _school_id_for(db, course_id=assignment.course_id),
-    )
-    await db.commit()
-
     # Capture the values we need for the response BEFORE spawning the
     # background pipeline. Locals are immune to session expiry.
     response = SubmitHomeworkResponse(
@@ -2006,6 +2007,30 @@ async def submit_homework(
         _spawn_background_task(
             _run_extraction_background(submission_id_for_task),
         )
+
+    # Logged LAST, and deliberately so. The submission is committed and
+    # durable by here, and `_run_extraction_background` has exactly one
+    # caller — the spawn directly above. Anything fallible placed between
+    # that commit and that spawn can 500 a submission that already
+    # landed; the retry then hits the one-shot 409 and extraction never
+    # fires, leaving the work permanently unprocessable with no path
+    # back. So the audit write goes after the spawn, and its own failure
+    # can cost nothing but the log line.
+    try:
+        await record_student_activity(
+            db, user, "submission.create", "submission", submission.id,
+            {
+                "assignment_id": str(assignment_id),
+                "section_id": str(section_id),
+                "file_count": len(validated_files),
+                "is_late": is_late,
+            },
+            school_id=await _school_id_for(db, course_id=assignment.course_id),
+        )
+        await db.commit()
+    except Exception:
+        logger.exception("submission.create activity write failed")
+        await db.rollback()
 
     return response
 
@@ -2133,10 +2158,7 @@ async def confirm_extraction(
     # this table.
     await record_student_activity(
         db, user, "submission.confirm_extraction", "submission", submission_id,
-        {
-            "submission_id": str(submission_id),
-            "corrections_count": len(sanitized_edits),
-        },
+        {"corrections_count": len(sanitized_edits)},
         school_id=await _school_id_for(db, assignment_id=sub.assignment_id),
     )
     await db.commit()
@@ -2212,7 +2234,7 @@ async def flag_extraction_submission(
     # wrong enough that a student pushed back.
     await record_student_activity(
         db, user, "submission.flag_extraction", "submission", submission_id,
-        {"submission_id": str(submission_id)},
+        None,
         school_id=await _school_id_for(db, assignment_id=sub.assignment_id),
     )
     await db.commit()
@@ -2431,7 +2453,6 @@ async def complete_consumption(
         await record_student_activity(
             db, user, "consumption.complete", "bank_consumption", row.id,
             {
-                "consumption_id": str(row.id),
                 "bank_item_id": str(row.bank_item_id),
                 "context": row.context,
             },
@@ -2457,18 +2478,22 @@ async def flag_consumption(
         raise HTTPException(status_code=404, detail="Consumption not found")
     if row.student_id != user.id:
         raise HTTPException(status_code=403, detail="Not your consumption")
+    changed = row.flagged != body.flagged
     row.flagged = body.flagged
-    await record_student_activity(
-        db, user, "consumption.flag", "bank_consumption", row.id,
-        {
-            "consumption_id": str(row.id),
-            "bank_item_id": str(row.bank_item_id),
-            # The button toggles, so record which way it went —
-            # otherwise un-flagging is indistinguishable from flagging.
-            "flagged": body.flagged,
-        },
-        school_id=await _school_id_for(db, bank_item_id=row.bank_item_id),
-    )
+    if changed:
+        # Only on the state CHANGE, matching complete_consumption above:
+        # the button toggles, and a double-tap that lands on the same
+        # value is not a second decision.
+        await record_student_activity(
+            db, user, "consumption.flag", "bank_consumption", row.id,
+            {
+                "bank_item_id": str(row.bank_item_id),
+                # Record which way it went — otherwise un-flagging is
+                # indistinguishable from flagging.
+                "flagged": body.flagged,
+            },
+            school_id=await _school_id_for(db, bank_item_id=row.bank_item_id),
+        )
     await db.commit()
 
 
@@ -2678,16 +2703,22 @@ async def bank_item_step_chat(
     # engagement exists only inside raw llm_call text. turn_index gives
     # struggle intensity — "14 questions on one step" — while storing
     # not one word of what was said.
-    await record_student_activity(
-        db, user, "tutor.step_chat", "bank_item", bank_item_id,
-        {
-            "bank_item_id": str(bank_item_id),
-            "step_index": body.step_index,
-            "turn_index": len(body.prior_messages),
-        },
-        school_id=school_id,
-    )
-    await db.commit()
+    # Guarded: the answer above is already generated and BILLED. A
+    # failed audit write must not 500 the response and make the student
+    # pay for a second generation on retry.
+    try:
+        await record_student_activity(
+            db, user, "tutor.step_chat", "bank_item", bank_item_id,
+            {
+                "step_index": body.step_index,
+                "turn_index": len(body.prior_messages),
+            },
+            school_id=school_id,
+        )
+        await db.commit()
+    except Exception:
+        logger.exception("tutor.step_chat activity write failed")
+        await db.rollback()
     return ChatResponse(reply=result.feedback)
 
 
@@ -2711,15 +2742,16 @@ async def bank_item_problem_chat(
         user_id=str(user.id),
         subject=subject,
     )
-    await record_student_activity(
-        db, user, "tutor.problem_chat", "bank_item", bank_item_id,
-        {
-            "bank_item_id": str(bank_item_id),
-            "turn_index": len(body.prior_messages),
-        },
-        school_id=school_id,
-    )
-    await db.commit()
+    try:
+        await record_student_activity(
+            db, user, "tutor.problem_chat", "bank_item", bank_item_id,
+            {"turn_index": len(body.prior_messages)},
+            school_id=school_id,
+        )
+        await db.commit()
+    except Exception:
+        logger.exception("tutor.problem_chat activity write failed")
+        await db.rollback()
     return ChatResponse(reply=result.feedback)
 
 
