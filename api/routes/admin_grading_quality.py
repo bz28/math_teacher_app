@@ -219,6 +219,11 @@ async def _coverage_counts(
         _unreadable_ok(),
         SubmissionGrade.graded_at.is_not(None),
         SubmissionGrade.graded_at >= since,
+        # Same exclusion as _reviewed_rows, and it has to be the same or
+        # this page reports override stats over one population beside a
+        # coverage tile counting another — the exact mismatch the
+        # comment above _reviewed_rows warns about.
+        User.is_preview.is_(False),
     ]
     if subject:
         filters.append(Course.subject == subject)

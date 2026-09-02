@@ -2261,7 +2261,7 @@ async def publish_grades(
     # can see the result; the graded/published counts and the gradebook
     # still filter her out.
     stmt = (
-        select(SubmissionGrade)
+        select(SubmissionGrade, User.is_preview)
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
         .join(User, User.id == Submission.student_id)
         .where(
@@ -2283,21 +2283,28 @@ async def publish_grades(
     )
     if reviewed_only:
         stmt = stmt.where(SubmissionGrade.reviewed_at.is_not(None))
-    grades = (await db.execute(stmt)).scalars().all()
+    rows = (await db.execute(stmt)).all()
 
     now = datetime.now(UTC)
-    for g in grades:
+    for g, _is_preview in rows:
         g.published_final_score = g.final_score
         g.published_breakdown = g.breakdown
         g.published_teacher_notes = g.teacher_notes
         g.grade_published_at = now
 
+    # The teacher's own rehearsal is released alongside the class — it
+    # has to be, or she can never see the score on the student view she
+    # was checking. But it is not a grade that went out to anybody, so
+    # the number reported back and written to the audit log counts only
+    # her students' grades.
+    published_count = sum(1 for _, is_preview in rows if not is_preview)
+
     await record_activity(
         db, current_user, "grade.publish", "assignment", a.id,
-        {"published_count": len(grades), "reviewed_only": reviewed_only},
+        {"published_count": published_count, "reviewed_only": reviewed_only},
     )
     await db.commit()
-    return {"status": "ok", "published_count": len(grades)}
+    return {"status": "ok", "published_count": published_count}
 
 
 # ── Submission detail viewing (list endpoint already exists above as

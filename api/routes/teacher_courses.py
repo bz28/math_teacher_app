@@ -579,8 +579,15 @@ async def get_course_setup_status(
         select(Section.id).where(Section.course_id == course_id),
     )
     has_student = await _exists(
-        select(SectionEnrollment.id).where(
+        select(SectionEnrollment.id)
+        .join(User, User.id == SectionEnrollment.student_id)
+        .where(
             SectionEnrollment.course_id == course_id,
+            # Her preview shadow gets a real enrollment row, so without
+            # this the checklist tells her she has students when she has
+            # none. Pre-existing, but it is the neighbour of the
+            # milestone below and fails the same way.
+            User.is_preview.is_(False),
         ),
     )
     has_materials = await _exists(

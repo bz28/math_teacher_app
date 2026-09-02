@@ -445,8 +445,10 @@ function HomeworkSectionReview({
             submission: submissionByStudent.get(st.id) ?? null,
           }))
           .sort((a, b) => a.student_name.localeCompare(b.student_name));
-        // Appended, never sorted in — the roster is her class, and her
-        // own test run sits after it rather than among her students.
+        // Appended last, though TriageRoster re-buckets everything by
+        // status when it renders, so an ungraded or flagged rehearsal
+        // can still surface above her students. The badge is what
+        // distinguishes it, not its position.
         if (previewEntry) merged.push(previewEntry);
         setRoster(merged);
         // Auto-select the first submitter that still needs release —
@@ -601,13 +603,25 @@ function HomeworkSectionReview({
     return parts.join(" · ");
   }, [hwTitle, sectionName]);
 
-  // `roster` is what the left list shows, and it includes the teacher's
-  // own rehearsal so she can open it. `classRoster` is her actual
-  // class. EVERY count on this page describes the class — "1 of 1
-  // submitted" must not become true because she tested her own
-  // homework. Derived once, so no individual count has to remember.
+  // Two populations, and which one a number belongs to is decided by
+  // what the number is FOR:
+  //
+  //   classRoster — her students. Anything describing the class reads
+  //       this: "1 of 1 submitted" must not become true because she
+  //       tested her own homework, and a triage chip counting her would
+  //       send her looking for a pupil who doesn't exist.
+  //   roster — what the left list shows, her own rehearsal included so
+  //       she can open it. Anything describing what a BUTTON WILL DO
+  //       reads this, because the actions genuinely act on her too:
+  //       publishing grades releases her rehearsal's grade (it has to,
+  //       or she can never see the score on the student view she was
+  //       checking), and grading pending work grades it.
+  //
+  // So "Students · 0/3 submitted" beside "Publish 1 grade" is not a
+  // contradiction — the first describes her class, the second describes
+  // the click. Keep new counts on the right side of that line.
   const classRoster = useMemo(
-    () => roster?.filter((e) => !e.submission?.is_preview) ?? null,
+    () => (roster ? classOnly(roster) : null),
     [roster],
   );
 
@@ -943,8 +957,8 @@ function HomeworkSectionReview({
   // section-scoped action would misdescribe what pressing it does.
   const ungradedInSection = useMemo(() => {
     if (!roster) return 0;
-    return roster.filter((e) => isAwaitingGrade(e) && !e.submission?.is_preview)
-      .length;
+    // Action count — "Grade N now" does grade her rehearsal too.
+    return roster.filter((e) => isAwaitingGrade(e)).length;
   }, [roster]);
   // Reviewed vs unopened split of the full to-release set (HW-wide).
   const toReleaseTotal = pendingTotal + dirtyTotal;
@@ -2037,14 +2051,23 @@ function hasLowConfidence(entry: RosterEntry): boolean {
   );
 }
 
+/** Her students, without her own rehearsal. See the two-populations
+ *  note in HomeworkSectionReview: class counts use this, action counts
+ *  use the full roster. */
+function classOnly(entries: RosterEntry[]): RosterEntry[] {
+  return entries.filter((e) => !e.submission?.is_preview);
+}
+
 function applyRosterFilter(
   roster: RosterEntry[],
   filter: RosterFilter,
 ): RosterEntry[] {
   if (filter === "all") return roster;
-  if (filter === "needs_me") return roster.filter(needsTeacher);
-  if (filter === "low_confidence") return roster.filter(hasLowConfidence);
-  return roster.filter(isFlagged);
+  // Same population the chips count — see RosterFilterBar.
+  if (filter === "needs_me") return classOnly(roster).filter(needsTeacher);
+  if (filter === "low_confidence")
+    return classOnly(roster).filter(hasLowConfidence);
+  return classOnly(roster).filter(isFlagged);
 }
 
 function RosterFilterBar({
@@ -2056,9 +2079,10 @@ function RosterFilterBar({
   value: RosterFilter;
   onChange: (v: RosterFilter) => void;
 }) {
-  // Chip counts describe the class, like every other count here — her
-  // own rehearsal is on the list but isn't one of her students.
-  const forCounting = roster.filter((e) => !e.submission?.is_preview);
+  // Chips are class triage, so they count her students — and the list
+  // they filter to must be the same population, or a chip reading 1
+  // opens a list of 2.
+  const forCounting = classOnly(roster);
   const flaggedCount = forCounting.filter(isFlagged).length;
   const needsMeCount = forCounting.filter(needsTeacher).length;
   const lowConfidenceCount = forCounting.filter(hasLowConfidence).length;
