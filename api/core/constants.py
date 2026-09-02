@@ -45,6 +45,13 @@ MAX_SUBMISSION_TOTAL_BYTES = 50 * 1024 * 1024
 # headroom for multi-page worksheets.
 MAX_SUBMISSION_FILES = 10
 
+# Per-field cap on the teacher's grading rubric. These four free-text
+# fields are rendered verbatim into the grading prompt
+# (`grading_ai._build_rubric_block`), so an unbounded field is an
+# unbounded prompt. Matches the 2000-char cap the per-problem feedback
+# textarea already uses.
+MAX_RUBRIC_FIELD_CHARS = 2000
+
 # ---------------------------------------------------------------------------
 # Logging / storage
 # ---------------------------------------------------------------------------

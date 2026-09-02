@@ -111,6 +111,41 @@ const restoreDollarText = (s: string) => s.replaceAll(DOLLAR_SENTINEL, "$");
 const restoreDollarMath = (s: string) => s.replaceAll(DOLLAR_SENTINEL, "\\$");
 
 function parse(input: string): Segment[] {
+  // `text` is typed `string`, but this component is the render target for
+  // free-form JSON the API stores without validating — `Assignment.rubric`
+  // fields, extraction blobs, AI-authored reasoning. A value that isn't a
+  // string used to throw here, and because MathText renders inside the
+  // teacher's grading and homework pages, one bad row took the entire page
+  // down behind an error boundary with no way back from the UI. Degrade to
+  // showing what's there instead: a renderer should never be the thing that
+  // makes a page unreachable.
+  // Cast through `unknown`: the prop is declared `string`, so TS narrows
+  // the guard below to `never` without it. The guard is about runtime
+  // values the type system never saw, not about the declared type.
+  const raw: unknown = input;
+  if (typeof raw !== "string") {
+    if (raw == null) return [];
+    // Arrays are the shape actually seen in the wild (a rubric field
+    // stored as a list of strings); join them the way a person would,
+    // matching how migration cl1000081 normalizes the same shape.
+    if (Array.isArray(raw)) {
+      const joined = raw
+        .filter((v): v is string | number =>
+          typeof v === "string" || typeof v === "number",
+        )
+        .map((v) => String(v).trim())
+        .filter(Boolean)
+        .join("; ");
+      return joined ? [{ type: "text", content: joined }] : [];
+    }
+    // A number or boolean has an honest rendering; an object does not —
+    // "[object Object]" is worse than showing nothing, and it is the same
+    // call the migration makes for a nested value.
+    if (typeof raw === "number" || typeof raw === "boolean") {
+      return [{ type: "text", content: String(raw) }];
+    }
+    return [];
+  }
   // Clean up before parsing
   let text = input.replace(/<br\s*\/?>/gi, "\n");
   // Protect escaped (literal) dollars from the math-delimiter matcher.

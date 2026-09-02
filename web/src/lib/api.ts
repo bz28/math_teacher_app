@@ -209,11 +209,51 @@ export interface EntitlementsResponse {
  * (e.g. entitlement gating).
  */
 export interface ApiErrorBody {
-  detail?: string;
+  /** A plain string on the app's own `HTTPException(detail=...)` errors.
+   *  FastAPI's own 422s put an ARRAY of `{loc, msg, type}` here instead
+   *  — see `apiErrorMessage`. */
+  detail?: string | ValidationIssue[];
   entitlement?: string;
   is_limit?: boolean;
   message?: string;
   [key: string]: unknown;
+}
+
+/** One entry in FastAPI's 422 `detail` array. */
+interface ValidationIssue {
+  loc?: (string | number)[];
+  msg?: string;
+  type?: string;
+}
+
+/**
+ * A human-readable message for an error body.
+ *
+ * `detail` is a string for every `HTTPException` the app raises, but
+ * FastAPI's request-validation failures put an ARRAY of issue objects
+ * there. Passing that array to `new Error()` stringifies it to
+ * "[object Object]", which is what a teacher was shown when a field
+ * failed validation — a dead end with no indication of what to change.
+ * Render the field name and reason instead.
+ */
+export function apiErrorMessage(status: number, body: ApiErrorBody): string {
+  const detail = body.detail;
+  if (typeof detail === "string" && detail) return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    return detail
+      .map((issue) => {
+        // `loc` is like ["body", "rubric", "notes"]; the last segment is
+        // the field the teacher can actually act on. Drop the framing.
+        const field = issue.loc?.[issue.loc.length - 1];
+        const msg = issue.msg ?? "is not valid";
+        return typeof field === "string" && field !== "body"
+          ? `${field}: ${msg}`
+          : msg;
+      })
+      .join("; ");
+  }
+  if (typeof body.message === "string" && body.message) return body.message;
+  return `API error ${status}`;
 }
 
 export class ApiError extends Error {
@@ -226,7 +266,7 @@ export class ApiError extends Error {
   public body: ApiErrorBody;
 
   constructor(status: number, body: ApiErrorBody) {
-    super(body.detail ?? `API error ${status}`);
+    super(apiErrorMessage(status, body));
     this.name = "ApiError";
     this.status = status;
     this.body = body;

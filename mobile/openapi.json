@@ -60,6 +60,58 @@
         "title": "AssignSectionsRequest",
         "type": "object"
       },
+      "AssignmentRubric": {
+        "additionalProperties": false,
+        "description": "The teacher-authored grading rubric, as the UI actually collects it.\n\nThis used to be a bare `dict[str, Any]`, which meant the API accepted\nany shape at all \u2014 a gap `api/models/llm_payload.py` already called\nout (\"no key whitelist, value validation or length cap\"). Two things\nmade it worth closing:\n\n* Every reader assumes `str`. The teacher review page renders these\n  through `MathText`, the homework page's `normalizeRubric` calls\n  `.trim()` on them, and `grading_ai._build_rubric_block` interpolates\n  them into a prompt. A list or a number reaching any of those is a\n  crash or a garbled prompt, not a graceful degrade \u2014 and a crash here\n  takes the whole grading page down behind an error boundary, with no\n  way out of it from the UI.\n* These four fields are rendered verbatim into an LLM prompt, so an\n  unbounded string is an unbounded prompt.\n\n`extra=\"forbid\"` rather than ignore: the only writer is the rubric\neditor, which emits exactly these four keys, so an unexpected key\nmeans a client bug and a 422 says so instead of silently dropping the\nteacher's work. (`grading_mode` appears in a stale comment on\n`Assignment.rubric` but has never been written.)",
+        "properties": {
+          "common_mistakes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Common Mistakes"
+          },
+          "full_credit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Credit"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "partial_credit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partial Credit"
+          }
+        },
+        "title": "AssignmentRubric",
+        "type": "object"
+      },
       "BreakdownEntry": {
         "properties": {
           "deductions": {
@@ -390,14 +442,12 @@
           "rubric": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/AssignmentRubric"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Rubric"
+            ]
           },
           "source_type": {
             "anyOf": [
@@ -4871,14 +4921,12 @@
           "rubric": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/AssignmentRubric"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Rubric"
+            ]
           },
           "status": {
             "anyOf": [
