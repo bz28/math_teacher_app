@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
   type GenerationBoardData,
@@ -11,6 +11,8 @@ import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
 import { EditorialModal } from "../components/EditorialModal";
+import { Pagination } from "../components/Pagination";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 
 // ────────────────────────────────────────────────────────────────────
 // Generation quality — which generated questions teachers had to fix.
@@ -136,12 +138,17 @@ function boardTone(rate: number): "ok" | "warn" | "danger" {
 }
 
 function GenerationBoard({
-  data, outcome, onOutcome, onOpen,
+  data, outcome, onOutcome, onOpen, offset, onOffset, loading,
 }: {
   data: GenerationBoardData;
   outcome: string;
   onOutcome: (v: string) => void;
   onOpen: (id: string) => void;
+  offset: number;
+  onOffset: (v: number) => void;
+  /** A fetch is in flight — show the loader rather than the previous
+   *  page's rows under the new page's label. */
+  loading: boolean;
 }) {
   const { summary } = data;
   const settled = summary.settled;
@@ -260,12 +267,22 @@ function GenerationBoard({
       <DataTable
         columns={cols}
         rows={data.questions}
+        // Server-paged: one page of a larger set. <Pagination> below owns
+        // paging, and client-side sort would rank only this page.
+        serverPaged
         rowKey={(q) => q.id}
+        loading={loading}
         onRowClick={(q) => onOpen(q.id)}
         rowStatus={(q) => OUTCOME_META[q.outcome].color}
         drill
         minWidth={680}
         empty={<span className="dt-state-title">No questions match this filter.</span>}
+      />
+      <Pagination
+        offset={offset}
+        limit={BOARD_PAGE_SIZE}
+        total={data.total_count}
+        onChange={onOffset}
       />
     </>
   );
@@ -276,6 +293,7 @@ export default function GenerationQuality() {
   const [board, setBoard] = useState<GenerationBoardData | null>(null);
   const [trackingSince, setTrackingSince] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<string>("");
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -284,19 +302,36 @@ export default function GenerationQuality() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
+  // Only the newest load may write state — see the note on the same guard
+  // in Quality.tsx. Paging makes overlapping fetches ordinary, and the
+  // retry button calls load() directly, so a sequence beats a
+  // cancelled-flag scoped to an effect.
+  const loadSeq = useRef(0);
+
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     setError(null);
     try {
-      const brd = await api.generationBoard(outcome ? { outcome } : undefined);
+      // Paged on the server. Sending no limit took the endpoint's default
+      // 50 while the count beside the table read the true total, so the
+      // table showed a prefix and said nothing about it.
+      const brd = await api.generationBoard({
+        limit: String(BOARD_PAGE_SIZE),
+        offset: String(offset),
+        ...(outcome ? { outcome } : {}),
+      });
+      if (seq !== loadSeq.current) return;
       setBoard(brd);
       setTrackingSince(brd.tracking_since);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't load generation quality");
+      if (seq === loadSeq.current) {
+        setError(e instanceof Error ? e.message : "Couldn't load generation quality");
+      }
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
-  }, [outcome]);
+  }, [outcome, offset]);
 
   useEffect(() => {
     void load();
@@ -415,8 +450,11 @@ export default function GenerationQuality() {
         <GenerationBoard
           data={board}
           outcome={outcome}
-          onOutcome={setOutcome}
+          onOutcome={(v) => { setOffset(0); setOutcome(v); }}
           onOpen={setOpenId}
+          offset={offset}
+          onOffset={setOffset}
+          loading={loading}
         />
       )}
 

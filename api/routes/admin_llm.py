@@ -184,7 +184,10 @@ async def llm_calls(
 
     calls_query = (
         calls_query.where(*row_filters)
-        .order_by(LLMCall.created_at.desc())
+        # `id` breaks ties: created_at defaults to now(), the TRANSACTION
+        # timestamp, so calls logged in one transaction share a value and
+        # OFFSET paging over an unstable order repeats and skips rows.
+        .order_by(LLMCall.created_at.desc(), LLMCall.id)
         .offset(offset)
         .limit(limit)
     )

@@ -188,9 +188,18 @@ async def solution_quality(
         )
         .where(*list_filters)
         # Repairs first — a solution nobody touched has nothing to debug.
+        #
+        # `id` breaks ties, and ties are the norm rather than an edge case:
+        # `created_at` defaults to now(), which in Postgres is the
+        # TRANSACTION timestamp, and generation commits a whole batch at
+        # once — so every question in a batch carries a byte-identical
+        # value. Without a unique final key the order of tied rows is
+        # unspecified and may differ between queries, so paging with
+        # OFFSET can show one row twice and never show another.
         .order_by(
             case((o == _REPAIRED, 0), else_=1).cast(Integer),
             desc(QuestionBankItem.created_at),
+            QuestionBankItem.id,
         )
         .offset(offset)
         .limit(limit)

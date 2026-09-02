@@ -7,6 +7,7 @@ import {
 import { api, type LLMCallsData, type SchoolListItem } from "../lib/api";
 import { formatRelativeDate, shortModel, shortId, fmtCost } from "../lib/format";
 import { windowLabel } from "../lib/definitions";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
@@ -17,7 +18,6 @@ import { EditorialModal } from "../components/EditorialModal";
 import { useConfirm } from "../lib/confirm";
 
 const COLORS = ["#14130f", "#4a6b3a", "#b8431a", "#3d5a78", "#a66b15", "#6b21a8"];
-const PAGE_SIZE = 25;
 
 type CallRow = LLMCallsData["calls"][number];
 type Status = "" | "ok" | "failed";
@@ -58,6 +58,9 @@ export default function LLMCalls() {
   const [selectedCall, setSelectedCall] = useState<CallRow | null>(null);
   const [debugState, setDebugState] = useState<Record<string, string>>({});
   const [offset, setOffset] = useState(0);
+  // Which page the rows on screen are, or null while none is loaded for
+  // the offset being asked about — see Users.tsx.
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -83,11 +86,18 @@ export default function LLMCalls() {
       school_id: schoolFilter,
       search,
       ...(status === "ok" ? { success: "true" } : status === "failed" ? { success: "false" } : {}),
-      limit: String(PAGE_SIZE),
+      limit: String(BOARD_PAGE_SIZE),
       offset: String(offset),
     })
-      .then((d) => { if (!cancelled) { setData(d); setError(null); } })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load LLM calls."); });
+      .then((d) => { if (!cancelled) { setData(d); setLoadedOffset(offset); setError(null); } })
+      .catch((e) => {
+        if (cancelled) return;
+        // Mark this offset loaded even though it failed: that ends the
+        // in-flight state so DataTable, which renders loading ahead of
+        // error, reaches the message and its Retry.
+        setLoadedOffset(offset);
+        setError(e instanceof Error ? e.message : "Failed to load LLM calls.");
+      });
     return () => { cancelled = true; };
   }, [hours, fnFilter, userFilter, submissionFilter, sessionFilter, schoolFilter, status, search, offset, reloadKey]);
 
@@ -169,7 +179,7 @@ export default function LLMCalls() {
   ], []);
 
   if (!data && error) {
-    return <ErrorState message={error} onRetry={() => { setError(null); setReloadKey((k) => k + 1); }} />;
+    return <ErrorState message={error} onRetry={() => { setError(null); setLoadedOffset(null); setReloadKey((k) => k + 1); }} />;
   }
   if (!data) return <p className="loading">Loading…</p>;
 
@@ -247,6 +257,7 @@ export default function LLMCalls() {
             defaultSort={{ key: "count", dir: "desc" }}
             onRowClick={(r) => { setFnFilter(r.function); setParam("status", "failed"); }}
             rowStatus={() => "var(--danger)"}
+            unpaged
             minWidth={360}
           />
         </div>
@@ -258,14 +269,22 @@ export default function LLMCalls() {
         <DataTable
           columns={columns}
           rows={data.calls}
+          // Server-paged: one page of a larger set. <Pagination> below owns
+          // paging, and client-side sort would rank only this page.
+          serverPaged
           rowKey={(c) => c.id}
-          defaultSort={{ key: "created_at", dir: "desc" }}
+          loading={loadedOffset !== offset}
+          // Unconditionally: withheld, a failed Next left the previous
+          // page's rows under the new page's label, reading as data rather
+          // than as a failure.
+          error={error}
+          onRetry={() => { setError(null); setLoadedOffset(null); setReloadKey((k) => k + 1); }}
           onRowClick={(c) => setSelectedCall(c)}
           rowStatus={(c) => (c.id === selectedCall?.id ? "var(--accent)" : !c.success ? "var(--danger)" : undefined)}
           empty={<span className="dt-state-title">No calls match these filters.</span>}
           minWidth={720}
         />
-        <Pagination offset={offset} limit={PAGE_SIZE} total={data.total_count} onChange={setOffset} />
+        <Pagination offset={offset} limit={BOARD_PAGE_SIZE} total={data.total_count} onChange={setOffset} />
       </div>
 
       {/* ── ③ One call, up front — prompt in, response out ───────────── */}
@@ -353,6 +372,7 @@ export default function LLMCalls() {
             rowKey={(r) => r.function}
             defaultSort={{ key: "total_cost", dir: "desc" }}
             onRowClick={(r) => setFnFilter(r.function)}
+            unpaged
             minWidth={520}
           />
         </div>

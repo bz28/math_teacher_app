@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type SchoolListItem } from "../lib/api";
 import { formatRelativeDate, fmtCost } from "../lib/format";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import { btnGhost, btnPrimary, inputStyle } from "../lib/styles";
 import {
   STALE_AFTER_DAYS,
@@ -324,7 +325,7 @@ export default function Schools() {
           // typing "Lincoln" alone would match fourteen rows.
           searchKeys={(s) => [s.name, s.city, s.state, s.contact_email]}
           searchLabel="schools"
-          pageSize={25}
+          pageSize={BOARD_PAGE_SIZE}
           rowStatus={(s) =>
             s.failed_calls_24h > 0
               ? "var(--danger)"

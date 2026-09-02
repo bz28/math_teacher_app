@@ -11,6 +11,8 @@ import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
 import ErrorState from "../components/ErrorState";
 import { EditorialModal } from "../components/EditorialModal";
+import { Pagination } from "../components/Pagination";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import { MetaChip } from "../components/MetaChip";
 import { formatRelativeDate } from "../lib/format";
 import { windowLabel } from "../lib/definitions";
@@ -186,18 +188,28 @@ export default function ExtractionQuality() {
   const [reloadKey, setReloadKey] = useState(0);
   const [hours, setHours] = useState("2160");
   const [bucket, setBucket] = useState("");
+  const [offset, setOffset] = useState(0);
+  // Which page the rows on screen are, or null while none is loaded for
+  // the offset being asked about — see Users.tsx.
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     api
-      .extractionQuality({ hours, bucket })
-      .then((d) => { if (!cancelled) { setData(d); setError(null); } })
+      // Paged on the server. Sending no limit took the endpoint's default
+      // 50 while the count in the heading read the true total, so the table
+      // showed a prefix and said nothing about it.
+      .extractionQuality({ hours, bucket, limit: String(BOARD_PAGE_SIZE), offset: String(offset) })
+      .then((d) => { if (!cancelled) { setData(d); setLoadedOffset(offset); setError(null); } })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load extraction quality.");
+        if (cancelled) return;
+        // Mark this offset loaded even though it failed — see AuditLogs.
+        setLoadedOffset(offset);
+        setError(e instanceof Error ? e.message : "Failed to load extraction quality.");
       });
     return () => { cancelled = true; };
-  }, [hours, bucket, reloadKey]);
+  }, [hours, bucket, offset, reloadKey]);
 
   const cols: Column<ExtractionCase>[] = useMemo(() => [
     {
@@ -249,7 +261,7 @@ export default function ExtractionQuality() {
   ], []);
 
   if (!data && error) {
-    return <ErrorState message={error} onRetry={() => { setError(null); setReloadKey((k) => k + 1); }} />;
+    return <ErrorState message={error} onRetry={() => { setError(null); setLoadedOffset(null); setReloadKey((k) => k + 1); }} />;
   }
   if (!data) return <p className="loading">Loading…</p>;
 
@@ -274,13 +286,13 @@ export default function ExtractionQuality() {
       </div>
 
       <div className="filters">
-        <select value={hours} onChange={(e) => setHours(e.target.value)}>
+        <select value={hours} onChange={(e) => { setOffset(0); setHours(e.target.value); }}>
           <option value="168">Last 7 days</option>
           <option value="720">Last 30 days</option>
           <option value="2160">Last 90 days</option>
           <option value="87600">All time</option>
         </select>
-        <select value={bucket} onChange={(e) => setBucket(e.target.value)}>
+        <select value={bucket} onChange={(e) => { setOffset(0); setBucket(e.target.value); }}>
           <option value="">All outcomes</option>
           <option value="flagged">Flagged only</option>
           <option value="repaired">Corrected only</option>
@@ -412,6 +424,7 @@ export default function ExtractionQuality() {
                 ]}
                 rows={data.by_subject}
                 rowKey={(s) => s.subject}
+                unpaged
                 minWidth={480}
                 empty={<span className="dt-state-title">No subject data in this window.</span>}
               />
@@ -428,12 +441,27 @@ export default function ExtractionQuality() {
             <DataTable
               columns={cols}
               rows={data.cases}
+              // Server-paged: one page of a larger set. <Pagination> below owns
+              // paging, and client-side sort would rank only this page.
+              serverPaged
               rowKey={(c) => c.submission_id}
+              loading={loadedOffset !== offset}
+              // Unconditionally: withheld, a failed Next left the previous
+              // page's rows under the new page's label, reading as data
+              // rather than as a failure.
+              error={error}
+              onRetry={() => { setError(null); setLoadedOffset(null); setReloadKey((k) => k + 1); }}
               onRowClick={(c) => setOpenId(c.submission_id)}
               rowStatus={(c) => BUCKET_META[c.bucket].color}
               drill
               minWidth={680}
               empty={<span className="dt-state-title">No reads match this filter.</span>}
+            />
+            <Pagination
+              offset={offset}
+              limit={BOARD_PAGE_SIZE}
+              total={data.total_count}
+              onChange={setOffset}
             />
           </div>
         </>

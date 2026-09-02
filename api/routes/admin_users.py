@@ -517,7 +517,13 @@ async def users(
     )
     users_query = (
         users_query
-        .order_by(sort_columns.get(sort_by, sort_columns["total_cost"]))
+        # `id` breaks ties so OFFSET paging is stable. Every sort column
+        # here ties in bulk — the default coalesces missing spend to 0.0,
+        # which is most of the table on a real console, and names repeat.
+        # Without a unique final key Postgres may order a tie group
+        # differently per query, so a page can repeat one user and never
+        # show another.
+        .order_by(sort_columns.get(sort_by, sort_columns["total_cost"]), User.id)
         .limit(limit)
         .offset(offset)
     )

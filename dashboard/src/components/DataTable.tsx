@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 
+import { PAGE_SIZE } from "../lib/pagination";
 import { Pagination, SearchInput } from "./Pagination";
 
 /**
@@ -13,18 +14,30 @@ import { Pagination, SearchInput } from "./Pagination";
  * Generic over the row type; drive it with a columns config so a tab is
  * just data + column definitions. Sorting is internal (click a header).
  *
- * Long lists: pass `searchKeys` and/or `pageSize` and the table grows a
- * search box and a pager ON ITS OWN, but only once the list is long enough
- * to need them (see LONG_LIST_THRESHOLD). Both used to be wired by hand per
- * page, which meant most tables never got them at all — a roster reads fine
- * at six teachers and is unusable at sixty, and nobody notices until the day
- * it happens. Owning the behaviour here means every table crosses that line
- * correctly without anyone remembering to.
+ * Long lists page themselves at `PAGE_SIZE` with no wiring at the call
+ * site, and grow a search box too once `searchKeys` is supplied. Both used
+ * to be opt-in, which meant most tables never got them at all — a roster
+ * reads fine at six teachers and is unusable at sixty, and nobody notices
+ * until the day it happens. Owning the behaviour here means every table
+ * crosses that line correctly without anyone remembering to.
+ *
+ * This component serves three roles, and who owns paging is the
+ * difference:
+ *
+ *   A LIST is browsed and we page it — a roster, submissions, a set the
+ *   caller fetched whole. The default.
+ *   A CARD is read at a glance — "by function", "by subject", a
+ *   scoreboard whose whole point is the shape of the distribution. It
+ *   passes `unpaged`, because five of eight rows under a Next button is
+ *   a card that quietly lies about what it measured.
+ *   A BOARD is paged by its caller, which fetched one page with
+ *   limit+offset and renders its own `<Pagination>`. It passes
+ *   `serverPaged`, which turns off both our pager and our sort — see the
+ *   prop docs for why sorting one page is a claim we can't honour.
+ *
+ * When in doubt it's a list: a card that outgrows a glance was always a
+ * list wearing the wrong clothes.
  */
-
-// Below this many rows a search box and pager are noise: the list already
-// fits on screen and the eye beats typing.
-export const LONG_LIST_THRESHOLD = 10;
 
 export interface Column<T> {
   /** Stable key; also the sort identity. */
@@ -65,8 +78,39 @@ export interface DataTableProps<T> {
   loadingRows?: number;
   /** Fields a search query matches against. Omit for no search. */
   searchKeys?: (row: T) => (string | null | undefined)[];
-  /** Rows per page. Omit to render every row. */
+  /** Rows per page. Defaults to the console-wide `PAGE_SIZE`. */
   pageSize?: number;
+  /**
+   * Render every row, never a page of them — for a summary or breakdown
+   * card ("by function", "by subject", a scoreboard) whose whole
+   * distribution IS the content. Paging one hides the tail and turns a
+   * glance into a click: a card measuring eight things that shows five is
+   * worse than no card, because nothing on screen says three are missing.
+   *
+   * These rows are the complete set, so sorting still sorts everything.
+   * For one page of a larger set, use `serverPaged`.
+   *
+   * Not for a long list that merely feels short today — those grow.
+   */
+  unpaged?: boolean;
+  /**
+   * These rows are ONE PAGE of a larger set; the caller fetched them with
+   * limit+offset and renders its own `<Pagination>`.
+   *
+   * Two things follow, and both are about not claiming more than we have.
+   * The internal pager stays off, so only one pager exists — stated here
+   * rather than left to the fetch limit and `pageSize` happening to be
+   * equal, which is a coincidence that breaks the first time someone
+   * changes one of them.
+   *
+   * And the sort headers go away. Sorting is client-side over `rows`, so
+   * on a page it reorders the visible handful while the caret implies it
+   * ranked the set: the top row reads as the worst of 1,280 when it is
+   * the worst of 25, and page 2 continues in server order rather than
+   * yours. Offering a control that cannot do what it appears to do is
+   * worse than not offering it.
+   */
+  serverPaged?: boolean;
   /** Noun used in the search placeholder and empty copy, e.g. "teachers". */
   searchLabel?: string;
 }
@@ -74,7 +118,8 @@ export interface DataTableProps<T> {
 export default function DataTable<T>({
   columns, rows, rowKey, onRowClick, rowStatus, drill,
   loading, error, onRetry, empty, defaultSort, minWidth = 640, loadingRows = 6,
-  searchKeys, pageSize, searchLabel = "rows",
+  searchKeys, pageSize = PAGE_SIZE, unpaged = false, serverPaged = false,
+  searchLabel = "rows",
 }: DataTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(defaultSort?.key ?? null);
   const [sortDir, setSortDir] = useState<SortDir>(defaultSort?.dir ?? "desc");
@@ -82,7 +127,12 @@ export default function DataTable<T>({
   const colCount = columns.length + (drill ? 1 : 0);
 
   const sorted = useMemo(() => {
-    if (!sortKey) return rows;
+    // A server-paged table arrives in the server's order and keeps it.
+    // Hiding the sort button was not enough on its own: `defaultSort` still
+    // seeded `sortKey`, so the page was silently reordered by a control the
+    // reader can no longer see — invisible only while a column's sortValue
+    // happens to agree with the server's ORDER BY.
+    if (serverPaged || !sortKey) return rows;
     const col = columns.find((c) => c.key === sortKey);
     if (!col?.sortValue) return rows;
     const dir = sortDir === "asc" ? 1 : -1;
@@ -92,13 +142,20 @@ export default function DataTable<T>({
       if (typeof av === "number" && typeof bv === "number") return dir * (av - bv);
       return dir * String(av).localeCompare(String(bv));
     });
-  }, [rows, columns, sortKey, sortDir]);
+  }, [rows, columns, sortKey, sortDir, serverPaged]);
 
-  // Both affordances stay hidden until the list is genuinely long, so a
-  // caller opting in doesn't force chrome onto a table of three.
-  const longEnough = rows.length > LONG_LIST_THRESHOLD;
+  // Whether `rows` is ours to page. Both opt-outs say it isn't: a card
+  // holds the whole set already, a board holds one page its caller owns.
+  //
+  // When it is ours, the pager and search box appear as soon as the list
+  // outgrows a single page. Deriving that threshold from `pageSize` rather
+  // than a separate constant means they arrive at exactly the row that
+  // first becomes unreachable — a fixed threshold above the page size
+  // hides rows behind a pager that never renders.
+  const ownsPaging = !unpaged && !serverPaged;
+  const longEnough = ownsPaging && rows.length > pageSize;
   const canSearch = !!searchKeys && longEnough;
-  const canPage = !!pageSize && longEnough;
+  const canPage = longEnough;
 
   const [query, setQuery] = useState("");
   const [offset, setOffset] = useState(0);
@@ -119,12 +176,12 @@ export default function DataTable<T>({
   // and no window where the two disagree.
   const maxOffset =
     canPage && filtered.length > 0
-      ? Math.floor((filtered.length - 1) / pageSize!) * pageSize!
+      ? Math.floor((filtered.length - 1) / pageSize) * pageSize
       : 0;
   const safeOffset = Math.min(offset, maxOffset);
 
   const visible = useMemo(
-    () => (canPage ? filtered.slice(safeOffset, safeOffset + pageSize!) : filtered),
+    () => (canPage ? filtered.slice(safeOffset, safeOffset + pageSize) : filtered),
     [filtered, canPage, safeOffset, pageSize],
   );
 
@@ -167,13 +224,22 @@ export default function DataTable<T>({
         <thead>
           <tr>
             {columns.map((c) => {
-              const sortable = !!c.sortValue;
+              // Sorting is client-side over `rows`, so on one page of a
+              // larger set it would reorder the handful on screen under a
+              // caret that implies it ranked the set.
+              const sortable = !!c.sortValue && !serverPaged;
               const active = sortKey === c.key;
               return (
                 <th
                   key={c.key}
                   style={{ textAlign: alignOf(c) }}
-                  aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
+                  aria-sort={
+                    // Never announce a sort a server-paged table neither
+                    // applies nor offers a control for.
+                    active && !serverPaged
+                      ? (sortDir === "asc" ? "ascending" : "descending")
+                      : undefined
+                  }
                 >
                   {sortable ? (
                     <button
@@ -298,10 +364,10 @@ export default function DataTable<T>({
         </tbody>
       </table>
       </div>
-      {canPage && !loading && !error && filtered.length > pageSize! && (
+      {canPage && !loading && !error && filtered.length > pageSize && (
         <Pagination
           offset={safeOffset}
-          limit={pageSize!}
+          limit={pageSize}
           total={filtered.length}
           onChange={setOffset}
         />

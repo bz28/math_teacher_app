@@ -5,6 +5,7 @@ import {
   type GoldenSetData,
   type GoldenStatus,
 } from "../lib/api";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import StatTile, { type TileTone } from "../components/StatTile";
 import StatusPill, { type PillTone } from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
@@ -274,6 +275,7 @@ export default function GoldenSet() {
       <DataTable
         columns={columns}
         rows={rows}
+        pageSize={BOARD_PAGE_SIZE}
         rowKey={(c) => c.id}
         onRowClick={(c) => setSelected(c)}
         rowStatus={(c) => (c.is_regression ? "var(--danger)" : STATUS[c.last_status].color)}

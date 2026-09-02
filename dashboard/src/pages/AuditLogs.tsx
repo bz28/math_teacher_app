@@ -8,6 +8,7 @@ import {
 } from "../lib/api";
 import { renderChipValue, shortId } from "../lib/format";
 import { windowLabel } from "../lib/definitions";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
@@ -26,8 +27,6 @@ import { Pagination, SearchInput } from "../components/Pagination";
  * did what, when?" Everything is URL-driven so a filtered view is a
  * shareable deep link, and the same filter drives the CSV export.
  */
-
-const PAGE_SIZE = 50;
 
 // Date-range presets → the backend `hours` window. "" = all-time.
 const RANGES: { value: string; label: string }[] = [
@@ -60,7 +59,15 @@ export default function AuditLogs() {
   const facet = searchParams.get("facet") ?? "";
   const typeFilter = searchParams.get("type") ?? "";
   const target = searchParams.get("target") ?? "";
-  const offset = Number(searchParams.get("offset") ?? "0");
+  // Sanitised, because this one comes from the URL rather than a pager.
+  // `?offset=abc` gives NaN, and NaN !== NaN — so the loaded marker could
+  // never match the requested offset and the table would sit on its
+  // skeleton for good, with the 422 behind it never rendering.
+  const rawOffset = Number(searchParams.get("offset") ?? "0");
+  const offset = Number.isInteger(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
+  // Which page the rows on screen are, or null while none is loaded for
+  // the offset being asked about — see Users.tsx.
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(null);
 
   // The filter fields, minus pagination — shared by the fetch and the
   // CSV export so the download is always exactly what's on screen.
@@ -78,15 +85,21 @@ export default function AuditLogs() {
   useEffect(() => {
     let cancelled = false;
     api
-      .auditTimeline({ ...filterParams, limit: String(PAGE_SIZE), offset: String(offset) })
+      .auditTimeline({ ...filterParams, limit: String(BOARD_PAGE_SIZE), offset: String(offset) })
       .then((d) => {
         if (!cancelled) {
           setData(d);
+          setLoadedOffset(offset);
           setError(null);
         }
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+        if (cancelled) return;
+        // Mark this offset loaded even though it failed: that ends the
+        // in-flight state so DataTable, which renders loading ahead of
+        // error, reaches the message and its Retry.
+        setLoadedOffset(offset);
+        setError(e instanceof Error ? e.message : "Failed to load");
       });
     return () => {
       cancelled = true;
@@ -330,14 +343,17 @@ export default function AuditLogs() {
         <DataTable
           columns={columns}
           rows={data?.entries ?? []}
+          // Server-paged: one page of a larger set. <Pagination> below owns
+          // paging, and client-side sort would rank only this page.
+          serverPaged
           rowKey={(e) => `${e.facet}:${e.id}`}
-          loading={!data && !error}
+          loading={loadedOffset !== offset}
           error={error}
           onRetry={() => {
             setError(null);
+            setLoadedOffset(null);
             setReloadKey((k) => k + 1);
           }}
-          defaultSort={{ key: "at", dir: "desc" }}
           rowStatus={(e) => (e.facet === "access" ? "var(--info)" : "var(--accent)")}
           empty={<span className="dt-state-title">No audit events match the current filter.</span>}
           minWidth={940}
@@ -346,7 +362,13 @@ export default function AuditLogs() {
           <Pagination
             total={data.total}
             limit={data.limit}
-            offset={data.offset}
+            // The REQUESTED offset, not the loaded one, matching every other
+            // board. Reading `data.offset` meant that after a failed page
+            // fetch the pager still showed the page you came from, so Next
+            // recomputed the offset you were already on, the effect didn't
+            // refire, and the button did nothing. The loading state above
+            // covers the gap while the two differ.
+            offset={offset}
             onChange={updateOffset}
           />
         )}

@@ -425,13 +425,17 @@ async def generation_board(
             o.label("outcome"),
         )
         .where(*list_filters)
-        # Worst first, so what needs reading is on top.
+        # Worst first, so what needs reading is on top. `id` breaks ties —
+        # see the note in admin_quality.py: a generation batch commits in
+        # one transaction, so its rows share an identical `created_at`, and
+        # OFFSET paging over an unstable order drops and repeats rows.
         .order_by(
             case(
                 (o == _REJECTED, 0), (o == _REDONE, 1), (o == _REPAIRED, 2),
                 else_=3,
             ).cast(Integer),
             desc(QuestionBankItem.created_at),
+            QuestionBankItem.id,
         )
         .offset(offset)
         .limit(limit)

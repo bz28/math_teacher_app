@@ -21,6 +21,7 @@ import {
   activityDetail,
 } from "../lib/activityActions";
 import { fmtCost, formatRelativeDate } from "../lib/format";
+import { PAGE_SIZE } from "../lib/pagination";
 import MathText from "./MathText";
 import { Pagination } from "./Pagination";
 
@@ -35,13 +36,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 // rendered source worksheet + produced problems + LLM cost. Reuses the
 // shared api client, Pagination, and format helpers — no new endpoints
 // beyond the admin activity/generation reads.
-
-const PAGE_SIZE = 25;
-// The timeline answers "what did this teacher just do" far more often
-// than "show me everything", so it opens on the last handful and pages
-// back from there. Generations keep the fuller page — that panel is
-// read as a list.
-const TIMELINE_PAGE_SIZE = 5;
 
 const sectionHeader = (title: string, right: React.ReactNode) => (
   <div
@@ -93,7 +87,7 @@ function ActivityTimeline({ teacherId }: { teacherId: string }) {
       .activityLog({
         actor_user_id: teacherId,
         action,
-        limit: String(TIMELINE_PAGE_SIZE),
+        limit: String(PAGE_SIZE),
         offset: String(offset),
       })
       .then((d) => {
@@ -248,6 +242,11 @@ function GenerationsPanel({ teacherId }: { teacherId: string }) {
 
   useEffect(() => {
     let cancelled = false;
+    // This panel used to page at 25 against the timeline's 5, on the
+    // reasoning that generations are "read as a list" while the timeline
+    // answers "what did they just do". Both are lists you page back
+    // through, and the console now has one answer for that — the size of
+    // a page isn't where those two differ.
     api
       .generationJobs({ teacher_id: teacherId, limit: String(PAGE_SIZE), offset: String(offset) })
       .then((d) => {

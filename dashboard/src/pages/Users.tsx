@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, getUserId, type SchoolListItem, type UsersData } from "../lib/api";
 import { formatRelativeDate, fmtCost } from "../lib/format";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import { activityPill, activityStatus, daysSince, windowLabel } from "../lib/definitions";
 import StatTile from "../components/StatTile";
 import StatusPill, { type PillTone } from "../components/StatusPill";
@@ -13,8 +14,6 @@ import { confirmAndDeleteUser } from "../lib/deleteUserFlow";
 import { useToast } from "../lib/toast";
 
 type UserRow = UsersData["users"][number];
-
-const PAGE_SIZE = 25;
 
 // Role presets driving the segmented filter. "" is the cross-cutting
 // All view; each other value maps straight to the backend `role` param.
@@ -120,6 +119,7 @@ export default function Users() {
   const [schoolId, setSchoolId] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(null);
   const [schools, setSchools] = useState<SchoolListItem[]>([]);
 
   // The console must not offer an admin destructive actions against
@@ -130,11 +130,20 @@ export default function Users() {
   const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
   const menuToggleRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
-  const reload = () =>
-    api
+  // Only the newest load may write state. Every other board here guards
+  // with an effect-scoped `cancelled` flag, but `reload()` is also called
+  // directly by the row actions, outside any effect that could clean it
+  // up — so a sequence, like the quality boards use. Without it a slower
+  // response landing last leaves `loadedOffset` on the wrong page and the
+  // table stuck on its skeleton with no fetch queued to clear it.
+  const loadSeq = useRef(0);
+
+  const reload = () => {
+    const seq = ++loadSeq.current;
+    return api
       .users({
         hours,
-        limit: String(PAGE_SIZE),
+        limit: String(BOARD_PAGE_SIZE),
         offset: String(offset),
         ...(role ? { role } : {}),
         // Plan / school selects are hidden on the Admin preset, so
@@ -144,8 +153,34 @@ export default function Users() {
         ...(!isAdminView && schoolId ? { school_id: schoolId } : {}),
         ...(search ? { search } : {}),
       })
-      .then((d) => { setData(d); setError(null); })
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load users."));
+      .then((d) => {
+        if (seq !== loadSeq.current) return;
+        setData(d);
+        setLoadedOffset(offset);
+        setError(null);
+      })
+      .catch((e) => {
+        if (seq !== loadSeq.current) return;
+        // Mark this offset loaded even though it failed: that ends the
+        // in-flight state so DataTable, which renders loading ahead of
+        // error, reaches the message and its Retry.
+        setLoadedOffset(offset);
+        setError(e instanceof Error ? e.message : "Failed to load users.");
+      });
+  };
+
+  // True whenever the rows on screen are not the page being asked for, so
+  // the table shows its loader instead. `offset` moves the instant the
+  // pager is clicked, and without this the label read "26-50 of 654" over
+  // rows 1-25 for the round trip — the screen contradicting itself, which
+  // is what this branch exists to remove.
+  //
+  // The three states it has to cover, and why `loadedOffset` is nullable:
+  // nothing loaded yet (null, so the first paint is a skeleton rather than
+  // an empty table reading "no users"), a page in flight (the two differ),
+  // and a retry (set back to null, or the failed page's own offset would
+  // read as loaded and show the wrong rows under the new label).
+  const paging = loadedOffset !== offset;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { reload(); }, [hours, role, plan, schoolId, search, offset, reloadKey]);
@@ -489,10 +524,17 @@ export default function Users() {
         <DataTable
           columns={columns}
           rows={data?.users ?? []}
+          // Server-paged: one page of a larger set. <Pagination> below owns
+          // paging, and client-side sort would rank only this page.
+          serverPaged
           rowKey={(u) => u.id}
-          loading={!data && !error}
-          error={!data ? error : null}
-          onRetry={() => { setError(null); setReloadKey((k) => k + 1); }}
+          loading={paging}
+          // Unconditionally. Withholding it once a page had loaded meant a
+          // failed Next showed the PREVIOUS page's rows under the new
+          // page's label, with no message and no Retry — silently wrong
+          // data, which is worse than the stuck skeleton it replaced.
+          error={error}
+          onRetry={() => { setError(null); setLoadedOffset(null); setReloadKey((k) => k + 1); }}
           minWidth={720}
           empty={
             <>
@@ -502,7 +544,7 @@ export default function Users() {
           }
         />
         {data && (
-          <Pagination offset={offset} limit={PAGE_SIZE} total={data.filtered_count} onChange={setOffset} />
+          <Pagination offset={offset} limit={BOARD_PAGE_SIZE} total={data.filtered_count} onChange={setOffset} />
         )}
       </div>
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type UsersData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import StatCard from "./StatCard";
 import { Pagination, SearchInput } from "./Pagination";
 import { useConfirm } from "../lib/confirm";
@@ -20,7 +21,6 @@ import { useToast } from "../lib/toast";
 // component too or keep it as the "all users" engineer tool.
 
 type SortKey = "total_cost" | "session_count" | "last_active" | "name";
-const PAGE_SIZE = 25;
 
 export interface UserScopePanelProps {
   eyebrow: string;
@@ -97,7 +97,7 @@ export default function UserScopePanel({
       .users({
         hours,
         sort_by: sortBy,
-        limit: String(PAGE_SIZE),
+        limit: String(BOARD_PAGE_SIZE),
         offset: String(offset),
         role,
         no_school: "true",
@@ -524,7 +524,7 @@ export default function UserScopePanel({
         </div>
         <Pagination
           offset={offset}
-          limit={PAGE_SIZE}
+          limit={BOARD_PAGE_SIZE}
           total={data.filtered_count}
           onChange={setOffset}
         />

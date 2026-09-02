@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
   type SolutionQualityData,
@@ -10,7 +10,9 @@ import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
 import { EditorialModal } from "../components/EditorialModal";
+import { Pagination } from "../components/Pagination";
 import { formatRelativeDate } from "../lib/format";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 
 // ────────────────────────────────────────────────────────────────────
 // Solution quality — scoring the solve call.
@@ -98,6 +100,7 @@ function RepairStep({
 export default function Quality() {
   const [data, setData] = useState<SolutionQualityData | null>(null);
   const [outcome, setOutcome] = useState<string>("");
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,17 +109,39 @@ export default function Quality() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
+  // Only the newest load may write state. Paging makes two fetches in
+  // flight an ordinary thing — click Next twice — and without this the
+  // slower one lands last: the pager says 11-15 while the table shows
+  // 6-10, with nothing on screen admitting it. A sequence rather than the
+  // usual cancelled-flag because the retry button calls load() directly,
+  // outside any effect that could clean itself up.
+  const loadSeq = useRef(0);
+
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     setError(null);
     try {
-      setData(await api.solutionQuality(outcome ? { outcome } : undefined));
+      // Paged on the server. This used to send no limit at all and take
+      // the endpoint's default 50 while the count beside the table read
+      // the true total — so the table showed a prefix and said nothing
+      // about it. Sending limit+offset makes the pager's "of N" the real
+      // N and every row reachable.
+      const d = await api.solutionQuality({
+        limit: String(BOARD_PAGE_SIZE),
+        offset: String(offset),
+        ...(outcome ? { outcome } : {}),
+      });
+      if (seq === loadSeq.current) setData(d);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't load solution quality");
+      if (seq === loadSeq.current) {
+        setError(e instanceof Error ? e.message : "Couldn't load solution quality");
+      }
     } finally {
-      setLoading(false);
+      // A superseded load must not clear the spinner the newer one owns.
+      if (seq === loadSeq.current) setLoading(false);
     }
-  }, [outcome]);
+  }, [outcome, offset]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -282,7 +307,10 @@ export default function Quality() {
           <div className="gq-filters">
             <label className="gq-filter">
               <span>Show</span>
-              <select value={outcome} onChange={(e) => setOutcome(e.target.value)}>
+              <select
+                value={outcome}
+                onChange={(e) => { setOffset(0); setOutcome(e.target.value); }}
+              >
                 <option value="">Every solution</option>
                 <option value="repaired">Fixed by a teacher</option>
                 <option value="clean">Held up</option>
@@ -296,12 +324,22 @@ export default function Quality() {
           <DataTable
             columns={cols}
             rows={data.questions}
+            // Server-paged: one page of a larger set. <Pagination> below owns
+            // paging, and client-side sort would rank only this page.
+            serverPaged
             rowKey={(q) => q.id}
+            loading={loading}
             onRowClick={(q) => setOpenId(q.id)}
             rowStatus={(q) => OUTCOME_META[q.outcome].color}
             drill
             minWidth={640}
             empty={<span className="dt-state-title">No solutions match this filter.</span>}
+          />
+          <Pagination
+            offset={offset}
+            limit={BOARD_PAGE_SIZE}
+            total={data.total_count}
+            onChange={setOffset}
           />
         </>
       )}

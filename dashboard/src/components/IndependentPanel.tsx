@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, type UsersData } from "../lib/api";
 import { fmtCost, formatRelativeDate } from "../lib/format";
 import { activityStatus, activityPill, windowLabel } from "../lib/definitions";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import StatTile from "./StatTile";
 import StatusPill from "./StatusPill";
 import DataTable, { type Column } from "./DataTable";
@@ -29,7 +30,6 @@ type Row = UsersData["users"][number];
 // never a mystery. Ordering + pagination are both server-driven, so the
 // list stays honest across the whole population (not just one page).
 type SortKey = "total_cost" | "last_active" | "name";
-const PAGE_SIZE = 25;
 
 export interface IndependentPanelProps {
   eyebrow: string;
@@ -53,6 +53,9 @@ export default function IndependentPanel({
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("total_cost");
   const [offset, setOffset] = useState(0);
+  // Which page the rows on screen are, or null while none is loaded for
+  // the offset being asked about — see Users.tsx.
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -64,14 +67,21 @@ export default function IndependentPanel({
       .users({
         hours,
         sort_by: sortBy,
-        limit: String(PAGE_SIZE),
+        limit: String(BOARD_PAGE_SIZE),
         offset: String(offset),
         role,
         no_school: "true",
         ...(search ? { search } : {}),
       })
-      .then((d) => { if (!cancelled) { setData(d); setError(null); } })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load."); });
+      .then((d) => { if (!cancelled) { setData(d); setLoadedOffset(offset); setError(null); } })
+      .catch((e) => {
+        if (cancelled) return;
+        // Mark this offset loaded even though it failed: that ends the
+        // in-flight state so DataTable, which renders loading ahead of
+        // error, reaches the message and its Retry.
+        setLoadedOffset(offset);
+        setError(e instanceof Error ? e.message : "Failed to load.");
+      });
     return () => { cancelled = true; };
   }, [hours, search, sortBy, offset, role, reloadKey]);
 
@@ -211,12 +221,20 @@ export default function IndependentPanel({
         <DataTable
           columns={columns}
           rows={data?.users ?? []}
+          // Server-paged: one page of a larger set. <Pagination> below owns
+          // paging, and client-side sort would rank only this page.
+          serverPaged
           rowKey={(u) => u.id}
           onRowClick={(u) => navigate(rowHref(u))}
           drill
-          loading={!data && !error}
+          loading={loadedOffset !== offset}
           error={error}
-          onRetry={() => setReloadKey((k) => k + 1)}
+          // Clearing the error first is what makes Retry visibly do
+          // something: it hands the table back to its loading state for the
+          // round trip. Without it the same card sits there, and a retry
+          // that fails identically writes the same string — which React
+          // bails on — so the button reads as broken.
+          onRetry={() => { setError(null); setLoadedOffset(null); setReloadKey((k) => k + 1); }}
           empty={
             <div>
               <div className="dt-state-title">{emptyMessage}</div>
@@ -227,7 +245,7 @@ export default function IndependentPanel({
         />
         <Pagination
           offset={offset}
-          limit={PAGE_SIZE}
+          limit={BOARD_PAGE_SIZE}
           total={data?.filtered_count ?? 0}
           onChange={setOffset}
         />

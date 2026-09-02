@@ -2,12 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type HarnessRun, type HarnessRunsData, type ProbeHealth } from "../lib/api";
 import { fmtCost, formatRelativeDate } from "../lib/format";
 import { HARNESS_STALE_AFTER_HOURS, isHarnessStale } from "../lib/definitions";
+import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import StatusPill, { type PillTone } from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
 import { Pagination } from "../components/Pagination";
 import ErrorState from "../components/ErrorState";
-
-const PAGE_SIZE = 50;
 
 /** Deterministic pass-rate as a fraction, or null when a run ran no
  *  deterministic checks (so we never divide by zero or fake a 0%). */
@@ -126,6 +125,9 @@ export default function HarnessRuns() {
   const [probe, setProbe] = useState("");
   const [failedOnly, setFailedOnly] = useState(false);
   const [offset, setOffset] = useState(0);
+  // Which page the rows on screen are, or null while none is loaded for
+  // the offset being asked about — see Users.tsx.
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(null);
 
   const [reportHtml, setReportHtml] = useState<string | null>(null);
   const [loadingReport, setLoadingReport] = useState<string | null>(null);
@@ -142,7 +144,7 @@ export default function HarnessRuns() {
 
   useEffect(() => {
     let cancelled = false;
-    const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: String(offset) };
+    const params: Record<string, string> = { limit: String(BOARD_PAGE_SIZE), offset: String(offset) };
     if (probe) params.probe = probe;
     if (failedOnly) params.failed_only = "true";
     api
@@ -150,11 +152,17 @@ export default function HarnessRuns() {
       .then((d) => {
         if (!cancelled) {
           setData(d);
+          setLoadedOffset(offset);
           setError(null);
         }
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+        if (cancelled) return;
+        // Mark this offset loaded even though it failed: that ends the
+        // in-flight state so DataTable, which renders loading ahead of
+        // error, reaches the message and its Retry.
+        setLoadedOffset(offset);
+        setError(e instanceof Error ? e.message : "Failed to load");
       });
     return () => {
       cancelled = true;
@@ -273,7 +281,7 @@ export default function HarnessRuns() {
   );
 
   if (!data && error) {
-    return <ErrorState message={error} onRetry={() => { setError(null); setReloadKey((k) => k + 1); }} />;
+    return <ErrorState message={error} onRetry={() => { setError(null); setLoadedOffset(null); setReloadKey((k) => k + 1); }} />;
   }
 
   const summary = data?.summary;
@@ -379,11 +387,15 @@ export default function HarnessRuns() {
         <DataTable
           columns={columns}
           rows={data?.runs ?? []}
+          // Server-paged: one page of a larger set. <Pagination> below owns
+          // paging, and client-side sort would rank only this page.
+          serverPaged
           rowKey={(r) => r.id}
-          loading={!data && !error}
-          error={data ? null : error}
-          onRetry={() => { setError(null); setReloadKey((k) => k + 1); }}
-          defaultSort={{ key: "when", dir: "desc" }}
+          loading={loadedOffset !== offset}
+          // Unconditionally — see the note in Users.tsx. Withheld, a failed
+          // page fetch shows the previous page's rows under the new label.
+          error={error}
+          onRetry={() => { setError(null); setLoadedOffset(null); setReloadKey((k) => k + 1); }}
           minWidth={820}
           empty={
             <span className="dt-state-title">
@@ -393,7 +405,7 @@ export default function HarnessRuns() {
         />
 
         {data && (
-          <Pagination offset={offset} limit={PAGE_SIZE} total={data.total_count} onChange={setOffset} />
+          <Pagination offset={offset} limit={BOARD_PAGE_SIZE} total={data.total_count} onChange={setOffset} />
         )}
       </div>
 

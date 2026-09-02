@@ -336,6 +336,7 @@ function WeakSpotsTable({
       onRowClick={onDrill}
       drill
       defaultSort={{ key: "override", dir: "desc" }}
+      unpaged
       minWidth={720}
       empty={<span className="dt-state-title">No breakdown available.</span>}
     />
@@ -552,6 +553,11 @@ function DrillModal({
           rowKey={(r) => r._k}
           loading={!data && !error}
           error={error}
+          // The caption below counts `data.cases`, and the modal merges
+          // several fetches, so a page of 5 under a line reading "Showing
+          // 200 of 261" would have the screen contradict itself. This is a
+          // scan-the-whole-set drill — it lists what it loaded.
+          unpaged
           minWidth={560}
           empty={<span className="dt-state-title">No overridden cases here.</span>}
         />

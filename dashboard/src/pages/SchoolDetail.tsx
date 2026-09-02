@@ -1046,7 +1046,6 @@ function SectionRow({
               minWidth={520}
               searchKeys={(s) => [s.name, s.email]}
               searchLabel="students"
-              pageSize={25}
             />
           )}
         </div>

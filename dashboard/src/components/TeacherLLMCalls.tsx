@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type LLMCallsData } from "../lib/api";
 import { fmtClockTime, fmtCost, shortModel } from "../lib/format";
+import { PAGE_SIZE } from "../lib/pagination";
 import { Pagination } from "./Pagination";
 import StatusPill from "./StatusPill";
 
@@ -32,7 +33,6 @@ import StatusPill from "./StatusPill";
  *      header states the bounds instead of leaving them to be inferred.
  */
 
-const PAGE = 25;
 const WINDOW_HOURS = 720; // 30d — matches the cost window on this page.
 
 export default function TeacherLLMCalls({ teacherId }: { teacherId: string }) {
@@ -61,7 +61,7 @@ export default function TeacherLLMCalls({ teacherId }: { teacherId: string }) {
     const params: Record<string, string> = {
       user_id: teacherId,
       hours: String(WINDOW_HOURS),
-      limit: String(PAGE),
+      limit: String(PAGE_SIZE),
       offset: String(offset),
     };
     if (fn) params.function = fn;
@@ -247,10 +247,10 @@ export default function TeacherLLMCalls({ teacherId }: { teacherId: string }) {
         </table>
       </div>
 
-      {data && data.total_count > PAGE && (
+      {data && data.total_count > PAGE_SIZE && (
         <Pagination
           offset={offset}
-          limit={PAGE}
+          limit={PAGE_SIZE}
           total={data.total_count}
           onChange={setOffset}
         />
