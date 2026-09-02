@@ -111,7 +111,6 @@ function useCourseIdFromPath(): string | null {
  * rather than put an error in the chrome above every page.
  */
 function SeatSwitcher({ courseId }: { courseId: string }) {
-  const router = useRouter();
   const toast = useToast();
   const [seats, setSeats] = useState<PreviewSeat[] | null>(null);
   const [moving, setMoving] = useState(false);
@@ -149,15 +148,15 @@ function SeatSwitcher({ courseId }: { courseId: string }) {
           setMoving(true);
           try {
             await schoolStudent.movePreviewSeat(courseId, next);
-            // Everything on screen — homework list, dashboard, grades —
-            // is rendered for the old seat, so re-fetch the route
-            // rather than patching pieces of it.
-            router.refresh();
-            setSeats((prev) =>
-              prev
-                ? prev.map((s) => ({ ...s, current: s.section_id === next }))
-                : prev,
-            );
+            // Full reload, not router.refresh(). Everything on screen
+            // was rendered for the old seat, and most of it — the class
+            // list in the sidebar, the homework list, grades — is
+            // client-fetched in effects that a refresh() doesn't re-run.
+            // Refreshing alone left the banner saying Period 4 with the
+            // sidebar still saying Period 2. Switching seats is a
+            // deliberate, occasional act; paying for a clean reload is
+            // better than a page that half-agrees with itself.
+            window.location.reload();
           } catch {
             toast.error("Couldn't switch section. Try again in a moment.");
           } finally {
