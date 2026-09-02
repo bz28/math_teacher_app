@@ -2097,7 +2097,7 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 
 /* ── DataTable — canonical table ──────────────────────────────────── */
 /* Long-list toolbar — the search box + result count DataTable grows for
-   itself once a list passes LONG_LIST_THRESHOLD. Sits above the table's
+   itself once a list outgrows a single PAGE_SIZE page. Sits above the table's
    own scroll container so it stays put while the table scrolls sideways. */
 /* Expanded LLM call — the exchange itself, in place. Monospace because
    it's a prompt, capped in height because a system prompt can run to

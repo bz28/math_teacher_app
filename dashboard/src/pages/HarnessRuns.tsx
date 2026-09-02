@@ -2,12 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type HarnessRun, type HarnessRunsData, type ProbeHealth } from "../lib/api";
 import { fmtCost, formatRelativeDate } from "../lib/format";
 import { HARNESS_STALE_AFTER_HOURS, isHarnessStale } from "../lib/definitions";
+import { PAGE_SIZE } from "../lib/pagination";
 import StatusPill, { type PillTone } from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
 import { Pagination } from "../components/Pagination";
 import ErrorState from "../components/ErrorState";
-
-const PAGE_SIZE = 50;
 
 /** Deterministic pass-rate as a fraction, or null when a run ran no
  *  deterministic checks (so we never divide by zero or fake a 0%). */

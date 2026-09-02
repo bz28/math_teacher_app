@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 
+import { PAGE_SIZE } from "../lib/pagination";
 import { Pagination, SearchInput } from "./Pagination";
 
 /**
@@ -13,18 +14,17 @@ import { Pagination, SearchInput } from "./Pagination";
  * Generic over the row type; drive it with a columns config so a tab is
  * just data + column definitions. Sorting is internal (click a header).
  *
- * Long lists: pass `searchKeys` and/or `pageSize` and the table grows a
- * search box and a pager ON ITS OWN, but only once the list is long enough
- * to need them (see LONG_LIST_THRESHOLD). Both used to be wired by hand per
- * page, which meant most tables never got them at all — a roster reads fine
- * at six teachers and is unusable at sixty, and nobody notices until the day
- * it happens. Owning the behaviour here means every table crosses that line
- * correctly without anyone remembering to.
+ * Long lists page themselves at `PAGE_SIZE` with no wiring at the call
+ * site, and grow a search box too once `searchKeys` is supplied. Both used
+ * to be opt-in, which meant most tables never got them at all — a roster
+ * reads fine at six teachers and is unusable at sixty, and nobody notices
+ * until the day it happens. Owning the behaviour here means every table
+ * crosses that line correctly without anyone remembering to.
+ *
+ * A server-paged caller hands us exactly one page and renders its own
+ * `<Pagination>`; `rows.length` then never exceeds `pageSize`, so the
+ * internal pager stays dormant rather than competing with it.
  */
-
-// Below this many rows a search box and pager are noise: the list already
-// fits on screen and the eye beats typing.
-export const LONG_LIST_THRESHOLD = 10;
 
 export interface Column<T> {
   /** Stable key; also the sort identity. */
@@ -65,7 +65,7 @@ export interface DataTableProps<T> {
   loadingRows?: number;
   /** Fields a search query matches against. Omit for no search. */
   searchKeys?: (row: T) => (string | null | undefined)[];
-  /** Rows per page. Omit to render every row. */
+  /** Rows per page. Defaults to the console-wide `PAGE_SIZE`. */
   pageSize?: number;
   /** Noun used in the search placeholder and empty copy, e.g. "teachers". */
   searchLabel?: string;
@@ -74,7 +74,7 @@ export interface DataTableProps<T> {
 export default function DataTable<T>({
   columns, rows, rowKey, onRowClick, rowStatus, drill,
   loading, error, onRetry, empty, defaultSort, minWidth = 640, loadingRows = 6,
-  searchKeys, pageSize, searchLabel = "rows",
+  searchKeys, pageSize = PAGE_SIZE, searchLabel = "rows",
 }: DataTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(defaultSort?.key ?? null);
   const [sortDir, setSortDir] = useState<SortDir>(defaultSort?.dir ?? "desc");
@@ -94,11 +94,13 @@ export default function DataTable<T>({
     });
   }, [rows, columns, sortKey, sortDir]);
 
-  // Both affordances stay hidden until the list is genuinely long, so a
-  // caller opting in doesn't force chrome onto a table of three.
-  const longEnough = rows.length > LONG_LIST_THRESHOLD;
+  // Both affordances stay hidden until the list outgrows a single page.
+  // Deriving the threshold from `pageSize` rather than a separate constant
+  // means they appear at exactly the row that first becomes unreachable —
+  // a fixed threshold above the page size hides rows behind no pager.
+  const longEnough = rows.length > pageSize;
   const canSearch = !!searchKeys && longEnough;
-  const canPage = !!pageSize && longEnough;
+  const canPage = longEnough;
 
   const [query, setQuery] = useState("");
   const [offset, setOffset] = useState(0);
@@ -119,12 +121,12 @@ export default function DataTable<T>({
   // and no window where the two disagree.
   const maxOffset =
     canPage && filtered.length > 0
-      ? Math.floor((filtered.length - 1) / pageSize!) * pageSize!
+      ? Math.floor((filtered.length - 1) / pageSize) * pageSize
       : 0;
   const safeOffset = Math.min(offset, maxOffset);
 
   const visible = useMemo(
-    () => (canPage ? filtered.slice(safeOffset, safeOffset + pageSize!) : filtered),
+    () => (canPage ? filtered.slice(safeOffset, safeOffset + pageSize) : filtered),
     [filtered, canPage, safeOffset, pageSize],
   );
 
@@ -298,10 +300,10 @@ export default function DataTable<T>({
         </tbody>
       </table>
       </div>
-      {canPage && !loading && !error && filtered.length > pageSize! && (
+      {canPage && !loading && !error && filtered.length > pageSize && (
         <Pagination
           offset={safeOffset}
-          limit={pageSize!}
+          limit={pageSize}
           total={filtered.length}
           onChange={setOffset}
         />

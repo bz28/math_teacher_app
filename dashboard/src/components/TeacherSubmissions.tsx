@@ -23,20 +23,17 @@ import StatusPill from "./StatusPill";
  * was to type a UUID into the address bar. Every row here is that link.
  */
 
-const PAGE = 25;
-
 /**
  * How many rows to pull so `DataTable` can search, sort and page across
  * the WHOLE set rather than a slice of it.
  *
- * The first version fetched `limit=25` and handed those to a table with
- * `pageSize={25}`. `DataTable` only renders a pager when
- * `filtered.length > pageSize`, so 25 rows never produced one: the panel
- * read "62 submissions" above 25 rows with no pager, 37 unreachable,
- * client sort surfacing the biggest override *on page one* rather than
- * overall, and search reporting "no match" for a student who exists in
- * rows 26-62. Exactly the defect the calls panel one section below was
- * rewritten to remove, reintroduced above it.
+ * An early version fetched exactly one page and handed it to a table
+ * paging at the same size, so the pager never rendered: the panel read
+ * "62 submissions" above a page of them, the rest unreachable, client
+ * sort surfacing the biggest override *on page one* rather than overall,
+ * and search reporting "no match" for a student further down the list.
+ * Exactly the defect the calls panel one section below was rewritten to
+ * remove, reintroduced above it.
  *
  * Fetching the set and paging it locally keeps sort and search honest.
  * The ceiling is real, so when it bites the panel says so rather than
@@ -203,7 +200,6 @@ export default function TeacherSubmissions({ teacherId }: { teacherId: string })
         defaultSort={{ key: "submitted", dir: "desc" }}
         searchKeys={(r) => [r.student_name, r.assignment_title]}
         searchLabel="submissions"
-        pageSize={PAGE}
         minWidth={720}
         empty={
           overriddenOnly

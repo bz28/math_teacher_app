@@ -324,7 +324,6 @@ export default function Schools() {
           // typing "Lincoln" alone would match fourteen rows.
           searchKeys={(s) => [s.name, s.city, s.state, s.contact_email]}
           searchLabel="schools"
-          pageSize={25}
           rowStatus={(s) =>
             s.failed_calls_24h > 0
               ? "var(--danger)"

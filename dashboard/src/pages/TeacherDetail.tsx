@@ -508,7 +508,6 @@ function StudentsCard({
         minWidth={560}
         searchKeys={(s) => [s.name, s.email]}
         searchLabel="students"
-        pageSize={25}
         empty={
           <div className="empty-state">
             <div className="empty-state-title">

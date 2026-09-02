@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, type UsersData } from "../lib/api";
 import { fmtCost, formatRelativeDate } from "../lib/format";
 import { activityStatus, activityPill, windowLabel } from "../lib/definitions";
+import { PAGE_SIZE } from "../lib/pagination";
 import StatTile from "./StatTile";
 import StatusPill from "./StatusPill";
 import DataTable, { type Column } from "./DataTable";
@@ -29,7 +30,6 @@ type Row = UsersData["users"][number];
 // never a mystery. Ordering + pagination are both server-driven, so the
 // list stays honest across the whole population (not just one page).
 type SortKey = "total_cost" | "last_active" | "name";
-const PAGE_SIZE = 25;
 
 export interface IndependentPanelProps {
   eyebrow: string;

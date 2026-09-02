@@ -8,6 +8,7 @@ import {
 } from "../lib/api";
 import { renderChipValue, shortId } from "../lib/format";
 import { windowLabel } from "../lib/definitions";
+import { PAGE_SIZE } from "../lib/pagination";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
@@ -26,8 +27,6 @@ import { Pagination, SearchInput } from "../components/Pagination";
  * did what, when?" Everything is URL-driven so a filtered view is a
  * shareable deep link, and the same filter drives the CSV export.
  */
-
-const PAGE_SIZE = 50;
 
 // Date-range presets → the backend `hours` window. "" = all-time.
 const RANGES: { value: string; label: string }[] = [

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, getUserId, type SchoolListItem, type UsersData } from "../lib/api";
 import { formatRelativeDate, fmtCost } from "../lib/format";
+import { PAGE_SIZE } from "../lib/pagination";
 import { activityPill, activityStatus, daysSince, windowLabel } from "../lib/definitions";
 import StatTile from "../components/StatTile";
 import StatusPill, { type PillTone } from "../components/StatusPill";
@@ -13,8 +14,6 @@ import { confirmAndDeleteUser } from "../lib/deleteUserFlow";
 import { useToast } from "../lib/toast";
 
 type UserRow = UsersData["users"][number];
-
-const PAGE_SIZE = 25;
 
 // Role presets driving the segmented filter. "" is the cross-cutting
 // All view; each other value maps straight to the backend `role` param.

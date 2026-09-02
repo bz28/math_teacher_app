@@ -7,6 +7,7 @@ import {
 import { api, type LLMCallsData, type SchoolListItem } from "../lib/api";
 import { formatRelativeDate, shortModel, shortId, fmtCost } from "../lib/format";
 import { windowLabel } from "../lib/definitions";
+import { PAGE_SIZE } from "../lib/pagination";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
@@ -17,7 +18,6 @@ import { EditorialModal } from "../components/EditorialModal";
 import { useConfirm } from "../lib/confirm";
 
 const COLORS = ["#14130f", "#4a6b3a", "#b8431a", "#3d5a78", "#a66b15", "#6b21a8"];
-const PAGE_SIZE = 25;
 
 type CallRow = LLMCallsData["calls"][number];
 type Status = "" | "ok" | "failed";
