@@ -13,7 +13,7 @@ import {
   ResolveIntegrityControl,
   RowDispositionPill,
   type IntegrityActivityNotableTurnLite,
-} from "@/components/school/teacher/_pieces/submissions-panel";
+} from "@/components/school/teacher/_pieces/integrity-pieces";
 import { Skeleton } from "@/components/ui";
 import { PdfView } from "@/components/ui/pdf-view";
 import { WorkGalleryModal } from "@/components/school/teacher/_pieces/work-gallery";
@@ -1865,7 +1865,7 @@ function RubricDriftBanner({
           <p className="text-sm font-bold text-[color:var(--color-warning-dark)] ">
             Rubric edited since this was graded
           </p>
-          <p className="mt-1 text-xs text-[color:var(--color-warning-dark)]/80 /80">
+          <p className="mt-1 text-xs text-[color:var(--color-warning-dark)]/80">
             The AI graded against an earlier version of your rubric.
             Regrade to apply your current criteria — your edits on this
             submission will be replaced.
@@ -1894,7 +1894,7 @@ function RubricDriftBanner({
           <div className="mt-2 space-y-2 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-white/60 p-3 dark:border-[color:var(--color-warning)]/20 ">
             {snapshotFields.map((f) => (
               <div key={f.label}>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)]/70 /70">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)]/70">
                   {f.label}
                 </p>
                 <p className="mt-0.5 whitespace-pre-wrap leading-relaxed text-[color:var(--color-warning-dark)]">
