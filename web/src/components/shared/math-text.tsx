@@ -232,6 +232,56 @@ interface MathTextProps {
 }
 
 /**
+ * The same content as `MathText` renders, flattened to plain text for an
+ * `aria-label`, a `title`, or anywhere else a string is required.
+ *
+ * Built on the SAME `parse()` the renderer uses, deliberately. The
+ * obvious alternative -- strip `$` delimiters with a regex -- was tried
+ * three times and diverged three times, because the matcher makes one
+ * left-to-right pass over five alternatives and a sequence of global
+ * replaces cannot reproduce that: it strips pairs the real pass never
+ * saw (`$$$x$$$`), and has no counterpart for `<br>`, `**bold**`,
+ * `<svg>` or `@@{...}@@` at all. Anything derived from the segments
+ * agrees with the render by construction.
+ *
+ * Math keeps its LaTeX source, minus the delimiters -- this is not a
+ * LaTeX-to-speech converter, it just isn't source. Diagrams and SVG
+ * contribute nothing: they have no text a screen reader can use, and
+ * emitting their markup would be worse than silence.
+ */
+export function mathPlainText(input: string): string {
+  return parse(input)
+    .map((seg) => {
+      switch (seg.type) {
+        case "text":
+        case "math-inline":
+        case "math-display":
+          return seg.content;
+        case "bold":
+          // `parse` keeps bold content in SOURCE form on purpose — the
+          // renderer hands it to a nested MathText — so it still holds
+          // delimiters and escapes. Recurse, or the label reports the
+          // source for bold while reporting the value everywhere else.
+          return mathPlainText(seg.content);
+        default:
+          return "";
+      }
+    })
+    // No separator: the renderer emits segments adjacently, and whatever
+    // space belongs between them is already in the text around the
+    // delimiters. Joining on " " put one before the comma in
+    // `$x = 3$, $y = -2$`.
+    .join("")
+    // Math segments come back carrying `\$` and text segments a bare `$`
+    // (the two restore helpers differ, correctly, for their own render
+    // paths). Both are one dollar sign to a reader, so settle on the one
+    // that reads out as money rather than as an escape.
+    .replace(/\\\$/g, "$")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * IMPORTANT: must be wrapped in a block-level container (div, section,
  * etc.) — NEVER inside a <p>. Display math (matrices, fractions) emits
  * a top-level <div> here, and the HTML spec forbids <div> inside <p>.

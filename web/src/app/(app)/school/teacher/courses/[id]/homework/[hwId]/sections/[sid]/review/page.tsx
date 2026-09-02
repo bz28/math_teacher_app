@@ -3,7 +3,7 @@
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { MathText } from "@/components/shared/math-text";
+import { MathText, mathPlainText } from "@/components/shared/math-text";
 import { Modal } from "@/components/ui/modal";
 import {
   ActivityDigest,
@@ -286,6 +286,36 @@ function HomeworkSectionReview({
   // first land, but the filter chip is the fastest path from "show
   // me everyone" to "show me only the cheaters".
   const [rosterFilter, setRosterFilter] = useState<RosterFilter>("all");
+  // Which confident rows the teacher has ticked, per submission.
+  //
+  // This lives here rather than in the detail panel because the panel is
+  // remounted on every student switch, and switching students is the
+  // page's primary action — owning it there meant a teacher could leave a
+  // student to check something, come back, and find every tick gone
+  // (including a "Confirm all N" they had just clicked). Keyed by
+  // submission id, so returning to a student restores exactly their own
+  // ticks and nobody else's.
+  //
+  // Session-scoped on purpose: a reload clears it, which is honest,
+  // because nothing about it is persisted server-side. The durable trust
+  // signal is `reviewed_at`, stamped only by the explicit Approve button.
+  const [confirmedBySubmission, setConfirmedBySubmission] = useState<
+    ReadonlyMap<string, ReadonlySet<string>>
+  >(() => new Map());
+
+  const handleConfirmProblems = useCallback(
+    (submissionId: string, bankItemIds: string[]) => {
+      if (bankItemIds.length === 0) return;
+      setConfirmedBySubmission((prev) => {
+        const next = new Map(prev);
+        const merged = new Set(prev.get(submissionId) ?? []);
+        for (const id of bankItemIds) merged.add(id);
+        next.set(submissionId, merged);
+        return next;
+      });
+    },
+    [],
+  );
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   // Last-fetched detail, kept as-is across switches. Staleness for
   // the current selection is detected at render via a submission_id
@@ -1510,6 +1540,11 @@ function HomeworkSectionReview({
                 onRegradeRequest={() =>
                   setRegradeConfirmOpenFor(selectedEntry.submission!.id)
                 }
+                confirmedIds={
+                  confirmedBySubmission.get(selectedEntry.submission.id) ??
+                  EMPTY_ID_SET
+                }
+                onConfirmProblems={handleConfirmProblems}
               />
             )}
           </section>
@@ -2658,6 +2693,8 @@ function SubmissionDetailPanel({
   regrading,
   regradeError,
   onRegradeRequest,
+  confirmedIds,
+  onConfirmProblems,
 }: {
   detail: TeacherSubmissionDetail;
   integrity: TeacherIntegrityDetail | null;
@@ -2685,6 +2722,10 @@ function SubmissionDetailPanel({
   regrading: boolean;
   regradeError: string | null;
   onRegradeRequest: () => void;
+  /** Bank-item ids the teacher has ticked on THIS submission. Owned by
+   *  the page so it survives this panel being remounted on a switch. */
+  confirmedIds: ReadonlySet<string>;
+  onConfirmProblems: (submissionId: string, bankItemIds: string[]) => void;
 }) {
   const breakdownByProblem = useMemo(() => {
     const map = new Map<string, GradeBreakdownEntry>();
@@ -2714,19 +2755,24 @@ function SubmissionDetailPanel({
   // problem the AI is confident about (high band, not overridden)
   // COLLAPSES to a one-line confirm row; uncertain ones stay fully
   // expanded with the answer/key, work, receipt, and grade buttons.
-  // Nothing is auto-confirmed — `confirmedIds` is a purely local
-  // checklist the teacher fills by pressing the AI's key (or the Confirm
-  // chip). It's a grading-workflow aid (collapse/expand the confident
-  // rows), NOT the review stamp: the durable, server-side trust signal is
-  // `reviewed_at`, which is now set only by the explicit Approve button.
-  const [confirmState, setConfirmState] = useState<{ sid: string; ids: Set<string> }>(
-    () => ({ sid: detail.submission_id, ids: new Set() }),
-  );
-  const confirmedIds =
-    confirmState.sid === detail.submission_id ? confirmState.ids : EMPTY_ID_SET;
-  // Manual "open this confident row to inspect it" toggles — also keyed
-  // by submission so they reset on student switch (derivation, not an
-  // effect, matching the focus model below).
+  // Nothing is auto-confirmed — `confirmedIds` is a checklist the teacher
+  // fills by pressing the AI's key (or the Confirm chip). It's a
+  // grading-workflow aid (collapse/expand the confident rows), NOT the
+  // review stamp: the durable, server-side trust signal is `reviewed_at`,
+  // which is set only by the explicit Approve button.
+  //
+  // It lives on the PAGE, not here, because this panel is remounted on
+  // every student switch — and switching students is the page's primary
+  // action. Owning it here meant leaving a student to check something and
+  // coming back to find every tick gone, including a "Confirm all N" the
+  // teacher had just clicked. Session-scoped: a reload still clears it,
+  // which is honest, since nothing about it is persisted server-side.
+  //
+  // Expansion deliberately does NOT get the same treatment. Reopening a
+  // confident row is one click and costs nothing to redo, and coming back
+  // to a student with the rows collapsed again is arguably the right
+  // default — a fresh look. Confirmations represent work done; expansions
+  // don't.
   const [expandState, setExpandState] = useState<{ sid: string; ids: Set<string> }>(
     () => ({ sid: detail.submission_id, ids: new Set() }),
   );
@@ -2772,18 +2818,13 @@ function SubmissionDetailPanel({
       if (ids.length === 0) return;
       // Confirming is the teacher vouching for the AI's grade. The grade
       // itself is already persisted (the AI wrote breakdown + final_score),
-      // so confirming only records the local checklist — it never re-saves
-      // or mutates a grade, and it does NOT stamp the submission reviewed.
-      // Approval is now an explicit, deliberate act (the Approve button
+      // so confirming only records the checklist — it never re-saves or
+      // mutates a grade, and it does NOT stamp the submission reviewed.
+      // Approval is an explicit, deliberate act (the Approve button
       // below), never a side effect of confirming or finishing.
-      setConfirmState((s) => {
-        const base =
-          s.sid === detail.submission_id ? new Set(s.ids) : new Set<string>();
-        for (const id of ids) base.add(id);
-        return { sid: detail.submission_id, ids: base };
-      });
+      onConfirmProblems(detail.submission_id, ids);
     },
-    [detail.submission_id],
+    [detail.submission_id, onConfirmProblems],
   );
 
   // ── Explicit approval gate ────────────────────────────────────────
@@ -4089,8 +4130,6 @@ function ProblemGradeRow({
   // Same rowRef + focus model as the expanded row so keyboard nav, the
   // focus ring, and screen-reader tracking are identical.
   if (collapsed && aiGrade) {
-    const confPct =
-      aiGrade.confidence != null ? Math.round(aiGrade.confidence * 100) : null;
     const verdict =
       aiGrade.score_status === "full"
         // Was a hard-coded #22a06b that sat outside the palette and put
@@ -4125,32 +4164,80 @@ function ProblemGradeRow({
           type="button"
           onClick={onToggleExpand}
           className="flex min-w-0 flex-1 items-center gap-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-[--radius-sm]"
-          aria-label={`Expand problem ${problem.position} to inspect`}
+          // Spell the comparison out for screen readers rather than
+          // leaving them the bare position. Delimiters stripped: these
+          // values are LaTeX source, not plain text — the API wraps the
+          // extractor's read as `$…$` precisely so it renders as math.
+          aria-label={
+            problem.student_answer
+              ? `Expand problem ${problem.position} to inspect. Student answered ${mathPlainText(problem.student_answer)}; answer key is ${problem.final_answer ? mathPlainText(problem.final_answer) : "not set"}.`
+              : `Expand problem ${problem.position} to inspect. No answer extracted. Answer key is ${problem.final_answer ? mathPlainText(problem.final_answer) : "not set"}.`
+          }
           aria-expanded={false}
         >
           <span className="w-5 shrink-0 text-xs font-bold tabular-nums text-text-muted">
             {problem.position}
           </span>
-          <span className="block min-w-0 flex-1 truncate text-[13px] text-text-primary">
-            <MathText text={problem.question} />
+          {/* The comparison the one-second confirm actually rests on.
+              This row used to show a truncated copy of the QUESTION —
+              which the teacher wrote, and which tells them nothing about
+              whether the AI's call is right. What decides it is the
+              student's answer against the key, so that is what the row
+              carries. The question is one click away on expand. */}
+          {/* Two overrides, both load-bearing, both about keeping this a
+              scannable column of equal-height one-liners:
+                - `[&_span]:!whitespace-nowrap` — MathText sets
+                  `white-space: pre-wrap` as an INLINE style on its text
+                  segments, and an inline style beats `truncate`'s class.
+                - `[&_div]:!my-0 [&_div]:!inline` — an answer in display
+                  math ($$…$$, or a bare \begin{…} environment, which is
+                  exactly the shape the AI grader returns for a matrix)
+                  makes MathText emit a BLOCK div with vertical margins,
+                  dropped into a truncating flex item. That grows the row
+                  well past one line. Inlining keeps the row honest, and
+                  `max-h` hard-caps anything still too tall. */}
+          <span className="flex max-h-6 min-w-0 flex-1 items-baseline gap-1.5 overflow-hidden text-[13px] [&_div]:!my-0 [&_div]:!inline [&_span]:!whitespace-nowrap">
+            {problem.student_answer ? (
+              <span
+                className="min-w-0 max-w-[50%] truncate font-semibold text-text-primary"
+                title={mathPlainText(problem.student_answer)}
+              >
+                <MathText text={problem.student_answer} />
+              </span>
+            ) : (
+              <span className="shrink-0 text-xs font-semibold text-[color:var(--color-warning-dark)]">
+                <span aria-hidden>⚠</span> No answer extracted
+              </span>
+            )}
+            <span aria-hidden className="shrink-0 text-[11px] text-text-muted">
+              →
+            </span>
+            {/* Long values truncate rather than wrap. `title` keeps the
+                full text reachable on hover without expanding the row,
+                and the button's aria-label carries both in full for
+                screen readers. */}
+            <span
+              className="min-w-0 flex-1 truncate text-text-secondary"
+              title={problem.final_answer ? mathPlainText(problem.final_answer) : undefined}
+            >
+              {problem.final_answer ? (
+                <MathText text={problem.final_answer} />
+              ) : (
+                <span className="italic text-text-muted">no key</span>
+              )}
+            </span>
           </span>
           <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold tracking-[0.04em] text-text-muted">
             <span aria-hidden>🤖</span>
-            <span>AI</span>
             <span
               className={`rounded-[--radius-pill] px-1.5 py-0.5 text-[10px] font-extrabold ${verdict.cls}`}
             >
               {verdict.label}
             </span>
-            {confPct != null && (
-              <>
-                <span
-                  aria-hidden
-                  className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--color-success)]"
-                />
-                <span>{confPct}%</span>
-              </>
-            )}
+            {/* Reuse ConfidenceSignal instead of a bare dot + percent.
+                "96%" sitting next to a "Full" badge reads as a score;
+                "AI · High 96%" reads as certainty, which is what it is. */}
+            <ConfidenceSignal confidence={aiGrade.confidence} />
           </span>
         </button>
         {confirmed ? (
