@@ -1,19 +1,4 @@
 {
-  "0535fe36238f6dae31c168a19728674b": {
-    "meta": {
-      "mode": "practice_eval",
-      "model": "claude-haiku-4-5-20251001",
-      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: A regular hexagon has a side length of $12$ cm. (a) Find the perimeter of the hexagon. (b) Find the measure",
-      "recorded_at": 1780588706.0115972
-    },
-    "response": {
-      "distractors": [
-        "$60$ cm",
-        "$84$ cm",
-        "$144$ cm"
-      ]
-    }
-  },
   "09a8b5561f80eaa65c00b2690ac85771": {
     "meta": {
       "mode": "ai_grading",
@@ -33,21 +18,6 @@
           "student_answer": "100 m",
           "student_feedback": "Great work! You correctly applied the distance formula d = vt and arrived at the right answer of 100 m."
         }
-      ]
-    }
-  },
-  "09d7e4740f1ada4a5b13741335d8c06b": {
-    "meta": {
-      "mode": "practice_eval",
-      "model": "claude-haiku-4-5-20251001",
-      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: In circle $O$, the radius is $r = 13$. Chord $AB$ is drawn such that it is perpendicular to radius $OC$ at ",
-      "recorded_at": 1780588704.7833521
-    },
-    "response": {
-      "distractors": [
-        "$AB = 10$",
-        "$AB = 26$",
-        "$AB = 20$"
       ]
     }
   },
@@ -86,21 +56,6 @@
           "equivalent": false,
           "problem_position": 1
         }
-      ]
-    }
-  },
-  "1b17b9005a65597489624961d711df8a": {
-    "meta": {
-      "mode": "practice_eval",
-      "model": "claude-haiku-4-5-20251001",
-      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: In triangle $PQR$, side $PQ = 30$, side $QR = 40$, and the included angle at $Q$ measures $90\u00b0$. Find the l",
-      "recorded_at": 1780588704.7847328
-    },
-    "response": {
-      "distractors": [
-        "$PR = 50, \\quad \\angle P \\approx 37\u00b0$",
-        "$PR = 70, \\quad \\angle P \\approx 53\u00b0$",
-        "$PR = \\sqrt{1300}, \\quad \\angle P \\approx 53\u00b0$"
       ]
     }
   },
@@ -195,21 +150,6 @@
           "student_answer": "$x = 4$",
           "student_feedback": "Great work! You correctly isolated the variable by subtracting 3 from both sides and then dividing by 2, arriving at the right answer."
         }
-      ]
-    }
-  },
-  "3d44de2a499fc3d4920fa559c5e1bc23": {
-    "meta": {
-      "mode": "practice_eval",
-      "model": "claude-haiku-4-5-20251001",
-      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: In right triangle $ABC$, the right angle is at $C$. The two legs measure $AC = 3$ and $BC = 4$. Find the le",
-      "recorded_at": 1780588704.780407
-    },
-    "response": {
-      "distractors": [
-        "$AB = 7$",
-        "$AB = \\sqrt{25} = 5.0$",
-        "$AB = \\sqrt{7}$"
       ]
     }
   },

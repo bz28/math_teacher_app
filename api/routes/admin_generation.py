@@ -7,7 +7,7 @@ out of it.
 
 LLM cost is now linked EXACTLY: every call made in service of a job
 (the question call plus its per-problem `decompose` solutions and
-`practice_eval` distractors) carries the job's id in
+`generate_distractors` distractors) carries the job's id in
 `LLMCall.generation_job_id`, so cost is summed by that FK.
 
 Calls WITHOUT the FK still fall back to the time-window heuristic (calls
@@ -52,13 +52,21 @@ router = APIRouter()
 # LLMCall is the LLMMode value (api/core/llm_client.py). One job fans out
 # to several: the question call (generate_questions, or bank_extract in
 # upload mode), then per-question solution (decompose) and distractor
-# (practice_eval) calls — all logged under the job creator's user_id
-# inside the job's run window. The solve + distractor calls usually
-# dominate cost, so leaving them out would badly understate a job's spend.
+# (generate_distractors) calls — all logged under the job creator's
+# user_id inside the job's run window. The solve + distractor calls
+# usually dominate cost, so leaving them out would badly understate a
+# job's spend.
+#
+# `practice_eval` is the LEGACY label distractor calls carried before
+# they were split from the tutor's answer-equivalence check. It stays
+# in this tuple: jobs run before the split have distractor rows under
+# the old string, and dropping it would silently understate every
+# historical job's cost.
 _GENERATION_FUNCTIONS = (
     "generate_questions",
     "bank_extract",
     "decompose",
+    "generate_distractors",
     "practice_eval",
 )
 

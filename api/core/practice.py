@@ -108,7 +108,7 @@ async def generate_distractors(
         result = await call_claude_json(
             system_prompt,
             user_msg,
-            mode=LLMMode.PRACTICE_EVAL,
+            mode=LLMMode.GENERATE_DISTRACTORS,
             tool_schema=DISTRACTOR_SCHEMA,
             user_id=user_id,
             model=model,
