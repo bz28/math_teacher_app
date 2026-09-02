@@ -82,7 +82,14 @@ export const ACTIVITY_FAMILIES: {
   { family: "grade", label: "Grading", allLabel: "All grading actions" },
   { family: "bank_item", label: "Question bank", allLabel: "All question-bank actions" },
   { family: "user", label: "User administration", allLabel: "All user actions" },
-  { family: "student", label: "Student activity", allLabel: "All student actions" },
+  // NOTE: `student` is deliberately absent. ACTIVITY_FAMILIES drives the
+  // filter dropdown in TeacherActivitySection, which is scoped to ONE
+  // teacher (`actor_user_id: teacherId`) — so a student group there
+  // would be nine options that can only ever return zero rows, the exact
+  // "reads as a broken filter" complaint this registry was built to fix.
+  // The student entries still live in ACTIVITY_ACTIONS below, because
+  // BY_ACTION is built from it and supplies the row sentences wherever a
+  // surface does render student events.
 ];
 
 export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
