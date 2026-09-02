@@ -38,6 +38,7 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.course import Course
+from api.models.user import User
 from api.routes.admin_helpers import time_range
 from api.services.grading_overrides import (
     ProblemDelta,
@@ -85,6 +86,12 @@ async def _reviewed_rows(
         SubmissionGrade.breakdown.is_not(None),
         _unreadable_ok(),
         _EFFECTIVE_AT >= since,
+        # A teacher rehearsing her own homework in preview produces a
+        # real AI grade on work she wrote to test the flow. That is not
+        # a signal about grading quality, so keep it out of the
+        # population these metrics describe. Reachable since a preview's
+        # grade became publishable.
+        User.is_preview.is_(False),
     ]
     if subject:
         filters.append(Course.subject == subject)
@@ -100,6 +107,7 @@ async def _reviewed_rows(
             Course.name,
         )
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
+        .join(User, User.id == Submission.student_id)
         .join(Assignment, Assignment.id == Submission.assignment_id)
         .join(Course, Course.id == Assignment.course_id)
         .where(*filters)
@@ -227,6 +235,7 @@ async def _coverage_counts(
         )
         .select_from(SubmissionGrade)
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
+        .join(User, User.id == Submission.student_id)
         .join(Assignment, Assignment.id == Submission.assignment_id)
         .join(Course, Course.id == Assignment.course_id)
         .where(*filters)
