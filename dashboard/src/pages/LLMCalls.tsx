@@ -275,7 +275,11 @@ export default function LLMCalls() {
           serverPaged
           rowKey={(c) => c.id}
           loading={data !== null && loadedOffset !== offset}
-          defaultSort={{ key: "created_at", dir: "desc" }}
+          // The guard above only fires before the first page loads, so
+          // without these a failed Next showed the previous page's rows
+          // under the new page's label — no message, no way back.
+          error={error}
+          onRetry={() => { setError(null); setReloadKey((k) => k + 1); }}
           onRowClick={(c) => setSelectedCall(c)}
           rowStatus={(c) => (c.id === selectedCall?.id ? "var(--accent)" : !c.success ? "var(--danger)" : undefined)}
           empty={<span className="dt-state-title">No calls match these filters.</span>}

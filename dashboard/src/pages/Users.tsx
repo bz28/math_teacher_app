@@ -523,7 +523,11 @@ export default function Users() {
           serverPaged
           rowKey={(u) => u.id}
           loading={(!data && !error) || paging}
-          error={!data ? error : null}
+          // Unconditionally. Withholding it once a page had loaded meant a
+          // failed Next showed the PREVIOUS page's rows under the new
+          // page's label, with no message and no Retry — silently wrong
+          // data, which is worse than the stuck skeleton it replaced.
+          error={error}
           onRetry={() => { setError(null); setReloadKey((k) => k + 1); }}
           minWidth={720}
           empty={

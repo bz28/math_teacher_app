@@ -230,7 +230,12 @@ export default function IndependentPanel({
           drill
           loading={(!data && !error) || (data !== null && loadedOffset !== offset)}
           error={error}
-          onRetry={() => setReloadKey((k) => k + 1)}
+          // Clearing the error first is what makes Retry visibly do
+          // something: it hands the table back to its loading state for the
+          // round trip. Without it the same card sits there, and a retry
+          // that fails identically writes the same string — which React
+          // bails on — so the button reads as broken.
+          onRetry={() => { setError(null); setReloadKey((k) => k + 1); }}
           empty={
             <div>
               <div className="dt-state-title">{emptyMessage}</div>

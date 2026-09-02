@@ -20,11 +20,17 @@
  * Two consumers, and the shape matters:
  *
  *   Server-paged  — fetch `limit` + `offset` and render `<Pagination>`
- *                   beside the table, passing `unpaged` to `DataTable` so
- *                   only one pager exists. Don't rely on the fetch limit
- *                   matching `DataTable`'s page size to keep its pager
- *                   quiet: that invariant breaks the first time someone
- *                   changes one number, and breaks as a second pager.
+ *                   beside the table, passing `serverPaged` to `DataTable`.
+ *                   That turns off both its pager and its sort: one page
+ *                   sorted client-side ranks the handful on screen under a
+ *                   caret claiming it ranked the set. Don't reach for
+ *                   `unpaged` here — it stops the pager but leaves the
+ *                   sort — and don't rely on the fetch limit matching
+ *                   `DataTable`'s page size to keep the pager quiet, which
+ *                   breaks as a second pager the moment either changes.
+ *                   Pass `error` and `onRetry` unconditionally too: withheld
+ *                   once a page has loaded, a failed fetch leaves the
+ *                   previous page's rows under the new page's label.
  *   Client-paged  — fetch the set and let `DataTable` page it, so sorting
  *                   and search run over everything rather than a prefix.
  */

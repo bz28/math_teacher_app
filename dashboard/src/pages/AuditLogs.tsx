@@ -349,7 +349,6 @@ export default function AuditLogs() {
             setError(null);
             setReloadKey((k) => k + 1);
           }}
-          defaultSort={{ key: "at", dir: "desc" }}
           rowStatus={(e) => (e.facet === "access" ? "var(--info)" : "var(--accent)")}
           empty={<span className="dt-state-title">No audit events match the current filter.</span>}
           minWidth={940}

@@ -393,9 +393,10 @@ export default function HarnessRuns() {
           serverPaged
           rowKey={(r) => r.id}
           loading={(!data && !error) || (data !== null && loadedOffset !== offset)}
-          error={data ? null : error}
+          // Unconditionally — see the note in Users.tsx. Withheld, a failed
+          // page fetch shows the previous page's rows under the new label.
+          error={error}
           onRetry={() => { setError(null); setReloadKey((k) => k + 1); }}
-          defaultSort={{ key: "when", dir: "desc" }}
           minWidth={820}
           empty={
             <span className="dt-state-title">

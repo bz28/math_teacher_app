@@ -447,6 +447,11 @@ export default function ExtractionQuality() {
               serverPaged
               rowKey={(c) => c.submission_id}
               loading={data !== null && loadedOffset !== offset}
+              // The guard above only fires before the first page loads, so
+              // without these a failed Next showed the previous page's rows
+              // under the new page's label — no message, no way back.
+              error={error}
+              onRetry={() => { setError(null); setReloadKey((k) => k + 1); }}
               onRowClick={(c) => setOpenId(c.submission_id)}
               rowStatus={(c) => BUCKET_META[c.bucket].color}
               drill
