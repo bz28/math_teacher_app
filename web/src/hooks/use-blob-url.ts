@@ -40,50 +40,85 @@ export function useBlobUrl(
   base64: string | null | undefined,
   mediaType: string,
 ): string | null {
-  const [url, setUrl] = useState<string | null>(null);
+  // The handle is stored WITH the bytes it was built from, and only
+  // returned when the two still match. Decoding is async, so between the
+  // input changing and the new handle arriving there is a window of one
+  // or more renders — and holding a bare `url` across it would serve the
+  // PREVIOUS handle, which cleanup has already revoked. A caller pointing
+  // an <embed> or an href at a revoked blob: gets a torn-down plugin or a
+  // dead new tab. Keying it means the gap returns null instead, and every
+  // caller already falls back to its data: URL on null.
+  const [handle, setHandle] = useState<{ key: string; url: string } | null>(
+    null,
+  );
 
   useEffect(() => {
-    const objectUrl = base64 ? createObjectUrlFor(base64, mediaType) : null;
+    let cancelled = false;
+    let objectUrl: string | null = null;
     // An object URL's lifecycle IS the external system this effect
     // synchronizes with: it has to be created and revoked in the same
     // scope to survive StrictMode's double-invoke. Deriving it during
     // render instead is the bug described above, not the fix.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setUrl(objectUrl);
-    // No setUrl(null) here: React runs cleanup and the next setup in the
-    // same commit with no render in between, so state never hands a
-    // caller a revoked handle. On unmount the state is discarded anyway.
+    void (async () => {
+      const built = base64 ? await createObjectUrlFor(base64, mediaType) : null;
+      if (cancelled) {
+        // Cleanup already ran (StrictMode's double-invoke, or the caller
+        // moved to another file mid-decode). Revoke here — the cleanup
+        // never saw this handle.
+        if (built) URL.revokeObjectURL(built);
+        return;
+      }
+      objectUrl = built;
+      // Not a sync set-state-in-effect: this runs in a later microtask,
+      // after the decode, so there is no cascading render to guard.
+      setHandle(built && base64 ? { key: base64, url: built } : null);
+    })();
     return () => {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        // Forget it as well as revoking it. Keying on the bytes alone
+        // isn't enough: page A -> B -> back to A re-matches the stored
+        // key while the handle it points at was revoked on the way out,
+        // so the hook would hand a caller a dead blob: again. Clearing
+        // here means the only thing a match can return is a live handle.
+        setHandle((current) =>
+          current && current.url === objectUrl ? null : current,
+        );
+      }
     };
   }, [base64, mediaType]);
 
-  return url;
+  return handle && handle.key === base64 ? handle.url : null;
 }
 
 /** Build the handle, or null if the bytes can't be decoded (malformed
  *  base64, or a browser refusing the allocation) — the caller then keeps
- *  its data: URL, exactly as before this hook existed. */
-function createObjectUrlFor(base64: string, mediaType: string): string | null {
+ *  its data: URL, exactly as before this hook existed.
+ *
+ *  Decodes via `fetch` on a data: URL rather than atob + a byte-at-a-time
+ *  copy. The hand-rolled loop measured ~48ms of BLOCKING main thread for
+ *  a 5MB page (the per-file upload cap), which the gallery pays on every
+ *  page turn — held arrow keys turned into visible stutter. `fetch` does
+ *  the same work off-thread in about the same wall-clock and yields, so
+ *  paging stays smooth. No network request is made.
+ *
+ *  One caveat if a Content-Security-Policy is ever added: `fetch` of a
+ *  `data:` URL IS gated by `connect-src`, which would need an explicit
+ *  `data:` source. The app sets no CSP today, and the failure is soft —
+ *  fetch rejects, the catch returns null, and callers fall back to their
+ *  data: URL — but it is the wrong thing to be surprised by later.
+ */
+async function createObjectUrlFor(
+  base64: string,
+  mediaType: string,
+): Promise<string | null> {
   try {
-    return URL.createObjectURL(
-      new Blob([decodeBase64(base64)], { type: mediaType }),
+    const blob = await fetch(`data:${mediaType};base64,${base64}`).then((r) =>
+      r.blob(),
     );
+    return URL.createObjectURL(blob);
   } catch {
     return null;
   }
-}
-
-/** base64 -> bytes. `atob` returns a binary string whose char codes are
- *  the bytes; copying them one at a time is exact across the full
- *  0-255 range, high-bit values included. */
-function decodeBase64(base64: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(base64);
-  // Allocate the ArrayBuffer explicitly: a bare `new Uint8Array(n)` is
-  // typed over ArrayBufferLike, which BlobPart won't accept.
-  const bytes = new Uint8Array(new ArrayBuffer(binary.length));
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
 }
