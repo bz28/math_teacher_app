@@ -130,8 +130,17 @@ export default function Users() {
   const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number }>({ right: 0 });
   const menuToggleRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
-  const reload = () =>
-    api
+  // Only the newest load may write state. Every other board here guards
+  // with an effect-scoped `cancelled` flag, but `reload()` is also called
+  // directly by the row actions, outside any effect that could clean it
+  // up — so a sequence, like the quality boards use. Without it a slower
+  // response landing last leaves `loadedOffset` on the wrong page and the
+  // table stuck on its skeleton with no fetch queued to clear it.
+  const loadSeq = useRef(0);
+
+  const reload = () => {
+    const seq = ++loadSeq.current;
+    return api
       .users({
         hours,
         limit: String(BOARD_PAGE_SIZE),
@@ -144,8 +153,21 @@ export default function Users() {
         ...(!isAdminView && schoolId ? { school_id: schoolId } : {}),
         ...(search ? { search } : {}),
       })
-      .then((d) => { setData(d); setLoadedOffset(offset); setError(null); })
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load users."));
+      .then((d) => {
+        if (seq !== loadSeq.current) return;
+        setData(d);
+        setLoadedOffset(offset);
+        setError(null);
+      })
+      .catch((e) => {
+        if (seq !== loadSeq.current) return;
+        // Clear the in-flight marker too. Without it the table stays on the
+        // loading skeleton forever — DataTable renders loading before error,
+        // so the message and its Retry never appear.
+        setLoadedOffset(offset);
+        setError(e instanceof Error ? e.message : "Failed to load users.");
+      });
+  };
 
   // Which page the rows on screen actually are. `offset` moves the instant
   // the pager is clicked, so without this the label reads "26-50 of 654"

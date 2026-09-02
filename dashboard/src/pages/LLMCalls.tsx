@@ -91,7 +91,14 @@ export default function LLMCalls() {
       offset: String(offset),
     })
       .then((d) => { if (!cancelled) { setData(d); setLoadedOffset(offset); setError(null); } })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load LLM calls."); });
+      .catch((e) => {
+        if (cancelled) return;
+        // Clear the in-flight marker too. Without it the table stays on the
+        // loading skeleton forever — DataTable renders loading before error,
+        // so the message and its Retry never appear.
+        setLoadedOffset(offset);
+        setError(e instanceof Error ? e.message : "Failed to load LLM calls.");
+      });
     return () => { cancelled = true; };
   }, [hours, fnFilter, userFilter, submissionFilter, sessionFilter, schoolFilter, status, search, offset, reloadKey]);
 

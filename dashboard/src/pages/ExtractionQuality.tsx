@@ -204,7 +204,10 @@ export default function ExtractionQuality() {
       .extractionQuality({ hours, bucket, limit: String(BOARD_PAGE_SIZE), offset: String(offset) })
       .then((d) => { if (!cancelled) { setData(d); setLoadedOffset(offset); setError(null); } })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load extraction quality.");
+        if (cancelled) return;
+        // Clear the in-flight marker too — see the note in AuditLogs.
+        setLoadedOffset(offset);
+        setError(e instanceof Error ? e.message : "Failed to load extraction quality.");
       });
     return () => { cancelled = true; };
   }, [hours, bucket, offset, reloadKey]);

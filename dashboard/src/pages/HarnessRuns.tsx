@@ -158,7 +158,12 @@ export default function HarnessRuns() {
         }
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+        if (cancelled) return;
+        // Clear the in-flight marker too, or the table sits on the loading
+        // skeleton forever: DataTable renders loading before error, so the
+        // message and its Retry never appear.
+        setLoadedOffset(offset);
+        setError(e instanceof Error ? e.message : "Failed to load");
       });
     return () => {
       cancelled = true;

@@ -150,7 +150,12 @@ async def harness_runs(
 
     rows = (
         await db.execute(
-            base.order_by(HarnessRun.created_at.desc()).limit(limit).offset(offset),
+            # `id` breaks ties: created_at defaults to now(), the
+            # TRANSACTION timestamp, and an ingest writes a batch — so
+            # OFFSET paging over an unstable order repeats and skips runs.
+            base.order_by(HarnessRun.created_at.desc(), HarnessRun.id)
+            .limit(limit)
+            .offset(offset),
         )
     ).scalars().all()
 

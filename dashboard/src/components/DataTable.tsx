@@ -21,21 +21,22 @@ import { Pagination, SearchInput } from "./Pagination";
  * until the day it happens. Owning the behaviour here means every table
  * crosses that line correctly without anyone remembering to.
  *
- * This component serves two roles, and paging is the difference:
+ * This component serves three roles, and who owns paging is the
+ * difference:
  *
- *   A LIST is browsed — a roster, an audit trail, every call. It pages,
- *   which is the default.
+ *   A LIST is browsed and we page it — a roster, submissions, a set the
+ *   caller fetched whole. The default.
  *   A CARD is read at a glance — "by function", "by subject", a
  *   scoreboard whose whole point is the shape of the distribution. It
  *   passes `unpaged`, because five of eight rows under a Next button is
  *   a card that quietly lies about what it measured.
+ *   A BOARD is paged by its caller, which fetched one page with
+ *   limit+offset and renders its own `<Pagination>`. It passes
+ *   `serverPaged`, which turns off both our pager and our sort — see the
+ *   prop docs for why sorting one page is a claim we can't honour.
  *
  * When in doubt it's a list: a card that outgrows a glance was always a
  * list wearing the wrong clothes.
- *
- * A server-paged caller hands us exactly one page and renders its own
- * `<Pagination>`; `rows.length` then never exceeds `pageSize`, so the
- * internal pager stays dormant rather than competing with it.
  */
 
 export interface Column<T> {
@@ -126,7 +127,12 @@ export default function DataTable<T>({
   const colCount = columns.length + (drill ? 1 : 0);
 
   const sorted = useMemo(() => {
-    if (!sortKey) return rows;
+    // A server-paged table arrives in the server's order and keeps it.
+    // Hiding the sort button was not enough on its own: `defaultSort` still
+    // seeded `sortKey`, so the page was silently reordered by a control the
+    // reader can no longer see — invisible only while a column's sortValue
+    // happens to agree with the server's ORDER BY.
+    if (serverPaged || !sortKey) return rows;
     const col = columns.find((c) => c.key === sortKey);
     if (!col?.sortValue) return rows;
     const dir = sortDir === "asc" ? 1 : -1;
@@ -136,15 +142,16 @@ export default function DataTable<T>({
       if (typeof av === "number" && typeof bv === "number") return dir * (av - bv);
       return dir * String(av).localeCompare(String(bv));
     });
-  }, [rows, columns, sortKey, sortDir]);
+  }, [rows, columns, sortKey, sortDir, serverPaged]);
 
-  // Both affordances stay hidden until the list outgrows a single page.
-  // Deriving the threshold from `pageSize` rather than a separate constant
-  // means they appear at exactly the row that first becomes unreachable —
-  // a fixed threshold above the page size hides rows behind no pager.
-  // Whether `rows` is the whole set. Both opt-outs mean it is not ours to
-  // page — a card holds everything already, a server-paged table holds one
-  // page and its caller pages it.
+  // Whether `rows` is ours to page. Both opt-outs say it isn't: a card
+  // holds the whole set already, a board holds one page its caller owns.
+  //
+  // When it is ours, the pager and search box appear as soon as the list
+  // outgrows a single page. Deriving that threshold from `pageSize` rather
+  // than a separate constant means they arrive at exactly the row that
+  // first becomes unreachable — a fixed threshold above the page size
+  // hides rows behind a pager that never renders.
   const ownsPaging = !unpaged && !serverPaged;
   const longEnough = ownsPaging && rows.length > pageSize;
   const canSearch = !!searchKeys && longEnough;
@@ -226,7 +233,13 @@ export default function DataTable<T>({
                 <th
                   key={c.key}
                   style={{ textAlign: alignOf(c) }}
-                  aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
+                  aria-sort={
+                    // Never announce a sort a server-paged table neither
+                    // applies nor offers a control for.
+                    active && !serverPaged
+                      ? (sortDir === "asc" ? "ascending" : "descending")
+                      : undefined
+                  }
                 >
                   {sortable ? (
                     <button

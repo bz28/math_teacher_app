@@ -75,7 +75,14 @@ export default function IndependentPanel({
         ...(search ? { search } : {}),
       })
       .then((d) => { if (!cancelled) { setData(d); setLoadedOffset(offset); setError(null); } })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load."); });
+      .catch((e) => {
+        if (cancelled) return;
+        // Clear the in-flight marker too. Without it the table stays on the
+        // loading skeleton forever — DataTable renders loading before error,
+        // so the message and its Retry never appear.
+        setLoadedOffset(offset);
+        setError(e instanceof Error ? e.message : "Failed to load.");
+      });
     return () => { cancelled = true; };
   }, [hours, search, sortBy, offset, role, reloadKey]);
 
