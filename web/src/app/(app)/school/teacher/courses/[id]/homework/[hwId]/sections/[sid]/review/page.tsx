@@ -3498,6 +3498,7 @@ function SubmissionDetailPanel({
                 aiGrade={aiByPosition.get(p.position) ?? null}
                 focused={i === focusedIndex}
                 collapsed={meta?.collapsed ?? false}
+                collapsible={meta?.confident ?? false}
                 confirmed={meta?.confirmed ?? false}
                 confirmKey={meta?.confirmKey ?? null}
                 onConfirm={() => confirmProblems([p.bank_item_id])}
@@ -3929,6 +3930,7 @@ function ProblemGradeRow({
   aiGrade,
   focused,
   collapsed,
+  collapsible,
   confirmed,
   confirmKey,
   onConfirm,
@@ -3947,6 +3949,11 @@ function ProblemGradeRow({
   /** The AI was confident — render the one-line confirm summary instead
    *  of the full grading body. The teacher can expand to inspect. */
   collapsed: boolean;
+  /** This row HAS a collapsed form, i.e. it's a confident row the
+   *  teacher hasn't overridden. Expanded-and-collapsible is the only
+   *  state where offering "collapse" means anything; an uncertain row
+   *  has nothing to collapse to. */
+  collapsible: boolean;
   /** The teacher has confirmed the AI's grade on this row (local
    *  checklist — the server trust signal is the submission's
    *  reviewed_at, stamped by onConfirm). */
@@ -4367,6 +4374,27 @@ function ProblemGradeRow({
             screen-reader order follow the DOM, and a teacher shouldn't
             reach "open page 3" before reading the problem it belongs to.
             Visually it still sits at the right end of the header row. */}
+        {/* Expanding used to be a one-way door: the only `onToggleExpand`
+            call site was inside the collapsed branch, so once a row was
+            open the sole way back was switching students, which resets
+            the expansion set as a side effect. A control that can be
+            turned on and not off isn't a toggle.
+
+            Placed after the question in the DOM for the same reason as
+            the page marker below: tab and screen-reader order follow the
+            DOM, and neither control should be reached before the problem
+            it belongs to. */}
+        {collapsible && (
+          <button
+            type="button"
+            onClick={onToggleExpand}
+            className="shrink-0 rounded-[--radius-sm] border border-border-light bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-text-muted transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            aria-expanded
+            aria-label={`Collapse problem ${problem.position} back to one line`}
+          >
+            <span aria-hidden>▴</span> Collapse
+          </button>
+        )}
         {pageLabel && (
           <button
             type="button"
