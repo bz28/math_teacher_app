@@ -185,7 +185,7 @@ async def check_answer_equivalence(
     try:
         result = await call_claude_json(
             _build_equivalence_prompt(subject), user_msg,
-            mode=LLMMode.PRACTICE_EVAL, tool_schema=ANSWER_EQUIVALENCE_SCHEMA,
+            mode=LLMMode.ANSWER_EQUIVALENCE, tool_schema=ANSWER_EQUIVALENCE_SCHEMA,
             session_id=session_id, user_id=user_id,
         )
         return bool(result.get("is_correct", False))

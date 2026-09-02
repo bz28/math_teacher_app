@@ -9,7 +9,13 @@ export const LLM_MODES = {
   DECOMPOSE_DIAGNOSIS: "decompose_diagnosis",
   STEP_CHAT: "step_chat",
   PRACTICE_GENERATE: "practice_generate",
+  // LEGACY — no new call is written with this. It labeled both
+  // distractor generation and the tutor's answer-equivalence check
+  // until they were split into the two below. Historical LLMCall rows
+  // still carry it, so it stays here to keep those rows recognized.
   PRACTICE_EVAL: "practice_eval",
+  GENERATE_DISTRACTORS: "generate_distractors",
+  ANSWER_EQUIVALENCE: "answer_equivalence",
   IMAGE_EXTRACT: "image_extract",
   DIAGNOSE_WORK: "diagnose_work",
   // Test-harness grading label. Kept in sync with LLMMode.JUDGE, which

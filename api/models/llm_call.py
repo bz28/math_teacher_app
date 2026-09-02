@@ -44,10 +44,13 @@ class LLMCall(Base):
     )
 
     # The generation job this call was made in service of (the question
-    # call plus its per-problem `decompose` solutions and `practice_eval`
-    # distractors). An EXPLICIT link so admin cost attribution is exact
-    # per generation instead of a time-window heuristic that misattributes
-    # when two jobs overlap. Null on calls unrelated to a generation job
+    # call plus its per-problem `decompose` solutions and
+    # `generate_distractors` distractors). An EXPLICIT link so admin cost
+    # attribution is exact per generation instead of a time-window
+    # heuristic that misattributes when two jobs overlap. Rows written
+    # before the distractor/answer-equivalence label split carry the
+    # legacy `practice_eval` function instead — see LLMMode in
+    # api/core/llm_client.py. Null on calls unrelated to a generation job
     # (grading, tutoring, integrity, standalone regenerate). SET NULL on
     # job delete keeps the cost row for aggregate spend.
     generation_job_id: Mapped[uuid.UUID | None] = mapped_column(
