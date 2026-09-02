@@ -11,12 +11,36 @@ Those rows read as "published, but with nothing published in them".
 
 That was survivable while the student surfaces read the live columns.
 It stops being survivable the moment they read the snapshot — a student
-whose grade predates the migration would watch it disappear. Repair the
-history rather than teach the readers to tolerate it.
+whose grade predates the migration would watch it disappear.
 
-Copies live → published only where the grade is published and the
-snapshot is missing, so a teacher's genuine mid-edit draft (published
-snapshot present, live column ahead of it) is never overwritten.
+Repairing means copying live -> published, which is only honest where
+the live values ARE what she released. Two guards make that provable:
+
+  graded_at <= grade_published_at
+      Nothing has touched the grade since it went out, so the live
+      columns still hold the released values. A row edited AFTER
+      publication fails this and is deliberately left alone: promoting
+      its live score would publish a number the teacher never released,
+      and — because _is_grade_dirty compares content, not timestamps —
+      would flip her row from dirty to clean and drop it out of her
+      review queue with the edit still unreleased. She would never be
+      told. Left as-is, the row stays dirty, she republishes, and the
+      snapshot fills in correctly. A NULL graded_at fails this
+      comparison too, which is the outcome we want: unprovable is
+      treated as unsafe.
+
+  final_score IS NOT NULL
+      The guard column is published_final_score, but the SET writes all
+      three. Without this, a row whose score was cleared after release
+      gets published_breakdown and published_teacher_notes written while
+      published_final_score stays NULL — a half-written snapshot, the
+      exact shape the readers were changed to stop tolerating.
+
+The cost of being wrong in the safe direction is a grade that stays
+hidden until the teacher republishes, and she is prompted to because the
+row reads dirty. The cost of being wrong the other way is silently
+publishing work she was still editing. Hence the conservative guards.
+
 Idempotent, and a no-op on any database created after as1000036.
 """
 from collections.abc import Sequence
@@ -38,6 +62,8 @@ def upgrade() -> None:
             published_teacher_notes = teacher_notes
         WHERE grade_published_at IS NOT NULL
           AND published_final_score IS NULL
+          AND final_score IS NOT NULL
+          AND graded_at <= grade_published_at
         """
     )
 

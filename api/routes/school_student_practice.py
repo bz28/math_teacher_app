@@ -1378,11 +1378,12 @@ async def get_dashboard(
             # The PUBLISHED snapshot, not the live column. Those two
             # diverge the moment a teacher reopens an already-released
             # grade: final_score follows her edits immediately, while
-            # published_final_score holds what she actually released.
-            # Reading the live one pushed her in-progress number to this
-            # surface before she had decided to publish it — and left it
+            # published_final_score holds what she last released.
+            # Reading the live one moved the number under the student
+            # mid-edit, without her republishing, and left this surface
             # disagreeing with the homework page, which reads the
-            # snapshot correctly.
+            # snapshot. The grade was already out, so nothing
+            # unpublished ever leaked — the revision to it did.
             final_score=round(grade.published_final_score, 1),
             published_at=grade.grade_published_at,
         ))
@@ -1456,11 +1457,12 @@ async def get_all_grades(
             # The PUBLISHED snapshot, not the live column. Those two
             # diverge the moment a teacher reopens an already-released
             # grade: final_score follows her edits immediately, while
-            # published_final_score holds what she actually released.
-            # Reading the live one pushed her in-progress number to this
-            # surface before she had decided to publish it — and left it
+            # published_final_score holds what she last released.
+            # Reading the live one moved the number under the student
+            # mid-edit, without her republishing, and left this surface
             # disagreeing with the homework page, which reads the
-            # snapshot correctly.
+            # snapshot. The grade was already out, so nothing
+            # unpublished ever leaked — the revision to it did.
             final_score=round(grade.published_final_score, 1),
             published_at=grade.grade_published_at,
         ))

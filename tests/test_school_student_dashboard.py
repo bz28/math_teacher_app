@@ -96,9 +96,12 @@ async def _publish_grade(submission_id: uuid.UUID, final_score: float) -> None:
             final_score=final_score,
             # Publishing stamps the snapshot and the timestamp together
             # (publish_grades sets published_* alongside
-            # grade_published_at), so a fixture that sets only the
-            # timestamp models a state the app can't produce — and the
-            # student surfaces read the snapshot.
+            # grade_published_at), so a fixture setting only the
+            # timestamp doesn't model a real publish — and the student
+            # surfaces read the snapshot. The database does hold rows
+            # of that shape, from before as1000036 added the columns;
+            # cm1000082 repairs those. They just aren't what a publish
+            # looks like, which is what this fixture is for.
             published_final_score=final_score,
             grade_published_at=datetime.now(UTC),
             graded_at=datetime.now(UTC),

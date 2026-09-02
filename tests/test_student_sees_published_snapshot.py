@@ -160,12 +160,18 @@ async def test_all_three_student_surfaces_agree(client: AsyncClient) -> None:
 
 async def test_an_unpublished_grade_is_still_invisible(client: AsyncClient) -> None:
     """Guards the half that was already right, so a future edit to these
-    queries can't quietly start showing unreleased work."""
+    queries can't quietly start showing unreleased work.
+
+    Only `grade_published_at` is cleared; the snapshot column is left
+    populated on purpose. Nulling both would let the snapshot filter
+    alone satisfy every assertion below, and the test would pass with
+    the publication gate deleted — proving nothing about the thing it
+    claims to protect.
+    """
     w = await _world()
     async with get_session_factory()() as s:
         grade = (await s.execute(select(SubmissionGrade))).scalar_one()
         grade.grade_published_at = None
-        grade.published_final_score = None
         await s.commit()
 
     assert (await client.get(
@@ -207,3 +213,38 @@ async def test_a_grade_with_no_snapshot_never_falls_off_the_dashboard(
     assert sum(appearances.values()) == 1, appearances
     # Nothing is published, so it belongs with the work awaiting a grade.
     assert appearances["in_review"] == 1, appearances
+
+
+async def test_un_grading_after_release_leaves_the_released_score_standing(
+    client: AsyncClient,
+) -> None:
+    """Clearing a breakdown nulls `final_score` but keeps the publication
+    and its snapshot (`teacher_assignments.py`, "empty list = clear").
+    That is a live row whose two score columns disagree in the opposite
+    direction to a mid-edit draft, and it is reachable from a real
+    endpoint.
+
+    The released 78 stands until she republishes — and the homework must
+    still appear exactly once, since the bucket query and the
+    recently-graded query both answer "is this published?" from the
+    snapshot.
+    """
+    w = await _world()
+    async with get_session_factory()() as s:
+        grade = (await s.execute(select(SubmissionGrade))).scalar_one()
+        grade.final_score = None
+        grade.breakdown = []
+        await s.commit()
+
+    dash = (await client.get(
+        "/v1/school/student/dashboard", headers=w["student"],
+    )).json()
+    buckets = ["due_this_week", "overdue", "in_review", "recently_graded"]
+    appearances = {b: len(dash[b]) for b in buckets}
+    assert sum(appearances.values()) == 1, appearances
+    assert dash["recently_graded"][0]["final_score"] == PUBLISHED
+
+    listed = (await client.get(
+        "/v1/school/student/grades", headers=w["student"],
+    )).json()["grades"]
+    assert [g["final_score"] for g in listed] == [PUBLISHED]
