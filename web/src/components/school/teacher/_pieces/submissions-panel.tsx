@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { usePdfBlobUrl } from "@/hooks/use-pdf-blob-url";
+import { useBlobUrl } from "@/hooks/use-blob-url";
 import { Modal } from "@/components/ui/modal";
 import {
   teacher,
@@ -1421,7 +1421,7 @@ function GalleryZoomModal({
   const label = file.filename ?? `Page ${index + 1}`;
   // blob: URL for the PDF — a data: link is inert in Chrome/Firefox and
   // that link is the only fallback when <embed> can't render inline.
-  const pdfUrl = usePdfBlobUrl(isPdf ? file.data : null) ?? dataUrl;
+  const pdfUrl = useBlobUrl(isPdf ? file.data : null, "application/pdf") ?? dataUrl;
   // ←/→ flip pages without leaving the modal. Modal's own keydown
   // handler owns Esc + Tab; we attach our arrows alongside.
   useEffect(() => {

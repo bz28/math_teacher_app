@@ -3,16 +3,21 @@
 import { useEffect, useState } from "react";
 
 /**
- * A `blob:` URL for base64 PDF bytes, revoked when the bytes change or
- * the component unmounts.
+ * A `blob:` URL for base64 bytes of any type, revoked when the bytes
+ * change or the component unmounts.
  *
- * Why not the `data:` URL the callers already build for `<embed>`:
+ * Why not the `data:` URL the callers already build for `<embed>`/`<img>`:
  * Chrome and Firefox block top-level navigation to `data:` URLs, so
  * `<a href="data:application/pdf" target="_blank">` silently does
  * nothing when clicked. That link is the *only* recourse for browsers
  * which can't render a PDF inline (mobile Safari, sandboxed iframes) —
  * so precisely the people who need the fallback got a blank frame and a
  * dead link. `blob:` URLs are permitted for top-level navigation.
+ *
+ * The same block is why an "open this page full size" link on a photo
+ * needs a blob handle too: a submitted image is base64 in the API
+ * payload, and a `data:` link to it is just as inert. Hence the
+ * media type is a parameter rather than pinned to PDF.
  *
  * Create and revoke both live in the effect, deliberately. Creating in
  * `useMemo` and revoking in an effect looks tidier and is wrong: React
@@ -31,11 +36,14 @@ import { useEffect, useState } from "react";
  * decoded; callers fall back to their `data:` URL, so behaviour is
  * never worse than before this hook existed.
  */
-export function usePdfBlobUrl(base64: string | null | undefined): string | null {
+export function useBlobUrl(
+  base64: string | null | undefined,
+  mediaType: string,
+): string | null {
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    const objectUrl = base64 ? createPdfObjectUrl(base64) : null;
+    const objectUrl = base64 ? createObjectUrlFor(base64, mediaType) : null;
     // An object URL's lifecycle IS the external system this effect
     // synchronizes with: it has to be created and revoked in the same
     // scope to survive StrictMode's double-invoke. Deriving it during
@@ -48,7 +56,7 @@ export function usePdfBlobUrl(base64: string | null | undefined): string | null 
     return () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [base64]);
+  }, [base64, mediaType]);
 
   return url;
 }
@@ -56,10 +64,10 @@ export function usePdfBlobUrl(base64: string | null | undefined): string | null 
 /** Build the handle, or null if the bytes can't be decoded (malformed
  *  base64, or a browser refusing the allocation) — the caller then keeps
  *  its data: URL, exactly as before this hook existed. */
-function createPdfObjectUrl(base64: string): string | null {
+function createObjectUrlFor(base64: string, mediaType: string): string | null {
   try {
     return URL.createObjectURL(
-      new Blob([decodeBase64(base64)], { type: "application/pdf" }),
+      new Blob([decodeBase64(base64)], { type: mediaType }),
     );
   } catch {
     return null;
