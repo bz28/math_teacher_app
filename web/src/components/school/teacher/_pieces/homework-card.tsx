@@ -1,7 +1,12 @@
 "use client";
 
 import type { TeacherAssignment } from "@/lib/api";
-import { formatDate, formatDue } from "@/lib/utils";
+import {
+  formatDate,
+  formatDue,
+  sectionTargetLabel,
+  sectionToneClass,
+} from "@/lib/utils";
 import { StatusPill } from "./status-pill";
 
 export type HomeworkBucket =
@@ -46,10 +51,14 @@ export function HomeworkCard({
 
   const isDraft = hw.status !== "published";
   const dueLabel = hw.due_at ? formatDue(hw.due_at) : "No due date";
-  const sectionLabel =
-    hw.section_names.length > 0
-      ? hw.section_names.join(", ")
-      : "No sections";
+  // Same helper as the homework detail page. A list card doesn't load
+  // the course's sections, so it can't tell "course has none" from the
+  // ordinary blank default — the detail page, where publishing happens,
+  // can and does.
+  const sections = sectionTargetLabel({
+    selectedNames: hw.section_names,
+    status: hw.status,
+  });
   const overdueDays = bucket === "needsGrading" && hw.due_at ? daysOverdue(hw.due_at) : 0;
   // Outstanding submissions = submitted but not yet graded. Headline
   // signal for the NEEDS GRADING bucket: surface as a pill on the
@@ -120,8 +129,8 @@ export function HomeworkCard({
         )}
         <span className={hw.due_at ? "" : "italic"}>{dueLabel}</span>
         <span aria-hidden>·</span>
-        <span className={hw.section_names.length === 0 ? "italic" : ""}>
-          {sectionLabel}
+        <span className={sectionToneClass(sections.tone)}>
+          {sections.label}
         </span>
       </div>
 

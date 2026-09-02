@@ -12,22 +12,30 @@ export function SectionMultiSelect({
   selected,
   onChange,
   disabled = false,
+  sections: providedSections,
 }: {
   courseId: string;
   selected: string[];
   onChange: (next: string[]) => void;
   disabled?: boolean;
+  /** Supplied when the parent already holds the course's sections — the
+   *  homework page needs them for its own header, and two fetches of
+   *  the same list is two chances to disagree. Omitted by the creation
+   *  wizard, which has no reason to load them itself. */
+  sections?: TeacherSection[] | null;
 }) {
-  const [sections, setSections] = useState<TeacherSection[] | null>(null);
+  const [fetched, setFetched] = useState<TeacherSection[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const sections = providedSections !== undefined ? providedSections : fetched;
 
   useEffect(() => {
+    if (providedSections !== undefined) return;
     let cancelled = false;
     teacher
       .sections(courseId)
       .then((res) => {
         if (cancelled) return;
-        setSections(res.sections);
+        setFetched(res.sections);
       })
       .catch((e) => {
         if (cancelled) return;
@@ -36,7 +44,7 @@ export function SectionMultiSelect({
     return () => {
       cancelled = true;
     };
-  }, [courseId]);
+  }, [courseId, providedSections]);
 
   const toggle = (id: string) => {
     if (disabled) return;

@@ -60,3 +60,16 @@ MAX_STORED_TEXT_LENGTH = 10 * 1024  # truncate LLM call logs beyond this
 # may drift) rather than the exact string when gating.
 SOLUTION_FAILED_SENTINEL = "(solution failed — please solve manually)"
 SOLUTION_FAILED_SENTINEL_PREFIX = "(solution failed"
+
+
+# Seeded into a new homework's student-visible instructions so the
+# expectation is on the page before the student starts working.
+#
+# It lives in the teacher's own Instructions block rather than as a
+# separate platform line, because that block already renders at the top
+# of the student's homework page and a second instruction beside it read
+# as a near-duplicate. A default she can edit or delete keeps one voice
+# on the page and leaves her in control of what her students are told.
+#
+# Homework only — practice has no student-visible instructions surface.
+DEFAULT_HOMEWORK_INSTRUCTIONS = "Write neatly and show your work."

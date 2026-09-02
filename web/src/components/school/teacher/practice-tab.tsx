@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { teacher, type TeacherAssignment, type TeacherUnit } from "@/lib/api";
 import { TOUR_IDS } from "@/components/tour";
 import { topUnits, unitLabel as labelForUnit } from "@/lib/units";
+import { sectionTargetLabel, sectionToneClass } from "@/lib/utils";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { Select } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -331,10 +332,10 @@ function PracticeCard({
   onOpen: () => void;
 }) {
   const isDraft = practice.status !== "published";
-  const sectionLabel =
-    practice.section_names.length > 0
-      ? practice.section_names.join(", ")
-      : "No sections";
+  const sections = sectionTargetLabel({
+    selectedNames: practice.section_names,
+    status: practice.status,
+  });
   return (
     <button
       type="button"
@@ -367,8 +368,8 @@ function PracticeCard({
             <span aria-hidden>·</span>
           </>
         )}
-        <span className={practice.section_names.length === 0 ? "italic" : ""}>
-          {sectionLabel}
+        <span className={sectionToneClass(sections.tone)}>
+          {sections.label}
         </span>
       </div>
 
