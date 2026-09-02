@@ -7,7 +7,7 @@ overlap.
 
 Covers:
 1. A full generation run stamps the job id on the question-gen call AND
-   the per-problem `decompose` solution + `practice_eval` distractor calls
+   the per-problem `decompose` solution + `generate_distractors` calls
    (those dominate cost, so cost/homework is only complete with them).
 2. The persistence layer writes the FK onto the row.
 3. `_correlate_costs` sums by the exact FK — an overlapping-window call
@@ -84,7 +84,7 @@ async def _seed_generatable_job() -> uuid.UUID:
 
 @pytest.mark.asyncio
 async def test_generation_run_stamps_job_id_on_every_call() -> None:
-    """The question-gen, decompose, and practice_eval calls made while
+    """The question-gen, decompose, and distractor calls made while
     producing one generation ALL carry the job id — proving the id threads
     through generate_questions, generate_solutions→decompose_problem, and
     generate_distractors, not just the top-level question call."""
@@ -107,7 +107,7 @@ async def test_generation_run_stamps_job_id_on_every_call() -> None:
                 "steps": [{"title": "Add", "description": "Sum the terms."}],
                 "final_answer": "5", "answer_type": "text",
             }
-        if mode == LLMMode.PRACTICE_EVAL:
+        if mode == LLMMode.GENERATE_DISTRACTORS:
             return {"distractors": ["3", "6", "7"]}
         raise AssertionError(f"unexpected mode {mode}")
 
@@ -128,7 +128,9 @@ async def test_generation_run_stamps_job_id_on_every_call() -> None:
     # All three cost-bearing call types fired, each stamped with the job id.
     assert by_mode[LLMMode.GENERATE_QUESTIONS] == str(job_id)
     assert by_mode[LLMMode.DECOMPOSE] == str(job_id), "solution call must be stamped"
-    assert by_mode[LLMMode.PRACTICE_EVAL] == str(job_id), "distractor call must be stamped"
+    assert by_mode[LLMMode.GENERATE_DISTRACTORS] == str(job_id), (
+        "distractor call must be stamped"
+    )
 
 
 @pytest.mark.asyncio
@@ -220,7 +222,11 @@ async def test_correlate_costs_uses_fk_exactly_across_overlapping_jobs() -> None
             generation_job_id=b_id, created_at=mid,
         ))
         # Unlinked (NULL) call in the overlap → time-window fallback lands
-        # it in the latest-started job that contains it (B).
+        # it in the latest-started job that contains it (B). Deliberately
+        # uses the LEGACY `practice_eval` distractor label: pre-split rows
+        # are exactly the unlinked population the fallback exists for, so
+        # this also guards that the old string stays in
+        # admin_generation._GENERATION_FUNCTIONS.
         s.add(LLMCall(
             function="practice_eval", model="m", input_tokens=1, output_tokens=1,
             latency_ms=1.0, cost_usd=0.05, user_id=teacher.id, success=True,

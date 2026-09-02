@@ -109,7 +109,11 @@ async def get_or_create_preview_student(
         # Previewing a specific homework overrides that course's pick
         # with a section the homework was actually assigned to — and is
         # the ONLY thing that justifies moving a seat the shadow already
-        # has. Without that scoping, the sidebar's preview entry point
+        # has. It can override a seat the teacher chose by hand, which
+        # is intended: opening a homework she can't see from her current
+        # seat would answer a question she didn't ask. The banner's
+        # section switcher shows the seat she landed in, so the override
+        # is visible rather than silent. Without that scoping, the sidebar's preview entry point
         # — which names no homework — would silently yank her back to the
         # default section every time, undoing the seat a homework
         # preview just put her in.

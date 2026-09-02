@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import {
   auth as authApi,
-  saveTokens,
+  startSession,
   clearTokens,
   hasStoredTokens,
   isMfaChallenge,
@@ -105,7 +105,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         });
         return { mfa_required: true };
       }
-      saveTokens(result);
+      startSession(result);
       const user = await authApi.me();
       set({ user, loading: false });
       return { mfa_required: false };
@@ -125,7 +125,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const tokens = await authApi.loginVerifyMfa(pending.mfaPendingToken, code);
-      saveTokens(tokens);
+      startSession(tokens);
       const user = await authApi.me();
       set({ user, loading: false, pendingMfa: null });
     } catch (err) {
@@ -156,7 +156,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const tokens = await authApi.register(data);
-      saveTokens(tokens);
+      startSession(tokens);
       const user = await authApi.me();
       set({ user, loading: false });
     } catch (err) {

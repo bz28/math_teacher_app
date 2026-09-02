@@ -2180,6 +2180,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/school/student/preview/courses/{course_id}/seat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move Preview Seat
+         * @description Move the preview's seat to another section of the same course.
+         */
+        post: operations["move_preview_seat_v1_school_student_preview_courses__course_id__seat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/school/student/preview/courses/{course_id}/seats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Preview Seats
+         * @description Every section of this course the preview could sit in, and which
+         *     one it currently occupies.
+         */
+        get: operations["list_preview_seats_v1_school_student_preview_courses__course_id__seats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/school/student/submissions/{submission_id}/confirm-extraction": {
         parameters: {
             query?: never;
@@ -4832,6 +4873,14 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** MovePreviewSeatRequest */
+        MovePreviewSeatRequest: {
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+        };
         /** NextVariationEmpty */
         NextVariationEmpty: {
             /**
@@ -4969,6 +5018,24 @@ export interface components {
             distractors: string[];
             /** Question */
             question: string;
+        };
+        /** PreviewSeat */
+        PreviewSeat: {
+            /** Current */
+            current: boolean;
+            /** Name */
+            name: string;
+            /** Section Id */
+            section_id: string;
+        };
+        /** PreviewSeatsResponse */
+        PreviewSeatsResponse: {
+            /** Course Id */
+            course_id: string;
+            /** Course Name */
+            course_name: string;
+            /** Seats */
+            seats: components["schemas"]["PreviewSeat"][];
         };
         /**
          * PreviewStudentRequest
@@ -9656,6 +9723,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecordActivityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    move_preview_seat_v1_school_student_preview_courses__course_id__seat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MovePreviewSeatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_preview_seats_v1_school_student_preview_courses__course_id__seats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewSeatsResponse"];
                 };
             };
             /** @description Validation Error */

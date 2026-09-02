@@ -1,14 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   schoolStudent,
+  ApiError,
   type StudentPracticeDetail,
   type StudentPracticeProblem,
 } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth";
 import { MathText } from "@/components/shared/math-text";
 import { PageErrorState } from "@/components/ui";
 import { SkeletonStep } from "@/components/ui/skeleton";
@@ -36,6 +38,9 @@ export default function PracticeDetailPage() {
     courseId: string;
     assignmentId: string;
   }>();
+  const router = useRouter();
+  // A teacher previewing her own course — see the catch in load().
+  const isPreview = useAuthStore((st) => st.user?.is_preview ?? false);
   const [detail, setDetail] = useState<StudentPracticeDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("preview");
@@ -48,10 +53,25 @@ export default function PracticeDetailPage() {
         setDetail(d);
         setError(null);
       })
-      .catch(() =>
-        setError("We couldn't load this practice set just now."),
-      );
-  }, [assignmentId]);
+      .catch((e) => {
+        // Same rule as the homework page: a preview whose seat is in a
+        // period this practice was never sent to gets the 403 a student
+        // in that period would, and a student in that period would
+        // never be on this page. Send her to the list, where it's
+        // simply absent — the generic error would call a correct answer
+        // a failure.
+        if (
+          isPreview &&
+          e instanceof ApiError &&
+          e.status === 403 &&
+          e.body.detail === "Not enrolled in this assignment"
+        ) {
+          router.replace(`/school/student/courses/${courseId}`);
+          return;
+        }
+        setError("We couldn't load this practice set just now.");
+      });
+  }, [assignmentId, courseId, isPreview, router]);
 
   useEffect(() => {
     load();

@@ -217,12 +217,19 @@ export interface ApiErrorBody {
 }
 
 export class ApiError extends Error {
-  constructor(
-    public status: number,
-    public body: ApiErrorBody,
-  ) {
+  // Written as fields + assignment rather than constructor parameter
+  // properties: those are the one TypeScript feature Node's
+  // type-stripping can't execute, and they made this whole module
+  // unimportable from a `node --test` file. EntitlementError below
+  // already does it this way.
+  public status: number;
+  public body: ApiErrorBody;
+
+  constructor(status: number, body: ApiErrorBody) {
     super(body.detail ?? `API error ${status}`);
     this.name = "ApiError";
+    this.status = status;
+    this.body = body;
   }
 }
 
@@ -239,10 +246,9 @@ export class ApiError extends Error {
  * than the literal browser error.
  */
 export class NetworkError extends Error {
-  constructor(
-    public cause: "fetch_failed" | "timeout",
-    message?: string,
-  ) {
+  public cause: "fetch_failed" | "timeout";
+
+  constructor(cause: "fetch_failed" | "timeout", message?: string) {
     super(
       message ??
         (cause === "timeout"
@@ -250,6 +256,7 @@ export class NetworkError extends Error {
           : "Can't reach our servers right now. Please try again in a moment."),
     );
     this.name = "NetworkError";
+    this.cause = cause;
   }
 }
 
@@ -309,16 +316,27 @@ function getRefreshToken(): string | null {
   return localStorage.getItem(REFRESH_KEY);
 }
 
+/** Write the tokens for the CURRENT session. Says nothing about whose
+ *  session it is — a silent refresh mid-preview goes through here too,
+ *  so it must not touch the preview stash. To begin a new session, use
+ *  {@link startSession}. */
 export function saveTokens(tokens: TokenPair) {
   localStorage.setItem(TOKEN_KEY, tokens.access_token);
   localStorage.setItem(REFRESH_KEY, tokens.refresh_token);
-  // Any stashed teacher session belongs to a preview that is now over.
-  // Leaving it behind makes isInPreviewMode() true for whoever logs in
-  // next — a phantom "Previewing as student" banner over the teacher
-  // app, whose "Back to teacher view" restores someone's stale tokens.
-  // enterPreviewMode writes its stash *after* calling this, so the one
-  // legitimate stash survives.
+}
+
+/** Begin a session for a newly authenticated person: any preview the
+ *  last one left behind is over.
+ *
+ *  This exists so the decision can't be forgotten. Clearing the stash
+ *  used to live inside saveTokens, which was wrong (refreshes go
+ *  through it); moving it to the call sites made it a rule three of
+ *  them had to remember, and the next sign-in path added — SSO, magic
+ *  link, admin impersonation — would silently reintroduce the bug.
+ *  Sign-in paths call this; nothing else should. */
+export function startSession(tokens: TokenPair) {
   clearPreviewStash();
+  saveTokens(tokens);
 }
 
 export function clearTokens() {
@@ -336,20 +354,25 @@ export function hasStoredTokens(): boolean {
 const TEACHER_TOKEN_KEY = "veradic_teacher_access_token";
 const TEACHER_REFRESH_KEY = "veradic_teacher_refresh_token";
 
-function clearPreviewStash() {
+/** Drop a stashed teacher session. A preview ends when its owner signs
+ *  out or a different session signs in — NOT when tokens are merely
+ *  rewritten, which happens on every silent refresh mid-preview. */
+export function clearPreviewStash() {
   localStorage.removeItem(TEACHER_TOKEN_KEY);
   localStorage.removeItem(TEACHER_REFRESH_KEY);
 }
 
 /** Stash teacher tokens and swap to the preview student tokens. */
 export function enterPreviewMode(studentTokens: TokenPair) {
+  // Drop anything stale first. Otherwise a leftover stash could survive
+  // a preview entered with no current tokens, and "Back to teacher
+  // view" would install someone else's session.
+  clearPreviewStash();
   const teacherAccess = getAccessToken();
   const teacherRefresh = getRefreshToken();
-  // saveTokens clears the stash (a fresh sign-in ends any preview), so
-  // the swap has to happen before we write ours.
-  saveTokens(studentTokens);
   if (teacherAccess) localStorage.setItem(TEACHER_TOKEN_KEY, teacherAccess);
   if (teacherRefresh) localStorage.setItem(TEACHER_REFRESH_KEY, teacherRefresh);
+  saveTokens(studentTokens);
 }
 
 /** Restore teacher tokens and clear the stash. Returns true if stash existed. */
@@ -357,8 +380,8 @@ export function exitPreviewMode(): boolean {
   const teacherAccess = localStorage.getItem(TEACHER_TOKEN_KEY);
   const teacherRefresh = localStorage.getItem(TEACHER_REFRESH_KEY);
   if (!teacherAccess || !teacherRefresh) return false;
-  // Restore directly rather than via saveTokens — the stash is cleared
-  // here either way, and going through saveTokens would only re-clear it.
+  // Restore directly rather than via startSession: this is the same
+  // person resuming their own session, not a new one signing in.
   localStorage.setItem(TOKEN_KEY, teacherAccess);
   localStorage.setItem(REFRESH_KEY, teacherRefresh);
   clearPreviewStash();
@@ -2347,9 +2370,37 @@ export interface StudentPracticeActivityResponse {
   sets: PracticeActivitySetSummary[];
 }
 
+export interface PreviewSeat {
+  section_id: string;
+  name: string;
+  /** The section the preview is sitting in right now. */
+  current: boolean;
+}
+
+export interface PreviewSeatsResponse {
+  course_id: string;
+  course_name: string;
+  seats: PreviewSeat[];
+}
+
 export const schoolStudent = {
   listClasses() {
     return apiFetch<StudentClassSummary[]>("/school/student/classes");
+  },
+  /** Preview-only: which sections of this course the shadow could sit
+   *  in, and which one it currently occupies. 403 for a real student. */
+  previewSeats(courseId: string) {
+    return apiFetch<PreviewSeatsResponse>(
+      `/school/student/preview/courses/${courseId}/seats`,
+    );
+  },
+  /** Preview-only: move the shadow's seat to another section of the
+   *  same course. One seat per course, so this is a move. */
+  movePreviewSeat(courseId: string, sectionId: string) {
+    return apiFetch<{ status: string }>(
+      `/school/student/preview/courses/${courseId}/seat`,
+      { method: "POST", body: JSON.stringify({ section_id: sectionId }) },
+    );
   },
   getDashboard() {
     return apiFetch<StudentDashboardResponse>("/school/student/dashboard");

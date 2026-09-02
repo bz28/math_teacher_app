@@ -41,7 +41,16 @@ class LLMMode:
     DECOMPOSE_DIAGNOSIS = "decompose_diagnosis"
     STEP_CHAT = "step_chat"
     PRACTICE_GENERATE = "practice_generate"
+    # LEGACY — read-only. Never stamp a new call with this. It was one
+    # label over two unrelated calls: distractor generation and the
+    # tutor's answer-equivalence check, now GENERATE_DISTRACTORS and
+    # ANSWER_EQUIVALENCE below. Every LLMCall row written before that
+    # split carries this string, so the value stays defined and stays
+    # in the readers that aggregate history (admin_generation's
+    # _GENERATION_FUNCTIONS, dashboard/src/lib/llm_modes.ts).
     PRACTICE_EVAL = "practice_eval"
+    GENERATE_DISTRACTORS = "generate_distractors"
+    ANSWER_EQUIVALENCE = "answer_equivalence"
     IMAGE_EXTRACT = "image_extract"
     DIAGNOSE_WORK = "diagnose_work"
     # Used by the TEST HARNESS (tests/harness/eval.py and the improver)
