@@ -4075,6 +4075,41 @@ export interface components {
             /** Section Ids */
             section_ids: string[];
         };
+        /**
+         * AssignmentRubric
+         * @description The teacher-authored grading rubric, as the UI actually collects it.
+         *
+         *     This used to be a bare `dict[str, Any]`, which meant the API accepted
+         *     any shape at all — a gap `api/models/llm_payload.py` already called
+         *     out ("no key whitelist, value validation or length cap"). Two things
+         *     made it worth closing:
+         *
+         *     * Every reader assumes `str`. The teacher review page renders these
+         *       through `MathText`, the homework page's `normalizeRubric` calls
+         *       `.trim()` on them, and `grading_ai._build_rubric_block` interpolates
+         *       them into a prompt. A list or a number reaching any of those is a
+         *       crash or a garbled prompt, not a graceful degrade — and a crash here
+         *       takes the whole grading page down behind an error boundary, with no
+         *       way out of it from the UI.
+         *     * These four fields are rendered verbatim into an LLM prompt, so an
+         *       unbounded string is an unbounded prompt.
+         *
+         *     `extra="forbid"` rather than ignore: the only writer is the rubric
+         *     editor, which emits exactly these four keys, so an unexpected key
+         *     means a client bug and a 422 says so instead of silently dropping the
+         *     teacher's work. (`grading_mode` appears in a stale comment on
+         *     `Assignment.rubric` but has never been written.)
+         */
+        AssignmentRubric: {
+            /** Common Mistakes */
+            common_mistakes?: string | null;
+            /** Full Credit */
+            full_credit?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Partial Credit */
+            partial_credit?: string | null;
+        };
         /** BreakdownEntry */
         BreakdownEntry: {
             /** Deductions */
@@ -4199,10 +4234,7 @@ export interface components {
              * @default none
              */
             late_policy: string;
-            /** Rubric */
-            rubric?: {
-                [key: string]: unknown;
-            } | null;
+            rubric?: components["schemas"]["AssignmentRubric"] | null;
             /** Source Type */
             source_type?: string | null;
             /** Title */
@@ -5942,10 +5974,7 @@ export interface components {
             due_at?: string | null;
             /** Late Policy */
             late_policy?: string | null;
-            /** Rubric */
-            rubric?: {
-                [key: string]: unknown;
-            } | null;
+            rubric?: components["schemas"]["AssignmentRubric"] | null;
             /** Status */
             status?: string | null;
             /** Title */
