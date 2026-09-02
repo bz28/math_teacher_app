@@ -14,17 +14,7 @@ const nextConfig: NextConfig = {
 
     return {
       beforeFiles: [],
-      // afterFiles runs only when no real file matched — so the tour's actual
-      // assets in public/tour (JS, CSS, screenshots, the film) are served by
-      // the filesystem first, and these rewrites just serve the SPA's
-      // index.html for its own client routes (/tour, /tour/integrity, …) so
-      // deep links and refreshes resolve. The tour is built from demo/ into
-      // public/tour by scripts/build-tour.mjs at build time.
-      afterFiles: [
-        ...apiProxy,
-        { source: "/tour", destination: "/tour/index.html" },
-        { source: "/tour/:path*", destination: "/tour/index.html" },
-      ],
+      afterFiles: apiProxy,
       fallback: [],
     };
   },
@@ -68,6 +58,23 @@ const nextConfig: NextConfig = {
       {
         source: "/safety/:path*",
         destination: "/for-districts",
+        permanent: true,
+      },
+      // /tour used to mount the buyer pitch site (demo/) under
+      // veradicai.com/tour. It's off the public site now: its deep-dives
+      // walk through how integrity signals and grading work — sales
+      // material, not something a student browsing veradicai.com should
+      // be reading. The pitch site still lives standalone at
+      // demo.veradicai.com, which is where sales links point. 308 so
+      // existing /tour links land on book-a-demo instead of a 404.
+      {
+        source: "/tour",
+        destination: "/demo",
+        permanent: true,
+      },
+      {
+        source: "/tour/:path*",
+        destination: "/demo",
         permanent: true,
       },
     ];

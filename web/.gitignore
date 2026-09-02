@@ -40,5 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Product tour — built from demo/ into public/tour at build time (scripts/build-tour.mjs)
+# Stale product-tour build output. /tour no longer mounts the pitch site, so
+# nothing writes this any more — kept ignored so the 35MB directory left on
+# machines that built before the removal can't be committed by accident.
 /public/tour

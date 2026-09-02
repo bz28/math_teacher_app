@@ -29,13 +29,9 @@ function StoryFallback() {
   );
 }
 
-// Match the router to the build's base: "/" standalone, "/tour" when mounted
-// under veradicai.com/tour. Vite's BASE_URL carries the configured base.
-const basename = import.meta.env.BASE_URL.replace(/\/$/, "") || undefined;
-
 export default function App() {
   return (
-    <BrowserRouter basename={basename}>
+    <BrowserRouter>
       <Routes>
         {/* The front door. */}
         <Route
