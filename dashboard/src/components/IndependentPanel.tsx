@@ -56,7 +56,7 @@ export default function IndependentPanel({
   // The page the rows on screen belong to. `offset` moves the moment the
   // pager is clicked, so comparing the two tells us the table is showing
   // the previous page under the new label — see Users.tsx.
-  const [loadedOffset, setLoadedOffset] = useState(0);
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(0);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -228,14 +228,14 @@ export default function IndependentPanel({
           rowKey={(u) => u.id}
           onRowClick={(u) => navigate(rowHref(u))}
           drill
-          loading={(!data && !error) || (data !== null && loadedOffset !== offset)}
+          loading={loadedOffset !== offset}
           error={error}
           // Clearing the error first is what makes Retry visibly do
           // something: it hands the table back to its loading state for the
           // round trip. Without it the same card sits there, and a retry
           // that fails identically writes the same string — which React
           // bails on — so the button reads as broken.
-          onRetry={() => { setError(null); setReloadKey((k) => k + 1); }}
+          onRetry={() => { setError(null); setLoadedOffset(null); setReloadKey((k) => k + 1); }}
           empty={
             <div>
               <div className="dt-state-title">{emptyMessage}</div>

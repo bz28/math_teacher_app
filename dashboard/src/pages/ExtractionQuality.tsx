@@ -192,7 +192,7 @@ export default function ExtractionQuality() {
   // The page the rows on screen belong to. `offset` moves the moment the
   // pager is clicked, so comparing the two tells us the table is showing
   // the previous page under the new label — see Users.tsx.
-  const [loadedOffset, setLoadedOffset] = useState(0);
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(0);
   const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -262,7 +262,7 @@ export default function ExtractionQuality() {
   ], []);
 
   if (!data && error) {
-    return <ErrorState message={error} onRetry={() => { setError(null); setReloadKey((k) => k + 1); }} />;
+    return <ErrorState message={error} onRetry={() => { setError(null); setLoadedOffset(null); setReloadKey((k) => k + 1); }} />;
   }
   if (!data) return <p className="loading">Loading…</p>;
 
@@ -446,12 +446,12 @@ export default function ExtractionQuality() {
               // paging, and client-side sort would rank only this page.
               serverPaged
               rowKey={(c) => c.submission_id}
-              loading={data !== null && loadedOffset !== offset}
+              loading={loadedOffset !== offset}
               // The guard above only fires before the first page loads, so
               // without these a failed Next showed the previous page's rows
               // under the new page's label — no message, no way back.
               error={error}
-              onRetry={() => { setError(null); setReloadKey((k) => k + 1); }}
+              onRetry={() => { setError(null); setLoadedOffset(null); setReloadKey((k) => k + 1); }}
               onRowClick={(c) => setOpenId(c.submission_id)}
               rowStatus={(c) => BUCKET_META[c.bucket].color}
               drill

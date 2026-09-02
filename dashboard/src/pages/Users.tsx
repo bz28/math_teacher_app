@@ -119,7 +119,7 @@ export default function Users() {
   const [schoolId, setSchoolId] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
-  const [loadedOffset, setLoadedOffset] = useState(0);
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(0);
   const [schools, setSchools] = useState<SchoolListItem[]>([]);
 
   // The console must not offer an admin destructive actions against
@@ -174,7 +174,7 @@ export default function Users() {
   // over rows 1-25 for the length of the round trip — the same screen
   // contradicting itself that this branch set out to remove. Derived, so
   // there is no window where the two disagree.
-  const paging = data !== null && loadedOffset !== offset;
+  const paging = loadedOffset !== offset;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { reload(); }, [hours, role, plan, schoolId, search, offset, reloadKey]);
@@ -528,7 +528,7 @@ export default function Users() {
           // page's label, with no message and no Retry — silently wrong
           // data, which is worse than the stuck skeleton it replaced.
           error={error}
-          onRetry={() => { setError(null); setReloadKey((k) => k + 1); }}
+          onRetry={() => { setError(null); setLoadedOffset(null); setReloadKey((k) => k + 1); }}
           minWidth={720}
           empty={
             <>

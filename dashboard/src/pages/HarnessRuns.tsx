@@ -128,7 +128,7 @@ export default function HarnessRuns() {
   // The page the rows on screen belong to. `offset` moves the moment the
   // pager is clicked, so comparing the two tells us the table is showing
   // the previous page under the new label — see Users.tsx.
-  const [loadedOffset, setLoadedOffset] = useState(0);
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(0);
 
   const [reportHtml, setReportHtml] = useState<string | null>(null);
   const [loadingReport, setLoadingReport] = useState<string | null>(null);
@@ -282,7 +282,7 @@ export default function HarnessRuns() {
   );
 
   if (!data && error) {
-    return <ErrorState message={error} onRetry={() => { setError(null); setReloadKey((k) => k + 1); }} />;
+    return <ErrorState message={error} onRetry={() => { setError(null); setLoadedOffset(null); setReloadKey((k) => k + 1); }} />;
   }
 
   const summary = data?.summary;
@@ -392,11 +392,11 @@ export default function HarnessRuns() {
           // paging, and client-side sort would rank only this page.
           serverPaged
           rowKey={(r) => r.id}
-          loading={(!data && !error) || (data !== null && loadedOffset !== offset)}
+          loading={loadedOffset !== offset}
           // Unconditionally — see the note in Users.tsx. Withheld, a failed
           // page fetch shows the previous page's rows under the new label.
           error={error}
-          onRetry={() => { setError(null); setReloadKey((k) => k + 1); }}
+          onRetry={() => { setError(null); setLoadedOffset(null); setReloadKey((k) => k + 1); }}
           minWidth={820}
           empty={
             <span className="dt-state-title">

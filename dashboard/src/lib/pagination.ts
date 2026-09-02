@@ -28,9 +28,15 @@
  *                   sort — and don't rely on the fetch limit matching
  *                   `DataTable`'s page size to keep the pager quiet, which
  *                   breaks as a second pager the moment either changes.
- *                   Pass `error` and `onRetry` unconditionally too: withheld
- *                   once a page has loaded, a failed fetch leaves the
- *                   previous page's rows under the new page's label.
+ *                   And a failed page fetch has to be visible: withheld,
+ *                   it leaves the previous page's rows under the new page's
+ *                   label, which reads as data rather than as a failure.
+ *                   Two sanctioned ways — pass `error`/`onRetry` to the
+ *                   table unconditionally (most boards), or render a stale
+ *                   banner above it (Quality, GenerationQuality). Prefer
+ *                   the banner for a new board: the stat tiles above a
+ *                   table go stale on the same failure, and only the banner
+ *                   says so. What isn't allowed is neither.
  *   Client-paged  — fetch the set and let `DataTable` page it, so sorting
  *                   and search run over everything rather than a prefix.
  */

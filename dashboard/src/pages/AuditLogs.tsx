@@ -63,7 +63,7 @@ export default function AuditLogs() {
   // The page the rows on screen belong to. `offset` moves the moment the
   // pager is clicked, so comparing the two tells us the table is showing
   // the previous page under the new label — see Users.tsx.
-  const [loadedOffset, setLoadedOffset] = useState(0);
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(0);
 
   // The filter fields, minus pagination — shared by the fetch and the
   // CSV export so the download is always exactly what's on screen.
@@ -343,10 +343,11 @@ export default function AuditLogs() {
           // paging, and client-side sort would rank only this page.
           serverPaged
           rowKey={(e) => `${e.facet}:${e.id}`}
-          loading={(!data && !error) || (data !== null && loadedOffset !== offset)}
+          loading={loadedOffset !== offset}
           error={error}
           onRetry={() => {
             setError(null);
+            setLoadedOffset(null);
             setReloadKey((k) => k + 1);
           }}
           rowStatus={(e) => (e.facet === "access" ? "var(--info)" : "var(--accent)")}
@@ -357,7 +358,13 @@ export default function AuditLogs() {
           <Pagination
             total={data.total}
             limit={data.limit}
-            offset={data.offset}
+            // The REQUESTED offset, not the loaded one, matching every other
+            // board. Reading `data.offset` meant that after a failed page
+            // fetch the pager still showed the page you came from, so Next
+            // recomputed the offset you were already on, the effect didn't
+            // refire, and the button did nothing. The loading state above
+            // covers the gap while the two differ.
+            offset={offset}
             onChange={updateOffset}
           />
         )}
