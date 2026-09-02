@@ -2243,20 +2243,13 @@ async def publish_grades(
             detail="Cannot publish grades on a draft homework",
         )
 
-    # Preview shadows are NOT filtered here, unlike every count on this
-    # page. A teacher's rehearsal runs the whole pipeline — extraction,
-    # integrity, grading — and then stopped dead: her grade existed and
-    # nothing could ever set grade_published_at on it, so the student
-    # view she was checking never showed a score. This is the only
-    # writer of that column, so the release sweep has to include her or
-    # the back half of the loop is unreachable. Only she can see it; the
-    # graded/published counts and the gradebook still filter her out.
     stmt = (
         select(SubmissionGrade)
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
         .join(User, User.id == Submission.student_id)
         .where(
             Submission.assignment_id == a.id,
+            User.is_preview.is_(False),
             SubmissionGrade.final_score.is_not(None),
             or_(
                 SubmissionGrade.grade_published_at.is_(None),
