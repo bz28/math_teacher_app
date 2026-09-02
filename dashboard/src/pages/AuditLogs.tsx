@@ -59,11 +59,15 @@ export default function AuditLogs() {
   const facet = searchParams.get("facet") ?? "";
   const typeFilter = searchParams.get("type") ?? "";
   const target = searchParams.get("target") ?? "";
-  const offset = Number(searchParams.get("offset") ?? "0");
-  // The page the rows on screen belong to. `offset` moves the moment the
-  // pager is clicked, so comparing the two tells us the table is showing
-  // the previous page under the new label — see Users.tsx.
-  const [loadedOffset, setLoadedOffset] = useState<number | null>(0);
+  // Sanitised, because this one comes from the URL rather than a pager.
+  // `?offset=abc` gives NaN, and NaN !== NaN — so the loaded marker could
+  // never match the requested offset and the table would sit on its
+  // skeleton for good, with the 422 behind it never rendering.
+  const rawOffset = Number(searchParams.get("offset") ?? "0");
+  const offset = Number.isInteger(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
+  // Which page the rows on screen are, or null while none is loaded for
+  // the offset being asked about — see Users.tsx.
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(null);
 
   // The filter fields, minus pagination — shared by the fetch and the
   // CSV export so the download is always exactly what's on screen.
@@ -91,9 +95,9 @@ export default function AuditLogs() {
       })
       .catch((e) => {
         if (cancelled) return;
-        // Clear the in-flight marker too, or the table sits on the loading
-        // skeleton forever: DataTable renders loading before error, so the
-        // message and its Retry never appear.
+        // Mark this offset loaded even though it failed: that ends the
+        // in-flight state so DataTable, which renders loading ahead of
+        // error, reaches the message and its Retry.
         setLoadedOffset(offset);
         setError(e instanceof Error ? e.message : "Failed to load");
       });

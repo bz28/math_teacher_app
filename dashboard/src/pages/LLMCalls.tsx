@@ -58,10 +58,9 @@ export default function LLMCalls() {
   const [selectedCall, setSelectedCall] = useState<CallRow | null>(null);
   const [debugState, setDebugState] = useState<Record<string, string>>({});
   const [offset, setOffset] = useState(0);
-  // The page the rows on screen belong to. `offset` moves the moment the
-  // pager is clicked, so comparing the two tells us the table is showing
-  // the previous page under the new label — see Users.tsx.
-  const [loadedOffset, setLoadedOffset] = useState<number | null>(0);
+  // Which page the rows on screen are, or null while none is loaded for
+  // the offset being asked about — see Users.tsx.
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -93,9 +92,9 @@ export default function LLMCalls() {
       .then((d) => { if (!cancelled) { setData(d); setLoadedOffset(offset); setError(null); } })
       .catch((e) => {
         if (cancelled) return;
-        // Clear the in-flight marker too. Without it the table stays on the
-        // loading skeleton forever — DataTable renders loading before error,
-        // so the message and its Retry never appear.
+        // Mark this offset loaded even though it failed: that ends the
+        // in-flight state so DataTable, which renders loading ahead of
+        // error, reaches the message and its Retry.
         setLoadedOffset(offset);
         setError(e instanceof Error ? e.message : "Failed to load LLM calls.");
       });

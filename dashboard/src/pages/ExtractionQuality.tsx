@@ -189,10 +189,9 @@ export default function ExtractionQuality() {
   const [hours, setHours] = useState("2160");
   const [bucket, setBucket] = useState("");
   const [offset, setOffset] = useState(0);
-  // The page the rows on screen belong to. `offset` moves the moment the
-  // pager is clicked, so comparing the two tells us the table is showing
-  // the previous page under the new label — see Users.tsx.
-  const [loadedOffset, setLoadedOffset] = useState<number | null>(0);
+  // Which page the rows on screen are, or null while none is loaded for
+  // the offset being asked about — see Users.tsx.
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -205,7 +204,7 @@ export default function ExtractionQuality() {
       .then((d) => { if (!cancelled) { setData(d); setLoadedOffset(offset); setError(null); } })
       .catch((e) => {
         if (cancelled) return;
-        // Clear the in-flight marker too — see the note in AuditLogs.
+        // Mark this offset loaded even though it failed — see AuditLogs.
         setLoadedOffset(offset);
         setError(e instanceof Error ? e.message : "Failed to load extraction quality.");
       });

@@ -125,10 +125,9 @@ export default function HarnessRuns() {
   const [probe, setProbe] = useState("");
   const [failedOnly, setFailedOnly] = useState(false);
   const [offset, setOffset] = useState(0);
-  // The page the rows on screen belong to. `offset` moves the moment the
-  // pager is clicked, so comparing the two tells us the table is showing
-  // the previous page under the new label — see Users.tsx.
-  const [loadedOffset, setLoadedOffset] = useState<number | null>(0);
+  // Which page the rows on screen are, or null while none is loaded for
+  // the offset being asked about — see Users.tsx.
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(null);
 
   const [reportHtml, setReportHtml] = useState<string | null>(null);
   const [loadingReport, setLoadingReport] = useState<string | null>(null);
@@ -159,9 +158,9 @@ export default function HarnessRuns() {
       })
       .catch((e) => {
         if (cancelled) return;
-        // Clear the in-flight marker too, or the table sits on the loading
-        // skeleton forever: DataTable renders loading before error, so the
-        // message and its Retry never appear.
+        // Mark this offset loaded even though it failed: that ends the
+        // in-flight state so DataTable, which renders loading ahead of
+        // error, reaches the message and its Retry.
         setLoadedOffset(offset);
         setError(e instanceof Error ? e.message : "Failed to load");
       });

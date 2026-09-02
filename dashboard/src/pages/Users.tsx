@@ -119,7 +119,7 @@ export default function Users() {
   const [schoolId, setSchoolId] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
-  const [loadedOffset, setLoadedOffset] = useState<number | null>(0);
+  const [loadedOffset, setLoadedOffset] = useState<number | null>(null);
   const [schools, setSchools] = useState<SchoolListItem[]>([]);
 
   // The console must not offer an admin destructive actions against
@@ -161,19 +161,25 @@ export default function Users() {
       })
       .catch((e) => {
         if (seq !== loadSeq.current) return;
-        // Clear the in-flight marker too. Without it the table stays on the
-        // loading skeleton forever — DataTable renders loading before error,
-        // so the message and its Retry never appear.
+        // Mark this offset loaded even though it failed: that ends the
+        // in-flight state so DataTable, which renders loading ahead of
+        // error, reaches the message and its Retry.
         setLoadedOffset(offset);
         setError(e instanceof Error ? e.message : "Failed to load users.");
       });
   };
 
-  // Which page the rows on screen actually are. `offset` moves the instant
-  // the pager is clicked, so without this the label reads "26-50 of 654"
-  // over rows 1-25 for the length of the round trip — the same screen
-  // contradicting itself that this branch set out to remove. Derived, so
-  // there is no window where the two disagree.
+  // True whenever the rows on screen are not the page being asked for, so
+  // the table shows its loader instead. `offset` moves the instant the
+  // pager is clicked, and without this the label read "26-50 of 654" over
+  // rows 1-25 for the round trip — the screen contradicting itself, which
+  // is what this branch exists to remove.
+  //
+  // The three states it has to cover, and why `loadedOffset` is nullable:
+  // nothing loaded yet (null, so the first paint is a skeleton rather than
+  // an empty table reading "no users"), a page in flight (the two differ),
+  // and a retry (set back to null, or the failed page's own offset would
+  // read as loaded and show the wrong rows under the new label).
   const paging = loadedOffset !== offset;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -522,7 +528,7 @@ export default function Users() {
           // paging, and client-side sort would rank only this page.
           serverPaged
           rowKey={(u) => u.id}
-          loading={(!data && !error) || paging}
+          loading={paging}
           // Unconditionally. Withholding it once a page had loaded meant a
           // failed Next showed the PREVIOUS page's rows under the new
           // page's label, with no message and no Retry — silently wrong
