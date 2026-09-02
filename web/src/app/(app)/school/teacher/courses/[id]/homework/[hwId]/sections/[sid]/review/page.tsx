@@ -601,20 +601,31 @@ function HomeworkSectionReview({
     return parts.join(" · ");
   }, [hwTitle, sectionName]);
 
-  const submittedCount = roster?.filter((e) => e.submission).length ?? 0;
-  const totalRoster = roster?.length ?? 0;
+  // `roster` is what the left list shows, and it includes the teacher's
+  // own rehearsal so she can open it. `classRoster` is her actual
+  // class. EVERY count on this page describes the class — "1 of 1
+  // submitted" must not become true because she tested her own
+  // homework. Derived once, so no individual count has to remember.
+  const classRoster = useMemo(
+    () => roster?.filter((e) => !e.submission?.is_preview) ?? null,
+    [roster],
+  );
+
+  const submittedCount = classRoster?.filter((e) => e.submission).length ?? 0;
+  const totalRoster = classRoster?.length ?? 0;
   // Submitters the triage roster surfaces as "needs your eyes" — flagged
   // or low-confidence. Drives the header's editorial subhead.
   const needsEyesCount =
-    roster?.filter((e) => e.submission && (isFlagged(e) || hasLowConfidence(e)))
-      .length ?? 0;
+    classRoster?.filter(
+      (e) => e.submission && (isFlagged(e) || hasLowConfidence(e)),
+    ).length ?? 0;
   // Ungraded MINUS anything already reported as needing eyes. The two
   // sets overlap (integrity runs at confirm time, grading waits for the
   // due date), so counting both raw reported one student twice — and
   // disagreed with the triage list, which files them under "Needs your
   // eyes". Header and roster must partition the class the same way.
   const awaitingOnlyCount =
-    roster?.filter(
+    classRoster?.filter(
       (e) => isAwaitingGrade(e) && !isFlagged(e) && !hasLowConfidence(e),
     ).length ?? 0;
 
@@ -932,7 +943,8 @@ function HomeworkSectionReview({
   // section-scoped action would misdescribe what pressing it does.
   const ungradedInSection = useMemo(() => {
     if (!roster) return 0;
-    return roster.filter((e) => isAwaitingGrade(e)).length;
+    return roster.filter((e) => isAwaitingGrade(e) && !e.submission?.is_preview)
+      .length;
   }, [roster]);
   // Reviewed vs unopened split of the full to-release set (HW-wide).
   const toReleaseTotal = pendingTotal + dirtyTotal;
@@ -2044,9 +2056,12 @@ function RosterFilterBar({
   value: RosterFilter;
   onChange: (v: RosterFilter) => void;
 }) {
-  const flaggedCount = roster.filter(isFlagged).length;
-  const needsMeCount = roster.filter(needsTeacher).length;
-  const lowConfidenceCount = roster.filter(hasLowConfidence).length;
+  // Chip counts describe the class, like every other count here — her
+  // own rehearsal is on the list but isn't one of her students.
+  const forCounting = roster.filter((e) => !e.submission?.is_preview);
+  const flaggedCount = forCounting.filter(isFlagged).length;
+  const needsMeCount = forCounting.filter(needsTeacher).length;
+  const lowConfidenceCount = forCounting.filter(hasLowConfidence).length;
 
   // Auto-revert to "all" when the active filter's count drops to 0 —
   // otherwise a teacher who clears the last flagged submission gets
