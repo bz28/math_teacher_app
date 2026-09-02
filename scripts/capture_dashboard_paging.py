@@ -66,11 +66,13 @@ FIXED_TARGETS = [
     ("schools", "/schools"),  # client-paged, DataTable-owned
     ("extraction-quality", "/extraction-quality"),  # server-paged
     ("grading-quality", "/grading-quality"),  # unpaged breakdown card
-    # /quality and /generation-quality are deliberately absent. They 500 on
-    # a database behind head (`question_edits.field` arrived in a migration),
-    # and a shot of an error page is worse than no shot: it looks like
-    # evidence, and before/after are then identical because both failed.
-    # Add them back once the local DB is migrated.
+    # These two 500 against a database behind head (`question_edits.field`
+    # arrives in a migration), and the failure renders as an error card
+    # rather than an empty state — so an unmigrated run produces identical
+    # before/after shots of a broken page. Run `alembic upgrade head` first;
+    # a picture of an error page is worse than no picture.
+    ("quality", "/quality"),  # server-paged
+    ("generation-quality", "/generation-quality"),  # server-paged
 ]
 
 

@@ -301,6 +301,11 @@ async def extraction_quality(
                 else_=3,
             ).cast(Integer),
             _RULED_AT.desc(),
+            # Unique final key so OFFSET paging is stable. `_RULED_AT` is
+            # nullable and ties freely across a batch of submissions ruled
+            # together; without this, tied rows may order differently per
+            # query and a page can repeat or skip one.
+            Submission.id,
         )
         .offset(offset)
         .limit(limit)
