@@ -2687,7 +2687,7 @@ async def get_submission_detail(
         # last"), and this block exists to show the teacher what the
         # grader saw. Two different answers tagged 99 are two things the
         # model read; only the literal repeat is noise.
-        seen_unplaced: set[tuple[str, str]] = set()
+        seen_unplaced: set[tuple[str, str, bool]] = set()
         for fa in sub.extraction.get("final_answers", []) or []:
             fa_position = _real_position(fa.get("problem_position"))
             if fa_position is not None and fa_position in valid_positions:
@@ -2712,35 +2712,36 @@ async def get_submission_detail(
             if fa_edited is not None:
                 # Route the edit to the field that carried the original,
                 # matching `_overlaid_step` and `apply_extraction_edits`.
-                edit_key = (fa_edited, "edited")
-                if edit_key in seen_unplaced:
-                    continue
-                seen_unplaced.add(edit_key)
-                other_work.append(
-                    TeacherSubmissionStep(
-                        latex=fa_edited if fa_latex else "",
-                        plain_english="" if fa_latex else fa_edited,
-                        edited=True,
-                        original_latex=fa_latex,
-                        original_plain_english=fa_plain,
-                    )
+                row = TeacherSubmissionStep(
+                    latex=fa_edited if fa_latex else "",
+                    plain_english="" if fa_latex else fa_edited,
+                    edited=True,
+                    original_latex=fa_latex,
+                    original_plain_english=fa_plain,
                 )
+            elif not fa_latex and not fa_plain:
                 continue
-            if not fa_latex and not fa_plain:
-                continue
-            if (fa_latex, fa_plain) in seen_unplaced:
-                continue
-            seen_unplaced.add((fa_latex, fa_plain))
-            # Raw and UNDELIMITED. `StudentStepRow` renders a step's latex
-            # as `$${latex}$$`, so wrapping here would emit `$$$x$$$` and
-            # KaTeX would render an error glyph. Every other
-            # `TeacherSubmissionStep.latex` this route emits is raw too.
-            other_work.append(
-                TeacherSubmissionStep(
+            else:
+                # Raw and UNDELIMITED. `StudentStepRow` renders a step's
+                # latex as `$${latex}$$`, so wrapping here would emit
+                # `$$$x$$$` and KaTeX would render an error glyph. Every
+                # other `TeacherSubmissionStep.latex` this route emits is
+                # raw too.
+                row = TeacherSubmissionStep(
                     latex=fa_latex,
                     plain_english="" if fa_latex else fa_plain,
                 )
-            )
+            # Keyed on the EMITTED row, not the raw pair. `answer_plain`
+            # is discarded whenever `answer_latex` is set, so keying on
+            # the raw pair let two reads that render identically hash
+            # differently and show up as two identical lines. The `edited`
+            # flag is part of the key because an edited row renders
+            # differently from a raw one carrying the same text.
+            row_key = (row.latex, row.plain_english, row.edited)
+            if row_key in seen_unplaced:
+                continue
+            seen_unplaced.add(row_key)
+            other_work.append(row)
 
     problems: list[TeacherSubmissionDetailProblem] = []
     for pos, pid in enumerate(primary_ids, start=1):
