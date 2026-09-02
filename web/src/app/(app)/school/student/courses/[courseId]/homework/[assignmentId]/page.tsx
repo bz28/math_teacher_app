@@ -334,6 +334,21 @@ export default function HomeworkPage() {
         {hw.due_at ? ` · ${formatDue(hw.due_at)}` : ""}
       </p>
 
+      {/* Standing expectation, read before the pencil moves. The submission
+          panel already coaches photo quality, but it sits below every
+          problem — by the time a student reads it the work is done, and
+          "write neatly" is only actionable beforehand.
+
+          Deliberately not a callout box: the teacher's own Instructions
+          block sits directly below and should stay the loudest thing here.
+          Drops away once the work is in, when it has nothing left to ask
+          for. */}
+      {!hw.submitted && (
+        <p className="mt-2 text-sm text-text-secondary">
+          Write neatly and show your work.
+        </p>
+      )}
+
       {/* Teacher-authored instructions, e.g. "Show all work, no
           calculators." Hidden when there's nothing to say. Renders LaTeX
           inline so formulas in the instructions display correctly. */}
