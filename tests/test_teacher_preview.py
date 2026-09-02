@@ -5,9 +5,17 @@ The regression this guards: the shadow hit the same student-side gates a
 real student does, so previewing a *draft* always 403'd ("Assignment is
 not published") and previewing a homework pushed to only some sections
 403'd ("Not enrolled") — both surfaced to the teacher as the generic
-"We hit a snag" page with no hint of why. Previewing before publishing
-is the entire point of the button, so the shadow is now waived through
-both gates inside its owning teacher's own courses.
+"We hit a snag" page with no hint of why.
+
+Two different fixes close those, and it matters which does what. The
+publish gate is genuinely waived for a shadow: previewing before
+publishing is the whole point of the button. Section targeting is NOT
+waived — the preview endpoint instead *seats* the shadow in a section
+the homework was pushed to, so these cases pass because the seating is
+right, not because the gate is off. (A homework targeting no sections
+at all is the one case with nothing to enforce.) That distinction is
+what lets the section switcher tell the truth; see
+tests/test_preview_seat_switch.py, which guards it directly.
 
 The whole state matrix (draft/published × four section targetings) runs
 here because the two failures had different causes and only the matrix

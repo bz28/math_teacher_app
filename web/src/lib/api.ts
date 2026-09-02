@@ -2370,9 +2370,37 @@ export interface StudentPracticeActivityResponse {
   sets: PracticeActivitySetSummary[];
 }
 
+export interface PreviewSeat {
+  section_id: string;
+  name: string;
+  /** The section the preview is sitting in right now. */
+  current: boolean;
+}
+
+export interface PreviewSeatsResponse {
+  course_id: string;
+  course_name: string;
+  seats: PreviewSeat[];
+}
+
 export const schoolStudent = {
   listClasses() {
     return apiFetch<StudentClassSummary[]>("/school/student/classes");
+  },
+  /** Preview-only: which sections of this course the shadow could sit
+   *  in, and which one it currently occupies. 403 for a real student. */
+  previewSeats(courseId: string) {
+    return apiFetch<PreviewSeatsResponse>(
+      `/school/student/preview/courses/${courseId}/seats`,
+    );
+  },
+  /** Preview-only: move the shadow's seat to another section of the
+   *  same course. One seat per course, so this is a move. */
+  movePreviewSeat(courseId: string, sectionId: string) {
+    return apiFetch<{ status: string }>(
+      `/school/student/preview/courses/${courseId}/seat`,
+      { method: "POST", body: JSON.stringify({ section_id: sectionId }) },
+    );
   },
   getDashboard() {
     return apiFetch<StudentDashboardResponse>("/school/student/dashboard");

@@ -647,14 +647,33 @@ async def _is_teacher_preview_of_course(
     """True when `user` is a teacher's preview shadow and that teacher
     teaches `course_id`.
 
-    A shadow is the teacher looking at their own material, so two
-    student-side gates don't apply to it. Publish state: checking the
-    homework *before* it goes out is the entire point of the Preview
-    button, which sits next to Publish precisely so it can be used
-    first. Section targeting: we invent the shadow's enrollment, so a
-    homework pushed to only some sections would 403 on a roster fact
-    we made up. Both are waived — but only inside courses the owning
-    teacher actually teaches, so a shadow can't reach anything else.
+    A shadow is the teacher looking at her own material, so the publish
+    gate doesn't apply to it: checking the homework *before* it goes out
+    is the entire point of the Preview button, which sits next to
+    Publish precisely so it can be used first.
+
+    Section targeting is NOT waived, and the difference matters. It was,
+    briefly — the shadow's seat used to be one we picked for it, so a
+    homework pushed to only some sections 403'd on a roster fact we had
+    invented. Now the teacher chooses the seat, and waiving targeting
+    would make that choice a lie: she moves to Period 2 to check a
+    Period-4-only homework is invisible there, and it stays on screen.
+    A wrong answer to the question the seat switcher exists to ask.
+
+    So targeting is enforced exactly as it is for a student, whenever
+    there is targeting to enforce. The one genuine exception is an
+    assignment with NO sections at all — the wizard's blank default,
+    before publish fans it out — where the join has nothing to match and
+    refusing would mean a teacher couldn't preview her own new homework.
+
+    Note that is a much narrower exception than "it's a draft". Sections
+    can only be edited WHILE a draft (`assign_to_sections` 400s once
+    published), so the draft phase is exactly when a teacher picks them
+    — and "did this go to the right class?" is a question she asks
+    before publishing, not after.
+
+    Either way this only applies inside courses the owning teacher
+    actually teaches, so a shadow can't reach anything else.
     """
     if not user.is_preview or user.preview_owner_id is None:
         return False
@@ -679,8 +698,11 @@ async def _load_assignment_for_student(
     enrolled in at least one section it's been assigned to. Raises
     HTTPException on any failure.
 
-    (c) and (d) are waived for a teacher previewing their own course —
-    see `_is_teacher_preview_of_course`.
+    For a teacher's preview shadow, (c) is waived and (d) is not: she
+    can look at unpublished work, but only from a seat the assignment
+    was actually sent to, so moving that seat changes what she sees.
+    The single exception is an assignment targeting no sections at all,
+    where there is nothing to match. See `_is_teacher_preview_of_course`.
 
     The HW variation loop passes expected_type="homework" (the default);
     the practice-tab endpoints pass expected_type="practice". Quizzes
@@ -698,14 +720,30 @@ async def _load_assignment_for_student(
             status_code=404,
             detail=f"Not a {expected_type} assignment",
         )
-    if await _is_teacher_preview_of_course(db, user, assignment.course_id):
-        return assignment
+    is_preview_of_course = await _is_teacher_preview_of_course(
+        db, user, assignment.course_id,
+    )
 
-    if assignment.status != "published":
+    if assignment.status != "published" and not is_preview_of_course:
         raise HTTPException(status_code=403, detail="Assignment is not published")
 
+    if is_preview_of_course:
+        # Nothing to enforce only when the assignment targets nothing at
+        # all. Anything else — including a draft the teacher has already
+        # picked sections for — gets the same treatment a student gets,
+        # so her seat actually decides what she sees.
+        targeted = (await db.execute(
+            select(AssignmentSection.id)
+            .where(AssignmentSection.assignment_id == assignment_id)
+            .limit(1)
+        )).scalar_one_or_none()
+        if targeted is None:
+            return assignment
+
     # The student must be enrolled in at least one section this
-    # assignment was assigned to. We check via a join — single round trip.
+    # assignment was assigned to — a preview shadow included, so that
+    # moving its seat actually changes what it can see. We check via a
+    # join — single round trip.
     enrolled = (await db.execute(
         select(SectionEnrollment.id)
         .join(AssignmentSection, AssignmentSection.section_id == SectionEnrollment.section_id)
@@ -733,9 +771,11 @@ async def _section_for_student_work(
 
     For a real student the join always hits — the loader already
     confirmed enrollment. A teacher's preview shadow arrives through a
-    waiver instead, so the two can disagree: a draft has no section rows
-    to join against at all. It falls back to the shadow's own seat in
-    the course, which keeps its rehearsal attributable to a real section.
+    waiver instead, so the two can disagree: an assignment targeting NO
+    sections has nothing to join against. (Not "a draft" — sections can
+    only be edited while a draft, so drafts routinely do have rows.) It
+    falls back to the shadow's own seat in the course, which keeps its
+    rehearsal attributable to a real section.
 
     Returns None only when even that is missing, which callers must
     still handle rather than assume a row.
@@ -773,6 +813,160 @@ def _bank_item_id_belongs_to_assignment(assignment: Assignment, bank_item_id: uu
 
 
 # ── Endpoints ──
+
+# ── Preview seat switching ──
+#
+# A teacher's preview shadow holds one seat per course (one enrollment
+# per student per course is a DB constraint), so it can only ever see
+# one class period at a time. That's the right shape — a real student
+# sits in one period — but it left the teacher unable to check what her
+# *other* period sees, which is exactly the question "did I assign this
+# to the right class?" These two endpoints let her move the seat
+# deliberately, instead of it moving invisibly underneath her when she
+# opens a homework.
+#
+# They live on the student router, not the teacher one, because in
+# preview the browser holds the shadow's tokens — a /teacher/* call
+# would 403. The shadow is acting on its own enrollment; the guard is
+# that its owner teaches the course.
+
+
+class PreviewSeat(BaseModel):
+    section_id: str
+    name: str
+    current: bool
+
+
+class PreviewSeatsResponse(BaseModel):
+    course_id: str
+    course_name: str
+    seats: list[PreviewSeat]
+
+
+class MovePreviewSeatRequest(BaseModel):
+    section_id: uuid.UUID
+
+
+async def _require_preview_of_course(
+    db: AsyncSession, user: User, course_id: uuid.UUID,
+) -> None:
+    """403 unless `user` is a preview shadow of a teacher of this course."""
+    if not await _is_teacher_preview_of_course(db, user, course_id):
+        raise HTTPException(
+            status_code=403, detail="Not a preview of this course",
+        )
+
+
+@router.get("/preview/courses/{course_id}/seats")
+async def list_preview_seats(
+    course_id: uuid.UUID,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> PreviewSeatsResponse:
+    """Every section of this course the preview could sit in, and which
+    one it currently occupies."""
+    await _require_preview_of_course(db, user, course_id)
+
+    course = (await db.execute(
+        select(Course).where(Course.id == course_id)
+    )).scalar_one()
+    sections = (await db.execute(
+        select(Section.id, Section.name)
+        .where(Section.course_id == course_id)
+        .order_by(Section.created_at, Section.id)
+    )).all()
+    seated_in = (await db.execute(
+        select(SectionEnrollment.section_id).where(
+            SectionEnrollment.student_id == user.id,
+            SectionEnrollment.course_id == course_id,
+        )
+    )).scalar_one_or_none()
+
+    return PreviewSeatsResponse(
+        course_id=str(course.id),
+        course_name=course.name,
+        seats=[
+            PreviewSeat(
+                section_id=str(sid), name=name, current=sid == seated_in,
+            )
+            for sid, name in sections
+        ],
+    )
+
+
+@router.post("/preview/courses/{course_id}/seat")
+async def move_preview_seat(
+    course_id: uuid.UUID,
+    body: MovePreviewSeatRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Move the preview's seat to another section of the same course."""
+    await _require_preview_of_course(db, user, course_id)
+
+    target_ok = (await db.execute(
+        select(Section.id).where(
+            Section.id == body.section_id, Section.course_id == course_id,
+        )
+    )).scalar_one_or_none()
+    if target_ok is None:
+        raise HTTPException(
+            status_code=404, detail="Section is not part of this course",
+        )
+
+    # One enrollment per (student, course) is a DB constraint, so this
+    # is a move, not an addition. A shadow with no seat yet (its owner
+    # picked up the course after the shadow was made) gets one here.
+    row = (await db.execute(
+        select(SectionEnrollment).where(
+            SectionEnrollment.student_id == user.id,
+            SectionEnrollment.course_id == course_id,
+        )
+    )).scalar_one_or_none()
+    if row is None:
+        db.add(SectionEnrollment(
+            student_id=user.id, section_id=body.section_id, course_id=course_id,
+        ))
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Two switches racing (two tabs, or a double-click) both saw
+            # no seat and both inserted. One wins; the loser's row is
+            # the same course, so re-read and move it instead of 500ing.
+            # Same shape as submit_homework's insert race below.
+            await db.rollback()
+            existing = (await db.execute(
+                select(SectionEnrollment).where(
+                    SectionEnrollment.student_id == user.id,
+                    SectionEnrollment.course_id == course_id,
+                )
+            )).scalar_one_or_none()
+            if existing is None:
+                # Not the race after all — the section was deleted
+                # between validating it and writing. Say that, rather
+                # than raising NoResultFound from the recovery path and
+                # pointing a 500 at the wrong line.
+                raise HTTPException(
+                    status_code=404, detail="Section is not part of this course",
+                ) from None
+            existing.section_id = body.section_id
+            await db.commit()
+        return {"status": "ok"}
+
+    row.section_id = body.section_id
+    try:
+        await db.commit()
+    except IntegrityError:
+        # The section passed validation and was deleted before the
+        # write landed. The insert branch above handles its own race;
+        # this one has no recovery — say what happened rather than
+        # surfacing a 500 from a foreign key.
+        await db.rollback()
+        raise HTTPException(
+            status_code=404, detail="Section is not part of this course",
+        ) from None
+    return {"status": "ok"}
+
 
 @router.get("/classes")
 async def list_classes(
@@ -1559,8 +1753,9 @@ async def linked_practice_for_homework(
     The HW itself must also be visible to the student — the standard
     loader gates access, which doubles as the authz guard against
     enumerating unrelated HW ids. (A teacher's preview shadow is waived
-    through that loader, but the practice set it finds still has to be
-    published and section-visible on its own, below.)
+    through that loader's publish check only — targeting still applies —
+    and the practice set it finds has to be published and
+    section-visible on its own, below.)
     """
     await _load_assignment_for_student(db, assignment_id, user)
 
@@ -2133,8 +2328,9 @@ async def flagged_consumptions(
 ) -> list[FlaggedConsumption]:
     """Return all flagged consumption rows for this student/anchor.
     Used by the practice summary screen to populate the Learn N flagged
-    queue. Re-runs the standard access gate (enrollment + publish state
-    for a student; the owning teacher's course for a preview shadow)."""
+    queue. Re-runs the standard access gate: enrollment plus publish
+    state for a student, and for a preview shadow the same enrollment
+    check with the publish state waived."""
     assignment = await _load_assignment_for_student(db, assignment_id, user)
     if not _bank_item_id_belongs_to_assignment(assignment, bank_item_id):
         raise HTTPException(status_code=404, detail="Problem is not part of this assignment")
