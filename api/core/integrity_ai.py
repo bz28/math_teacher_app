@@ -175,21 +175,33 @@ async def extract_student_work(
     briefing = _format_problems_briefing(problems)
     instruction = (
         "Extract the student's handwritten work from this homework submission. "
-        "Pages are sent in order — treat them as one document so work that "
-        "spans pages stitches across cleanly. List each step the student "
-        "wrote, in order, and tag each step with the problem_position it "
-        "belongs to. Extract each problem's final answer when the student "
-        "wrote one."
+        "Pages are sent in order, each preceded by a '--- Page N of M ---' "
+        "marker — treat them as one document so work that spans pages "
+        "stitches across cleanly. List each step the student wrote, in "
+        "order, and tag each step with the problem_position it belongs to "
+        "and the page_index (the N from the marker above it) it was written "
+        "on. Extract each problem's final answer when the student wrote one, "
+        "tagged the same way."
     )
 
     content: list[dict[str, Any]] = []
-    for f in files:
+    for page_number, f in enumerate(files, start=1):
         raw = f.get("data", "")
         recorded_media = f.get("media_type", "image/jpeg")
         base64_data, media_type = _strip_data_url_prefix(raw, recorded_media)
         # EXIF-orient + downscale phone photos before Vision sees them;
         # PDFs/non-images pass through untouched.
         base64_data = preprocess_image_for_vision(base64_data, media_type)
+        # Label every page before its image. Without this, asking the
+        # model for a `page_index` would be asking it to count ordinal
+        # image positions with nothing to count against — the blocks are
+        # otherwise indistinguishable. With it, attribution is reading
+        # back a label it was just handed, which is what makes the field
+        # worth trusting enough to render.
+        content.append({
+            "type": "text",
+            "text": f"--- Page {page_number} of {len(files)} ---",
+        })
         content.append(to_content_block(media_type, base64_data))
     content.append({
         "type": "text",

@@ -605,6 +605,7 @@ async def _submit_and_stage_extraction(
     world: dict[str, Any],
     extraction: str,
     edits: str | None = None,
+    files: int = 1,
 ) -> str:
     """Submit as the student, then overwrite the persisted extraction.
 
@@ -612,12 +613,14 @@ async def _submit_and_stage_extraction(
     real submission (so ownership and problem hydration are exercised)
     carrying a hand-authored extraction. Returns the submission id.
     Leaves no SubmissionGrade row, which is the pre-grading window the
-    answer chain is most load-bearing in.
+    answer chain is most load-bearing in. `files` sets how many pages the
+    submission carries, which is what `page_index` is range-checked
+    against.
     """
     submit_resp = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG]},
+        json={"files": [TINY_PNG] * files},
     )
     submission_id = submit_resp.json()["submission_id"]
     await drain_integrity_background_tasks()
@@ -1189,6 +1192,147 @@ async def test_bool_problem_position_is_not_problem_one(
     body = r.json()
     assert body["problems"][0]["student_steps"] == []
     assert [st["latex"] for st in body["other_work"]] == ["bogus"]
+
+
+async def test_teacher_submission_detail_derives_problem_pages(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """`page_index` is model output, so the teacher payload only reports a
+    page it can range-check against the real file count. A submission has
+    one file here, so page 1 is the only legal value: it survives, and a
+    hallucinated 7 is dropped rather than rendering a marker that links to
+    a page which doesn't exist."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": ['
+        '{"step_num": 1, "problem_position": 1, "latex": "x = 5", '
+        '"plain_english": "", "page_index": 1},'
+        '{"step_num": 2, "problem_position": 1, "latex": "check", '
+        '"plain_english": "", "page_index": 7}'
+        '], "final_answers": [], "confidence": 0.9}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200
+    assert r.json()["problems"][0]["pages"] == [1]
+
+
+async def test_teacher_submission_detail_pages_empty_without_tags(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Every extraction from before page labelling has no `page_index`.
+    Those problems report no pages, so the UI shows no marker rather than
+    inventing one."""
+    submission_id = await _submit_and_stage_extraction(
+        client, world, _READABLE_EXTRACTION,
+    )
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["problems"][0]["pages"] == []
+
+
+async def test_teacher_submission_detail_page_from_final_answer(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A final answer carries a page too — an answer written in the margin
+    of a later page is exactly the case the marker exists for."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 1, "answer_latex": "5", '
+        '"answer_plain": "five", "page_index": 1}'
+        '], "confidence": 0.9}',
+    )
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["problems"][0]["pages"] == [1]
+
+
+async def test_teacher_submission_detail_page_from_a_duplicate_answer(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Which read fills the single answer cell is a display choice; where
+    the work sits is a fact about the paper. A problem whose answer was
+    read twice, on two different pages, is on both -- the same rule the
+    step path already follows."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 1, "answer_latex": "5", '
+        '"answer_plain": "", "page_index": 1},'
+        '{"problem_position": 1, "answer_latex": "5", '
+        '"answer_plain": "", "page_index": 2}'
+        '], "confidence": 0.9}',
+        files=2,
+    )
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    problem = r.json()["problems"][0]
+    assert problem["pages"] == [1, 2]
+    # The answer cell still takes the first non-empty read, undisturbed.
+    assert problem["student_answer"] == "$5$"
+
+
+async def test_teacher_submission_detail_no_pages_when_unreadable(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Below the unreadable threshold the extraction is what triggered the
+    skip, so its page index is a guess. The row already warns the teacher
+    the read failed; a confident-looking page number on top of that would
+    be worse than no attribution at all."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": ['
+        '{"problem_position": 1, "step_num": 1, "latex": "x=2", '
+        '"plain_english": "", "page_index": 1}'
+        '], "final_answers": ['
+        '{"problem_position": 1, "answer_latex": "5", '
+        '"answer_plain": "", "page_index": 1}'
+        '], "confidence": 0.05}',
+    )
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    problem = r.json()["problems"][0]
+    assert problem["pages"] == []
+    # The answer is withheld for the same reason, which is the behaviour
+    # the page gate is being made consistent with.
+    assert problem["student_answer"] is None
+
+
+async def test_teacher_submission_detail_no_page_for_an_empty_answer(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """An entry with both fields empty is a read that produced nothing, so
+    it points at no page. Same rule the step path applies to work the
+    student cleared."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 1, "answer_latex": "", '
+        '"answer_plain": "", "page_index": 1}'
+        '], "confidence": 0.9}',
+    )
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["problems"][0]["pages"] == []
 
 
 async def test_teacher_submission_detail_403_for_other_teacher(

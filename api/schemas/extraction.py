@@ -42,6 +42,11 @@ class ExtractionStepOut(BaseModel):
     problem_position: int | None
     latex: str
     plain_english: str
+    # 1-based index into `Submission.files` this step was written on.
+    # Null on rows extracted before page labelling, and whenever the
+    # model didn't tag it. Range-checked against the real file count on
+    # read, so a hallucinated value never reaches a UI.
+    page_index: int | None = None
 
 
 class ExtractionFinalAnswerOut(BaseModel):
@@ -52,6 +57,8 @@ class ExtractionFinalAnswerOut(BaseModel):
     problem_position: int
     answer_latex: str
     answer_plain: str
+    # See ExtractionStepOut.page_index.
+    page_index: int | None = None
 
 
 class ExtractionOut(BaseModel):

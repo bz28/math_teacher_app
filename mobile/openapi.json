@@ -1177,6 +1177,17 @@
             "title": "Answer Plain",
             "type": "string"
           },
+          "page_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Index"
+          },
           "problem_position": {
             "title": "Problem Position",
             "type": "integer"
@@ -1228,6 +1239,17 @@
           "latex": {
             "title": "Latex",
             "type": "string"
+          },
+          "page_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Index"
           },
           "plain_english": {
             "title": "Plain English",
@@ -4493,6 +4515,14 @@
               }
             ],
             "title": "Final Answer"
+          },
+          "pages": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Pages",
+            "type": "array"
           },
           "position": {
             "title": "Position",
