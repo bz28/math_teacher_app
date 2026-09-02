@@ -125,6 +125,10 @@ export default function HarnessRuns() {
   const [probe, setProbe] = useState("");
   const [failedOnly, setFailedOnly] = useState(false);
   const [offset, setOffset] = useState(0);
+  // The page the rows on screen belong to. `offset` moves the moment the
+  // pager is clicked, so comparing the two tells us the table is showing
+  // the previous page under the new label — see Users.tsx.
+  const [loadedOffset, setLoadedOffset] = useState(0);
 
   const [reportHtml, setReportHtml] = useState<string | null>(null);
   const [loadingReport, setLoadingReport] = useState<string | null>(null);
@@ -149,6 +153,7 @@ export default function HarnessRuns() {
       .then((d) => {
         if (!cancelled) {
           setData(d);
+          setLoadedOffset(offset);
           setError(null);
         }
       })
@@ -378,10 +383,11 @@ export default function HarnessRuns() {
         <DataTable
           columns={columns}
           rows={data?.runs ?? []}
-          // Server-paged: this is one page, and <Pagination> below owns it.
-          unpaged
+          // Server-paged: one page of a larger set. <Pagination> below owns
+          // paging, and client-side sort would rank only this page.
+          serverPaged
           rowKey={(r) => r.id}
-          loading={!data && !error}
+          loading={(!data && !error) || (data !== null && loadedOffset !== offset)}
           error={data ? null : error}
           onRetry={() => { setError(null); setReloadKey((k) => k + 1); }}
           defaultSort={{ key: "when", dir: "desc" }}

@@ -60,6 +60,10 @@ export default function AuditLogs() {
   const typeFilter = searchParams.get("type") ?? "";
   const target = searchParams.get("target") ?? "";
   const offset = Number(searchParams.get("offset") ?? "0");
+  // The page the rows on screen belong to. `offset` moves the moment the
+  // pager is clicked, so comparing the two tells us the table is showing
+  // the previous page under the new label — see Users.tsx.
+  const [loadedOffset, setLoadedOffset] = useState(0);
 
   // The filter fields, minus pagination — shared by the fetch and the
   // CSV export so the download is always exactly what's on screen.
@@ -81,6 +85,7 @@ export default function AuditLogs() {
       .then((d) => {
         if (!cancelled) {
           setData(d);
+          setLoadedOffset(offset);
           setError(null);
         }
       })
@@ -329,10 +334,11 @@ export default function AuditLogs() {
         <DataTable
           columns={columns}
           rows={data?.entries ?? []}
-          // Server-paged: this is one page, and <Pagination> below owns it.
-          unpaged
+          // Server-paged: one page of a larger set. <Pagination> below owns
+          // paging, and client-side sort would rank only this page.
+          serverPaged
           rowKey={(e) => `${e.facet}:${e.id}`}
-          loading={!data && !error}
+          loading={(!data && !error) || (data !== null && loadedOffset !== offset)}
           error={error}
           onRetry={() => {
             setError(null);

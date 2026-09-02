@@ -324,9 +324,11 @@ export default function Quality() {
           <DataTable
             columns={cols}
             rows={data.questions}
-            // Server-paged: this is one page, and <Pagination> below owns it.
-            unpaged
+            // Server-paged: one page of a larger set. <Pagination> below owns
+            // paging, and client-side sort would rank only this page.
+            serverPaged
             rowKey={(q) => q.id}
+            loading={loading}
             onRowClick={(q) => setOpenId(q.id)}
             rowStatus={(q) => OUTCOME_META[q.outcome].color}
             drill

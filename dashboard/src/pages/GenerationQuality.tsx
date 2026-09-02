@@ -138,7 +138,7 @@ function boardTone(rate: number): "ok" | "warn" | "danger" {
 }
 
 function GenerationBoard({
-  data, outcome, onOutcome, onOpen, offset, onOffset,
+  data, outcome, onOutcome, onOpen, offset, onOffset, loading,
 }: {
   data: GenerationBoardData;
   outcome: string;
@@ -146,6 +146,9 @@ function GenerationBoard({
   onOpen: (id: string) => void;
   offset: number;
   onOffset: (v: number) => void;
+  /** A fetch is in flight — show the loader rather than the previous
+   *  page's rows under the new page's label. */
+  loading: boolean;
 }) {
   const { summary } = data;
   const settled = summary.settled;
@@ -264,9 +267,11 @@ function GenerationBoard({
       <DataTable
         columns={cols}
         rows={data.questions}
-        // Server-paged: this is one page, and <Pagination> below owns it.
-        unpaged
+        // Server-paged: one page of a larger set. <Pagination> below owns
+        // paging, and client-side sort would rank only this page.
+        serverPaged
         rowKey={(q) => q.id}
+        loading={loading}
         onRowClick={(q) => onOpen(q.id)}
         rowStatus={(q) => OUTCOME_META[q.outcome].color}
         drill
@@ -449,6 +454,7 @@ export default function GenerationQuality() {
           onOpen={setOpenId}
           offset={offset}
           onOffset={setOffset}
+          loading={loading}
         />
       )}
 

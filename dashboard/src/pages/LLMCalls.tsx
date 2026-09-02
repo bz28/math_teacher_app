@@ -58,6 +58,10 @@ export default function LLMCalls() {
   const [selectedCall, setSelectedCall] = useState<CallRow | null>(null);
   const [debugState, setDebugState] = useState<Record<string, string>>({});
   const [offset, setOffset] = useState(0);
+  // The page the rows on screen belong to. `offset` moves the moment the
+  // pager is clicked, so comparing the two tells us the table is showing
+  // the previous page under the new label — see Users.tsx.
+  const [loadedOffset, setLoadedOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -86,7 +90,7 @@ export default function LLMCalls() {
       limit: String(BOARD_PAGE_SIZE),
       offset: String(offset),
     })
-      .then((d) => { if (!cancelled) { setData(d); setError(null); } })
+      .then((d) => { if (!cancelled) { setData(d); setLoadedOffset(offset); setError(null); } })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load LLM calls."); });
     return () => { cancelled = true; };
   }, [hours, fnFilter, userFilter, submissionFilter, sessionFilter, schoolFilter, status, search, offset, reloadKey]);
@@ -259,9 +263,11 @@ export default function LLMCalls() {
         <DataTable
           columns={columns}
           rows={data.calls}
-          // Server-paged: this is one page, and <Pagination> below owns it.
-          unpaged
+          // Server-paged: one page of a larger set. <Pagination> below owns
+          // paging, and client-side sort would rank only this page.
+          serverPaged
           rowKey={(c) => c.id}
+          loading={data !== null && loadedOffset !== offset}
           defaultSort={{ key: "created_at", dir: "desc" }}
           onRowClick={(c) => setSelectedCall(c)}
           rowStatus={(c) => (c.id === selectedCall?.id ? "var(--accent)" : !c.success ? "var(--danger)" : undefined)}

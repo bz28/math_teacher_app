@@ -53,6 +53,10 @@ export default function IndependentPanel({
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("total_cost");
   const [offset, setOffset] = useState(0);
+  // The page the rows on screen belong to. `offset` moves the moment the
+  // pager is clicked, so comparing the two tells us the table is showing
+  // the previous page under the new label — see Users.tsx.
+  const [loadedOffset, setLoadedOffset] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -70,7 +74,7 @@ export default function IndependentPanel({
         no_school: "true",
         ...(search ? { search } : {}),
       })
-      .then((d) => { if (!cancelled) { setData(d); setError(null); } })
+      .then((d) => { if (!cancelled) { setData(d); setLoadedOffset(offset); setError(null); } })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load."); });
     return () => { cancelled = true; };
   }, [hours, search, sortBy, offset, role, reloadKey]);
@@ -211,12 +215,13 @@ export default function IndependentPanel({
         <DataTable
           columns={columns}
           rows={data?.users ?? []}
-          // Server-paged: this is one page, and <Pagination> below owns it.
-          unpaged
+          // Server-paged: one page of a larger set. <Pagination> below owns
+          // paging, and client-side sort would rank only this page.
+          serverPaged
           rowKey={(u) => u.id}
           onRowClick={(u) => navigate(rowHref(u))}
           drill
-          loading={!data && !error}
+          loading={(!data && !error) || (data !== null && loadedOffset !== offset)}
           error={error}
           onRetry={() => setReloadKey((k) => k + 1)}
           empty={

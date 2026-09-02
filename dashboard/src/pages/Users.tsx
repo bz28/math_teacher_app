@@ -119,6 +119,7 @@ export default function Users() {
   const [schoolId, setSchoolId] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
+  const [loadedOffset, setLoadedOffset] = useState(0);
   const [schools, setSchools] = useState<SchoolListItem[]>([]);
 
   // The console must not offer an admin destructive actions against
@@ -143,8 +144,15 @@ export default function Users() {
         ...(!isAdminView && schoolId ? { school_id: schoolId } : {}),
         ...(search ? { search } : {}),
       })
-      .then((d) => { setData(d); setError(null); })
+      .then((d) => { setData(d); setLoadedOffset(offset); setError(null); })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load users."));
+
+  // Which page the rows on screen actually are. `offset` moves the instant
+  // the pager is clicked, so without this the label reads "26-50 of 654"
+  // over rows 1-25 for the length of the round trip — the same screen
+  // contradicting itself that this branch set out to remove. Derived, so
+  // there is no window where the two disagree.
+  const paging = data !== null && loadedOffset !== offset;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { reload(); }, [hours, role, plan, schoolId, search, offset, reloadKey]);
@@ -488,10 +496,11 @@ export default function Users() {
         <DataTable
           columns={columns}
           rows={data?.users ?? []}
-          // Server-paged: this is one page, and <Pagination> below owns it.
-          unpaged
+          // Server-paged: one page of a larger set. <Pagination> below owns
+          // paging, and client-side sort would rank only this page.
+          serverPaged
           rowKey={(u) => u.id}
-          loading={!data && !error}
+          loading={(!data && !error) || paging}
           error={!data ? error : null}
           onRetry={() => { setError(null); setReloadKey((k) => k + 1); }}
           minWidth={720}

@@ -80,23 +80,36 @@ export interface DataTableProps<T> {
   /** Rows per page. Defaults to the console-wide `PAGE_SIZE`. */
   pageSize?: number;
   /**
-   * Render every row handed in, never a page of them. Two callers want it:
-   *
-   * A summary or breakdown card — "by function", "by subject", a
-   * scoreboard — where the whole distribution IS the content and the
-   * reader takes it in at a glance. Paging one hides the tail and turns a
+   * Render every row, never a page of them — for a summary or breakdown
+   * card ("by function", "by subject", a scoreboard) whose whole
+   * distribution IS the content. Paging one hides the tail and turns a
    * glance into a click: a card measuring eight things that shows five is
    * worse than no card, because nothing on screen says three are missing.
    *
-   * A server-paged table, which was handed exactly one page and renders
-   * its own `<Pagination>`. Saying so here is what keeps the second pager
-   * away; leaving it to the fetch limit and `pageSize` happening to be
-   * equal is a coincidence, and it stops being true the first time
-   * someone changes one of them.
+   * These rows are the complete set, so sorting still sorts everything.
+   * For one page of a larger set, use `serverPaged`.
    *
    * Not for a long list that merely feels short today — those grow.
    */
   unpaged?: boolean;
+  /**
+   * These rows are ONE PAGE of a larger set; the caller fetched them with
+   * limit+offset and renders its own `<Pagination>`.
+   *
+   * Two things follow, and both are about not claiming more than we have.
+   * The internal pager stays off, so only one pager exists — stated here
+   * rather than left to the fetch limit and `pageSize` happening to be
+   * equal, which is a coincidence that breaks the first time someone
+   * changes one of them.
+   *
+   * And the sort headers go away. Sorting is client-side over `rows`, so
+   * on a page it reorders the visible handful while the caret implies it
+   * ranked the set: the top row reads as the worst of 1,280 when it is
+   * the worst of 25, and page 2 continues in server order rather than
+   * yours. Offering a control that cannot do what it appears to do is
+   * worse than not offering it.
+   */
+  serverPaged?: boolean;
   /** Noun used in the search placeholder and empty copy, e.g. "teachers". */
   searchLabel?: string;
 }
@@ -104,7 +117,8 @@ export interface DataTableProps<T> {
 export default function DataTable<T>({
   columns, rows, rowKey, onRowClick, rowStatus, drill,
   loading, error, onRetry, empty, defaultSort, minWidth = 640, loadingRows = 6,
-  searchKeys, pageSize = PAGE_SIZE, unpaged = false, searchLabel = "rows",
+  searchKeys, pageSize = PAGE_SIZE, unpaged = false, serverPaged = false,
+  searchLabel = "rows",
 }: DataTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(defaultSort?.key ?? null);
   const [sortDir, setSortDir] = useState<SortDir>(defaultSort?.dir ?? "desc");
@@ -128,7 +142,11 @@ export default function DataTable<T>({
   // Deriving the threshold from `pageSize` rather than a separate constant
   // means they appear at exactly the row that first becomes unreachable —
   // a fixed threshold above the page size hides rows behind no pager.
-  const longEnough = !unpaged && rows.length > pageSize;
+  // Whether `rows` is the whole set. Both opt-outs mean it is not ours to
+  // page — a card holds everything already, a server-paged table holds one
+  // page and its caller pages it.
+  const ownsPaging = !unpaged && !serverPaged;
+  const longEnough = ownsPaging && rows.length > pageSize;
   const canSearch = !!searchKeys && longEnough;
   const canPage = longEnough;
 
@@ -199,7 +217,10 @@ export default function DataTable<T>({
         <thead>
           <tr>
             {columns.map((c) => {
-              const sortable = !!c.sortValue;
+              // Sorting is client-side over `rows`, so on one page of a
+              // larger set it would reorder the handful on screen under a
+              // caret that implies it ranked the set.
+              const sortable = !!c.sortValue && !serverPaged;
               const active = sortKey === c.key;
               return (
                 <th

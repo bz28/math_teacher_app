@@ -189,6 +189,10 @@ export default function ExtractionQuality() {
   const [hours, setHours] = useState("2160");
   const [bucket, setBucket] = useState("");
   const [offset, setOffset] = useState(0);
+  // The page the rows on screen belong to. `offset` moves the moment the
+  // pager is clicked, so comparing the two tells us the table is showing
+  // the previous page under the new label — see Users.tsx.
+  const [loadedOffset, setLoadedOffset] = useState(0);
   const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -198,7 +202,7 @@ export default function ExtractionQuality() {
       // 50 while the count in the heading read the true total, so the table
       // showed a prefix and said nothing about it.
       .extractionQuality({ hours, bucket, limit: String(BOARD_PAGE_SIZE), offset: String(offset) })
-      .then((d) => { if (!cancelled) { setData(d); setError(null); } })
+      .then((d) => { if (!cancelled) { setData(d); setLoadedOffset(offset); setError(null); } })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load extraction quality.");
       });
@@ -435,9 +439,11 @@ export default function ExtractionQuality() {
             <DataTable
               columns={cols}
               rows={data.cases}
-              // Server-paged: this is one page, and <Pagination> below owns it.
-              unpaged
+              // Server-paged: one page of a larger set. <Pagination> below owns
+              // paging, and client-side sort would rank only this page.
+              serverPaged
               rowKey={(c) => c.submission_id}
+              loading={data !== null && loadedOffset !== offset}
               onRowClick={(c) => setOpenId(c.submission_id)}
               rowStatus={(c) => BUCKET_META[c.bucket].color}
               drill
