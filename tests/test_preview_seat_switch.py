@@ -241,17 +241,25 @@ async def test_the_homework_page_itself_follows_the_seat(
     assert r.status_code == 200, r.text
 
 
-async def test_a_draft_stays_visible_from_any_seat(client: AsyncClient) -> None:
-    """The narrowed waiver must not re-break the original bug. A draft
-    has no section rows to check against, so it previews from whichever
-    seat she happens to hold."""
+async def test_a_homework_targeting_nothing_previews_from_any_seat(
+    client: AsyncClient,
+) -> None:
+    """The narrowed waiver must not re-break the original bug. A
+    homework with NO sections — the wizard's blank default, before
+    publish fans it out — has nothing for the join to match, so it
+    previews from whichever seat she holds."""
     await _wipe()
     headers = await _teacher()
-    world = await _course_with_homework(client, headers, target="second")
+    world = await _course_with_homework(client, headers, target="both")
     await client.post(
         f"/v1/teacher/assignments/{world['assignment_id']}/unpublish",
         headers=headers,
     )
+    r = await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/sections",
+        headers=headers, json={"section_ids": []},
+    )
+    assert r.status_code == 200, r.text
     preview = await _preview(client, headers, world["assignment_id"])
 
     for section_id in world["section_ids"]:
@@ -264,6 +272,85 @@ async def test_a_draft_stays_visible_from_any_seat(client: AsyncClient) -> None:
             headers=preview,
         )
         assert r.status_code == 200, r.text
+
+
+async def test_a_draft_with_sections_still_respects_them(
+    client: AsyncClient,
+) -> None:
+    """"It's a draft" is NOT a reason to ignore targeting.
+
+    Sections can only be edited while a draft — `assign_to_sections`
+    400s once published — so the draft phase is exactly when a teacher
+    picks them, and "did this go to the right class?" is a question she
+    asks before publishing. Waiving targeting for drafts would leave the
+    switcher confidently wrong for the whole period she most needs it."""
+    await _wipe()
+    headers = await _teacher()
+    world = await _course_with_homework(client, headers, target="second")
+    await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/unpublish",
+        headers=headers,
+    )
+    preview = await _preview(client, headers, world["assignment_id"])
+
+    # Seated where the draft is aimed.
+    r = await client.get(
+        f"/v1/school/student/homework/{world['assignment_id']}", headers=preview,
+    )
+    assert r.status_code == 200, r.text
+
+    await client.post(
+        f"/v1/school/student/preview/courses/{world['course_id']}/seat",
+        headers=preview, json={"section_id": world["section_ids"][0]},
+    )
+    r = await client.get(
+        f"/v1/school/student/homework/{world['assignment_id']}", headers=preview,
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"] == "Not enrolled in this assignment"
+
+
+async def test_a_rehearsal_on_an_untargeted_draft_still_lands_somewhere(
+    client: AsyncClient,
+) -> None:
+    """The section fallback in _section_for_student_work, which nothing
+    covered. A homework targeting no sections has no rows to join
+    against, so a rehearsal's Submission row can only get its section
+    from the shadow's own seat."""
+    await _wipe()
+    headers = await _teacher()
+    world = await _course_with_homework(client, headers, target="both")
+    await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/unpublish",
+        headers=headers,
+    )
+    await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/sections",
+        headers=headers, json={"section_ids": []},
+    )
+    preview = await _preview(client, headers, world["assignment_id"])
+
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=preview, json={"files": [TINY_PNG]},
+    )
+    assert r.status_code == 200, r.text
+
+    async with get_session_factory()() as s:
+        shadow = (await s.execute(
+            select(User).where(User.is_preview.is_(True))
+        )).scalar_one()
+        seat = (await s.execute(
+            select(SectionEnrollment.section_id).where(
+                SectionEnrollment.student_id == shadow.id,
+            )
+        )).scalar_one()
+        stamped = (await s.execute(
+            select(Submission.section_id).where(
+                Submission.id == uuid.UUID(r.json()["submission_id"]),
+            )
+        )).scalar_one()
+    assert stamped == seat
 
 
 async def test_a_section_from_another_course_is_refused(

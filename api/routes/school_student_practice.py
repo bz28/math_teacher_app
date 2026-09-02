@@ -660,9 +660,17 @@ async def _is_teacher_preview_of_course(
     Period-4-only homework is invisible there, and it stays on screen.
     A wrong answer to the question the seat switcher exists to ask.
 
-    So targeting is enforced for a published homework exactly as it is
-    for a student. A draft has no section rows to check against, which
-    is the one case where there is genuinely nothing to enforce.
+    So targeting is enforced exactly as it is for a student, whenever
+    there is targeting to enforce. The one genuine exception is an
+    assignment with NO sections at all — the wizard's blank default,
+    before publish fans it out — where the join has nothing to match and
+    refusing would mean a teacher couldn't preview her own new homework.
+
+    Note that is a much narrower exception than "it's a draft". Sections
+    can only be edited WHILE a draft (`assign_to_sections` 400s once
+    published), so the draft phase is exactly when a teacher picks them
+    — and "did this go to the right class?" is a question she asks
+    before publishing, not after.
 
     Either way this only applies inside courses the owning teacher
     actually teaches, so a shadow can't reach anything else.
@@ -713,14 +721,21 @@ async def _load_assignment_for_student(
         db, user, assignment.course_id,
     )
 
-    if assignment.status != "published":
-        if not is_preview_of_course:
-            raise HTTPException(
-                status_code=403, detail="Assignment is not published",
-            )
-        # A draft has no section rows to check enrollment against, so
-        # there is nothing left to gate on.
-        return assignment
+    if assignment.status != "published" and not is_preview_of_course:
+        raise HTTPException(status_code=403, detail="Assignment is not published")
+
+    if is_preview_of_course:
+        # Nothing to enforce only when the assignment targets nothing at
+        # all. Anything else — including a draft the teacher has already
+        # picked sections for — gets the same treatment a student gets,
+        # so her seat actually decides what she sees.
+        targeted = (await db.execute(
+            select(AssignmentSection.id)
+            .where(AssignmentSection.assignment_id == assignment_id)
+            .limit(1)
+        )).scalar_one_or_none()
+        if targeted is None:
+            return assignment
 
     # The student must be enrolled in at least one section this
     # assignment was assigned to — a preview shadow included, so that
@@ -920,7 +935,15 @@ async def move_preview_seat(
                     SectionEnrollment.student_id == user.id,
                     SectionEnrollment.course_id == course_id,
                 )
-            )).scalar_one()
+            )).scalar_one_or_none()
+            if existing is None:
+                # Not the race after all — the section was deleted
+                # between validating it and writing. Say that, rather
+                # than raising NoResultFound from the recovery path and
+                # pointing a 500 at the wrong line.
+                raise HTTPException(
+                    status_code=404, detail="Section is not part of this course",
+                ) from None
             existing.section_id = body.section_id
             await db.commit()
         return {"status": "ok"}
@@ -1715,8 +1738,9 @@ async def linked_practice_for_homework(
     The HW itself must also be visible to the student — the standard
     loader gates access, which doubles as the authz guard against
     enumerating unrelated HW ids. (A teacher's preview shadow is waived
-    through that loader, but the practice set it finds still has to be
-    published and section-visible on its own, below.)
+    through that loader's publish check only — targeting still applies —
+    and the practice set it finds has to be published and
+    section-visible on its own, below.)
     """
     await _load_assignment_for_student(db, assignment_id, user)
 

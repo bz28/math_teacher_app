@@ -5,9 +5,17 @@ The regression this guards: the shadow hit the same student-side gates a
 real student does, so previewing a *draft* always 403'd ("Assignment is
 not published") and previewing a homework pushed to only some sections
 403'd ("Not enrolled") — both surfaced to the teacher as the generic
-"We hit a snag" page with no hint of why. Previewing before publishing
-is the entire point of the button, so the shadow is now waived through
-both gates inside its owning teacher's own courses.
+"We hit a snag" page with no hint of why.
+
+Two different fixes close those, and it matters which does what. The
+publish gate is genuinely waived for a shadow: previewing before
+publishing is the whole point of the button. Section targeting is NOT
+waived — the preview endpoint instead *seats* the shadow in a section
+the homework was pushed to, so these cases pass because the seating is
+right, not because the gate is off. (A homework targeting no sections
+at all is the one case with nothing to enforce.) That distinction is
+what lets the section switcher tell the truth; see
+tests/test_preview_seat_switch.py, which guards it directly.
 
 The whole state matrix (draft/published × four section targetings) runs
 here because the two failures had different causes and only the matrix
@@ -23,7 +31,7 @@ from sqlalchemy import func, select, text
 
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
-from api.models.assignment import Submission
+from api.models.assignment import Submission, SubmissionGrade
 from api.models.question_bank import QuestionBankItem
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
@@ -493,3 +501,58 @@ async def test_another_teachers_shadow_is_blocked(
             .where(User.is_preview.is_(True))
         )).scalars().all()
     assert not (set(map(str, seats)) & set(victim["section_ids"]))
+
+
+async def test_a_rehearsal_grade_can_be_published_so_she_can_see_it(
+    client: AsyncClient,
+) -> None:
+    """The back half of the loop. A rehearsal runs the real pipeline and
+    gets a real grade — but publish-grades is the only writer of
+    grade_published_at, and it used to exclude her, so the student view
+    she was checking could never show a score. Her grade releases with
+    the class now; the counts still leave her out."""
+    await _wipe()
+    world = await _teacher_with_homework(client, sections="both", status="published")
+    headers = await _preview_headers(client, world)
+
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=headers, json={"files": [TINY_PNG]},
+    )
+    assert r.status_code == 200, r.text
+    submission_id = uuid.UUID(r.json()["submission_id"])
+
+    # Stand in for the grading pipeline, which needs an LLM.
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(submission_id=submission_id, final_score=92.0))
+        await s.commit()
+
+    # Nothing to see yet — the score exists but was never released.
+    detail = (await client.get(
+        f"/v1/school/student/homework/{world['assignment_id']}", headers=headers,
+    )).json()
+    assert detail["final_score"] is None
+
+    r = await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
+        headers=world["headers"], json={},
+    )
+    assert r.status_code == 200, r.text
+
+    detail = (await client.get(
+        f"/v1/school/student/homework/{world['assignment_id']}", headers=headers,
+    )).json()
+    assert detail["final_score"] == 92.0
+    assert detail["grade_published_at"] is not None
+
+    # ...and she still isn't one of her own students.
+    listed = (await client.get(
+        f"/v1/teacher/courses/{world['course_id']}/assignments",
+        headers=world["headers"],
+    )).json()
+    row = next(
+        a for a in listed["assignments"]
+        if a["id"] == world["assignment_id"]
+    )
+    assert row["submitted"] == 0
+    assert row["published"] == 0
