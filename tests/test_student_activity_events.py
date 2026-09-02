@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -48,6 +48,23 @@ _ALLOWED_META_KEYS = {
     "consumption_id", "context", "flagged", "anchor_bank_item_id",
     "step_index", "turn_index",
 }
+
+
+@pytest.fixture(autouse=True)
+def _mock_tutor_llm() -> Any:
+    """Stub the tutor's Claude call for the chat endpoints.
+
+    Without this the tutor test issues a REAL, billed Claude request:
+    it passed locally only because a valid CLAUDE_API_KEY sits in .env,
+    and failed in CI with a 401 → 500. Mirrors the fixture in
+    tests/test_school_student_learn_chat.py.
+    """
+    with patch(
+        "api.core.tutor.call_claude_json",
+        new_callable=AsyncMock,
+        return_value={"feedback": "Sure — let me explain."},
+    ):
+        yield
 
 
 @pytest.fixture(autouse=True)
