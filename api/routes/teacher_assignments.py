@@ -1690,9 +1690,17 @@ async def item_analysis(
     breakdowns = (await db.execute(
         select(SubmissionGrade.breakdown)
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
+        .join(User, User.id == Submission.student_id)
         .where(
             Submission.assignment_id == a.id,
             SubmissionGrade.breakdown.is_not(None),
+            # This panel is labelled "Class item analysis · Across N
+            # graded submissions" and is the only average on the review
+            # page. A teacher's rehearsal is her own work, written to
+            # test the flow — counting it would show a class score
+            # distribution built out of it, beside a header correctly
+            # reading "0 of 3 submitted".
+            User.is_preview.is_(False),
         )
     )).scalars().all()
 
@@ -2315,13 +2323,21 @@ async def publish_grades(
             detail="Cannot publish grades on a draft homework",
         )
 
+    # Preview shadows are deliberately NOT filtered here, unlike every
+    # count on this page. A teacher's rehearsal runs the whole pipeline
+    # — extraction, integrity, grading — and then stopped dead: the
+    # grade existed and nothing could ever set grade_published_at on it,
+    # so the student view she was checking never showed a score. This is
+    # the only writer of that column, so the release sweep has to
+    # include her or the back half of the loop is unreachable. Only she
+    # can see the result; the graded/published counts and the gradebook
+    # still filter her out.
     stmt = (
-        select(SubmissionGrade)
+        select(SubmissionGrade, User.is_preview)
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
         .join(User, User.id == Submission.student_id)
         .where(
             Submission.assignment_id == a.id,
-            User.is_preview.is_(False),
             SubmissionGrade.final_score.is_not(None),
             or_(
                 SubmissionGrade.grade_published_at.is_(None),
@@ -2339,21 +2355,36 @@ async def publish_grades(
     )
     if reviewed_only:
         stmt = stmt.where(SubmissionGrade.reviewed_at.is_not(None))
-    grades = (await db.execute(stmt)).scalars().all()
+    rows = (await db.execute(stmt)).all()
 
     now = datetime.now(UTC)
-    for g in grades:
+    for g, _is_preview in rows:
         g.published_final_score = g.final_score
         g.published_breakdown = g.breakdown
         g.published_teacher_notes = g.teacher_notes
         g.grade_published_at = now
 
+    # The teacher's own rehearsal is released alongside the class — it
+    # has to be, or she can never see the score on the student view she
+    # was checking. But it is not a grade that went out to anybody, so
+    # the number reported back and written to the audit log counts only
+    # her students' grades.
+    published_count = sum(1 for _, is_preview in rows if not is_preview)
+
     await record_activity(
         db, current_user, "grade.publish", "assignment", a.id,
-        {"published_count": len(grades), "reviewed_only": reviewed_only},
+        {
+            "published_count": published_count,
+            # published_count counts grades that went to students; a
+            # rehearsal of the teacher's own is released in the same
+            # sweep, so record what was actually written too or the
+            # audit trail disagrees with the rows.
+            "rows_written": len(rows),
+            "reviewed_only": reviewed_only,
+        },
     )
     await db.commit()
-    return {"status": "ok", "published_count": len(grades)}
+    return {"status": "ok", "published_count": published_count}
 
 
 # ── Submission detail viewing (list endpoint already exists above as

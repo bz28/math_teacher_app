@@ -392,28 +392,62 @@ function HomeworkSectionReview({
         let otherPendingReviewed = 0;
         let otherDirtyReviewed = 0;
         let otherFlagged = 0;
+        // The teacher's own rehearsal, if she left one in this section.
+        // Held aside rather than skipped: it belongs on the roster so
+        // she can open it and see what grading her students' work will
+        // look like. It stays out of the counts that describe a CLASS —
+        // she is not in her own class — but not out of the counts that
+        // label a BUTTON. See the two-populations note further down.
+        let previewEntry: RosterEntry | null = null;
         for (const r of subs.submissions) {
-          if (r.is_preview) continue;
           if (r.section_id === sectionId) {
-            submissionByStudent.set(r.student_id, r);
-          } else if (r.final_score !== null) {
-            otherGraded += 1;
-            // Mirror the in-section flagged-to-publish rule (see below):
-            // only flag_for_review, only while unresolved, only when the
-            // grade is actually about to go out (pending or dirty).
-            const ov = r.integrity_overview;
-            const isFlaggedUnresolved =
-              ov?.disposition === "flag_for_review" &&
-              ov.resolution === "unresolved";
-            if (r.grade_published_at === null) {
-              otherPending += 1;
-              if (r.reviewed_at) otherPendingReviewed += 1;
-              if (isFlaggedUnresolved) otherFlagged += 1;
-            } else if (r.grade_dirty) {
-              otherDirty += 1;
-              if (r.reviewed_at) otherDirtyReviewed += 1;
-              if (isFlaggedUnresolved) otherFlagged += 1;
+            if (r.is_preview) {
+              previewEntry = {
+                student_id: r.student_id,
+                student_name: r.student_name || r.student_email,
+                student_email: r.student_email,
+                submission: r,
+              };
+            } else {
+              submissionByStudent.set(r.student_id, r);
             }
+            continue;
+          }
+          // Another section's row — a classmate's, or her own rehearsal
+          // left in a sibling section. Both are counted here, and the
+          // ONLY difference between them is the class tally below. That
+          // is deliberate: this used to be two branches, and each time a
+          // counter was added to one and not the other the totals
+          // disagreed depending on which section page you opened.
+          if (r.final_score === null) continue;
+          // Class tally. gradedTotal's only consumer is the pill
+          // choosing between "No grades to publish" and "All grades
+          // published" — a claim about the class, so her rehearsal must
+          // not be what flips a section to "all published" when none of
+          // her students' work has been.
+          if (!r.is_preview) otherGraded += 1;
+          // Everything below is an ACTION count. Publishing is
+          // homework-wide, so the button releases her rehearsal from
+          // here too, and every label and warning on that click has to
+          // say so — including the reviewed/unopened split and the
+          // flagged soft-confirm. This mirrors the in-section loop,
+          // which guards only its `graded` tally the same way.
+          //
+          // Flagged rule (same as in-section): only flag_for_review,
+          // only while unresolved, only when the grade is actually
+          // about to go out.
+          const ov = r.integrity_overview;
+          const isFlaggedUnresolved =
+            ov?.disposition === "flag_for_review" &&
+            ov.resolution === "unresolved";
+          if (r.grade_published_at === null) {
+            otherPending += 1;
+            if (r.reviewed_at) otherPendingReviewed += 1;
+            if (isFlaggedUnresolved) otherFlagged += 1;
+          } else if (r.grade_dirty) {
+            otherDirty += 1;
+            if (r.reviewed_at) otherDirtyReviewed += 1;
+            if (isFlaggedUnresolved) otherFlagged += 1;
           }
         }
         setPendingOtherSections(otherPending);
@@ -430,6 +464,11 @@ function HomeworkSectionReview({
             submission: submissionByStudent.get(st.id) ?? null,
           }))
           .sort((a, b) => a.student_name.localeCompare(b.student_name));
+        // Appended last, and TriageRoster keeps it there: it is pulled
+        // out of the status buckets and rendered under its own "Your
+        // test run" header after them, so it can never sort above her
+        // students.
+        if (previewEntry) merged.push(previewEntry);
         setRoster(merged);
         // Auto-select the first submitter that still needs release —
         // never published or dirty-since-edit. If everyone's clean-
@@ -583,20 +622,43 @@ function HomeworkSectionReview({
     return parts.join(" · ");
   }, [hwTitle, sectionName]);
 
-  const submittedCount = roster?.filter((e) => e.submission).length ?? 0;
-  const totalRoster = roster?.length ?? 0;
+  // Two populations, and which one a number belongs to is decided by
+  // what the number is FOR:
+  //
+  //   classRoster — her students. Anything describing the class reads
+  //       this: "1 of 1 submitted" must not become true because she
+  //       tested her own homework, and a triage chip counting her would
+  //       send her looking for a pupil who doesn't exist.
+  //   roster — what the left list shows, her own rehearsal included so
+  //       she can open it. Anything describing what a BUTTON WILL DO
+  //       reads this, because the actions genuinely act on her too:
+  //       publishing grades releases her rehearsal's grade (it has to,
+  //       or she can never see the score on the student view she was
+  //       checking), and grading pending work grades it.
+  //
+  // So "Students · 0/3 submitted" beside "Publish 1 grade" is not a
+  // contradiction — the first describes her class, the second describes
+  // the click. Keep new counts on the right side of that line.
+  const classRoster = useMemo(
+    () => (roster ? classOnly(roster) : null),
+    [roster],
+  );
+
+  const submittedCount = classRoster?.filter((e) => e.submission).length ?? 0;
+  const totalRoster = classRoster?.length ?? 0;
   // Submitters the triage roster surfaces as "needs your eyes" — flagged
   // or low-confidence. Drives the header's editorial subhead.
   const needsEyesCount =
-    roster?.filter((e) => e.submission && (isFlagged(e) || hasLowConfidence(e)))
-      .length ?? 0;
+    classRoster?.filter(
+      (e) => e.submission && (isFlagged(e) || hasLowConfidence(e)),
+    ).length ?? 0;
   // Ungraded MINUS anything already reported as needing eyes. The two
   // sets overlap (integrity runs at confirm time, grading waits for the
   // due date), so counting both raw reported one student twice — and
   // disagreed with the triage list, which files them under "Needs your
   // eyes". Header and roster must partition the class the same way.
   const awaitingOnlyCount =
-    roster?.filter(
+    classRoster?.filter(
       (e) => isAwaitingGrade(e) && !isFlagged(e) && !hasLowConfidence(e),
     ).length ?? 0;
 
@@ -871,7 +933,13 @@ function HomeworkSectionReview({
     for (const e of roster ?? []) {
       const s = e.submission;
       if (!s || s.final_score === null) continue;
-      graded += 1;
+      // Class-side on purpose: gradedTotal's only consumer is the
+      // pill choosing between "No grades to publish" and a green "All
+      // grades published". Those are claims ABOUT THE CLASS, not
+      // labels on a click, so her rehearsal must not be what flips a
+      // section to "all published" when none of her students' work
+      // has been.
+      if (!s.is_preview) graded += 1;
       const isPending = s.grade_published_at === null;
       const isDirty = !isPending && s.grade_dirty;
       if (isPending) pending += 1;
@@ -914,6 +982,7 @@ function HomeworkSectionReview({
   // section-scoped action would misdescribe what pressing it does.
   const ungradedInSection = useMemo(() => {
     if (!roster) return 0;
+    // Action count — "Grade N now" does grade her rehearsal too.
     return roster.filter((e) => isAwaitingGrade(e)).length;
   }, [roster]);
   // Reviewed vs unopened split of the full to-release set (HW-wide).
@@ -1331,7 +1400,10 @@ function HomeworkSectionReview({
 
       {roster === null && !error && <ReviewLoadingSkeleton />}
 
-      {roster !== null && roster.length === 0 && (
+      {/* Class-side: her rehearsal being the only row must not suppress
+          the onboarding card. This is exactly the state it exists for —
+          she previews before anyone has joined. */}
+      {classRoster !== null && classRoster.length === 0 && (
         <div className="mt-6 rounded-[--radius-xl] border border-border-light bg-[color:var(--color-surface-alt-2)] p-10 text-center">
           <p className="text-sm font-bold text-text-primary">
             No students in this section yet
@@ -2007,14 +2079,23 @@ function hasLowConfidence(entry: RosterEntry): boolean {
   );
 }
 
+/** Her students, without her own rehearsal. See the two-populations
+ *  note in HomeworkSectionReview: class counts use this, action counts
+ *  use the full roster. */
+function classOnly(entries: RosterEntry[]): RosterEntry[] {
+  return entries.filter((e) => !e.submission?.is_preview);
+}
+
 function applyRosterFilter(
   roster: RosterEntry[],
   filter: RosterFilter,
 ): RosterEntry[] {
   if (filter === "all") return roster;
-  if (filter === "needs_me") return roster.filter(needsTeacher);
-  if (filter === "low_confidence") return roster.filter(hasLowConfidence);
-  return roster.filter(isFlagged);
+  // Same population the chips count — see RosterFilterBar.
+  if (filter === "needs_me") return classOnly(roster).filter(needsTeacher);
+  if (filter === "low_confidence")
+    return classOnly(roster).filter(hasLowConfidence);
+  return classOnly(roster).filter(isFlagged);
 }
 
 function RosterFilterBar({
@@ -2026,9 +2107,13 @@ function RosterFilterBar({
   value: RosterFilter;
   onChange: (v: RosterFilter) => void;
 }) {
-  const flaggedCount = roster.filter(isFlagged).length;
-  const needsMeCount = roster.filter(needsTeacher).length;
-  const lowConfidenceCount = roster.filter(hasLowConfidence).length;
+  // Chips are class triage, so they count her students — and the list
+  // they filter to must be the same population, or a chip reading 1
+  // opens a list of 2.
+  const forCounting = classOnly(roster);
+  const flaggedCount = forCounting.filter(isFlagged).length;
+  const needsMeCount = forCounting.filter(needsTeacher).length;
+  const lowConfidenceCount = forCounting.filter(hasLowConfidence).length;
 
   // Auto-revert to "all" when the active filter's count drops to 0 —
   // otherwise a teacher who clears the last flagged submission gets
@@ -2235,7 +2320,17 @@ function TriageRoster({
   const awaitingGrade: RosterEntry[] = [];
   const confident: RosterEntry[] = [];
   const notSubmitted: RosterEntry[] = [];
+  // Her rehearsal is a row, not a member of any triage group. The group
+  // headers count her class — a "Needs your eyes · 1" over her own test
+  // run contradicts the subhead and the chips, which both read
+  // classOnly. Rendered after the groups instead, where the badge is
+  // the whole story.
+  let rehearsal: RosterEntry | null = null;
   for (const e of roster) {
+    if (e.submission?.is_preview) {
+      rehearsal = e;
+      continue;
+    }
     if (!e.submission) notSubmitted.push(e);
     else if (isFlagged(e) || hasLowConfidence(e)) needsEyes.push(e);
     // Ungraded gets its own group. It used to fall into "AI confident"
@@ -2319,6 +2414,12 @@ function TriageRoster({
         />
       )}
       {renderRows(notSubmitted)}
+      {rehearsal && (
+        <>
+          <RosterGroupHeader label="Your test run" count={1} tone="calm" />
+          {renderRows([rehearsal])}
+        </>
+      )}
     </>
   );
 }
@@ -2401,6 +2502,13 @@ function StudentRow({
           }`}
         >
           {entry.student_name}
+          {/* Her own rehearsal sits at the end of the roster. Badged so
+              a row that isn't a student can't be mistaken for one. */}
+          {sub?.is_preview && (
+            <span className="ml-1.5 rounded-full bg-[color:var(--color-info-light)] px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-info)]">
+              Preview
+            </span>
+          )}
         </div>
         {hasScore && (
           <span

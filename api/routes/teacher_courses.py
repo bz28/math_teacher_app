@@ -579,8 +579,15 @@ async def get_course_setup_status(
         select(Section.id).where(Section.course_id == course_id),
     )
     has_student = await _exists(
-        select(SectionEnrollment.id).where(
+        select(SectionEnrollment.id)
+        .join(User, User.id == SectionEnrollment.student_id)
+        .where(
             SectionEnrollment.course_id == course_id,
+            # Her preview shadow gets a real enrollment row, so without
+            # this the checklist tells her she has students when she has
+            # none. Pre-existing, but it is the neighbour of the
+            # milestone below and fails the same way.
+            User.is_preview.is_(False),
         ),
     )
     has_materials = await _exists(
@@ -596,11 +603,17 @@ async def get_course_setup_status(
     has_published_grade = await _exists(
         select(SubmissionGrade.id)
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
+        .join(User, User.id == Submission.student_id)
         .join(Assignment, Assignment.id == Submission.assignment_id)
         .where(
             Assignment.course_id == course_id,
             Assignment.teacher_id == current_user.user_id,
             SubmissionGrade.grade_published_at.is_not(None),
+            # Releasing her own rehearsal's grade is not "you have
+            # published a grade" — this drives a setup milestone, and
+            # ticking it off her own test run would tell her she's
+            # finished something she hasn't started.
+            User.is_preview.is_(False),
         ),
     )
 

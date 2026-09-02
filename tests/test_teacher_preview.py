@@ -23,6 +23,7 @@ shows they're both closed.
 """
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -31,7 +32,7 @@ from sqlalchemy import func, select, text
 
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
-from api.models.assignment import Submission
+from api.models.assignment import Submission, SubmissionGrade
 from api.models.question_bank import QuestionBankItem
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
@@ -501,3 +502,157 @@ async def test_another_teachers_shadow_is_blocked(
             .where(User.is_preview.is_(True))
         )).scalars().all()
     assert not (set(map(str, seats)) & set(victim["section_ids"]))
+
+
+async def test_a_rehearsal_grade_can_be_published_so_she_can_see_it(
+    client: AsyncClient,
+) -> None:
+    """The back half of the loop. A rehearsal runs the real pipeline and
+    gets a real grade — but publish-grades is the only writer of
+    grade_published_at, and it used to exclude her, so the student view
+    she was checking could never show a score. Her grade releases with
+    the class now; the counts still leave her out."""
+    await _wipe()
+    world = await _teacher_with_homework(client, sections="both", status="published")
+    headers = await _preview_headers(client, world)
+
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=headers, json={"files": [TINY_PNG]},
+    )
+    assert r.status_code == 200, r.text
+    submission_id = uuid.UUID(r.json()["submission_id"])
+
+    # Stand in for the grading pipeline, which needs an LLM.
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(submission_id=submission_id, final_score=92.0))
+        await s.commit()
+
+    # Nothing to see yet — the score exists but was never released.
+    detail = (await client.get(
+        f"/v1/school/student/homework/{world['assignment_id']}", headers=headers,
+    )).json()
+    assert detail["final_score"] is None
+
+    r = await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
+        headers=world["headers"], json={},
+    )
+    assert r.status_code == 200, r.text
+
+    detail = (await client.get(
+        f"/v1/school/student/homework/{world['assignment_id']}", headers=headers,
+    )).json()
+    assert detail["final_score"] == 92.0
+    assert detail["grade_published_at"] is not None
+
+    # ...and she still isn't one of her own students.
+    listed = (await client.get(
+        f"/v1/teacher/courses/{world['course_id']}/assignments",
+        headers=world["headers"],
+    )).json()
+    row = next(
+        a for a in listed["assignments"]
+        if a["id"] == world["assignment_id"]
+    )
+    assert row["submitted"] == 0
+    assert row["published"] == 0
+
+
+async def test_a_rehearsal_stays_out_of_every_teacher_facing_number(
+    client: AsyncClient,
+) -> None:
+    """Guards the exclusions, not just the release.
+
+    Every one of these was found by review rather than by a test, and
+    two of them contradicted comments claiming they were handled. So
+    each gets an assertion: without them a teacher's own test run
+    inflates a milestone, a class average, an audit entry, or an admin
+    quality metric."""
+    await _wipe()
+    world = await _teacher_with_homework(client, sections="both", status="published")
+    headers = await _preview_headers(client, world)
+
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=headers, json={"files": [TINY_PNG]},
+    )
+    assert r.status_code == 200, r.text
+    submission_id = uuid.UUID(r.json()["submission_id"])
+
+    # Stand in for the grading pipeline (needs an LLM). A breakdown is
+    # what item analysis counts; final_score is what publishing needs.
+    # ai_breakdown and graded_at matter: the admin quality queries gate
+    # on them, so without them the rehearsal never reaches those queries
+    # and an assertion about the preview filter would pass for the wrong
+    # reason. (It did, until a mutation test caught it.)
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(
+            submission_id=submission_id,
+            final_score=92.0,
+            graded_at=datetime.now(UTC),
+            breakdown=[{"problem_id": "x", "score_status": "zero", "percent": 0}],
+            ai_breakdown={
+                "grades": [
+                    {"problem_id": "x", "score_status": "zero", "percent": 0},
+                ],
+            },
+        ))
+        await s.commit()
+
+    r = await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
+        headers=world["headers"], json={},
+    )
+    assert r.status_code == 200, r.text
+    # Reports grades that went to students — she is not one.
+    assert r.json()["published_count"] == 0
+
+    # The only average on the review page. "Class item analysis" must
+    # not be a distribution of her own work.
+    r = await client.get(
+        f"/v1/teacher/assignments/{world['assignment_id']}/item-analysis",
+        headers=world["headers"],
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["graded_count"] == 0
+
+    # Setup milestones: she has neither students nor a published grade.
+    r = await client.get(
+        f"/v1/teacher/courses/{world['course_id']}/setup-status",
+        headers=world["headers"],
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["has_student"] is False
+    assert r.json()["has_published_grade"] is False
+
+    # Admin AI-grading quality. A teacher rehearsing on work she wrote
+    # herself is not evidence about how well the grader performs, and
+    # both queries behind this page have to agree about that or it
+    # reports override stats over one population beside a coverage tile
+    # counting another. Review found this untested twice.
+    async with get_session_factory()() as s:
+        admin = User(
+            email=f"admin_{uuid.uuid4().hex[:8]}@veradic.ai",
+            password_hash=hash_password("x"), grade_level=99,
+            role="admin", name="Admin",
+        )
+        s.add(admin)
+        await s.commit()
+        admin_headers = auth_headers(create_access_token(str(admin.id), "admin"))
+
+    r = await client.get("/v1/admin/grading-quality?hours=720", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    summary = body["summary"]
+    # Two independent queries feed this page and BOTH have to exclude
+    # her, or it reports override stats over one population beside a
+    # coverage tile counting another. Round 4 asserted only the coverage
+    # pair — both of these come from _coverage_counts — so removing the
+    # other filter still passed. reviewed_submissions and by_subject
+    # come from _reviewed_rows; without its filter her rehearsal shows
+    # up as a fabricated "the AI got 100% of this wrong" signal.
+    assert summary["ai_graded_submissions"] == 0, summary
+    assert summary["reviewed_ai_grades"] == 0, summary
+    assert summary["reviewed_submissions"] == 0, summary
+    assert body["by_subject"] == [], body["by_subject"]
