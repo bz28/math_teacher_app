@@ -2409,6 +2409,10 @@ class TeacherSubmissionDetail(BaseModel):
     # multi-file column.
     files: list[dict[str, str]] | None
     problems: list[TeacherSubmissionDetailProblem]
+    # Extracted lines that belong to no problem on this assignment. The
+    # grader receives these as context, so the review page has to be able
+    # to show them — see the bucketing note in `get_submission_detail`.
+    other_work: list[TeacherSubmissionStep] = []
     # Current grading state. None when the teacher hasn't touched this
     # submission yet. `breakdown` + `final_score` are teacher-draft
     # until `grade_published_at` is set, at which point the student
@@ -2564,61 +2568,177 @@ async def get_submission_detail(
     # what was replaced, and the `original_*` disclosure needs both
     # sides. Keep the two in step if the overlay rules ever change.
     edits = sub.extraction_edits or {}
+
+    def _overlaid_step(
+        raw: dict[str, Any], position: int | None
+    ) -> TeacherSubmissionStep | None:
+        """One extracted line as the teacher should see it, or None when
+        the student deleted it.
+
+        Applies the confirm-screen edit on top of the Vision read so the
+        teacher sees what the AI actually graded, and carries the Vision
+        read alongside on `original_*` for the "view original" disclosure
+        — which is why this can't just reuse `apply_extraction_edits`
+        above: that returns the merged view and discards what it
+        replaced, and the disclosure needs both sides.
+
+        `position` may be one that isn't on this assignment. That still
+        gets the overlay: the confirm screen keys edits purely by
+        position and only makes a group read-only when the position is
+        NULL, so a student can and does edit a step whose stale tag no
+        longer resolves. Skipping the overlay there would show the
+        teacher the pre-correction text under copy promising it is what
+        the AI saw.
+        """
+        step_num = raw.get("step_num")
+        edit_key = (
+            f"{position}:{step_num}"
+            if position is not None
+            and isinstance(step_num, int)
+            and not isinstance(step_num, bool)
+            else None
+        )
+        original_latex = raw.get("latex") or ""
+        original_plain = raw.get("plain_english") or ""
+        edited_text = (
+            edits.get(edit_key, "").strip() if edit_key and edit_key in edits else None
+        )
+        if edited_text == "":
+            # Student cleared the row — drop it entirely so the grader's
+            # view and the teacher's view stay in sync.
+            return None
+        if edited_text is not None:
+            # Route the edit to the field that carried the original work:
+            # math steps stay math (latex), text steps stay text. Mirrors
+            # `apply_extraction_edits` so the teacher view renders with
+            # the same fidelity the grader saw.
+            if original_latex:
+                return TeacherSubmissionStep(
+                    latex=edited_text,
+                    plain_english="",
+                    edited=True,
+                    original_latex=original_latex,
+                    original_plain_english=original_plain,
+                )
+            return TeacherSubmissionStep(
+                latex="",
+                plain_english=edited_text,
+                edited=True,
+                original_latex=original_latex,
+                original_plain_english=original_plain,
+            )
+        if not original_latex and not original_plain:
+            return None
+        return TeacherSubmissionStep(
+            latex=original_latex, plain_english=original_plain
+        )
+
     steps_by_position: dict[int, list[TeacherSubmissionStep]] = {}
+    # Work the extractor couldn't tie to a problem on this assignment.
+    # These used to be dropped here, which put the teacher behind the
+    # grader: `grading_ai._build_user_message` hands the model the exact
+    # same lines under "Other work" and tells it to use them as context,
+    # so a grade could rest on evidence invisible on the page where it is
+    # reviewed. Two ways in — a null `problem_position` (scratchwork,
+    # cross-problem setup) and a position that isn't on this assignment,
+    # which is how a stale tag reads after an unpublish → edit problems →
+    # republish cycle shifts positions. Both are bucketed the same way by
+    # the grader, so both are surfaced the same way here.
+    other_work: list[TeacherSubmissionStep] = []
+    # Positions the problem list below will actually render, so an
+    # out-of-range tag lands in `other_work` rather than nowhere.
+    valid_positions = {
+        pos
+        for pos, pid in enumerate(primary_ids, start=1)
+        if items_by_id.get(str(pid))
+    }
+
+    def _real_position(value: Any) -> int | None:
+        """The step's position, or None when it isn't a usable one.
+        Excludes bools explicitly: `True` is an `int` and `True in {1, …}`
+        is True, so without this a step tagged `problem_position: true`
+        would render under problem 1 — where `grading_ai` would have put
+        it in "Other work"."""
+        if not isinstance(value, int) or isinstance(value, bool):
+            return None
+        return value
+
     if sub.extraction:
         for step in sub.extraction.get("steps", []) or []:
-            position = step.get("problem_position")
-            if not isinstance(position, int):
-                continue  # cross-problem scratchwork — skip
-            step_num = step.get("step_num")
-            edit_key = (
-                f"{position}:{step_num}"
-                if isinstance(step_num, int) and not isinstance(step_num, bool)
+            position = _real_position(step.get("problem_position"))
+            if position is None or position not in valid_positions:
+                built = _overlaid_step(step, position)
+                if built is not None:
+                    other_work.append(built)
+                continue
+            built = _overlaid_step(step, position)
+            if built is not None:
+                steps_by_position.setdefault(position, []).append(built)
+
+        # Final answers the extractor couldn't place either. The grader
+        # buckets these into the SAME "Other work" block as the steps
+        # above (`grading_ai._build_user_message`), so surfacing only the
+        # steps would leave the asymmetry half-closed — an answer read
+        # off the page, handed to the model, and still invisible here.
+        # Duplicate entries are possible — the tool schema doesn't enforce
+        # one per position — so drop repeats of the same VALUE. Not of the
+        # same position: `grading_ai._build_user_message` renders every
+        # candidate it was given ("rather than silently losing all but the
+        # last"), and this block exists to show the teacher what the
+        # grader saw. Two different answers tagged 99 are two things the
+        # model read; only the literal repeat is noise.
+        seen_unplaced: set[tuple[str, str]] = set()
+        for fa in sub.extraction.get("final_answers", []) or []:
+            fa_position = _real_position(fa.get("problem_position"))
+            if fa_position is not None and fa_position in valid_positions:
+                continue
+            # These are editable for exactly the reason the steps are:
+            # the confirm screen keys `{position}:final` off any integer
+            # position and only locks a group when the position is NULL.
+            # So a student can clear or correct one whose stale tag no
+            # longer resolves, and the grader consumes that edit. Without
+            # the overlay this block would list a phantom line the model
+            # never received, under copy saying it is what the AI saw.
+            fa_edit_key = f"{fa_position}:final" if fa_position is not None else None
+            fa_edited = (
+                edits.get(fa_edit_key, "").strip()
+                if fa_edit_key and fa_edit_key in edits
                 else None
             )
-            original_latex = step.get("latex") or ""
-            original_plain = step.get("plain_english") or ""
-            edited_text = (
-                edits.get(edit_key, "").strip()
-                if edit_key and edit_key in edits
-                else None
-            )
-            if edited_text == "":
-                # Student cleared the row — drop it entirely so the
-                # grader's view and the teacher's view stay in sync.
+            if fa_edited == "":
                 continue
-            if edited_text is not None:
-                # Student replaced this step's content. Route the edit
-                # to the field that carried the original work: math
-                # steps stay math (latex), text steps stay text. Mirrors
-                # the apply_extraction_edits helper so the teacher view
-                # renders with the same fidelity as the grader saw.
-                # Vision read is preserved on original_* for the
-                # disclosure regardless.
-                if original_latex:
-                    edited_step = TeacherSubmissionStep(
-                        latex=edited_text,
-                        plain_english="",
+            fa_latex = (fa.get("answer_latex") or "").strip()
+            fa_plain = (fa.get("answer_plain") or "").strip()
+            if fa_edited is not None:
+                # Route the edit to the field that carried the original,
+                # matching `_overlaid_step` and `apply_extraction_edits`.
+                edit_key = (fa_edited, "edited")
+                if edit_key in seen_unplaced:
+                    continue
+                seen_unplaced.add(edit_key)
+                other_work.append(
+                    TeacherSubmissionStep(
+                        latex=fa_edited if fa_latex else "",
+                        plain_english="" if fa_latex else fa_edited,
                         edited=True,
-                        original_latex=original_latex,
-                        original_plain_english=original_plain,
+                        original_latex=fa_latex,
+                        original_plain_english=fa_plain,
                     )
-                else:
-                    edited_step = TeacherSubmissionStep(
-                        latex="",
-                        plain_english=edited_text,
-                        edited=True,
-                        original_latex=original_latex,
-                        original_plain_english=original_plain,
-                    )
-                steps_by_position.setdefault(position, []).append(edited_step)
+                )
                 continue
-            if not original_latex and not original_plain:
+            if not fa_latex and not fa_plain:
                 continue
-            steps_by_position.setdefault(position, []).append(
+            if (fa_latex, fa_plain) in seen_unplaced:
+                continue
+            seen_unplaced.add((fa_latex, fa_plain))
+            # Raw and UNDELIMITED. `StudentStepRow` renders a step's latex
+            # as `$${latex}$$`, so wrapping here would emit `$$$x$$$` and
+            # KaTeX would render an error glyph. Every other
+            # `TeacherSubmissionStep.latex` this route emits is raw too.
+            other_work.append(
                 TeacherSubmissionStep(
-                    latex=original_latex,
-                    plain_english=original_plain,
+                    latex=fa_latex,
+                    plain_english="" if fa_latex else fa_plain,
                 )
             )
 
@@ -2686,6 +2806,7 @@ async def get_submission_detail(
         is_late=sub.is_late,
         files=sub.files,
         problems=problems,
+        other_work=other_work,
         breakdown=grade.breakdown if grade else None,
         ai_breakdown=ai_breakdown_grades,
         final_score=grade.final_score if grade else None,

@@ -900,6 +900,269 @@ async def test_teacher_submission_detail_confidence_at_threshold(
     assert r.json()["problems"][0]["student_answer"] == "$5$"
 
 
+async def test_teacher_submission_detail_surfaces_unattributed_work(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Steps the extractor couldn't tie to a problem must reach the
+    teacher. `grading_ai._build_user_message` hands the grader these same
+    lines under "Other work" and tells it to use them as context, so
+    dropping them left a grade resting on evidence invisible on the page
+    where it is reviewed.
+
+    Two ways in, and the grader buckets both the same way: a null
+    `problem_position`, and a position that isn't on this assignment —
+    which is how a stale tag reads after problems have been reordered.
+    """
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": ['
+        '{"step_num": 1, "problem_position": 1, "latex": "x = 5", '
+        '"plain_english": "solve"},'
+        '{"step_num": 2, "problem_position": null, "latex": "", '
+        '"plain_english": "check: 5 times 3 is 15"},'
+        '{"step_num": 3, "problem_position": 99, "latex": "d = b^2 - 4ac", '
+        '"plain_english": ""},'
+        '{"step_num": 4, "problem_position": null, "latex": "", '
+        '"plain_english": ""}'
+        '], "final_answers": [], "confidence": 0.9}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200
+    body = r.json()
+
+    # The attributed step still lands on its problem, not in the bucket.
+    assert [st["plain_english"] for st in body["problems"][0]["student_steps"]] == [
+        "solve"
+    ]
+    # Null position and off-assignment position both surface; the wholly
+    # empty step is dropped rather than rendering a blank row.
+    other = body["other_work"]
+    assert len(other) == 2
+    assert other[0]["plain_english"] == "check: 5 times 3 is 15"
+    assert other[1]["latex"] == "d = b^2 - 4ac"
+
+
+async def test_teacher_submission_detail_other_work_empty_by_default(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A clean submission carries an empty bucket, so the UI can hide the
+    disclosure entirely rather than showing an empty one."""
+    submission_id = await _submit_and_stage_extraction(
+        client, world, _READABLE_EXTRACTION,
+    )
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["other_work"] == []
+
+
+async def test_other_work_honors_a_student_edit(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A step whose position isn't on this assignment still went through
+    the confirm screen as an editable row — that screen only locks a
+    group when the position is NULL, so a stale tag stays editable. The
+    grader consumes the overlaid view, so the teacher must see the
+    corrected text too; showing the pre-correction read under copy that
+    says "the AI saw these" would be a lie."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [{"step_num": 2, "problem_position": 99, '
+        '"latex": "x = 5", "plain_english": ""}], '
+        '"final_answers": [], "confidence": 0.9}',
+        '{"99:2": "x = 6"}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    other = r.json()["other_work"]
+    assert len(other) == 1
+    assert other[0]["latex"] == "x = 6"
+    assert other[0]["edited"] is True
+    assert other[0]["original_latex"] == "x = 5"
+
+
+async def test_other_work_drops_a_step_the_student_cleared(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Clearing a row removes it from the grader's prompt, so it must not
+    linger on the review page as a phantom line the AI never saw."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [{"step_num": 2, "problem_position": 99, '
+        '"latex": "x = 5", "plain_english": ""}], '
+        '"final_answers": [], "confidence": 0.9}',
+        '{"99:2": ""}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["other_work"] == []
+
+
+async def test_other_work_includes_unplaced_final_answers(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The grader buckets unattributed final answers into the same "Other
+    work" block as unattributed steps, so surfacing only the steps would
+    leave an answer the model received still invisible here."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 99, "answer_latex": "42", "answer_plain": ""},'
+        '{"problem_position": 1, "answer_latex": "5", "answer_plain": ""}'
+        '], "confidence": 0.9}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    body = r.json()
+    # Raw and UNDELIMITED: `StudentStepRow` renders a step's latex as
+    # `$${latex}$$`, so a pre-wrapped value would reach KaTeX as
+    # `$$$42$$$` and render an error glyph. The `$…$` convention belongs
+    # to `student_answer`, which the review page passes through raw.
+    assert [st["latex"] for st in body["other_work"]] == ["42"]
+    # The one that DOES place still goes to its problem, not the bucket,
+    # and IS delimited, because that field is rendered unwrapped.
+    assert body["problems"][0]["student_answer"] == "$5$"
+
+
+async def test_other_work_keeps_distinct_answers_sharing_a_position(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Two different reads tagged with the same unplaced position are two
+    things the model was actually given. `grading_ai._build_user_message`
+    renders every candidate rather than losing all but one, and this
+    bucket exists to show the teacher what the grader saw, so it must not
+    collapse them either. Only a literal repeat is noise."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 99, "answer_latex": "42", "answer_plain": ""},'
+        '{"problem_position": 99, "answer_latex": "7", "answer_plain": ""},'
+        '{"problem_position": 99, "answer_latex": "42", "answer_plain": ""}'
+        '], "confidence": 0.9}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert [st["latex"] for st in r.json()["other_work"]] == ["42", "7"]
+
+
+async def test_other_work_empty_duplicate_does_not_hide_a_real_answer(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """An empty entry must not consume the slot for a later real one at
+    the same position. The grader still receives the real answer, so
+    dropping it here would reopen the exact asymmetry this bucket was
+    added to close."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 99, "answer_latex": "", "answer_plain": ""},'
+        '{"problem_position": 99, "answer_latex": "42", "answer_plain": ""}'
+        '], "confidence": 0.9}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert [st["latex"] for st in r.json()["other_work"]] == ["42"]
+
+
+async def test_other_work_final_answer_honors_a_student_edit(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Final answers are editable for the same reason steps are: the
+    confirm screen keys `{position}:final` off any integer position and
+    only locks a group when the position is NULL. The grader consumes the
+    edit, so the teacher must see it too."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 99, "answer_latex": "42", "answer_plain": ""}'
+        '], "confidence": 0.9}',
+        '{"99:final": "43"}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    other = r.json()["other_work"]
+    assert len(other) == 1
+    assert other[0]["latex"] == "43"
+    assert other[0]["edited"] is True
+    assert other[0]["original_latex"] == "42"
+
+
+async def test_other_work_drops_a_final_answer_the_student_cleared(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """`apply_extraction_edits` drops a cleared final answer from the
+    grader's prompt, so leaving it here would list a phantom line under
+    copy saying the AI saw it."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 99, "answer_latex": "42", "answer_plain": ""}'
+        '], "confidence": 0.9}',
+        '{"99:final": ""}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["other_work"] == []
+
+
+async def test_bool_problem_position_is_not_problem_one(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """`True` is an `int` in Python and `True in {1, ...}` is True, so a
+    bare isinstance check would file a step tagged `true` under problem 1.
+    `grading_ai` excludes bools explicitly; this must agree, or the two
+    views of the same submission diverge."""
+    submission_id = await _submit_and_stage_extraction(
+        client,
+        world,
+        '{"steps": [{"step_num": 1, "problem_position": true, '
+        '"latex": "bogus", "plain_english": ""}], '
+        '"final_answers": [], "confidence": 0.9}',
+    )
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    body = r.json()
+    assert body["problems"][0]["student_steps"] == []
+    assert [st["latex"] for st in body["other_work"]] == ["bogus"]
+
+
 async def test_teacher_submission_detail_403_for_other_teacher(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
