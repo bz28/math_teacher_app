@@ -1,7 +1,7 @@
 """backfill published_* for grades released before the snapshot existed
 
-Revision ID: cl1000081
-Revises: ck1000080
+Revision ID: cm1000082
+Revises: cl1000081
 Create Date: 2026-09-02 02:30:00.000000
 
 as1000036 added published_final_score / published_breakdown /
@@ -23,8 +23,8 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "cl1000081"
-down_revision: str | None = "ck1000080"
+revision: str = "cm1000082"
+down_revision: str | None = "cl1000081"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

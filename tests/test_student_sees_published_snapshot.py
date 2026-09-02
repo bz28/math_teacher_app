@@ -177,3 +177,33 @@ async def test_an_unpublished_grade_is_still_invisible(client: AsyncClient) -> N
     assert (await client.get(
         f"/v1/school/student/homework/{w['assignment_id']}", headers=w["student"],
     )).json()["final_score"] is None
+
+
+async def test_a_grade_with_no_snapshot_never_falls_off_the_dashboard(
+    client: AsyncClient,
+) -> None:
+    """`get_dashboard` answers "is this published?" twice — once to drop
+    the homework from the active buckets, once to put it under Recently
+    graded. When those two disagreed, a row with a score but no snapshot
+    satisfied only the first, and the assignment appeared in NO bucket:
+    gone from the student's dashboard entirely.
+
+    That state is what every grade released before `as1000036` looked
+    like. `cl1000081` backfills them, but the two queries must agree on
+    their own terms — a dashboard that silently drops a homework is worse
+    than one showing it in the wrong place.
+    """
+    w = await _world()
+    async with get_session_factory()() as s:
+        grade = (await s.execute(select(SubmissionGrade))).scalar_one()
+        grade.published_final_score = None  # pre-as1000036 shape
+        await s.commit()
+
+    dash = (await client.get(
+        "/v1/school/student/dashboard", headers=w["student"],
+    )).json()
+    buckets = ["due_this_week", "overdue", "in_review", "recently_graded"]
+    appearances = {b: len(dash[b]) for b in buckets}
+    assert sum(appearances.values()) == 1, appearances
+    # Nothing is published, so it belongs with the work awaiting a grade.
+    assert appearances["in_review"] == 1, appearances

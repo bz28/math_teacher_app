@@ -1249,11 +1249,19 @@ async def get_dashboard(
     }
 
     # Published grades keyed by submission_id for the dedupe below.
+    #
+    # Gated on published_final_score, matching the recently_graded query
+    # below. The two must agree on what "published" means: this one drops
+    # the assignment from the active buckets on the promise that the other
+    # will surface it under Recently graded. When they disagreed — this
+    # one reading the live column, that one the snapshot — a row with a
+    # score but no snapshot satisfied only the first, and the homework
+    # fell out of every bucket and off the dashboard completely.
     published_grades = (await db.execute(
         select(SubmissionGrade).where(
             SubmissionGrade.submission_id.in_(submission_by_aid.values()),
             SubmissionGrade.grade_published_at.is_not(None),
-            SubmissionGrade.final_score.is_not(None),
+            SubmissionGrade.published_final_score.is_not(None),
         )
     )).scalars().all() if submission_by_aid else []
     published_by_sid: dict[uuid.UUID, SubmissionGrade] = {
