@@ -83,7 +83,8 @@ async def _world() -> dict[str, uuid.UUID]:
         s.add(assignment)
         await s.flush()
 
-        labels = ("untouched", "edited_after", "modern", "ungraded", "unpublished")
+        labels = ("untouched", "edited_after", "modern", "ungraded", "unpublished",
+                  "notes_edited", "released_with_notes")
         students = {
             label: User(
                 email=f"s_{label}_{uuid.uuid4().hex[:8]}@school.edu",
@@ -102,7 +103,15 @@ async def _world() -> dict[str, uuid.UUID]:
             "untouched": dict(
                 final_score=78.0, breakdown=[{"problem_id": "p", "score_status": "full",
                                               "percent": 100.0}],
-                teacher_notes="released",
+                graded_at=PUBLISHED_AT - timedelta(minutes=5),
+                grade_published_at=PUBLISHED_AT,
+                published_final_score=None,
+            ),
+            # Released with a note and never touched since. Safe in
+            # principle, skipped in practice — see the test below.
+            "released_with_notes": dict(
+                final_score=78.0,
+                teacher_notes="nice work",
                 graded_at=PUBLISHED_AT - timedelta(minutes=5),
                 grade_published_at=PUBLISHED_AT,
                 published_final_score=None,
@@ -113,7 +122,6 @@ async def _world() -> dict[str, uuid.UUID]:
             "edited_after": dict(
                 final_score=85.0, breakdown=[{"problem_id": "p", "score_status": "full",
                                               "percent": 100.0}],
-                teacher_notes="still editing",
                 graded_at=PUBLISHED_AT + timedelta(days=3),
                 grade_published_at=PUBLISHED_AT,
                 published_final_score=None,
@@ -127,7 +135,18 @@ async def _world() -> dict[str, uuid.UUID]:
             ),
             # Legacy row whose score was cleared after release.
             "ungraded": dict(
-                final_score=None, breakdown=[], teacher_notes="cleared",
+                final_score=None, breakdown=[],
+                graded_at=PUBLISHED_AT - timedelta(minutes=5),
+                grade_published_at=PUBLISHED_AT,
+                published_final_score=None,
+            ),
+            # Released, then a NOTES-ONLY save. The notes branch of the
+            # grade PATCH deliberately leaves graded_at alone, so this row
+            # still satisfies graded_at <= grade_published_at while
+            # carrying an edit the teacher never released.
+            "notes_edited": dict(
+                final_score=78.0,
+                teacher_notes="second thoughts - never released",
                 graded_at=PUBLISHED_AT - timedelta(minutes=5),
                 grade_published_at=PUBLISHED_AT,
                 published_final_score=None,
@@ -174,7 +193,6 @@ async def test_a_grade_released_and_never_touched_is_repaired() -> None:
     await _run_backfill()
     g = (await _grades())["untouched"]
     assert g.published_final_score == 78.0
-    assert g.published_teacher_notes == "released"
     assert g.published_breakdown == [
         {"problem_id": "p", "score_status": "full", "percent": 100.0}
     ]
@@ -195,7 +213,6 @@ async def test_an_edit_made_after_release_is_never_published() -> None:
     await _run_backfill()
     g = (await _grades())["edited_after"]
     assert g.published_final_score is None
-    assert g.published_teacher_notes is None
     assert g.final_score == 85.0  # her draft is untouched
     # Still dirty by the app's own predicate, so it stays in her queue.
     assert g.final_score != g.published_final_score
@@ -212,8 +229,14 @@ async def test_a_modern_mid_edit_draft_is_untouched() -> None:
 async def test_a_cleared_score_never_leaves_a_half_written_snapshot() -> None:
     """The guard column is published_final_score but the SET writes all
     three. Without the final_score guard this row would come out with a
-    published breakdown and notes beside a NULL published score — the
-    exact shape the student queries were changed to stop tolerating."""
+    published breakdown beside a NULL published score — the exact shape
+    the student queries were changed to stop tolerating.
+
+    Defence in depth rather than a live population: the un-grade path
+    nulls graded_at along with final_score, so a row the app actually
+    produced would already fail the graded_at guard. This fixture keeps
+    graded_at set on purpose, to hold the final_score guard on its own.
+    """
     await _world()
     await _run_backfill()
     g = (await _grades())["ungraded"]
@@ -223,6 +246,11 @@ async def test_a_cleared_score_never_leaves_a_half_written_snapshot() -> None:
 
 
 async def test_an_unpublished_grade_is_not_published_by_the_backfill() -> None:
+    """Note which guard does the work: `graded_at <= grade_published_at`
+    is NULL for an unpublished row and so already excludes it. The
+    explicit grade_published_at clause is redundant, kept for reading.
+    The behaviour asserted here is real; the clause it looks like it
+    pins is not the one enforcing it."""
     await _world()
     await _run_backfill()
     g = (await _grades())["unpublished"]
@@ -241,3 +269,49 @@ async def test_running_it_twice_changes_nothing() -> None:
     second = {k: (g.published_final_score, g.published_teacher_notes)
               for k, g in (await _grades()).items()}
     assert first == second
+
+
+async def test_a_notes_only_edit_after_release_is_never_published() -> None:
+    """The hole the timestamp guard cannot see.
+
+    `teacher_notes` is written by its own branch of the grade PATCH,
+    outside every `graded_at` write — the endpoint says so out loud
+    ("notes are independent of the score"). So a teacher who reopens a
+    released grade and changes only her notes leaves `graded_at`
+    untouched, and the row still satisfies
+    `graded_at <= grade_published_at` while holding an edit she never
+    released.
+
+    `_is_grade_dirty` compares `teacher_notes`, so that row is dirty
+    today. Copying the note into the snapshot would publish it AND clear
+    the dirty flag, silently retiring it from her review queue. The
+    `teacher_notes IS NULL` guard is what stops that.
+    """
+    await _world()
+    await _run_backfill()
+    g = (await _grades())["notes_edited"]
+    assert g.published_teacher_notes is None
+    assert g.published_final_score is None
+    # Still dirty by the app's own predicate, so it stays in her queue.
+    assert g.teacher_notes != g.published_teacher_notes
+
+
+async def test_a_released_note_is_skipped_rather_than_guessed_at() -> None:
+    """The cost of the notes guard, stated plainly.
+
+    This row is genuinely safe to repair — released, never touched — but
+    the migration cannot tell it apart from one whose note was rewritten
+    after release, because a notes-only save leaves no timestamp behind.
+    So it is skipped. It stays dirty, and republishing fills the snapshot
+    correctly.
+
+    That trade costs nothing today: no client writes teacher_notes, and
+    no grade in the database carries one. It is the right way round
+    regardless — a skipped repair is visible and self-healing, whereas
+    publishing a note she never released is silent and irreversible.
+    """
+    await _world()
+    await _run_backfill()
+    g = (await _grades())["released_with_notes"]
+    assert g.published_final_score is None
+    assert g.published_teacher_notes is None
