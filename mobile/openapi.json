@@ -11700,7 +11700,7 @@
     },
     "/v1/school/student/homework/{assignment_id}/linked-practice": {
       "get": {
-        "description": "Return the practice assignment linked to this homework (via\nsource_homework_id), if one exists and the student is enrolled in\none of its sections. Powers the integrity-chat \"Go to Practice\"\nCTA in PR 4 \u2014 silent when no link exists so the chat UI can render\na no-nudge terminal.\n\nThe HW itself must also be visible to the student \u2014 the standard\nloader gates access, which doubles as the authz guard against\nenumerating unrelated HW ids. (A teacher's preview shadow is waived\nthrough that loader, but the practice set it finds still has to be\npublished and section-visible on its own, below.)",
+        "description": "Return the practice assignment linked to this homework (via\nsource_homework_id), if one exists and the student is enrolled in\none of its sections. Powers the integrity-chat \"Go to Practice\"\nCTA in PR 4 \u2014 silent when no link exists so the chat UI can render\na no-nudge terminal.\n\nThe HW itself must also be visible to the student \u2014 the standard\nloader gates access, which doubles as the authz guard against\nenumerating unrelated HW ids. (A teacher's preview shadow is waived\nthrough that loader's publish check only \u2014 targeting still applies \u2014\nand the practice set it finds has to be published and\nsection-visible on its own, below.)",
         "operationId": "linked_practice_for_homework_v1_school_student_homework__assignment_id__linked_practice_get",
         "parameters": [
           {
@@ -11749,7 +11749,7 @@
     },
     "/v1/school/student/homework/{assignment_id}/problems/{bank_item_id}/flagged": {
       "get": {
-        "description": "Return all flagged consumption rows for this student/anchor.\nUsed by the practice summary screen to populate the Learn N flagged\nqueue. Re-runs the standard access gate (enrollment + publish state\nfor a student; the owning teacher's course for a preview shadow).",
+        "description": "Return all flagged consumption rows for this student/anchor.\nUsed by the practice summary screen to populate the Learn N flagged\nqueue. Re-runs the standard access gate: enrollment plus publish\nstate for a student, and for a preview shadow the same enrollment\ncheck with the publish state waived.",
         "operationId": "flagged_consumptions_v1_school_student_homework__assignment_id__problems__bank_item_id__flagged_get",
         "parameters": [
           {
