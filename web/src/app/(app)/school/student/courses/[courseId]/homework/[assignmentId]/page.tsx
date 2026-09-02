@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   schoolStudent,
+  ApiError,
   EntitlementError,
   type StudentHomeworkDetail,
   type StudentProblemFeedback,
@@ -163,7 +164,24 @@ export default function HomeworkPage() {
           }
         }
       }
-    } catch {
+    } catch (e) {
+      // A preview whose seat is in a period this homework was never
+      // sent to gets the same 403 a student in that period would — and
+      // a student in that period would never be on this page, because
+      // the homework isn't in their list to click. So send her where
+      // they'd be, rather than inventing a screen no student ever sees
+      // inside the one tool whose job is showing her what they see.
+      // The homework is simply absent from the list, which is the
+      // answer she came for.
+      if (
+        isPreview &&
+        e instanceof ApiError &&
+        e.status === 403 &&
+        e.body.detail === "Not enrolled in this assignment"
+      ) {
+        router.replace(`/school/student/courses/${courseId}`);
+        return;
+      }
       setError("We couldn't load this homework right now.");
     }
   }
