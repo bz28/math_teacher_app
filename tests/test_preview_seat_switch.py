@@ -110,7 +110,7 @@ async def _course_with_homework(
     assert r.status_code == 200, r.text
     return {
         "course_id": course_id, "section_ids": section_ids,
-        "assignment_id": assignment_id,
+        "assignment_id": assignment_id, "unit_id": unit_id,
     }
 
 
@@ -517,3 +517,61 @@ async def test_work_made_in_one_seat_survives_a_switch(
             select(Submission.section_id).where(Submission.id == submission_id)
         )).scalar_one()
     assert still == made_in
+
+
+async def test_a_practice_set_follows_the_seat_too(client: AsyncClient) -> None:
+    """The homework page and the practice page have to agree.
+
+    Both are course-scoped routes, so the switcher renders on both, and
+    switching reloads whichever one she's on. Review found the practice
+    page still showing the generic "we couldn't load this" for a correct
+    403 — the exact symptom #854 existed to remove, one surface over."""
+    await _wipe()
+    headers = await _teacher()
+    world = await _course_with_homework(client, headers, target="second")
+
+    # A practice set aimed at Period 4 only, alongside the homework.
+    practice_id = (await client.post(
+        f"/v1/teacher/courses/{world['course_id']}/assignments", headers=headers,
+        json={
+            "title": "Practice 1", "type": "practice",
+            "unit_ids": [world["unit_id"]], "late_policy": "none",
+        },
+    )).json()["id"]
+    async with get_session_factory()() as s:
+        item = QuestionBankItem(
+            course_id=uuid.UUID(world["course_id"]),
+            unit_id=uuid.UUID(world["unit_id"]),
+            originating_assignment_id=uuid.UUID(practice_id),
+            title="P1", question="p", solution_steps=[{"title": "s", "description": "d"}],
+            final_answer="1", distractors=["a", "b", "c"],
+            status="approved", source="practice",
+        )
+        s.add(item)
+        await s.commit()
+    await client.post(
+        f"/v1/teacher/assignments/{practice_id}/sections", headers=headers,
+        json={"section_ids": [world["section_ids"][1]]},
+    )
+    r = await client.post(
+        f"/v1/teacher/assignments/{practice_id}/publish", headers=headers,
+    )
+    assert r.status_code == 200, r.text
+
+    preview = await _preview(client, headers, world["assignment_id"])
+    r = await client.get(
+        f"/v1/school/student/practice/{practice_id}", headers=preview,
+    )
+    assert r.status_code == 200, r.text
+
+    await client.post(
+        f"/v1/school/student/preview/courses/{world['course_id']}/seat",
+        headers=preview, json={"section_id": world["section_ids"][0]},
+    )
+    r = await client.get(
+        f"/v1/school/student/practice/{practice_id}", headers=preview,
+    )
+    assert r.status_code == 403
+    # Same detail string the frontend keys its redirect on, for both
+    # surfaces — if this ever changes, both redirects break together.
+    assert r.json()["detail"] == "Not enrolled in this assignment"

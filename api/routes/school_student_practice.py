@@ -698,8 +698,11 @@ async def _load_assignment_for_student(
     enrolled in at least one section it's been assigned to. Raises
     HTTPException on any failure.
 
-    (c) and (d) are waived for a teacher previewing their own course —
-    see `_is_teacher_preview_of_course`.
+    For a teacher's preview shadow, (c) is waived and (d) is not: she
+    can look at unpublished work, but only from a seat the assignment
+    was actually sent to, so moving that seat changes what she sees.
+    The single exception is an assignment targeting no sections at all,
+    where there is nothing to match. See `_is_teacher_preview_of_course`.
 
     The HW variation loop passes expected_type="homework" (the default);
     the practice-tab endpoints pass expected_type="practice". Quizzes
@@ -768,9 +771,11 @@ async def _section_for_student_work(
 
     For a real student the join always hits — the loader already
     confirmed enrollment. A teacher's preview shadow arrives through a
-    waiver instead, so the two can disagree: a draft has no section rows
-    to join against at all. It falls back to the shadow's own seat in
-    the course, which keeps its rehearsal attributable to a real section.
+    waiver instead, so the two can disagree: an assignment targeting NO
+    sections has nothing to join against. (Not "a draft" — sections can
+    only be edited while a draft, so drafts routinely do have rows.) It
+    falls back to the shadow's own seat in the course, which keeps its
+    rehearsal attributable to a real section.
 
     Returns None only when even that is missing, which callers must
     still handle rather than assume a row.
@@ -949,7 +954,17 @@ async def move_preview_seat(
         return {"status": "ok"}
 
     row.section_id = body.section_id
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # The section passed validation and was deleted before the
+        # write landed. The insert branch above handles its own race;
+        # this one has no recovery — say what happened rather than
+        # surfacing a 500 from a foreign key.
+        await db.rollback()
+        raise HTTPException(
+            status_code=404, detail="Section is not part of this course",
+        ) from None
     return {"status": "ok"}
 
 
@@ -2313,8 +2328,9 @@ async def flagged_consumptions(
 ) -> list[FlaggedConsumption]:
     """Return all flagged consumption rows for this student/anchor.
     Used by the practice summary screen to populate the Learn N flagged
-    queue. Re-runs the standard access gate (enrollment + publish state
-    for a student; the owning teacher's course for a preview shadow)."""
+    queue. Re-runs the standard access gate: enrollment plus publish
+    state for a student, and for a preview shadow the same enrollment
+    check with the publish state waived."""
     assignment = await _load_assignment_for_student(db, assignment_id, user)
     if not _bank_item_id_belongs_to_assignment(assignment, bank_item_id):
         raise HTTPException(status_code=404, detail="Problem is not part of this assignment")
