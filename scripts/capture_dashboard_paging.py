@@ -64,10 +64,13 @@ FIXED_TARGETS = [
     ("audit-logs", "/audit-logs?hours="),  # server-paged, all-time
     ("llm-calls", "/llm-calls?hours=720"),  # server-paged, 30d
     ("schools", "/schools"),  # client-paged, DataTable-owned
-    ("quality", "/quality"),  # server-paged
     ("extraction-quality", "/extraction-quality"),  # server-paged
-    ("generation-quality", "/generation-quality"),  # server-paged
     ("grading-quality", "/grading-quality"),  # unpaged breakdown card
+    # /quality and /generation-quality are deliberately absent. They 500 on
+    # a database behind head (`question_edits.field` arrived in a migration),
+    # and a shot of an error page is worse than no shot: it looks like
+    # evidence, and before/after are then identical because both failed.
+    # Add them back once the local DB is migrated.
 ]
 
 
