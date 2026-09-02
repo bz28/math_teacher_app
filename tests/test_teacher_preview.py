@@ -23,6 +23,7 @@ shows they're both closed.
 """
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -581,11 +582,21 @@ async def test_a_rehearsal_stays_out_of_every_teacher_facing_number(
 
     # Stand in for the grading pipeline (needs an LLM). A breakdown is
     # what item analysis counts; final_score is what publishing needs.
+    # ai_breakdown and graded_at matter: the admin quality queries gate
+    # on them, so without them the rehearsal never reaches those queries
+    # and an assertion about the preview filter would pass for the wrong
+    # reason. (It did, until a mutation test caught it.)
     async with get_session_factory()() as s:
         s.add(SubmissionGrade(
             submission_id=submission_id,
             final_score=92.0,
+            graded_at=datetime.now(UTC),
             breakdown=[{"problem_id": "x", "score_status": "zero", "percent": 0}],
+            ai_breakdown={
+                "grades": [
+                    {"problem_id": "x", "score_status": "zero", "percent": 0},
+                ],
+            },
         ))
         await s.commit()
 
@@ -614,3 +625,24 @@ async def test_a_rehearsal_stays_out_of_every_teacher_facing_number(
     assert r.status_code == 200, r.text
     assert r.json()["has_student"] is False
     assert r.json()["has_published_grade"] is False
+
+    # Admin AI-grading quality. A teacher rehearsing on work she wrote
+    # herself is not evidence about how well the grader performs, and
+    # both queries behind this page have to agree about that or it
+    # reports override stats over one population beside a coverage tile
+    # counting another. Review found this untested twice.
+    async with get_session_factory()() as s:
+        admin = User(
+            email=f"admin_{uuid.uuid4().hex[:8]}@veradic.ai",
+            password_hash=hash_password("x"), grade_level=99,
+            role="admin", name="Admin",
+        )
+        s.add(admin)
+        await s.commit()
+        admin_headers = auth_headers(create_access_token(str(admin.id), "admin"))
+
+    r = await client.get("/v1/admin/grading-quality?days=30", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    summary = r.json()["summary"]
+    assert summary["ai_graded_submissions"] == 0, summary
+    assert summary["reviewed_ai_grades"] == 0, summary

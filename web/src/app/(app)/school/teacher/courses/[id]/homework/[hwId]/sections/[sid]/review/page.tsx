@@ -445,10 +445,10 @@ function HomeworkSectionReview({
             submission: submissionByStudent.get(st.id) ?? null,
           }))
           .sort((a, b) => a.student_name.localeCompare(b.student_name));
-        // Appended last, though TriageRoster re-buckets everything by
-        // status when it renders, so an ungraded or flagged rehearsal
-        // can still surface above her students. The badge is what
-        // distinguishes it, not its position.
+        // Appended last, and TriageRoster keeps it there: it is pulled
+        // out of the status buckets and rendered under its own "Your
+        // test run" header after them, so it can never sort above her
+        // students.
         if (previewEntry) merged.push(previewEntry);
         setRoster(merged);
         // Auto-select the first submitter that still needs release —
@@ -914,7 +914,13 @@ function HomeworkSectionReview({
     for (const e of roster ?? []) {
       const s = e.submission;
       if (!s || s.final_score === null) continue;
-      graded += 1;
+      // Class-side on purpose: gradedTotal's only consumer is the
+      // pill choosing between "No grades to publish" and a green "All
+      // grades published". Those are claims ABOUT THE CLASS, not
+      // labels on a click, so her rehearsal must not be what flips a
+      // section to "all published" when none of her students' work
+      // has been.
+      if (!s.is_preview) graded += 1;
       const isPending = s.grade_published_at === null;
       const isDirty = !isPending && s.grade_dirty;
       if (isPending) pending += 1;
@@ -1375,7 +1381,10 @@ function HomeworkSectionReview({
 
       {roster === null && !error && <ReviewLoadingSkeleton />}
 
-      {roster !== null && roster.length === 0 && (
+      {/* Class-side: her rehearsal being the only row must not suppress
+          the onboarding card. This is exactly the state it exists for —
+          she previews before anyone has joined. */}
+      {classRoster !== null && classRoster.length === 0 && (
         <div className="mt-6 rounded-[--radius-xl] border border-border-light bg-[color:var(--color-surface-alt-2)] p-10 text-center">
           <p className="text-sm font-bold text-text-primary">
             No students in this section yet
