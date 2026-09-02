@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   schoolStudent,
+  ApiError,
   EntitlementError,
   type StudentHomeworkDetail,
   type StudentProblemFeedback,
@@ -53,6 +54,9 @@ export default function HomeworkPage() {
   const [hw, setHw] = useState<StudentHomeworkDetail | null>(null);
   const [submission, setSubmission] = useState<StudentSubmission | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Preview only: this homework wasn't sent to the period she's
+  // currently sitting in. Not an error — a finding.
+  const [notAssignedHere, setNotAssignedHere] = useState(false);
   const [mode, setMode] = useState<Mode>({ kind: "homework" });
   // True only for the render right after the student submits in this
   // session — drives the celebratory entrance animation on the
@@ -163,7 +167,21 @@ export default function HomeworkPage() {
           }
         }
       }
-    } catch {
+    } catch (e) {
+      // A preview whose seat is in a period this homework was never
+      // sent to gets the same 403 a student in that period would. That
+      // is the answer she came for — "did I assign this to the right
+      // class?" — so say it, rather than dressing a correct result up
+      // as a failure.
+      if (
+        isPreview &&
+        e instanceof ApiError &&
+        e.status === 403 &&
+        e.body.detail === "Not enrolled in this assignment"
+      ) {
+        setNotAssignedHere(true);
+        return;
+      }
       setError("We couldn't load this homework right now.");
     }
   }
@@ -177,6 +195,10 @@ export default function HomeworkPage() {
     // change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
+
+  if (notAssignedHere) {
+    return <NotAssignedToThisPeriod courseId={courseId} />;
+  }
 
   if (error) {
     return (
@@ -502,6 +524,39 @@ export default function HomeworkPage() {
         />
         </>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Shown when a previewing teacher's seat is in a period this homework
+ * was never assigned to.
+ *
+ * The API refuses it exactly as it refuses a student in that period,
+ * which is the correct answer to "did this go to the right class?" —
+ * so this is a finding, not a failure, and it should read like one. The
+ * generic error state would tell her something went wrong when in fact
+ * something went right.
+ */
+function NotAssignedToThisPeriod({ courseId }: { courseId: string }) {
+  return (
+    <div className="mx-auto max-w-3xl">
+      <Link
+        href={`/school/student/courses/${courseId}`}
+        className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary"
+      >
+        ← Back to homework list
+      </Link>
+      <div className="mt-6 rounded-[--radius-lg] border border-border bg-surface p-8 text-center shadow-[0_1px_2px_rgba(20,19,15,0.04)]">
+        <h2 className="font-serif text-[26px] leading-tight text-text-primary">
+          Not assigned to this period
+        </h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-text-secondary">
+          Students in the period you&rsquo;re previewing don&rsquo;t see this
+          homework — it won&rsquo;t appear in their list at all. Switch
+          periods at the top to check another one.
+        </p>
+      </div>
     </div>
   );
 }

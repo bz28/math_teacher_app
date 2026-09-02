@@ -647,14 +647,25 @@ async def _is_teacher_preview_of_course(
     """True when `user` is a teacher's preview shadow and that teacher
     teaches `course_id`.
 
-    A shadow is the teacher looking at their own material, so two
-    student-side gates don't apply to it. Publish state: checking the
-    homework *before* it goes out is the entire point of the Preview
-    button, which sits next to Publish precisely so it can be used
-    first. Section targeting: we invent the shadow's enrollment, so a
-    homework pushed to only some sections would 403 on a roster fact
-    we made up. Both are waived — but only inside courses the owning
-    teacher actually teaches, so a shadow can't reach anything else.
+    A shadow is the teacher looking at her own material, so the publish
+    gate doesn't apply to it: checking the homework *before* it goes out
+    is the entire point of the Preview button, which sits next to
+    Publish precisely so it can be used first.
+
+    Section targeting is NOT waived, and the difference matters. It was,
+    briefly — the shadow's seat used to be one we picked for it, so a
+    homework pushed to only some sections 403'd on a roster fact we had
+    invented. Now the teacher chooses the seat, and waiving targeting
+    would make that choice a lie: she moves to Period 2 to check a
+    Period-4-only homework is invisible there, and it stays on screen.
+    A wrong answer to the question the seat switcher exists to ask.
+
+    So targeting is enforced for a published homework exactly as it is
+    for a student. A draft has no section rows to check against, which
+    is the one case where there is genuinely nothing to enforce.
+
+    Either way this only applies inside courses the owning teacher
+    actually teaches, so a shadow can't reach anything else.
     """
     if not user.is_preview or user.preview_owner_id is None:
         return False
@@ -698,14 +709,23 @@ async def _load_assignment_for_student(
             status_code=404,
             detail=f"Not a {expected_type} assignment",
         )
-    if await _is_teacher_preview_of_course(db, user, assignment.course_id):
-        return assignment
+    is_preview_of_course = await _is_teacher_preview_of_course(
+        db, user, assignment.course_id,
+    )
 
     if assignment.status != "published":
-        raise HTTPException(status_code=403, detail="Assignment is not published")
+        if not is_preview_of_course:
+            raise HTTPException(
+                status_code=403, detail="Assignment is not published",
+            )
+        # A draft has no section rows to check enrollment against, so
+        # there is nothing left to gate on.
+        return assignment
 
     # The student must be enrolled in at least one section this
-    # assignment was assigned to. We check via a join — single round trip.
+    # assignment was assigned to — a preview shadow included, so that
+    # moving its seat actually changes what it can see. We check via a
+    # join — single round trip.
     enrolled = (await db.execute(
         select(SectionEnrollment.id)
         .join(AssignmentSection, AssignmentSection.section_id == SectionEnrollment.section_id)
@@ -887,8 +907,25 @@ async def move_preview_seat(
         db.add(SectionEnrollment(
             student_id=user.id, section_id=body.section_id, course_id=course_id,
         ))
-    else:
-        row.section_id = body.section_id
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Two switches racing (two tabs, or a double-click) both saw
+            # no seat and both inserted. One wins; the loser's row is
+            # the same course, so re-read and move it instead of 500ing.
+            # Same shape as submit_homework's insert race below.
+            await db.rollback()
+            existing = (await db.execute(
+                select(SectionEnrollment).where(
+                    SectionEnrollment.student_id == user.id,
+                    SectionEnrollment.course_id == course_id,
+                )
+            )).scalar_one()
+            existing.section_id = body.section_id
+            await db.commit()
+        return {"status": "ok"}
+
+    row.section_id = body.section_id
     await db.commit()
     return {"status": "ok"}
 

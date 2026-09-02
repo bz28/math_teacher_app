@@ -15,14 +15,15 @@ import uuid
 from typing import Any
 
 from httpx import AsyncClient
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
+from api.models.assignment import Submission
 from api.models.question_bank import QuestionBankItem
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
-from tests.conftest import auth_headers
+from tests.conftest import TINY_PNG, auth_headers
 
 
 async def _wipe() -> None:
@@ -186,25 +187,83 @@ async def test_switching_seats_changes_what_the_preview_can_see(
     assert [str(sid) for sid in seats] == [world["section_ids"][0]]
 
 
-async def test_switching_back_restores_the_view(client: AsyncClient) -> None:
-    """Round-trip, because a switcher you can't switch back with is a
-    trap rather than a tool."""
+async def test_the_homework_page_itself_follows_the_seat(
+    client: AsyncClient,
+) -> None:
+    """The answer has to be the same on the homework page as in the list.
+
+    Switching seats reloads without changing the URL, so a teacher
+    checking "is this hidden from Period 2?" is usually standing on the
+    homework page when she switches. If the detail endpoint kept
+    returning 200 there she'd read that as "Period 2 can see it" — a
+    confident wrong answer to the exact question the switcher exists to
+    ask. (It did, until the preview waiver stopped covering section
+    targeting.)"""
     await _wipe()
     headers = await _teacher()
     world = await _course_with_homework(client, headers, target="second")
     preview = await _preview(client, headers, world["assignment_id"])
 
-    for section_id in (world["section_ids"][0], world["section_ids"][1]):
-        r = await client.post(
-            f"/v1/school/student/preview/courses/{world['course_id']}/seat",
-            headers=preview, json={"section_id": section_id},
-        )
-        assert r.status_code == 200, r.text
-
+    # Seated in Period 4, which the homework was sent to.
     r = await client.get(
         f"/v1/school/student/homework/{world['assignment_id']}", headers=preview,
     )
     assert r.status_code == 200, r.text
+
+    await client.post(
+        f"/v1/school/student/preview/courses/{world['course_id']}/seat",
+        headers=preview, json={"section_id": world["section_ids"][0]},
+    )
+
+    # Period 2 was excluded — the page must say so, not show the work.
+    r = await client.get(
+        f"/v1/school/student/homework/{world['assignment_id']}", headers=preview,
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"] == "Not enrolled in this assignment"
+
+    # And she can't rehearse a turn-in from a period that never got it.
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=preview, json={"files": [TINY_PNG]},
+    )
+    assert r.status_code == 403
+
+    # Switching back restores it — a switcher you can't switch back
+    # with is a trap rather than a tool.
+    await client.post(
+        f"/v1/school/student/preview/courses/{world['course_id']}/seat",
+        headers=preview, json={"section_id": world["section_ids"][1]},
+    )
+    r = await client.get(
+        f"/v1/school/student/homework/{world['assignment_id']}", headers=preview,
+    )
+    assert r.status_code == 200, r.text
+
+
+async def test_a_draft_stays_visible_from_any_seat(client: AsyncClient) -> None:
+    """The narrowed waiver must not re-break the original bug. A draft
+    has no section rows to check against, so it previews from whichever
+    seat she happens to hold."""
+    await _wipe()
+    headers = await _teacher()
+    world = await _course_with_homework(client, headers, target="second")
+    await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/unpublish",
+        headers=headers,
+    )
+    preview = await _preview(client, headers, world["assignment_id"])
+
+    for section_id in world["section_ids"]:
+        await client.post(
+            f"/v1/school/student/preview/courses/{world['course_id']}/seat",
+            headers=preview, json={"section_id": section_id},
+        )
+        r = await client.get(
+            f"/v1/school/student/homework/{world['assignment_id']}",
+            headers=preview,
+        )
+        assert r.status_code == 200, r.text
 
 
 async def test_a_section_from_another_course_is_refused(
@@ -291,3 +350,83 @@ async def test_another_teachers_shadow_cannot_seat_itself_here(
         headers=intruder, json={"section_id": world["section_ids"][0]},
     )
     assert r.status_code == 403
+
+
+async def test_a_shadow_with_no_seat_yet_gets_one(client: AsyncClient) -> None:
+    """The insert branch. A shadow normally has a seat by the time it
+    can switch, but a deleted section cascades its enrollment away —
+    switching then has to create one rather than fail."""
+    await _wipe()
+    headers = await _teacher()
+    world = await _course_with_homework(client, headers, target="both")
+    preview = await _preview(client, headers, world["assignment_id"])
+
+    async with get_session_factory()() as s:
+        shadow = (await s.execute(
+            select(User).where(User.is_preview.is_(True))
+        )).scalar_one()
+        await s.execute(delete(SectionEnrollment).where(
+            SectionEnrollment.student_id == shadow.id,
+        ))
+        await s.commit()
+
+    r = await client.get(
+        f"/v1/school/student/preview/courses/{world['course_id']}/seats",
+        headers=preview,
+    )
+    assert r.status_code == 200
+    assert not any(seat["current"] for seat in r.json()["seats"])
+
+    r = await client.post(
+        f"/v1/school/student/preview/courses/{world['course_id']}/seat",
+        headers=preview, json={"section_id": world["section_ids"][0]},
+    )
+    assert r.status_code == 200, r.text
+
+    async with get_session_factory()() as s:
+        seats = (await s.execute(
+            select(SectionEnrollment.section_id).where(
+                SectionEnrollment.student_id == shadow.id,
+            )
+        )).scalars().all()
+    assert [str(sid) for sid in seats] == [world["section_ids"][0]]
+
+
+async def test_work_made_in_one_seat_survives_a_switch(
+    client: AsyncClient,
+) -> None:
+    """A rehearsal keeps the section it was made in. That's deliberate —
+    the row records where the work happened — and it must not be
+    rewritten or orphaned when she moves on to check another period."""
+    await _wipe()
+    headers = await _teacher()
+    world = await _course_with_homework(client, headers, target="both")
+    preview = await _preview(client, headers, world["assignment_id"])
+
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=preview, json={"files": [TINY_PNG]},
+    )
+    assert r.status_code == 200, r.text
+    submission_id = uuid.UUID(r.json()["submission_id"])
+
+    async with get_session_factory()() as s:
+        made_in = (await s.execute(
+            select(Submission.section_id).where(Submission.id == submission_id)
+        )).scalar_one()
+
+    await client.post(
+        f"/v1/school/student/preview/courses/{world['course_id']}/seat",
+        headers=preview,
+        json={
+            "section_id": next(
+                sid for sid in world["section_ids"] if sid != str(made_in)
+            ),
+        },
+    )
+
+    async with get_session_factory()() as s:
+        still = (await s.execute(
+            select(Submission.section_id).where(Submission.id == submission_id)
+        )).scalar_one()
+    assert still == made_in
