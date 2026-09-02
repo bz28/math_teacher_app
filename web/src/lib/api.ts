@@ -217,12 +217,19 @@ export interface ApiErrorBody {
 }
 
 export class ApiError extends Error {
-  constructor(
-    public status: number,
-    public body: ApiErrorBody,
-  ) {
+  // Written as fields + assignment rather than constructor parameter
+  // properties: those are the one TypeScript feature Node's
+  // type-stripping can't execute, and they made this whole module
+  // unimportable from a `node --test` file. EntitlementError below
+  // already does it this way.
+  public status: number;
+  public body: ApiErrorBody;
+
+  constructor(status: number, body: ApiErrorBody) {
     super(body.detail ?? `API error ${status}`);
     this.name = "ApiError";
+    this.status = status;
+    this.body = body;
   }
 }
 
@@ -239,10 +246,9 @@ export class ApiError extends Error {
  * than the literal browser error.
  */
 export class NetworkError extends Error {
-  constructor(
-    public cause: "fetch_failed" | "timeout",
-    message?: string,
-  ) {
+  public cause: "fetch_failed" | "timeout";
+
+  constructor(cause: "fetch_failed" | "timeout", message?: string) {
     super(
       message ??
         (cause === "timeout"
@@ -250,6 +256,7 @@ export class NetworkError extends Error {
           : "Can't reach our servers right now. Please try again in a moment."),
     );
     this.name = "NetworkError";
+    this.cause = cause;
   }
 }
 
@@ -309,9 +316,27 @@ function getRefreshToken(): string | null {
   return localStorage.getItem(REFRESH_KEY);
 }
 
+/** Write the tokens for the CURRENT session. Says nothing about whose
+ *  session it is — a silent refresh mid-preview goes through here too,
+ *  so it must not touch the preview stash. To begin a new session, use
+ *  {@link startSession}. */
 export function saveTokens(tokens: TokenPair) {
   localStorage.setItem(TOKEN_KEY, tokens.access_token);
   localStorage.setItem(REFRESH_KEY, tokens.refresh_token);
+}
+
+/** Begin a session for a newly authenticated person: any preview the
+ *  last one left behind is over.
+ *
+ *  This exists so the decision can't be forgotten. Clearing the stash
+ *  used to live inside saveTokens, which was wrong (refreshes go
+ *  through it); moving it to the call sites made it a rule three of
+ *  them had to remember, and the next sign-in path added — SSO, magic
+ *  link, admin impersonation — would silently reintroduce the bug.
+ *  Sign-in paths call this; nothing else should. */
+export function startSession(tokens: TokenPair) {
+  clearPreviewStash();
+  saveTokens(tokens);
 }
 
 export function clearTokens() {
@@ -339,6 +364,10 @@ export function clearPreviewStash() {
 
 /** Stash teacher tokens and swap to the preview student tokens. */
 export function enterPreviewMode(studentTokens: TokenPair) {
+  // Drop anything stale first. Otherwise a leftover stash could survive
+  // a preview entered with no current tokens, and "Back to teacher
+  // view" would install someone else's session.
+  clearPreviewStash();
   const teacherAccess = getAccessToken();
   const teacherRefresh = getRefreshToken();
   if (teacherAccess) localStorage.setItem(TEACHER_TOKEN_KEY, teacherAccess);
@@ -351,8 +380,8 @@ export function exitPreviewMode(): boolean {
   const teacherAccess = localStorage.getItem(TEACHER_TOKEN_KEY);
   const teacherRefresh = localStorage.getItem(TEACHER_REFRESH_KEY);
   if (!teacherAccess || !teacherRefresh) return false;
-  // Restore directly rather than via saveTokens — the stash is cleared
-  // here either way, and going through saveTokens would only re-clear it.
+  // Restore directly rather than via startSession: this is the same
+  // person resuming their own session, not a new one signing in.
   localStorage.setItem(TOKEN_KEY, teacherAccess);
   localStorage.setItem(REFRESH_KEY, teacherRefresh);
   clearPreviewStash();
