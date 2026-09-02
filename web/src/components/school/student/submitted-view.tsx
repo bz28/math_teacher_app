@@ -9,7 +9,7 @@ import {
   FileTextIcon,
   XIcon,
 } from "@/components/ui/icons";
-import { usePdfBlobUrl } from "@/hooks/use-pdf-blob-url";
+import { useBlobUrl } from "@/hooks/use-blob-url";
 import { Modal } from "@/components/ui/modal";
 
 interface Props {
@@ -214,7 +214,7 @@ function ZoomModal({
   const label = file.filename ?? "Submitted page";
   // blob: URL for the PDF — a data: link is inert in Chrome/Firefox and
   // that link is the only fallback when <embed> can't render inline.
-  const pdfUrl = usePdfBlobUrl(isPdf ? file.data : null) ?? dataUrl;
+  const pdfUrl = useBlobUrl(isPdf ? file.data : null, "application/pdf") ?? dataUrl;
   return (
     <Modal
       open

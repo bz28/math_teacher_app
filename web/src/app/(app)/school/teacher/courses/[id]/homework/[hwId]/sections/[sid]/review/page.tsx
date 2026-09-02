@@ -16,6 +16,7 @@ import {
 } from "@/components/school/teacher/_pieces/submissions-panel";
 import { Skeleton } from "@/components/ui";
 import { PdfView } from "@/components/ui/pdf-view";
+import { WorkGalleryModal } from "@/components/school/teacher/_pieces/work-gallery";
 import {
   teacher,
   type AiGradeEntry,
@@ -3036,7 +3037,10 @@ function SubmissionDetailPanel({
               unpins. */}
           {detail.files && detail.files.length > 0 && (
             <span className="xl:hidden">
-              <StudentWorkThumbButton files={detail.files} />
+              <StudentWorkThumbButton
+                files={detail.files}
+                studentName={detail.student_name}
+              />
             </span>
           )}
           {/* Review state + explicit approval. Approval is a deliberate
@@ -3240,7 +3244,10 @@ function SubmissionDetailPanel({
             </div>
             {detail.files && detail.files.length > 0 && (
               <div className="shrink-0">
-                <StudentWorkThumbButton files={detail.files} />
+                <StudentWorkThumbButton
+                files={detail.files}
+                studentName={detail.student_name}
+              />
               </div>
             )}
           </div>
@@ -5270,62 +5277,6 @@ function TranscriptTurn({
   );
 }
 
-// Shared "Full" zoom — every submitted page stacked vertically in a
-// modal. Used by both the header-strip thumbnail (narrow layout) and the
-// pinned work rail's "⤢ Full" toggle (wide layout), so the zoom view is
-// identical wherever the teacher opens it from.
-function WorkLightbox({
-  files,
-  open,
-  onClose,
-}: {
-  files: SubmissionFile[];
-  open: boolean;
-  onClose: () => void;
-}) {
-  return (
-    <Modal open={open} onClose={onClose} className="max-w-4xl bg-surface p-3" label="Student's work">
-      <div className="flex items-center justify-between pb-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-          Student&apos;s work
-          {files.length > 1 ? ` · ${files.length} pages` : ""}
-        </p>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-[--radius-md] px-2 py-1 text-xs font-semibold text-text-muted hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary"
-          aria-label="Close"
-        >
-          Close ✕
-        </button>
-      </div>
-      <div className="mx-auto flex max-h-[80vh] flex-col gap-3 overflow-y-auto">
-        {files.map((f, i) => {
-          const src = `data:${f.media_type};base64,${f.data}`;
-          if (f.media_type === "application/pdf") {
-            return (
-              <PdfView
-                key={i}
-                data={f.data}
-                className="h-[70vh] w-full rounded-[--radius-md] border border-border-light bg-white"
-              />
-            );
-          }
-          return (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={i}
-              src={src}
-              alt={`Student handwritten submission, page ${i + 1}`}
-              className="rounded-[--radius-md] border border-border-light object-contain"
-            />
-          );
-        })}
-      </div>
-    </Modal>
-  );
-}
-
 /**
  * Student's submitted pages (images + PDFs): compact thumbnail +
  * page count that opens every file in a modal. The work is a
@@ -5335,8 +5286,14 @@ function WorkLightbox({
  * layout the PinnedWorkRail makes the work glanceable and this strip
  * affordance hides; below ~1100px the rail unpins and this takes over.
  */
-function StudentWorkThumbButton({ files }: { files: SubmissionFile[] }) {
-  const [open, setOpen] = useState(false);
+function StudentWorkThumbButton({
+  files,
+  studentName,
+}: {
+  files: SubmissionFile[];
+  studentName: string;
+}) {
+  const [openAt, setOpenAt] = useState<number | null>(null);
   const first = files[0];
   if (!first) return null;
   const firstSrc = `data:${first.media_type};base64,${first.data}`;
@@ -5345,7 +5302,7 @@ function StudentWorkThumbButton({ files }: { files: SubmissionFile[] }) {
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => setOpenAt(0)}
         className="group inline-flex items-center gap-1.5 rounded-[--radius-md] border border-border-light bg-surface px-2 py-1 text-xs font-semibold text-text-secondary transition-all hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
         aria-label="View student's handwritten work full size"
       >
@@ -5363,7 +5320,12 @@ function StudentWorkThumbButton({ files }: { files: SubmissionFile[] }) {
           View work{files.length > 1 ? ` · ${files.length} pages` : ""} ↗
         </span>
       </button>
-      <WorkLightbox files={files} open={open} onClose={() => setOpen(false)} />
+      <WorkGalleryModal
+        files={files}
+        studentName={studentName}
+        openAt={openAt}
+        onClose={() => setOpenAt(null)}
+      />
     </>
   );
 }
@@ -5389,7 +5351,7 @@ function PinnedWorkRail({
   pinned: boolean;
   onTogglePinned: () => void;
 }) {
-  const [full, setFull] = useState(false);
+  const [openAt, setOpenAt] = useState<number | null>(null);
   const firstName = studentName ? studentName.split(" ")[0] : null;
   const hasFiles = !!files && files.length > 0;
   return (
@@ -5415,7 +5377,7 @@ function PinnedWorkRail({
             </button>
             <button
               type="button"
-              onClick={() => setFull(true)}
+              onClick={() => setOpenAt(0)}
               className="rounded-[--radius-sm] border border-border-light bg-surface px-2 py-1 text-[11px] font-semibold text-text-muted transition-colors hover:border-primary/40 hover:text-primary"
             >
               ⤢ Full
@@ -5445,7 +5407,7 @@ function PinnedWorkRail({
                 <button
                   key={i}
                   type="button"
-                  onClick={() => setFull(true)}
+                  onClick={() => setOpenAt(i)}
                   className="block w-full overflow-hidden rounded-[--radius-sm] border border-border-light"
                   aria-label={`Open page ${i + 1} full size`}
                 >
@@ -5469,7 +5431,12 @@ function PinnedWorkRail({
           Photo collapsed — click to pin it back
         </button>
       )}
-      <WorkLightbox files={files ?? []} open={full} onClose={() => setFull(false)} />
+      <WorkGalleryModal
+        files={files ?? []}
+        studentName={studentName ?? "Student"}
+        openAt={openAt}
+        onClose={() => setOpenAt(null)}
+      />
     </div>
   );
 }

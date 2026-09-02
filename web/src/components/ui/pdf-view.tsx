@@ -1,6 +1,6 @@
 "use client";
 
-import { usePdfBlobUrl } from "@/hooks/use-pdf-blob-url";
+import { useBlobUrl } from "@/hooks/use-blob-url";
 
 interface PdfViewProps {
   /** Raw base64 PDF bytes (no `data:` prefix). */
@@ -24,7 +24,7 @@ interface PdfViewProps {
  */
 export function PdfView({ data, className }: PdfViewProps) {
   const dataUrl = `data:application/pdf;base64,${data}`;
-  const url = usePdfBlobUrl(data) ?? dataUrl;
+  const url = useBlobUrl(data, "application/pdf") ?? dataUrl;
   return (
     <div className="w-full">
       <embed src={url} type="application/pdf" className={className} />
