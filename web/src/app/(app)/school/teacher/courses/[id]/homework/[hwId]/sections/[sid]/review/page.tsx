@@ -394,50 +394,59 @@ function HomeworkSectionReview({
         // The teacher's own rehearsal, if she left one in this section.
         // Held aside rather than skipped: it belongs on the roster so
         // she can open it and see what grading her students' work will
-        // look like, but it must stay out of every count — those
-        // describe a class, and she is not in her own class.
+        // look like. It stays out of the counts that describe a CLASS —
+        // she is not in her own class — but not out of the counts that
+        // label a BUTTON. See the two-populations note further down.
         let previewEntry: RosterEntry | null = null;
         for (const r of subs.submissions) {
-          if (r.is_preview) {
-            if (r.section_id === sectionId) {
+          if (r.section_id === sectionId) {
+            if (r.is_preview) {
               previewEntry = {
                 student_id: r.student_id,
                 student_name: r.student_name || r.student_email,
                 student_email: r.student_email,
                 submission: r,
               };
-            } else if (r.final_score !== null) {
-              // A rehearsal she left in a SIBLING section. Publishing is
-              // homework-wide, so the button releases it from here too —
-              // dropping it made "Publish N grades" undercount by one
-              // depending on which section page you happened to open.
-              // Action counts only; it stays out of the other-section
-              // graded/flagged tallies, which describe her class.
-              if (r.grade_published_at === null) otherPending += 1;
-              else if (r.grade_dirty) otherDirty += 1;
+            } else {
+              submissionByStudent.set(r.student_id, r);
             }
             continue;
           }
-          if (r.section_id === sectionId) {
-            submissionByStudent.set(r.student_id, r);
-          } else if (r.final_score !== null) {
-            otherGraded += 1;
-            // Mirror the in-section flagged-to-publish rule (see below):
-            // only flag_for_review, only while unresolved, only when the
-            // grade is actually about to go out (pending or dirty).
-            const ov = r.integrity_overview;
-            const isFlaggedUnresolved =
-              ov?.disposition === "flag_for_review" &&
-              ov.resolution === "unresolved";
-            if (r.grade_published_at === null) {
-              otherPending += 1;
-              if (r.reviewed_at) otherPendingReviewed += 1;
-              if (isFlaggedUnresolved) otherFlagged += 1;
-            } else if (r.grade_dirty) {
-              otherDirty += 1;
-              if (r.reviewed_at) otherDirtyReviewed += 1;
-              if (isFlaggedUnresolved) otherFlagged += 1;
-            }
+          // Another section's row — a classmate's, or her own rehearsal
+          // left in a sibling section. Both are counted here, and the
+          // ONLY difference between them is the class tally below. That
+          // is deliberate: this used to be two branches, and each time a
+          // counter was added to one and not the other the totals
+          // disagreed depending on which section page you opened.
+          if (r.final_score === null) continue;
+          // Class tally. gradedTotal's only consumer is the pill
+          // choosing between "No grades to publish" and "All grades
+          // published" — a claim about the class, so her rehearsal must
+          // not be what flips a section to "all published" when none of
+          // her students' work has been.
+          if (!r.is_preview) otherGraded += 1;
+          // Everything below is an ACTION count. Publishing is
+          // homework-wide, so the button releases her rehearsal from
+          // here too, and every label and warning on that click has to
+          // say so — including the reviewed/unopened split and the
+          // flagged soft-confirm. This mirrors the in-section loop,
+          // which guards only its `graded` tally the same way.
+          //
+          // Flagged rule (same as in-section): only flag_for_review,
+          // only while unresolved, only when the grade is actually
+          // about to go out.
+          const ov = r.integrity_overview;
+          const isFlaggedUnresolved =
+            ov?.disposition === "flag_for_review" &&
+            ov.resolution === "unresolved";
+          if (r.grade_published_at === null) {
+            otherPending += 1;
+            if (r.reviewed_at) otherPendingReviewed += 1;
+            if (isFlaggedUnresolved) otherFlagged += 1;
+          } else if (r.grade_dirty) {
+            otherDirty += 1;
+            if (r.reviewed_at) otherDirtyReviewed += 1;
+            if (isFlaggedUnresolved) otherFlagged += 1;
           }
         }
         setPendingOtherSections(otherPending);
