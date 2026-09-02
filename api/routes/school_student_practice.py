@@ -1249,11 +1249,19 @@ async def get_dashboard(
     }
 
     # Published grades keyed by submission_id for the dedupe below.
+    #
+    # Gated on published_final_score, matching the recently_graded query
+    # below. The two must agree on what "published" means: this one drops
+    # the assignment from the active buckets on the promise that the other
+    # will surface it under Recently graded. When they disagreed — this
+    # one reading the live column, that one the snapshot — a row with a
+    # score but no snapshot satisfied only the first, and the homework
+    # fell out of every bucket and off the dashboard completely.
     published_grades = (await db.execute(
         select(SubmissionGrade).where(
             SubmissionGrade.submission_id.in_(submission_by_aid.values()),
             SubmissionGrade.grade_published_at.is_not(None),
-            SubmissionGrade.final_score.is_not(None),
+            SubmissionGrade.published_final_score.is_not(None),
         )
     )).scalars().all() if submission_by_aid else []
     published_by_sid: dict[uuid.UUID, SubmissionGrade] = {
@@ -1350,7 +1358,7 @@ async def get_dashboard(
             Assignment.status == "published",
             Assignment.type == "homework",
             SubmissionGrade.grade_published_at.is_not(None),
-            SubmissionGrade.final_score.is_not(None),
+            SubmissionGrade.published_final_score.is_not(None),
         )
         .order_by(SubmissionGrade.grade_published_at.desc())
         .limit(10)
@@ -1367,7 +1375,16 @@ async def get_dashboard(
             course_id=str(grade_meta["course_id"]),
             course_name=grade_meta["course_name"],
             section_name=grade_meta["section_name"],
-            final_score=round(grade.final_score, 1),
+            # The PUBLISHED snapshot, not the live column. Those two
+            # diverge the moment a teacher reopens an already-released
+            # grade: final_score follows her edits immediately, while
+            # published_final_score holds what she last released.
+            # Reading the live one moved the number under the student
+            # mid-edit, without her republishing, and left this surface
+            # disagreeing with the homework page, which reads the
+            # snapshot. The grade was already out, so nothing
+            # unpublished ever leaked — the revision to it did.
+            final_score=round(grade.published_final_score, 1),
             published_at=grade.grade_published_at,
         ))
 
@@ -1422,7 +1439,7 @@ async def get_all_grades(
             Assignment.status == "published",
             Assignment.type == "homework",
             SubmissionGrade.grade_published_at.is_not(None),
-            SubmissionGrade.final_score.is_not(None),
+            SubmissionGrade.published_final_score.is_not(None),
         )
         .order_by(SubmissionGrade.grade_published_at.desc())
     )).all()
@@ -1437,7 +1454,16 @@ async def get_all_grades(
             course_id=str(grade_meta["course_id"]),
             course_name=grade_meta["course_name"],
             section_name=grade_meta["section_name"],
-            final_score=round(grade.final_score, 1),
+            # The PUBLISHED snapshot, not the live column. Those two
+            # diverge the moment a teacher reopens an already-released
+            # grade: final_score follows her edits immediately, while
+            # published_final_score holds what she last released.
+            # Reading the live one moved the number under the student
+            # mid-edit, without her republishing, and left this surface
+            # disagreeing with the homework page, which reads the
+            # snapshot. The grade was already out, so nothing
+            # unpublished ever leaked — the revision to it did.
+            final_score=round(grade.published_final_score, 1),
             published_at=grade.grade_published_at,
         ))
 
@@ -1530,6 +1556,18 @@ async def homework_detail(
             .where(
                 SubmissionGrade.submission_id == sub.id,
                 SubmissionGrade.grade_published_at.is_not(None),
+                # The snapshot, not just the stamp. A row can carry
+                # grade_published_at with no snapshot — released before
+                # as1000036 added the columns, or released and since
+                # edited, which cm1000082 deliberately leaves alone.
+                # Gating on the stamp alone returned grade_published_at
+                # with a null score, and AssignmentTimeline keys its
+                # stage off that field without looking at the score: the
+                # page read "Graded" with no number on it, while the
+                # dashboard said the work was still awaiting a grade.
+                # This is the fourth surface answering "is it
+                # published?" and it has to answer it the same way.
+                SubmissionGrade.published_final_score.is_not(None),
             )
             .limit(1)
         )).first()

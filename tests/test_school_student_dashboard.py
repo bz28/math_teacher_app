@@ -94,6 +94,15 @@ async def _publish_grade(submission_id: uuid.UUID, final_score: float) -> None:
         grade = SubmissionGrade(
             submission_id=submission_id,
             final_score=final_score,
+            # Publishing stamps the snapshot and the timestamp together
+            # (publish_grades sets published_* alongside
+            # grade_published_at), so a fixture setting only the
+            # timestamp doesn't model a real publish — and the student
+            # surfaces read the snapshot. The database does hold rows
+            # of that shape, from before as1000036 added the columns;
+            # cm1000082 repairs those. They just aren't what a publish
+            # looks like, which is what this fixture is for.
+            published_final_score=final_score,
             grade_published_at=datetime.now(UTC),
             graded_at=datetime.now(UTC),
         )
@@ -366,6 +375,7 @@ async def test_dashboard_does_not_expose_feedback_fields(
         s.add(SubmissionGrade(
             submission_id=sub_id,
             final_score=90.0,
+            published_final_score=90.0,
             grade_published_at=datetime.now(UTC),
             teacher_notes="Great work!",
             breakdown=[{"problem_id": "x", "score_status": "full", "percent": 100}],
