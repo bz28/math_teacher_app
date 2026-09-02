@@ -3,7 +3,7 @@
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { MathText } from "@/components/shared/math-text";
+import { MathText, mathPlainText } from "@/components/shared/math-text";
 import { Modal } from "@/components/ui/modal";
 import {
   ActivityDigest,
@@ -148,32 +148,6 @@ function confidenceBand(c: number): "high" | "medium" | "low" {
   return "low";
 }
 
-// Strip the `$`/`$$` delimiters an answer carries for rendering, so the
-// text reaching a screen reader or a tooltip is the value rather than its
-// source. `$\frac{3}{4}$` read aloud as "dollar backslash f r a c" is
-// worse than useless. Global rather than outer-pair-only: an answer key
-// is plausibly authored as `$x=1$ or $x=-1$`, and stripping just the ends
-// of that would leave `x=1$ or $x=-1` — mangled rather than plainer.
-// Not a LaTeX-to-speech converter, just not source.
-//
-// An escaped dollar has to survive: `\$0.50` is a literal dollar sign in
-// a word problem, not a delimiter, and a blind global strip turns it into
-// `\0.50` — which is then what gets read out. Park those on a
-// private-use sentinel first, exactly as `math-text.tsx` does for the
-// same shape, and restore them as real dollars afterwards. A regex can't
-// do this: any pattern that looks at the preceding character consumes
-// it, which both blinds it to `\\$` (an escaped backslash before a real
-// delimiter) and lets a stray `$` through on runs of three or more.
-const DOLLAR_SENTINEL = "\uE000";
-function plainAnswer(text: string): string {
-  return text
-    .replace(/\\\$/g, DOLLAR_SENTINEL)
-    .replace(/\$\$?/g, "")
-    .split(DOLLAR_SENTINEL)
-    .join("$")
-    .trim();
-}
-
 // A problem the AI is confident about — high band (>=0.85) on a present
 // AI grade. These COLLAPSE to a one-line confirm row in the triage detail
 // pane; everything else (medium / low / no AI grade) stays fully
@@ -312,6 +286,36 @@ function HomeworkSectionReview({
   // first land, but the filter chip is the fastest path from "show
   // me everyone" to "show me only the cheaters".
   const [rosterFilter, setRosterFilter] = useState<RosterFilter>("all");
+  // Which confident rows the teacher has ticked, per submission.
+  //
+  // This lives here rather than in the detail panel because the panel is
+  // remounted on every student switch, and switching students is the
+  // page's primary action — owning it there meant a teacher could leave a
+  // student to check something, come back, and find every tick gone
+  // (including a "Confirm all N" they had just clicked). Keyed by
+  // submission id, so returning to a student restores exactly their own
+  // ticks and nobody else's.
+  //
+  // Session-scoped on purpose: a reload clears it, which is honest,
+  // because nothing about it is persisted server-side. The durable trust
+  // signal is `reviewed_at`, stamped only by the explicit Approve button.
+  const [confirmedBySubmission, setConfirmedBySubmission] = useState<
+    ReadonlyMap<string, ReadonlySet<string>>
+  >(() => new Map());
+
+  const handleConfirmProblems = useCallback(
+    (submissionId: string, bankItemIds: string[]) => {
+      if (bankItemIds.length === 0) return;
+      setConfirmedBySubmission((prev) => {
+        const next = new Map(prev);
+        const merged = new Set(prev.get(submissionId) ?? []);
+        for (const id of bankItemIds) merged.add(id);
+        next.set(submissionId, merged);
+        return next;
+      });
+    },
+    [],
+  );
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   // Last-fetched detail, kept as-is across switches. Staleness for
   // the current selection is detected at render via a submission_id
@@ -1536,6 +1540,11 @@ function HomeworkSectionReview({
                 onRegradeRequest={() =>
                   setRegradeConfirmOpenFor(selectedEntry.submission!.id)
                 }
+                confirmedIds={
+                  confirmedBySubmission.get(selectedEntry.submission.id) ??
+                  EMPTY_ID_SET
+                }
+                onConfirmProblems={handleConfirmProblems}
               />
             )}
           </section>
@@ -2684,6 +2693,8 @@ function SubmissionDetailPanel({
   regrading,
   regradeError,
   onRegradeRequest,
+  confirmedIds,
+  onConfirmProblems,
 }: {
   detail: TeacherSubmissionDetail;
   integrity: TeacherIntegrityDetail | null;
@@ -2711,6 +2722,10 @@ function SubmissionDetailPanel({
   regrading: boolean;
   regradeError: string | null;
   onRegradeRequest: () => void;
+  /** Bank-item ids the teacher has ticked on THIS submission. Owned by
+   *  the page so it survives this panel being remounted on a switch. */
+  confirmedIds: ReadonlySet<string>;
+  onConfirmProblems: (submissionId: string, bankItemIds: string[]) => void;
 }) {
   const breakdownByProblem = useMemo(() => {
     const map = new Map<string, GradeBreakdownEntry>();
@@ -2740,19 +2755,24 @@ function SubmissionDetailPanel({
   // problem the AI is confident about (high band, not overridden)
   // COLLAPSES to a one-line confirm row; uncertain ones stay fully
   // expanded with the answer/key, work, receipt, and grade buttons.
-  // Nothing is auto-confirmed — `confirmedIds` is a purely local
-  // checklist the teacher fills by pressing the AI's key (or the Confirm
-  // chip). It's a grading-workflow aid (collapse/expand the confident
-  // rows), NOT the review stamp: the durable, server-side trust signal is
-  // `reviewed_at`, which is now set only by the explicit Approve button.
-  const [confirmState, setConfirmState] = useState<{ sid: string; ids: Set<string> }>(
-    () => ({ sid: detail.submission_id, ids: new Set() }),
-  );
-  const confirmedIds =
-    confirmState.sid === detail.submission_id ? confirmState.ids : EMPTY_ID_SET;
-  // Manual "open this confident row to inspect it" toggles — also keyed
-  // by submission so they reset on student switch (derivation, not an
-  // effect, matching the focus model below).
+  // Nothing is auto-confirmed — `confirmedIds` is a checklist the teacher
+  // fills by pressing the AI's key (or the Confirm chip). It's a
+  // grading-workflow aid (collapse/expand the confident rows), NOT the
+  // review stamp: the durable, server-side trust signal is `reviewed_at`,
+  // which is set only by the explicit Approve button.
+  //
+  // It lives on the PAGE, not here, because this panel is remounted on
+  // every student switch — and switching students is the page's primary
+  // action. Owning it here meant leaving a student to check something and
+  // coming back to find every tick gone, including a "Confirm all N" the
+  // teacher had just clicked. Session-scoped: a reload still clears it,
+  // which is honest, since nothing about it is persisted server-side.
+  //
+  // Expansion deliberately does NOT get the same treatment. Reopening a
+  // confident row is one click and costs nothing to redo, and coming back
+  // to a student with the rows collapsed again is arguably the right
+  // default — a fresh look. Confirmations represent work done; expansions
+  // don't.
   const [expandState, setExpandState] = useState<{ sid: string; ids: Set<string> }>(
     () => ({ sid: detail.submission_id, ids: new Set() }),
   );
@@ -2798,18 +2818,13 @@ function SubmissionDetailPanel({
       if (ids.length === 0) return;
       // Confirming is the teacher vouching for the AI's grade. The grade
       // itself is already persisted (the AI wrote breakdown + final_score),
-      // so confirming only records the local checklist — it never re-saves
-      // or mutates a grade, and it does NOT stamp the submission reviewed.
-      // Approval is now an explicit, deliberate act (the Approve button
+      // so confirming only records the checklist — it never re-saves or
+      // mutates a grade, and it does NOT stamp the submission reviewed.
+      // Approval is an explicit, deliberate act (the Approve button
       // below), never a side effect of confirming or finishing.
-      setConfirmState((s) => {
-        const base =
-          s.sid === detail.submission_id ? new Set(s.ids) : new Set<string>();
-        for (const id of ids) base.add(id);
-        return { sid: detail.submission_id, ids: base };
-      });
+      onConfirmProblems(detail.submission_id, ids);
     },
-    [detail.submission_id],
+    [detail.submission_id, onConfirmProblems],
   );
 
   // ── Explicit approval gate ────────────────────────────────────────
@@ -4155,8 +4170,8 @@ function ProblemGradeRow({
           // extractor's read as `$…$` precisely so it renders as math.
           aria-label={
             problem.student_answer
-              ? `Expand problem ${problem.position} to inspect. Student answered ${plainAnswer(problem.student_answer)}; answer key is ${problem.final_answer ? plainAnswer(problem.final_answer) : "not set"}.`
-              : `Expand problem ${problem.position} to inspect. No answer extracted. Answer key is ${problem.final_answer ? plainAnswer(problem.final_answer) : "not set"}.`
+              ? `Expand problem ${problem.position} to inspect. Student answered ${mathPlainText(problem.student_answer)}; answer key is ${problem.final_answer ? mathPlainText(problem.final_answer) : "not set"}.`
+              : `Expand problem ${problem.position} to inspect. No answer extracted. Answer key is ${problem.final_answer ? mathPlainText(problem.final_answer) : "not set"}.`
           }
           aria-expanded={false}
         >
@@ -4185,7 +4200,7 @@ function ProblemGradeRow({
             {problem.student_answer ? (
               <span
                 className="min-w-0 max-w-[50%] truncate font-semibold text-text-primary"
-                title={plainAnswer(problem.student_answer)}
+                title={mathPlainText(problem.student_answer)}
               >
                 <MathText text={problem.student_answer} />
               </span>
@@ -4203,7 +4218,7 @@ function ProblemGradeRow({
                 screen readers. */}
             <span
               className="min-w-0 flex-1 truncate text-text-secondary"
-              title={problem.final_answer ? plainAnswer(problem.final_answer) : undefined}
+              title={problem.final_answer ? mathPlainText(problem.final_answer) : undefined}
             >
               {problem.final_answer ? (
                 <MathText text={problem.final_answer} />
