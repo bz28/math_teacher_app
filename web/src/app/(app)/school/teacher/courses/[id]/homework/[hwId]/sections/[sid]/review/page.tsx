@@ -3221,10 +3221,21 @@ function SubmissionDetailPanel({
                 <span aria-hidden>⚠</span>
                 Couldn&rsquo;t read this submission
               </p>
-              <p className="mt-1 text-xs leading-relaxed text-[color:var(--color-warning-dark)]/80 /80">
-                The AI couldn&rsquo;t read this submission clearly, so it
-                wasn&rsquo;t auto-graded. Open the student&rsquo;s work to grade
-                it by hand, or ask them to resubmit a clearer photo.
+              {/* Names only what the teacher can actually do from here.
+                  The previous copy offered "ask them to resubmit a clearer
+                  photo", which the product cannot do: submission is
+                  one-shot (a second attempt gets 409 Already submitted)
+                  and no endpoint reopens one. It also has to say what
+                  "by hand" means, because there is no button for it —
+                  `record_unreadable_grading_skip` leaves breakdown and
+                  final_score null precisely so the grading controls
+                  below this callout work normally, just with nothing
+                  pre-filled. */}
+              <p className="mt-1 text-xs leading-relaxed text-[color:var(--color-warning-dark)]/80">
+                The work was too unclear to read, so nothing was
+                auto-graded. Open the pages and grade it by hand — the
+                grading controls work the same, there&rsquo;s just no AI
+                suggestion to start from.
               </p>
             </div>
             {detail.files && detail.files.length > 0 && (
