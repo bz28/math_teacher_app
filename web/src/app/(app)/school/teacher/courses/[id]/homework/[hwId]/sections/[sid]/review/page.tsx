@@ -391,8 +391,24 @@ function HomeworkSectionReview({
         let otherPendingReviewed = 0;
         let otherDirtyReviewed = 0;
         let otherFlagged = 0;
+        // The teacher's own rehearsal, if she left one in this section.
+        // Held aside rather than skipped: it belongs on the roster so
+        // she can open it and see what grading her students' work will
+        // look like, but it must stay out of every count — those
+        // describe a class, and she is not in her own class.
+        let previewEntry: RosterEntry | null = null;
         for (const r of subs.submissions) {
-          if (r.is_preview) continue;
+          if (r.is_preview) {
+            if (r.section_id === sectionId) {
+              previewEntry = {
+                student_id: r.student_id,
+                student_name: r.student_name || r.student_email,
+                student_email: r.student_email,
+                submission: r,
+              };
+            }
+            continue;
+          }
           if (r.section_id === sectionId) {
             submissionByStudent.set(r.student_id, r);
           } else if (r.final_score !== null) {
@@ -429,6 +445,9 @@ function HomeworkSectionReview({
             submission: submissionByStudent.get(st.id) ?? null,
           }))
           .sort((a, b) => a.student_name.localeCompare(b.student_name));
+        // Appended, never sorted in — the roster is her class, and her
+        // own test run sits after it rather than among her students.
+        if (previewEntry) merged.push(previewEntry);
         setRoster(merged);
         // Auto-select the first submitter that still needs release —
         // never published or dirty-since-edit. If everyone's clean-
@@ -2400,6 +2419,13 @@ function StudentRow({
           }`}
         >
           {entry.student_name}
+          {/* Her own rehearsal sits at the end of the roster. Badged so
+              a row that isn't a student can't be mistaken for one. */}
+          {sub?.is_preview && (
+            <span className="ml-1.5 rounded-full bg-[color:var(--color-info-light)] px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-info)]">
+              Preview
+            </span>
+          )}
         </div>
         {hasScore && (
           <span
