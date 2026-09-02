@@ -312,13 +312,6 @@ function getRefreshToken(): string | null {
 export function saveTokens(tokens: TokenPair) {
   localStorage.setItem(TOKEN_KEY, tokens.access_token);
   localStorage.setItem(REFRESH_KEY, tokens.refresh_token);
-  // Any stashed teacher session belongs to a preview that is now over.
-  // Leaving it behind makes isInPreviewMode() true for whoever logs in
-  // next — a phantom "Previewing as student" banner over the teacher
-  // app, whose "Back to teacher view" restores someone's stale tokens.
-  // enterPreviewMode writes its stash *after* calling this, so the one
-  // legitimate stash survives.
-  clearPreviewStash();
 }
 
 export function clearTokens() {
@@ -336,7 +329,10 @@ export function hasStoredTokens(): boolean {
 const TEACHER_TOKEN_KEY = "veradic_teacher_access_token";
 const TEACHER_REFRESH_KEY = "veradic_teacher_refresh_token";
 
-function clearPreviewStash() {
+/** Drop a stashed teacher session. A preview ends when its owner signs
+ *  out or a different session signs in — NOT when tokens are merely
+ *  rewritten, which happens on every silent refresh mid-preview. */
+export function clearPreviewStash() {
   localStorage.removeItem(TEACHER_TOKEN_KEY);
   localStorage.removeItem(TEACHER_REFRESH_KEY);
 }
@@ -345,11 +341,9 @@ function clearPreviewStash() {
 export function enterPreviewMode(studentTokens: TokenPair) {
   const teacherAccess = getAccessToken();
   const teacherRefresh = getRefreshToken();
-  // saveTokens clears the stash (a fresh sign-in ends any preview), so
-  // the swap has to happen before we write ours.
-  saveTokens(studentTokens);
   if (teacherAccess) localStorage.setItem(TEACHER_TOKEN_KEY, teacherAccess);
   if (teacherRefresh) localStorage.setItem(TEACHER_REFRESH_KEY, teacherRefresh);
+  saveTokens(studentTokens);
 }
 
 /** Restore teacher tokens and clear the stash. Returns true if stash existed. */

@@ -4,6 +4,7 @@ import { create } from "zustand";
 import {
   auth as authApi,
   saveTokens,
+  clearPreviewStash,
   clearTokens,
   hasStoredTokens,
   isMfaChallenge,
@@ -105,6 +106,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         });
         return { mfa_required: true };
       }
+      // A sign-in ends any preview the previous session left behind —
+      // otherwise whoever signs in next inherits a phantom "Previewing
+      // as student" banner whose exit restores someone else's tokens.
+      // Deliberately here and not in saveTokens: that runs on every
+      // silent token refresh too, and refreshing mid-preview would
+      // strand a teacher with no way back to her own account.
+      clearPreviewStash();
       saveTokens(result);
       const user = await authApi.me();
       set({ user, loading: false });
@@ -125,6 +133,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const tokens = await authApi.loginVerifyMfa(pending.mfaPendingToken, code);
+      clearPreviewStash();
       saveTokens(tokens);
       const user = await authApi.me();
       set({ user, loading: false, pendingMfa: null });
@@ -156,6 +165,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const tokens = await authApi.register(data);
+      clearPreviewStash();
       saveTokens(tokens);
       const user = await authApi.me();
       set({ user, loading: false });
