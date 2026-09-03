@@ -33,9 +33,11 @@ export const PARAM_OPTIONS: {
     label: "Answer form",
     help:
       "How final answers come out. Whole numbers is the odd one — it " +
-      "shapes the problem so answers land clean, rather than reformatting " +
-      "an answer that already exists, so topics that can't support it " +
-      "(irrational roots, most trig) will ignore it rather than round.",
+      "shapes the problem so answers land clean (negatives allowed; no " +
+      "fractions, decimals or radicals) rather than reformatting an " +
+      "answer that already exists. Staying on topic wins: a unit that " +
+      "can't yield them (radicals, most trig) keeps its problems and " +
+      "gives exact answers instead.",
     options: [
       { value: "auto", label: "Auto" },
       { value: "integer", label: "Whole numbers" },

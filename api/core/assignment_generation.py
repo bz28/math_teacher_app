@@ -157,17 +157,36 @@ _ANSWER_FORM_INSTRUCTIONS = {
     # Unlike every other value here, this one constrains how the problem
     # is BUILT, not how a finished answer is written down: you cannot
     # express sqrt(2) as a whole number, you can only choose givens that
-    # avoid it. Hence "design ... choose the numbers", and hence the
-    # explicit ban on rounding — an unguarded "make answers whole" reads
-    # to the model as permission to state 5 when the answer is 4.7, which
-    # ships a wrong answer to a student under a teacher's name.
+    # avoid it. Hence "design ... choose the given values".
+    #
+    # Two things this wording is carefully doing:
+    #
+    # 1. "integer ... negative, or zero". A model told "whole number"
+    #    reads the US-curriculum sense {0,1,2,...} and will avoid
+    #    negative answers — which quietly guts any unit where a negative
+    #    solution IS the point (solving equations, integer operations).
+    # 2. The escape hatch is "stay on topic and give the exact answer",
+    #    NOT "write a different problem". The prompt already demands
+    #    exactly N problems within the unit's scope, so inviting
+    #    substitution pushes a radicals or trig unit toward off-topic
+    #    output. Topic fidelity has to outrank clean numbers, and the
+    #    teacher-facing tooltip promises exactly this behaviour.
+    #
+    # Note this does NOT prevent a wrong answer reaching a student:
+    # generate_questions emits problem text only (see the template's
+    # "no answers, no hints" and GENERATE_QUESTIONS_SCHEMA), and the
+    # solver that does produce answers never sees these params. The
+    # worst case here is a problem whose honest answer isn't an integer
+    # — the teacher gets something they didn't ask for, not a lie.
     "integer": (
-        "Design every problem so its final answer is a whole number "
-        "(no fractions, decimals, or radicals). Choose the given "
-        "values so it works out exactly. NEVER round or approximate to "
-        "reach a whole number — if a problem cannot have a whole-number "
-        "answer without distorting the topic (irrational roots, most "
-        "trigonometric values), write a different problem that can."
+        "Design every problem so its final answer is an integer "
+        "(positive, negative, or zero — no fractions, decimals, or "
+        "radicals). Choose the given values so it works out exactly, "
+        "and NEVER round or approximate to reach one. Staying on the "
+        "unit's topic outranks this: if the topic cannot yield integer "
+        "answers (irrational roots, most trigonometric values), keep "
+        "the problem on-topic and let the answer be exact instead — do "
+        "not substitute an unrelated problem to satisfy this."
     ),
     "radical": "Express all final answers in radical form (no decimal approximations).",
     "rational_exponent": "Express all final answers in rational-exponent form.",
