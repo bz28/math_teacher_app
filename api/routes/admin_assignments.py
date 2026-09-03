@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -287,4 +287,80 @@ async def get_assignment(
         "graded_count": graded,
         "released_count": released,
         "problems": problems,
+    }
+
+
+@router.get("/users/{teacher_id}/assignments")
+async def teacher_assignments(
+    teacher_id: uuid.UUID,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Everything this teacher has assigned, newest first.
+
+    The activity log only shows the window you happen to be reading, so
+    it answers "what did she do on Tuesday" and never "what has she
+    assigned all term" — including the draft she started and abandoned,
+    which is often the more interesting row.
+
+    `problem_count` is read from `content` rather than by hydrating each
+    row: hydration is a query per assignment, and a count that is off by
+    a hard-deleted reference is not worth N queries on a list whose job
+    is to get you to the detail page. Practice sets carry no
+    `problem_ids` at all, so they report null rather than a wrong zero —
+    the detail page resolves them properly.
+    """
+    total = (
+        await db.execute(
+            select(func.count())
+            .select_from(Assignment)
+            .where(Assignment.teacher_id == teacher_id)
+        )
+    ).scalar_one()
+
+    rows = (
+        await db.execute(
+            select(Assignment)
+            .where(Assignment.teacher_id == teacher_id)
+            .order_by(Assignment.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+    ).scalars().all()
+
+    published_by_assignment: dict[uuid.UUID, datetime] = {}
+    if rows:
+        for a_id, pub in (
+            await db.execute(
+                select(
+                    AssignmentSection.assignment_id,
+                    func.min(AssignmentSection.published_at),
+                )
+                .where(AssignmentSection.assignment_id.in_([a.id for a in rows]))
+                .group_by(AssignmentSection.assignment_id)
+            )
+        ).all():
+            if pub is not None:
+                published_by_assignment[a_id] = pub
+
+    return {
+        "total": total,
+        "assignments": [
+            {
+                "id": str(a.id),
+                "title": a.title,
+                "type": a.type,
+                "status": a.status,
+                "problem_count": (
+                    None
+                    if a.type == "practice"
+                    else len(problem_ids_in_content(a.content))
+                ),
+                "created_at": _iso(a.created_at),
+                "first_published_at": _iso(published_by_assignment.get(a.id)),
+            }
+            for a in rows
+        ],
     }

@@ -8,6 +8,7 @@ import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
 import TeacherActivitySection from "../components/TeacherActivitySection";
 import TeacherLLMCalls from "../components/TeacherLLMCalls";
+import TeacherAssignments from "../components/TeacherAssignments";
 import TeacherSubmissions from "../components/TeacherSubmissions";
 import { useScopeToSchool } from "../lib/useSelectedSchool";
 
@@ -213,6 +214,31 @@ export default function TeacherDetail() {
           did she cost" but not the question you actually have when she
           reports something odd: what did we send, and what came back. That
           was one click into another page with the filter to re-apply. */}
+      {/* ── What she assigned ─────────────────────────────────────
+          Above "Work handed in" so the page reads in the order the work
+          happens: she builds an assignment, students hand it in, a
+          submission gets traced. The activity timeline above shows the
+          actions; this shows the artifacts they produced. */}
+      <section className="table-card" style={{ marginBottom: 24 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            padding: "12px 16px",
+            borderBottom: "1px solid var(--rule)",
+          }}
+        >
+          <h3 style={{ margin: 0 }}>Assignments</h3>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted-2)" }}>
+            click a row to see the problems
+          </span>
+        </div>
+        <div style={{ padding: "12px 16px 4px" }}>
+          <TeacherAssignments key={t.id} teacherId={t.id} />
+        </div>
+      </section>
+
       {/* ── Work handed in ───────────────────────────────────────
           Above Model calls deliberately. A complaint is about a GRADE far
           more often than about a generation, and grading/integrity calls

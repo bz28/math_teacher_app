@@ -274,3 +274,47 @@ async def test_teacher_cannot_read_the_admin_view(client: AsyncClient) -> None:
         f"/v1/admin/assignments/{a_id}", headers=_auth(teacher_token),
     )
     assert r.status_code in (401, 403)
+
+
+async def test_listing_returns_drafts_alongside_published(
+    client: AsyncClient,
+) -> None:
+    """Drafts are the point of having a list at all.
+
+    The activity log only records what a teacher DID in the window you
+    are reading. An abandoned draft never generated an event worth
+    logging, so it is invisible there and visible only here.
+    """
+    w = await _world()
+    await _add_assignment(w, type_="homework", content={"problem_ids": []})
+    await _add_assignment(
+        w, type_="homework", content={"problem_ids": []}, published=False,
+    )
+
+    r = await client.get(
+        f"/v1/admin/users/{w['teacher_id']}/assignments", headers=_auth(w["token"]),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["total"] == 2
+    assert sorted(a["status"] for a in body["assignments"]) == ["draft", "published"]
+
+
+async def test_listing_reports_no_count_for_practice_rather_than_zero(
+    client: AsyncClient,
+) -> None:
+    """A practice set's problems aren't in `content`, so counting it there
+    would report 0 for a set that has problems. Null says "ask the detail
+    page", which is true; zero would be a lie the reader can't detect."""
+    w = await _world()
+    practice = await _add_assignment(
+        w, type_="practice", content={"problem_ids": []},
+    )
+    await _add_item(w, practice, question="Practice one")
+
+    r = await client.get(
+        f"/v1/admin/users/{w['teacher_id']}/assignments", headers=_auth(w["token"]),
+    )
+    assert r.status_code == 200, r.text
+    row = next(a for a in r.json()["assignments"] if a["id"] == str(practice))
+    assert row["problem_count"] is None

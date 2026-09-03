@@ -573,6 +573,75 @@ export interface ExtractionDetail {
   files: { data: string; media_type: string; filename?: string }[];
 }
 
+
+/** One row of a teacher's assignment list. `problem_count` is null for
+ *  practice sets, whose problems don't live in `content` — the detail
+ *  endpoint resolves those properly. */
+export interface TeacherAssignmentRow {
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  problem_count: number | null;
+  created_at: string | null;
+  first_published_at: string | null;
+}
+
+export interface TeacherAssignmentsData {
+  total: number;
+  assignments: TeacherAssignmentRow[];
+}
+
+export interface AssignmentProblem {
+  position: number;
+  bank_item_id: string | null;
+  question: string | null;
+  final_answer: string | null;
+  figure_svg: string | null;
+  difficulty: string | null;
+  format: string | null;
+  /** "AI · approved" | "AI · edited" | "hand-written" | "imported", or
+   *  null when it can't be known (a legacy snapshot has no bank item to
+   *  read provenance from). Render nothing rather than guessing. */
+  provenance: string | null;
+  /** The bank item this slot pointed at was deleted. Keeps its position
+   *  so the surviving problems still describe what students saw. */
+  missing: boolean;
+}
+
+export interface AssignmentSectionRow {
+  id: string;
+  name: string;
+  published_at: string | null;
+}
+
+export interface AssignmentDetailData {
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  description: string | null;
+  source_type: string | null;
+  due_at: string | null;
+  late_policy: string;
+  integrity_check_enabled: boolean;
+  created_at: string | null;
+  first_published_at: string | null;
+  course: { id: string; name: string } | null;
+  teacher: { id: string; name: string } | null;
+  sections: AssignmentSectionRow[];
+  generation: {
+    status: string;
+    requested_count: number;
+    created_at: string | null;
+    generated_count: number;
+  } | null;
+  submitted_count: number;
+  graded_count: number;
+  released_count: number;
+  problems: AssignmentProblem[];
+}
+
 export const api = {
   overview: (params?: Record<string, string>) => request<OverviewData>("/admin/overview", params),
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
@@ -641,6 +710,16 @@ export const api = {
    *  for why a teacher's own LLM calls don't answer this. */
   teacherSubmissions: (teacherId: string, params?: Record<string, string>) =>
     request<TeacherSubmissionsData>(`/admin/users/${teacherId}/submissions`, params),
+
+  /** Everything this teacher has assigned, newest first — including the
+   *  drafts the activity log never sees, because abandoning a draft
+   *  generates no event worth logging. */
+  teacherAssignments: (teacherId: string, params?: Record<string, string>) =>
+    request<TeacherAssignmentsData>(`/admin/users/${teacherId}/assignments`, params),
+
+  /** One assignment as the teacher built it: the problems she kept. */
+  assignmentDetail: (assignmentId: string) =>
+    request<AssignmentDetailData>(`/admin/assignments/${assignmentId}`),
 
   teacherStudents: (teacherId: string, params?: Record<string, string>) =>
     request<TeacherStudentsData>(`/admin/users/${teacherId}/students`, params),

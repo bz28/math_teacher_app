@@ -205,6 +205,16 @@ function ActivityRow({ e }: { e: ActivityLogEntry }) {
             >
               {shortId(e.target_id)} →
             </Link>
+          ) : e.target_type === "assignment" ? (
+            // "Published HW 4" told you the title and then dead-ended on
+            // an id. The artifact is the thing you actually want when
+            // you read that line.
+            <Link
+              to={`/assignments/${e.target_id}`}
+              style={{ fontFamily: "var(--font-mono)", fontSize: 11 }}
+            >
+              {shortId(e.target_id)} →
+            </Link>
           ) : (
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#888" }}>
               {shortId(e.target_id)}
