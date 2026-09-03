@@ -1438,6 +1438,7 @@
             "default": "auto",
             "enum": [
               "auto",
+              "integer",
               "radical",
               "rational_exponent",
               "exact",

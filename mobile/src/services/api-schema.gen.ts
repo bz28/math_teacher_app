@@ -4617,7 +4617,7 @@ export interface components {
              * @default auto
              * @enum {string}
              */
-            answer_form: "auto" | "radical" | "rational_exponent" | "exact" | "decimal_2" | "decimal_3";
+            answer_form: "auto" | "integer" | "radical" | "rational_exponent" | "exact" | "decimal_2" | "decimal_3";
             /**
              * Calculator
              * @default either

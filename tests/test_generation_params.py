@@ -12,6 +12,7 @@ Covers:
 
 import asyncio
 import uuid
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -36,6 +37,8 @@ from api.models.question_bank import (
 from api.models.school import SCHOOL_KIND_INSTITUTIONAL, School
 from api.models.unit import Unit
 from api.models.user import User
+
+_ROOT = Path(__file__).resolve().parent.parent
 
 # ── translator ──
 
@@ -85,6 +88,87 @@ def test_every_non_default_value_translates_to_a_line() -> None:
     assert any("No-calculator" in line for line in lines)
     assert any("multiple choice" in line for line in lines)
     assert len(lines) == 5
+
+
+def test_whole_numbers_instructs_design_not_rounding() -> None:
+    """The whole-numbers option is the only answer_form that constrains
+    how a problem is BUILT rather than how a finished answer is written,
+    so its wording carries three loads that are each easy to soften
+    later without anyone noticing.
+
+    Scope note: this does NOT guard a wrong answer reaching a student.
+    generate_questions emits problem text only, and the solver that
+    produces answers never receives these params. What it guards is the
+    teacher getting something other than what they asked for."""
+    line = _translate_params_to_instructions(
+        {"problem_type": "mixed", "answer_form": "integer",
+         "difficulty": "mixed", "calculator": "either", "format": "frq"},
+    )[0]
+    # 1. Sign must be explicit. "whole number" alone reads as {0,1,2,...}
+    #    and silently removes negative answers from equation-solving
+    #    units, where a negative solution is the point.
+    assert "positive, negative, or zero" in line
+    # 2. The ban on rounding has to be explicit, not implied by "exactly".
+    assert "NEVER round" in line
+    # 3. The escape hatch must keep the problem ON TOPIC. The prompt also
+    #    demands exactly N problems in the unit's scope, so inviting a
+    #    substitution instead pushes a radicals unit off-topic.
+    assert "outranks this" in line
+    assert "do not substitute" in line
+
+
+def test_every_dropdown_option_is_accepted_by_the_request_model() -> None:
+    """Every option the dropdown offers must be one the API accepts.
+
+    Add a value to the frontend dropdown without adding it to the
+    Literal and the symptom is an option a teacher can select that 422s
+    on Generate — no test, no artifact check, no type error.
+
+    Deliberately ONE-directional, unlike the symmetric registry guard in
+    test_activity_action_registry_parity. The reverse — a Literal value
+    with no dropdown option — is checked by nothing here, and that is
+    fine: it yields an unreachable backend capability, not an error a
+    teacher can hit. (Note it is NOT caught by CI's artifact diff, which
+    only proves the committed spec matches the Literal; it says nothing
+    about the dropdown.)
+
+    Reads the frontend list as source text because the two sides are
+    different languages.
+    """
+    import re
+    from typing import get_args, get_type_hints
+
+    from api.routes.teacher_question_bank import GenerationParams
+
+    options_ts = (
+        _ROOT / "web/src/components/school/teacher/_pieces"
+        / "generation-params-options.ts"
+    ).read_text()
+
+    hints = get_type_hints(GenerationParams)
+    # Each dropdown is `key: "<field>",` followed by its option values.
+    blocks = re.split(r'key:\s*"([a-z_]+)"', options_ts)
+    assert len(blocks) > 1, "could not parse PARAM_OPTIONS — regex broke?"
+
+    checked = 0
+    for field, body in zip(blocks[1::2], blocks[2::2]):
+        allowed = set(get_args(hints[field]))
+        assert allowed, f"{field} is not a Literal on GenerationParams"
+        # `[^"]+`, not `[a-z0-9_]+`. The narrow class silently skipped
+        # any value it couldn't express — "mixed-number", "mixedNumber",
+        # "SI_units" — so a drifted option was simply not seen and the
+        # assert below passed with drift present. The `assert offered`
+        # guard does not help: it fires only when EVERY option in a
+        # field is unparseable, never when one is.
+        offered = set(re.findall(r'value:\s*"([^"]+)"', body))
+        assert offered, f"no options parsed for {field}"
+        extra = offered - allowed
+        assert not extra, (
+            f"{field}: the dropdown offers {sorted(extra)}, which "
+            f"GenerationParams rejects — selecting it 422s on Generate"
+        )
+        checked += 1
+    assert checked == 5, f"expected 5 dropdowns, parsed {checked}"
 
 
 def test_partial_non_defaults_emit_only_relevant_lines() -> None:

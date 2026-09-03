@@ -74,7 +74,8 @@ class GenerationParams(BaseModel):
         "mixed", "word", "computation", "multi_step", "proof"
     ] = "mixed"
     answer_form: Literal[
-        "auto", "radical", "rational_exponent", "exact", "decimal_2", "decimal_3"
+        "auto", "integer", "radical", "rational_exponent", "exact",
+        "decimal_2", "decimal_3",
     ] = "auto"
     difficulty: Literal[
         "mixed", "easy", "medium", "hard", "ramp"

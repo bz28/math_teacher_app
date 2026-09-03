@@ -6,86 +6,16 @@ import {
   type GenerationParams,
 } from "@/lib/api";
 import { Select } from "@/components/ui";
+import {
+  PARAM_OPTIONS,
+  activeSummary,
+} from "./generation-params-options";
 
 // localStorage key for the Customize-section selections. Per-teacher
 // scoping happens implicitly because each teacher logs in on their
 // own browser session; cross-teacher leakage on a shared device is
 // the same risk every other form has and is out of scope.
 const PARAMS_STORAGE_KEY = "veradic.generationParams";
-
-// Labels + tooltip copy for the Customize dropdowns. Tied to the
-// GenerationParams shape; defaults at index 0 of each list translate
-// to "no prompt instruction" on the backend, so the 1-click flow is
-// byte-identical when the teacher doesn't customize.
-const PARAM_OPTIONS: {
-  key: keyof GenerationParams;
-  label: string;
-  help: string;
-  options: { value: string; label: string }[];
-}[] = [
-  {
-    key: "problem_type",
-    label: "Problem type",
-    help: "What shape the problems take.",
-    options: [
-      { value: "mixed", label: "Mixed" },
-      { value: "word", label: "Word problems only" },
-      { value: "computation", label: "Computation only" },
-      { value: "multi_step", label: "Multi-step" },
-      { value: "proof", label: "Proofs" },
-    ],
-  },
-  {
-    key: "answer_form",
-    label: "Answer form",
-    help: "How final answers should be expressed.",
-    options: [
-      { value: "auto", label: "Auto" },
-      { value: "radical", label: "Radical form" },
-      { value: "rational_exponent", label: "Rational exponent" },
-      { value: "exact", label: "Exact (no decimals)" },
-      { value: "decimal_2", label: "Decimal · 2 sig figs" },
-      { value: "decimal_3", label: "Decimal · 3 sig figs" },
-    ],
-  },
-  {
-    key: "difficulty",
-    label: "Difficulty",
-    help:
-      "Relative to this course's student level (not absolute math). " +
-      "Ramp orders easy → hard across the set.",
-    options: [
-      { value: "mixed", label: "Mixed" },
-      { value: "easy", label: "All easy" },
-      { value: "medium", label: "All medium" },
-      { value: "hard", label: "All hard" },
-      { value: "ramp", label: "Easy → hard ramp" },
-    ],
-  },
-  {
-    key: "calculator",
-    label: "Calculator",
-    help:
-      "No-calc keeps numerics clean (standard angles, integer evals). " +
-      "Calculator-allowed lets the AI use messy decimals freely.",
-    options: [
-      { value: "either", label: "Either" },
-      { value: "no_calc", label: "No calculator" },
-      { value: "calc_allowed", label: "Calculator allowed" },
-    ],
-  },
-  {
-    key: "format",
-    label: "Format",
-    help:
-      "MCQ poses the problem with 4 choices the student picks between. " +
-      "FRQ is open-ended.",
-    options: [
-      { value: "frq", label: "Free response" },
-      { value: "mcq", label: "Multiple choice" },
-    ],
-  },
-];
 
 /**
  * Disclosure-style customize section for the Generate-problems and
@@ -138,19 +68,44 @@ export function GenerationParamsCustomize({
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={disabled}
-        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-bold text-text-primary hover:bg-bg-subtle disabled:opacity-50"
+        className="flex w-full items-start justify-between px-3 py-2 text-left text-sm font-bold text-text-primary hover:bg-bg-subtle disabled:opacity-50"
         aria-expanded={open}
       >
-        <span className="flex items-center gap-2">
-          <span>Customize</span>
-          {customizationCount > 0 && (
-            <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-semibold text-primary">
-              {customizationCount} active
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span>Customize</span>
+            {customizationCount > 0 && (
+              <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-semibold text-primary">
+                {customizationCount} active
+              </span>
+            )}
+            {customizationCount === 0 && (
+              <span className="font-normal text-text-muted">· optional</span>
+            )}
+          </span>
+          {/* One line, two jobs. Closed and untouched it says what the
+              section is FOR — otherwise "Customize" names a verb and a
+              teacher has to open it to discover the feature exists. Closed
+              with settings applied it says WHICH, which matters more than
+              it looks: these params hydrate from localStorage on mount, so
+              a choice made weeks ago silently shapes today's generation and
+              the count badge alone ("2 active") never says what changed.
+              Deliberately inside the button — it lengthens the accessible
+              name, but hiding it would keep the applied settings from
+              exactly the users least able to spot them another way. */}
+          {/* Closed only. Open, the dropdowns below ARE the answer — a
+              summary line repeating "Whole numbers · All hard" directly
+              above the two selects showing exactly that is duplicated
+              state a reader has to reconcile. */}
+          {!open && (
+            <span className="mt-0.5 block truncate text-[11px] font-normal text-text-muted">
+              {customizationCount > 0
+                ? activeSummary(params, DEFAULT_GENERATION_PARAMS)
+                : "AI picks difficulty, answer form and format — set any of them yourself here."}
             </span>
           )}
-          <span className="font-normal text-text-muted">· optional</span>
         </span>
-        <span aria-hidden className="text-text-muted">
+        <span aria-hidden className="ml-2 shrink-0 text-text-muted">
           {open ? "▾" : "▸"}
         </span>
       </button>
