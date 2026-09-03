@@ -24,6 +24,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/assignments/{assignment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Assignment
+         * @description One assignment, as the teacher built it.
+         *
+         *     Problems resolve through `hydrate_assignment_content` — the same
+         *     helper the teacher's own app uses — rather than reading
+         *     `content.problem_ids` directly. Practice assignments don't populate
+         *     that field at all (their items are bank *variations*, which the
+         *     snapshot path deliberately rejects) and would render as empty
+         *     assignments if we read content ourselves.
+         */
+        get: operations["get_assignment_v1_admin_assignments__assignment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/audit-logs/student-access": {
         parameters: {
             query?: never;
@@ -6315,6 +6342,39 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assignment_v1_admin_assignments__assignment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
