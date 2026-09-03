@@ -39,6 +39,7 @@ from sqlalchemy import distinct, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.audit_log import record_student_activity
 from api.core.constants import MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
 from api.core.image_utils import validate_and_decode_upload
 from api.core.integrity_pipeline import (
@@ -685,6 +686,73 @@ async def _is_teacher_preview_of_course(
         )
         .limit(1)
     )).scalar_one_or_none() is not None
+
+
+async def _school_id_for(
+    db: AsyncSession,
+    *,
+    course_id: uuid.UUID | None = None,
+    assignment_id: uuid.UUID | None = None,
+    bank_item_id: uuid.UUID | None = None,
+) -> uuid.UUID | None:
+    """Resolve the school a student's action happened in, in ONE query.
+
+    Student events must carry `school_id` explicitly — `users.school_id`
+    is teachers-only, so the default lookup in `record_activity` returns
+    NULL for a student and the row drops out of every school-filtered
+    dashboard query without erroring. See `record_student_activity`.
+
+    Three entry points because that's the shape of what the handlers
+    already hold: a course (chat, which has the loaded bank item), an
+    assignment (submit / next-variation), or a bank item (the
+    consumption endpoints, which load only the consumption row). Each
+    resolves through a single indexed join rather than a chain of
+    round-trips. Returns None when the id doesn't resolve — the event is
+    still worth recording without a school.
+    """
+    if course_id is not None:
+        stmt = select(Course.school_id).where(Course.id == course_id)
+    elif assignment_id is not None:
+        stmt = (
+            select(Course.school_id)
+            .join(Assignment, Assignment.course_id == Course.id)
+            .where(Assignment.id == assignment_id)
+        )
+    elif bank_item_id is not None:
+        stmt = (
+            select(Course.school_id)
+            .join(QuestionBankItem, QuestionBankItem.course_id == Course.id)
+            .where(QuestionBankItem.id == bank_item_id)
+        )
+    else:
+        return None
+    # Guarded, and specifically with a SAVEPOINT rather than a bare
+    # try/except. This runs in the caller's frame — it is an argument
+    # expression at every call site — so it sits OUTSIDE
+    # `record_activity`'s own guard, inside whatever transaction the
+    # handler is holding. A bare except would swallow the error and
+    # leave asyncpg's transaction aborted, so the handler's next
+    # commit() would fail and roll back the student's ACTUAL mutation:
+    # exactly the failure `record_activity`'s savepoint comment
+    # describes. begin_nested() rolls back only this lookup.
+    #
+    # Returning None degrades gracefully — `record_activity` then falls
+    # back to its own guarded lookup, and the event is written without a
+    # school rather than not written at all.
+    try:
+        async with db.begin_nested():
+            return (await db.execute(stmt)).scalar_one_or_none()
+    except Exception:
+        # Also catches a flush of the CALLER's pending mutation:
+        # begin_nested() flushes before emitting the SAVEPOINT, so a
+        # constraint error on the student's own row surfaces here first
+        # and again at the handler's commit(). Hence the hedged wording —
+        # the message must not assert the lookup was the culprit.
+        logger.warning(
+            "student activity school lookup failed (or a pending flush "
+            "under it)", exc_info=True,
+        )
+        return None
 
 
 async def _load_assignment_for_student(
@@ -1948,6 +2016,34 @@ async def submit_homework(
             _run_extraction_background(submission_id_for_task),
         )
 
+    # Logged LAST, and deliberately so. The submission is committed and
+    # durable by here, and `_run_extraction_background` has exactly one
+    # caller — the spawn directly above. Anything fallible placed between
+    # that commit and that spawn can 500 a submission that already
+    # landed; the retry then hits the one-shot 409 and extraction never
+    # fires, leaving the work permanently unprocessable with no path
+    # back. So the audit write goes after the spawn, and its own failure
+    # can cost nothing but the log line.
+    try:
+        await record_student_activity(
+            db, user, "submission.create", "submission", submission.id,
+            {
+                "assignment_id": str(assignment_id),
+                "section_id": str(section_id),
+                "file_count": len(validated_files),
+                "is_late": is_late,
+            },
+            school_id=await _school_id_for(db, course_id=assignment.course_id),
+        )
+        await db.commit()
+    except Exception:
+        # Deliberately no rollback() here. `get_db` closes the session on
+        # teardown, which rolls back anything pending — so an explicit
+        # call adds nothing, and it is itself unguarded: if IT raised, the
+        # exception would escape and 500 an already-durable submission,
+        # which is the exact stranding this block exists to prevent.
+        logger.exception("submission.create activity write failed")
+
     return response
 
 
@@ -2068,6 +2164,15 @@ async def confirm_extraction(
             status_code=409,
             detail="Submission state changed — reload and try again",
         )
+    # Inside the transaction: if the race-guard above rolls back, the
+    # log rolls back with it. Only the COUNT of corrections is recorded
+    # — the edit values are student-authored text and must never enter
+    # this table.
+    await record_student_activity(
+        db, user, "submission.confirm_extraction", "submission", submission_id,
+        {"corrections_count": len(sanitized_edits)},
+        school_id=await _school_id_for(db, assignment_id=sub.assignment_id),
+    )
     await db.commit()
 
     _spawn_background_task(
@@ -2135,6 +2240,15 @@ async def flag_extraction_submission(
             status_code=409,
             detail="Submission state changed — reload and try again",
         )
+    # No reason_code: the endpoint takes no body, so the flag itself is
+    # the whole signal. Paired with submission.confirm_extraction this
+    # gives the confirm-vs-flag rate — how often the Vision read was
+    # wrong enough that a student pushed back.
+    await record_student_activity(
+        db, user, "submission.flag_extraction", "submission", submission_id,
+        None,
+        school_id=await _school_id_for(db, assignment_id=sub.assignment_id),
+    )
     await db.commit()
     return {"status": "ok"}
 
@@ -2283,6 +2397,19 @@ async def next_variation(
         context=mode,
     )
     db.add(consumption)
+    # Flush so the client-side uuid4 default is materialized — the
+    # activity row targets this consumption by id, and before a flush
+    # that attribute is still None.
+    await db.flush()
+    await record_student_activity(
+        db, user, "practice.next_variation", "bank_consumption", consumption.id,
+        {
+            "assignment_id": str(assignment_id),
+            "bank_item_id": str(bank_item_id),
+            "mode": mode,
+        },
+        school_id=await _school_id_for(db, course_id=assignment.course_id),
+    )
     await db.commit()
     await db.refresh(consumption)
 
@@ -2333,6 +2460,16 @@ async def complete_consumption(
         raise HTTPException(status_code=403, detail="Not your consumption")
     if row.completed_at is None:
         row.completed_at = datetime.now(UTC)
+        # Only on the state CHANGE — the endpoint is idempotent, and a
+        # repeated call shouldn't log a second completion.
+        await record_student_activity(
+            db, user, "consumption.complete", "bank_consumption", row.id,
+            {
+                "bank_item_id": str(row.bank_item_id),
+                "context": row.context,
+            },
+            school_id=await _school_id_for(db, bank_item_id=row.bank_item_id),
+        )
         await db.commit()
 
 
@@ -2353,7 +2490,22 @@ async def flag_consumption(
         raise HTTPException(status_code=404, detail="Consumption not found")
     if row.student_id != user.id:
         raise HTTPException(status_code=403, detail="Not your consumption")
+    changed = row.flagged != body.flagged
     row.flagged = body.flagged
+    if changed:
+        # Only on the state CHANGE, matching complete_consumption above:
+        # the button toggles, and a double-tap that lands on the same
+        # value is not a second decision.
+        await record_student_activity(
+            db, user, "consumption.flag", "bank_consumption", row.id,
+            {
+                "bank_item_id": str(row.bank_item_id),
+                # Record which way it went — otherwise un-flagging is
+                # indistinguishable from flagging.
+                "flagged": body.flagged,
+            },
+            school_id=await _school_id_for(db, bank_item_id=row.bank_item_id),
+        )
     await db.commit()
 
 
@@ -2482,9 +2634,12 @@ async def _load_variation_for_chat(
     db: AsyncSession,
     bank_item_id: uuid.UUID,
     student_id: uuid.UUID,
-) -> tuple[QuestionBankItem, str]:
+) -> tuple[QuestionBankItem, str, uuid.UUID | None]:
     """Authorize and load a bank item the student may chat about.
-    Returns the item plus the course subject for prompt tone. Two access
+    Returns the item, the course subject for prompt tone, and the
+    course's school_id (the Course row is loaded here anyway, and the
+    tutor activity events need the school — returning it avoids a
+    second identical query on the hottest student endpoint). Two access
     paths, either of which authorizes:
       1. The student owns a BankConsumption row for it (HW variation loop).
       2. It's an approved problem of a practice assignment they're
@@ -2513,7 +2668,7 @@ async def _load_variation_for_chat(
         select(Course).where(Course.id == item.course_id)
     )).scalar_one_or_none()
     subject = course.subject if course is not None else "math"
-    return item, subject
+    return item, subject, (course.school_id if course is not None else None)
 
 
 def _steps_for_prompt(raw: list[Any] | None) -> list[dict[str, str]]:
@@ -2539,7 +2694,7 @@ async def bank_item_step_chat(
 ) -> ChatResponse:
     """Ask a question about a specific step of a variation's solution.
     Stateless — caller passes prior messages."""
-    item, subject = await _load_variation_for_chat(db, bank_item_id, user.id)
+    item, subject, school_id = await _load_variation_for_chat(db, bank_item_id, user.id)
 
     steps = _steps_for_prompt(item.solution_steps)
     if body.step_index < 0 or body.step_index >= len(steps):
@@ -2554,6 +2709,30 @@ async def bank_item_step_chat(
         user_id=str(user.id),
         subject=subject,
     )
+    # The ONLY structured record that a student asked for help: this
+    # chat is stateless and persisted nowhere else (the caller re-sends
+    # prior_messages every turn), so without this row the tutoring
+    # engagement exists only inside raw llm_call text. turn_index gives
+    # struggle intensity — "14 questions on one step" — while storing
+    # not one word of what was said.
+    # Guarded: the answer above is already generated and BILLED. A
+    # failed audit write must not 500 the response and make the student
+    # pay for a second generation on retry.
+    try:
+        await record_student_activity(
+            db, user, "tutor.step_chat", "bank_item", bank_item_id,
+            {
+                "step_index": body.step_index,
+                "turn_index": len(body.prior_messages),
+            },
+            school_id=school_id,
+        )
+        await db.commit()
+    except Exception:
+        # No rollback — see submission.create. Session teardown handles it,
+        # and an unguarded rollback here could throw away an answer the
+        # student has already been billed for.
+        logger.exception("tutor.step_chat activity write failed")
     return ChatResponse(reply=result.feedback)
 
 
@@ -2566,7 +2745,7 @@ async def bank_item_problem_chat(
 ) -> ChatResponse:
     """Ask a question about the whole problem (post-walkthrough). The
     LLM may freely reference any step or the final answer."""
-    item, subject = await _load_variation_for_chat(db, bank_item_id, user.id)
+    item, subject, school_id = await _load_variation_for_chat(db, bank_item_id, user.id)
 
     exchanges = [{"role": m.role, "content": m.content} for m in body.prior_messages]
     result = await completed_chat(
@@ -2577,6 +2756,15 @@ async def bank_item_problem_chat(
         user_id=str(user.id),
         subject=subject,
     )
+    try:
+        await record_student_activity(
+            db, user, "tutor.problem_chat", "bank_item", bank_item_id,
+            {"turn_index": len(body.prior_messages)},
+            school_id=school_id,
+        )
+        await db.commit()
+    except Exception:
+        logger.exception("tutor.problem_chat activity write failed")
     return ChatResponse(reply=result.feedback)
 
 
@@ -2649,6 +2837,18 @@ async def learn_this_problem(
         context="learn",
     )
     db.add(consumption)
+    # Flush first — the activity row targets this consumption by id, and
+    # the uuid4 default isn't materialized until then.
+    await db.flush()
+    await record_student_activity(
+        db, user, "practice.learn_start", "bank_consumption", consumption.id,
+        {
+            "bank_item_id": str(bank_item_uuid),
+            "anchor_bank_item_id": str(anchor_id),
+            "assignment_id": str(assignment_uuid),
+        },
+        school_id=await _school_id_for(db, bank_item_id=bank_item_uuid),
+    )
     await db.commit()
     await db.refresh(consumption)
 

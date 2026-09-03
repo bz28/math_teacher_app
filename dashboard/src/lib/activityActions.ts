@@ -17,7 +17,8 @@ export type ActivityFamily =
   | "generation"
   | "grade"
   | "bank_item"
-  | "user";
+  | "user"
+  | "student";
 
 export interface ActivityAction {
   /** The exact `action` string on the log row. */
@@ -44,6 +45,11 @@ const quoted = (m: Meta, k: string, fallback: string) =>
   str(m, k) ? `${fallback} "${str(m, k)}"` : fallback;
 const plural = (n: number | undefined, word: string) =>
   `${n ?? "?"} ${word}${n === 1 ? "" : "s"}`;
+// turn_index is how many prior messages the student had already sent, so
+// the human-facing turn number is one more. Depth is the struggle
+// signal — a 9th question on one step is a different event from a 1st.
+const turn = (n: number | undefined) =>
+  n === undefined ? undefined : n === 0 ? "first question" : `question ${n + 1}`;
 const join = (...parts: (string | false | undefined)[]) =>
   parts.filter(Boolean).join(" · ");
 
@@ -76,6 +82,14 @@ export const ACTIVITY_FAMILIES: {
   { family: "grade", label: "Grading", allLabel: "All grading actions" },
   { family: "bank_item", label: "Question bank", allLabel: "All question-bank actions" },
   { family: "user", label: "User administration", allLabel: "All user actions" },
+  // NOTE: `student` is deliberately absent. ACTIVITY_FAMILIES drives the
+  // filter dropdown in TeacherActivitySection, which is scoped to ONE
+  // teacher (`actor_user_id: teacherId`) — so a student group there
+  // would be nine options that can only ever return zero rows, the exact
+  // "reads as a broken filter" complaint this registry was built to fix.
+  // The student entries still live in ACTIVITY_ACTIONS below, because
+  // BY_ACTION is built from it and supplies the row sentences wherever a
+  // surface does render student events.
 ];
 
 export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
@@ -257,6 +271,81 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
       action: "user.delete",
       label: "Deleted user",
       detail: (m) => join("Deleted", str(m, "email"), str(m, "role")),
+    },
+  ],
+  // Student lifecycle milestones. These are the half of a homework the
+  // log used to miss entirely — without them a timeline jumps from
+  // "teacher published" to "teacher graded" with the actual work
+  // invisible in between. Metadata is ids and counts only (FERPA: this
+  // table never holds student content), so the sentences describe the
+  // SHAPE of what happened and deep-link for the substance.
+  student: [
+    {
+      action: "submission.create",
+      label: "Submitted homework",
+      detail: (m) =>
+        join(
+          `Submitted ${plural(num(m, "file_count"), "file")}`,
+          m.is_late ? "late" : undefined,
+        ),
+    },
+    {
+      action: "submission.confirm_extraction",
+      label: "Confirmed reading",
+      detail: (m) => {
+        const n = num(m, "corrections_count");
+        return n
+          ? `Confirmed the reading after ${plural(n, "correction")}`
+          : "Confirmed the reading as-is";
+      },
+    },
+    {
+      action: "submission.flag_extraction",
+      label: "Flagged reading",
+      detail: () => "Said the reader got something wrong — sent for manual grading",
+    },
+    {
+      action: "practice.next_variation",
+      label: "Served practice",
+      detail: (m) =>
+        str(m, "mode") === "learn"
+          ? "Served a Learn variation"
+          : "Served a practice variation",
+    },
+    {
+      action: "practice.learn_start",
+      label: "Started Learn",
+      detail: () => "Pivoted a practised problem into a Learn walkthrough",
+    },
+    {
+      action: "consumption.complete",
+      label: "Finished problem",
+      detail: (m) => join("Finished a problem", str(m, "context")),
+    },
+    {
+      action: "consumption.flag",
+      // The one endpoint toggles both ways, so the badge has to read
+      // from the row or an un-flag renders as "Flagged".
+      label: "Flagged problem",
+      badgeLabel: (m) => (m.flagged ? "Flagged problem" : "Un-flagged problem"),
+      detail: (m) =>
+        m.flagged
+          ? "Flagged a problem to revisit"
+          : "Removed a flag from a problem",
+    },
+    {
+      action: "tutor.step_chat",
+      label: "Asked about a step",
+      detail: (m) =>
+        join(
+          `Asked about step ${(num(m, "step_index") ?? 0) + 1}`,
+          turn(num(m, "turn_index")),
+        ),
+    },
+    {
+      action: "tutor.problem_chat",
+      label: "Asked about a problem",
+      detail: (m) => join("Asked about the whole problem", turn(num(m, "turn_index"))),
     },
   ],
 };

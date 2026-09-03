@@ -5942,7 +5942,7 @@
             }
           },
           {
-            "description": "\"admin\" or \"teacher\".",
+            "description": "\"admin\", \"teacher\", or \"student\".",
             "in": "query",
             "name": "actor_role",
             "required": false,
@@ -5955,8 +5955,20 @@
                   "type": "null"
                 }
               ],
-              "description": "\"admin\" or \"teacher\".",
+              "description": "\"admin\", \"teacher\", or \"student\".",
               "title": "Actor Role"
+            }
+          },
+          {
+            "description": "Include events from teachers' preview-as-student shadow accounts. Excluded by default so they don't inflate student engagement.",
+            "in": "query",
+            "name": "include_preview",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include events from teachers' preview-as-student shadow accounts. Excluded by default so they don't inflate student engagement.",
+              "title": "Include Preview",
+              "type": "boolean"
             }
           },
           {
@@ -6357,6 +6369,18 @@
               "description": "Pivot to every event touching this record or student.",
               "title": "Target Id"
             }
+          },
+          {
+            "description": "Include events from teachers' preview-as-student shadow accounts. Excluded by default.",
+            "in": "query",
+            "name": "include_preview",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include events from teachers' preview-as-student shadow accounts. Excluded by default.",
+              "title": "Include Preview",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -6507,6 +6531,18 @@
               ],
               "description": "Pivot to every event touching this record or student.",
               "title": "Target Id"
+            }
+          },
+          {
+            "description": "Include events from teachers' preview-as-student shadow accounts. Excluded by default.",
+            "in": "query",
+            "name": "include_preview",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include events from teachers' preview-as-student shadow accounts. Excluded by default.",
+              "title": "Include Preview",
+              "type": "boolean"
             }
           }
         ],

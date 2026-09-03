@@ -30,19 +30,28 @@ _ACTION_RE = r"[A-Za-z][A-Za-z0-9_]*\.[A-Za-z][A-Za-z0-9_]*"
 _ACTION = re.compile(f'"({_ACTION_RE})"')
 
 
-def _backend_actions() -> set[str]:
-    """Action literals passed to record_activity across api/.
+# Every helper that writes an ActivityLog row. Listed explicitly rather
+# than matched loosely: `record_student_activity(` does NOT contain
+# `record_activity(` as a substring, so the single-name check this
+# started as silently skipped all nine student actions — the registry
+# then failed the reverse test with no hint as to why. A loose pattern
+# would instead catch the unrelated `record_practice_activity` endpoint.
+_WRITERS = ("record_activity(", "record_student_activity(")
 
-    record_activity's signature puts `action` third, so the literal is
-    always within a few lines of the call. Scanning that window rather
-    than the whole file keeps unrelated dotted strings (module paths,
-    content types) out of the result.
+
+def _backend_actions() -> set[str]:
+    """Action literals passed to an activity-log writer across api/.
+
+    Both writers put `action` third, so the literal is always within a
+    few lines of the call. Scanning that window rather than the whole
+    file keeps unrelated dotted strings (module paths, content types)
+    out of the result.
     """
     found: set[str] = set()
     for path in (_ROOT / "api").rglob("*.py"):
         lines = path.read_text().splitlines()
         for i, line in enumerate(lines):
-            if "record_activity(" not in line:
+            if not any(w in line for w in _WRITERS):
                 continue
             window = "\n".join(lines[i : i + 8])
             # Stop at the metadata dict — its keys and values are not
@@ -64,7 +73,7 @@ def test_every_logged_action_is_in_the_frontend_registry() -> None:
     backend = _backend_actions()
     # Guard the guard: if the scan silently stops finding anything, the
     # comparison below passes vacuously and this test protects nothing.
-    assert len(backend) >= 16, f"action scan found only {backend} — regex broke?"
+    assert len(backend) >= 33, f"action scan found only {backend} — regex broke?"
 
     missing = backend - _registry_actions()
     assert not missing, (

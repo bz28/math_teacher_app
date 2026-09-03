@@ -1,11 +1,16 @@
 """Role-agnostic activity log.
 
 One row per notable actor action — admin writes (delete, role change,
-export) AND teacher writes (assignment create/publish, generation
-start, bank approve/reject, grade save/review/publish). Written by
-`api.core.audit_log.record_activity`. Queried by ops/leadership for
-procurement audits and by the founder observability hub to watch what
-a pilot teacher actually does and generates.
+export), teacher writes (assignment create/publish, generation start,
+bank approve/reject, grade save/review/publish) AND student
+lifecycle milestones (submission create/confirm/flag, practice
+serve/complete/flag, tutor chat turns). Written by
+`api.core.audit_log.record_activity`, or `record_student_activity`
+for the student half. Queried by ops/leadership for procurement
+audits and by the founder observability hub to watch what a pilot
+teacher actually does and generates — and, with the student events,
+to see the work itself rather than a gap between two teacher
+actions.
 
 Superset of the old admin-only audit log: `actor_user_id`/`actor_role`
 replace the admin-specific columns, and `school_id` is denormalized at
@@ -39,8 +44,10 @@ class ActivityLog(Base):
         nullable=True,
         index=True,
     )
-    # "admin" | "teacher" — discriminates the two writer classes so a
-    # query can scope to just teacher activity.
+    # "admin" | "teacher" | "student" — discriminates the writer
+    # classes so a query can scope to just one. Taken verbatim from the
+    # actor's role at write time; no CHECK constraint, so adding a
+    # writer class needs no migration.
     actor_role: Mapped[str] = mapped_column(String(20), nullable=False)
 
     # Denormalized snapshot of the actor's school at write time so the

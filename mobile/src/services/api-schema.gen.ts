@@ -6300,8 +6300,10 @@ export interface operations {
         parameters: {
             query?: {
                 actor_user_id?: string | null;
-                /** @description "admin" or "teacher". */
+                /** @description "admin", "teacher", or "student". */
                 actor_role?: string | null;
+                /** @description Include events from teachers' preview-as-student shadow accounts. Excluded by default so they don't inflate student engagement. */
+                include_preview?: boolean;
                 /** @description Exact action ("grade.publish") or prefix glob ("grade.*"). */
                 action?: string | null;
                 target_type?: string | null;
@@ -6393,6 +6395,8 @@ export interface operations {
                 type?: string | null;
                 /** @description Pivot to every event touching this record or student. */
                 target_id?: string | null;
+                /** @description Include events from teachers' preview-as-student shadow accounts. Excluded by default. */
+                include_preview?: boolean;
             };
             header?: never;
             path?: never;
@@ -6436,6 +6440,8 @@ export interface operations {
                 type?: string | null;
                 /** @description Pivot to every event touching this record or student. */
                 target_id?: string | null;
+                /** @description Include events from teachers' preview-as-student shadow accounts. Excluded by default. */
+                include_preview?: boolean;
             };
             header?: never;
             path?: never;

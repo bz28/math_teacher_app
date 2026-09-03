@@ -3,10 +3,15 @@
 Two related logs:
 - `log_student_record_access` — every teacher/admin read of a student
   record. Powers FERPA disclosure-tracking reports.
-- `record_activity` — every notable actor write (admin OR teacher):
-  deletes/role changes on the admin side, and assignment/generation/
-  grade mutations on the teacher side. Powers procurement-required
-  admin activity reports and the founder observability hub.
+- `record_activity` — every notable actor write (admin, teacher OR
+  student): deletes/role changes on the admin side, assignment/
+  generation/grade mutations on the teacher side, and submission /
+  practice / tutor milestones on the student side (via the
+  `record_student_activity` wrapper). Powers procurement-required
+  admin activity reports and the founder observability hub. Student
+  events are what let one stream show a homework end to end —
+  assigned, worked, submitted, graded — instead of only the halves a
+  teacher performed.
 
 Both helpers are designed to be called from inside route handlers
 after authorization has already been confirmed. They add a row to
@@ -103,19 +108,28 @@ async def record_activity(
     target_id: uuid.UUID | str | None = None,
     metadata: dict[str, Any] | None = None,
     request: Request | None = None,
+    school_id: uuid.UUID | None = None,
 ) -> None:
-    """Record one notable actor action (admin or teacher).
+    """Record one notable actor action (admin, teacher, or student).
 
     One best-effort call per mutation, wrapped so a logging failure
-    NEVER fails the underlying request. `school_id` is looked up from
-    the actor's `users.school_id` at write time (snapshot semantics),
-    like LLM-call logging does. Keep `metadata` SMALL — ids / counts /
-    titles, never full student content.
+    NEVER fails the underlying request. Keep `metadata` SMALL — ids /
+    counts / titles, never full student content.
+
+    `school_id`: pass it explicitly when the caller already knows the
+    school; otherwise it is looked up from the actor's
+    `users.school_id` at write time (snapshot semantics), like
+    LLM-call logging does. The override exists because that column is
+    populated for TEACHERS ONLY — students affiliate through section
+    enrollments (see `User.school_id`), so a student's lookup returns
+    NULL and their events would silently vanish from every
+    school-filtered dashboard query. Student callers resolve the
+    school from the course they're already working in; see
+    `record_student_activity`.
 
     Caller is responsible for committing the surrounding transaction.
     """
     try:
-        school_id: uuid.UUID | None = None
         try:
             # Run the lookup inside a SAVEPOINT. A driver-level failure of
             # this SELECT (a DB timeout/outage) leaves the asyncpg
@@ -126,12 +140,13 @@ async def record_activity(
             # back only to the savepoint, keeping the outer transaction (and
             # the caller's commit) healthy. Best-effort logging must never
             # touch the underlying write.
-            async with db.begin_nested():
-                school_id = (
-                    await db.execute(
-                        select(User.school_id).where(User.id == _as_uuid(actor.user_id))
-                    )
-                ).scalar_one_or_none()
+            if school_id is None:
+                async with db.begin_nested():
+                    school_id = (
+                        await db.execute(
+                            select(User.school_id).where(User.id == _as_uuid(actor.user_id))
+                        )
+                    ).scalar_one_or_none()
         except Exception:
             logger.warning("activity school lookup failed", exc_info=True)
 
@@ -148,6 +163,57 @@ async def record_activity(
         db.add(entry)
     except Exception:
         logger.exception("Failed to record activity")
+
+
+async def record_student_activity(
+    db: AsyncSession,
+    student: User,
+    action: str,
+    target_type: str,
+    target_id: uuid.UUID | str | None = None,
+    metadata: dict[str, Any] | None = None,
+    *,
+    school_id: uuid.UUID | None = None,
+    request: Request | None = None,
+) -> None:
+    """Record one student lifecycle milestone.
+
+    A thin wrapper over `record_activity` for the student routes, which
+    hold a full `User` (via `get_current_user_full`) rather than the
+    `CurrentUser` the admin/teacher routes carry. It exists so two
+    easy-to-forget concerns live in exactly ONE place instead of at
+    every student call site:
+
+    1. `school_id` must be passed explicitly. `users.school_id` is a
+       teachers-only column, so the default lookup returns NULL for a
+       student and the event disappears from every school-scoped
+       dashboard query — silently, with no error. Callers resolve it
+       from the course they are already working in.
+    2. `is_preview` is stamped into the metadata. A teacher clicking
+       "Preview as student" gets a real shadow student account
+       (`User.is_preview`), whose events are otherwise
+       indistinguishable from a real child's and would inflate every
+       engagement number. The rows are kept — a teacher previewing is
+       itself signal — but the flag lets readers exclude them.
+
+    Same contract as `record_activity`: best-effort, never raises, and
+    the caller commits the surrounding transaction.
+    """
+    # Imported lazily: api.middleware.auth pulls in the route-layer
+    # dependency graph, and this module is imported by it.
+    from api.middleware.auth import CurrentUser
+
+    tagged: dict[str, Any] = {**(metadata or {}), "is_preview": bool(student.is_preview)}
+    await record_activity(
+        db,
+        CurrentUser(user_id=student.id, role=student.role, name=student.name or ""),
+        action,
+        target_type,
+        target_id,
+        tagged,
+        request,
+        school_id=school_id,
+    )
 
 
 async def record_question_edit(
