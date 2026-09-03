@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import "katex/dist/katex.min.css";
 
@@ -194,7 +194,12 @@ function Sections({ sections }: { sections: AssignmentDetailData["sections"] }) 
  *  page is to see how much of what we produced a teacher was willing to
  *  assign. */
 function Lifecycle({ a }: { a: AssignmentDetailData }) {
-  const kept = a.problems.filter((p) => !p.missing).length;
+  // Every slot she put on the paper, tombstones included. Deleting an
+  // item from the bank afterwards doesn't change what she chose to
+  // assign, and counting only survivors would quietly rewrite that
+  // decision months later. The tombstone row explains the difference
+  // between this number and what's rendered below.
+  const kept = a.problems.length;
   return (
     <div
       style={{
@@ -211,43 +216,45 @@ function Lifecycle({ a }: { a: AssignmentDetailData }) {
     >
       <span>created {fmtDate(a.created_at)}</span>
 
-      {a.generation && (
-        <span>
-          generated{" "}
-          <strong
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: 15,
-              color: "var(--ink)",
-              fontWeight: 500,
-            }}
-          >
-            {a.generation.generated_count}
-          </strong>
-        </span>
-      )}
-
+      {/* The narrowing, as one phrase. Two separate counts read as two
+          unrelated facts; an arrow between them is the comparison the
+          page exists to make. "published" is not reused as a count here
+          because it is already the name of a date on this same line. */}
       <span>
-        published{" "}
-        <strong
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: 15,
-            color: "var(--ink)",
-            fontWeight: 500,
-          }}
-        >
-          {kept}
-        </strong>
+        {a.generation && (
+          <>
+            generated <Big>{a.generation.generated_count}</Big>
+            <span style={{ padding: "0 6px", color: "var(--muted-2)" }}>→</span>
+          </>
+        )}
+        kept <Big>{kept}</Big>
       </span>
 
-      {a.first_published_at && <span>{fmtDate(a.first_published_at)}</span>}
+      {a.first_published_at && (
+        <span>first published {fmtDate(a.first_published_at)}</span>
+      )}
 
       <span style={{ color: "var(--muted-2)" }}>
         {a.submitted_count} submitted · {a.graded_count} graded ·{" "}
         {a.released_count} released
       </span>
     </div>
+  );
+}
+
+/** The only inked thing on an otherwise muted line. */
+function Big({ children }: { children: ReactNode }) {
+  return (
+    <strong
+      style={{
+        fontFamily: "var(--font-mono)",
+        fontSize: 15,
+        color: "var(--ink)",
+        fontWeight: 500,
+      }}
+    >
+      {children}
+    </strong>
   );
 }
 
