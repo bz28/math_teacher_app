@@ -118,16 +118,22 @@ def test_whole_numbers_instructs_design_not_rounding() -> None:
 
 
 def test_every_dropdown_option_is_accepted_by_the_request_model() -> None:
-    """The drift direction nothing else covers.
+    """Every option the dropdown offers must be one the API accepts.
 
-    Backend -> UI is caught for free: dump_openapi regenerates from the
-    Literal and CI fails on the artifact diff. UI -> backend is not.
     Add a value to the frontend dropdown without adding it to the
     Literal and the symptom is an option a teacher can select that 422s
     on Generate — no test, no artifact check, no type error.
 
+    Deliberately ONE-directional, unlike the symmetric registry guard in
+    test_activity_action_registry_parity. The reverse — a Literal value
+    with no dropdown option — is checked by nothing here, and that is
+    fine: it yields an unreachable backend capability, not an error a
+    teacher can hit. (Note it is NOT caught by CI's artifact diff, which
+    only proves the committed spec matches the Literal; it says nothing
+    about the dropdown.)
+
     Reads the frontend list as source text because the two sides are
-    different languages, same as the activity-action registry guard.
+    different languages.
     """
     import re
     from typing import get_args, get_type_hints
@@ -148,7 +154,13 @@ def test_every_dropdown_option_is_accepted_by_the_request_model() -> None:
     for field, body in zip(blocks[1::2], blocks[2::2]):
         allowed = set(get_args(hints[field]))
         assert allowed, f"{field} is not a Literal on GenerationParams"
-        offered = set(re.findall(r'value:\s*"([a-z0-9_]+)"', body))
+        # `[^"]+`, not `[a-z0-9_]+`. The narrow class silently skipped
+        # any value it couldn't express — "mixed-number", "mixedNumber",
+        # "SI_units" — so a drifted option was simply not seen and the
+        # assert below passed with drift present. The `assert offered`
+        # guard does not help: it fires only when EVERY option in a
+        # field is unparseable, never when one is.
+        offered = set(re.findall(r'value:\s*"([^"]+)"', body))
         assert offered, f"no options parsed for {field}"
         extra = offered - allowed
         assert not extra, (
