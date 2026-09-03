@@ -2112,7 +2112,14 @@ export interface BankItem {
  *  api/routes/teacher_question_bank.py. */
 export interface GenerationParams {
   problem_type: "mixed" | "word" | "computation" | "multi_step" | "proof";
-  answer_form: "auto" | "radical" | "rational_exponent" | "exact" | "decimal_2" | "decimal_3";
+  answer_form:
+    | "auto"
+    | "integer"
+    | "radical"
+    | "rational_exponent"
+    | "exact"
+    | "decimal_2"
+    | "decimal_3";
   difficulty: "mixed" | "easy" | "medium" | "hard" | "ramp";
   calculator: "either" | "no_calc" | "calc_allowed";
   format: "frq" | "mcq";

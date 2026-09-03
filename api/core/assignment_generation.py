@@ -154,6 +154,21 @@ _PROBLEM_TYPE_INSTRUCTIONS = {
     "proof": "Each problem must be a proof requiring justified reasoning at each step.",
 }
 _ANSWER_FORM_INSTRUCTIONS = {
+    # Unlike every other value here, this one constrains how the problem
+    # is BUILT, not how a finished answer is written down: you cannot
+    # express sqrt(2) as a whole number, you can only choose givens that
+    # avoid it. Hence "design ... choose the numbers", and hence the
+    # explicit ban on rounding — an unguarded "make answers whole" reads
+    # to the model as permission to state 5 when the answer is 4.7, which
+    # ships a wrong answer to a student under a teacher's name.
+    "integer": (
+        "Design every problem so its final answer is a whole number "
+        "(no fractions, decimals, or radicals). Choose the given "
+        "values so it works out exactly. NEVER round or approximate to "
+        "reach a whole number — if a problem cannot have a whole-number "
+        "answer without distorting the topic (irrational roots, most "
+        "trigonometric values), write a different problem that can."
+    ),
     "radical": "Express all final answers in radical form (no decimal approximations).",
     "rational_exponent": "Express all final answers in rational-exponent form.",
     "exact": "All final answers must be exact — no decimal approximations.",

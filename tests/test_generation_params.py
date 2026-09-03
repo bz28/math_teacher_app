@@ -87,6 +87,25 @@ def test_every_non_default_value_translates_to_a_line() -> None:
     assert len(lines) == 5
 
 
+def test_whole_numbers_instructs_design_not_rounding() -> None:
+    """The whole-numbers option is the only answer_form that constrains
+    how a problem is BUILT rather than how a finished answer is written,
+    and it carries the one failure mode in this feature that reaches a
+    student: told merely to "make answers whole", a model will round 4.7
+    to 5 and state a wrong answer under the teacher's name. The emitted
+    line must forbid that explicitly and offer the escape hatch."""
+    line = _translate_params_to_instructions(
+        {"problem_type": "mixed", "answer_form": "integer",
+         "difficulty": "mixed", "calculator": "either", "format": "frq"},
+    )[0]
+    assert "whole number" in line
+    # The ban has to be explicit, not implied by "exactly".
+    assert "NEVER round" in line
+    # And a way out for topics that genuinely can't comply, so the model
+    # rewrites the problem instead of faking the answer.
+    assert "write a different problem" in line
+
+
 def test_partial_non_defaults_emit_only_relevant_lines() -> None:
     params = {
         "problem_type": "mixed",
