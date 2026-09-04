@@ -18,6 +18,7 @@ from api.routes.admin_audit_logs import router as admin_audit_logs_router
 from api.routes.auth import router as auth_router
 from api.routes.billing import router as billing_router
 from api.routes.contact import router as contact_router
+from api.routes.extraction_drain import router as extraction_drain_router
 from api.routes.grading_drain import router as grading_drain_router
 from api.routes.health import router as health_router
 from api.routes.image import router as image_router
@@ -114,6 +115,7 @@ app.include_router(work_router, prefix="/v1")
 app.include_router(admin_router, prefix="/v1")
 app.include_router(admin_audit_logs_router, prefix="/v1")
 app.include_router(grading_drain_router, prefix="/v1")
+app.include_router(extraction_drain_router, prefix="/v1")
 app.include_router(webhook_router, prefix="/v1")
 app.include_router(billing_router, prefix="/v1")
 app.include_router(contact_router, prefix="/v1")

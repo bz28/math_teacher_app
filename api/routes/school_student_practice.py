@@ -41,6 +41,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import record_student_activity
 from api.core.constants import MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
+from api.core.extraction_queue import drain as extraction_drain
+from api.core.extraction_queue import enqueue_submission as enqueue_extraction
 from api.core.image_utils import validate_and_decode_upload
 from api.core.integrity_pipeline import (
     spawn_diagnosis_seeding,
@@ -107,54 +109,67 @@ async def drain_integrity_background_tasks() -> None:
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-async def _run_extraction_background(submission_id: uuid.UUID) -> None:
+async def _drain_extraction_quietly() -> None:
+    """Adapter for the background-task spawner.
+
+    `extraction_queue.drain` returns a tally for the cron endpoint to
+    report; nobody is here to read it, and `_spawn_background_task` is
+    typed for coroutines returning None. Discarding it explicitly beats
+    casting the type away.
+    """
+    await extraction_drain()
+
+
+async def run_extraction_for_submission(submission_id: uuid.UUID) -> None:
     """Run the Vision extraction for a submission and persist it.
 
-    Stops after extraction — integrity sampling + AI grading are
-    gated on the student pressing Confirm (or Flag) on the post-
-    submit screen. The confirm endpoint spawns
-    `_run_integrity_and_grading_background`.
+    Stops after extraction — integrity sampling + AI grading are gated on
+    the student pressing Confirm (or Flag) on the post-submit screen. The
+    confirm endpoint spawns `_run_integrity_and_grading_background`.
 
-    Opens its own DB session — the request session is already closed
-    by the time this runs. Never re-raises: fire-and-forget.
+    RAISES on failure, deliberately. This used to swallow everything
+    because it was spawned fire-and-forget and had nobody to tell. It is
+    now driven by `extraction_queue`, which has somewhere to put the
+    error: the job's `last_error`, visible in the admin console. On
+    2026-09-03 the swallowed exception was
+
+        TypeError: AsyncMessages.create() got an unexpected keyword
+        argument 'temperature'
+
+    and the only copy of it was in the platform log stream. Putting it on
+    the row is the difference between one query and an outage
+    investigation.
+
+    Opens its own DB session — the request session is closed by the time
+    a drain calls this.
     """
     from api.core.integrity_ai import extract_student_work
     from api.services.bank import load_problems_for_assignment
 
-    try:
-        async with get_session_factory()() as db:
-            sub = (await db.execute(
-                select(Submission).where(Submission.id == submission_id)
-            )).scalar_one_or_none()
-            if not sub:
-                return
-            assignment = (await db.execute(
-                select(Assignment).where(Assignment.id == sub.assignment_id)
-            )).scalar_one_or_none()
-            if not assignment:
-                return
-            user_id = str(sub.student_id)
+    async with get_session_factory()() as db:
+        sub = (await db.execute(
+            select(Submission).where(Submission.id == submission_id)
+        )).scalar_one_or_none()
+        if not sub:
+            # Deleted between enqueue and drain. Nothing owed, and not an
+            # error — the queue marks the job done and moves on.
+            return
+        assignment = (await db.execute(
+            select(Assignment).where(Assignment.id == sub.assignment_id)
+        )).scalar_one_or_none()
+        if not assignment:
+            return
+        user_id = str(sub.student_id)
 
-            # Feed Vision the problem list so each step can be tagged
-            # with the problem it belongs to. See
-            # load_problems_for_assignment for the returned shape.
-            problems = await load_problems_for_assignment(db, assignment)
-            try:
-                extraction = await extract_student_work(
-                    submission_id, db, problems=problems, user_id=user_id,
-                )
-            except Exception:
-                logger.exception(
-                    "extraction failed for submission %s", submission_id,
-                )
-                return
-
-            sub.extraction = extraction
-            await db.commit()
-    except Exception:
-        logger.exception(
-            "extraction pipeline crashed for submission %s", submission_id,
+        # Feed Vision the problem list so each step can be tagged with
+        # the problem it belongs to. See load_problems_for_assignment
+        # for the returned shape.
+        problems = await load_problems_for_assignment(db, assignment)
+        extraction = await extract_student_work(
+            submission_id, db, problems=problems, user_id=user_id,
         )
+        sub.extraction = extraction
+        await db.commit()
 
 
 async def _run_integrity_and_grading_background(
@@ -2001,29 +2016,37 @@ async def submit_homework(
     )
     submission_id_for_task = submission.id
 
-    # Spawn extraction as a background task so the student's submit
-    # returns immediately. Vision calls take 5–15s — inline would
-    # time out the HTTP response. Extraction runs only when there's
-    # a downstream consumer (integrity or grading toggle on);
-    # otherwise extraction is pure waste.
+    # Extraction is QUEUED, not spawned. Vision takes 5-15s so it cannot
+    # run inline, but a bare background task was how a submission got
+    # permanently stranded on 2026-09-03: the task died, and because the
+    # work was never written down, nothing knew it was owed. The job row
+    # is committed here, so losing this process costs latency and never
+    # the read — the scheduled drain picks it up.
     #
-    # Integrity sampling + AI grading are NOT spawned here — they're
-    # gated on the student pressing Confirm on the post-submit
-    # screen, which calls /confirm-extraction to spawn
-    # _run_integrity_and_grading_background.
+    # Only when there is a downstream consumer: with both toggles off no
+    # read is owed, and a job would be pure cost. That is the same
+    # condition `stage_for` uses to tell `extraction_off` (correct) from
+    # `awaiting_extraction` (a bug).
+    #
+    # Integrity sampling + AI grading are NOT queued here — they're gated
+    # on the student pressing Confirm on the post-submit screen, which
+    # calls /confirm-extraction.
     if assignment.integrity_check_enabled or assignment.ai_grading_enabled:
-        _spawn_background_task(
-            _run_extraction_background(submission_id_for_task),
-        )
+        await enqueue_extraction(db, submission_id_for_task, assignment)
+        await db.commit()
+        # Kick a drain now so the student's read still starts in seconds
+        # rather than waiting for the cron. Best-effort by design: the
+        # row is already durable, so losing this task costs latency only.
+        _spawn_background_task(_drain_extraction_quietly())
 
-    # Logged LAST, and deliberately so. The submission is committed and
-    # durable by here, and `_run_extraction_background` has exactly one
-    # caller — the spawn directly above. Anything fallible placed between
-    # that commit and that spawn can 500 a submission that already
-    # landed; the retry then hits the one-shot 409 and extraction never
-    # fires, leaving the work permanently unprocessable with no path
-    # back. So the audit write goes after the spawn, and its own failure
-    # can cost nothing but the log line.
+    # Logged after the enqueue. The ordering used to be load-bearing —
+    # with a fire-and-forget spawn, anything fallible between the commit
+    # and the spawn could 500 a submission that had already landed, and
+    # the retry would hit the one-shot 409 with extraction never firing.
+    # The queue removes that hazard: the job is committed above, so even
+    # if this write fails the read still happens. Kept last anyway,
+    # because an audit line is never worth risking a student's
+    # submission for.
     try:
         await record_student_activity(
             db, user, "submission.create", "submission", submission.id,

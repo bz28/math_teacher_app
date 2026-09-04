@@ -1,15 +1,19 @@
 """Re-run extraction for submissions whose background task died.
 
-Why this exists: extraction is fire-and-forget. `_run_extraction_background`
-has exactly one caller — the spawn inside submit_homework — and there is no
-retry, no queue, no sweeper. When the task dies (on 2026-09-03, because the
-anthropic SDK floated to 1.3.0 and dropped the `temperature` kwarg), the
-submission is durable but permanently unprocessable: the student's post-submit
-screen spins for 90s and then shows "Couldn't prepare your check", forever.
+Why this exists: a job whose retry budget is spent parks as `failed` and
+waits for a human, by design — a photo that will never read must stop
+burning a Vision call on every drain. This is how a human says "the cause
+is fixed, try again".
 
-This calls the SAME function the app would have called, so the student's flow
-resumes exactly as if it had worked the first time — next page load hands them
-the confirm screen.
+It RE-ENQUEUES rather than running extraction directly. That matters: a
+direct call would bypass the very machinery built to make this
+recoverable, so a second failure would again leave nothing behind.
+Through the queue, a failure lands on the row as `last_error`, the retry
+budget resets, and the drain owns it from there.
+
+Before `extraction_jobs` existed this script was the ONLY recovery path,
+and on 2026-09-03 it was run by hand against production at 2am to rescue
+one student whose submission the anthropic SDK outage had stranded.
 
 SAFETY
   * Dry-run by default. Pass --apply to actually write.
@@ -99,9 +103,9 @@ async def _record_intervention(submission_id: uuid.UUID, steps: int) -> None:
 async def main(submission_id: uuid.UUID, apply: bool) -> None:
     from sqlalchemy import select
 
+    from api.core.extraction_queue import drain, enqueue_submission
     from api.database import get_session_factory
     from api.models.assignment import Assignment, Submission
-    from api.routes.school_student_practice import _run_extraction_background
 
     async with get_session_factory()() as db:
         sub = (await db.execute(
@@ -122,6 +126,7 @@ async def main(submission_id: uuid.UUID, apply: bool) -> None:
         print(f"  extraction     : {'present' if sub.extraction else 'NULL'}")
         print(f"  confirmed_at   : {sub.extraction_confirmed_at}")
         print(f"  flagged_at     : {sub.extraction_flagged_at}")
+        sub_assignment_id = sub.assignment_id
         print(f"  integrity/grade: {assignment.integrity_check_enabled}"
               f"/{assignment.ai_grading_enabled}")
 
@@ -146,8 +151,15 @@ async def main(submission_id: uuid.UUID, apply: bool) -> None:
         print("\nDRY RUN — would re-run extraction. Re-run with --apply.")
         return
 
-    print("\n  running extraction (one Vision call, may take 5-15s)...")
-    await _run_extraction_background(submission_id)
+    print("\n  re-enqueueing and draining (one Vision call, may take 5-15s)...")
+    async with get_session_factory()() as db:
+        assignment = (await db.execute(
+            select(Assignment).where(Assignment.id == sub_assignment_id)
+        )).scalar_one()
+        await enqueue_submission(db, submission_id, assignment)
+        await db.commit()
+    tally = await drain(limit=1)
+    print(f"  drain: {tally}")
 
     # Flush the cost log before the loop closes. _log_and_persist hands the
     # llm_calls row to fire_and_forget_persist, which is a create_task —
@@ -161,7 +173,7 @@ async def main(submission_id: uuid.UUID, apply: bool) -> None:
         print(f"  flushing {len(_background_tasks)} pending cost-log write(s)...")
         await asyncio.gather(*list(_background_tasks), return_exceptions=True)
 
-    # _run_extraction_background never re-raises, so confirm by re-reading
+    # The drain reports its own tally, but confirm the RESULT by re-reading
     # rather than trusting that it returned.
     async with get_session_factory()() as db:
         after = (await db.execute(
