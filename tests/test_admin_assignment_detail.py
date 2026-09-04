@@ -9,10 +9,13 @@ These pin the parts that are easy to get quietly wrong:
    bank items. Reading content directly returns an empty list, which
    renders as "no problems" on an assignment that has six — a wrong
    answer that looks like a working page.
-2. **Provenance is never guessed.** A legacy snapshot has no bank item to
-   read `source` from, so it gets no badge rather than a fabricated one.
+2. **Provenance is never guessed.** A problem with no resolvable bank
+   item gets no badge rather than a fabricated one — and the labels
+   describe the sources that are actually written, not ones the model
+   merely declares.
 3. **A deleted problem leaves a hole, not a renumbering.** Positions must
-   describe what students saw.
+   describe what students saw, and a hole means a reference we couldn't
+   resolve — never merely a gap in the stored position numbers.
 """
 
 import uuid
@@ -167,7 +170,7 @@ async def test_provenance_labels_the_sources_that_actually_exist(
     imported = await _add_item(w, a_id, question="From a worksheet", source="imported")
     async with get_session_factory()() as s:
         await s.execute(text("UPDATE assignments SET content = :c WHERE id = :i"), {
-            "c": '{"problem_ids": ["%s", "%s", "%s"]}' % (untouched, edited, imported),
+            "c": f'{{"problem_ids": ["{untouched}", "{edited}", "{imported}"]}}',
             "i": str(a_id),
         })
         await s.commit()
@@ -195,7 +198,7 @@ async def test_deleted_problem_leaves_a_hole_rather_than_renumbering(
     third = await _add_item(w, a_id, question="Third")
     async with get_session_factory()() as s:
         await s.execute(text("UPDATE assignments SET content = :c WHERE id = :i"), {
-            "c": '{"problem_ids": ["%s", "%s", "%s"]}' % (first, doomed, third),
+            "c": f'{{"problem_ids": ["{first}", "{doomed}", "{third}"]}}',
             "i": str(a_id),
         })
         await s.execute(
@@ -419,9 +422,9 @@ async def test_a_junk_position_in_content_does_not_break_the_page(
         await s.execute(text("UPDATE assignments SET content = :c WHERE id = :i"), {
             "c": (
                 '{"problems": ['
-                '{"bank_item_id": "%s", "position": "1", "question": "First"},'
-                '{"bank_item_id": "%s", "position": 0, "question": "Second"}'
-                ']}' % (one, two)
+                f'{{"bank_item_id": "{one}", "position": "1", "question": "First"}},'
+                f'{{"bank_item_id": "{two}", "position": 0, "question": "Second"}}'
+                ']}'
             ),
             "i": str(a_id),
         })
@@ -486,10 +489,10 @@ async def test_odd_stored_positions_do_not_invent_a_missing_problem(
         await s.execute(text("UPDATE assignments SET content = :c WHERE id = :i"), {
             "c": (
                 '{"problems": ['
-                '{"bank_item_id": "%s", "position": 0, "question": "Zeroth"},'
-                '{"bank_item_id": "%s", "position": 1, "question": "First"},'
-                '{"bank_item_id": "%s", "position": 2, "question": "Second"}'
-                ']}' % (one, two, three)
+                f'{{"bank_item_id": "{one}", "position": 0, "question": "Zeroth"}},'
+                f'{{"bank_item_id": "{two}", "position": 1, "question": "First"}},'
+                f'{{"bank_item_id": "{three}", "position": 2, "question": "Second"}}'
+                ']}'
             ),
             "i": str(a_id),
         })
