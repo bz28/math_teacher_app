@@ -4,16 +4,16 @@ version = "0.1.0"
 description = "AI-powered math tutoring backend"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.34.0",
-    "sqlalchemy[asyncio]>=2.0.36",
-    "asyncpg>=0.30.0",
-    "alembic>=1.14.0",
-    "pydantic-settings>=2.7.0",
-    "python-jose[cryptography]>=3.3.0",
-    "pyjwt[crypto]>=2.10.0",
-    "bcrypt>=4.2.0",
-    "sentry-sdk[fastapi]>=2.19.0",
+    "fastapi==0.139.0",
+    "uvicorn[standard]==0.51.0",
+    "sqlalchemy[asyncio]==2.0.51",
+    "asyncpg==0.31.0",
+    "alembic==1.18.5",
+    "pydantic-settings==2.14.2",
+    "python-jose[cryptography]==3.5.0",
+    "pyjwt[crypto]==2.13.0",
+    "bcrypt==5.0.0",
+    "sentry-sdk[fastapi]==2.64.0",
     # PINNED, not floored. Railway does NOT build from infra/Dockerfile —
     # it uses Railpack, whose start command is `pip install -e "."`. That
     # reads THIS file and ignores constraints.txt entirely, so a `>=` here
@@ -24,12 +24,12 @@ dependencies = [
     # processed. TypeError isn't an APIError, so nothing was even logged as
     # a failed call. Keep this in lockstep with constraints.txt.
     "anthropic==0.116.0",
-    "httpx>=0.28.0",
-    "email-validator>=2.2.0",
-    "slowapi>=0.1.9",
-    "resend>=2.0.0",
-    "stripe>=10.0.0",
-    "pillow>=11.0.0",  # EXIF-transpose + downscale student photos before vision (api/core/image_utils) — RUNTIME dep, imported at app startup
+    "httpx==0.28.1",
+    "email-validator==2.3.0",
+    "slowapi==0.1.10",
+    "resend==2.32.2",
+    "stripe==15.5.1",
+    "pillow==12.3.0",  # EXIF-transpose + downscale student photos before vision (api/core/image_utils) — RUNTIME dep, imported at app startup
 ]
 
 [tool.setuptools.packages.find]

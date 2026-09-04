@@ -1100,3 +1100,33 @@ async def call_claude_vision(
             tool_schema_text=_tool_schema_text(tools),
         )
         raise RuntimeError(f"Failed to parse Claude Vision response: {e}") from e
+    except Exception as e:
+        # Anything the two handlers above don't name — most importantly a
+        # TypeError from an SDK whose signature moved under us. On
+        # 2026-09-03 `anthropic` floated to 1.3.0, which dropped the
+        # `temperature` kwarg; every extraction raised TypeError, which is
+        # not an APIError, so NOTHING was logged. The database showed a
+        # submission with zero model calls and zero failures, and the only
+        # evidence lived in the platform log stream.
+        #
+        # Re-raised unchanged, so behaviour is identical — this exists
+        # purely to leave a trace. The logging is itself wrapped: failing
+        # while recording a failure must not replace the real exception
+        # with a confusing one.
+        latency_ms = round((time.monotonic() - start) * 1000, 2)
+        _circuit.record_failure()
+        try:
+            await _log_and_persist(
+                use_model, mode, 0, 0, latency_ms,
+                session_id=session_id, user_id=user_id, success=False,
+                input_text=input_summary,
+                output_text=f"{type(e).__name__}: {e}",
+                submission_id=submission_id,
+                generation_job_id=generation_job_id,
+                call_metadata=call_metadata,
+                system_prompt=_with_safety(None),
+                tool_schema_text=_tool_schema_text(tools),
+            )
+        except Exception:
+            logger.exception("failed to log an unexpected LLM error")
+        raise
