@@ -65,6 +65,11 @@ NOW = datetime.now(UTC)
 READ_AFTER_SUBMIT = timedelta(seconds=11)
 RULED_AFTER_READ = timedelta(minutes=3)
 
+# One due date for every seeded assignment, so the grading jobs'
+# `scheduled_for` can be bound to the same value `enqueue_submission`
+# would have read off the assignment.
+DUE_AT = NOW - timedelta(days=1)
+
 
 def submitted(days_ago: int) -> datetime:
     return NOW - timedelta(days=days_ago)
@@ -190,7 +195,7 @@ async def seed() -> dict[str, str]:
                 course_id=course.id, unit_ids=[], teacher_id=teacher.id,
                 title=title, type="homework", status="published",
                 integrity_check_enabled=ai, ai_grading_enabled=ai,
-                due_at=NOW - timedelta(days=1),
+                due_at=DUE_AT,
             )
             s.add(a)
             await s.flush()
@@ -256,10 +261,27 @@ async def seed() -> dict[str, str]:
                 graded_at=NOW - timedelta(days=7),
             ),
         ])
-        s.add(GradingJob(
-            submission_id=repaired.id, assignment_id=repaired.assignment_id,
-            status="queued", attempts=0,
-        ))
+        # The grading queue, as `enqueue_submission` actually writes it.
+        #
+        # `scheduled_for` is set to the assignment's `due_at`, never left
+        # NULL when the assignment has one — NULL means "no due date,
+        # wait for a teacher" (see the GradingJob docstring), so a NULL
+        # here alongside a due date asserts the opposite of the row it
+        # points at. And confirming an AI-graded submission enqueues a
+        # job unconditionally, so the two that carry an ai_score must
+        # carry a finished job too; a published submission with no
+        # grading job on record is not a state the drain can leave
+        # behind.
+        for target, job_status in (
+            (repaired, "queued"), (done, "done"), (graded, "done"),
+        ):
+            s.add(GradingJob(
+                submission_id=target.id,
+                assignment_id=target.assignment_id,
+                status=job_status,
+                scheduled_for=DUE_AT,
+                attempts=1 if job_status == "done" else 0,
+            ))
 
         # The read that produced each stored extraction.
         #

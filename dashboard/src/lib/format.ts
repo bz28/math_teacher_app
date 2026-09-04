@@ -41,11 +41,13 @@ export function fmtPercent(n: number, digits = 1): string {
 // and 359_600ms rendered "5m 60s". Round to the smaller unit FIRST,
 // then divide, so the carry lands where it belongs.
 export function fmtWallTime(ms: number): string {
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  if (ms < 3_600_000) {
-    const totalS = Math.round(ms / 1000);
-    return `${Math.floor(totalS / 60)}m ${totalS % 60}s`;
-  }
+  // Tier on the ROUNDED value, not the raw one. Choosing the tier first
+  // let the carry escape upward: 59_999ms rounded to "60.0s" and
+  // 3_599_600ms to "60m 0s" — the same defect as "23h 60m", just one
+  // tier further along each time.
+  if (ms < 59_950) return `${(ms / 1000).toFixed(1)}s`;
+  const totalS = Math.round(ms / 1000);
+  if (totalS < 3600) return `${Math.floor(totalS / 60)}m ${totalS % 60}s`;
   const totalM = Math.round(ms / 60_000);
   return `${Math.floor(totalM / 60)}h ${totalM % 60}m`;
 }

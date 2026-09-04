@@ -138,6 +138,25 @@ export default function StudentDetail() {
       render: (r) => {
         const meta = STAGE_META[r.stage];
         const w = waited(r.stage_since);
+        // A confirmed submission with no grade is the question this
+        // column has to answer, and the durable queue is the answer:
+        // owed-and-scheduled is healthy, `failed` is not. Without this
+        // the row said CONFIRMED and stopped, and the endpoint's
+        // `grading_job` was returned but rendered nowhere.
+        const job = r.grading_job;
+        const jobNote =
+          r.stage !== "confirmed" || !job
+            ? null
+            : job.status === "failed"
+              ? { text: `grading failed after ${job.attempts} tries`, bad: true }
+              : job.status === "queued"
+                ? {
+                  text: job.scheduled_for
+                    ? `grading queued for ${fmtClockTime(job.scheduled_for)}`
+                    : "grading waiting on the teacher",
+                  bad: false,
+                }
+                : { text: `grading ${job.status}`, bad: false };
         return (
           <div>
             <StatusPill tone={meta.tone} label={meta.label} title={meta.blurb} />
@@ -147,6 +166,19 @@ export default function StudentDetail() {
                 style={{ fontSize: 11, color: "var(--danger)", marginTop: 4 }}
               >
                 waiting {w}
+              </div>
+            )}
+            {jobNote && (
+              <div
+                className="mono"
+                style={{
+                  fontSize: 11,
+                  color: jobNote.bad ? "var(--danger)" : "var(--muted)",
+                  marginTop: 4,
+                }}
+                title={job?.last_error ?? undefined}
+              >
+                {jobNote.text}
               </div>
             )}
           </div>
