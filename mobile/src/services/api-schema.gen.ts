@@ -900,6 +900,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/users/{teacher_id}/assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Teacher Assignments
+         * @description Everything this teacher has assigned, newest first.
+         *
+         *     The activity log only shows the window you happen to be reading, so
+         *     it answers "what did she do on Tuesday" and never "what has she
+         *     assigned all term" — including the draft she started and abandoned,
+         *     which is often the more interesting row.
+         *
+         *     `problem_count` is read from `content` rather than by hydrating each
+         *     row: hydration is a query per assignment, and a count that is off by
+         *     a hard-deleted reference is not worth N queries on a list whose job
+         *     is to get you to the detail page. Practice sets carry no
+         *     `problem_ids` at all, so they report null rather than a wrong zero —
+         *     the detail page resolves them properly.
+         */
+        get: operations["teacher_assignments_v1_admin_users__teacher_id__assignments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/users/{teacher_id}/students": {
         parameters: {
             query?: never;
@@ -8113,6 +8145,42 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    teacher_assignments_v1_admin_users__teacher_id__assignments_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                teacher_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
                     };
                 };
             };
