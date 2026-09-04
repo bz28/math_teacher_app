@@ -24,13 +24,18 @@ Extraction is only spawned when the assignment has a downstream
 consumer::
 
     if assignment.integrity_check_enabled or assignment.ai_grading_enabled:
-        _spawn_background_task(_run_extraction_background(...))
+        await enqueue_extraction(submission_id, assignment)
 
 With both toggles off, no Vision call was ever owed and the empty
-trace is correct. With either on, one *was* owed and did not land —
-the read failed, or the fire-and-forget task died with the process
-that spawned it. Same NULL, opposite meanings: one is the product
-working, the other is work silently lost. Folding them together
+trace is correct. With either on, one *was* owed and did not land.
+Same NULL, opposite meanings: one is the product working, the other is
+work still outstanding.
+
+Since the extraction queue landed, ``awaiting_extraction`` no longer
+means the work may have been silently lost — there is a row in
+``extraction_jobs`` saying it is owed, carrying its attempt count and
+its last error. The stage still reads NULL the same way; what changed
+is that the answer to "why?" now exists somewhere. Folding them together
 reports a bug as a feature on every HW with AI switched off, which is
 most of the ones being piloted.
 

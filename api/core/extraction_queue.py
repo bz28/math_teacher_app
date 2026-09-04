@@ -21,10 +21,17 @@ differs, the reason is written down.
 * **No grouping in the drain.** Same reason: nothing to share between
   two students' photos, so jobs run independently.
 
-* **No `skipped` outcome.** Grading skips for real reasons (a teacher
-  turned AI grading off, the photo was unreadable). Extraction is either
-  owed or not, and "not owed" is decided at enqueue time — a job that
-  exists should run.
+* **A narrower `skipped`.** Grading skips for several reasons;
+  extraction has exactly one — the assignment's AI toggles were switched
+  off after the job was queued. "Not owed" is decided at enqueue time
+  AND again at drain time, because a backfilled or re-enqueued row can
+  be days old by the time it runs and a Vision call is the most
+  expensive thing this system does per submission. It is reported apart
+  from `failed`, since `failed` is the counter an operator is told to
+  alert on and a closed door is not an incident.
+
+  A deleted submission needs no outcome of its own: the job row is
+  `ON DELETE CASCADE` and goes with it.
 """
 
 import logging
@@ -33,7 +40,7 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, select, update
+from sqlalchemy import CursorResult, case, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,6 +67,10 @@ STALE_RUNNING_MINUTES = 10
 
 _DONE = "done"
 _FAILED = "failed"
+# The assignment's AI toggles were switched off after the job was
+# queued, so nothing is owed. Kept out of `failed` so a closed door
+# does not page anyone.
+_SKIPPED = "skipped"
 
 
 def _now() -> datetime:
@@ -67,7 +78,6 @@ def _now() -> datetime:
 
 
 async def enqueue_submission(
-    db: AsyncSession,
     submission_id: uuid.UUID,
     assignment: Assignment,
 ) -> None:
@@ -84,32 +94,49 @@ async def enqueue_submission(
     already exhausted its budget: the cause has presumably been fixed, so
     it deserves a fresh budget rather than inheriting a spent one.
 
-    Caller commits. Never raises: a queueing failure must not take down
-    the submit that just succeeded — the whole point of this table is
-    that the student's work is already safe by the time we get here.
+    Opens and commits its OWN session, and takes no caller session. That
+    is load-bearing, not tidiness. It used to run on the caller's session
+    and swallow every exception, which meant a failed INSERT left that
+    transaction ABORTED: the caller's next `COMMIT` silently degraded to
+    a rollback, and the result was a durable submission with no job row
+    and nothing but a log line — the exact stranding this table exists to
+    end, reproduced inside the code written to end it.
+
+    On its own session the failure is total instead of partial. Either
+    the row is committed or it is not, and the caller's transaction is
+    untouched either way.
+
+    Requires the submission to be COMMITTED first: a separate session
+    cannot see an uncommitted row, and the foreign key would reject it.
+    Every caller already commits the submission before queueing.
+
+    Still never raises — a queueing failure must not take down a submit
+    that already succeeded.
     """
     try:
-        await db.execute(
-            pg_insert(ExtractionJob)
-            .values(
-                id=uuid.uuid4(),
-                submission_id=submission_id,
-                assignment_id=assignment.id,
-                status=STATUS_QUEUED,
-                attempts=0,
+        async with get_session_factory()() as own:
+            await own.execute(
+                pg_insert(ExtractionJob)
+                .values(
+                    id=uuid.uuid4(),
+                    submission_id=submission_id,
+                    assignment_id=assignment.id,
+                    status=STATUS_QUEUED,
+                    attempts=0,
+                )
+                .on_conflict_do_update(
+                    index_elements=["submission_id"],
+                    set_={
+                        "status": STATUS_QUEUED,
+                        "attempts": 0,
+                        "last_error": None,
+                        "started_at": None,
+                        "finished_at": None,
+                        "updated_at": _now(),
+                    },
+                )
             )
-            .on_conflict_do_update(
-                index_elements=["submission_id"],
-                set_={
-                    "status": STATUS_QUEUED,
-                    "attempts": 0,
-                    "last_error": None,
-                    "started_at": None,
-                    "finished_at": None,
-                    "updated_at": _now(),
-                },
-            )
-        )
+            await own.commit()
     except Exception:
         logger.exception(
             "failed to enqueue extraction for submission %s", submission_id,
@@ -163,19 +190,43 @@ async def _reclaim_stale(db: AsyncSession) -> int:
     return int(parked.rowcount or 0) + int(requeued.rowcount or 0)
 
 
-async def _claim_queued(db: AsyncSession, limit: int) -> list[ExtractionJob]:
+async def _claim_queued(
+    db: AsyncSession,
+    limit: int,
+    first: uuid.UUID | None = None,
+) -> list[ExtractionJob]:
     """Atomically claim up to `limit` queued jobs.
 
     `FOR UPDATE SKIP LOCKED` is what makes two drains safe to run at
     once: each claims a disjoint set instead of both grabbing the same
     rows and billing the same Vision call twice.
+
+    `first` jumps one submission to the head of the queue. Submit kicks a
+    drain for the student who is at that moment watching a spinner, and
+    jobs run one at a time — so under plain oldest-first that student
+    lands LAST, behind every backlogged job, each a 5-15s Vision call.
+    Twenty of those is past the client's 90-second timeout, and the
+    student sees the "Couldn't prepare your check" screen this queue was
+    built to eliminate. The migration backfill makes that concrete
+    rather than theoretical: it stamps every pre-existing submission at
+    the same `now()`, so the first student to submit after deploy is
+    behind all of them.
+
+    Oldest-first for everyone else, so a backlog still drains in the
+    order students were kept waiting.
     """
+    order = (
+        [ExtractionJob.created_at.asc()]
+        if first is None
+        else [
+            case((ExtractionJob.submission_id == first, 0), else_=1).asc(),
+            ExtractionJob.created_at.asc(),
+        ]
+    )
     rows = (await db.execute(
         select(ExtractionJob)
         .where(ExtractionJob.status == STATUS_QUEUED)
-        # Oldest first, so a backlog drains in the order students were
-        # kept waiting.
-        .order_by(ExtractionJob.created_at.asc())
+        .order_by(*order)
         .limit(limit)
         .with_for_update(skip_locked=True)
     )).scalars().all()
@@ -200,30 +251,94 @@ async def _finish(
     closed one of its own; reusing that would mean holding a connection
     across a 15-second Vision call.
     """
+    values: dict[str, Any] = {
+        "status": status,
+        "last_error": error,
+        "updated_at": _now(),
+    }
+    if status == STATUS_QUEUED:
+        # Going back to the queue is not finishing. Leaving `finished_at`
+        # set — or `started_at` pointing at the claim that just failed —
+        # would make a waiting job read as a completed one to anything
+        # that renders these stamps. `_reclaim_stale` clears `started_at`
+        # on its own requeue for the same reason.
+        values["started_at"] = None
+        values["finished_at"] = None
+    else:
+        values["finished_at"] = _now()
+
     async with get_session_factory()() as db:
         await db.execute(
             update(ExtractionJob)
             .where(ExtractionJob.id == job_id)
-            .values(
-                status=status,
-                last_error=error,
-                finished_at=_now(),
-                updated_at=_now(),
-            )
+            .values(**values)
         )
         await db.commit()
 
 
 async def _extract_one(job: ExtractionJob) -> str:
-    """Run one job. Returns the tally key; never raises."""
+    """Run one job. Returns the tally key; never raises.
+
+    This wrapper is what makes "never raises" true. Only the extraction
+    call itself used to be guarded, so a blip in `_finish` or in the
+    verification read propagated out of `drain()` — abandoning every job
+    the same pass had already claimed, stranded in `running` until
+    `_reclaim_stale` picked them up ten minutes later, and only if a
+    drain ran at all. One bad job must not take the pass down with it.
+    """
+    try:
+        return await _run_job(job)
+    except Exception:
+        logger.exception(
+            "extraction job %s crashed outside the guarded call", job.id,
+        )
+        # Release the claim so the job is retryable now rather than in
+        # ten minutes — but still on the budget. A job that reliably
+        # crashes the bookkeeping would otherwise be requeued forever,
+        # billing a Vision call every pass, which is precisely what
+        # MAX_ATTEMPTS exists to prevent. If even this write fails,
+        # `_reclaim_stale` is the backstop — which is why it exists.
+        exhausted = job.attempts >= MAX_ATTEMPTS
+        try:
+            await _finish(
+                job.id,
+                status=STATUS_FAILED if exhausted else STATUS_QUEUED,
+                error="drain crashed while handling this job",
+            )
+        except Exception:
+            logger.exception("could not release extraction job %s", job.id)
+        return _FAILED
+
+
+async def _run_job(job: ExtractionJob) -> str:
     from api.routes.school_student_practice import run_extraction_for_submission
+
+    # Re-check the toggles at drain time, not just at enqueue. The
+    # enqueue-time gate is normally seconds old, but a backfilled row or
+    # a job re-enqueued after parking can be days old, and a teacher may
+    # have switched the feature off in between. A Vision call is the most
+    # expensive thing this system does per submission; billing one
+    # against a setting somebody deliberately turned off is not
+    # defensible. Grading re-reads its own toggle for the same reason.
+    async with get_session_factory()() as db:
+        toggles = (await db.execute(
+            select(
+                Assignment.integrity_check_enabled,
+                Assignment.ai_grading_enabled,
+            ).where(Assignment.id == job.assignment_id)
+        )).one_or_none()
+    if toggles is not None and not (
+        toggles.integrity_check_enabled or toggles.ai_grading_enabled
+    ):
+        await _finish(job.id, status=STATUS_DONE)
+        return _SKIPPED
 
     try:
         await run_extraction_for_submission(job.submission_id)
     except Exception as exc:
         # Budget exhausted -> park for a human. Still in budget -> back to
-        # the queue for the next drain, with the error kept so the admin
-        # console can say WHY it is retrying rather than just that it is.
+        # the queue for the next drain, with the error kept on the row so
+        # a human can see WHY it is retrying and not merely that it is.
         exhausted = job.attempts >= MAX_ATTEMPTS
         await _finish(
             job.id,
@@ -252,6 +367,11 @@ async def _extract_one(job: ExtractionJob) -> str:
         await _finish(job.id, status=STATUS_DONE)
         return _DONE
 
+    # No need to rule out a deleted submission here:
+    # `extraction_jobs.submission_id` is ON DELETE CASCADE, so a deleted
+    # submission takes its job row with it and there is nothing left to
+    # drain. Reaching this line means the submission exists and the read
+    # genuinely did not land.
     exhausted = job.attempts >= MAX_ATTEMPTS
     await _finish(
         job.id,
@@ -261,12 +381,20 @@ async def _extract_one(job: ExtractionJob) -> str:
     return _FAILED
 
 
-async def drain(limit: int = DEFAULT_DRAIN_LIMIT) -> dict[str, int]:
-    """One drain pass. Safe to call concurrently with itself."""
+async def drain(
+    limit: int = DEFAULT_DRAIN_LIMIT,
+    first: uuid.UUID | None = None,
+) -> dict[str, int]:
+    """One drain pass. Safe to call concurrently with itself.
+
+    `first` names a submission to run ahead of the queue — see
+    `_claim_queued`. Submit passes the student it just accepted; the cron
+    passes nothing and takes them oldest-first.
+    """
     async with get_session_factory()() as db:
         reclaimed = await _reclaim_stale(db)
         await db.commit()
-        claimed = await _claim_queued(db, limit)
+        claimed = await _claim_queued(db, limit, first)
 
     tally: Counter[str] = Counter()
     # Sequential, not gathered: each job is a full Vision call on
@@ -280,5 +408,7 @@ async def drain(limit: int = DEFAULT_DRAIN_LIMIT) -> dict[str, int]:
         "reclaimed": reclaimed,
         "claimed": len(claimed),
         "succeeded": tally[_DONE],
+        # Claimed, then found to owe nothing — the toggles went off.
+        "skipped": tally[_SKIPPED],
         "failed": tally[_FAILED],
     }
