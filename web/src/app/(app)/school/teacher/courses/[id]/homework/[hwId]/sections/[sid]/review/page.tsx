@@ -3250,7 +3250,13 @@ function SubmissionDetailPanel({
             </p>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-3">
+        {/* Wraps on a phone rather than refusing to shrink. These four
+            controls measured 484px wide inside a 390px viewport, so
+            `shrink-0` alone pushed the grading header sideways — on the
+            screen a teacher is most likely to open between classes.
+            The no-shrink guarantee still holds from md: up, where there
+            is room for a single row. */}
+        <div className="flex flex-wrap items-center gap-3 md:flex-nowrap md:shrink-0">
           {/* Submitted pages stay one click away — promoted to the
               page header so they're findable without scrolling to
               the problems card. Lightbox markup lives inside the

@@ -2018,7 +2018,9 @@ function ActionBar({
                 <span>Missing: {missingForPublish.join(", ")}</span>
               )}
             </div>
-            <div className="flex shrink-0 items-center gap-3">
+            {/* Same reason as the section-review action strip: allow a
+                wrap on narrow screens instead of widening the page. */}
+            <div className="flex flex-wrap items-center gap-3 md:flex-nowrap md:shrink-0">
               <button
                 type="button"
                 onClick={onPreviewAsStudent}
