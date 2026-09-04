@@ -48,14 +48,24 @@ function waited(since: string | null): string | null {
   return since ? fmtAge(since) : null;
 }
 
-// The drain claims due jobs every 5 minutes, and reclaims a job stuck
-// `running` after 15. A queued job whose scheduled time passed longer
-// ago than that is not waiting for its due date — it is waiting for a
-// drain that is not coming, which is how an outage looks from here: the
-// grading-drain workflow no-ops silently when its token or API base is
-// unset, so every confirmed submission in every school sits ungraded
-// while this page reports each one in calm grey.
-const DRAIN_GRACE_MS = 15 * 60_000;
+// How long past its scheduled time a queued job can sit before the
+// delay means something is wrong rather than busy.
+//
+// This is deliberately an hour, not the drain's 5-minute cadence. One
+// pass claims at most DEFAULT_DRAIN_LIMIT = 200 jobs, passes cannot
+// overlap (`concurrency: grading-drain`, `cancel-in-progress: false`),
+// and each is capped at `--max-time 600`. So a class night that puts
+// 1000 jobs in one due-date window legitimately takes ~5 serialized
+// passes — the better part of an hour — to clear, with every unclaimed
+// job sitting past due the whole time and nothing at all wrong.
+//
+// A 15-minute window (three cron ticks) assumed each pass claims
+// everything due. It doesn't, so that threshold would have painted a
+// district's busiest evening red — crying wolf on the one night an
+// operator most needs to trust this page, which is the inverse of the
+// bug it was added to fix. An hour clears any plausible backlog and is
+// still well inside a school day for a real drain outage.
+const DRAIN_GRACE_MS = 60 * 60_000;
 
 function queuedNote(
   scheduledFor: string | null,
