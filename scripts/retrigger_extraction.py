@@ -50,6 +50,52 @@ def _preflight_sdk() -> None:
     print(f"  anthropic {anthropic.__version__} — accepts temperature ✓")
 
 
+
+async def _record_intervention(submission_id: uuid.UUID, steps: int) -> None:
+    """Leave a trace that a HUMAN re-ran this, not the app.
+
+    Without it the dashboard shows a submission with an extraction and
+    zero model calls — which reads as "this appeared from nowhere" and
+    is actively misleading to whoever debugs it next. The cost row alone
+    is not enough either: it looks like an ordinary extraction, with
+    nothing to distinguish the app doing its job from someone running a
+    script against production.
+
+    Written directly rather than through `record_activity`, which wants
+    a CurrentUser this has no notion of. actor_user_id stays NULL and
+    actor_role is "system" — nobody logged in, and pretending otherwise
+    would put a real person's id on an action they did not take.
+    """
+    from sqlalchemy import text
+
+    from api.database import get_session_factory
+
+    try:
+        async with get_session_factory()() as db:
+            await db.execute(
+                text(
+                    "INSERT INTO activity_log "
+                    "(id, actor_user_id, actor_role, school_id, action, "
+                    " target_type, target_id, action_metadata) "
+                    "SELECT gen_random_uuid(), NULL, 'system', c.school_id, "
+                    "  'submission.extraction_retriggered', 'submission', "
+                    "  s.id, :meta::jsonb "
+                    "FROM submissions s "
+                    "JOIN assignments a ON a.id = s.assignment_id "
+                    "JOIN courses c ON c.id = a.course_id "
+                    "WHERE s.id = :sid"
+                ),
+                {
+                    "sid": submission_id,
+                    "meta": f'{{"steps": {steps}, "tool": "retrigger_extraction.py"}}',
+                },
+            )
+            await db.commit()
+        print("  ✓ intervention recorded in activity_log")
+    except Exception as exc:  # noqa: BLE001 — never fail the rescue over the audit
+        print(f"  ! could not record the intervention: {exc}")
+
+
 async def main(submission_id: uuid.UUID, apply: bool) -> None:
     from sqlalchemy import select
 
@@ -124,6 +170,7 @@ async def main(submission_id: uuid.UUID, apply: bool) -> None:
 
     if after:
         steps = len(after.get("steps") or [])
+        await _record_intervention(submission_id, steps)
         print(f"  ✓ extraction written — {steps} steps")
         print("    The student's next page load shows the confirm screen.")
     else:
