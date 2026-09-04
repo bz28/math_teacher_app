@@ -169,6 +169,13 @@ export interface paths {
          *     This is the only surface where a misread can actually be diagnosed.
          *     A count tells you the reader is struggling; only the strokes beside
          *     the transcription tell you *how*.
+         *
+         *     Also the case-file body for `/submissions/{id}/trace`, which is why
+         *     the response carries the student's identity and the assignment's two
+         *     AI toggles alongside the read. The trace's job is to explain a
+         *     submission's whole life, and the most common thing it has to explain
+         *     is an EMPTY call list — for which the toggles are the answer roughly
+         *     as often as a failure is. See `api.core.submission_stage`.
          */
         get: operations["extraction_detail_v1_admin_extraction_quality__submission_id__get"];
         put?: never;
@@ -855,6 +862,58 @@ export interface paths {
         };
         /** School Overview */
         get: operations["school_overview_v1_admin_schools__school_id__overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/students/{student_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Student Detail
+         * @description Who this student is, whose classes they are in, and the funnel.
+         *
+         *     The funnel is the point of the page. Counting submissions tells you
+         *     a student is participating; counting how many of them reached a
+         *     published grade tells you whether the product worked for them, and
+         *     the shortfall is itemised by the hop it died on.
+         */
+        get: operations["student_detail_v1_admin_students__student_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/students/{student_id}/submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Student Submissions
+         * @description Everything this student handed in, newest first.
+         *
+         *     Each row carries its stage, when it entered that stage, and the
+         *     numbers that say whether anything is wrong with it: how many model
+         *     calls it caused, how many failed, and what the durable grading queue
+         *     thinks it still owes. That last one matters because a submission can
+         *     be confirmed, have zero LLM calls, and be entirely healthy — the job
+         *     is queued for a due date that has not arrived.
+         */
+        get: operations["student_submissions_v1_admin_students__student_id__submissions_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8051,6 +8110,75 @@ export interface operations {
             path: {
                 /** @description School UUID or 'internal' */
                 school_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    student_detail_v1_admin_students__student_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    student_submissions_v1_admin_students__student_id__submissions_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                student_id: string;
             };
             cookie?: never;
         };

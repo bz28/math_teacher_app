@@ -93,10 +93,10 @@ export default function IndependentPanel({
 
   const win = windowLabel(Number(hours));
 
-  // Teachers drill into their roster; students have no dedicated detail
-  // page, so their most useful drill-in is their logged AI calls.
+  // Both roles now have a case file: a teacher drills into their roster,
+  // a student into their own submissions and where each one stopped.
   const rowHref = (u: Row) =>
-    role === "teacher" ? `/teachers/${u.id}` : `/llm-calls?user=${u.id}`;
+    role === "teacher" ? `/teachers/${u.id}` : `/students/${u.id}`;
 
   // Columns render in the server-provided order (no client sort) so the
   // visible page always agrees with the sort control and pagination.

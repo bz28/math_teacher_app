@@ -51,6 +51,7 @@ function inviteBadge(status: UserRow["invite_status"]): { tone: PillTone; label:
 
 // The row "…" menu is gated by user *type* — a locked founder decision.
 type MenuAction =
+  | "view-student"
   | "view-calls"
   | "view-in-school"
   | "make-student"
@@ -83,8 +84,12 @@ type MenuAction =
  */
 function menuActionsFor(u: UserRow, selfId: string | null): MenuAction[] {
   const isSelf = selfId !== null && u.id === selfId;
+  // A student's case file is the most useful thing in this menu — it is
+  // the only route to their submissions and where each one stopped — so
+  // it leads for every student, school-backed or independent.
+  const student: MenuAction[] = u.role === "student" ? ["view-student"] : [];
   if (u.role !== "admin" && u.school) {
-    return ["view-in-school", "make-admin"];
+    return [...student, "view-in-school", "make-admin"];
   }
   if (u.role === "admin") {
     // Already an admin, so role change is a *revoke* to student/teacher.
@@ -97,7 +102,9 @@ function menuActionsFor(u: UserRow, selfId: string | null): MenuAction[] {
   const roleChanges = (["student", "teacher", "admin"] as const)
     .filter((r) => r !== u.role)
     .map((r) => `make-${r}` as MenuAction);
-  const actions: MenuAction[] = ["view-calls", ...roleChanges, "toggle-plan"];
+  const actions: MenuAction[] = [
+    ...student, "view-calls", ...roleChanges, "toggle-plan",
+  ];
   if (u.subscription_tier !== "pro") actions.push("reset-limit");
   if (!isSelf) actions.push("toggle-active", "delete");
   return actions;
@@ -561,6 +568,12 @@ export default function Users() {
         >
           {menuActionsFor(openUser, selfId).map((action) => {
             switch (action) {
+              case "view-student":
+                return (
+                  <button key={action} onClick={() => { setOpenMenu(null); navigate(`/students/${openUser.id}`); }}>
+                    View student →
+                  </button>
+                );
               case "view-calls":
                 return (
                   <button key={action} onClick={() => { setOpenMenu(null); navigate(`/llm-calls?user=${openUser.id}`); }}>
