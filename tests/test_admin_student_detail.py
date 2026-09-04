@@ -91,7 +91,16 @@ async def _seed() -> dict[str, str]:
             grade_level=8, role="student", name="Other Student",
             school_id=school.id,
         )
-        s.add_all([teacher, student, other])
+        # Enrolled and has done nothing at all — no submission, no
+        # tutoring session, no logged action. The only fixture that can
+        # prove `last_active_at` still returns null, which is what keeps
+        # "not started" meaning something.
+        inert = User(
+            email=f"inert_{tag}@t.com", password_hash=hash_password("x"),
+            grade_level=8, role="student", name="Inert Student",
+            school_id=school.id,
+        )
+        s.add_all([teacher, student, other, inert])
         await s.flush()
 
         course = Course(
@@ -188,6 +197,7 @@ async def _seed() -> dict[str, str]:
             "admin_token": create_access_token(str(admin.id), "admin"),
             "student_id": str(student.id),
             "other_student_id": str(other.id),
+            "inert_student_id": str(inert.id),
             "teacher_id": str(teacher.id),
             "school_id": str(school.id),
             "awaiting_confirm_id": str(stage_subs["awaiting_confirm"].id),
@@ -389,16 +399,24 @@ async def test_last_active_is_null_only_when_nothing_happened(
     client: AsyncClient,
 ) -> None:
     """The other half: a student with no footprint at all still reports
-    null, so "not started" keeps meaning something."""
+    null, so "not started" keeps meaning something.
+
+    This must use a student with NOTHING — an earlier version pointed at
+    `other_student`, who has a submission, so it asserted
+    `last_active == last_submitted` and passed no matter what the null
+    branch did. It duplicated the test above while claiming to be its
+    complement, and left the `default=None` fallback uncovered.
+    """
     seeded = await _seed()
     resp = await client.get(
-        f"/v1/admin/students/{seeded['other_student_id']}",
+        f"/v1/admin/students/{seeded['inert_student_id']}",
         headers=auth_headers(seeded["admin_token"]),
     )
     assert resp.status_code == 200, resp.text
     student = resp.json()["student"]
-    # This student has exactly one submission and nothing else.
-    assert student["last_active_at"] == student["last_submitted_at"]
+    assert student["last_active_at"] is None
+    assert student["last_submitted_at"] is None
+    assert resp.json()["total_submissions"] == 0
 
 
 @pytest.mark.asyncio

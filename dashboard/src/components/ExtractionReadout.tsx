@@ -104,7 +104,14 @@ export default function ExtractionReadout({
               // still tap "Looks right" on this, so it must never read
               // like an ordinary blank.
               ? "The reader ran and found no work on these photos."
-              : "No read has been stored for this submission yet."}
+              // "Yet" promises a read that is still coming — true only
+              // when one was owed. With both toggles off none was, and
+              // none is: saying "yet" there reports the teacher's
+              // setting as a pending obligation, the same conflation
+              // the stage vocabulary exists to prevent.
+              : detail.integrity_check_enabled || detail.ai_grading_enabled
+                ? "No read has been stored for this submission yet."
+                : "No read was requested — AI is switched off for this homework."}
           </p>
         ) : (
           <ol className="xq-rows">

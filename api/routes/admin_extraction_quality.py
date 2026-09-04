@@ -502,8 +502,8 @@ async def extraction_detail(
         })
 
     # The grade stamps decide the stage, and a submission that was never
-    # graded has no row here at all — hence the outer join semantics of
-    # `one_or_none` rather than treating absence as an error.
+    # graded has no row here at all — so absence is expected and `.first()`
+    # returning None is the normal path, not an error.
     grade = (await db.execute(
         select(SubmissionGrade.graded_at, SubmissionGrade.grade_published_at)
         .where(SubmissionGrade.submission_id == sub.id)

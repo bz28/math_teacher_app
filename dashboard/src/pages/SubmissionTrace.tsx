@@ -475,6 +475,14 @@ function CaseHeader({
   // the most prominent thing on the page and it says the opposite of
   // the truth: "no calls failed" is not "this submission is fine". With
   // no calls to judge, show where the submission actually stopped.
+  //
+  // And when there are no calls AND no record loaded, show NOTHING. An
+  // earlier guard fell through to PASS in that case, so the heavy
+  // submission fetch being slow painted a green PASS over a stalled
+  // submission for the length of the round trip — and painted it
+  // permanently if that fetch failed, directly above a body reading
+  // "the submission record couldn't be loaded". A verdict is a claim;
+  // with neither the calls nor the record there is nothing to claim.
   const stagePill = !hasCalls && work ? STAGE_META[work.stage] : null;
 
   return (
@@ -516,19 +524,19 @@ function CaseHeader({
             )}
           </div>
         </div>
-        {stagePill ? (
-          <StatusPill
-            tone={stagePill.tone}
-            label={stagePill.label}
-            title={stagePill.blurb}
-          />
-        ) : (
+        {hasCalls ? (
           <StatusPill
             tone={runPassed ? "ok" : "danger"}
             label={runPassed ? "PASS" : "FAILED"}
             title={runTitle}
           />
-        )}
+        ) : stagePill ? (
+          <StatusPill
+            tone={stagePill.tone}
+            label={stagePill.label}
+            title={stagePill.blurb}
+          />
+        ) : null}
       </div>
 
       {summary && <DecisionStrip summary={summary} />}
@@ -635,7 +643,9 @@ function Lifecycle({
   work: ExtractionDetail | null;
   summary: SubmissionSummary | null;
   firstReadAt: string | null;
-  /** An image_extract call was logged and failed. */
+  /** An `integrity_extract` call was logged and failed. NOT
+   *  `image_extract` — see the note where this is computed; that mode
+   *  never carries a submission_id and matching it finds nothing. */
   readFailed?: boolean;
 }) {
   if (!work && !summary) return null;
