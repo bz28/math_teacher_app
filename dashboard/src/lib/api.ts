@@ -560,6 +560,21 @@ export interface ExtractionRow {
 
 export interface ExtractionDetail {
   submission_id: string;
+  student_id: string;
+  student_name: string | null;
+  assignment_title: string | null;
+  assignment_type: string | null;
+  /** Where the submission stopped — see `SubmissionStage`. */
+  stage: SubmissionStage;
+  /** The three facts that turn an empty LLM-call list into a diagnosis:
+   *  whether a read was ever owed, whether one landed, and whether
+   *  there were photos to read. */
+  integrity_check_enabled: boolean;
+  ai_grading_enabled: boolean;
+  extraction_present: boolean;
+  extraction_empty: boolean;
+  files_count: number;
+  edited_at: string | null;
   course: string;
   subject: string;
   bucket: ExtractionBucket | "awaiting";
@@ -600,6 +615,12 @@ export const api = {
     request<ExtractionQualityData>("/admin/extraction-quality", params),
   extractionDetail: (submissionId: string) =>
     request<ExtractionDetail>(`/admin/extraction-quality/${submissionId}`),
+  studentDetail: (studentId: string) =>
+    request<StudentDetailData>(`/admin/students/${studentId}`),
+  studentSubmissions: (studentId: string, params?: Record<string, string>) =>
+    request<StudentSubmissionsData>(
+      `/admin/students/${studentId}/submissions`, params,
+    ),
   gradingQuality: (params?: Record<string, string>) =>
     request<GradingQualityData>("/admin/grading-quality", params),
   gradingQualityOverrides: (params?: Record<string, string>) =>
@@ -1499,6 +1520,108 @@ export interface DocumentContent {
   image_data: string | null;
 }
 
+
+/** Where a submission stopped moving. Mirrors
+ *  `api.core.submission_stage`; the two must stay in lockstep, and the
+ *  backend's STAGE_ORDER is the source of truth for the ordering.
+ *
+ *  `awaiting_confirm` is the one that pays for this whole surface: the
+ *  read landed, the student never ruled on it, and nothing downstream
+ *  runs until they do — so the work sits handed-in and ungradeable.
+ *  `extraction_off` vs `awaiting_extraction` is the other load-bearing
+ *  split: both mean no read exists, but the first is the teacher's
+ *  choice and the second is work that went missing. */
+export type SubmissionStage =
+  | "published"
+  | "graded"
+  | "flagged"
+  | "confirmed"
+  | "awaiting_confirm"
+  | "awaiting_extraction"
+  | "extraction_off";
+
+export interface StudentSubmissionRow {
+  id: string;
+  status: string;
+  stage: SubmissionStage;
+  /** When it entered `stage` — what "stuck for 6 days" counts from.
+   *  Falls back to `submitted_at` for the waiting stages, because no
+   *  column records when a read actually landed. */
+  stage_since: string | null;
+  submitted_at: string | null;
+  is_late: boolean;
+  due_at: string | null;
+  assignment_id: string | null;
+  assignment_title: string | null;
+  assignment_type: string | null;
+  course_name: string | null;
+  subject: string | null;
+  files_count: number;
+  extraction_present: boolean;
+  /** Null when no read exists at all — "the reader found nothing" and
+   *  "the reader never ran" are different findings. */
+  extraction_empty: boolean | null;
+  extraction_edited: boolean;
+  confirmed_at: string | null;
+  flagged_at: string | null;
+  ai_score: number | null;
+  final_score: number | null;
+  overridden: boolean;
+  ai_grading_status: string | null;
+  reviewed_at: string | null;
+  graded_at: string | null;
+  grade_published_at: string | null;
+  integrity_status: string | null;
+  integrity_disposition: string | null;
+  /** The durable queue. A confirmed submission with zero calls is
+   *  healthy when a job is queued for a due date that hasn't arrived. */
+  grading_job: {
+    status: string;
+    attempts: number;
+    last_error: string | null;
+    scheduled_for: string | null;
+  } | null;
+  call_count: number;
+  failed_count: number;
+}
+
+export interface StudentSubmissionsData {
+  total: number;
+  submissions: StudentSubmissionRow[];
+}
+
+export interface StudentSection {
+  id: string;
+  name: string;
+  course_id: string;
+  course_name: string;
+  subject: string | null;
+  teachers: { id: string; name: string }[];
+}
+
+export interface StudentDetailData {
+  student: {
+    id: string;
+    name: string;
+    email: string;
+    grade_level: number | null;
+    role: string;
+    is_active: boolean;
+    registered: string;
+    school: { id: string; name: string; kind: string } | null;
+    subscription_tier: string | null;
+    subscription_status: string | null;
+    /** Two different questions: when they last opened the app, and
+     *  when they last handed something in. */
+    last_active_at: string | null;
+    last_submitted_at: string | null;
+    call_count_30d: number;
+    total_cost_30d: number;
+  };
+  sections: StudentSection[];
+  funnel: Record<SubmissionStage, number>;
+  total_submissions: number;
+}
 
 export interface TeacherSubmissionsData {
   total: number;

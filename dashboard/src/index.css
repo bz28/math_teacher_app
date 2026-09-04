@@ -3194,3 +3194,112 @@ table.dt tr:last-child td { border-bottom: none; }
   .xq-shot { position: static; }
   .xq-row-pair { grid-template-columns: 1fr; gap: 8px; }
 }
+
+/* ── Student case file ────────────────────────────────────────────────
+   Per-student drill-in (/students/:id) and the lifecycle strip the
+   submission trace reuses.
+
+   The funnel is the one place this page raises its voice, and it does
+   it for the stalled stages rather than the settled ones: the page
+   exists to find work that stopped moving, so colouring "published"
+   and leaving "awaiting confirm" grey would weight it exactly backwards.
+   Everything else stays in the console's quiet register — hairline
+   cells, no card chrome, no radius.
+
+   Position encodes the sequence, so the cells carry no step numbers.
+   The count stays full-size and legible at any scale; the underbar
+   carries the shape, which is what a proportional-width bar would have
+   destroyed at seven segments over a handful of submissions. */
+
+.sd-dim { color: var(--muted); }
+
+.section-head {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--ink);
+  letter-spacing: -0.2px;
+  margin: 30px 0 12px;
+  display: flex;
+  align-items: baseline;
+}
+
+.funnel-strip {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.funnel-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 12px 12px;
+  border: none;
+  border-right: 1px solid var(--rule);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: background 120ms ease;
+}
+.funnel-cell:last-child { border-right: none; }
+.funnel-cell:hover:not(:disabled) { background: var(--paper-2); }
+.funnel-cell:disabled { cursor: default; opacity: 0.45; }
+.funnel-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.funnel-cell-active { background: var(--paper-2); }
+.funnel-cell-active .funnel-count { color: var(--accent); }
+
+.funnel-count {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--ink);
+}
+.funnel-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  line-height: 1.3;
+}
+.funnel-bar {
+  display: block;
+  height: 3px;
+  background: var(--rule);
+  margin-top: 2px;
+}
+.funnel-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--muted-2);
+  transition: width 200ms ease;
+}
+
+/* Work that stopped moving. The only place on the page that shouts. */
+.funnel-cell-stalled .funnel-count { color: var(--danger); }
+.funnel-cell-stalled .funnel-label { color: var(--danger); }
+.funnel-cell-stalled .funnel-bar-fill { background: var(--danger); }
+
+@media (max-width: 900px) {
+  .funnel-strip { grid-template-columns: repeat(4, 1fr); }
+  .funnel-cell:nth-child(4) { border-right: none; }
+  .funnel-cell:nth-child(-n + 3) { border-bottom: 1px solid var(--rule); }
+  .funnel-cell:nth-child(4) { border-bottom: 1px solid var(--rule); }
+}
+@media (max-width: 560px) {
+  .funnel-strip { grid-template-columns: repeat(2, 1fr); }
+  .funnel-cell { border-right: 1px solid var(--rule); }
+  .funnel-cell:nth-child(2n) { border-right: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .funnel-cell,
+  .funnel-bar-fill { transition: none; }
+}

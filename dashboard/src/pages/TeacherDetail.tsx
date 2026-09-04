@@ -274,7 +274,9 @@ export default function TeacherDetail() {
         total={data.total_students}
         filterLabel={sectionFilter ? sectionNames[sectionFilter] : null}
         onClearFilter={() => setSectionFilter(null)}
-        onDrill={(id) => navigate(`/llm-calls?user=${id}`)}
+        // Into the student's own case file — their submissions and where
+        // each one stopped — rather than a raw list of model calls.
+        onDrill={(id) => navigate(`/students/${id}`)}
       />
     </div>
   );
