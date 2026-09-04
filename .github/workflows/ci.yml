@@ -24,14 +24,24 @@ jobs:
     # Railway installs only `[project.dependencies]`. Mirror prod: install
     # WITHOUT [dev] and import the app entrypoint. (This is exactly how the
     # PIL/pillow prod boot crash slipped through CI once.)
+    #
+    # Mirror it PROPERLY. This job used to run `pip install . -c
+    # constraints.txt` on Python 3.12, and neither matched production:
+    # Railway builds with Railpack, whose start command is
+    # `pip install -e "."` on its default Python 3.13 — constraints.txt is
+    # never read. So the job installed pinned deps while prod installed
+    # floating ones, and stayed green through the 2026-09-03 outage where
+    # anthropic floated to 1.3.0. Resolving exactly what prod resolves is
+    # the whole point of the job.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Install production dependencies only (no [dev])
-        run: pip install . -c constraints.txt
+          # Railpack's default, not ours. See above.
+          python-version: "3.13"
+      - name: Install production dependencies only (no [dev], no constraints)
+        run: pip install .
       - name: App imports with production deps only
         env:
           DATABASE_URL: postgresql+asyncpg://x:x@localhost:5432/x
