@@ -214,7 +214,7 @@ async def seed() -> dict[str, str]:
             extraction_confirmed_at=NOW - timedelta(days=3),
         )
         # Student rejected the read outright — teacher grades by hand.
-        sub(
+        flagged = sub(
             await hw("Word Problems"), 4,
             extraction=read_for(),
             extraction_flagged_at=NOW - timedelta(days=4),
@@ -242,25 +242,34 @@ async def seed() -> dict[str, str]:
             status="queued", attempts=0,
         ))
 
-        # The read that produced `done`'s extraction, so the healthy
-        # trace has a real Vision call to date its "Reader ran" hop from
-        # and the strip can be checked against a populated timeline.
+        # The read that produced each stored extraction.
         #
-        # The mode is INTEGRITY_EXTRACT: that is what
-        # `extract_student_work` logs, and it is the ONLY vision mode
-        # carrying a submission_id. Seeding IMAGE_EXTRACT here would
-        # reproduce the bug it is meant to catch — the strip would say
-        # "Reader ran —" with the call sitting right below it.
-        s.add(LLMCall(
-            user_id=student.id,
-            submission_id=done.id,
-            function=LLMMode.INTEGRITY_EXTRACT,
-            model="claude-sonnet-4-5",
-            input_tokens=2400, output_tokens=310,
-            latency_ms=8200.0, cost_usd=0.0121,
-            success=True, retry_count=0,
-            created_at=NOW - timedelta(days=12) + timedelta(seconds=11),
-        ))
+        # EVERY submission carrying an `extraction` gets one, because a
+        # stored read implies the call that produced it:
+        # `extract_student_work` logs INTEGRITY_EXTRACT with the
+        # submission_id and returns the value the pipeline persists. A
+        # fixture with an extraction and no call is a state production
+        # cannot reach — and seeding only the happy path that way hid a
+        # header bug through five review rounds of screenshots, because
+        # the stalled submission being photographed had no calls and so
+        # took a branch real data never takes.
+        #
+        # The mode is INTEGRITY_EXTRACT, not IMAGE_EXTRACT: that is what
+        # the pipeline logs, and it is the only vision mode carrying a
+        # submission_id.
+        for target, days in (
+            (stuck, 6), (done, 12), (graded, 8), (repaired, 3), (flagged, 4),
+        ):
+            s.add(LLMCall(
+                user_id=student.id,
+                submission_id=target.id,
+                function=LLMMode.INTEGRITY_EXTRACT,
+                model="claude-sonnet-4-5",
+                input_tokens=2400, output_tokens=310,
+                latency_ms=8200.0, cost_usd=0.0121,
+                success=True, retry_count=0,
+                created_at=NOW - timedelta(days=days) + timedelta(seconds=11),
+            ))
         await s.commit()
 
         return {

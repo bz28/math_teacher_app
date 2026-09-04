@@ -595,6 +595,16 @@ h3 {
 
 .case-file { margin-bottom: 24px; }
 
+/* Stage first, then the run verdict beside it when it adds something.
+   Wraps rather than squeezing the header on a narrow viewport. */
+.case-head-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: none;
+}
+
 .case-head {
   display: flex;
   justify-content: space-between;

@@ -470,20 +470,28 @@ function CaseHeader({
     ? "Every logged call in this run succeeded"
     : `${failures} call${failures === 1 ? "" : "s"} in this run failed`;
 
-  // The pill used to read PASS whenever nothing failed — including when
-  // nothing ran. On a submission stuck six days with zero calls that is
-  // the most prominent thing on the page and it says the opposite of
-  // the truth: "no calls failed" is not "this submission is fine". With
-  // no calls to judge, show where the submission actually stopped.
+  // The header pill answers "where is this submission?", NOT "did the
+  // model calls succeed?".
   //
-  // And when there are no calls AND no record loaded, show NOTHING. An
-  // earlier guard fell through to PASS in that case, so the heavy
-  // submission fetch being slow painted a green PASS over a stalled
-  // submission for the length of the round trip — and painted it
-  // permanently if that fetch failed, directly above a body reading
-  // "the submission record couldn't be loaded". A verdict is a claim;
-  // with neither the calls nor the record there is nothing to claim.
-  const stagePill = !hasCalls && work ? STAGE_META[work.stage] : null;
+  // Those are different questions and this pill kept answering the
+  // wrong one. "No call failed" is not "this submission is fine": a
+  // submission stuck six days at read-landed-never-confirmed has a
+  // perfectly healthy Vision call behind it, so a run verdict renders
+  // a green PASS as the loudest element on the page while the stage
+  // pill lower down reads AWAITING CONFIRM in red.
+  //
+  // Gating the stage on `!hasCalls` did not fix that, it just moved it:
+  // a stored extraction IMPLIES a logged call, because
+  // `extract_student_work` logs `integrity_extract` with this
+  // submission_id and that call is what produced the read. So every
+  // real awaiting_confirm submission has calls, and only a fixture that
+  // seeds an extraction without one — which production cannot reach —
+  // ever took the stage branch.
+  //
+  // So: the stage wins whenever the record is loaded. Call failures are
+  // not hidden — they get their own pill beside it, and the economics
+  // strip and the timeline both surface them.
+  const stagePill = work ? STAGE_META[work.stage] : null;
 
   return (
     <div className="case-file">
@@ -524,19 +532,28 @@ function CaseHeader({
             )}
           </div>
         </div>
-        {hasCalls ? (
-          <StatusPill
-            tone={runPassed ? "ok" : "danger"}
-            label={runPassed ? "PASS" : "FAILED"}
-            title={runTitle}
-          />
-        ) : stagePill ? (
-          <StatusPill
-            tone={stagePill.tone}
-            label={stagePill.label}
-            title={stagePill.blurb}
-          />
-        ) : null}
+        <div className="case-head-pills">
+          {stagePill && (
+            <StatusPill
+              tone={stagePill.tone}
+              label={stagePill.label}
+              title={stagePill.blurb}
+            />
+          )}
+          {/* The run verdict, demoted beside the stage. Only rendered
+              when it carries information: a failure always does, and a
+              clean run does only when there is no stage to show. */}
+          {hasCalls && !runPassed && (
+            <StatusPill
+              tone="danger"
+              label={`${failures} CALL${failures === 1 ? "" : "S"} FAILED`}
+              title={runTitle}
+            />
+          )}
+          {hasCalls && runPassed && !stagePill && (
+            <StatusPill tone="ok" label="PASS" title={runTitle} />
+          )}
+        </div>
       </div>
 
       {summary && <DecisionStrip summary={summary} />}
