@@ -23,6 +23,7 @@ import IndependentTeachers from "./pages/IndependentTeachers";
 import TeacherDetail from "./pages/TeacherDetail";
 import AuditLogs from "./pages/AuditLogs";
 import AIQuality from "./pages/AIQuality";
+import AssignmentDetail from "./pages/AssignmentDetail";
 import SubmissionTrace from "./pages/SubmissionTrace";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -79,6 +80,7 @@ export default function App() {
           <Route path="/extraction-quality" element={<ExtractionQuality />} />
           <Route path="/generation-quality" element={<GenerationQuality />} />
           <Route path="/golden-set" element={<GoldenSet />} />
+          <Route path="/assignments/:id" element={<AssignmentDetail />} />
           <Route
             path="/submissions/:submissionId/trace"
             element={<SubmissionTrace />}

@@ -6102,6 +6102,57 @@
         ]
       }
     },
+    "/v1/admin/assignments/{assignment_id}": {
+      "get": {
+        "description": "One assignment, as the teacher built it.\n\nProblems resolve through `hydrate_assignment_content` \u2014 the same\nhelper the teacher's own app uses \u2014 rather than reading\n`content.problem_ids` directly. Practice assignments don't populate\nthat field at all (their items are bank *variations*, which the\nsnapshot path deliberately rejects) and would render as empty\nassignments if we read content ourselves.",
+        "operationId": "get_assignment_v1_admin_assignments__assignment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assignment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assignment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Assignment V1 Admin Assignments  Assignment Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Assignment",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/audit-logs/student-access": {
       "get": {
         "description": "Paginated FERPA student-record access log.\n\nThe (target_student_id, accessed_at) composite index makes the\ncanonical \"all access to one student\" query a fast indexed range\nscan even at scale.",
