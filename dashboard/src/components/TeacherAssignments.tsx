@@ -59,6 +59,9 @@ export default function TeacherAssignments({ teacherId }: { teacherId: string })
   }, [teacherId, reloadKey]);
 
   const rows = data?.assignments ?? [];
+  // Say so rather than quietly showing a prefix: sorting or scanning a
+  // slice answers a different question than the one the reader asked.
+  const truncated = data !== null && data.total > rows.length;
 
   const columns: Column<Row>[] = [
     {
@@ -107,16 +110,28 @@ export default function TeacherAssignments({ teacherId }: { teacherId: string })
   ];
 
   return (
-    <DataTable
-      columns={columns}
-      rows={rows}
-      rowKey={(r) => r.id}
-      loading={data === null && !error}
-      error={error}
-      onRetry={() => setReloadKey((k) => k + 1)}
-      drill
-      onRowClick={(r) => navigate(`/assignments/${r.id}`)}
-      empty="This teacher hasn't created any assignments yet."
-    />
+    <>
+      {truncated && (
+        <p style={{ margin: "0 0 8px", fontSize: 12, color: "var(--muted)" }}>
+          Showing the {rows.length} most recent of {data?.total}.
+        </p>
+      )}
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKey={(r) => r.id}
+        loading={data === null && !error}
+        error={error}
+        onRetry={() => {
+          // Clear first, so the retry renders as loading rather than
+          // leaving the failure on screen for the length of the request.
+          setError(null);
+          setReloadKey((k) => k + 1);
+        }}
+        drill
+        onRowClick={(r) => navigate(`/assignments/${r.id}`)}
+        empty="This teacher hasn't created any assignments yet."
+      />
+    </>
   );
 }

@@ -46,14 +46,27 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
+def _real_position(value: Any) -> int | None:
+    """A stored position we can order by, or None to fall back to order.
+
+    `bool` is an `int` in Python and `True` would sort as 1, so it is
+    excluded explicitly — the same guard the teacher route applies to
+    `problem_position`.
+    """
+    if not isinstance(value, int) or isinstance(value, bool):
+        return None
+    return value if value > 0 else None
+
+
 def _provenance(item: QuestionBankItem | None, edited: bool) -> str | None:
     """How this problem came to exist, as the dashboard labels it.
 
-    `None` means "we can't tell" and the UI shows no badge. That is the
-    right answer for a legacy snapshot assignment, whose content carries
-    the question text but no bank item to read `source` from — a missing
+    `None` means "we can't tell" and the UI shows no badge — a missing
     badge costs a reader nothing, a wrong one costs them their trust in
-    the column.
+    the whole column. It happens when a problem carries no resolvable
+    bank item: a snapshot shape that stored no `bank_item_id`, or a
+    reference whose item has since been deleted. (Most legacy snapshots
+    DO store the id, so they get a real badge.)
     """
     if item is None:
         return None
@@ -160,16 +173,20 @@ async def get_assignment(
         item = items_by_id.get(bank_item_id) if isinstance(bank_item_id, str) else None
         problems.append(
             {
-                # Legacy snapshots predate the `position` key; fall back to
-                # the list order rather than emitting a null the UI has to
-                # special-case.
-                "position": p.get("position") or index,
+                # Legacy snapshots predate the `position` key, and
+                # `content` is an unvalidated blob a teacher can post, so
+                # this is not guaranteed to be a usable integer. A string
+                # "1" used to reach the sort below and raise a TypeError
+                # (500 on an admin page, from teacher-controlled data);
+                # a 0 was falsy enough to fall through to `index` and
+                # produce two rows sharing one position — which is also
+                # the React key — plus a tombstone for a problem that was
+                # right there. Trust the list order unless the stored
+                # value is a real positive int.
+                "position": _real_position(p.get("position")) or index,
                 "bank_item_id": bank_item_id,
                 "question": p.get("question"),
                 "final_answer": p.get("final_answer"),
-                "figure_svg": p.get("figure_svg"),
-                "difficulty": p.get("difficulty"),
-                "format": item.format if item else None,
                 "provenance": _provenance(item, bank_item_id in edited_ids),
                 "missing": False,
             }
@@ -193,9 +210,6 @@ async def get_assignment(
                             "bank_item_id": expected[position - 1],
                             "question": None,
                             "final_answer": None,
-                            "figure_svg": None,
-                            "difficulty": None,
-                            "format": None,
                             "provenance": None,
                             "missing": True,
                         }
@@ -211,13 +225,34 @@ async def get_assignment(
             .limit(1)
         )
     ).scalar_one_or_none()
-    generated_count = (
-        await db.execute(
-            select(func.count())
-            .select_from(QuestionBankItem)
-            .where(QuestionBankItem.originating_assignment_id == assignment.id)
+    # Only the AI candidates this assignment's generation produced for
+    # THIS paper. `originating_assignment_id` alone is far too wide:
+    #
+    #   * a problem the teacher typed by hand or imported from a PDF
+    #     carries it too (`teacher_question_bank.py` create/import), and
+    #   * so does every "generate similar" practice variation ever
+    #     spawned from one of its problems — those inherit the parent's
+    #     originating homework (`teacher_question_bank.py:832`).
+    #
+    # Counting those made a homework that generated 2 and kept 1 report
+    # "generated 7 → kept 2", contradicting `requested_count` in the same
+    # payload. `source == generated` drops the hand-written and imported
+    # ones; `parent_question_id IS NULL` drops the variations — the same
+    # primary-only gate the snapshot path uses.
+    #
+    # A practice set is the exception: its items ARE variations by
+    # design, so the primary gate would report zero for an assignment
+    # made entirely of them. There, every item under this assignment is
+    # genuinely what was produced.
+    generated_q = select(func.count()).select_from(QuestionBankItem).where(
+        QuestionBankItem.originating_assignment_id == assignment.id
+    )
+    if assignment.type != "practice":
+        generated_q = generated_q.where(
+            QuestionBankItem.source == "generated",
+            QuestionBankItem.parent_question_id.is_(None),
         )
-    ).scalar_one()
+    generated_count = (await db.execute(generated_q)).scalar_one()
 
     submitted = (
         await db.execute(

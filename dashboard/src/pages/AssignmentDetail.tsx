@@ -53,7 +53,18 @@ export default function AssignmentDetail() {
     let cancelled = false;
     api
       .assignmentDetail(id)
-      .then((d) => !cancelled && setLoaded({ id, data: d }))
+      .then((d) => {
+        if (cancelled) return;
+        setLoaded({ id, data: d });
+        // Retire this id's failure. Without it, a transient first error
+        // (a blip, a 401 before token refresh) survived the successful
+        // reload that followed — the route has no `key`, so the
+        // component stays mounted across a param change and `failed`
+        // outlived the data it was replaced by. The page then showed an
+        // error over an assignment it had already fetched, and only a
+        // manual Retry escaped it.
+        setFailed((f) => (f && f.id === id ? null : f));
+      })
       .catch((e: Error) => !cancelled && setFailed({ id, message: e.message }));
     return () => {
       cancelled = true;

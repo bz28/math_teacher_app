@@ -27,7 +27,7 @@ from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
 from api.models.assignment import Assignment, AssignmentSection
 from api.models.course import Course
-from api.models.question_bank import QuestionBankItem
+from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
 from api.models.question_edit import (
     EDIT_MANUAL,
     FIELD_QUESTION,
@@ -318,3 +318,116 @@ async def test_listing_reports_no_count_for_practice_rather_than_zero(
     assert r.status_code == 200, r.text
     row = next(a for a in r.json()["assignments"] if a["id"] == str(practice))
     assert row["problem_count"] is None
+
+
+async def test_generated_counts_only_this_paper_s_ai_candidates(
+    client: AsyncClient,
+) -> None:
+    """`originating_assignment_id` is far wider than "what the AI made
+    for this homework".
+
+    A problem the teacher typed by hand carries it, and so does every
+    "generate similar" practice variation ever spawned from one of its
+    problems — those inherit the parent's originating homework. Counting
+    them made a homework that generated 2 and kept 1 report
+    "generated 7 → kept 2", contradicting `requested_count` in the same
+    payload.
+    """
+    w = await _world()
+    a_id = await _add_assignment(w, type_="homework", content={"problem_ids": []})
+    primary = await _add_item(w, a_id, question="Real candidate")
+    await _add_item(w, a_id, question="Also generated")
+    # Neither of these was ever a candidate for this paper.
+    await _add_item(w, a_id, question="Typed by the teacher", source="manual")
+    await _add_item(w, a_id, question="Imported from a PDF", source="imported")
+    async with get_session_factory()() as s:
+        # Four practice variations spawned off the primary. They inherit
+        # the homework, which is exactly why the naive count was wrong.
+        for n in range(4):
+            s.add(QuestionBankItem(
+                course_id=w["course_id"], unit_id=w["unit_id"],
+                originating_assignment_id=a_id,
+                title=f"Variation {n}", question=f"Variation {n}",
+                solution_steps=[], final_answer="0",
+                status="approved", source="generated",
+                parent_question_id=primary,
+            ))
+        s.add(QuestionBankGenerationJob(
+            course_id=w["course_id"], unit_id=w["unit_id"],
+            originating_assignment_id=a_id, created_by_id=w["teacher_id"],
+            mode="generate", status="done", requested_count=2,
+        ))
+        await s.commit()
+
+    r = await client.get(f"/v1/admin/assignments/{a_id}", headers=_auth(w["token"]))
+    assert r.status_code == 200, r.text
+    gen = r.json()["generation"]
+    # Two AI primaries. Not 8, and not contradicting requested_count.
+    assert gen["generated_count"] == 2, gen
+    assert gen["requested_count"] == 2
+
+
+async def test_practice_still_counts_its_variations_as_generated(
+    client: AsyncClient,
+) -> None:
+    """The primary-only gate would report zero for a practice set, whose
+    items ARE variations by design. There, everything under the
+    assignment genuinely is what was produced."""
+    w = await _world()
+    a_id = await _add_assignment(w, type_="practice", content={"problem_ids": []})
+    parent = await _add_item(w, a_id, question="Practice primary")
+    async with get_session_factory()() as s:
+        for n in range(2):
+            s.add(QuestionBankItem(
+                course_id=w["course_id"], unit_id=w["unit_id"],
+                originating_assignment_id=a_id,
+                title=f"Var {n}", question=f"Var {n}",
+                solution_steps=[], final_answer="0",
+                status="approved", source="generated",
+                parent_question_id=parent,
+            ))
+        s.add(QuestionBankGenerationJob(
+            course_id=w["course_id"], unit_id=w["unit_id"],
+            originating_assignment_id=a_id, created_by_id=w["teacher_id"],
+            mode="generate", status="done", requested_count=3,
+        ))
+        await s.commit()
+
+    r = await client.get(f"/v1/admin/assignments/{a_id}", headers=_auth(w["token"]))
+    assert r.status_code == 200, r.text
+    assert r.json()["generation"]["generated_count"] == 3
+
+
+async def test_a_junk_position_in_content_does_not_break_the_page(
+    client: AsyncClient,
+) -> None:
+    """`content` is an unvalidated blob a teacher can post.
+
+    A string "1" used to reach the sort and raise a TypeError — a 500 on
+    an admin page from teacher-controlled data. A 0 was falsy enough to
+    fall through to the list index, producing two rows sharing one
+    position (which is also the React key) plus a tombstone for a problem
+    that was right there.
+    """
+    w = await _world()
+    a_id = await _add_assignment(w, type_="homework", content={"problem_ids": []})
+    one = await _add_item(w, a_id, question="First")
+    two = await _add_item(w, a_id, question="Second")
+    async with get_session_factory()() as s:
+        await s.execute(text("UPDATE assignments SET content = :c WHERE id = :i"), {
+            "c": (
+                '{"problems": ['
+                '{"bank_item_id": "%s", "position": "1", "question": "First"},'
+                '{"bank_item_id": "%s", "position": 0, "question": "Second"}'
+                ']}' % (one, two)
+            ),
+            "i": str(a_id),
+        })
+        await s.commit()
+
+    r = await client.get(f"/v1/admin/assignments/{a_id}", headers=_auth(w["token"]))
+    assert r.status_code == 200, r.text
+    problems = r.json()["problems"]
+    # Falls back to list order, so positions are unique and usable as keys.
+    assert [p["position"] for p in problems] == [1, 2]
+    assert [p["missing"] for p in problems] == [False, False]
