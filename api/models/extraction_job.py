@@ -106,7 +106,7 @@ class ExtractionJob(Base):
         index=True,
     )
 
-    # Denormalized from the submission so the admin console can answer
+    # Denormalized from the submission so an operator can answer
     # "what is stuck for this assignment?" without a join, and so a
     # future drain can group by assignment if batching ever helps.
     assignment_id: Mapped[uuid.UUID] = mapped_column(
@@ -129,7 +129,10 @@ class ExtractionJob(Base):
     # The exception text from the last failed run. This is the field that
     # would have made the 2026-09-03 outage a one-query diagnosis instead
     # of a log-trace: "TypeError: ... unexpected keyword argument
-    # 'temperature'" sitting on the row, visible in the admin console.
+    # 'temperature'" sitting on the row. No admin screen joins this
+    # table yet — reading it is a SQL query for now — but the reason a
+    # student's read never landed is written down instead of living only
+    # in a log stream that has since rolled over.
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     started_at: Mapped[datetime | None] = mapped_column(

@@ -156,7 +156,7 @@ async def main(submission_id: uuid.UUID, apply: bool) -> None:
         assignment = (await db.execute(
             select(Assignment).where(Assignment.id == sub_assignment_id)
         )).scalar_one()
-        await enqueue_submission(db, submission_id, assignment)
+        await enqueue_submission(submission_id, assignment)
         await db.commit()
     tally = await drain(limit=1)
     print(f"  drain: {tally}")

@@ -109,15 +109,20 @@ async def drain_integrity_background_tasks() -> None:
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-async def _drain_extraction_quietly() -> None:
+async def _drain_extraction_quietly(submission_id: uuid.UUID) -> None:
     """Adapter for the background-task spawner.
 
     `extraction_queue.drain` returns a tally for the cron endpoint to
     report; nobody is here to read it, and `_spawn_background_task` is
     typed for coroutines returning None. Discarding it explicitly beats
     casting the type away.
+
+    Passes the submission as `first` so the student who just submitted is
+    served before any backlog. Jobs run one at a time, so without this
+    they would wait behind every queued job — each a 5-15s Vision call —
+    and a deep enough queue puts them past the client's 90s timeout.
     """
-    await extraction_drain()
+    await extraction_drain(first=submission_id)
 
 
 async def run_extraction_for_submission(submission_id: uuid.UUID) -> None:
@@ -130,8 +135,10 @@ async def run_extraction_for_submission(submission_id: uuid.UUID) -> None:
     RAISES on failure, deliberately. This used to swallow everything
     because it was spawned fire-and-forget and had nobody to tell. It is
     now driven by `extraction_queue`, which has somewhere to put the
-    error: the job's `last_error`, visible in the admin console. On
-    2026-09-03 the swallowed exception was
+    error: the job's `last_error`. No admin screen joins
+    `extraction_jobs` yet, so today that means one SQL query rather than
+    a page — but the text exists, durably, which is the part that was
+    missing. On 2026-09-03 the swallowed exception was
 
         TypeError: AsyncMessages.create() got an unexpected keyword
         argument 'temperature'
@@ -151,8 +158,10 @@ async def run_extraction_for_submission(submission_id: uuid.UUID) -> None:
             select(Submission).where(Submission.id == submission_id)
         )).scalar_one_or_none()
         if not sub:
-            # Deleted between enqueue and drain. Nothing owed, and not an
-            # error — the queue marks the job done and moves on.
+            # Not reachable from the queue — `extraction_jobs` is
+            # ON DELETE CASCADE, so a deleted submission takes its job
+            # row with it. Kept for the direct callers (the rescue
+            # script), where a stale id is a typo, not an incident.
             return
         assignment = (await db.execute(
             select(Assignment).where(Assignment.id == sub.assignment_id)
@@ -2032,12 +2041,17 @@ async def submit_homework(
     # on the student pressing Confirm on the post-submit screen, which
     # calls /confirm-extraction.
     if assignment.integrity_check_enabled or assignment.ai_grading_enabled:
-        await enqueue_extraction(db, submission_id_for_task, assignment)
-        await db.commit()
+        # The submission is already committed above, which `enqueue` needs
+        # — it writes on its own session and cannot see an uncommitted
+        # row. It commits itself, so there is nothing to commit here.
+        await enqueue_extraction(submission_id_for_task, assignment)
         # Kick a drain now so the student's read still starts in seconds
         # rather than waiting for the cron. Best-effort by design: the
-        # row is already durable, so losing this task costs latency only.
-        _spawn_background_task(_drain_extraction_quietly())
+        # row is already durable, so losing this task costs latency only
+        # — `.github/workflows/extraction-drain.yml` is the guarantee.
+        _spawn_background_task(
+            _drain_extraction_quietly(submission_id_for_task),
+        )
 
     # Logged after the enqueue. The ordering used to be load-bearing —
     # with a fire-and-forget spawn, anything fallible between the commit
