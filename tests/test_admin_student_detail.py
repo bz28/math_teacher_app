@@ -352,6 +352,56 @@ async def test_404_on_a_missing_id(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_last_active_counts_submitting_not_just_tutoring(
+    client: AsyncClient,
+) -> None:
+    """A student who only ever hands in homework is ACTIVE, not "never".
+
+    `last_active` used to read `sessions` alone — the TUTORING session
+    table, which homework submission never writes to. The seeded student
+    has seven submissions and zero tutoring sessions, so the old
+    derivation returned null and the page rendered NOT STARTED / "never
+    opened the app" directly beside "last handed in 2d ago".
+
+    Nothing asserted this, which is exactly why it survived three review
+    rounds and three passes of screenshots.
+    """
+    seeded = await _seed()
+    async with get_session_factory()() as s:
+        sessions = (await s.execute(text(
+            "SELECT count(*) FROM sessions WHERE user_id = :sid"
+        ), {"sid": seeded["student_id"]})).scalar_one()
+    assert sessions == 0, "fixture must have no tutoring sessions"
+
+    resp = await client.get(
+        f"/v1/admin/students/{seeded['student_id']}",
+        headers=auth_headers(seeded["admin_token"]),
+    )
+    assert resp.status_code == 200, resp.text
+    student = resp.json()["student"]
+    assert student["last_active_at"] is not None
+    # And it cannot be older than the work they handed in.
+    assert student["last_active_at"] >= student["last_submitted_at"]
+
+
+@pytest.mark.asyncio
+async def test_last_active_is_null_only_when_nothing_happened(
+    client: AsyncClient,
+) -> None:
+    """The other half: a student with no footprint at all still reports
+    null, so "not started" keeps meaning something."""
+    seeded = await _seed()
+    resp = await client.get(
+        f"/v1/admin/students/{seeded['other_student_id']}",
+        headers=auth_headers(seeded["admin_token"]),
+    )
+    assert resp.status_code == 200, resp.text
+    student = resp.json()["student"]
+    # This student has exactly one submission and nothing else.
+    assert student["last_active_at"] == student["last_submitted_at"]
+
+
+@pytest.mark.asyncio
 async def test_both_reads_are_ferpa_logged(client: AsyncClient) -> None:
     """Both endpoints return a named student's full grade record, which
     is the same disclosure `teacher_grades.student_grades` logs — and an

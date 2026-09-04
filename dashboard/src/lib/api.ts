@@ -1611,8 +1611,11 @@ export interface StudentDetailData {
     school: { id: string; name: string; kind: string } | null;
     subscription_tier: string | null;
     subscription_status: string | null;
-    /** Two different questions: when they last opened the app, and
-     *  when they last handed something in. */
+    /** Two different questions: when they were last active AT ALL
+     *  (tutoring, any logged action, or a submission), and when they
+     *  last handed something in. Not "opened the app" — that named one
+     *  narrow source and was false for a student who only does
+     *  homework. */
     last_active_at: string | null;
     last_submitted_at: string | null;
     call_count_30d: number;

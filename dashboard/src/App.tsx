@@ -57,8 +57,9 @@ export default function App() {
             path="/students/independent"
             element={<IndependentStudents />}
           />
-          {/* Declared after /students/independent so the literal
-              segment wins over the param. */}
+          {/* /students/independent still resolves to the list: React
+              Router ranks by specificity, so its literal segment beats
+              this param regardless of declaration order. */}
           <Route path="/students/:studentId" element={<StudentDetail />} />
           <Route
             path="/teachers/independent"

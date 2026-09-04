@@ -117,9 +117,16 @@ export default function SubmissionTrace() {
     setWorkLoaded(false);
     setError(null);
     // The student's own work: the photos, what Vision made of them, and
-    // the confirm stamps. Failure is non-fatal — a submission whose
-    // assignment or course was deleted 404s here, and the call timeline
-    // is still worth rendering without it.
+    // the confirm stamps. Failure is non-fatal — the call timeline is
+    // still worth rendering without it.
+    //
+    // The realistic failure is this endpoint alone: it returns the
+    // photos as inline base64, so it can time out or trip a response
+    // size limit on a submission where the small /llm-calls fetch
+    // beside it succeeds. (NOT a deleted assignment or course — both
+    // FKs cascade, so a submission cannot outlive either.) Everything
+    // downstream must therefore treat a null `work` as "unknown",
+    // never as "absent".
     api
       .extractionDetail(submissionId)
       .then((d) => { if (!cancelled) { setWork(d); setWorkLoaded(true); } })
@@ -648,6 +655,14 @@ function Lifecycle({
       at: readAt,
       note: work.extraction_empty ? "found nothing" : undefined,
     });
+  } else if (readAt && !work) {
+    // A read ran, and the submission record didn't load — so whether it
+    // was STORED is simply unknown here. Say only what the timeline
+    // proves and stop: claiming "never stored" off a failed fetch would
+    // invent a defect, and there is no StudentWork section rendered to
+    // contradict it. Matches `noCallsDiagnosis`, which refuses to
+    // diagnose without the record for the same reason.
+    hops.push({ label: "Reader ran", at: readAt });
   } else if (readAt) {
     // The call succeeded and nothing was stored. `sub.extraction` is
     // assigned and committed AFTER the Vision call returns, so a failed
