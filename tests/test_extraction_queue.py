@@ -26,12 +26,8 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import StatementError
 
 from api.core import extraction_queue
-from api.core.extraction_queue import (
-    _finish,
-    _traceback_is_safe,
-    drain,
-    enqueue_submission,
-)
+from api.core.extraction_queue import _finish, drain, enqueue_submission
+from api.core.safe_errors import traceback_is_safe
 from api.database import get_session_factory
 from api.models.assignment import Assignment
 from api.models.extraction_job import (
@@ -312,6 +308,11 @@ async def test_one_bad_job_does_not_abandon_the_rest_of_the_pass(
 
     Fails the bookkeeping rather than the extraction, because the
     extraction call was the only part that was ever guarded.
+
+    The crashing job's read does NOT land here, so this covers the
+    release-back-to-`queued` branch. The other branch — a crash AFTER
+    the read landed — is
+    `test_a_read_that_landed_before_the_crash_is_not_parked_as_failed`.
     """
     first_sid = await _seed_submission(world)
     await _enqueue(world, first_sid)
@@ -331,7 +332,10 @@ async def test_one_bad_job_does_not_abandon_the_rest_of_the_pass(
 
     async def _record(sid: uuid.UUID) -> None:
         ran.append(sid)
-        await _mark_extracted(sid)
+        # Deliberately NOT for the job whose bookkeeping fails: this
+        # test is about the branch where nothing landed.
+        if sid != first_sid:
+            await _mark_extracted(sid)
 
     with (
         patch(_TARGET, new_callable=AsyncMock, side_effect=_record),
@@ -825,7 +829,7 @@ async def test_a_chained_database_error_does_not_leak_through_the_traceback(
 
     # A plain failure keeps its traceback — that is what makes an
     # unfamiliar error diagnosable, and it carries nothing.
-    assert _traceback_is_safe(RuntimeError("something ordinary")) is True
+    assert traceback_is_safe(RuntimeError("something ordinary")) is True
 
     # The same failure, raised while the database error is the active
     # context, must NOT be logged with its traceback.
@@ -835,7 +839,7 @@ async def test_a_chained_database_error_does_not_leak_through_the_traceback(
         except Exception:
             raise RuntimeError("connection reset while stamping the job")
     except Exception as chained:
-        assert _traceback_is_safe(chained) is False, (
+        assert traceback_is_safe(chained) is False, (
             "a chained database error would print the student's work"
         )
         # And explicit `raise ... from ...` is the same hazard.
@@ -949,3 +953,96 @@ async def test_asking_for_zero_jobs_runs_zero(world: dict[str, Any]) -> None:
     vision.assert_not_awaited()
     assert result["claimed"] == 0
     assert (await _job(sid)).status == STATUS_QUEUED
+
+
+@pytest.mark.asyncio
+async def test_a_read_that_landed_before_the_crash_is_not_parked_as_failed(
+    world: dict[str, Any],
+) -> None:
+    """The mirror of `_finish`'s `done` exemption.
+
+    The likeliest thing to escape `_run_job` is `_finish` failing right
+    AFTER a successful extraction — the two writes are lines apart, so
+    whatever kills one tends to kill the other. Treating that as a
+    failure would spend an attempt and, on the last one, park a
+    submission whose read exists on disk as
+    "failed — abandoned", with nothing in the product to correct it.
+
+    A landed read is ground truth, whatever happened to the paperwork.
+    """
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+
+    # Burn the budget so the crash would otherwise PARK rather than
+    # requeue — the case where getting it wrong is permanent.
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE extraction_jobs SET attempts = :m WHERE submission_id = :i"),
+            {"m": MAX_ATTEMPTS, "i": sid},
+        )
+        await s.commit()
+
+    real_finish = extraction_queue._finish
+    tripped = False
+
+    async def _finish_once_broken(job_id: uuid.UUID, **kw: Any) -> None:
+        nonlocal tripped
+        if not tripped:
+            tripped = True
+            raise RuntimeError("connection reset while stamping the job")
+        await real_finish(job_id, **kw)
+
+    async def _succeed(_sid: uuid.UUID) -> None:
+        await _mark_extracted(_sid)
+
+    with (
+        patch(_TARGET, new_callable=AsyncMock, side_effect=_succeed),
+        patch.object(extraction_queue, "_finish", _finish_once_broken),
+    ):
+        result = await drain()
+
+    assert result["succeeded"] == 1, f"a landed read was counted as failed: {result}"
+    job = await _job(sid)
+    assert job.status == STATUS_DONE, (
+        "a submission with a real extraction was parked as failed"
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_attempt_refund_cannot_drive_the_budget_negative(
+    world: dict[str, Any],
+) -> None:
+    """The refund is floored at zero.
+
+    A fresh job has `attempts = 0` after its first refund, so a second
+    refund racing on the same row would take it negative and hand the
+    job an unbounded budget — the opposite of what MAX_ATTEMPTS is for.
+    Grading floors it the same way.
+    """
+    from api.core.cost_tracker import PlatformStopError
+
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+    job_id = (await _job(sid)).id
+
+    with patch(
+        _TARGET, new_callable=AsyncMock,
+        side_effect=PlatformStopError("Daily cost limit reached"),
+    ):
+        await drain()
+
+    assert (await _job(sid)).attempts == 0
+
+    # Refund again, as a second drain racing the first would. The row
+    # must be `running` for the write to apply at all — `_finish` only
+    # stamps a job it still owns, so refunding a `queued` row is a
+    # no-op and would make this test pass without proving anything.
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE extraction_jobs SET status = :r WHERE id = :i"),
+            {"r": STATUS_RUNNING, "i": job_id},
+        )
+        await s.commit()
+
+    await _finish(job_id, status=STATUS_QUEUED, error="x", refund_attempt=True)
+    assert (await _job(sid)).attempts == 0, "the budget went negative"

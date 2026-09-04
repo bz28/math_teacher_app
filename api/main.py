@@ -77,6 +77,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             # anyone actually debugs from; the variable values are the
             # part we cannot send.
             include_local_variables=False,
+            # OFF for the same reason, and it is a SEPARATE hole —
+            # turning off frame locals does not touch request bodies.
+            # The default is "medium", which captures any body under
+            # 10 KB verbatim, and the Starlette integration's JSON-body
+            # branch is not gated behind `send_default_pii`. The body of
+            # POST .../confirm-extraction is the student's own
+            # plain-English replacement for their handwritten work, and
+            # at a few hundred bytes it sails under that bound — so any
+            # error raised in that request shipped their schoolwork to a
+            # third-party processor.
+            max_request_body_size="never",
         )
 
     if settings.bypass_subscription and settings.app_env != "development":
