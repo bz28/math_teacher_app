@@ -135,12 +135,24 @@ export default function StudentDetail() {
       key: "read",
       header: "What the reader got",
       width: "18%",
+      // Describes the READ and what the student did about it. An earlier
+      // version said "read accepted" whenever nothing was edited, which
+      // labelled an unconfirmed read — and a rejected one — as accepted:
+      // the two rows on this page where that claim is exactly backwards.
       render: (r) => {
         if (!r.extraction_present) {
           return <span className="sd-dim">no read</span>;
         }
         if (r.extraction_empty) {
           return <span style={{ color: "var(--danger)" }}>read nothing</span>;
+        }
+        if (r.flagged_at) {
+          return <span style={{ color: "var(--warn)" }}>student rejected it</span>;
+        }
+        if (!r.confirmed_at) {
+          return (
+            <span style={{ color: "var(--danger)" }}>not yet reviewed</span>
+          );
         }
         return (
           <span className="sd-dim">

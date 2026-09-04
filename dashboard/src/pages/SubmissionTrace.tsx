@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, type LLMCallsData, type SubmissionSummary } from "../lib/api";
+import {
+  api,
+  type ExtractionDetail,
+  type LLMCallsData,
+  type SubmissionSummary,
+} from "../lib/api";
 import {
   fmtCost,
   fmtRelativeMs,
@@ -12,6 +17,8 @@ import {
 import { PIPELINE_BUCKETS, bucketFor } from "../lib/llm_modes";
 import MetadataChips from "../components/MetadataChips";
 import StatusPill, { type PillTone } from "../components/StatusPill";
+import ExtractionReadout from "../components/ExtractionReadout";
+import { STAGE_META, isStalled, noCallsDiagnosis } from "../lib/stages";
 import { useConfirm } from "../lib/confirm";
 
 // SubmissionTrace — the per-submission case file. Traces ONE student
@@ -81,6 +88,12 @@ export default function SubmissionTrace() {
   const { submissionId } = useParams<{ submissionId: string }>();
   const confirm = useConfirm();
   const [data, setData] = useState<LLMCallsData | null>(null);
+  const [work, setWork] = useState<ExtractionDetail | null>(null);
+  // The two fetches are independent, so the calls can land first. Without
+  // this the empty-call diagnosis would fire against a `work` that is
+  // merely still in flight and report "couldn't be loaded" on a healthy
+  // page for as long as the round trip takes.
+  const [workLoaded, setWorkLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [debugState, setDebugState] = useState<Record<string, string>>({});
 
@@ -89,7 +102,17 @@ export default function SubmissionTrace() {
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setData(null);
+    setWork(null);
+    setWorkLoaded(false);
     setError(null);
+    // The student's own work: the photos, what Vision made of them, and
+    // the confirm stamps. Failure is non-fatal — a submission whose
+    // assignment or course was deleted 404s here, and the call timeline
+    // is still worth rendering without it.
+    api
+      .extractionDetail(submissionId)
+      .then((d) => { if (!cancelled) { setWork(d); setWorkLoaded(true); } })
+      .catch(() => { if (!cancelled) { setWork(null); setWorkLoaded(true); } });
     // Pull every call for this submission. 200 is comfortably above
     // even pathological pipelines (typical: 5-15 calls per submission).
     // The wide time window makes sure old debug submissions aren't
@@ -138,15 +161,27 @@ export default function SubmissionTrace() {
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
   );
 
-  // Empty state — a valid submission with no logged calls still shows its
-  // case-file header, just with an empty timeline note.
+  // Empty state — a valid submission with no logged calls. This used to
+  // be a one-line shrug, which reads as "nothing to see" when it is
+  // usually the most interesting thing on the page: there are only a few
+  // ways to get here and the stored facts tell them apart, so say which.
   if (calls.length === 0) {
+    const why = workLoaded ? noCallsDiagnosis(work, 0) : null;
     return (
       <div>
-        <CaseHeader summary={summary} submissionId={submissionId} runPassed failures={0} />
-        <p style={{ color: "var(--muted)", marginTop: 20 }}>
-          No LLM calls logged for this submission.
-        </p>
+        <CaseHeader
+          summary={summary} submissionId={submissionId}
+          runPassed failures={0} work={work} hasCalls={false}
+        />
+        <Lifecycle work={work} summary={summary} firstReadAt={null} />
+        {!workLoaded && <p className="loading">Loading the submission…</p>}
+        {why && (
+          <div className="cf-why">
+            <div className="cf-why-head">{why.headline}</div>
+            <p className="cf-why-body">{why.detail}</p>
+          </div>
+        )}
+        <StudentWork work={work} />
       </div>
     );
   }
@@ -180,9 +215,26 @@ export default function SubmissionTrace() {
   // start" timing, so grouping by stage doesn't scramble the numbering.
   const indexOf = new Map(calls.map((c, i) => [c.id, i]));
 
+  // When Vision actually read the page. `Submission` stores no
+  // extraction timestamp, but the call that produced it is right here in
+  // the timeline — so the trace can date the read exactly where the
+  // student page can only approximate from submission.
+  const firstRead = calls.find((c) => c.function === "image_extract");
+
   return (
     <div>
-      <CaseHeader summary={summary} submissionId={submissionId} runPassed={runPassed} failures={failures} />
+      <CaseHeader
+        summary={summary} submissionId={submissionId}
+        runPassed={runPassed} failures={failures} work={work} hasCalls
+      />
+
+      <Lifecycle
+        work={work}
+        summary={summary}
+        firstReadAt={firstRead?.created_at ?? null}
+      />
+
+      <StudentWork work={work} />
 
       {truncated && (
         <p style={{ color: "var(--warn)", fontSize: 12, marginTop: -8, marginBottom: 16 }}>
@@ -361,16 +413,27 @@ export default function SubmissionTrace() {
 // ── Case-file header: identity + the decisions this run produced ──────
 
 function CaseHeader({
-  summary, submissionId, runPassed, failures,
+  summary, submissionId, runPassed, failures, work, hasCalls,
 }: {
   summary: SubmissionSummary | null;
   submissionId: string | undefined;
   runPassed: boolean;
   failures: number;
+  work: ExtractionDetail | null;
+  /** Whether any call was logged at all. With none, the run pill is a
+   *  verdict about an empty set. */
+  hasCalls: boolean;
 }) {
   const runTitle = runPassed
     ? "Every logged call in this run succeeded"
     : `${failures} call${failures === 1 ? "" : "s"} in this run failed`;
+
+  // The pill used to read PASS whenever nothing failed — including when
+  // nothing ran. On a submission stuck six days with zero calls that is
+  // the most prominent thing on the page and it says the opposite of
+  // the truth: "no calls failed" is not "this submission is fine". With
+  // no calls to judge, show where the submission actually stopped.
+  const stagePill = !hasCalls && work ? STAGE_META[work.stage] : null;
 
   return (
     <div className="case-file">
@@ -379,7 +442,12 @@ function CaseHeader({
           <span className="eyebrow">Case file</span>
           <h1 style={{ marginBottom: 4 }}>
             {summary?.student_name ? (
-              <Link to={`/llm-calls?user=${summary.student_id}`} title="View this student's LLM calls">
+              // Up to the student's whole case file, not sideways into a
+              // raw call list — this submission is one row on that page.
+              <Link
+                to={`/students/${summary.student_id}`}
+                title="Open this student's case file"
+              >
                 {summary.student_name}
               </Link>
             ) : (
@@ -406,11 +474,19 @@ function CaseHeader({
             )}
           </div>
         </div>
-        <StatusPill
-          tone={runPassed ? "ok" : "danger"}
-          label={runPassed ? "PASS" : "FAILED"}
-          title={runTitle}
-        />
+        {stagePill ? (
+          <StatusPill
+            tone={stagePill.tone}
+            label={stagePill.label}
+            title={stagePill.blurb}
+          />
+        ) : (
+          <StatusPill
+            tone={runPassed ? "ok" : "danger"}
+            label={runPassed ? "PASS" : "FAILED"}
+            title={runTitle}
+          />
+        )}
       </div>
 
       {summary && <DecisionStrip summary={summary} />}
@@ -465,6 +541,176 @@ function DecisionStrip({ summary }: { summary: SubmissionSummary }) {
         <div className="case-decision-sub">{action.sub}</div>
       </div>
     </div>
+  );
+}
+
+// ── Lifecycle: the hops, and the gaps between them ───────────────────
+
+/** The gap between two moments, in the coarsest unit that stays true.
+ *  The finding on this strip is nearly always a gap, not an event. */
+function gapLabel(from: string | null, to: string | null): string | null {
+  if (!from || !to) return null;
+  const ms = new Date(to).getTime() - new Date(from).getTime();
+  if (ms < 0) return null;
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 90_000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 5_400_000) return `${Math.round(ms / 60_000)}m`;
+  if (ms < 172_800_000) return `${Math.round(ms / 3_600_000)}h`;
+  return `${Math.round(ms / 86_400_000)}d`;
+}
+
+interface Hop {
+  label: string;
+  at: string | null;
+  /** Rendered open-ended and in danger tone — the run stops here and
+   *  nothing is coming. */
+  pending?: boolean;
+  note?: string;
+}
+
+/**
+ * Submitted → read → confirmed → graded → published, with the elapsed
+ * gap rendered between the stamps rather than beside them.
+ *
+ * The question this answers is the one the call timeline below cannot:
+ * a submission can have a perfectly healthy set of Vision calls and
+ * still be dead, because the student never pressed Confirm and every
+ * downstream step is gated on that. The strip ends in an open pending
+ * node when that is what happened, so the break is visible as a shape
+ * before anything is read.
+ */
+function Lifecycle({
+  work, summary, firstReadAt,
+}: {
+  work: ExtractionDetail | null;
+  summary: SubmissionSummary | null;
+  firstReadAt: string | null;
+}) {
+  if (!work && !summary) return null;
+
+  const submittedAt = work?.submitted_at ?? null;
+  const readAt = firstReadAt ?? null;
+  const ruledAt = work?.confirmed_at ?? work?.flagged_at ?? null;
+  const stalled = work ? isStalled(work.stage) : false;
+
+  const hops: Hop[] = [
+    { label: "Submitted", at: submittedAt },
+  ];
+
+  if (work?.extraction_present || readAt) {
+    hops.push({
+      label: "Reader ran",
+      at: readAt,
+      note: work?.extraction_empty ? "found nothing" : undefined,
+    });
+  } else if (work) {
+    hops.push({
+      label: "Reader ran",
+      at: null,
+      pending: true,
+      note:
+        work.integrity_check_enabled || work.ai_grading_enabled
+          ? "never arrived"
+          : "AI off for this HW",
+    });
+  }
+
+  if (work?.confirmed_at) {
+    hops.push({
+      label: "Student confirmed",
+      at: work.confirmed_at,
+      note: work.edited_at ? "after correcting the read" : undefined,
+    });
+  } else if (work?.flagged_at) {
+    hops.push({ label: "Student rejected the read", at: work.flagged_at });
+  } else if (work?.extraction_present) {
+    // The case this whole surface was built for. Labelled for what is
+    // happening rather than what didn't — "Student confirmed … never
+    // ruled" contradicts itself in the space of four words.
+    hops.push({
+      label: "Awaiting student",
+      at: null,
+      pending: true,
+      note: "never ruled on the read",
+    });
+  }
+
+  if (summary?.graded_at) {
+    hops.push({ label: "Graded", at: summary.graded_at });
+  }
+  if (summary?.reviewed_at) {
+    hops.push({ label: "Teacher reviewed", at: summary.reviewed_at });
+  }
+  if (summary?.grade_published_at) {
+    hops.push({ label: "Published", at: summary.grade_published_at });
+  }
+
+  // How long the open end has been open — the number an operator acts on.
+  const openSince = stalled ? (ruledAt ?? readAt ?? submittedAt) : null;
+  const waitingFor = openSince
+    ? gapLabel(openSince, new Date().toISOString())
+    : null;
+
+  return (
+    <ol className="cf-life" aria-label="Submission lifecycle">
+      {hops.map((h, i) => {
+        const gap = i === 0 ? null : gapLabel(hops[i - 1].at, h.at);
+        return (
+          <li
+            key={h.label}
+            className={`cf-life-hop${h.pending ? " cf-life-hop-pending" : ""}`}
+          >
+            {i > 0 && (
+              <span className="cf-life-gap" aria-hidden="true">
+                {gap ?? ""}
+              </span>
+            )}
+            <span className="cf-life-dot" aria-hidden="true" />
+            <span className="cf-life-label">{h.label}</span>
+            <span className="cf-life-at">
+              {h.at ? (
+                <span title={h.at}>{formatRelativeDate(h.at)}</span>
+              ) : h.pending && waitingFor ? (
+                `waiting ${waitingFor}`
+              ) : (
+                "—"
+              )}
+            </span>
+            {h.note && <span className="cf-life-note">{h.note}</span>}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// ── The student's own work, beside what the reader made of it ────────
+
+function StudentWork({ work }: { work: ExtractionDetail | null }) {
+  if (!work) return null;
+  const corrected = work.rows.filter((r) => r.changed).length;
+  const meta = STAGE_META[work.stage];
+  return (
+    <section className="cf-work">
+      <h3 className="cf-work-head">
+        Student work
+        <span className="cf-work-sub">
+          {work.files_count === 1 ? "1 page" : `${work.files_count} pages`}
+          {work.rows.length > 0 && (
+            <>
+              {" · "}
+              {corrected === 0
+                ? `${work.rows.length} rows read, none corrected`
+                : `${corrected} of ${work.rows.length} rows corrected by the student`}
+            </>
+          )}
+        </span>
+        <span className="cf-work-stage">
+          <StatusPill tone={meta.tone} label={meta.label} title={meta.blurb} />
+        </span>
+      </h3>
+      <ExtractionReadout detail={work} />
+    </section>
   );
 }
 

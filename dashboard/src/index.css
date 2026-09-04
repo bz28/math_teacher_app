@@ -3303,3 +3303,133 @@ table.dt tr:last-child td { border-bottom: none; }
   .funnel-cell,
   .funnel-bar-fill { transition: none; }
 }
+
+/* ── Submission case file: lifecycle + student work ───────────────────
+   The strip renders the GAP between stamps, not just the stamps: the
+   finding is nearly always "six days between the read and nothing",
+   and a bare row of timestamps makes you do that subtraction yourself.
+
+   A hop with no stamp and nothing coming renders open-ended in the
+   danger tone — a submission can have a flawless set of Vision calls
+   and still be dead because the student never pressed Confirm, and that
+   break should be visible as a shape before a word is read. */
+
+.cf-life {
+  list-style: none;
+  margin: 0 0 24px;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 4px;
+}
+
+.cf-life-hop {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.cf-life-gap {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted-2);
+  padding: 0 10px 0 6px;
+  position: relative;
+}
+/* The connector, drawn under the gap label so the elapsed time sits ON
+   the line between two hops rather than beside it. */
+.cf-life-gap::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.cf-life-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--muted-2);
+  flex: none;
+  transform: translateY(-1px);
+}
+.cf-life-label {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.cf-life-at {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.cf-life-note {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  background: var(--paper-2);
+  padding: 1px 6px;
+}
+
+.cf-life-hop-pending .cf-life-dot {
+  background: none;
+  border: 1px solid var(--danger);
+}
+.cf-life-hop-pending .cf-life-label,
+.cf-life-hop-pending .cf-life-at { color: var(--danger); }
+.cf-life-hop-pending .cf-life-note {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+/* Why an empty timeline is empty. */
+.cf-why {
+  border-left: 2px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 14px 18px;
+  margin-bottom: 24px;
+}
+.cf-why-head {
+  font-size: 15px;
+  color: var(--ink);
+  margin-bottom: 5px;
+}
+.cf-why-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  max-width: 68ch;
+}
+
+.cf-work { margin-bottom: 28px; }
+.cf-work-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--ink);
+  font-weight: 400;
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule);
+}
+.cf-work-sub {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--muted);
+}
+.cf-work-stage { margin-left: auto; }
+
+@media (max-width: 640px) {
+  .cf-life-gap { padding: 0 6px; }
+  .cf-work-stage { margin-left: 0; }
+}

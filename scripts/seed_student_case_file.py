@@ -1,0 +1,291 @@
+"""Seed a student whose work stopped at every stage, and screenshot the
+two surfaces that now say so.
+
+Standalone (not a durable test) — drives an already-running stack:
+    dashboard :5173 (override with DASH_BASE), API :8000
+
+    .venv/bin/python -m scripts.seed_student_case_file
+
+The point of the seed is the submission that got a clean Vision read and
+was never confirmed. Confirming is what spawns the integrity check and
+enqueues grading, so that submission is finished-looking and permanently
+ungraded — and on every pre-existing surface it renders identically to a
+healthy one. A local database will not contain that case by accident,
+and a screenshot of an empty funnel proves nothing.
+
+Writes docs/design/student-case-file-*.png.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import io
+import os
+import uuid
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+from PIL import Image, ImageDraw
+from sqlalchemy.engine import make_url
+
+from api.config import settings
+from api.core.auth import create_access_token, hash_password
+from api.database import get_session_factory
+from api.models.assignment import Assignment, Submission, SubmissionGrade
+from api.models.course import Course, CourseTeacher
+from api.models.grading_job import GradingJob
+from api.models.school import SCHOOL_KIND_INSTITUTIONAL, School
+from api.models.section import Section
+from api.models.section_enrollment import SectionEnrollment
+from api.models.user import User
+from tests.harness.browser import HarnessBrowser
+
+DASH_BASE = os.environ.get("DASH_BASE", "http://localhost:5173").rstrip("/")
+OUT_DIR = Path(__file__).resolve().parents[1] / "docs" / "design"
+
+ADMIN_ACCESS_KEY = "admin_access_token"
+ADMIN_REFRESH_KEY = "admin_refresh_token"
+
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "postgres", "db", ""}
+
+NOW = datetime.now(UTC)
+
+
+def assert_local_database() -> None:
+    """Refuse to run against anything but a local database.
+
+    This script writes users and submissions and mints an admin JWT from
+    whatever DATABASE_URL and jwt_secret the environment carries. Fine
+    pointed at a dev box, emphatically not fine anywhere else.
+    """
+    host = (make_url(settings.database_url).host or "").lower()
+    if host not in _LOCAL_HOSTS:
+        raise SystemExit(
+            f"Refusing to run: DATABASE_URL points at {host!r}, not a local "
+            "database. This script seeds data and mints an admin token."
+        )
+
+
+def handwriting_png() -> str:
+    """A stand-in for the photographed page, base64 like the real column.
+
+    Drawn rather than shipped as a fixture so the repo carries no image
+    blob for a screenshot script. It only has to prove the photo lane
+    renders at the right size beside the transcription.
+    """
+    img = Image.new("RGB", (620, 460), "#fbfaf6")
+    d = ImageDraw.Draw(img)
+    for y in range(60, 460, 44):
+        d.line([(28, y), (592, y)], fill="#dfe6ef", width=1)
+    lines = [
+        "1)  2x + 5 = 17",
+        "     2x = 12",
+        "     x = 6",
+        "2)  3(y - 4) = 9",
+        "     y - 4 = 3",
+        "     y = 7",
+    ]
+    for i, text in enumerate(lines):
+        d.text((44, 30 + i * 44), text, fill="#1f2a3a")
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=88)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def read_for(problem_count: int = 2) -> dict:
+    """A Vision read shaped like the real one: steps tagged to problems,
+    one final answer each, one overall confidence."""
+    steps = []
+    for p in range(1, problem_count + 1):
+        for n, latex in enumerate(["2x = 12", "x = 6"], start=1):
+            steps.append({
+                "problem_position": p,
+                "step_num": n,
+                "latex": latex if p == 1 else latex.replace("x", "y"),
+                "plain_english": None,
+            })
+    return {
+        "steps": steps,
+        "final_answers": [
+            {"problem_position": p, "answer_latex": "6" if p == 1 else "7",
+             "answer_plain": None}
+            for p in range(1, problem_count + 1)
+        ],
+        "confidence": 0.91,
+    }
+
+
+async def seed() -> dict[str, str]:
+    tag = uuid.uuid4().hex[:6]
+    photo = handwriting_png()
+    async with get_session_factory()() as s:
+        admin = User(
+            email=f"cf_admin_{tag}@t.com", password_hash=hash_password("x"),
+            grade_level=12, role="admin", name="Case File Admin",
+        )
+        school = School(
+            name="Lincoln High", kind=SCHOOL_KIND_INSTITUTIONAL,
+            contact_name="Demo", contact_email=f"cf_{tag}@s.com",
+        )
+        s.add_all([admin, school])
+        await s.flush()
+
+        teacher = User(
+            email=f"cf_teacher_{tag}@t.com", password_hash=hash_password("x"),
+            grade_level=12, role="teacher", name="Dana Whitfield",
+            school_id=school.id,
+        )
+        student = User(
+            email=f"cf_student_{tag}@t.com", password_hash=hash_password("x"),
+            grade_level=9, role="student", name="Maya Chen",
+            school_id=school.id,
+        )
+        s.add_all([teacher, student])
+        await s.flush()
+
+        course = Course(
+            name="Algebra I", subject="math", school_id=school.id,
+        )
+        s.add(course)
+        await s.flush()
+        s.add(CourseTeacher(
+            course_id=course.id, teacher_id=teacher.id, role="owner",
+        ))
+        section = Section(course_id=course.id, name="Period 3")
+        s.add(section)
+        await s.flush()
+        s.add(SectionEnrollment(
+            section_id=section.id, course_id=course.id, student_id=student.id,
+        ))
+
+        async def hw(title: str, *, ai: bool = True) -> Assignment:
+            a = Assignment(
+                course_id=course.id, unit_ids=[], teacher_id=teacher.id,
+                title=title, type="homework", status="published",
+                integrity_check_enabled=ai, ai_grading_enabled=ai,
+                due_at=NOW - timedelta(days=1),
+            )
+            s.add(a)
+            await s.flush()
+            return a
+
+        def sub(a: Assignment, days_ago: int, **kw: object) -> Submission:
+            row = Submission(
+                assignment_id=a.id, student_id=student.id,
+                section_id=section.id, status="submitted",
+                files=[{"data": photo, "media_type": "image/jpeg",
+                        "filename": "page1.jpg"}],
+                submitted_at=NOW - timedelta(days=days_ago),
+                **kw,  # type: ignore[arg-type]
+            )
+            s.add(row)
+            return row
+
+        # THE case: read landed, student never ruled. Six days and
+        # counting, and nothing downstream will ever fire.
+        stuck = sub(await hw("Two-Step Equations"), 6, extraction=read_for())
+
+        # Published — the happy path, for contrast.
+        done = sub(
+            await hw("Fraction Operations"), 12,
+            extraction=read_for(),
+            extraction_confirmed_at=NOW - timedelta(days=12),
+        )
+        # Graded, not yet published, and the teacher moved the score.
+        graded = sub(
+            await hw("Graphing Linear Functions"), 8,
+            extraction=read_for(),
+            extraction_confirmed_at=NOW - timedelta(days=8),
+        )
+        # Student corrected the read, then confirmed — grading queued.
+        repaired = sub(
+            await hw("Systems of Equations"), 3,
+            extraction=read_for(),
+            extraction_edits={"1:2": "x = 8"},
+            extraction_edited_at=NOW - timedelta(days=3),
+            extraction_confirmed_at=NOW - timedelta(days=3),
+        )
+        # Student rejected the read outright — teacher grades by hand.
+        sub(
+            await hw("Word Problems"), 4,
+            extraction=read_for(),
+            extraction_flagged_at=NOW - timedelta(days=4),
+        )
+        # A read was owed and never arrived.
+        sub(await hw("Inequalities"), 2)
+        # Both toggles off — the empty trace here is correct.
+        sub(await hw("Exit Ticket", ai=False), 5)
+        await s.flush()
+
+        s.add_all([
+            SubmissionGrade(
+                submission_id=done.id, ai_score=88.0, final_score=88.0,
+                graded_at=NOW - timedelta(days=11),
+                grade_published_at=NOW - timedelta(days=10),
+                published_final_score=88.0,
+            ),
+            SubmissionGrade(
+                submission_id=graded.id, ai_score=72.0, final_score=90.0,
+                graded_at=NOW - timedelta(days=7),
+            ),
+        ])
+        s.add(GradingJob(
+            submission_id=repaired.id, assignment_id=repaired.assignment_id,
+            status="queued", attempts=0,
+        ))
+        await s.commit()
+
+        return {
+            "admin": create_access_token(str(admin.id), "admin"),
+            "student_id": str(student.id),
+            "stuck_id": str(stuck.id),
+        }
+
+
+async def shoot(hb: HarnessBrowser, token: str, path: str, name: str) -> None:
+    async with hb.authed_page(
+        token, token,
+        access_key=ADMIN_ACCESS_KEY, refresh_key=ADMIN_REFRESH_KEY,
+    ) as page:
+        errors: list[str] = []
+        page.on(
+            "console",
+            lambda m: errors.append(m.text) if m.type == "error" else None,
+        )
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        await page.set_viewport_size({"width": 1440, "height": 1200})
+        await page.goto(f"{DASH_BASE}{path}", wait_until="networkidle")
+        # Both pages render off a second fetch that resolves after
+        # networkidle on a warm dev server; settle or the shot catches
+        # the shimmer instead of the rows.
+        await page.wait_for_timeout(1500)
+        out = OUT_DIR / f"{name}.png"
+        await page.screenshot(path=str(out), full_page=True)
+        print(f"✓ {out.relative_to(OUT_DIR.parents[1])}")
+        print(f"  console errors: {len(errors)}")
+        for e in errors[:10]:
+            print(f"    ! {e}")
+
+
+async def main() -> None:
+    assert_local_database()
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    print("Seeding a student whose work stopped at every stage …")
+    w = await seed()
+    print(f"  student:  {DASH_BASE}/students/{w['student_id']}")
+    print(f"  stuck HW: {DASH_BASE}/submissions/{w['stuck_id']}/trace")
+
+    async with HarnessBrowser(DASH_BASE) as hb:
+        await shoot(
+            hb, w["admin"], f"/students/{w['student_id']}",
+            "student-case-file-detail",
+        )
+        await shoot(
+            hb, w["admin"], f"/submissions/{w['stuck_id']}/trace",
+            "student-case-file-trace",
+        )
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
