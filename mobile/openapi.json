@@ -6740,7 +6740,7 @@
     },
     "/v1/admin/extraction-quality/{submission_id}": {
       "get": {
-        "description": "One submission: the photo, what the AI read, and what the student\nsaid it should have said \u2014 row by row.\n\nThis is the only surface where a misread can actually be diagnosed.\nA count tells you the reader is struggling; only the strokes beside\nthe transcription tell you *how*.",
+        "description": "One submission: the photo, what the AI read, and what the student\nsaid it should have said \u2014 row by row.\n\nThis is the only surface where a misread can actually be diagnosed.\nA count tells you the reader is struggling; only the strokes beside\nthe transcription tell you *how*.\n\nAlso the case-file body for `/submissions/{id}/trace`, which is why\nthe response carries the student's identity and the assignment's two\nAI toggles alongside the read. The trace's job is to explain a\nsubmission's whole life, and the most common thing it has to explain\nis an EMPTY call list \u2014 for which the toggles are the answer roughly\nas often as a failure is. See `api.core.submission_stage`.",
         "operationId": "extraction_detail_v1_admin_extraction_quality__submission_id__get",
         "parameters": [
           {
@@ -9483,6 +9483,131 @@
           }
         ],
         "summary": "School Overview",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/students/{student_id}": {
+      "get": {
+        "description": "Who this student is, whose classes they are in, and the funnel.\n\nThe funnel is the point of the page. Counting submissions tells you\na student is participating; counting how many of them reached a\npublished grade tells you whether the product worked for them, and\nthe shortfall is itemised by the hop it died on.",
+        "operationId": "student_detail_v1_admin_students__student_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "student_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Student Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Student Detail V1 Admin Students  Student Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Student Detail",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/students/{student_id}/submissions": {
+      "get": {
+        "description": "Everything this student handed in, newest first.\n\nEach row carries its stage, when it entered that stage, and the\nnumbers that say whether anything is wrong with it: how many model\ncalls it caused, how many failed, and what the durable grading queue\nthinks it still owes. That last one matters because a submission can\nbe confirmed, have zero LLM calls, and be entirely healthy \u2014 the job\nis queued for a due date that has not arrived.",
+        "operationId": "student_submissions_v1_admin_students__student_id__submissions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "student_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Student Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Student Submissions V1 Admin Students  Student Id  Submissions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Student Submissions",
         "tags": [
           "admin"
         ]
