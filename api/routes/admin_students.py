@@ -101,8 +101,19 @@ async def _log_read(
     carefully.
 
     Authorization is already settled by `require_admin` and
-    `_load_student`. The helper commits its own row and never raises, so
-    a logging failure cannot 500 an authorized read.
+    `_load_student`.
+
+    CALL THIS LAST, after every ORM attribute the handler needs has been
+    read into plain values. The helper swallows its own exceptions, but
+    it recovers with `db.rollback()` (audit_log.py:100), and a rollback
+    expires every object in the identity map — `expire_on_commit=False`
+    does not cover it. Touching a lazily-expired attribute afterwards
+    triggers a refresh inside the async handler and raises
+    `MissingGreenlet`, turning an authorized 200 into a 500 on the one
+    path that was supposed to be unable to break the read.
+
+    Logging last also means a handler that dies before returning logs
+    nothing — correct, because nothing was disclosed.
     """
     await log_student_record_access(
         db,
@@ -173,7 +184,6 @@ async def student_detail(
     the shortfall is itemised by the hop it died on.
     """
     student = await _load_student(db, student_id)
-    await _log_read(db, current_user, student_id, "student_case_file", request)
 
     school: dict[str, str] | None = None
     if student.school_id:
@@ -262,7 +272,7 @@ async def student_detail(
         .where(Submission.student_id == student_id)
     )).scalar()
 
-    return {
+    payload = {
         "student": {
             "id": str(student.id),
             "name": student.name,
@@ -289,6 +299,9 @@ async def student_detail(
         "funnel": funnel,
         "total_submissions": len(stage_rows),
     }
+    # Last, once nothing further touches the ORM — see `_log_read`.
+    await _log_read(db, current_user, student_id, "student_case_file", request)
+    return payload
 
 
 @router.get("/students/{student_id}/submissions")
@@ -310,7 +323,6 @@ async def student_submissions(
     is queued for a due date that has not arrived.
     """
     await _load_student(db, student_id)
-    await _log_read(db, current_user, student_id, "student_submissions", request)
 
     total = (await db.execute(
         select(func.count())
@@ -493,4 +505,7 @@ async def student_submissions(
             "failed_count": int(r.failed_count),
         }
 
-    return {"total": int(total), "submissions": [_row(r) for r in rows]}
+    payload = {"total": int(total), "submissions": [_row(r) for r in rows]}
+    # Last, once nothing further touches the ORM — see `_log_read`.
+    await _log_read(db, current_user, student_id, "student_submissions", request)
+    return payload

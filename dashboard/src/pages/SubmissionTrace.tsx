@@ -14,7 +14,7 @@ import {
   shortId,
   shortModel,
 } from "../lib/format";
-import { PIPELINE_BUCKETS, bucketFor } from "../lib/llm_modes";
+import { LLM_MODES, PIPELINE_BUCKETS, bucketFor } from "../lib/llm_modes";
 import MetadataChips from "../components/MetadataChips";
 import StatusPill, { type PillTone } from "../components/StatusPill";
 import ExtractionReadout from "../components/ExtractionReadout";
@@ -220,20 +220,28 @@ export default function SubmissionTrace() {
   // the timeline — so the trace can date the read exactly where the
   // student page can only approximate from submission.
   //
-  // `success` is load-bearing: a FAILED image_extract is the single most
-  // common way to reach "AI on, photos uploaded, no extraction stored".
-  // Dating the hop from it would stamp the strip's headline "Reader ran
-  // <date>" over precisely the submission whose read never landed —
-  // contradicting the NO READ pill a few lines below it, and hiding the
-  // stall this strip exists to show.
+  // The mode is INTEGRITY_EXTRACT, not IMAGE_EXTRACT. Both sit in the
+  // Vision bucket and the names invite the mix-up, but only this one
+  // reads a submission: `extract_student_work` passes
+  // LLMMode.INTEGRITY_EXTRACT with a submission_id, while
+  // `extract_problems_from_image` — IMAGE_EXTRACT — is the teacher
+  // scanning an assignment and carries no submission_id at all. Since
+  // `calls` is filtered by submission_id, matching IMAGE_EXTRACT here
+  // matches nothing, ever: the strip would report "Reader ran —" on a
+  // submission whose read is sitting in the timeline directly below it.
+  //
+  // `success` is load-bearing: a FAILED read is the single most common
+  // way to reach "AI on, photos uploaded, no extraction stored". Dating
+  // the hop from it would stamp "Reader ran <date>" over precisely the
+  // submission whose read never landed.
   const firstRead = calls.find(
-    (c) => c.function === "image_extract" && c.success,
+    (c) => c.function === LLM_MODES.INTEGRITY_EXTRACT && c.success,
   );
   // A read was attempted and threw. The strip can then say so outright
   // instead of the weaker "never arrived", which is what it has to fall
   // back on when nothing was logged at all.
   const readFailed = calls.some(
-    (c) => c.function === "image_extract" && !c.success,
+    (c) => c.function === LLM_MODES.INTEGRITY_EXTRACT && !c.success,
   );
 
   return (
@@ -579,8 +587,16 @@ interface Hop {
   label: string;
   at: string | null;
   /** Rendered open-ended and in danger tone — the run stops here and
-   *  nothing is coming. */
+   *  something that WAS owed is not coming. Reserved for an actual
+   *  stall; see `absent` for the hop that was never owed at all. */
   pending?: boolean;
+  /** Neutral, quiet: this hop never happened and was never supposed to.
+   *  Both toggles off is the case — nothing was owed, so painting it
+   *  danger red would contradict the neutral AI OFF pill and the "the
+   *  empty timeline is correct" explainer on the same screen, and would
+   *  report the teacher's setting as a broken pipeline. That inversion
+   *  is the exact confusion this whole surface exists to prevent. */
+  absent?: boolean;
   note?: string;
 }
 
@@ -626,7 +642,10 @@ function Lifecycle({
     hops.push({
       label: "Reader ran",
       at: null,
-      pending: true,
+      // Owed-and-missing is a stall; not-owed is just a step that never
+      // applied. Same absence, and the page must not colour them alike.
+      pending: owed,
+      absent: !owed,
       note: readFailed
         ? "the read failed"
         : owed
@@ -675,10 +694,19 @@ function Lifecycle({
     <ol className="cf-life" aria-label="Submission lifecycle">
       {hops.map((h, i) => {
         const gap = i === 0 ? null : gapLabel(hops[i - 1].at, h.at);
+        // "Pending" means the run STOPS here. A hop with something after
+        // it plainly didn't stop anything — a teacher hand-grading an
+        // unconfirmed submission leaves "Awaiting student" mid-strip
+        // with "Graded" beyond it — so it renders as skipped rather
+        // than as an open-ended stall the operator should chase.
+        const stalled = h.pending && i === hops.length - 1;
+        const quiet = h.absent || (h.pending && !stalled);
         return (
           <li
             key={h.label}
-            className={`cf-life-hop${h.pending ? " cf-life-hop-pending" : ""}`}
+            className={`cf-life-hop${stalled ? " cf-life-hop-pending" : ""}${
+              quiet ? " cf-life-hop-absent" : ""
+            }`}
           >
             {i > 0 && (
               <span className="cf-life-gap" aria-hidden="true">
@@ -690,7 +718,10 @@ function Lifecycle({
             <span className="cf-life-at">
               {h.at ? (
                 <span title={h.at}>{formatRelativeDate(h.at)}</span>
-              ) : h.pending && waitingFor ? (
+              ) : stalled && waitingFor ? (
+                // Only a genuine stall is aged. A skipped or never-owed
+                // hop has nothing to wait for, so "waiting 6d" there
+                // would invent an obligation that never existed.
                 `waiting ${waitingFor}`
               ) : (
                 "—"

@@ -3388,6 +3388,19 @@ table.dt tr:last-child td { border-bottom: none; }
   background: var(--danger-soft);
 }
 
+/* Never happened, and was never owed — an assignment with the AI
+   switched off, or a hop the pipeline stepped past. Hollow like a
+   pending hop so the break in the run is still visible, but quiet:
+   painting it danger red would report a teacher's setting as a broken
+   pipeline, contradicting the neutral AI OFF pill and the "the empty
+   timeline is correct" note on the same screen. */
+.cf-life-hop-absent .cf-life-dot {
+  background: none;
+  border: 1px solid var(--muted-2);
+}
+.cf-life-hop-absent .cf-life-label,
+.cf-life-hop-absent .cf-life-at { color: var(--muted-2); }
+
 /* Why an empty timeline is empty. */
 .cf-why {
   border-left: 2px solid var(--accent);

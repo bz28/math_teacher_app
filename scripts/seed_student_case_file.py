@@ -31,10 +31,12 @@ from sqlalchemy.engine import make_url
 
 from api.config import settings
 from api.core.auth import create_access_token, hash_password
+from api.core.llm_client import LLMMode
 from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.course import Course, CourseTeacher
 from api.models.grading_job import GradingJob
+from api.models.llm_call import LLMCall
 from api.models.school import SCHOOL_KIND_INSTITUTIONAL, School
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
@@ -186,11 +188,16 @@ async def seed() -> dict[str, str]:
         # counting, and nothing downstream will ever fire.
         stuck = sub(await hw("Two-Step Equations"), 6, extraction=read_for())
 
-        # Published — the happy path, for contrast.
+        # Published — the happy path, for contrast. Confirmed AFTER the
+        # Vision call seeded below, because that is the only order the
+        # product can produce: the confirm screen exists to rule on a
+        # read, so it cannot precede one.
         done = sub(
             await hw("Fraction Operations"), 12,
             extraction=read_for(),
-            extraction_confirmed_at=NOW - timedelta(days=12),
+            extraction_confirmed_at=(
+                NOW - timedelta(days=12) + timedelta(minutes=3)
+            ),
         )
         # Graded, not yet published, and the teacher moved the score.
         graded = sub(
@@ -234,12 +241,33 @@ async def seed() -> dict[str, str]:
             submission_id=repaired.id, assignment_id=repaired.assignment_id,
             status="queued", attempts=0,
         ))
+
+        # The read that produced `done`'s extraction, so the healthy
+        # trace has a real Vision call to date its "Reader ran" hop from
+        # and the strip can be checked against a populated timeline.
+        #
+        # The mode is INTEGRITY_EXTRACT: that is what
+        # `extract_student_work` logs, and it is the ONLY vision mode
+        # carrying a submission_id. Seeding IMAGE_EXTRACT here would
+        # reproduce the bug it is meant to catch — the strip would say
+        # "Reader ran —" with the call sitting right below it.
+        s.add(LLMCall(
+            user_id=student.id,
+            submission_id=done.id,
+            function=LLMMode.INTEGRITY_EXTRACT,
+            model="claude-sonnet-4-5",
+            input_tokens=2400, output_tokens=310,
+            latency_ms=8200.0, cost_usd=0.0121,
+            success=True, retry_count=0,
+            created_at=NOW - timedelta(days=12) + timedelta(seconds=11),
+        ))
         await s.commit()
 
         return {
             "admin": create_access_token(str(admin.id), "admin"),
             "student_id": str(student.id),
             "stuck_id": str(stuck.id),
+            "healthy_id": str(done.id),
         }
 
 
@@ -284,6 +312,13 @@ async def main() -> None:
         await shoot(
             hb, w["admin"], f"/submissions/{w['stuck_id']}/trace",
             "student-case-file-trace",
+        )
+        # The healthy counterpart, with a real Vision call behind it —
+        # the shot that proves the lifecycle strip dates its "Reader ran"
+        # hop instead of rendering an em dash beside its own timeline.
+        await shoot(
+            hb, w["admin"], f"/submissions/{w['healthy_id']}/trace",
+            "student-case-file-trace-healthy",
         )
 
 
