@@ -121,8 +121,15 @@ async def _drain_extraction_quietly(submission_id: uuid.UUID) -> None:
     served before any backlog. Jobs run one at a time, so without this
     they would wait behind every queued job — each a 5-15s Vision call —
     and a deep enough queue puts them past the client's 90s timeout.
+
+    `limit=1`, unlike the cron's batch. This kick exists to serve ONE
+    waiting student; draining the backlog on their request would tie the
+    task to twenty Vision calls, hold a pool connection for the whole
+    run, and — if the process is replaced mid-way — strand every job it
+    had claimed rather than one. Clearing the backlog is the cron's job,
+    and it is not in a hurry.
     """
-    await extraction_drain(first=submission_id)
+    await extraction_drain(limit=1, first=submission_id)
 
 
 async def run_extraction_for_submission(submission_id: uuid.UUID) -> None:

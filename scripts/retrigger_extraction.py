@@ -103,7 +103,11 @@ async def _record_intervention(submission_id: uuid.UUID, steps: int) -> None:
 async def main(submission_id: uuid.UUID, apply: bool) -> None:
     from sqlalchemy import select
 
-    from api.core.extraction_queue import drain, enqueue_submission
+    from api.core.extraction_queue import (
+        STALE_RUNNING_MINUTES,
+        drain,
+        enqueue_submission,
+    )
     from api.database import get_session_factory
     from api.models.assignment import Assignment, Submission
 
@@ -157,15 +161,29 @@ async def main(submission_id: uuid.UUID, apply: bool) -> None:
             select(Assignment).where(Assignment.id == sub_assignment_id)
         )).scalar_one()
         # Commits on its own session; nothing to commit here.
-        await enqueue_submission(submission_id, assignment)
-    # `first=` is not optional. Without it the drain takes the OLDEST
-    # queued job platform-wide, which is almost never this one: a
-    # re-enqueue does not reset `created_at`, so a freshly queued rescue
-    # sorts last. The script would bill a Vision call against an
-    # unrelated student, then re-read THIS submission, find it still
-    # NULL, and tell the operator the rescue failed — at 2am, on the one
-    # tool you reach for during an incident.
-    tally = await drain(limit=1, first=submission_id)
+        status = await enqueue_submission(submission_id, assignment)
+
+    if status == "running":
+        # The upsert deliberately leaves an in-flight job alone, and a
+        # `running` row is exactly what "stuck" looks like from outside.
+        # Draining now would run somebody else's job and then report
+        # THIS rescue as failed, so say what is actually happening.
+        print(
+            "\n  a drain already owns this job (status=running).\n"
+            "  Wait for it, or if the worker is gone wait "
+            f"{STALE_RUNNING_MINUTES} minutes for the sweeper to\n"
+            "  reclaim it, then re-run this script."
+        )
+        return
+    if status is None:
+        print("\n✗ could not queue the job — see the log above.")
+        sys.exit(1)
+    # `only=`, not `first=`. `first` merely PREFERS this submission and
+    # falls back to the oldest queued job when it cannot be claimed —
+    # which would bill a Vision call against an unrelated student and
+    # then report THIS rescue as failed, at 2am, on the one tool you
+    # reach for during an incident. `only` runs this job or nothing.
+    tally = await drain(only=submission_id)
     print(f"  drain: {tally}")
 
     # Flush the cost log before the loop closes. _log_and_persist hands the

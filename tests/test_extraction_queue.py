@@ -15,6 +15,7 @@ Vision call twice.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -714,3 +715,66 @@ async def test_a_re_enqueue_will_not_reset_a_job_that_is_mid_flight(
     revived = await _job(sid)
     assert revived.status == STATUS_QUEUED
     assert revived.attempts == 0
+
+
+@pytest.mark.asyncio
+async def test_two_concurrent_drains_never_bill_the_same_call_twice(
+    world: dict[str, Any],
+) -> None:
+    """The claim this module's docstring makes, and the drain endpoint
+    repeats to operators, that nothing tested.
+
+    Every other test here runs one drain. But a drain is spawned on
+    EVERY submit, so overlapping drains are the normal case, not an
+    edge — and a Vision call is the most expensive thing this system
+    does per submission.
+    """
+    ids = [
+        await _seed_submission(world),
+        await _seed_submission(world, student="outsider_id"),
+    ]
+    for sid in ids:
+        await _enqueue(world, sid)
+
+    ran: list[uuid.UUID] = []
+
+    async def _slow(sid: uuid.UUID) -> None:
+        # Wide enough for the other drain to be inside its claim while
+        # this one holds a row.
+        ran.append(sid)
+        await asyncio.sleep(0.05)
+        await _mark_extracted(sid)
+
+    with patch(_TARGET, new_callable=AsyncMock, side_effect=_slow):
+        results = await asyncio.gather(drain(), drain(), drain())
+
+    # Each submission was read exactly once, across all three drains.
+    assert sorted(ran) == sorted(ids), f"a submission was read twice: {ran}"
+    assert sum(r["claimed"] for r in results) == 2
+    assert sum(r["succeeded"] for r in results) == 2
+    for sid in ids:
+        assert (await _job(sid)).status == STATUS_DONE
+
+
+@pytest.mark.asyncio
+async def test_a_failing_job_gets_one_attempt_per_pass_not_three(
+    world: dict[str, Any],
+) -> None:
+    """The retry budget is spread across drains on purpose.
+
+    A job that fails goes straight back to `queued`, and the drain claims
+    one job at a time — so without an explicit guard the same pass picks
+    it straight back up and spends the whole budget in seconds, against
+    one set of conditions. The budget exists to give a transient cause
+    time to clear; three tries in the same second is not three tries.
+    """
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+
+    with patch(_TARGET, new_callable=AsyncMock, side_effect=RuntimeError("no")):
+        result = await drain()
+
+    assert result["claimed"] == 1, f"the pass re-claimed it: {result}"
+    job = await _job(sid)
+    assert job.attempts == 1, f"the budget was spent in one pass: {job.attempts}"
+    assert job.status == STATUS_QUEUED
