@@ -63,6 +63,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             dsn=settings.sentry_dsn,
             environment=settings.app_env,
             traces_sample_rate=1.0 if settings.app_env == "development" else 0.2,
+            # OFF, and not negotiable for this product. The SDK default
+            # is True: every error event carries the local variables of
+            # every frame in the traceback. On the extraction path those
+            # frames hold `files` (the student's photographed homework,
+            # base64) and `content` (the model's transcription of it),
+            # so an ordinary logged error would ship a child's schoolwork
+            # to a third-party processor. `max_value_length` does not
+            # save us either — it truncates, it does not omit.
+            #
+            # We sell to districts under an ids-counts-and-codes rule.
+            # The exception type, the message and the stack are what
+            # anyone actually debugs from; the variable values are the
+            # part we cannot send.
+            include_local_variables=False,
         )
 
     if settings.bypass_subscription and settings.app_env != "development":

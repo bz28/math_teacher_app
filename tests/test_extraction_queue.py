@@ -16,6 +16,7 @@ Vision call twice.
 from __future__ import annotations
 
 import asyncio
+import traceback
 import uuid
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -25,7 +26,12 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import StatementError
 
 from api.core import extraction_queue
-from api.core.extraction_queue import drain, enqueue_submission
+from api.core.extraction_queue import (
+    _finish,
+    _traceback_is_safe,
+    drain,
+    enqueue_submission,
+)
 from api.database import get_session_factory
 from api.models.assignment import Assignment
 from api.models.extraction_job import (
@@ -83,6 +89,10 @@ async def _seed_submission(
 async def _enqueue(world: dict[str, Any], sid: uuid.UUID) -> None:
     """`enqueue_submission` opens and commits its own session."""
     await enqueue_submission(sid, await _assignment(world))
+
+
+def _job_id_for(job: ExtractionJob) -> uuid.UUID:
+    return job.id
 
 
 async def _job(sid: uuid.UUID) -> ExtractionJob:
@@ -778,3 +788,164 @@ async def test_a_failing_job_gets_one_attempt_per_pass_not_three(
     job = await _job(sid)
     assert job.attempts == 1, f"the budget was spent in one pass: {job.attempts}"
     assert job.status == STATUS_QUEUED
+
+
+@pytest.mark.asyncio
+async def test_a_chained_database_error_does_not_leak_through_the_traceback(
+    world: dict[str, Any],
+) -> None:
+    """The FERPA guard has to follow the exception CHAIN, not just the
+    exception.
+
+    This is the second version of that guard. The first keyed on the
+    type of the exception in hand, which is fine until `_finish` fails
+    while a `StatementError` is still the active context: the raised
+    error is then an ordinary RuntimeError, `exc_info` is judged safe,
+    and the traceback prints the whole chain — "During handling of the
+    above exception" — carrying the bound parameters, and the student's
+    transcribed homework in them.
+
+    Not a corner case: the extraction write and the `_finish` write are
+    one line apart, so whatever kills the first tends to kill the
+    second. And with the logging integration enabled, an ERROR event
+    goes to a third-party processor.
+
+    Asserts on the DECISION rather than on captured output, because the
+    leak is what a handler would render from `exc_info`, not what the
+    message string contains.
+    """
+    secret = "STUDENT-HANDWRITING-x-equals-42"
+    db_error = StatementError(
+        message="canceling statement due to statement timeout",
+        statement="UPDATE submissions SET extraction=%(extraction)s WHERE id=%(id)s",
+        params={"extraction": {"steps": [{"latex": secret}]}, "id": "abc"},
+        orig=Exception("canceling statement due to statement timeout"),
+    )
+    assert secret in str(db_error), "the exception must really carry the work"
+
+    # A plain failure keeps its traceback — that is what makes an
+    # unfamiliar error diagnosable, and it carries nothing.
+    assert _traceback_is_safe(RuntimeError("something ordinary")) is True
+
+    # The same failure, raised while the database error is the active
+    # context, must NOT be logged with its traceback.
+    try:
+        try:
+            raise db_error
+        except Exception:
+            raise RuntimeError("connection reset while stamping the job")
+    except Exception as chained:
+        assert _traceback_is_safe(chained) is False, (
+            "a chained database error would print the student's work"
+        )
+        # And explicit `raise ... from ...` is the same hazard.
+        assert secret in "".join(
+            traceback.format_exception(chained)
+        ), "the chain really does render the parameters"
+
+
+@pytest.mark.asyncio
+async def test_a_landed_read_is_recorded_even_if_the_job_was_parked(
+    world: dict[str, Any],
+) -> None:
+    """`done` must win over a park.
+
+    `_finish` only stamps a job that is still `running`, so a
+    non-terminal verdict cannot land on a row another drain has claimed.
+    But `_reclaim_stale` can PARK a slow job as `failed` while it is
+    still working — and if that job then succeeds, suppressing its
+    `done` would leave a submission whose read exists on the disk
+    reading `failed — abandoned` forever, with nothing to correct it.
+    That is precisely the "work is owed and nobody knows" state this
+    table exists to prevent, so a landed read is treated as ground
+    truth.
+    """
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE extraction_jobs SET status = :f, "
+                "last_error = 'abandoned mid-extraction' WHERE submission_id = :i"
+            ),
+            {"f": STATUS_FAILED, "i": sid},
+        )
+        await s.commit()
+
+    await _mark_extracted(sid)
+    await _finish(_job_id_for(await _job(sid)), status=STATUS_DONE)
+
+    assert (await _job(sid)).status == STATUS_DONE, (
+        "a successful read was suppressed because the row had been parked"
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_requeue_cannot_stamp_a_job_another_drain_now_owns(
+    world: dict[str, Any],
+) -> None:
+    """The other half of the same guard: a NON-terminal verdict from a
+    slow drain must not reset a row that has moved on."""
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+    job_id = _job_id_for(await _job(sid))
+
+    # The row moved on — reclaimed and re-queued by someone else.
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE extraction_jobs SET status = :q, attempts = 2 "
+                 "WHERE id = :i"),
+            {"q": STATUS_QUEUED, "i": job_id},
+        )
+        await s.commit()
+
+    await _finish(job_id, status=STATUS_FAILED, error="stale verdict")
+
+    job = await _job(sid)
+    assert job.status == STATUS_QUEUED, "a stale verdict parked a live job"
+    assert job.last_error != "stale verdict"
+
+
+@pytest.mark.asyncio
+async def test_enqueue_reports_that_it_left_an_in_flight_job_alone(
+    world: dict[str, Any],
+) -> None:
+    """The return value is load-bearing, not decoration.
+
+    The upsert deliberately skips a `running` row — but silently, and a
+    `running` row is exactly what "stuck" looks like from outside. The
+    rescue script branches on this to tell an operator "a drain already
+    owns this" instead of draining, which would otherwise run an
+    unrelated student's job and then report THIS rescue as failed.
+    """
+    sid = await _seed_submission(world)
+    assignment = await _assignment(world)
+
+    assert await enqueue_submission(sid, assignment) == STATUS_QUEUED
+
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE extraction_jobs SET status = :r WHERE submission_id = :i"),
+            {"r": STATUS_RUNNING, "i": sid},
+        )
+        await s.commit()
+
+    assert await enqueue_submission(sid, assignment) == STATUS_RUNNING, (
+        "an in-flight job was reported as freshly queued"
+    )
+
+
+@pytest.mark.asyncio
+async def test_asking_for_zero_jobs_runs_zero(world: dict[str, Any]) -> None:
+    """`limit=0` must mean none. It used to run one, because the loop
+    bound was `max(1, limit)`."""
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+
+    with patch(_TARGET, new_callable=AsyncMock) as vision:
+        result = await drain(limit=0)
+
+    vision.assert_not_awaited()
+    assert result["claimed"] == 0
+    assert (await _job(sid)).status == STATUS_QUEUED

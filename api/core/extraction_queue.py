@@ -41,7 +41,7 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, func, select, update
+from sqlalchemy import CursorResult, func, literal, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -466,11 +466,27 @@ async def _finish(
             update(ExtractionJob)
             .where(
                 ExtractionJob.id == job_id,
-                # Only stamp a job we still own. If `_reclaim_stale` gave
-                # it to another drain while this one was slow, that drain
-                # is now the owner and our verdict is stale — writing it
-                # would reset a job that is mid-call.
-                ExtractionJob.status == STATUS_RUNNING,
+                # A coarse guard, and worth being precise about what it
+                # does: it stops a NON-TERMINAL verdict landing on a row
+                # that has already moved on — a requeue or a park written
+                # over a job some other drain has since claimed.
+                #
+                # It is NOT proof of ownership. A job handed to another
+                # drain by `_reclaim_stale` is also `running`, so this
+                # predicate passes; distinguishing those would need a
+                # claim token, which is more machinery than the failure
+                # justifies.
+                #
+                # `done` is exempt deliberately. A landed extraction is
+                # ground truth — the read exists, whoever produced it —
+                # and suppressing it would leave a healthy submission
+                # parked as `failed` with nothing to correct the record,
+                # which is exactly the "work is owed and nobody knows"
+                # state this table exists to prevent.
+                or_(
+                    ExtractionJob.status == STATUS_RUNNING,
+                    literal(status == STATUS_DONE),
+                ),
             )
             .values(**values)
         )
@@ -569,8 +585,7 @@ async def _run_job(job: ExtractionJob) -> str:
         return _DONE
 
     try:
-        async with _SLOTS:
-            await run_extraction_for_submission(job.submission_id)
+        await run_extraction_for_submission(job.submission_id)
     except Exception as exc:
         # Budget exhausted -> park for a human. Still in budget -> back to
         # the queue for the next drain, with the error kept on the row so
@@ -661,17 +676,29 @@ async def drain(
     # multi-megabyte photos, and running twenty at once would spike both
     # memory and the provider's rate limit for no latency benefit that
     # matters — nobody is watching this run.
-    for _ in range(max(1, limit)):
-        async with get_session_factory()() as db:
-            job = await _claim_one(
-                db, prefer=prefer, only=only, exclude=seen,
-            )
-        if job is None:
-            break
-        prefer = None
-        seen.add(job.id)
-        claimed += 1
-        tally.update([await _extract_one(job)])
+    # `max(0, ...)`, not `max(1, ...)`: asking for zero jobs must run
+    # zero, not one. The route clamps its input so this was latent, but
+    # a caller that computes a limit and lands on 0 should get nothing.
+    for _ in range(max(0, limit)):
+        # The slot is taken BEFORE the claim, so a drain queueing for
+        # capacity is holding nothing. Acquiring it after the claim
+        # meant a job could sit `running` with a `started_at` from
+        # before its wait — and once that wait pushed it past
+        # STALE_RUNNING_MINUTES, `_reclaim_stale` would hand a
+        # mid-flight job to another drain and the submission would be
+        # read, and billed, twice. That is the same failure the
+        # one-at-a-time claim removed, reintroduced by the semaphore.
+        async with _SLOTS:
+            async with get_session_factory()() as db:
+                job = await _claim_one(
+                    db, prefer=prefer, only=only, exclude=seen,
+                )
+            if job is None:
+                break
+            prefer = None
+            seen.add(job.id)
+            claimed += 1
+            tally.update([await _extract_one(job)])
         if only is not None:
             break
 

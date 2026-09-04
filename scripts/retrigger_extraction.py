@@ -83,7 +83,15 @@ async def _record_intervention(submission_id: uuid.UUID, steps: int) -> None:
                     " target_type, target_id, action_metadata) "
                     "SELECT gen_random_uuid(), NULL, 'system', c.school_id, "
                     "  'submission.extraction_retriggered', 'submission', "
-                    "  s.id, :meta::jsonb "
+                    # CAST(), not `:meta::jsonb`. SQLAlchemy's bind
+                    # regex stops at the first colon pair, so
+                    # `:meta::jsonb` parses as a param named `met`
+                    # followed by the literal `a::jsonb` — `meta` was
+                    # never bound, the statement was a syntax error, and
+                    # the broad except below swallowed it. So the record
+                    # this function exists to write has never once been
+                    # written.
+                    "  s.id, CAST(:meta AS jsonb) "
                     "FROM submissions s "
                     "JOIN assignments a ON a.id = s.assignment_id "
                     "JOIN courses c ON c.id = a.course_id "
@@ -212,7 +220,9 @@ async def main(submission_id: uuid.UUID, apply: bool) -> None:
         print("    The student's next page load shows the confirm screen.")
     else:
         print("  ✗ extraction still NULL — it failed again.")
-        print("    Check the app logs; the traceback is not written to the DB.")
+        print("    The reason is ON THE JOB ROW now — no log spelunking:")
+        print("      SELECT status, attempts, last_error FROM extraction_jobs")
+        print(f"      WHERE submission_id = '{submission_id}';")
         sys.exit(1)
 
 
