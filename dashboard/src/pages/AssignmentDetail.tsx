@@ -166,7 +166,11 @@ export default function AssignmentDetail() {
             No problems yet — nothing has been added to this assignment.
           </p>
         ) : (
-          a.problems.map((p) => <ProblemRow key={p.position} p={p} />)
+          // Keyed by index, not position: `content` is an unvalidated
+          // blob and a legacy snapshot can store two problems at the
+          // same position, which would collide as a React key. The list
+          // is static per render, so the index is a safe identity.
+          a.problems.map((p, i) => <ProblemRow key={i} p={p} />)
         )}
       </div>
     </div>
@@ -234,7 +238,7 @@ function Lifecycle({ a }: { a: AssignmentDetailData }) {
       <span>
         {a.generation && (
           <>
-            generated <Big>{a.generation.generated_count}</Big>
+            candidates <Big>{a.generation.generated_count}</Big>
             <span style={{ padding: "0 6px", color: "var(--muted-2)" }}>→</span>
           </>
         )}

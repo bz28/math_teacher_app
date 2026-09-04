@@ -70,10 +70,17 @@ def _provenance(item: QuestionBankItem | None, edited: bool) -> str | None:
     """
     if item is None:
         return None
+    # The three values `question_bank_generation.py:454` actually writes.
+    # `manual` is declared on the model and reserved for a future entry
+    # point; nothing writes it, so there is no "hand-written" case to
+    # label. Anything unrecognized falls through as itself rather than
+    # being forced into one of these.
+    if item.source == "imported":
+        return "from upload"
+    if item.source == "practice":
+        return "variation"
     if item.source != "generated":
-        # "manual" (typed by the teacher) and "imported" (from a PDF)
-        # are both non-AI provenance and worth distinguishing.
-        return "hand-written" if item.source == "manual" else item.source
+        return item.source
     return "AI · edited" if edited else "AI · approved"
 
 
@@ -201,13 +208,22 @@ async def get_assignment(
     if assignment.type != "practice":
         expected = problem_ids_in_content(assignment.content)
         if expected:
-            seen = {p["position"] for p in problems}
-            for position in range(1, len(expected) + 1):
-                if position not in seen:
+            # Keyed on which IDS came back, not on which positions did.
+            # Position gaps are not evidence of a deletion: a legacy
+            # snapshot can store 0-based positions, or two problems at
+            # the same one, and then a rule of "every integer in 1..N
+            # must appear" manufactures a tombstone for a problem that is
+            # rendered three rows further down. A dropped reference is
+            # precisely an id the hydrator did not return.
+            rendered = {
+                p["bank_item_id"] for p in problems if p["bank_item_id"]
+            }
+            for position, expected_id in enumerate(expected, start=1):
+                if expected_id not in rendered:
                     problems.append(
                         {
                             "position": position,
-                            "bank_item_id": expected[position - 1],
+                            "bank_item_id": expected_id,
                             "question": None,
                             "final_answer": None,
                             "provenance": None,
@@ -225,32 +241,32 @@ async def get_assignment(
             .limit(1)
         )
     ).scalar_one_or_none()
-    # Only the AI candidates this assignment's generation produced for
-    # THIS paper. `originating_assignment_id` alone is far too wide:
+    # How many candidates this assignment's own job produced for THIS
+    # paper. `originating_assignment_id` alone is too wide: every
+    # "generate similar" practice variation ever spawned from one of its
+    # problems inherits the parent's originating homework
+    # (`teacher_question_bank.py:832`), so counting those made a homework
+    # that produced 2 report 7.
     #
-    #   * a problem the teacher typed by hand or imported from a PDF
-    #     carries it too (`teacher_question_bank.py` create/import), and
-    #   * so does every "generate similar" practice variation ever
-    #     spawned from one of its problems — those inherit the parent's
-    #     originating homework (`teacher_question_bank.py:832`).
-    #
-    # Counting those made a homework that generated 2 and kept 1 report
-    # "generated 7 → kept 2", contradicting `requested_count` in the same
-    # payload. `source == generated` drops the hand-written and imported
-    # ones; `parent_question_id IS NULL` drops the variations — the same
-    # primary-only gate the snapshot path uses.
+    # `parent_question_id IS NULL` is the whole rule. Filtering on
+    # `source == "generated"` as well looked equivalent and is not:
+    # `question_bank_generation.py:454` stamps upload-mode items
+    # `imported`, and a worksheet upload is one of the two ways a teacher
+    # builds a homework. Those items are exactly what the job produced —
+    # excluding them reported `candidates 0 → kept 5` on a real
+    # assignment, the same contradiction in the opposite direction. The
+    # source filter also bought nothing, because a parented job stamps
+    # `practice`, so the parent check already excludes variations.
     #
     # A practice set is the exception: its items ARE variations by
-    # design, so the primary gate would report zero for an assignment
-    # made entirely of them. There, every item under this assignment is
-    # genuinely what was produced.
+    # design, so the parent check would report zero for an assignment
+    # made entirely of them.
     generated_q = select(func.count()).select_from(QuestionBankItem).where(
         QuestionBankItem.originating_assignment_id == assignment.id
     )
     if assignment.type != "practice":
         generated_q = generated_q.where(
-            QuestionBankItem.source == "generated",
-            QuestionBankItem.parent_question_id.is_(None),
+            QuestionBankItem.parent_question_id.is_(None)
         )
     generated_count = (await db.execute(generated_q)).scalar_one()
 

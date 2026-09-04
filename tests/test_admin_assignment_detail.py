@@ -152,17 +152,22 @@ async def test_practice_assignment_resolves_its_problems(
     assert [p["position"] for p in body["problems"]] == [1, 2]
 
 
-async def test_provenance_distinguishes_generated_edited_and_handwritten(
+async def test_provenance_labels_the_sources_that_actually_exist(
     client: AsyncClient,
 ) -> None:
+    """`question_bank_generation.py:454` writes exactly three sources:
+    `generated`, `imported` (a worksheet upload) and `practice` (a
+    generate-similar variation). `manual` is declared on the model and
+    reserved for a future entry point — nothing writes it, so there is no
+    "hand-written" case to label."""
     w = await _world()
     a_id = await _add_assignment(w, type_="homework", content={"problem_ids": []})
     untouched = await _add_item(w, a_id, question="Untouched", source="generated")
     edited = await _add_item(w, a_id, question="Edited", source="generated", edits=2)
-    manual = await _add_item(w, a_id, question="Typed", source="manual")
+    imported = await _add_item(w, a_id, question="From a worksheet", source="imported")
     async with get_session_factory()() as s:
         await s.execute(text("UPDATE assignments SET content = :c WHERE id = :i"), {
-            "c": '{"problem_ids": ["%s", "%s", "%s"]}' % (untouched, edited, manual),
+            "c": '{"problem_ids": ["%s", "%s", "%s"]}' % (untouched, edited, imported),
             "i": str(a_id),
         })
         await s.commit()
@@ -170,7 +175,7 @@ async def test_provenance_distinguishes_generated_edited_and_handwritten(
     r = await client.get(f"/v1/admin/assignments/{a_id}", headers=_auth(w["token"]))
     assert r.status_code == 200, r.text
     assert [p["provenance"] for p in r.json()["problems"]] == [
-        "AI · approved", "AI · edited", "hand-written",
+        "AI · approved", "AI · edited", "from upload",
     ]
 
 
@@ -337,9 +342,6 @@ async def test_generated_counts_only_this_paper_s_ai_candidates(
     a_id = await _add_assignment(w, type_="homework", content={"problem_ids": []})
     primary = await _add_item(w, a_id, question="Real candidate")
     await _add_item(w, a_id, question="Also generated")
-    # Neither of these was ever a candidate for this paper.
-    await _add_item(w, a_id, question="Typed by the teacher", source="manual")
-    await _add_item(w, a_id, question="Imported from a PDF", source="imported")
     async with get_session_factory()() as s:
         # Four practice variations spawned off the primary. They inherit
         # the homework, which is exactly why the naive count was wrong.
@@ -362,7 +364,7 @@ async def test_generated_counts_only_this_paper_s_ai_candidates(
     r = await client.get(f"/v1/admin/assignments/{a_id}", headers=_auth(w["token"]))
     assert r.status_code == 200, r.text
     gen = r.json()["generation"]
-    # Two AI primaries. Not 8, and not contradicting requested_count.
+    # Two primaries. Not 6, and not contradicting requested_count.
     assert gen["generated_count"] == 2, gen
     assert gen["requested_count"] == 2
 
@@ -431,3 +433,72 @@ async def test_a_junk_position_in_content_does_not_break_the_page(
     # Falls back to list order, so positions are unique and usable as keys.
     assert [p["position"] for p in problems] == [1, 2]
     assert [p["missing"] for p in problems] == [False, False]
+
+
+async def test_an_uploaded_worksheet_still_counts_its_candidates(
+    client: AsyncClient,
+) -> None:
+    """Uploading a worksheet is one of the two ways a teacher builds a
+    homework, and `question_bank_generation.py:454` stamps every problem
+    such a job extracts as `imported` rather than `generated`.
+
+    Those items ARE what the job produced. An earlier attempt at the
+    count filtered on `source == "generated"` and reported
+    "candidates 0 → kept 5" for a real assignment — the same
+    self-contradiction it was written to remove, pointing the other way.
+    """
+    w = await _world()
+    a_id = await _add_assignment(w, type_="homework", content={"problem_ids": []})
+    for n in range(5):
+        await _add_item(w, a_id, question=f"From the worksheet {n}", source="imported")
+    async with get_session_factory()() as s:
+        s.add(QuestionBankGenerationJob(
+            course_id=w["course_id"], unit_id=w["unit_id"],
+            originating_assignment_id=a_id, created_by_id=w["teacher_id"],
+            mode="upload", status="done", requested_count=5,
+        ))
+        await s.commit()
+
+    r = await client.get(f"/v1/admin/assignments/{a_id}", headers=_auth(w["token"]))
+    assert r.status_code == 200, r.text
+    gen = r.json()["generation"]
+    assert gen["generated_count"] == 5, gen
+    assert gen["requested_count"] == 5
+
+
+async def test_odd_stored_positions_do_not_invent_a_missing_problem(
+    client: AsyncClient,
+) -> None:
+    """A tombstone means "this reference was dropped", so it has to be
+    driven by which IDS came back — not by which positions did.
+
+    A legacy snapshot can store 0-based positions, or two problems at the
+    same one. Requiring every integer in 1..N to appear then manufactures
+    a "problem no longer in the bank" for a problem rendered three rows
+    further down, and nothing was deleted at all.
+    """
+    w = await _world()
+    a_id = await _add_assignment(w, type_="homework", content={"problem_ids": []})
+    one = await _add_item(w, a_id, question="Zeroth")
+    two = await _add_item(w, a_id, question="First")
+    three = await _add_item(w, a_id, question="Second")
+    async with get_session_factory()() as s:
+        await s.execute(text("UPDATE assignments SET content = :c WHERE id = :i"), {
+            "c": (
+                '{"problems": ['
+                '{"bank_item_id": "%s", "position": 0, "question": "Zeroth"},'
+                '{"bank_item_id": "%s", "position": 1, "question": "First"},'
+                '{"bank_item_id": "%s", "position": 2, "question": "Second"}'
+                ']}' % (one, two, three)
+            ),
+            "i": str(a_id),
+        })
+        await s.commit()
+
+    r = await client.get(f"/v1/admin/assignments/{a_id}", headers=_auth(w["token"]))
+    assert r.status_code == 200, r.text
+    problems = r.json()["problems"]
+    # Every problem is present, so nothing is missing and nothing is
+    # invented — three rows, no tombstone.
+    assert [p["missing"] for p in problems] == [False, False, False], problems
+    assert len(problems) == 3

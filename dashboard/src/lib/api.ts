@@ -597,12 +597,9 @@ export interface AssignmentProblem {
   bank_item_id: string | null;
   question: string | null;
   final_answer: string | null;
-  figure_svg: string | null;
-  difficulty: string | null;
-  format: string | null;
-  /** "AI · approved" | "AI · edited" | "hand-written" | "imported", or
-   *  null when it can't be known (a legacy snapshot has no bank item to
-   *  read provenance from). Render nothing rather than guessing. */
+  /** "AI · approved" | "AI · edited" | "from upload" | "variation",
+   *  or null when no bank item resolves (a snapshot with no id, or a
+   *  deleted reference). Render nothing rather than guessing. */
   provenance: string | null;
   /** The bank item this slot pointed at was deleted. Keeps its position
    *  so the surviving problems still describe what students saw. */
