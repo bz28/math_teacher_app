@@ -34,13 +34,14 @@ differs, the reason is written down.
   `ON DELETE CASCADE` and goes with it.
 """
 
+import asyncio
 import logging
 import uuid
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, case, select, update
+from sqlalchemy import CursorResult, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,12 +54,33 @@ from api.models.extraction_job import (
     STATUS_FAILED,
     STATUS_QUEUED,
     STATUS_RUNNING,
+    STATUS_SKIPPED,
     ExtractionJob,
 )
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_DRAIN_LIMIT = 20
+
+# A ceiling on how much of the app's connection budget extraction may
+# occupy, not a throughput knob — the same guard, and the same number,
+# grading uses.
+#
+# It has to be module-level rather than per-drain. A single drain
+# already runs its jobs one at a time, but submit spawns a drain PER
+# SUBMISSION, so the number of concurrent drains is the number of
+# students pressing Submit at once. `run_extraction_for_submission`
+# holds a DB session open across the whole Vision call, and the pool is
+# 10 + 20 overflow SHARED with live teacher and student traffic — so a
+# class of thirty submitting together would otherwise pin every
+# connection in the pool for minutes and hand teachers pool timeouts
+# while they wait.
+#
+# Grading never needed this from its drain (cron-only, one at a time)
+# and has it anyway; extraction is the one that is actually spawned per
+# request, and shipped without it.
+_MAX_CONCURRENT_EXTRACTIONS = 5
+_SLOTS = asyncio.Semaphore(_MAX_CONCURRENT_EXTRACTIONS)
 
 # A job still `running` after this long belongs to a worker that was
 # deployed over or crashed. Vision calls take 5-15s and the client
@@ -76,6 +98,33 @@ _SKIPPED = "skipped"
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _is_infrastructure_stop(exc: BaseException) -> bool:
+    """Was this the platform saying "stop", rather than this submission
+    being unreadable?
+
+    Ported from `grading_queue`, where the same guard already exists and
+    the same reasoning already applies. The daily spend cap and the LLM
+    circuit breaker fire for every job in flight at once, and they mean
+    "come back later", not "this one is broken".
+
+    Charging them is not a small mistake here. `check_limit` raises
+    before the request is made, so a capped platform fails jobs
+    instantly and for free — and submit kicks a drain, so a burst of
+    submissions after the cap is hit burns all three attempts on every
+    queued job within minutes. `failed` is revived only by
+    `enqueue_submission`, whose callers are the one-shot submit endpoint
+    and a hand-run script. One afternoon at the cap would park the whole
+    queue in a state nothing in the product recovers — the 2026-09-03
+    stranding again, at class scale, inside the fix for it.
+
+    Keyed on the exception TYPE, following grading's note that a
+    substring match on the message never actually matched.
+    """
+    from api.core.cost_tracker import PlatformStopError
+
+    return isinstance(exc, PlatformStopError)
 
 
 def _safe_error(exc: BaseException) -> str:
@@ -169,6 +218,17 @@ async def enqueue_submission(
                 )
                 .on_conflict_do_update(
                     index_elements=["submission_id"],
+                    # Never touch a job that is mid-flight. Resetting a
+                    # `running` row frees a concurrent drain to claim it
+                    # while the first Vision call is still going, so the
+                    # same photos get read — and billed — twice, with
+                    # whichever call commits last silently winning. The
+                    # live trigger is the rescue script: its guards check
+                    # the SUBMISSION (already extracted? confirmed?
+                    # flagged?) and never the job's status, and a
+                    # `running` row a few minutes old is exactly what
+                    # "stuck" looks like to an operator at 2am.
+                    where=ExtractionJob.status != STATUS_RUNNING,
                     set_={
                         "status": STATUS_QUEUED,
                         "attempts": 0,
@@ -258,21 +318,40 @@ async def _claim_queued(
     Oldest-first for everyone else, so a backlog still drains in the
     order students were kept waiting.
     """
-    order = (
-        [ExtractionJob.created_at.asc()]
-        if first is None
-        else [
-            case((ExtractionJob.submission_id == first, 0), else_=1).asc(),
-            ExtractionJob.created_at.asc(),
-        ]
-    )
-    rows = (await db.execute(
-        select(ExtractionJob)
-        .where(ExtractionJob.status == STATUS_QUEUED)
-        .order_by(*order)
-        .limit(limit)
-        .with_for_update(skip_locked=True)
-    )).scalars().all()
+    rows: list[ExtractionJob] = []
+
+    # The priority row is claimed by its own indexed lookup rather than
+    # by a CASE in the ORDER BY. A CASE expression cannot be served by
+    # `ix_extraction_jobs_status_created_at`, so it turns the claim into
+    # a full sort of every queued row — measured at 0.5ms to 226ms on a
+    # 200k-row queue. `submission_id` is unique, so this is a one-row
+    # index hit, and the ordinary claim below keeps using the index it
+    # was built for.
+    if first is not None:
+        rows = list((await db.execute(
+            select(ExtractionJob)
+            .where(
+                ExtractionJob.status == STATUS_QUEUED,
+                ExtractionJob.submission_id == first,
+            )
+            .with_for_update(skip_locked=True)
+        )).scalars().all())
+
+    remaining = limit - len(rows)
+    if remaining > 0:
+        rest = (await db.execute(
+            select(ExtractionJob)
+            .where(
+                ExtractionJob.status == STATUS_QUEUED,
+                # Don't re-claim the row above; `notin_` on an empty
+                # list is valid SQL and simply matches everything.
+                ExtractionJob.id.notin_([j.id for j in rows]),
+            )
+            .order_by(ExtractionJob.created_at.asc())
+            .limit(remaining)
+            .with_for_update(skip_locked=True)
+        )).scalars().all()
+        rows.extend(rest)
 
     for job in rows:
         job.status = STATUS_RUNNING
@@ -287,18 +366,25 @@ async def _finish(
     *,
     status: str,
     error: str | None = None,
+    refund_attempt: bool = False,
 ) -> None:
     """Stamp a job's terminal state on its own session.
 
     Its own session because the extraction that just ran opened and
     closed one of its own; reusing that would mean holding a connection
     across a 15-second Vision call.
+
+    `refund_attempt` gives back the attempt `_claim_queued` took on the
+    way in, so a platform-level stop costs time and nothing else. See
+    `_is_infrastructure_stop`.
     """
     values: dict[str, Any] = {
         "status": status,
         "last_error": error,
         "updated_at": _now(),
     }
+    if refund_attempt:
+        values["attempts"] = ExtractionJob.attempts - 1
     if status == STATUS_QUEUED:
         # Going back to the queue is not finishing. Leaving `finished_at`
         # set — or `started_at` pointing at the claim that just failed —
@@ -373,20 +459,52 @@ async def _run_job(job: ExtractionJob) -> str:
     if toggles is not None and not (
         toggles.integrity_check_enabled or toggles.ai_grading_enabled
     ):
-        await _finish(job.id, status=STATUS_DONE)
+        # Not `done` — nothing was read, and a row saying `done` would
+        # tell an operator a read exists when no call was ever made.
+        await _finish(job.id, status=STATUS_SKIPPED)
         return _SKIPPED
 
+    # Never re-read a submission that already has an extraction. A job
+    # can legitimately return to `queued` AFTER the read landed — the
+    # `_finish` stamp can fail on a connection blip, and a worker can
+    # die between the extraction's commit and its own bookkeeping, in
+    # which case `_reclaim_stale` requeues it. Without this guard the
+    # retry bills a SECOND Vision call and overwrites the first read.
+    #
+    # That is worse than the cost. By then the student may have
+    # confirmed, and their corrections are keyed "{problem}:{step}"
+    # against the read they were shown — a fresh read renumbers the
+    # steps, so the edits land on the wrong ones or vanish, and
+    # integrity and grading then run on work the student never approved.
+    # Grading guards the same way, one layer down, by skipping a
+    # submission that already has a score.
+    async with get_session_factory()() as db:
+        already = (await db.execute(
+            select(Submission.extraction).where(
+                Submission.id == job.submission_id,
+            )
+        )).scalar_one_or_none()
+    if already:
+        await _finish(job.id, status=STATUS_DONE)
+        return _DONE
+
     try:
-        await run_extraction_for_submission(job.submission_id)
+        async with _SLOTS:
+            await run_extraction_for_submission(job.submission_id)
     except Exception as exc:
         # Budget exhausted -> park for a human. Still in budget -> back to
         # the queue for the next drain, with the error kept on the row so
         # a human can see WHY it is retrying and not merely that it is.
-        exhausted = job.attempts >= MAX_ATTEMPTS
+        # A platform stop is not this submission's fault: refund the
+        # attempt and leave it queued, so the job is exactly where it
+        # was once the cap resets or the breaker closes.
+        stopped = _is_infrastructure_stop(exc)
+        exhausted = not stopped and job.attempts >= MAX_ATTEMPTS
         await _finish(
             job.id,
             status=STATUS_FAILED if exhausted else STATUS_QUEUED,
             error=_safe_error(exc),
+            refund_attempt=stopped,
         )
         # NOT `logger.exception` for a database error: the traceback it
         # prints ends in the same `StatementError` string, so it would

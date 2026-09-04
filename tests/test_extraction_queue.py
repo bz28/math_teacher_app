@@ -33,6 +33,7 @@ from api.models.extraction_job import (
     STATUS_FAILED,
     STATUS_QUEUED,
     STATUS_RUNNING,
+    STATUS_SKIPPED,
     ExtractionJob,
 )
 
@@ -364,7 +365,8 @@ async def test_a_job_whose_toggles_were_switched_off_is_not_billed(
     # Reported apart from `failed`, the counter operators alert on.
     assert result["skipped"] == 1
     assert result["failed"] == 0
-    assert (await _job(sid)).status == STATUS_DONE
+    # And apart from `done` on the row, which would claim a read exists.
+    assert (await _job(sid)).status == STATUS_SKIPPED
 
 
 @pytest.mark.asyncio
@@ -388,10 +390,16 @@ async def test_a_requeued_job_does_not_read_as_finished(
 
 
 @pytest.mark.asyncio
-async def test_a_failed_enqueue_does_not_silently_lose_the_job(
+async def test_a_failed_enqueue_does_not_poison_the_callers_transaction(
     world: dict[str, Any],
 ) -> None:
     """`enqueue_submission` runs on its own session for a reason.
+
+    Note what this does and does not promise. The job row IS lost when
+    the INSERT fails — loudly, via `logger.exception`, which is the
+    deliberate trade: a queueing failure must never take down a submit
+    that already succeeded. What it guarantees is that the loss is
+    CONTAINED, and that is the whole point.
 
     It used to take the caller's and swallow every exception, so a failed
     INSERT left that transaction ABORTED — the caller's next COMMIT
@@ -544,3 +552,165 @@ async def test_a_non_database_failure_keeps_its_full_message(
     stored = (await _job(sid)).last_error or ""
     assert "TypeError" in stored
     assert "temperature" in stored
+
+
+@pytest.mark.asyncio
+async def test_a_platform_cost_stop_does_not_burn_the_retry_budget(
+    world: dict[str, Any],
+) -> None:
+    """The daily spend cap means "come back later", not "this one is
+    broken".
+
+    `check_limit` raises BEFORE the request goes out, so a capped
+    platform fails jobs instantly and for free — and submit kicks a
+    drain, so a burst of submissions after the cap is hit would burn all
+    three attempts on every queued job within minutes rather than over
+    the 15 minutes three cron passes would take.
+
+    That matters because `failed` is terminal in practice: it is revived
+    only by `enqueue_submission`, whose callers are the one-shot submit
+    endpoint (409 on repeat) and a hand-run script. Parking the queue
+    there is the 2026-09-03 stranding again, at class scale, inside the
+    fix written to end it. Grading has carried this guard for the same
+    reason; extraction shipped without it.
+    """
+    from api.core.cost_tracker import PlatformStopError
+
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+
+    stop = PlatformStopError("Daily cost limit reached ($50.00 >= $50.00)")
+
+    # Well past MAX_ATTEMPTS worth of passes.
+    for _ in range(MAX_ATTEMPTS + 2):
+        with patch(_TARGET, new_callable=AsyncMock, side_effect=stop):
+            await drain()
+
+    job = await _job(sid)
+    # Still runnable, and no attempt was spent — the cap resets and the
+    # student's read happens with a full budget.
+    assert job.status == STATUS_QUEUED, "a spend cap parked the job"
+    assert job.attempts == 0, f"the stop was charged: attempts={job.attempts}"
+    assert "Daily cost limit" in (job.last_error or "")
+
+    # And it really is still claimable once the platform recovers.
+    async def _succeed(_sid: uuid.UUID) -> None:
+        await _mark_extracted(_sid)
+
+    with patch(_TARGET, new_callable=AsyncMock, side_effect=_succeed):
+        result = await drain()
+    assert result["succeeded"] == 1
+    assert (await _job(sid)).status == STATUS_DONE
+
+
+@pytest.mark.asyncio
+async def test_a_landed_extraction_is_never_read_twice(
+    world: dict[str, Any],
+) -> None:
+    """A requeue after the read landed must not re-run Vision.
+
+    A job can return to `queued` with the extraction already committed:
+    the `_finish` stamp can fail on a connection blip, and a worker can
+    die between the extraction's commit and its own bookkeeping, leaving
+    `_reclaim_stale` to requeue it. The retry would then bill a SECOND
+    Vision call and overwrite the first read.
+
+    The cost is the smaller half. By then the student may have confirmed
+    — their corrections are keyed "{problem}:{step}" against the read
+    they were SHOWN, so a fresh read with different step numbering makes
+    those edits land on the wrong steps or vanish, and integrity and
+    grading go on to run over work the student never approved.
+    """
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+
+    # The read landed, and the student signed off on it.
+    await _mark_extracted(sid)
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE submissions SET extraction_confirmed_at = now(), "
+                "extraction_edits = :e WHERE id = :i"
+            ),
+            {"e": '{"1:1": "x = 42"}', "i": sid},
+        )
+        await s.commit()
+
+    # Put the job back in the queue, exactly as a failed _finish would.
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE extraction_jobs SET status = :q WHERE submission_id = :i"),
+            {"q": STATUS_QUEUED, "i": sid},
+        )
+        await s.commit()
+
+    with patch(_TARGET, new_callable=AsyncMock) as vision:
+        result = await drain()
+
+    vision.assert_not_awaited()
+    assert result["succeeded"] == 1
+    assert (await _job(sid)).status == STATUS_DONE
+
+    # The confirmed read and the student's corrections are untouched.
+    async with get_session_factory()() as s:
+        row = (await s.execute(
+            text(
+                "SELECT extraction_confirmed_at, extraction_edits "
+                "FROM submissions WHERE id = :i"
+            ),
+            {"i": sid},
+        )).one()
+    assert row[0] is not None, "the student's confirmation was discarded"
+    assert row[1] == {"1:1": "x = 42"}, "the student's corrections were orphaned"
+
+
+@pytest.mark.asyncio
+async def test_a_re_enqueue_will_not_reset_a_job_that_is_mid_flight(
+    world: dict[str, Any],
+) -> None:
+    """A re-enqueue must leave a `running` job alone.
+
+    Resetting one to `queued` frees a concurrent drain to claim it while
+    the first Vision call is still in flight: the same photos read and
+    billed twice, with whichever call commits last silently winning.
+
+    The live trigger is the rescue script. Its guards all interrogate the
+    SUBMISSION — already extracted? confirmed? flagged? — and never the
+    job's status, and a `running` row a few minutes old is exactly what
+    "stuck" looks like to an operator at 2am.
+    """
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE extraction_jobs SET status = :r, attempts = 1, "
+                "started_at = now() WHERE submission_id = :i"
+            ),
+            {"r": STATUS_RUNNING, "i": sid},
+        )
+        await s.commit()
+
+    await _enqueue(world, sid)
+
+    job = await _job(sid)
+    assert job.status == STATUS_RUNNING, "an in-flight job was reset"
+    assert job.attempts == 1, "the in-flight job's budget was reset"
+
+    # A job that is NOT in flight still resets — that is the recovery
+    # path, and the guard must not have broken it.
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE extraction_jobs SET status = :f, attempts = :m "
+                "WHERE submission_id = :i"
+            ),
+            {"f": STATUS_FAILED, "m": MAX_ATTEMPTS, "i": sid},
+        )
+        await s.commit()
+
+    await _enqueue(world, sid)
+    revived = await _job(sid)
+    assert revived.status == STATUS_QUEUED
+    assert revived.attempts == 0

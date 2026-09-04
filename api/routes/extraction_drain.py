@@ -39,8 +39,11 @@ async def drain_extraction_queue(
     """Run one drain pass; report what it did.
 
     Returns per-pass counters (`reclaimed` / `claimed` / `succeeded` /
-    `failed`) so the caller's logs answer "did anything happen, and did it
-    work?" without a database session. A cron that silently 200s while
+    `skipped` / `failed`) so the caller's logs answer "did anything
+    happen, and did it work?" without a database session. `skipped`
+    counts jobs that were claimed and then found to owe nothing — the
+    assignment's AI toggles had been switched off — and is deliberately
+    apart from `failed` so a closed door does not read as an incident. A cron that silently 200s while
     extracting nothing is indistinguishable from a healthy one otherwise
     — which is precisely how the outage went unnoticed until a student
     complained.
