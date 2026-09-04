@@ -156,9 +156,16 @@ async def main(submission_id: uuid.UUID, apply: bool) -> None:
         assignment = (await db.execute(
             select(Assignment).where(Assignment.id == sub_assignment_id)
         )).scalar_one()
+        # Commits on its own session; nothing to commit here.
         await enqueue_submission(submission_id, assignment)
-        await db.commit()
-    tally = await drain(limit=1)
+    # `first=` is not optional. Without it the drain takes the OLDEST
+    # queued job platform-wide, which is almost never this one: a
+    # re-enqueue does not reset `created_at`, so a freshly queued rescue
+    # sorts last. The script would bill a Vision call against an
+    # unrelated student, then re-read THIS submission, find it still
+    # NULL, and tell the operator the rescue failed — at 2am, on the one
+    # tool you reach for during an incident.
+    tally = await drain(limit=1, first=submission_id)
     print(f"  drain: {tally}")
 
     # Flush the cost log before the loop closes. _log_and_persist hands the

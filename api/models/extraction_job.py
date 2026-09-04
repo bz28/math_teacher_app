@@ -75,6 +75,13 @@ STATUS_QUEUED = "queued"
 STATUS_RUNNING = "running"
 STATUS_DONE = "done"
 STATUS_FAILED = "failed"
+# Claimed, then found to owe nothing — the assignment's AI toggles were
+# switched off after the job was queued. Distinct from `done` because
+# `done` claims a read EXISTS, and an operator asking "did this
+# submission get read?" would otherwise be told yes about a job that
+# never made a call. Grading draws the same distinction for the same
+# reason.
+STATUS_SKIPPED = "skipped"
 
 # Retries before the row is parked as `failed` for a human. Three covers
 # the transient cases worth retrying — a timeout, a 529, a deploy landing
