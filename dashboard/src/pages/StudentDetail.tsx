@@ -60,7 +60,14 @@ export default function StudentDetail() {
   // disagree, and an admin page that lets a number contradict the list
   // under it without saying so is one nobody trusts again.
   const [total, setTotal] = useState<number | null>(null);
+  // Split per fetch. Sharing one slot meant a 500 on the SUBMISSIONS
+  // call rendered "Student not found" for a student whose detail call
+  // had just succeeded — a false statement about someone who
+  // demonstrably exists, on the page whose whole value is being
+  // trustworthy. Only a failure to resolve the student is fatal; the
+  // table failing is a table-shaped problem and says so there.
   const [error, setError] = useState<string | null>(null);
+  const [rowsError, setRowsError] = useState<string | null>(null);
   // Clicking a funnel cell filters the table to that stage — what makes
   // the strip a tool rather than a readout.
   const [stageFilter, setStageFilter] = useState<SubmissionStage | null>(null);
@@ -75,6 +82,7 @@ export default function StudentDetail() {
     setRows(null);
     setTotal(null);
     setError(null);
+    setRowsError(null);
     setStageFilter(null);
     api
       .studentDetail(studentId)
@@ -87,7 +95,11 @@ export default function StudentDetail() {
         setRows(d.submissions);
         setTotal(d.total);
       })
-      .catch((e: Error) => { if (!cancelled) setError(e.message); });
+      .catch((e: Error) => {
+        if (cancelled) return;
+        setRows([]);
+        setRowsError(e.message);
+      });
     return () => { cancelled = true; };
   }, [studentId]);
 
@@ -226,12 +238,14 @@ export default function StudentDetail() {
     },
   ];
 
+  // Only a failure to resolve the STUDENT is fatal — see the state
+  // declaration. A failed submissions fetch surfaces in the table.
   if (error) {
     return (
       <div className="page-header">
-        <h1>Student not found</h1>
+        <h1>Couldn't load this student</h1>
         <p>{error}</p>
-        <Link to="/students/independent" className="link-btn">
+        <Link to="/users?role=student" className="link-btn">
           ← Back to students
         </Link>
       </div>
@@ -245,6 +259,8 @@ export default function StudentDetail() {
     s.school && s.school.kind === "institutional"
       ? { to: `/schools/${s.school.id}`, label: s.school.name }
       : { to: "/students/independent", label: "Independent students" };
+
+  const truncated = total !== null && rows !== null && total > rows.length;
 
   const stalledCount = STAGE_ORDER.filter(isStalled).reduce(
     (n, st) => n + (data.funnel[st] ?? 0),
@@ -369,9 +385,9 @@ export default function StudentDetail() {
           </button>
         )}
       </h2>
-      {total !== null && rows !== null && total > rows.length && (
+      {truncated && (
         <p style={{ color: "var(--warn)", fontSize: 12, margin: "0 0 10px" }}>
-          Showing the {rows.length} most recent of {total} submissions — the
+          Showing the {rows?.length} most recent of {total} submissions — the
           funnel above counts all {total}.
         </p>
       )}
@@ -383,17 +399,25 @@ export default function StudentDetail() {
           onRowClick={(r) => navigate(`/submissions/${r.id}/trace`)}
           drill
           loading={rows === null}
+          error={rowsError}
           minWidth={860}
           empty={
             <div>
               <div className="dt-state-title">
-                {stageFilter
-                  ? "Nothing at this stage."
-                  : "This student hasn't handed anything in yet."}
+                {!stageFilter
+                  ? "This student hasn't handed anything in yet."
+                  // "Nothing at this stage" is false when the funnel
+                  // counted rows the fetch didn't reach — the count
+                  // above would be sitting there contradicting it.
+                  : truncated
+                    ? "None of the loaded submissions are at this stage."
+                    : "Nothing at this stage."}
               </div>
               <div className="dt-state-sub">
                 {stageFilter
-                  ? "Pick another stage above, or clear the filter."
+                  ? truncated
+                    ? `The funnel counts all ${total}; only the ${rows?.length ?? 0} most recent are loaded here.`
+                    : "Pick another stage above, or clear the filter."
                   : "Submissions appear here as soon as they upload work."}
               </div>
             </div>

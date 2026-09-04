@@ -219,7 +219,22 @@ export default function SubmissionTrace() {
   // extraction timestamp, but the call that produced it is right here in
   // the timeline — so the trace can date the read exactly where the
   // student page can only approximate from submission.
-  const firstRead = calls.find((c) => c.function === "image_extract");
+  //
+  // `success` is load-bearing: a FAILED image_extract is the single most
+  // common way to reach "AI on, photos uploaded, no extraction stored".
+  // Dating the hop from it would stamp the strip's headline "Reader ran
+  // <date>" over precisely the submission whose read never landed —
+  // contradicting the NO READ pill a few lines below it, and hiding the
+  // stall this strip exists to show.
+  const firstRead = calls.find(
+    (c) => c.function === "image_extract" && c.success,
+  );
+  // A read was attempted and threw. The strip can then say so outright
+  // instead of the weaker "never arrived", which is what it has to fall
+  // back on when nothing was logged at all.
+  const readFailed = calls.some(
+    (c) => c.function === "image_extract" && !c.success,
+  );
 
   return (
     <div>
@@ -232,6 +247,7 @@ export default function SubmissionTrace() {
         work={work}
         summary={summary}
         firstReadAt={firstRead?.created_at ?? null}
+        readFailed={readFailed}
       />
 
       <StudentWork work={work} />
@@ -580,11 +596,13 @@ interface Hop {
  * before anything is read.
  */
 function Lifecycle({
-  work, summary, firstReadAt,
+  work, summary, firstReadAt, readFailed = false,
 }: {
   work: ExtractionDetail | null;
   summary: SubmissionSummary | null;
   firstReadAt: string | null;
+  /** An image_extract call was logged and failed. */
+  readFailed?: boolean;
 }) {
   if (!work && !summary) return null;
 
@@ -604,12 +622,14 @@ function Lifecycle({
       note: work?.extraction_empty ? "found nothing" : undefined,
     });
   } else if (work) {
+    const owed = work.integrity_check_enabled || work.ai_grading_enabled;
     hops.push({
       label: "Reader ran",
       at: null,
       pending: true,
-      note:
-        work.integrity_check_enabled || work.ai_grading_enabled
+      note: readFailed
+        ? "the read failed"
+        : owed
           ? "never arrived"
           : "AI off for this HW",
     });

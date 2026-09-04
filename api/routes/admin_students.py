@@ -39,10 +39,11 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.audit_log import log_student_record_access
 from api.core.submission_stage import (
     STAGE_ORDER,
     has_content_expr,
@@ -80,6 +81,37 @@ async def _load_student(db: AsyncSession, student_id: uuid.UUID) -> User:
             status_code=status.HTTP_404_NOT_FOUND, detail="Student not found",
         )
     return student
+
+
+async def _log_read(
+    db: AsyncSession,
+    current_user: CurrentUser,
+    student_id: uuid.UUID,
+    record_type: str,
+    request: Request,
+) -> None:
+    """FERPA: an admin just read one named student's record.
+
+    Both endpoints return a named student's grades — every `ai_score`,
+    `final_score`, grading stamp and integrity disposition they have.
+    `teacher_grades.student_grades` logs exactly that disclosure with
+    the comment "a teacher just read one student's full grade record",
+    and an admin reading any student in any school is wider than a
+    teacher reading their own roster, so it is logged at least as
+    carefully.
+
+    Authorization is already settled by `require_admin` and
+    `_load_student`. The helper commits its own row and never raises, so
+    a logging failure cannot 500 an authorized read.
+    """
+    await log_student_record_access(
+        db,
+        accessor_user_id=current_user.user_id,
+        accessor_role=current_user.role,
+        target_student_id=student_id,
+        record_type=record_type,
+        request=request,
+    )
 
 
 def _stage_columns() -> list[Any]:
@@ -129,6 +161,7 @@ def _stage_of(r: Any) -> str:
 @router.get("/students/{student_id}")
 async def student_detail(
     student_id: uuid.UUID,
+    request: Request,
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -140,6 +173,7 @@ async def student_detail(
     the shortfall is itemised by the hop it died on.
     """
     student = await _load_student(db, student_id)
+    await _log_read(db, current_user, student_id, "student_case_file", request)
 
     school: dict[str, str] | None = None
     if student.school_id:
@@ -260,6 +294,7 @@ async def student_detail(
 @router.get("/students/{student_id}/submissions")
 async def student_submissions(
     student_id: uuid.UUID,
+    request: Request,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(require_admin),
@@ -275,6 +310,7 @@ async def student_submissions(
     is queued for a due date that has not arrived.
     """
     await _load_student(db, student_id)
+    await _log_read(db, current_user, student_id, "student_submissions", request)
 
     total = (await db.execute(
         select(func.count())
@@ -333,8 +369,15 @@ async def student_submissions(
             .label("files_count"),
             # Zero here means Vision ran and read nothing — a distinct
             # outcome from "no read yet", and one a student can confirm
-            # their way past. NULL extraction yields NULL, which the row
-            # builder reads as "not applicable".
+            # their way past.
+            #
+            # Both coalesce to 0, so a NULL `extraction` also yields 0 and
+            # is INDISTINGUISHABLE from a read that found nothing at this
+            # level. `_row` is what separates them, by testing
+            # `extraction_present` first — do not drop that guard, or
+            # every never-read submission reports "read nothing" in
+            # danger red and the one distinction this module exists to
+            # preserve collapses.
             has_content_expr().label("read_rows"),
             func.coalesce(calls_sq.c.call_count, 0).label("call_count"),
             func.coalesce(calls_sq.c.failed_count, 0).label("failed_count"),
@@ -353,7 +396,16 @@ async def student_submissions(
         .outerjoin(GradingJob, GradingJob.submission_id == Submission.id)
         .outerjoin(calls_sq, calls_sq.c.submission_id == Submission.id)
         .where(Submission.student_id == student_id)
-        .order_by(Submission.submitted_at.desc())
+        .order_by(
+            Submission.submitted_at.desc(),
+            # Unique final key so OFFSET paging is stable. `submitted_at`
+            # ties freely — a class handing in together, or a seeded
+            # batch — and without a total order tied rows may sort
+            # differently per query, so a page can repeat or skip one.
+            # Same guard `admin_extraction_quality` applies to its list
+            # for the same reason.
+            Submission.id.desc(),
+        )
         .limit(limit)
         .offset(offset)
     )).all()

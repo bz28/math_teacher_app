@@ -47,9 +47,10 @@ def auth_headers(token: str) -> dict[str, str]:
 async def _truncate() -> None:
     async with get_session_factory()() as s:
         await s.execute(text(
-            "TRUNCATE TABLE grading_jobs, submission_grades, submissions, "
-            "assignments, section_enrollments, sections, courses, "
-            "course_teachers, schools, users RESTART IDENTITY CASCADE"
+            "TRUNCATE TABLE student_record_access_log, grading_jobs, "
+            "submission_grades, submissions, assignments, "
+            "section_enrollments, sections, courses, course_teachers, "
+            "schools, users RESTART IDENTITY CASCADE"
         ))
         await s.commit()
 
@@ -348,6 +349,49 @@ async def test_404_on_a_missing_id(client: AsyncClient) -> None:
         headers=auth_headers(seeded["admin_token"]),
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_both_reads_are_ferpa_logged(client: AsyncClient) -> None:
+    """Both endpoints return a named student's full grade record, which
+    is the same disclosure `teacher_grades.student_grades` logs — and an
+    admin reading any student in any school is wider than a teacher
+    reading their own roster."""
+    seeded = await _seed()
+    for path, record_type in (
+        ("", "student_case_file"),
+        ("/submissions", "student_submissions"),
+    ):
+        resp = await client.get(
+            f"/v1/admin/students/{seeded['student_id']}{path}",
+            headers=auth_headers(seeded["admin_token"]),
+        )
+        assert resp.status_code == 200, resp.text
+
+    async with get_session_factory()() as s:
+        rows = (await s.execute(text(
+            "SELECT record_type FROM student_record_access_log "
+            "WHERE target_student_id = :sid ORDER BY record_type"
+        ), {"sid": seeded["student_id"]})).scalars().all()
+    assert list(rows) == ["student_case_file", "student_submissions"]
+
+
+@pytest.mark.asyncio
+async def test_a_404_logs_no_disclosure(client: AsyncClient) -> None:
+    """Nothing was disclosed, so nothing is logged — an access log that
+    records reads that never happened is worse than useless."""
+    seeded = await _seed()
+    resp = await client.get(
+        f"/v1/admin/students/{seeded['teacher_id']}",
+        headers=auth_headers(seeded["admin_token"]),
+    )
+    assert resp.status_code == 404
+    async with get_session_factory()() as s:
+        count = (await s.execute(text(
+            "SELECT count(*) FROM student_record_access_log "
+            "WHERE target_student_id = :sid"
+        ), {"sid": seeded["teacher_id"]})).scalar_one()
+    assert count == 0
 
 
 @pytest.mark.asyncio

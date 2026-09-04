@@ -43,7 +43,13 @@ export const STAGE_META: Record<SubmissionStage, StageMeta> = {
   graded: {
     label: "GRADED",
     tone: "info",
-    blurb: "AI grade drafted — teacher hasn't published it",
+    // Says nothing about WHO graded it, deliberately. `graded_at` is
+    // stamped by the AI grader and by a teacher saving a breakdown by
+    // hand alike — and hand-grading is the normal path after the
+    // student rejects the read, or after an unreadable photo. Claiming
+    // "AI grade drafted" would send an operator hunting the timeline
+    // for a grading call that was never made.
+    blurb: "graded — not yet published to the student",
   },
   flagged: {
     label: "READER REJECTED",
