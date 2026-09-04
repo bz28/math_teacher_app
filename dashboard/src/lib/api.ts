@@ -553,6 +553,11 @@ export interface ExtractionRow {
   unattributed: boolean;
   ai_read: string | null;
   student_said: string | null;
+  /** The read came from the row's LaTeX field, so both columns are bare
+   *  LaTeX and must be typeset rather than printed. Sent by the server
+   *  rather than sniffed here: guessing from backslashes misfires on
+   *  prose that legitimately contains one. */
+  is_latex: boolean;
   /** Student cleared the row — a deletion, not a blank. */
   deleted: boolean;
   changed: boolean;
