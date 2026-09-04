@@ -41,7 +41,7 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, select, update
+from sqlalchemy import CursorResult, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -127,6 +127,32 @@ def _is_infrastructure_stop(exc: BaseException) -> bool:
     return isinstance(exc, PlatformStopError)
 
 
+def _traceback_is_safe(exc: BaseException) -> bool:
+    """May we log this exception WITH its traceback?
+
+    Only if no SQLAlchemy error appears anywhere in its chain. A
+    traceback prints every linked exception — "During handling of the
+    above exception, another exception occurred" — so an exception that
+    is itself harmless still leaks if a `StatementError` is sitting in
+    its `__context__`, bound parameters and all.
+
+    That is not a corner case here, it is the likely one: the two writes
+    are one line apart, so whatever kills the extraction flush (a
+    statement timeout, pool exhaustion, a deadlock, a connection reset)
+    tends to kill the `_finish` that follows it. The first version of
+    this guard keyed on the type of the exception in hand, which is
+    exactly the check that misses a chain.
+    """
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        if isinstance(cur, SQLAlchemyError):
+            return False
+        seen.add(id(cur))
+        cur = cur.__cause__ or cur.__context__
+    return True
+
+
 def _safe_error(exc: BaseException) -> str:
     """Describe a failure without quoting the student's homework.
 
@@ -172,7 +198,7 @@ def _safe_error(exc: BaseException) -> str:
 async def enqueue_submission(
     submission_id: uuid.UUID,
     assignment: Assignment,
-) -> None:
+) -> str | None:
     """Record that a submission owes a Vision read.
 
     Idempotent on `submission_id`: a retried request, or a re-run asked
@@ -204,10 +230,17 @@ async def enqueue_submission(
 
     Still never raises — a queueing failure must not take down a submit
     that already succeeded.
+
+    Returns the row's resulting status, or None if nothing was written.
+    That matters because the `running` guard below makes this a silent
+    no-op for an in-flight job: an operator re-enqueueing what looks
+    stuck would otherwise be told nothing and go on to drain, and a
+    caller cannot distinguish "queued for you" from "left alone" without
+    being told which happened.
     """
     try:
         async with get_session_factory()() as own:
-            await own.execute(
+            result = await own.execute(
                 pg_insert(ExtractionJob)
                 .values(
                     id=uuid.uuid4(),
@@ -238,12 +271,25 @@ async def enqueue_submission(
                         "updated_at": _now(),
                     },
                 )
+                .returning(ExtractionJob.status)
             )
             await own.commit()
+            written = result.scalar_one_or_none()
+        if written is not None:
+            return str(written)
+        # The upsert's WHERE excluded the row: it is `running`, and a
+        # drain owns it.
+        async with get_session_factory()() as own:
+            return (await own.execute(
+                select(ExtractionJob.status).where(
+                    ExtractionJob.submission_id == submission_id,
+                )
+            )).scalar_one_or_none()
     except Exception:
         logger.exception(
             "failed to enqueue extraction for submission %s", submission_id,
         )
+        return None
 
 
 async def _reclaim_stale(db: AsyncSession) -> int:
@@ -293,72 +339,88 @@ async def _reclaim_stale(db: AsyncSession) -> int:
     return int(parked.rowcount or 0) + int(requeued.rowcount or 0)
 
 
-async def _claim_queued(
+async def _claim_one(
     db: AsyncSession,
-    limit: int,
-    first: uuid.UUID | None = None,
-) -> list[ExtractionJob]:
-    """Atomically claim up to `limit` queued jobs.
+    *,
+    prefer: uuid.UUID | None = None,
+    only: uuid.UUID | None = None,
+    exclude: set[uuid.UUID] | None = None,
+) -> ExtractionJob | None:
+    """Claim exactly ONE queued job, or return None if there is none.
 
-    `FOR UPDATE SKIP LOCKED` is what makes two drains safe to run at
-    once: each claims a disjoint set instead of both grabbing the same
-    rows and billing the same Vision call twice.
+    One at a time, deliberately. The previous version claimed the whole
+    pass up front — up to twenty rows stamped `running` with
+    `started_at = now()` — and then worked them sequentially. The
+    twentieth job did not begin until nineteen Vision calls had
+    finished, but it had been wearing a ten-minute-old `started_at` the
+    entire time.
 
-    `first` jumps one submission to the head of the queue. Submit kicks a
-    drain for the student who is at that moment watching a spinner, and
-    jobs run one at a time — so under plain oldest-first that student
-    lands LAST, behind every backlogged job, each a 5-15s Vision call.
-    Twenty of those is past the client's 90-second timeout, and the
-    student sees the "Couldn't prepare your check" screen this queue was
-    built to eliminate. The migration backfill makes that concrete
-    rather than theoretical: it stamps every pre-existing submission at
-    the same `now()`, so the first student to submit after deploy is
-    behind all of them.
+    `STALE_RUNNING_MINUTES` is dimensioned for ONE call ("Vision calls
+    take 5-15s ... ten minutes is far past slow"), so the tail of a batch
+    crossed it routinely, `_reclaim_stale` handed the job to another
+    drain, and the same submission was read and BILLED twice
+    concurrently. The already-extracted guard cannot catch that: neither
+    run has written yet.
 
-    Oldest-first for everyone else, so a backlog still drains in the
-    order students were kept waiting.
+    Grading gets away with the batch shape because its cron is the only
+    thing that drains and GitHub's concurrency group serialises it — no
+    second drain exists to do the reclaiming. Extraction spawns a drain
+    on every submit, so an overlapping drain is not a risk, it is the
+    normal case. Claiming one at a time makes `started_at` mean what
+    `_reclaim_stale` reads it as: the moment work actually began.
+
+    `only` claims that submission or nothing. `prefer` tries it first and
+    falls back to oldest-first.
+
+    `exclude` holds the jobs this pass has already run. Claiming one at a
+    time means a job that fails and goes back to `queued` is immediately
+    available again — so without this it would be re-claimed by the same
+    pass and spend its entire retry budget in one go, on the one set of
+    conditions, in seconds. The budget is meant to be spread across
+    drains so a transient cause has time to clear. The batch claim got
+    this for free by taking every row up front; doing it one at a time
+    means saying so.
     """
-    rows: list[ExtractionJob] = []
-
-    # The priority row is claimed by its own indexed lookup rather than
-    # by a CASE in the ORDER BY. A CASE expression cannot be served by
-    # `ix_extraction_jobs_status_created_at`, so it turns the claim into
-    # a full sort of every queued row — measured at 0.5ms to 226ms on a
-    # 200k-row queue. `submission_id` is unique, so this is a one-row
-    # index hit, and the ordinary claim below keeps using the index it
-    # was built for.
-    if first is not None:
-        rows = list((await db.execute(
+    def _pick(*extra: Any) -> Any:
+        return (
             select(ExtractionJob)
             .where(
                 ExtractionJob.status == STATUS_QUEUED,
-                ExtractionJob.submission_id == first,
-            )
-            .with_for_update(skip_locked=True)
-        )).scalars().all())
-
-    remaining = limit - len(rows)
-    if remaining > 0:
-        rest = (await db.execute(
-            select(ExtractionJob)
-            .where(
-                ExtractionJob.status == STATUS_QUEUED,
-                # Don't re-claim the row above; `notin_` on an empty
-                # list is valid SQL and simply matches everything.
-                ExtractionJob.id.notin_([j.id for j in rows]),
+                ExtractionJob.id.notin_(exclude or set()),
+                *extra,
             )
             .order_by(ExtractionJob.created_at.asc())
-            .limit(remaining)
+            .limit(1)
             .with_for_update(skip_locked=True)
-        )).scalars().all()
-        rows.extend(rest)
+        )
 
-    for job in rows:
-        job.status = STATUS_RUNNING
-        job.started_at = _now()
-        job.attempts += 1
+    job: ExtractionJob | None = None
+    if only is not None:
+        # Exactly this one. Used by the rescue script, where running
+        # somebody else's job instead is worse than doing nothing.
+        job = (await db.execute(
+            _pick(ExtractionJob.submission_id == only)
+        )).scalars().first()
+    else:
+        if prefer is not None:
+            # A one-row hit on the unique `submission_id` index. This
+            # used to be a CASE in the ORDER BY, which no index can
+            # serve — it turned every submit-kicked claim into a full
+            # sort of the queue.
+            job = (await db.execute(
+                _pick(ExtractionJob.submission_id == prefer)
+            )).scalars().first()
+        if job is None:
+            job = (await db.execute(_pick())).scalars().first()
+
+    if job is None:
+        return None
+
+    job.status = STATUS_RUNNING
+    job.started_at = _now()
+    job.attempts += 1
     await db.commit()
-    return list(rows)
+    return job
 
 
 async def _finish(
@@ -374,7 +436,7 @@ async def _finish(
     closed one of its own; reusing that would mean holding a connection
     across a 15-second Vision call.
 
-    `refund_attempt` gives back the attempt `_claim_queued` took on the
+    `refund_attempt` gives back the attempt `_claim_one` took on the
     way in, so a platform-level stop costs time and nothing else. See
     `_is_infrastructure_stop`.
     """
@@ -384,7 +446,10 @@ async def _finish(
         "updated_at": _now(),
     }
     if refund_attempt:
-        values["attempts"] = ExtractionJob.attempts - 1
+        # Floored, matching grading's `max(0, ...)`. Two refunds racing
+        # on one row would otherwise drive the count negative and hand
+        # the job an unbounded budget.
+        values["attempts"] = func.greatest(0, ExtractionJob.attempts - 1)
     if status == STATUS_QUEUED:
         # Going back to the queue is not finishing. Leaving `finished_at`
         # set — or `started_at` pointing at the claim that just failed —
@@ -399,7 +464,14 @@ async def _finish(
     async with get_session_factory()() as db:
         await db.execute(
             update(ExtractionJob)
-            .where(ExtractionJob.id == job_id)
+            .where(
+                ExtractionJob.id == job_id,
+                # Only stamp a job we still own. If `_reclaim_stale` gave
+                # it to another drain while this one was slow, that drain
+                # is now the owner and our verdict is stale — writing it
+                # would reset a job that is mid-call.
+                ExtractionJob.status == STATUS_RUNNING,
+            )
             .values(**values)
         )
         await db.commit()
@@ -417,9 +489,17 @@ async def _extract_one(job: ExtractionJob) -> str:
     """
     try:
         return await _run_job(job)
-    except Exception:
-        logger.exception(
-            "extraction job %s crashed outside the guarded call", job.id,
+    except Exception as exc:
+        # NOT `logger.exception`. This handler catches whatever escaped
+        # `_run_job`, and the likeliest way that happens is `_finish`
+        # failing while a database error from the extraction write is
+        # still the active context — so the traceback would carry the
+        # bound parameters, and the student's transcribed homework with
+        # them. See `_traceback_is_safe`.
+        logger.error(
+            "extraction job %s crashed outside the guarded call: %s",
+            job.id, _safe_error(exc),
+            exc_info=_traceback_is_safe(exc),
         )
         # Release the claim so the job is retryable now rather than in
         # ten minutes — but still on the budget. A job that reliably
@@ -515,15 +595,17 @@ async def _run_job(job: ExtractionJob) -> str:
             "extraction job %s failed (attempt %d/%d) for submission %s: %s",
             job.id, job.attempts, MAX_ATTEMPTS, job.submission_id,
             _safe_error(exc),
-            exc_info=not isinstance(exc, SQLAlchemyError),
+            exc_info=_traceback_is_safe(exc),
         )
         return _FAILED
 
-    # `run_extraction_for_submission` swallows its own exceptions and
-    # returns normally either way, so success is confirmed by re-reading
-    # rather than by it not raising. Without this a silent failure would
-    # be recorded as `done` and the student would stay stuck with the
-    # queue insisting the work was finished.
+    # Success is confirmed by re-reading, not by the call not raising.
+    # It does raise on failure now — but it also returns EARLY and
+    # quietly when the submission or its assignment has gone, so
+    # "returned without an exception" is not the same as "a read
+    # landed". Without this check that gap would be recorded as `done`
+    # and the student would stay stuck while the queue insisted the work
+    # was finished.
     async with get_session_factory()() as db:
         landed = (await db.execute(
             select(Submission.extraction).where(
@@ -552,29 +634,50 @@ async def _run_job(job: ExtractionJob) -> str:
 async def drain(
     limit: int = DEFAULT_DRAIN_LIMIT,
     first: uuid.UUID | None = None,
+    only: uuid.UUID | None = None,
 ) -> dict[str, int]:
     """One drain pass. Safe to call concurrently with itself.
 
-    `first` names a submission to run ahead of the queue — see
-    `_claim_queued`. Submit passes the student it just accepted; the cron
-    passes nothing and takes them oldest-first.
+    `first` runs one submission ahead of the queue and then carries on
+    with the rest — what submit wants for the student now watching a
+    spinner. `only` runs that submission or nothing at all — what the
+    rescue script wants, where working somebody else's job instead is
+    worse than reporting that nothing could be done.
     """
     async with get_session_factory()() as db:
         reclaimed = await _reclaim_stale(db)
         await db.commit()
-        claimed = await _claim_queued(db, limit, first)
 
     tally: Counter[str] = Counter()
+    claimed = 0
+    prefer = first
+    seen: set[uuid.UUID] = set()
+
+    # Claim-then-work, one job at a time, rather than claiming the whole
+    # pass up front — see `_claim_one` for why that matters to
+    # `_reclaim_stale`.
+    #
     # Sequential, not gathered: each job is a full Vision call on
     # multi-megabyte photos, and running twenty at once would spike both
     # memory and the provider's rate limit for no latency benefit that
     # matters — nobody is watching this run.
-    for job in claimed:
+    for _ in range(max(1, limit)):
+        async with get_session_factory()() as db:
+            job = await _claim_one(
+                db, prefer=prefer, only=only, exclude=seen,
+            )
+        if job is None:
+            break
+        prefer = None
+        seen.add(job.id)
+        claimed += 1
         tally.update([await _extract_one(job)])
+        if only is not None:
+            break
 
     return {
         "reclaimed": reclaimed,
-        "claimed": len(claimed),
+        "claimed": claimed,
         "succeeded": tally[_DONE],
         # Claimed, then found to owe nothing — the toggles went off.
         "skipped": tally[_SKIPPED],
