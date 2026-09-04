@@ -53,6 +53,30 @@ _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "postgres", "db", ""}
 
 NOW = datetime.now(UTC)
 
+# The pipeline's real ordering, expressed once. A submission is uploaded,
+# Vision reads it seconds later, the student rules on that read, and only
+# then can it be graded and published.
+#
+# These exist because writing the rule as a prose comment on ONE seeded
+# submission let the other three drift into stamping a confirm before the
+# read that confirm is about — an order the product cannot produce, which
+# then silently exercised the negative-gap fallback in the lifecycle strip
+# that real data never reaches. Derive the stamps; don't retype them.
+READ_AFTER_SUBMIT = timedelta(seconds=11)
+RULED_AFTER_READ = timedelta(minutes=3)
+
+
+def submitted(days_ago: int) -> datetime:
+    return NOW - timedelta(days=days_ago)
+
+
+def read_at(days_ago: int) -> datetime:
+    return submitted(days_ago) + READ_AFTER_SUBMIT
+
+
+def ruled_at(days_ago: int) -> datetime:
+    return read_at(days_ago) + RULED_AFTER_READ
+
 
 def assert_local_database() -> None:
     """Refuse to run against anything but a local database.
@@ -188,36 +212,31 @@ async def seed() -> dict[str, str]:
         # counting, and nothing downstream will ever fire.
         stuck = sub(await hw("Two-Step Equations"), 6, extraction=read_for())
 
-        # Published — the happy path, for contrast. Confirmed AFTER the
-        # Vision call seeded below, because that is the only order the
-        # product can produce: the confirm screen exists to rule on a
-        # read, so it cannot precede one.
+        # Published — the happy path, for contrast.
         done = sub(
             await hw("Fraction Operations"), 12,
             extraction=read_for(),
-            extraction_confirmed_at=(
-                NOW - timedelta(days=12) + timedelta(minutes=3)
-            ),
+            extraction_confirmed_at=ruled_at(12),
         )
         # Graded, not yet published, and the teacher moved the score.
         graded = sub(
             await hw("Graphing Linear Functions"), 8,
             extraction=read_for(),
-            extraction_confirmed_at=NOW - timedelta(days=8),
+            extraction_confirmed_at=ruled_at(8),
         )
         # Student corrected the read, then confirmed — grading queued.
         repaired = sub(
             await hw("Systems of Equations"), 3,
             extraction=read_for(),
             extraction_edits={"1:2": "x = 8"},
-            extraction_edited_at=NOW - timedelta(days=3),
-            extraction_confirmed_at=NOW - timedelta(days=3),
+            extraction_edited_at=ruled_at(3),
+            extraction_confirmed_at=ruled_at(3),
         )
         # Student rejected the read outright — teacher grades by hand.
         flagged = sub(
             await hw("Word Problems"), 4,
             extraction=read_for(),
-            extraction_flagged_at=NOW - timedelta(days=4),
+            extraction_flagged_at=ruled_at(4),
         )
         # A read was owed and never arrived.
         sub(await hw("Inequalities"), 2)
@@ -268,7 +287,33 @@ async def seed() -> dict[str, str]:
                 input_tokens=2400, output_tokens=310,
                 latency_ms=8200.0, cost_usd=0.0121,
                 success=True, retry_count=0,
-                created_at=NOW - timedelta(days=days) + timedelta(seconds=11),
+                created_at=read_at(days),
+            ))
+
+        # And the grading call behind every ai_score, for the same
+        # reason: `grade_submission_with_ai` logs AI_GRADING with the
+        # submission_id, and nothing prunes `llm_calls` — so a scored
+        # submission with no grading call is another state production
+        # cannot reach. Without these the "healthy" reference screenshot
+        # showed a published, 88%-AI-graded submission whose whole
+        # timeline was a single Vision call: no Grading stage, no stage
+        # jump pills, and wall time falling to its one-call "—" branch.
+        # The multi-stage timeline that trace exists to demonstrate was
+        # the one thing the picture of it did not contain.
+        #
+        # `repaired` gets none on purpose — its grading job is still
+        # queued — and `flagged` gets none because a rejected read never
+        # reaches the grader.
+        for target, graded_days in ((done, 11), (graded, 7)):
+            s.add(LLMCall(
+                user_id=student.id,
+                submission_id=target.id,
+                function=LLMMode.AI_GRADING,
+                model="claude-sonnet-4-5",
+                input_tokens=3100, output_tokens=640,
+                latency_ms=11400.0, cost_usd=0.0203,
+                success=True, retry_count=0,
+                created_at=submitted(graded_days),
             ))
         await s.commit()
 

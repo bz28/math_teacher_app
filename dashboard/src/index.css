@@ -596,10 +596,11 @@ h3 {
 .case-file { margin-bottom: 24px; }
 
 /* Stage first, then the run verdict beside it when it adds something.
-   Wraps rather than squeezing the header on a narrow viewport. */
+   `flex: none` keeps the pills at full width and lets the header's text
+   column absorb the squeeze instead — the h1 wraps and the meta line
+   ellipses, so a truncated pill is never the thing that gives. */
 .case-head-pills {
   display: flex;
-  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
   flex: none;
@@ -3297,16 +3298,21 @@ table.dt tr:last-child td { border-bottom: none; }
 .funnel-cell-stalled .funnel-label { color: var(--danger); }
 .funnel-cell-stalled .funnel-bar-fill { background: var(--danger); }
 
+/* Seven cells never divide evenly, so the row/column rules are written
+   per breakpoint rather than inherited: at 4-up the first four end a
+   row, at 2-up every even cell does. Carrying the 4-up rules into the
+   2-up block left the third row unseparated and cell 7 with a dangling
+   right border. */
 @media (max-width: 900px) {
   .funnel-strip { grid-template-columns: repeat(4, 1fr); }
-  .funnel-cell:nth-child(4) { border-right: none; }
-  .funnel-cell:nth-child(-n + 3) { border-bottom: 1px solid var(--rule); }
-  .funnel-cell:nth-child(4) { border-bottom: 1px solid var(--rule); }
+  .funnel-cell:nth-child(4n) { border-right: none; }
+  .funnel-cell:nth-child(-n + 4) { border-bottom: 1px solid var(--rule); }
 }
 @media (max-width: 560px) {
   .funnel-strip { grid-template-columns: repeat(2, 1fr); }
   .funnel-cell { border-right: 1px solid var(--rule); }
   .funnel-cell:nth-child(2n) { border-right: none; }
+  .funnel-cell:nth-child(-n + 5) { border-bottom: 1px solid var(--rule); }
 }
 
 @media (prefers-reduced-motion: reduce) {
