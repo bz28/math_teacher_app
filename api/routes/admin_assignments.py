@@ -215,8 +215,14 @@ async def get_assignment(
             # must appear" manufactures a tombstone for a problem that is
             # rendered three rows further down. A dropped reference is
             # precisely an id the hydrator did not return.
+            # Compared as strings because that is what `expected` holds:
+            # `problem_ids_in_content` stringifies every id on the way
+            # out. A legacy snapshot can carry a non-string id — `content`
+            # reaches us unvalidated — and `"12345" != 12345` made a
+            # rendered problem look unresolved, so the page showed the
+            # problem and a tombstone for it, both numbered the same.
             rendered = {
-                p["bank_item_id"] for p in problems if p["bank_item_id"]
+                str(p["bank_item_id"]) for p in problems if p["bank_item_id"]
             }
             for position, expected_id in enumerate(expected, start=1):
                 if expected_id not in rendered:

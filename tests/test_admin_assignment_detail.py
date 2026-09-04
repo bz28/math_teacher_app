@@ -505,3 +505,36 @@ async def test_odd_stored_positions_do_not_invent_a_missing_problem(
     # invented — three rows, no tombstone.
     assert [p["missing"] for p in problems] == [False, False, False], problems
     assert len(problems) == 3
+
+
+async def test_a_non_string_bank_id_is_not_reported_missing(
+    client: AsyncClient,
+) -> None:
+    """`expected` holds stringified ids -- `problem_ids_in_content` calls
+    `str()` on every one -- so the set of rendered ids has to be compared
+    the same way.
+
+    `content` reaches us unvalidated (`teacher_assignments.py` passes the
+    body straight through), so a legacy row can carry a numeric id.
+    Comparing `"12345"` against `12345` made a problem that WAS rendered
+    look unresolved, and the page showed the problem and a
+    "no longer in the bank" tombstone for it, both numbered 1.
+    """
+    w = await _world()
+    a_id = await _add_assignment(w, type_="homework", content={"problem_ids": []})
+    async with get_session_factory()() as s:
+        await s.execute(text("UPDATE assignments SET content = :c WHERE id = :i"), {
+            "c": (
+                '{"problems": [{"bank_item_id": 12345, "position": 1,'
+                ' "question": "2x + 3 = 11"}]}'
+            ),
+            "i": str(a_id),
+        })
+        await s.commit()
+
+    r = await client.get(f"/v1/admin/assignments/{a_id}", headers=_auth(w["token"]))
+    assert r.status_code == 200, r.text
+    problems = r.json()["problems"]
+    assert len(problems) == 1, problems
+    assert problems[0]["missing"] is False
+    assert problems[0]["question"] == "2x + 3 = 11"
