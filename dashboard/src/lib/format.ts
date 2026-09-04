@@ -16,6 +16,30 @@ export function formatRelativeDate(dateStr: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+/**
+ * How long ago `since` was, floored on the same boundaries
+ * `formatRelativeDate` floors on.
+ *
+ * The flooring is the point. An age and a date derived from the SAME
+ * instant were being produced by two functions that disagreed —
+ * `Math.round` on one, `Math.floor` on the other — so a 5.6-day stall
+ * rendered as a hop dated "5d ago" carrying the label "waiting 6d",
+ * contradicting itself on one line, and read "waiting 5d" in the
+ * student table but "waiting 6d" one click later on the trace.
+ *
+ * Returns null for a future or unparseable instant: there is no age to
+ * report, and inventing "0m" would read as a fact.
+ */
+export function fmtAge(since: string): string | null {
+  const ms = Date.now() - new Date(since).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const min = Math.floor(ms / 60_000);
+  if (min < 60) return `${Math.max(min, 1)}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  return `${Math.floor(hr / 24)}d`;
+}
+
 // Cost formatter — tiered precision so a $400/mo school bill and a
 // $0.0008 per-submission unit cost both render legibly. Single source
 // of truth so the same value reads the same on every page. Exactly-zero

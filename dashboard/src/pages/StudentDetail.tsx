@@ -6,7 +6,9 @@ import {
   type StudentSubmissionRow,
   type SubmissionStage,
 } from "../lib/api";
-import { fmtCost, fmtClockTime, formatRelativeDate } from "../lib/format";
+import {
+  fmtAge, fmtCost, fmtClockTime, formatRelativeDate,
+} from "../lib/format";
 import { activityPill, activityStatus } from "../lib/definitions";
 import { STAGE_META, STAGE_ORDER, isStalled } from "../lib/stages";
 import DataTable, { type Column } from "../components/DataTable";
@@ -39,14 +41,42 @@ function fmtScore(n: number | null): string {
 }
 
 /** How long this submission has sat where it is. The finding on this
- *  page is nearly always a gap, not an event. */
+ *  page is nearly always a gap, not an event. Shares `fmtAge` with the
+ *  submission trace so the same stall cannot read "waiting 5d" here and
+ *  "waiting 6d" one click later. */
 function waited(since: string | null): string | null {
-  if (!since) return null;
-  const days = Math.floor(
-    (Date.now() - new Date(since).getTime()) / 86_400_000,
-  );
-  if (days < 1) return "today";
-  return `${days}d`;
+  return since ? fmtAge(since) : null;
+}
+
+// The drain claims due jobs every 5 minutes, and reclaims a job stuck
+// `running` after 15. A queued job whose scheduled time passed longer
+// ago than that is not waiting for its due date — it is waiting for a
+// drain that is not coming, which is how an outage looks from here: the
+// grading-drain workflow no-ops silently when its token or API base is
+// unset, so every confirmed submission in every school sits ungraded
+// while this page reports each one in calm grey.
+const DRAIN_GRACE_MS = 15 * 60_000;
+
+function queuedNote(
+  scheduledFor: string | null,
+): { text: string; bad: boolean } {
+  if (!scheduledFor) {
+    // NULL means the assignment has no due date, so the job genuinely
+    // waits for a teacher to ask. Not overdue, just unscheduled.
+    return { text: "grading waiting on the teacher", bad: false };
+  }
+  const overdueBy = Date.now() - new Date(scheduledFor).getTime();
+  if (overdueBy > DRAIN_GRACE_MS) {
+    const age = fmtAge(scheduledFor);
+    return {
+      text: age ? `grading overdue by ${age}` : "grading overdue",
+      bad: true,
+    };
+  }
+  return {
+    text: `grading queued for ${fmtClockTime(scheduledFor)}`,
+    bad: false,
+  };
 }
 
 export default function StudentDetail() {
@@ -160,12 +190,7 @@ export default function StudentDetail() {
               // Terminal with no grade, and deliberately not "done".
               ? { text: "grading skipped — no grade coming", bad: true }
               : job.status === "queued"
-                ? {
-                  text: job.scheduled_for
-                    ? `grading queued for ${fmtClockTime(job.scheduled_for)}`
-                    : "grading waiting on the teacher",
-                  bad: false,
-                }
+                ? queuedNote(job.scheduled_for)
                 : { text: `grading ${job.status}`, bad: false };
         return (
           <div>

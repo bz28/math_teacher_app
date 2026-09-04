@@ -7,6 +7,7 @@ import {
   type SubmissionSummary,
 } from "../lib/api";
 import {
+  fmtAge,
   fmtCost,
   fmtRelativeMs,
   fmtWallTime,
@@ -751,10 +752,15 @@ function Lifecycle({
   }
 
   // How long the open end has been open — the number an operator acts on.
+  //
+  // `fmtAge`, not `gapLabel`: this is an AGE, and it is rendered inches
+  // from dates produced by `formatRelativeDate`, which floors. gapLabel
+  // rounds, which is right between two fixed stamps and wrong here — a
+  // 5.6-day stall printed a hop dated "5d ago" carrying "waiting 6d",
+  // and the same stall read "waiting 5d" in the student table. Ages
+  // floor everywhere so the two can never disagree.
   const openSince = stalled ? (ruledAt ?? readAt ?? submittedAt) : null;
-  const waitingFor = openSince
-    ? gapLabel(openSince, new Date().toISOString())
-    : null;
+  const waitingFor = openSince ? fmtAge(openSince) : null;
 
   return (
     <ol className="cf-life" aria-label="Submission lifecycle">
