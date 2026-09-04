@@ -72,10 +72,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
 from api.core.extraction_edits import _final_key, _step_key
+from api.core.submission_stage import (
+    extraction_is_empty,
+    has_content_expr,
+    stage_for,
+)
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
-from api.models.assignment import Assignment, Submission
+from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.course import Course
+from api.models.user import User
 from api.routes.admin_helpers import time_range
 
 router = APIRouter()
@@ -108,11 +114,10 @@ THIN_SAMPLE = 30
 # Without this branch the worst possible read lands in the CLEAN
 # numerator and inflates the headline. It is the reader failing totally,
 # so it is counted as its own outcome, not as a success.
-_HAS_CONTENT = func.coalesce(
-    func.json_array_length(Submission.extraction["steps"]), 0
-) + func.coalesce(
-    func.json_array_length(Submission.extraction["final_answers"]), 0
-)
+#
+# Shared with the per-student views via `submission_stage`, so this page
+# and the student case file cannot drift on what "found nothing" means.
+_HAS_CONTENT = has_content_expr()
 
 
 def _bucket_expr() -> Any:
@@ -381,33 +386,38 @@ async def extraction_detail(
     This is the only surface where a misread can actually be diagnosed.
     A count tells you the reader is struggling; only the strokes beside
     the transcription tell you *how*.
+
+    Also the case-file body for `/submissions/{id}/trace`, which is why
+    the response carries the student's identity and the assignment's two
+    AI toggles alongside the read. The trace's job is to explain a
+    submission's whole life, and the most common thing it has to explain
+    is an EMPTY call list — for which the toggles are the answer roughly
+    as often as a failure is. See `api.core.submission_stage`.
     """
     row = (await db.execute(
-        select(Submission, Course.name, Course.subject)
+        select(
+            Submission,
+            Course.name,
+            Course.subject,
+            Assignment.title.label("assignment_title"),
+            Assignment.type.label("assignment_type"),
+            Assignment.integrity_check_enabled,
+            Assignment.ai_grading_enabled,
+            User.name.label("student_name"),
+        )
         .join(Assignment, Assignment.id == Submission.assignment_id)
         .join(Course, Course.id == Assignment.course_id)
+        .outerjoin(User, User.id == Submission.student_id)
         .where(Submission.id == submission_id)
     )).first()
     if row is None:
         raise HTTPException(status_code=404, detail="Submission not found")
 
-    sub, course_name, subject = row
+    sub = row.Submission
+    course_name, subject = row.name, row.subject
 
-    # This response carries a photograph of a student's own handwriting.
-    # Every other read of a student record in this codebase is logged for
-    # FERPA disclosure-tracking, and an admin reading any student's work
-    # across every school is a wider disclosure than a teacher reading
-    # their own — so it is logged the same way. See the module docstring
-    # for why the image is returned at all.
-    await log_student_record_access(
-        db,
-        accessor_user_id=current_user.user_id,
-        accessor_role=current_user.role,
-        target_student_id=sub.student_id,
-        record_type="extraction_quality_drill_in",
-        record_id=sub.id,
-        request=request,
-    )
+    # The FERPA log for this read is deliberately at the END of the
+    # handler — see the note above the call, and `admin_students._log_read`.
 
     edits: dict[str, Any] = sub.extraction_edits or {}
     # A single float for the whole read — Vision does not score individual
@@ -463,17 +473,25 @@ async def extraction_detail(
 
     # final_answers is a LIST of {problem_position, answer_latex, ...},
     # not a map keyed by position.
-    for fa in extraction.get("final_answers") or []:
+    for i, fa in enumerate(extraction.get("final_answers") or []):
         if not isinstance(fa, dict):
             continue
         key = _final_key(fa.get("problem_position"))
+        # Same two guards the steps loop applies, and for the same
+        # reason. `unattributed` was computed and then dropped from the
+        # dict, so the renderer read it as false and printed "— same —"
+        # — asserting the student saw and agreed with a row Vision could
+        # not place and they were therefore never shown. A null `key`
+        # also collided in React's list keys when two answers were
+        # unplaceable.
         unattributed = key is None
         corrected = None if key is None else edits.get(key)
         rows_out.append({
-            "key": key,
+            "key": key or f"unattributed-final:{i}",
             "problem_position": fa.get("problem_position"),
             "step_num": None,
             "kind": "final_answer",
+            "unattributed": unattributed,
             # answer_plain, NOT answer_text — the latter exists nowhere in
             # the schema, so every prose answer rendered "nothing read".
             "ai_read": _read_text(fa.get("answer_latex"), fa.get("answer_plain")),
@@ -483,8 +501,30 @@ async def extraction_detail(
             "changed": key is not None and key in edits,
         })
 
-    return {
+    # The grade stamps decide the stage, and a submission that was never
+    # graded has no row here at all — so absence is expected and `.first()`
+    # returning None is the normal path, not an error.
+    grade = (await db.execute(
+        select(SubmissionGrade.graded_at, SubmissionGrade.grade_published_at)
+        .where(SubmissionGrade.submission_id == sub.id)
+    )).first()
+
+    stage = stage_for(
+        extraction_present=sub.extraction is not None,
+        extraction_confirmed_at=sub.extraction_confirmed_at,
+        extraction_flagged_at=sub.extraction_flagged_at,
+        graded_at=grade.graded_at if grade else None,
+        grade_published_at=grade.grade_published_at if grade else None,
+        integrity_check_enabled=row.integrity_check_enabled,
+        ai_grading_enabled=row.ai_grading_enabled,
+    )
+
+    payload = {
         "submission_id": str(sub.id),
+        "student_id": str(sub.student_id),
+        "student_name": row.student_name,
+        "assignment_title": row.assignment_title,
+        "assignment_type": row.assignment_type,
         "course": course_name or "Untitled course",
         "subject": subject or "unknown",
         "bucket": (
@@ -492,6 +532,20 @@ async def extraction_detail(
             else _REPAIRED if sub.extraction_edited_at is not None
             else _CLEAN if sub.extraction_confirmed_at is not None
             else "awaiting"
+        ),
+        "stage": stage,
+        # The three facts that turn an empty LLM-call list from a dead
+        # end into a diagnosis: whether a read was ever owed, whether one
+        # landed, and whether there were photos to read in the first
+        # place. Rendered as a sentence by the trace page.
+        "integrity_check_enabled": row.integrity_check_enabled,
+        "ai_grading_enabled": row.ai_grading_enabled,
+        "extraction_present": sub.extraction is not None,
+        "extraction_empty": extraction_is_empty(sub.extraction),
+        "files_count": len(sub.files or []),
+        "edited_at": (
+            sub.extraction_edited_at.isoformat()
+            if sub.extraction_edited_at else None
         ),
         "submitted_at": sub.submitted_at.isoformat() if sub.submitted_at else None,
         "confirmed_at": (
@@ -510,3 +564,28 @@ async def extraction_detail(
         # see the module docstring on why this is never returned in bulk.
         "files": sub.files or [],
     }
+
+    # This response carries a photograph of a student's own handwriting.
+    # Every other read of a student record in this codebase is logged for
+    # FERPA disclosure-tracking, and an admin reading any student's work
+    # across every school is a wider disclosure than a teacher reading
+    # their own — so it is logged the same way. See the module docstring
+    # for why the image is returned at all.
+    #
+    # LAST, after every `sub.*` attribute is materialized above. The
+    # helper swallows its own exceptions but recovers with
+    # `db.rollback()`, which expires the whole identity map
+    # (`expire_on_commit=False` does not cover a rollback) — so a failed
+    # audit insert followed by any further ORM read raises MissingGreenlet
+    # and 500s an authorized request. `admin_students._log_read` carries
+    # the full note.
+    await log_student_record_access(
+        db,
+        accessor_user_id=current_user.user_id,
+        accessor_role=current_user.role,
+        target_student_id=sub.student_id,
+        record_type="extraction_quality_drill_in",
+        record_id=sub.id,
+        request=request,
+    )
+    return payload

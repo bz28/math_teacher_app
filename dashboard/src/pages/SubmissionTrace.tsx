@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, type LLMCallsData, type SubmissionSummary } from "../lib/api";
 import {
+  api,
+  type ExtractionDetail,
+  type LLMCallsData,
+  type SubmissionSummary,
+} from "../lib/api";
+import {
+  fmtAge,
   fmtCost,
   fmtRelativeMs,
   fmtWallTime,
@@ -9,9 +15,11 @@ import {
   shortId,
   shortModel,
 } from "../lib/format";
-import { PIPELINE_BUCKETS, bucketFor } from "../lib/llm_modes";
+import { LLM_MODES, PIPELINE_BUCKETS, bucketFor } from "../lib/llm_modes";
 import MetadataChips from "../components/MetadataChips";
 import StatusPill, { type PillTone } from "../components/StatusPill";
+import ExtractionReadout from "../components/ExtractionReadout";
+import { STAGE_META, isStalled, noCallsDiagnosis } from "../lib/stages";
 import { useConfirm } from "../lib/confirm";
 
 // SubmissionTrace — the per-submission case file. Traces ONE student
@@ -64,7 +72,18 @@ function teacherAction(s: SubmissionSummary): { label: string; sub: string } {
     return { label: "Reviewed by teacher", sub: `reviewed ${formatRelativeDate(s.reviewed_at)}` };
   }
   if (s.final_score != null || s.graded_at) {
-    return { label: "Awaiting teacher review", sub: "AI grade drafted — not yet approved" };
+    // Only claim the AI drafted it when the AI actually scored it.
+    // `graded_at` is stamped by a teacher saving a breakdown by hand as
+    // well as by the grader, and hand-grading is the NORMAL path after
+    // the student rejects the read — a stage this page surfaces. The
+    // stage pill a few elements away is worded to avoid this exact
+    // claim; the two must not contradict each other.
+    return {
+      label: "Awaiting teacher review",
+      sub: s.ai_score != null
+        ? "AI grade drafted — not yet approved"
+        : "graded by hand — not yet approved",
+    };
   }
   return { label: "Not graded", sub: "no grade on record" };
 }
@@ -81,6 +100,12 @@ export default function SubmissionTrace() {
   const { submissionId } = useParams<{ submissionId: string }>();
   const confirm = useConfirm();
   const [data, setData] = useState<LLMCallsData | null>(null);
+  const [work, setWork] = useState<ExtractionDetail | null>(null);
+  // The two fetches are independent, so the calls can land first. Without
+  // this the empty-call diagnosis would fire against a `work` that is
+  // merely still in flight and report "couldn't be loaded" on a healthy
+  // page for as long as the round trip takes.
+  const [workLoaded, setWorkLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [debugState, setDebugState] = useState<Record<string, string>>({});
 
@@ -89,7 +114,24 @@ export default function SubmissionTrace() {
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setData(null);
+    setWork(null);
+    setWorkLoaded(false);
     setError(null);
+    // The student's own work: the photos, what Vision made of them, and
+    // the confirm stamps. Failure is non-fatal — the call timeline is
+    // still worth rendering without it.
+    //
+    // The realistic failure is this endpoint alone: it returns the
+    // photos as inline base64, so it can time out or trip a response
+    // size limit on a submission where the small /llm-calls fetch
+    // beside it succeeds. (NOT a deleted assignment or course — both
+    // FKs cascade, so a submission cannot outlive either.) Everything
+    // downstream must therefore treat a null `work` as "unknown",
+    // never as "absent".
+    api
+      .extractionDetail(submissionId)
+      .then((d) => { if (!cancelled) { setWork(d); setWorkLoaded(true); } })
+      .catch(() => { if (!cancelled) { setWork(null); setWorkLoaded(true); } });
     // Pull every call for this submission. 200 is comfortably above
     // even pathological pipelines (typical: 5-15 calls per submission).
     // The wide time window makes sure old debug submissions aren't
@@ -138,15 +180,27 @@ export default function SubmissionTrace() {
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
   );
 
-  // Empty state — a valid submission with no logged calls still shows its
-  // case-file header, just with an empty timeline note.
+  // Empty state — a valid submission with no logged calls. This used to
+  // be a one-line shrug, which reads as "nothing to see" when it is
+  // usually the most interesting thing on the page: there are only a few
+  // ways to get here and the stored facts tell them apart, so say which.
   if (calls.length === 0) {
+    const why = workLoaded ? noCallsDiagnosis(work, 0) : null;
     return (
       <div>
-        <CaseHeader summary={summary} submissionId={submissionId} runPassed failures={0} />
-        <p style={{ color: "var(--muted)", marginTop: 20 }}>
-          No LLM calls logged for this submission.
-        </p>
+        <CaseHeader
+          summary={summary} submissionId={submissionId}
+          runPassed failures={0} work={work} hasCalls={false}
+        />
+        <Lifecycle work={work} summary={summary} firstReadAt={null} />
+        {!workLoaded && <p className="loading">Loading the submission…</p>}
+        {why && (
+          <div className="cf-why">
+            <div className="cf-why-head">{why.headline}</div>
+            <p className="cf-why-body">{why.detail}</p>
+          </div>
+        )}
+        <StudentWork work={work} />
       </div>
     );
   }
@@ -180,9 +234,50 @@ export default function SubmissionTrace() {
   // start" timing, so grouping by stage doesn't scramble the numbering.
   const indexOf = new Map(calls.map((c, i) => [c.id, i]));
 
+  // When Vision actually read the page. `Submission` stores no
+  // extraction timestamp, but the call that produced it is right here in
+  // the timeline — so the trace can date the read exactly where the
+  // student page can only approximate from submission.
+  //
+  // The mode is INTEGRITY_EXTRACT, not IMAGE_EXTRACT. Both sit in the
+  // Vision bucket and the names invite the mix-up, but only this one
+  // reads a submission: `extract_student_work` passes
+  // LLMMode.INTEGRITY_EXTRACT with a submission_id, while
+  // `extract_problems_from_image` — IMAGE_EXTRACT — is the teacher
+  // scanning an assignment and carries no submission_id at all. Since
+  // `calls` is filtered by submission_id, matching IMAGE_EXTRACT here
+  // matches nothing, ever: the strip would report "Reader ran —" on a
+  // submission whose read is sitting in the timeline directly below it.
+  //
+  // `success` is load-bearing: a FAILED read is the single most common
+  // way to reach "AI on, photos uploaded, no extraction stored". Dating
+  // the hop from it would stamp "Reader ran <date>" over precisely the
+  // submission whose read never landed.
+  const firstRead = calls.find(
+    (c) => c.function === LLM_MODES.INTEGRITY_EXTRACT && c.success,
+  );
+  // A read was attempted and threw. The strip can then say so outright
+  // instead of the weaker "never arrived", which is what it has to fall
+  // back on when nothing was logged at all.
+  const readFailed = calls.some(
+    (c) => c.function === LLM_MODES.INTEGRITY_EXTRACT && !c.success,
+  );
+
   return (
     <div>
-      <CaseHeader summary={summary} submissionId={submissionId} runPassed={runPassed} failures={failures} />
+      <CaseHeader
+        summary={summary} submissionId={submissionId}
+        runPassed={runPassed} failures={failures} work={work} hasCalls
+      />
+
+      <Lifecycle
+        work={work}
+        summary={summary}
+        firstReadAt={firstRead?.created_at ?? null}
+        readFailed={readFailed}
+      />
+
+      <StudentWork work={work} />
 
       {truncated && (
         <p style={{ color: "var(--warn)", fontSize: 12, marginTop: -8, marginBottom: 16 }}>
@@ -361,16 +456,43 @@ export default function SubmissionTrace() {
 // ── Case-file header: identity + the decisions this run produced ──────
 
 function CaseHeader({
-  summary, submissionId, runPassed, failures,
+  summary, submissionId, runPassed, failures, work, hasCalls,
 }: {
   summary: SubmissionSummary | null;
   submissionId: string | undefined;
   runPassed: boolean;
   failures: number;
+  work: ExtractionDetail | null;
+  /** Whether any call was logged at all. With none, the run pill is a
+   *  verdict about an empty set. */
+  hasCalls: boolean;
 }) {
   const runTitle = runPassed
     ? "Every logged call in this run succeeded"
     : `${failures} call${failures === 1 ? "" : "s"} in this run failed`;
+
+  // The header pill answers "where is this submission?", NOT "did the
+  // model calls succeed?".
+  //
+  // Those are different questions and this pill kept answering the
+  // wrong one. "No call failed" is not "this submission is fine": a
+  // submission stuck six days at read-landed-never-confirmed has a
+  // perfectly healthy Vision call behind it, so a run verdict renders
+  // a green PASS as the loudest element on the page while the stage
+  // pill lower down reads AWAITING CONFIRM in red.
+  //
+  // Gating the stage on `!hasCalls` did not fix that, it just moved it:
+  // a stored extraction IMPLIES a logged call, because
+  // `extract_student_work` logs `integrity_extract` with this
+  // submission_id and that call is what produced the read. So every
+  // real awaiting_confirm submission has calls, and only a fixture that
+  // seeds an extraction without one — which production cannot reach —
+  // ever took the stage branch.
+  //
+  // So: the stage wins whenever the record is loaded. Call failures are
+  // not hidden — they get their own pill beside it, and the economics
+  // strip and the timeline both surface them.
+  const stagePill = work ? STAGE_META[work.stage] : null;
 
   return (
     <div className="case-file">
@@ -379,7 +501,12 @@ function CaseHeader({
           <span className="eyebrow">Case file</span>
           <h1 style={{ marginBottom: 4 }}>
             {summary?.student_name ? (
-              <Link to={`/llm-calls?user=${summary.student_id}`} title="View this student's LLM calls">
+              // Up to the student's whole case file, not sideways into a
+              // raw call list — this submission is one row on that page.
+              <Link
+                to={`/students/${summary.student_id}`}
+                title="Open this student's case file"
+              >
                 {summary.student_name}
               </Link>
             ) : (
@@ -406,11 +533,28 @@ function CaseHeader({
             )}
           </div>
         </div>
-        <StatusPill
-          tone={runPassed ? "ok" : "danger"}
-          label={runPassed ? "PASS" : "FAILED"}
-          title={runTitle}
-        />
+        <div className="case-head-pills">
+          {stagePill && (
+            <StatusPill
+              tone={stagePill.tone}
+              label={stagePill.label}
+              title={stagePill.blurb}
+            />
+          )}
+          {/* The run verdict, demoted beside the stage. Only rendered
+              when it carries information: a failure always does, and a
+              clean run does only when there is no stage to show. */}
+          {hasCalls && !runPassed && (
+            <StatusPill
+              tone="danger"
+              label={`${failures} CALL${failures === 1 ? "" : "S"} FAILED`}
+              title={runTitle}
+            />
+          )}
+          {hasCalls && runPassed && !stagePill && (
+            <StatusPill tone="ok" label="PASS" title={runTitle} />
+          )}
+        </div>
       </div>
 
       {summary && <DecisionStrip summary={summary} />}
@@ -465,6 +609,231 @@ function DecisionStrip({ summary }: { summary: SubmissionSummary }) {
         <div className="case-decision-sub">{action.sub}</div>
       </div>
     </div>
+  );
+}
+
+// ── Lifecycle: the hops, and the gaps between them ───────────────────
+
+/** The gap between two moments, in the coarsest unit that stays true.
+ *  The finding on this strip is nearly always a gap, not an event. */
+function gapLabel(from: string | null, to: string | null): string | null {
+  if (!from || !to) return null;
+  const ms = new Date(to).getTime() - new Date(from).getTime();
+  if (ms < 0) return null;
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 90_000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 5_400_000) return `${Math.round(ms / 60_000)}m`;
+  if (ms < 172_800_000) return `${Math.round(ms / 3_600_000)}h`;
+  return `${Math.round(ms / 86_400_000)}d`;
+}
+
+interface Hop {
+  label: string;
+  at: string | null;
+  /** Rendered open-ended and in danger tone — the run stops here and
+   *  something that WAS owed is not coming. Reserved for an actual
+   *  stall; see `absent` for the hop that was never owed at all. */
+  pending?: boolean;
+  /** Neutral, quiet: this hop never happened and was never supposed to.
+   *  Both toggles off is the case — nothing was owed, so painting it
+   *  danger red would contradict the neutral AI OFF pill and the "the
+   *  empty timeline is correct" explainer on the same screen, and would
+   *  report the teacher's setting as a broken pipeline. That inversion
+   *  is the exact confusion this whole surface exists to prevent. */
+  absent?: boolean;
+  note?: string;
+}
+
+/**
+ * Submitted → read → confirmed → graded → published, with the elapsed
+ * gap rendered between the stamps rather than beside them.
+ *
+ * The question this answers is the one the call timeline below cannot:
+ * a submission can have a perfectly healthy set of Vision calls and
+ * still be dead, because the student never pressed Confirm and every
+ * downstream step is gated on that. The strip ends in an open pending
+ * node when that is what happened, so the break is visible as a shape
+ * before anything is read.
+ */
+function Lifecycle({
+  work, summary, firstReadAt, readFailed = false,
+}: {
+  work: ExtractionDetail | null;
+  summary: SubmissionSummary | null;
+  firstReadAt: string | null;
+  /** An `integrity_extract` call was logged and failed. NOT
+   *  `image_extract` — see the note where this is computed; that mode
+   *  never carries a submission_id and matching it finds nothing. */
+  readFailed?: boolean;
+}) {
+  if (!work && !summary) return null;
+
+  const submittedAt = work?.submitted_at ?? null;
+  const readAt = firstReadAt ?? null;
+  const ruledAt = work?.confirmed_at ?? work?.flagged_at ?? null;
+  const stalled = work ? isStalled(work.stage) : false;
+
+  const hops: Hop[] = [
+    { label: "Submitted", at: submittedAt },
+  ];
+
+  if (work?.extraction_present) {
+    hops.push({
+      label: "Reader ran",
+      at: readAt,
+      note: work.extraction_empty ? "found nothing" : undefined,
+    });
+  } else if (readAt && !work) {
+    // A read ran, and the submission record didn't load — so whether it
+    // was STORED is simply unknown here. Say only what the timeline
+    // proves and stop: claiming "never stored" off a failed fetch would
+    // invent a defect, and there is no StudentWork section rendered to
+    // contradict it. Matches `noCallsDiagnosis`, which refuses to
+    // diagnose without the record for the same reason.
+    hops.push({ label: "Reader ran", at: readAt });
+  } else if (readAt) {
+    // The call succeeded and nothing was stored. `sub.extraction` is
+    // assigned and committed AFTER the Vision call returns, so a failed
+    // commit or a restart inside that window lands exactly here. Dating
+    // a completed hop from the call would put "Reader ran <date>" beside
+    // a NO READ pill and a readout saying no read is stored — three
+    // claims, one of them false. It is a stall, so it renders as one.
+    hops.push({
+      label: "Reader ran",
+      at: readAt,
+      pending: true,
+      note: "read never stored",
+    });
+  } else if (work) {
+    const owed = work.integrity_check_enabled || work.ai_grading_enabled;
+    hops.push({
+      label: "Reader ran",
+      at: null,
+      // Owed-and-missing is a stall; not-owed is just a step that never
+      // applied. Same absence, and the page must not colour them alike.
+      pending: owed,
+      absent: !owed,
+      note: readFailed
+        ? "the read failed"
+        : owed
+          ? "never arrived"
+          : "AI off for this HW",
+    });
+  }
+
+  if (work?.confirmed_at) {
+    hops.push({
+      label: "Student confirmed",
+      at: work.confirmed_at,
+      note: work.edited_at ? "after correcting the read" : undefined,
+    });
+  } else if (work?.flagged_at) {
+    hops.push({ label: "Student rejected the read", at: work.flagged_at });
+  } else if (work?.extraction_present) {
+    // The case this whole surface was built for. Labelled for what is
+    // happening rather than what didn't — "Student confirmed … never
+    // ruled" contradicts itself in the space of four words.
+    hops.push({
+      label: "Awaiting student",
+      at: null,
+      pending: true,
+      note: "never ruled on the read",
+    });
+  }
+
+  if (summary?.graded_at) {
+    hops.push({ label: "Graded", at: summary.graded_at });
+  }
+  if (summary?.reviewed_at) {
+    hops.push({ label: "Teacher reviewed", at: summary.reviewed_at });
+  }
+  if (summary?.grade_published_at) {
+    hops.push({ label: "Published", at: summary.grade_published_at });
+  }
+
+  // How long the open end has been open — the number an operator acts on.
+  //
+  // `fmtAge`, not `gapLabel`: this is an AGE, and it is rendered inches
+  // from dates produced by `formatRelativeDate`, which floors. gapLabel
+  // rounds, which is right between two fixed stamps and wrong here — a
+  // 5.6-day stall printed a hop dated "5d ago" carrying "waiting 6d",
+  // and the same stall read "waiting 5d" in the student table. Ages
+  // floor everywhere so the two can never disagree.
+  const openSince = stalled ? (ruledAt ?? readAt ?? submittedAt) : null;
+  const waitingFor = openSince ? fmtAge(openSince) : null;
+
+  return (
+    <ol className="cf-life" aria-label="Submission lifecycle">
+      {hops.map((h, i) => {
+        const gap = i === 0 ? null : gapLabel(hops[i - 1].at, h.at);
+        // "Pending" means the run STOPS here. A hop with something after
+        // it plainly didn't stop anything — a teacher hand-grading an
+        // unconfirmed submission leaves "Awaiting student" mid-strip
+        // with "Graded" beyond it — so it renders as skipped rather
+        // than as an open-ended stall the operator should chase.
+        const stalled = h.pending && i === hops.length - 1;
+        const quiet = h.absent || (h.pending && !stalled);
+        return (
+          <li
+            key={h.label}
+            className={`cf-life-hop${stalled ? " cf-life-hop-pending" : ""}${
+              quiet ? " cf-life-hop-absent" : ""
+            }`}
+          >
+            {i > 0 && (
+              <span className="cf-life-gap" aria-hidden="true">
+                {gap ?? ""}
+              </span>
+            )}
+            <span className="cf-life-dot" aria-hidden="true" />
+            <span className="cf-life-label">{h.label}</span>
+            <span className="cf-life-at">
+              {h.at ? (
+                <span title={h.at}>{formatRelativeDate(h.at)}</span>
+              ) : stalled && waitingFor ? (
+                // Only a genuine stall is aged. A skipped or never-owed
+                // hop has nothing to wait for, so "waiting 6d" there
+                // would invent an obligation that never existed.
+                `waiting ${waitingFor}`
+              ) : (
+                "—"
+              )}
+            </span>
+            {h.note && <span className="cf-life-note">{h.note}</span>}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// ── The student's own work, beside what the reader made of it ────────
+
+function StudentWork({ work }: { work: ExtractionDetail | null }) {
+  if (!work) return null;
+  const corrected = work.rows.filter((r) => r.changed).length;
+  const meta = STAGE_META[work.stage];
+  return (
+    <section className="cf-work">
+      <h3 className="cf-work-head">
+        Student work
+        <span className="cf-work-sub">
+          {work.files_count === 1 ? "1 page" : `${work.files_count} pages`}
+          {work.rows.length > 0 && (
+            <>
+              {" · "}
+              {corrected === 0
+                ? `${work.rows.length} rows read, none corrected`
+                : `${corrected} of ${work.rows.length} rows corrected by the student`}
+            </>
+          )}
+        </span>
+        <span className="cf-work-stage">
+          <StatusPill tone={meta.tone} label={meta.label} title={meta.blurb} />
+        </span>
+      </h3>
+      <ExtractionReadout detail={work} />
+    </section>
   );
 }
 

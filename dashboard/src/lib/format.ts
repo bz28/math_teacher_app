@@ -16,6 +16,30 @@ export function formatRelativeDate(dateStr: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+/**
+ * How long ago `since` was, floored on the same boundaries
+ * `formatRelativeDate` floors on.
+ *
+ * The flooring is the point. An age and a date derived from the SAME
+ * instant were being produced by two functions that disagreed —
+ * `Math.round` on one, `Math.floor` on the other — so a 5.6-day stall
+ * rendered as a hop dated "5d ago" carrying the label "waiting 6d",
+ * contradicting itself on one line, and read "waiting 5d" in the
+ * student table but "waiting 6d" one click later on the trace.
+ *
+ * Returns null for a future or unparseable instant: there is no age to
+ * report, and inventing "0m" would read as a fact.
+ */
+export function fmtAge(since: string): string | null {
+  const ms = Date.now() - new Date(since).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const min = Math.floor(ms / 60_000);
+  if (min < 60) return `${Math.max(min, 1)}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  return `${Math.floor(hr / 24)}d`;
+}
+
 // Cost formatter — tiered precision so a $400/mo school bill and a
 // $0.0008 per-submission unit cost both render legibly. Single source
 // of truth so the same value reads the same on every page. Exactly-zero
@@ -36,23 +60,37 @@ export function fmtPercent(n: number, digits = 1): string {
 // Wall-time formatter — handles seconds, minutes, hours so a multi-
 // hour pathological flight-recorder run reads as "3h 12m" not
 // "192m 0s".
+// Rounding the remainder independently of the quotient could carry it
+// to a full unit and print it anyway: 86_390_000ms rendered "23h 60m",
+// and 359_600ms rendered "5m 60s". Round to the smaller unit FIRST,
+// then divide, so the carry lands where it belongs.
 export function fmtWallTime(ms: number): string {
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  if (ms < 3_600_000) {
-    const m = Math.floor(ms / 60_000);
-    const s = Math.round((ms % 60_000) / 1000);
-    return `${m}m ${s}s`;
-  }
-  const h = Math.floor(ms / 3_600_000);
-  const m = Math.round((ms % 3_600_000) / 60_000);
-  return `${h}h ${m}m`;
+  // Tier on the ROUNDED value, not the raw one. Choosing the tier first
+  // let the carry escape upward: 59_999ms rounded to "60.0s" and
+  // 3_599_600ms to "60m 0s" — the same defect as "23h 60m", just one
+  // tier further along each time.
+  if (ms < 59_950) return `${(ms / 1000).toFixed(1)}s`;
+  const totalS = Math.round(ms / 1000);
+  if (totalS < 3600) return `${Math.floor(totalS / 60)}m ${totalS % 60}s`;
+  const totalM = Math.round(ms / 60_000);
+  return `${Math.floor(totalM / 60)}h ${totalM % 60}m`;
 }
 
-// Sub-second elapsed offset — used inside the flight recorder for
-// "+offset from start" timing on each call row.
+// Elapsed offset from the first call — the "+X from start" on each row.
+//
+// This was sub-second only, which was right when a trace was one
+// pipeline burst. It isn't any more: grading is deliberately deferred to
+// the assignment's due date by the durable queue, so the gap between the
+// Vision read and the grading call is routinely hours or days. A
+// day-long offset rendered as "+86389.00s from start" — technically
+// true, unreadable, and the number an operator most wants to grasp at a
+// glance on this page.
 export function fmtRelativeMs(ms: number): string {
   if (ms < 1000) return `${ms.toFixed(0)}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
+  if (ms < 90_000) return `${(ms / 1000).toFixed(2)}s`;
+  if (ms < 5_400_000) return `${Math.round(ms / 60_000)}m`;
+  if (ms < 172_800_000) return `${Math.round(ms / 3_600_000)}h`;
+  return `${Math.round(ms / 86_400_000)}d`;
 }
 
 // First UUID segment as a compact stable handle — enough to scan

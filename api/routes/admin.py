@@ -19,6 +19,7 @@ from api.routes.admin_overview import router as overview_router
 from api.routes.admin_quality import router as quality_router
 from api.routes.admin_school_overview import router as school_overview_router
 from api.routes.admin_schools import router as schools_router
+from api.routes.admin_students import router as students_router
 from api.routes.admin_users import router as users_router
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -36,4 +37,5 @@ router.include_router(overview_router)
 router.include_router(quality_router)
 router.include_router(school_overview_router)
 router.include_router(schools_router)
+router.include_router(students_router)
 router.include_router(users_router)

@@ -20,6 +20,7 @@ import Schools from "./pages/Schools";
 import SchoolDetail from "./pages/SchoolDetail";
 import IndependentStudents from "./pages/IndependentStudents";
 import IndependentTeachers from "./pages/IndependentTeachers";
+import StudentDetail from "./pages/StudentDetail";
 import TeacherDetail from "./pages/TeacherDetail";
 import AuditLogs from "./pages/AuditLogs";
 import AIQuality from "./pages/AIQuality";
@@ -57,6 +58,10 @@ export default function App() {
             path="/students/independent"
             element={<IndependentStudents />}
           />
+          {/* /students/independent still resolves to the list: React
+              Router ranks by specificity, so its literal segment beats
+              this param regardless of declaration order. */}
+          <Route path="/students/:studentId" element={<StudentDetail />} />
           <Route
             path="/teachers/independent"
             element={<IndependentTeachers />}

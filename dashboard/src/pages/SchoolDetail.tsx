@@ -896,7 +896,12 @@ const studentCols = (
     render: (s) => (
       <div style={{ minWidth: 0 }}>
         <div style={{ color: "var(--ink)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis" }}>
-          {s.name || "—"}
+          {/* The name links rather than the row: this table already
+              carries per-row action buttons, and a row-level click
+              target would swallow them. */}
+          <Link to={`/students/${s.id}`} className="case-meta-link" title="Open this student's case file">
+            {s.name || "—"}
+          </Link>
           {!s.is_active && (
             <span style={{ marginLeft: 6, verticalAlign: "middle" }}>
               <StatusPill tone="neutral" label="DEACTIVATED" title="Access revoked — nothing deleted" />

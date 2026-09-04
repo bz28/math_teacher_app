@@ -595,6 +595,17 @@ h3 {
 
 .case-file { margin-bottom: 24px; }
 
+/* Stage first, then the run verdict beside it when it adds something.
+   `flex: none` keeps the pills at full width and lets the header's text
+   column absorb the squeeze instead — the h1 wraps and the meta line
+   ellipses, so a truncated pill is never the thing that gives. */
+.case-head-pills {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: none;
+}
+
 .case-head {
   display: flex;
   justify-content: space-between;
@@ -3193,4 +3204,269 @@ table.dt tr:last-child td { border-bottom: none; }
   .xq-detail { grid-template-columns: 1fr; }
   .xq-shot { position: static; }
   .xq-row-pair { grid-template-columns: 1fr; gap: 8px; }
+}
+
+/* ── Student case file ────────────────────────────────────────────────
+   Per-student drill-in (/students/:id) and the lifecycle strip the
+   submission trace reuses.
+
+   The funnel is the one place this page raises its voice, and it does
+   it for the stalled stages rather than the settled ones: the page
+   exists to find work that stopped moving, so colouring "published"
+   and leaving "awaiting confirm" grey would weight it exactly backwards.
+   Everything else stays in the console's quiet register — hairline
+   cells, no card chrome, no radius.
+
+   Position encodes the sequence, so the cells carry no step numbers.
+   The count stays full-size and legible at any scale; the underbar
+   carries the shape, which is what a proportional-width bar would have
+   destroyed at seven segments over a handful of submissions. */
+
+.sd-dim { color: var(--muted); }
+
+.section-head {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--ink);
+  letter-spacing: -0.2px;
+  margin: 30px 0 12px;
+  display: flex;
+  align-items: baseline;
+}
+
+.funnel-strip {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.funnel-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 12px 12px;
+  border: none;
+  border-right: 1px solid var(--rule);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: background 120ms ease;
+}
+.funnel-cell:last-child { border-right: none; }
+.funnel-cell:hover:not(:disabled) { background: var(--paper-2); }
+.funnel-cell:disabled { cursor: default; opacity: 0.45; }
+.funnel-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.funnel-cell-active { background: var(--paper-2); }
+.funnel-cell-active .funnel-count { color: var(--accent); }
+
+.funnel-count {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--ink);
+}
+.funnel-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  line-height: 1.3;
+}
+.funnel-bar {
+  display: block;
+  height: 3px;
+  background: var(--rule);
+  margin-top: 2px;
+}
+.funnel-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--muted-2);
+  transition: width 200ms ease;
+}
+
+/* Work that stopped moving. The only place on the page that shouts. */
+.funnel-cell-stalled .funnel-count { color: var(--danger); }
+.funnel-cell-stalled .funnel-label { color: var(--danger); }
+.funnel-cell-stalled .funnel-bar-fill { background: var(--danger); }
+
+/* Seven cells never divide evenly, so the row/column rules are written
+   per breakpoint rather than inherited: at 4-up the first four end a
+   row, at 2-up every even cell does. Carrying the 4-up rules into the
+   2-up block left the third row unseparated and cell 7 with a dangling
+   right border. */
+@media (max-width: 900px) {
+  .funnel-strip { grid-template-columns: repeat(4, 1fr); }
+  .funnel-cell:nth-child(4n) { border-right: none; }
+  .funnel-cell:nth-child(-n + 4) { border-bottom: 1px solid var(--rule); }
+}
+@media (max-width: 560px) {
+  .funnel-strip { grid-template-columns: repeat(2, 1fr); }
+  .funnel-cell { border-right: 1px solid var(--rule); }
+  .funnel-cell:nth-child(2n) { border-right: none; }
+  /* 7 cells at 2-up is (1,2)(3,4)(5,6)(7), so every cell above the last
+     row — 1 through 6 — needs a rule. `-n + 5` stopped under cell 5 and
+     left the separator running across only the left half of the strip,
+     directly beneath the two danger-toned cells this page exists to
+     draw the eye to. */
+  .funnel-cell:nth-child(-n + 6) { border-bottom: 1px solid var(--rule); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .funnel-cell,
+  .funnel-bar-fill { transition: none; }
+}
+
+/* ── Submission case file: lifecycle + student work ───────────────────
+   The strip renders the GAP between stamps, not just the stamps: the
+   finding is nearly always "six days between the read and nothing",
+   and a bare row of timestamps makes you do that subtraction yourself.
+
+   A hop with no stamp and nothing coming renders open-ended in the
+   danger tone — a submission can have a flawless set of Vision calls
+   and still be dead because the student never pressed Confirm, and that
+   break should be visible as a shape before a word is read. */
+
+.cf-life {
+  list-style: none;
+  margin: 0 0 24px;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 4px;
+}
+
+.cf-life-hop {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.cf-life-gap {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted-2);
+  padding: 0 10px 0 6px;
+  position: relative;
+}
+/* The connector, drawn under the gap label so the elapsed time sits ON
+   the line between two hops rather than beside it. */
+.cf-life-gap::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.cf-life-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--muted-2);
+  flex: none;
+  transform: translateY(-1px);
+}
+.cf-life-label {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.cf-life-at {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.cf-life-note {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  background: var(--paper-2);
+  padding: 1px 6px;
+}
+
+.cf-life-hop-pending .cf-life-dot {
+  background: none;
+  border: 1px solid var(--danger);
+}
+.cf-life-hop-pending .cf-life-label,
+.cf-life-hop-pending .cf-life-at { color: var(--danger); }
+.cf-life-hop-pending .cf-life-note {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+/* Never happened, and was never owed — an assignment with the AI
+   switched off, or a hop the pipeline stepped past. Hollow like a
+   pending hop so the break in the run is still visible, but quiet:
+   painting it danger red would report a teacher's setting as a broken
+   pipeline, contradicting the neutral AI OFF pill and the "the empty
+   timeline is correct" note on the same screen. */
+.cf-life-hop-absent .cf-life-dot {
+  background: none;
+  border: 1px solid var(--muted-2);
+}
+/* --muted, not --muted-2: these run at 11–12.5px and --muted-2 is
+   AA-Large only (its own token comment says 18px+ or labels). The dot
+   above is decoration and may stay lighter. */
+.cf-life-hop-absent .cf-life-label,
+.cf-life-hop-absent .cf-life-at { color: var(--muted); }
+
+/* Why an empty timeline is empty. */
+.cf-why {
+  border-left: 2px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 14px 18px;
+  margin-bottom: 24px;
+}
+.cf-why-head {
+  font-size: 15px;
+  color: var(--ink);
+  margin-bottom: 5px;
+}
+.cf-why-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  max-width: 68ch;
+}
+
+.cf-work { margin-bottom: 28px; }
+.cf-work-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--ink);
+  font-weight: 400;
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule);
+}
+.cf-work-sub {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--muted);
+}
+.cf-work-stage { margin-left: auto; }
+
+@media (max-width: 640px) {
+  .cf-life-gap { padding: 0 6px; }
+  .cf-work-stage { margin-left: 0; }
 }

@@ -28,6 +28,7 @@ export const LLM_MODES = {
   INTEGRITY_EXTRACT: "integrity_extract",
   INTEGRITY_AGENT: "integrity_agent",
   INTEGRITY_ANSWER_EQUIVALENCE: "integrity_answer_equivalence",
+  INTEGRITY_DIAGNOSE_WRONG: "integrity_diagnose_wrong",
   BANK_EXTRACT: "bank_extract",
   AI_GRADING: "ai_grading",
 } as const;
@@ -53,6 +54,10 @@ export const PIPELINE_BUCKETS: { label: string; functions: string[] }[] = [
     functions: [
       LLM_MODES.INTEGRITY_AGENT,
       LLM_MODES.INTEGRITY_ANSWER_EQUIVALENCE,
+      // Logged WITH a submission_id, so it lands on the trace timeline;
+      // missing from this mirror it bucketed as "Other" and rendered
+      // grey beside the integrity calls it belongs with.
+      LLM_MODES.INTEGRITY_DIAGNOSE_WRONG,
     ],
   },
   { label: "Grading", functions: [LLM_MODES.AI_GRADING] },

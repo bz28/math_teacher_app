@@ -11,6 +11,7 @@ import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
 import ErrorState from "../components/ErrorState";
 import { EditorialModal } from "../components/EditorialModal";
+import ExtractionReadout from "../components/ExtractionReadout";
 import { Pagination } from "../components/Pagination";
 import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import { MetaChip } from "../components/MetaChip";
@@ -64,58 +65,6 @@ function rateTone(rate: number): "ok" | "warn" | "danger" {
   return "danger";
 }
 
-/** One row of the read, AI beside student. The diff IS the diagnostic —
- *  a count tells you the reader is struggling, only this says how. */
-function ReadRow({ row }: { row: ExtractionDetail["rows"][number] }) {
-  const changed = row.changed;
-  return (
-    <li className="xq-row" style={{ borderLeftColor: changed ? "var(--warn)" : "var(--rule)" }}>
-      <div className="xq-row-key">
-        {row.unattributed
-          ? "unplaced row"
-          : row.kind === "final_answer"
-            ? `P${row.problem_position} answer`
-            : `P${row.problem_position} · step ${row.step_num}`}
-        {row.unattributed && (
-          // Vision couldn't tie this row to a problem, so the student was
-          // never shown it to correct. Often the most interesting misread
-          // on the page — dropping it made the list's count disagree with
-          // this modal.
-          <span className="xq-unplaced" title="The reader could not tell which problem this belongs to, so the student was never asked about it">
-            not shown to student
-          </span>
-        )}
-      </div>
-      <div className="xq-row-pair">
-        <div className="xq-read">
-          <span className="xq-read-label">AI read</span>
-          <p>{row.ai_read ?? <em>nothing read</em>}</p>
-        </div>
-        {changed ? (
-          <div className="xq-read xq-read-fixed">
-            <span className="xq-read-label">Student said</span>
-            {row.deleted ? (
-              // A cleared row is a DELETION — the overlay drops it. Showing
-              // an empty string here would read as "no change" on the one
-              // screen built to surface misreads.
-              <p><em>row deleted — nothing was written here</em></p>
-            ) : (
-              <p>{row.student_said}</p>
-            )}
-          </div>
-        ) : (
-          <div className="xq-read xq-read-agree">
-            <span className="xq-read-label">Student said</span>
-            <p className="xq-agree">
-              {row.unattributed ? "— never asked —" : "— same —"}
-            </p>
-          </div>
-        )}
-      </div>
-    </li>
-  );
-}
-
 function DetailModal({ id, onClose }: { id: string; onClose: () => void }) {
   const [detail, setDetail] = useState<ExtractionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -148,35 +97,7 @@ function DetailModal({ id, onClose }: { id: string; onClose: () => void }) {
       <div style={{ padding: "18px 30px 30px" }}>
         {error && <p className="empty-mini">{error}</p>}
         {!detail && !error && <p className="loading">Loading…</p>}
-        {detail && (
-          <div className="xq-detail">
-            {/* The strokes. You cannot diagnose a misread without seeing
-                what was actually on the page. */}
-            <div className="xq-shot">
-              {detail.files.length === 0 ? (
-                <div className="xq-shot-empty">No image stored for this submission.</div>
-              ) : (
-                detail.files.map((f, i) => (
-                  <img
-                    key={i}
-                    src={`data:${f.media_type};base64,${f.data}`}
-                    alt={`Submitted work, page ${i + 1}`}
-                    loading="lazy"
-                  />
-                ))
-              )}
-            </div>
-            <div>
-              {detail.rows.length === 0 ? (
-                <p className="empty-mini">Nothing was extracted from this submission.</p>
-              ) : (
-                <ol className="xq-rows">
-                  {detail.rows.map((r) => <ReadRow key={r.key} row={r} />)}
-                </ol>
-              )}
-            </div>
-          </div>
-        )}
+        {detail && <ExtractionReadout detail={detail} />}
       </div>
     </EditorialModal>
   );
