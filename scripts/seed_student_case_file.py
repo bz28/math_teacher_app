@@ -272,15 +272,33 @@ async def seed() -> dict[str, str]:
         # carry a finished job too; a published submission with no
         # grading job on record is not a state the drain can leave
         # behind.
-        for target, job_status in (
-            (repaired, "queued"), (done, "done"), (graded, "done"),
+        # A finished job's schedule must PRECEDE its completion: the
+        # drain only claims rows whose `scheduled_for` has passed, and
+        # nothing reschedules a done job afterwards. Binding all of them
+        # to one due date put the two finished jobs' completion 6-10
+        # days before the moment they were scheduled to run — so each
+        # finished job is scheduled from its own submission's timeline
+        # instead, and carries the `started_at` / `finished_at` the
+        # claim and finish steps always stamp.
+        for target, job_status, graded_days in (
+            (repaired, "queued", None), (done, "done", 11), (graded, "done", 7),
         ):
+            done_at = None if graded_days is None else submitted(graded_days)
             s.add(GradingJob(
                 submission_id=target.id,
                 assignment_id=target.assignment_id,
                 status=job_status,
-                scheduled_for=DUE_AT,
-                attempts=1 if job_status == "done" else 0,
+                # Queued work waits for the assignment's due date; a
+                # finished job was scheduled before it ran.
+                scheduled_for=(
+                    DUE_AT if done_at is None
+                    else done_at - timedelta(minutes=5)
+                ),
+                attempts=0 if done_at is None else 1,
+                started_at=(
+                    None if done_at is None else done_at - timedelta(seconds=12)
+                ),
+                finished_at=done_at,
             ))
 
         # The read that produced each stored extraction.

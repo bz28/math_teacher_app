@@ -294,6 +294,13 @@ async def test_submissions_name_the_stage_and_how_long_it_has_sat(
     assert by_stage["confirmed"]["grading_job"]["status"] == "queued"
     assert by_stage["awaiting_confirm"]["grading_job"] is None
 
+    # Whether a grade was ever OWED. Without this the console cannot
+    # tell a confirmed submission whose HW has AI grading switched off
+    # (healthy — the teacher marks it by hand) from one whose enqueue
+    # was lost (a defect), because both have `grading_job: null`.
+    assert by_stage["extraction_off"]["ai_grading_enabled"] is False
+    assert by_stage["confirmed"]["ai_grading_enabled"] is True
+
 
 @pytest.mark.asyncio
 async def test_empty_read_is_flagged_as_empty_not_as_a_clean_read(

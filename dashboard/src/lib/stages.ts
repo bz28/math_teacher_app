@@ -59,7 +59,12 @@ export const STAGE_META: Record<SubmissionStage, StageMeta> = {
   confirmed: {
     label: "CONFIRMED",
     tone: "info",
-    blurb: "student signed off — grading queued",
+    // Does NOT promise a queued grade. Confirming enqueues one only
+    // when AI grading is on for the HW and the read was legible — an
+    // unreadable read is deliberately never queued — so asserting
+    // "grading queued" here is false for two reachable states. The row
+    // says which one applies; this only says what the student did.
+    blurb: "student signed off on the read",
   },
   awaiting_confirm: {
     label: "AWAITING CONFIRM",

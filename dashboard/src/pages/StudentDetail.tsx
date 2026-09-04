@@ -139,16 +139,26 @@ export default function StudentDetail() {
         const meta = STAGE_META[r.stage];
         const w = waited(r.stage_since);
         // A confirmed submission with no grade is the question this
-        // column has to answer, and the durable queue is the answer:
-        // owed-and-scheduled is healthy, `failed` is not. Without this
-        // the row said CONFIRMED and stopped, and the endpoint's
-        // `grading_job` was returned but rendered nowhere.
+        // column has to answer. The durable queue answers it when a job
+        // exists — but the absence of a job is itself an answer, and an
+        // earlier version rendered nothing at all in that case, so the
+        // row said CONFIRMED and stopped while the pill's tooltip
+        // promised "grading queued". Two reachable states have no job
+        // and no grade coming: AI grading switched off for the HW, and
+        // an unreadable read, which `confirm-extraction` deliberately
+        // never queues. Both now say so.
         const job = r.grading_job;
-        const jobNote =
-          r.stage !== "confirmed" || !job
-            ? null
-            : job.status === "failed"
-              ? { text: `grading failed after ${job.attempts} tries`, bad: true }
+        const jobNote = r.stage !== "confirmed" ? null : !job
+          ? r.ai_grading_status === "skipped_unreadable"
+            ? { text: "unreadable — no grade coming", bad: true }
+            : !r.ai_grading_enabled
+              ? { text: "AI grading off — teacher grades by hand", bad: false }
+              : { text: "confirmed but never queued", bad: true }
+          : job.status === "failed"
+            ? { text: `grading failed after ${job.attempts} tries`, bad: true }
+            : job.status === "skipped"
+              // Terminal with no grade, and deliberately not "done".
+              ? { text: "grading skipped — no grade coming", bad: true }
               : job.status === "queued"
                 ? {
                   text: job.scheduled_for

@@ -505,6 +505,11 @@ async def student_submissions(
             "final_score": r.final_score,
             "overridden": overridden,
             "ai_grading_status": r.ai_grading_status,
+            # Whether a grade was ever owed. A confirmed submission with
+            # no grading job is healthy when AI grading is off for the
+            # HW and a lost enqueue when it isn't — the row cannot tell
+            # those apart without this.
+            "ai_grading_enabled": r.ai_grading_enabled,
             "reviewed_at": (
                 r.reviewed_at.isoformat() if r.reviewed_at else None
             ),

@@ -1568,6 +1568,10 @@ export interface StudentSubmissionRow {
   final_score: number | null;
   overridden: boolean;
   ai_grading_status: string | null;
+  /** Whether a grade was ever owed for this homework. A confirmed
+   *  submission with no grading job is healthy when this is false and a
+   *  lost enqueue when it is true. */
+  ai_grading_enabled: boolean;
   reviewed_at: string | null;
   graded_at: string | null;
   grade_published_at: string | null;
