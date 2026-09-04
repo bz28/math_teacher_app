@@ -9804,6 +9804,80 @@
         ]
       }
     },
+    "/v1/admin/users/{teacher_id}/assignments": {
+      "get": {
+        "description": "Everything this teacher has assigned, newest first.\n\nThe activity log only shows the window you happen to be reading, so\nit answers \"what did she do on Tuesday\" and never \"what has she\nassigned all term\" \u2014 including the draft she started and abandoned,\nwhich is often the more interesting row.\n\n`problem_count` is read from `content` rather than by hydrating each\nrow: hydration is a query per assignment, and a count that is off by\na hard-deleted reference is not worth N queries on a list whose job\nis to get you to the detail page. Practice sets carry no\n`problem_ids` at all, so they report null rather than a wrong zero \u2014\nthe detail page resolves them properly.",
+        "operationId": "teacher_assignments_v1_admin_users__teacher_id__assignments_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "teacher_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Teacher Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Teacher Assignments V1 Admin Users  Teacher Id  Assignments Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Teacher Assignments",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/users/{teacher_id}/students": {
       "get": {
         "description": "Roster of every student enrolled in any of `teacher_id`'s sections.\n\nDrives the per-teacher drill-in on the dashboard (both indie and\ninstitutional). Same row shape as `/admin/users` so the frontend\nreuses the existing row component \u2014 but slimmed to the columns\nthe roster actually needs (no spend / classroom / daily-usage\naggregates, since those don't make sense per-student in this\nview).\n\nReturns 404 if the user doesn't exist or isn't a teacher \u2014 the\npage only makes sense for teachers, and a typo'd UUID shouldn't\nsilently return an empty list.",
