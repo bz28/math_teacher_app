@@ -21,6 +21,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import select, text
+from sqlalchemy.exc import StatementError
 
 from api.core import extraction_queue
 from api.core.extraction_queue import drain, enqueue_submission
@@ -474,3 +475,72 @@ async def test_the_extraction_call_raises_so_the_queue_can_see_it(
         pytest.raises(TypeError, match="temperature"),
     ):
         await run_extraction_for_submission(sid)
+
+
+@pytest.mark.asyncio
+async def test_a_database_failure_does_not_write_student_work_into_last_error(
+    world: dict[str, Any],
+) -> None:
+    """`last_error` is durable and logged, and must never quote homework.
+
+    The extraction is persisted as `submissions.extraction = <the
+    student's transcribed work>`. If that flush fails — statement
+    timeout, deadlock, connection reset — SQLAlchemy raises a
+    `StatementError` whose `__str__` appends the statement AND its bound
+    parameters, one of which IS the transcription. Formatting that
+    exception naively puts a student's handwriting into a database
+    column and the log stream, on a product sold to districts under the
+    same ids-counts-and-codes rule `activity_log` follows.
+
+    A cold review of this PR explicitly cleared this path as safe. It
+    was right that the Vision-side errors carry no content and wrong
+    about the database-side one, which is the likelier failure.
+    """
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+
+    secret = "STUDENT-HANDWRITING-x-equals-42"
+    boom = StatementError(
+        message="canceling statement due to statement timeout",
+        statement="UPDATE submissions SET extraction=%(extraction)s WHERE id=%(id)s",
+        params={"extraction": {"steps": [{"latex": secret}]}, "id": str(sid)},
+        orig=Exception("canceling statement due to statement timeout"),
+    )
+    assert secret in str(boom), "the exception must really carry the work"
+
+    with patch(_TARGET, new_callable=AsyncMock, side_effect=boom):
+        await drain()
+
+    stored = (await _job(sid)).last_error or ""
+    assert secret not in stored, f"student work reached last_error: {stored}"
+    assert "parameters" not in stored, f"bound parameters leaked: {stored}"
+    assert "UPDATE submissions" not in stored, f"the statement leaked: {stored}"
+
+    # Still useful to an operator: the wrapper class and the server's own
+    # reason survive, which is what they act on.
+    assert "StatementError" in stored
+    assert "statement timeout" in stored
+
+
+@pytest.mark.asyncio
+async def test_a_non_database_failure_keeps_its_full_message(
+    world: dict[str, Any],
+) -> None:
+    """The sanitiser must not blunt the error it was written to preserve.
+
+    The 2026-09-03 outage was a `TypeError` from the SDK, and the whole
+    point of the row is that its text survives. Only SQLAlchemy errors
+    carry bound parameters, so only they are trimmed.
+    """
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+
+    boom = TypeError(
+        "AsyncMessages.create() got an unexpected keyword argument 'temperature'"
+    )
+    with patch(_TARGET, new_callable=AsyncMock, side_effect=boom):
+        await drain()
+
+    stored = (await _job(sid)).last_error or ""
+    assert "TypeError" in stored
+    assert "temperature" in stored

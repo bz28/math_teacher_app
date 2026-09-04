@@ -42,6 +42,7 @@ from typing import Any, cast
 
 from sqlalchemy import CursorResult, case, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_session_factory
@@ -75,6 +76,48 @@ _SKIPPED = "skipped"
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _safe_error(exc: BaseException) -> str:
+    """Describe a failure without quoting the student's homework.
+
+    `last_error` is a durable column and this text is also logged, so
+    whatever lands here outlives the incident. The obvious
+    `f"{type(exc).__name__}: {exc}"` is unsafe for exactly one family of
+    exceptions, and it is the family this code path is most likely to
+    raise.
+
+    The extraction is persisted with `submissions.extraction = <the
+    transcribed work>`. If anything goes wrong flushing that — a
+    statement timeout, a deadlock, a connection reset mid-statement —
+    SQLAlchemy raises a `StatementError`, and its `__str__` appends the
+    statement AND its bound parameters. One of those parameters is the
+    student's transcribed handwriting, so the naive format writes it
+    into a database column and into the log stream:
+
+        StatementError: statement timed out
+        [SQL: UPDATE submissions SET extraction=%(extraction)s ...]
+        [parameters: {'extraction': {'steps': [{'latex': '...'}]}}]
+
+    We sell to districts and the rule in `activity_log` is ids, counts
+    and codes — never student content. The same rule has to hold here.
+
+    So for any SQLAlchemy error we keep the wrapper's class name and the
+    DRIVER's message (`.orig`), which is the server's own text — "
+    canceling statement due to statement timeout", "deadlock detected" —
+    and never the statement or its parameters. That is the part an
+    operator acts on anyway; the SQL is recoverable from Postgres's own
+    logs if it is ever genuinely needed.
+
+    Everything else is formatted in full. Those are our own raises and
+    the Anthropic SDK's, and none carry transcribed work: the Vision
+    parse errors report a position or a `stop_reason`, not content.
+    """
+    if isinstance(exc, SQLAlchemyError):
+        orig = getattr(exc, "orig", None)
+        detail = str(orig) if orig is not None else "no driver detail"
+        return f"{type(exc).__name__}: {detail}"[:2000]
+    return f"{type(exc).__name__}: {exc}"[:2000]
 
 
 async def enqueue_submission(
@@ -343,11 +386,18 @@ async def _run_job(job: ExtractionJob) -> str:
         await _finish(
             job.id,
             status=STATUS_FAILED if exhausted else STATUS_QUEUED,
-            error=f"{type(exc).__name__}: {exc}"[:2000],
+            error=_safe_error(exc),
         )
-        logger.exception(
-            "extraction job %s failed (attempt %d/%d) for submission %s",
+        # NOT `logger.exception` for a database error: the traceback it
+        # prints ends in the same `StatementError` string, so it would
+        # leak into the log stream exactly what `_safe_error` just kept
+        # out of the column. Everything else keeps its traceback, which
+        # is what makes an unfamiliar failure diagnosable.
+        logger.error(
+            "extraction job %s failed (attempt %d/%d) for submission %s: %s",
             job.id, job.attempts, MAX_ATTEMPTS, job.submission_id,
+            _safe_error(exc),
+            exc_info=not isinstance(exc, SQLAlchemyError),
         )
         return _FAILED
 
