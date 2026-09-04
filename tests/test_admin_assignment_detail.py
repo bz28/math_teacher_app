@@ -538,3 +538,36 @@ async def test_a_non_string_bank_id_is_not_reported_missing(
     assert len(problems) == 1, problems
     assert problems[0]["missing"] is False
     assert problems[0]["question"] == "2x + 3 = 11"
+
+
+async def test_a_structured_bank_id_does_not_500_the_page(
+    client: AsyncClient,
+) -> None:
+    """`edited_ids` is a set, so `x in edited_ids` raises `unhashable
+    type` for a dict or list id — a 500 on the admin page rather than a
+    problem rendered without a badge.
+
+    `content` reaches us unvalidated, and this endpoint is read-only
+    tooling: a malformed row should degrade to showing what it can, never
+    take the page down.
+    """
+    w = await _world()
+    a_id = await _add_assignment(w, type_="homework", content={"problem_ids": []})
+    async with get_session_factory()() as s:
+        await s.execute(text("UPDATE assignments SET content = :c WHERE id = :i"), {
+            "c": (
+                '{"problems": ['
+                '{"bank_item_id": {"nested": 1}, "position": 1, "question": "A"},'
+                '{"bank_item_id": ["a", "list"], "position": 2, "question": "B"}'
+                ']}'
+            ),
+            "i": str(a_id),
+        })
+        await s.commit()
+
+    r = await client.get(f"/v1/admin/assignments/{a_id}", headers=_auth(w["token"]))
+    assert r.status_code == 200, r.text
+    problems = r.json()["problems"]
+    assert [p["question"] for p in problems] == ["A", "B"]
+    # No bank item resolves, so no badge is claimed for either.
+    assert [p["provenance"] for p in problems] == [None, None]

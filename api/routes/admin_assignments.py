@@ -194,7 +194,15 @@ async def get_assignment(
                 "bank_item_id": bank_item_id,
                 "question": p.get("question"),
                 "final_answer": p.get("final_answer"),
-                "provenance": _provenance(item, bank_item_id in edited_ids),
+                # The isinstance guard is not redundant with the one on
+                # `items_by_id` above: `edited_ids` is a set, and a
+                # snapshot carrying a dict or list id — `content` is
+                # unvalidated — makes `in` raise `unhashable type`, which
+                # is a 500 on the admin page rather than a missing badge.
+                "provenance": _provenance(
+                    item,
+                    isinstance(bank_item_id, str) and bank_item_id in edited_ids,
+                ),
                 "missing": False,
             }
         )
