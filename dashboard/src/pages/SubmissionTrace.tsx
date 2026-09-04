@@ -71,7 +71,18 @@ function teacherAction(s: SubmissionSummary): { label: string; sub: string } {
     return { label: "Reviewed by teacher", sub: `reviewed ${formatRelativeDate(s.reviewed_at)}` };
   }
   if (s.final_score != null || s.graded_at) {
-    return { label: "Awaiting teacher review", sub: "AI grade drafted — not yet approved" };
+    // Only claim the AI drafted it when the AI actually scored it.
+    // `graded_at` is stamped by a teacher saving a breakdown by hand as
+    // well as by the grader, and hand-grading is the NORMAL path after
+    // the student rejects the read — a stage this page surfaces. The
+    // stage pill a few elements away is worded to avoid this exact
+    // claim; the two must not contradict each other.
+    return {
+      label: "Awaiting teacher review",
+      sub: s.ai_score != null
+        ? "AI grade drafted — not yet approved"
+        : "graded by hand — not yet approved",
+    };
   }
   return { label: "Not graded", sub: "no grade on record" };
 }
@@ -631,11 +642,24 @@ function Lifecycle({
     { label: "Submitted", at: submittedAt },
   ];
 
-  if (work?.extraction_present || readAt) {
+  if (work?.extraction_present) {
     hops.push({
       label: "Reader ran",
       at: readAt,
-      note: work?.extraction_empty ? "found nothing" : undefined,
+      note: work.extraction_empty ? "found nothing" : undefined,
+    });
+  } else if (readAt) {
+    // The call succeeded and nothing was stored. `sub.extraction` is
+    // assigned and committed AFTER the Vision call returns, so a failed
+    // commit or a restart inside that window lands exactly here. Dating
+    // a completed hop from the call would put "Reader ran <date>" beside
+    // a NO READ pill and a readout saying no read is stored — three
+    // claims, one of them false. It is a stall, so it renders as one.
+    hops.push({
+      label: "Reader ran",
+      at: readAt,
+      pending: true,
+      note: "read never stored",
     });
   } else if (work) {
     const owed = work.integrity_check_enabled || work.ai_grading_enabled;

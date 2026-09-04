@@ -322,10 +322,14 @@ export default function StudentDetail() {
           value={
             s.last_submitted_at ? formatRelativeDate(s.last_submitted_at) : "never"
           }
+          // "Last active" folds in tutoring, logged actions AND
+          // submissions, so it must not be worded as "opened the app" —
+          // that named one narrow source and read as a flat
+          // contradiction of the number directly above it.
           sub={
             s.last_active_at
-              ? `last opened the app ${formatRelativeDate(s.last_active_at)}`
-              : "never opened the app"
+              ? `last active ${formatRelativeDate(s.last_active_at)}`
+              : "no activity on record"
           }
         />
         <StatTile

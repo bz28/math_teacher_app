@@ -416,21 +416,8 @@ async def extraction_detail(
     sub = row.Submission
     course_name, subject = row.name, row.subject
 
-    # This response carries a photograph of a student's own handwriting.
-    # Every other read of a student record in this codebase is logged for
-    # FERPA disclosure-tracking, and an admin reading any student's work
-    # across every school is a wider disclosure than a teacher reading
-    # their own — so it is logged the same way. See the module docstring
-    # for why the image is returned at all.
-    await log_student_record_access(
-        db,
-        accessor_user_id=current_user.user_id,
-        accessor_role=current_user.role,
-        target_student_id=sub.student_id,
-        record_type="extraction_quality_drill_in",
-        record_id=sub.id,
-        request=request,
-    )
+    # The FERPA log for this read is deliberately at the END of the
+    # handler — see the note above the call, and `admin_students._log_read`.
 
     edits: dict[str, Any] = sub.extraction_edits or {}
     # A single float for the whole read — Vision does not score individual
@@ -486,17 +473,25 @@ async def extraction_detail(
 
     # final_answers is a LIST of {problem_position, answer_latex, ...},
     # not a map keyed by position.
-    for fa in extraction.get("final_answers") or []:
+    for i, fa in enumerate(extraction.get("final_answers") or []):
         if not isinstance(fa, dict):
             continue
         key = _final_key(fa.get("problem_position"))
+        # Same two guards the steps loop applies, and for the same
+        # reason. `unattributed` was computed and then dropped from the
+        # dict, so the renderer read it as false and printed "— same —"
+        # — asserting the student saw and agreed with a row Vision could
+        # not place and they were therefore never shown. A null `key`
+        # also collided in React's list keys when two answers were
+        # unplaceable.
         unattributed = key is None
         corrected = None if key is None else edits.get(key)
         rows_out.append({
-            "key": key,
+            "key": key or f"unattributed-final:{i}",
             "problem_position": fa.get("problem_position"),
             "step_num": None,
             "kind": "final_answer",
+            "unattributed": unattributed,
             # answer_plain, NOT answer_text — the latter exists nowhere in
             # the schema, so every prose answer rendered "nothing read".
             "ai_read": _read_text(fa.get("answer_latex"), fa.get("answer_plain")),
@@ -524,7 +519,7 @@ async def extraction_detail(
         ai_grading_enabled=row.ai_grading_enabled,
     )
 
-    return {
+    payload = {
         "submission_id": str(sub.id),
         "student_id": str(sub.student_id),
         "student_name": row.student_name,
@@ -569,3 +564,28 @@ async def extraction_detail(
         # see the module docstring on why this is never returned in bulk.
         "files": sub.files or [],
     }
+
+    # This response carries a photograph of a student's own handwriting.
+    # Every other read of a student record in this codebase is logged for
+    # FERPA disclosure-tracking, and an admin reading any student's work
+    # across every school is a wider disclosure than a teacher reading
+    # their own — so it is logged the same way. See the module docstring
+    # for why the image is returned at all.
+    #
+    # LAST, after every `sub.*` attribute is materialized above. The
+    # helper swallows its own exceptions but recovers with
+    # `db.rollback()`, which expires the whole identity map
+    # (`expire_on_commit=False` does not cover a rollback) — so a failed
+    # audit insert followed by any further ORM read raises MissingGreenlet
+    # and 500s an authorized request. `admin_students._log_read` carries
+    # the full note.
+    await log_student_record_access(
+        db,
+        accessor_user_id=current_user.user_id,
+        accessor_role=current_user.role,
+        target_student_id=sub.student_id,
+        record_type="extraction_quality_drill_in",
+        record_id=sub.id,
+        request=request,
+    )
+    return payload

@@ -52,6 +52,7 @@ from api.core.submission_stage import (
 )
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
+from api.models.activity_log import ActivityLog
 from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.course import Course, CourseTeacher
 from api.models.grading_job import GradingJob
@@ -263,14 +264,39 @@ async def student_detail(
         .where(LLMCall.user_id == student_id, LLMCall.created_at >= since_30d)
     )).one()
 
-    last_active = (await db.execute(
-        select(func.max(Session.created_at))
-        .where(Session.user_id == student_id)
-    )).scalar()
     last_submitted = (await db.execute(
         select(func.max(Submission.submitted_at))
         .where(Submission.student_id == student_id)
     )).scalar()
+
+    # "Last active" is the latest of every footprint a STUDENT leaves,
+    # not `sessions` alone.
+    #
+    # `sessions` is the TUTORING session table — a row per problem
+    # worked through the tutor. Homework submission, the confirm screen,
+    # the integrity chat and login write none. Reading recency from it
+    # alone rendered a student who photographs homework every day as
+    # NOT STARTED / "never opened the app", directly beside a tile
+    # saying they handed something in two days ago: the case file
+    # contradicting itself on the same row.
+    #
+    # It also disagreed with the page that links here. `/admin/users`
+    # computes `greatest(session, activity_log)`, so the same student
+    # read ACTIVE in the roster and NOT STARTED one click later.
+    # Submissions are folded in on top, because for a school student
+    # handing in work is the participation signal.
+    last_action = (await db.execute(
+        select(func.max(ActivityLog.performed_at))
+        .where(ActivityLog.actor_user_id == student_id)
+    )).scalar()
+    last_session = (await db.execute(
+        select(func.max(Session.created_at))
+        .where(Session.user_id == student_id)
+    )).scalar()
+    last_active = max(
+        (t for t in (last_session, last_action, last_submitted) if t is not None),
+        default=None,
+    )
 
     payload = {
         "student": {
@@ -285,8 +311,8 @@ async def student_detail(
             "subscription_tier": student.subscription_tier,
             "subscription_status": student.subscription_status,
             # Two different questions, both asked on this page: when did
-            # they last open the app, and when did they last hand
-            # something in. A student who logs in daily and submits
+            # they last do ANYTHING, and when did they last hand
+            # something in. A student who tutors daily and submits
             # nothing is a different problem from one who vanished.
             "last_active_at": last_active.isoformat() if last_active else None,
             "last_submitted_at": (

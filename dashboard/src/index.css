@@ -3398,8 +3398,11 @@ table.dt tr:last-child td { border-bottom: none; }
   background: none;
   border: 1px solid var(--muted-2);
 }
+/* --muted, not --muted-2: these run at 11–12.5px and --muted-2 is
+   AA-Large only (its own token comment says 18px+ or labels). The dot
+   above is decoration and may stay lighter. */
 .cf-life-hop-absent .cf-life-label,
-.cf-life-hop-absent .cf-life-at { color: var(--muted-2); }
+.cf-life-hop-absent .cf-life-at { color: var(--muted); }
 
 /* Why an empty timeline is empty. */
 .cf-why {
