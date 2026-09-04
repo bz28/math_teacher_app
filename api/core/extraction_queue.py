@@ -43,9 +43,9 @@ from typing import Any, cast
 
 from sqlalchemy import CursorResult, func, literal, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.safe_errors import safe_error, traceback_is_safe
 from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission
 from api.models.extraction_job import (
@@ -125,74 +125,6 @@ def _is_infrastructure_stop(exc: BaseException) -> bool:
     from api.core.cost_tracker import PlatformStopError
 
     return isinstance(exc, PlatformStopError)
-
-
-def _traceback_is_safe(exc: BaseException) -> bool:
-    """May we log this exception WITH its traceback?
-
-    Only if no SQLAlchemy error appears anywhere in its chain. A
-    traceback prints every linked exception — "During handling of the
-    above exception, another exception occurred" — so an exception that
-    is itself harmless still leaks if a `StatementError` is sitting in
-    its `__context__`, bound parameters and all.
-
-    That is not a corner case here, it is the likely one: the two writes
-    are one line apart, so whatever kills the extraction flush (a
-    statement timeout, pool exhaustion, a deadlock, a connection reset)
-    tends to kill the `_finish` that follows it. The first version of
-    this guard keyed on the type of the exception in hand, which is
-    exactly the check that misses a chain.
-    """
-    seen: set[int] = set()
-    cur: BaseException | None = exc
-    while cur is not None and id(cur) not in seen:
-        if isinstance(cur, SQLAlchemyError):
-            return False
-        seen.add(id(cur))
-        cur = cur.__cause__ or cur.__context__
-    return True
-
-
-def _safe_error(exc: BaseException) -> str:
-    """Describe a failure without quoting the student's homework.
-
-    `last_error` is a durable column and this text is also logged, so
-    whatever lands here outlives the incident. The obvious
-    `f"{type(exc).__name__}: {exc}"` is unsafe for exactly one family of
-    exceptions, and it is the family this code path is most likely to
-    raise.
-
-    The extraction is persisted with `submissions.extraction = <the
-    transcribed work>`. If anything goes wrong flushing that — a
-    statement timeout, a deadlock, a connection reset mid-statement —
-    SQLAlchemy raises a `StatementError`, and its `__str__` appends the
-    statement AND its bound parameters. One of those parameters is the
-    student's transcribed handwriting, so the naive format writes it
-    into a database column and into the log stream:
-
-        StatementError: statement timed out
-        [SQL: UPDATE submissions SET extraction=%(extraction)s ...]
-        [parameters: {'extraction': {'steps': [{'latex': '...'}]}}]
-
-    We sell to districts and the rule in `activity_log` is ids, counts
-    and codes — never student content. The same rule has to hold here.
-
-    So for any SQLAlchemy error we keep the wrapper's class name and the
-    DRIVER's message (`.orig`), which is the server's own text — "
-    canceling statement due to statement timeout", "deadlock detected" —
-    and never the statement or its parameters. That is the part an
-    operator acts on anyway; the SQL is recoverable from Postgres's own
-    logs if it is ever genuinely needed.
-
-    Everything else is formatted in full. Those are our own raises and
-    the Anthropic SDK's, and none carry transcribed work: the Vision
-    parse errors report a position or a `stop_reason`, not content.
-    """
-    if isinstance(exc, SQLAlchemyError):
-        orig = getattr(exc, "orig", None)
-        detail = str(orig) if orig is not None else "no driver detail"
-        return f"{type(exc).__name__}: {detail}"[:2000]
-    return f"{type(exc).__name__}: {exc}"[:2000]
 
 
 async def enqueue_submission(
@@ -511,12 +443,35 @@ async def _extract_one(job: ExtractionJob) -> str:
         # failing while a database error from the extraction write is
         # still the active context — so the traceback would carry the
         # bound parameters, and the student's transcribed homework with
-        # them. See `_traceback_is_safe`.
+        # them. See `traceback_is_safe`.
         logger.error(
             "extraction job %s crashed outside the guarded call: %s",
-            job.id, _safe_error(exc),
-            exc_info=_traceback_is_safe(exc),
+            job.id, safe_error(exc),
+            exc_info=traceback_is_safe(exc),
         )
+        # Did the read actually land before the crash? The likeliest
+        # thing to escape `_run_job` is `_finish` failing right AFTER a
+        # successful extraction, and parking that as `failed` would
+        # leave a submission whose read exists on disk reading
+        # "abandoned" forever, with nothing to correct it — the mirror
+        # of the case `_finish` exempts `done` for.
+        try:
+            async with get_session_factory()() as db:
+                landed = (await db.execute(
+                    select(Submission.extraction).where(
+                        Submission.id == job.submission_id,
+                    )
+                )).scalar_one_or_none()
+        except Exception:
+            landed = None
+
+        if landed:
+            try:
+                await _finish(job.id, status=STATUS_DONE)
+            except Exception:
+                logger.exception("could not close extraction job %s", job.id)
+            return _DONE
+
         # Release the claim so the job is retryable now rather than in
         # ten minutes — but still on the budget. A job that reliably
         # crashes the bookkeeping would otherwise be requeued forever,
@@ -598,19 +553,19 @@ async def _run_job(job: ExtractionJob) -> str:
         await _finish(
             job.id,
             status=STATUS_FAILED if exhausted else STATUS_QUEUED,
-            error=_safe_error(exc),
+            error=safe_error(exc),
             refund_attempt=stopped,
         )
         # NOT `logger.exception` for a database error: the traceback it
         # prints ends in the same `StatementError` string, so it would
-        # leak into the log stream exactly what `_safe_error` just kept
+        # leak into the log stream exactly what `safe_error` just kept
         # out of the column. Everything else keeps its traceback, which
         # is what makes an unfamiliar failure diagnosable.
         logger.error(
             "extraction job %s failed (attempt %d/%d) for submission %s: %s",
             job.id, job.attempts, MAX_ATTEMPTS, job.submission_id,
-            _safe_error(exc),
-            exc_info=_traceback_is_safe(exc),
+            safe_error(exc),
+            exc_info=traceback_is_safe(exc),
         )
         return _FAILED
 
