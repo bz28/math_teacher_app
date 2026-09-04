@@ -4,7 +4,6 @@ import { Footer } from "@/components/landing/footer";
 import { CtaBand } from "@/components/landing/cta-band";
 import { FAQ } from "@/components/landing/faq";
 import { DistrictsHero } from "@/components/landing/districts/districts-hero";
-import { ComplianceGrid } from "@/components/landing/districts/compliance-grid";
 import { FederalComplianceMatrix } from "@/components/landing/districts/federal-compliance-matrix";
 import { DataModelSafety } from "@/components/landing/districts/data-model-safety";
 import { DeploymentTimeline } from "@/components/landing/districts/deployment-timeline";
@@ -57,7 +56,6 @@ export default function ForDistrictsPage() {
       <Navbar />
       <main>
         <DistrictsHero />
-        <ComplianceGrid />
         <FederalComplianceMatrix />
         <DataModelSafety />
         <DeploymentTimeline />
@@ -65,17 +63,15 @@ export default function ForDistrictsPage() {
         <PaperworkBlock />
         <FAQ
           items={districtFaqs}
-          eyebrow="District questions"
           heading="What district leaders ask."
         />
         <CtaBand
-          eyebrow="Ready to start"
           headline="Bring Veradic to your district."
           subhead="Send us your paperwork. We'll handle the rest."
-          primaryLabel="Email us"
-          primaryHref="mailto:support@veradicai.com?subject=Veradic%20%E2%80%94%20%5BDistrict%20name%5D"
-          secondaryLabel="Book a 20-min demo"
-          secondaryHref="/demo"
+          primaryLabel="Request DPA + pilot info"
+          primaryHref="/demo"
+          secondaryLabel="Email us instead"
+          secondaryHref="mailto:support@veradicai.com?subject=Veradic%20%E2%80%94%20%5BDistrict%20name%5D"
         />
       </main>
       <Footer />

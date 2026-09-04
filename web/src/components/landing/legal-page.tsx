@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Eyebrow } from "./eyebrow";
 
 interface Section {
   id: string;
@@ -21,7 +20,6 @@ export function LegalPage({ title, lastUpdated, sections }: LegalPageProps) {
   return (
     <div className="bg-[color:var(--color-surface)] px-6 pt-24 pb-24 md:pt-32 md:pb-32">
       <div className="mx-auto max-w-5xl">
-        <Eyebrow>Legal</Eyebrow>
         <h1 className="mt-6 text-display-lg text-[color:var(--color-text)]">
           {title}
         </h1>

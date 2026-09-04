@@ -4,7 +4,6 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { subjectBreadcrumbJsonLd, subjectEducationalProgramJsonLd } from "@/lib/seo";
 import { Section } from "./section";
-import { Eyebrow } from "./eyebrow";
 import { CtaBand } from "./cta-band";
 import { FAQ as SharedFAQ } from "./faq";
 import { StepsAnimation, type StepsAnimationData } from "./steps-animation";
@@ -147,7 +146,6 @@ export function SubjectPage({
       {demoData && (
         <Section variant="invert" id="demo">
           <div className="mx-auto max-w-3xl text-center">
-            <Eyebrow variant="invert">See it in action</Eyebrow>
             <h2 className="mt-6 text-display-md text-[color:var(--color-invert-text)]">
               Watch Veradic walk through a {name.toLowerCase()} problem.
             </h2>
@@ -165,7 +163,6 @@ export function SubjectPage({
       {/* ── What makes {name} on Veradic different — subject-specific prose ── */}
       <Section variant="alt">
         <div className="mx-auto max-w-2xl text-center">
-          <Eyebrow>For {name.toLowerCase()} teachers specifically</Eyebrow>
           <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
             What makes {name.toLowerCase()} on Veradic different.
           </h2>
@@ -178,7 +175,6 @@ export function SubjectPage({
       {/* ── Why for {name} teachers ── */}
       <Section variant="default">
         <div className="mx-auto max-w-3xl">
-          <Eyebrow>For {name.toLowerCase()} teachers</Eyebrow>
           <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
             Everything you wish your AI tool did.
           </h2>
@@ -213,7 +209,6 @@ export function SubjectPage({
 
       {/* ── CTA band ── */}
       <CtaBand
-        eyebrow="Ready when you are"
         headline={`Bring Veradic ${name} to your classroom.`}
         subhead="Book a 20-minute walkthrough. We'll show you exactly how it fits your curriculum."
       />

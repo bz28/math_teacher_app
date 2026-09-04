@@ -1,5 +1,4 @@
 import { Section } from "../section";
-import { Eyebrow } from "../eyebrow";
 
 type Step = { num: string; title: string; desc: string };
 
@@ -42,7 +41,6 @@ export function DeploymentTimeline() {
     <Section variant="default" id="deployment">
       <div className="mx-auto max-w-3xl">
         <div className="text-center">
-          <Eyebrow>Deployment</Eyebrow>
           <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
             Live with students in a week. Or a day.
           </h2>

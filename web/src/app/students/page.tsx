@@ -3,7 +3,6 @@ import Link from "next/link";
 import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
 import { Section } from "@/components/landing/section";
-import { Eyebrow } from "@/components/landing/eyebrow";
 import { CtaBand } from "@/components/landing/cta-band";
 import { StepsAnimation } from "@/components/landing/steps-animation";
 import { gardenDemo } from "@/components/landing/demos/garden-demo";
@@ -100,7 +99,6 @@ export default function StudentsPage() {
             instead of gradient text. */}
         <section className="relative flex min-h-[calc(100dvh_-_4rem)] items-center overflow-hidden bg-[color:var(--color-surface)] md:min-h-[calc(100dvh_-_5rem)]">
           <div className="relative mx-auto w-full max-w-4xl px-6 py-12 text-center md:px-8 md:py-16">
-            <Eyebrow>For students</Eyebrow>
             <h1 className="mt-6 text-display-xl text-[color:var(--color-text)]">
               Get unstuck.
               <br />
@@ -141,7 +139,6 @@ export default function StudentsPage() {
         {/* See it in action — animated demo */}
         <Section variant="invert">
           <div className="mx-auto max-w-3xl text-center">
-            <Eyebrow variant="invert">See it in action</Eyebrow>
             <h2 className="mt-6 text-display-md text-[color:var(--color-invert-text)]">
               This is what it looks like.
             </h2>
@@ -158,7 +155,6 @@ export default function StudentsPage() {
         {/* How it works */}
         <Section variant="alt">
           <div className="mx-auto max-w-3xl text-center">
-            <Eyebrow>How it works</Eyebrow>
             <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
               Three things. That&rsquo;s it.
             </h2>
@@ -190,17 +186,24 @@ export default function StudentsPage() {
         {/* Subjects */}
         <Section variant="default">
           <div className="mx-auto max-w-3xl text-center">
-            <Eyebrow>Subjects</Eyebrow>
             <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
               Pick your subject.
             </h2>
           </div>
 
           <div className="mt-12 grid gap-6 md:grid-cols-3">
+            {/* `tint` paints the chip; `ink` sets its label. They differ
+                because the brand hues are chosen for fills, and a fill
+                colour used as 12px text on its own 8% wash is
+                unreadable — measured 3.24:1 for physics and 2.16:1 for
+                chemistry, against a 4.5:1 floor. The ink variants are
+                the same hues darkened until they pass (4.56 and 4.80),
+                so the chip keeps its subject identity and the word is
+                actually legible. */}
             {[
-              { slug: "math", name: "Math", blurb: "Pre-algebra through calculus.", color: "#0E5238" },
-              { slug: "physics", name: "Physics", blurb: "Mechanics through modern physics.", color: "#0984E3" },
-              { slug: "chemistry", name: "Chemistry", blurb: "Stoichiometry through organic.", color: "#00B894" },
+              { slug: "math", name: "Math", blurb: "Pre-algebra through calculus.", tint: "#0E5238", ink: "#0E5238" },
+              { slug: "physics", name: "Physics", blurb: "Mechanics through modern physics.", tint: "#0984E3", ink: "#0B6BB5" },
+              { slug: "chemistry", name: "Chemistry", blurb: "Stoichiometry through organic.", tint: "#00B894", ink: "#0A7357" },
             ].map((s) => (
               <Link
                 key={s.slug}
@@ -209,7 +212,7 @@ export default function StudentsPage() {
               >
                 <span
                   className="inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest"
-                  style={{ background: `${s.color}14`, color: s.color }}
+                  style={{ background: `${s.tint}14`, color: s.ink }}
                 >
                   {s.name}
                 </span>
@@ -227,7 +230,6 @@ export default function StudentsPage() {
         {/* School mode call-out */}
         <Section variant="alt">
           <div className="mx-auto max-w-2xl rounded-[--radius-md] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] p-10 text-center">
-            <Eyebrow>Using Veradic in class?</Eyebrow>
             <p className="mt-5 text-xl font-semibold text-[color:var(--color-text)]">
               Your teacher will give you a join code.
             </p>
@@ -248,7 +250,6 @@ export default function StudentsPage() {
         <Section variant="default">
           <div className="mx-auto max-w-3xl">
             <div className="text-center">
-              <Eyebrow>Frequently asked</Eyebrow>
               <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
                 Questions students (and parents) ask.
               </h2>
@@ -279,7 +280,6 @@ export default function StudentsPage() {
         </Section>
 
         <CtaBand
-          eyebrow="Ready to stop dreading homework?"
           headline="Try Veradic free."
           subhead="No credit card. Start with one problem. See how it feels."
           primaryLabel="Get started free"

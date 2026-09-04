@@ -30,14 +30,24 @@ const instrumentSerif = Instrument_Serif({
 // phrases (hero second-line, subject hero second-line). Instrument
 // Serif only ships weight 400, which reads as "magazine subhead" —
 // too quiet against bold sans first lines on a conversion page.
-// Fraunces supports weights through 900 and was designed for display
-// use, so we can pair an italic 600 second phrase with a bold first
-// phrase and keep the editorial voice without losing punch.
+// Fraunces is now THE display face, not an italic garnish.
+//
+// The identity has always been described as "editorial serif", but
+// measured, Fraunces set three text nodes on the homepage while Inter
+// Bold set every headline on every page — so the serif was an
+// intention rather than something on screen, and the site read as
+// generic modern SaaS. Roman weights are loaded here so it can
+// actually set the headings; the italics stay for emphasis phrases.
+//
+// 400 covers the smaller `.font-serif` accents (student names in the
+// triage queue, section titles) that Instrument Serif used to set —
+// which is how the site gets down to ONE display serif instead of two
+// doing the same job at different weights.
 const fraunces = Fraunces({
   variable: "--font-fraunces",
   subsets: ["latin"],
-  weight: ["600", "700"],
-  style: ["italic"],
+  weight: ["400", "600", "700"],
+  style: ["normal", "italic"],
   display: "swap",
 });
 

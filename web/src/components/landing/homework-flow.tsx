@@ -111,7 +111,7 @@ export function HomeworkFlow() {
           {stage === 3 && <Pane key={`pub-${seq}`}><PublishStage /></Pane>}
         </AnimatePresence>
       </div>
-      <div style={{ textAlign: "center", fontSize: 11.5, color: "#A89F8C" }}>
+      <div style={{ textAlign: "center", fontSize: 11.5, color: "var(--color-text-muted)" }}>
         {isPaused ? "Click a step to replay it" : "Click any step to explore it"}
       </div>
     </div>
@@ -123,10 +123,10 @@ function Stepper({ active, onJump }: { active: number; onJump: (i: number) => vo
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
       {STAGES.map((s, i) => (
         <div key={s} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button type="button" onClick={() => onJump(i)} style={{ background: "none", border: "none", cursor: "pointer", padding: "3px 5px", fontSize: 12.5, fontFamily: "inherit", fontWeight: i === active ? 700 : 500, color: i === active ? "#0E5238" : "#A89F8C", transition: "color 0.25s" }}>
+          <button type="button" onClick={() => onJump(i)} style={{ background: "none", border: "none", cursor: "pointer", padding: "3px 5px", fontSize: 12.5, fontFamily: "inherit", fontWeight: i === active ? 700 : 500, color: i === active ? "#0E5238" : "var(--color-text-muted)", transition: "color 0.25s" }}>
             {i + 1}. {s}
           </button>
-          {i < STAGES.length - 1 && <span style={{ color: "#D8D0BF", fontSize: 12 }}>→</span>}
+          {i < STAGES.length - 1 && <span style={{ color: "var(--color-text-muted)", fontSize: 12 }}>→</span>}
         </div>
       ))}
     </div>
@@ -142,7 +142,7 @@ function Pane({ children }: { children: React.ReactNode }) {
 }
 
 const LABEL = { fontSize: 12.5, fontWeight: 700, color: "#23201A" } as const;
-const SUBTLE = { fontSize: 11, color: "#A89F8C" } as const;
+const SUBTLE = { fontSize: 11, color: "var(--color-text-muted)" } as const;
 const mathColor = { color: "#23201A", fontSize: 14 };
 
 function GenerateStage() {
@@ -194,7 +194,7 @@ function ReviewStage() {
         {PROBLEMS.slice(0, n).map((p, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.38, ease: EASE }} style={row}>
             <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-              <span style={{ color: "#A89F8C", fontWeight: 600, fontSize: 13 }}>{i + 1}.</span>
+              <span style={{ color: "var(--color-text-muted)", fontWeight: 600, fontSize: 13 }}>{i + 1}.</span>
               <span style={mathColor}><MathText text={p.q} /></span>
             </span>
             <Tag {...DIFF[p.d]}>{p.d}</Tag>
@@ -216,7 +216,7 @@ function ProblemSolution({ data }: { data: ProblemData }) {
         <div style={{ ...SUBTLE, marginBottom: 4 }}>WORKED SOLUTION</div>
         {data.sol.map((s, i) => (
           <div key={i} style={{ display: "flex", gap: 7, marginBottom: 3, lineHeight: 1.5 }}>
-            <span style={{ color: "#A89F8C", fontWeight: 700, fontSize: 11.5, flexShrink: 0 }}>{i + 1}.</span>
+            <span style={{ color: "var(--color-text-muted)", fontWeight: 700, fontSize: 11.5, flexShrink: 0 }}>{i + 1}.</span>
             <span style={{ fontSize: 12.5, color: "#6B6457" }}><strong style={{ color: "#23201A", fontWeight: 600 }}>{s.t}.</strong> <MathText text={s.b} /></span>
           </div>
         ))}
@@ -281,7 +281,7 @@ function PublishStage() {
         {[{ q: REFINE_AFTER.q, d: REFINE_AFTER.d }, PROBLEMS[1], PROBLEMS[2], PROBLEMS[3]].map((p, i) => (
           <div key={i} style={{ ...row, padding: "9px 14px" }}>
             <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-              <span style={{ color: "#A89F8C", fontWeight: 600, fontSize: 12.5 }}>{i + 1}.</span>
+              <span style={{ color: "var(--color-text-muted)", fontWeight: 600, fontSize: 12.5 }}>{i + 1}.</span>
               <span style={{ color: "#23201A", fontSize: 13 }}><MathText text={p.q} /></span>
             </span>
             <Tag {...DIFF[p.d]}>{p.d}</Tag>
