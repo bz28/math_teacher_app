@@ -54,6 +54,12 @@ export default function StudentDetail() {
   const navigate = useNavigate();
   const [data, setData] = useState<StudentDetailData | null>(null);
   const [rows, setRows] = useState<StudentSubmissionRow[] | null>(null);
+  // Server-side total, so the page can tell when the table is holding a
+  // prefix of it. The funnel counts every submission and the table
+  // fetches FETCH_LIMIT of them — past that the two legitimately
+  // disagree, and an admin page that lets a number contradict the list
+  // under it without saying so is one nobody trusts again.
+  const [total, setTotal] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Clicking a funnel cell filters the table to that stage — what makes
   // the strip a tool rather than a readout.
@@ -67,6 +73,7 @@ export default function StudentDetail() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setData(null);
     setRows(null);
+    setTotal(null);
     setError(null);
     setStageFilter(null);
     api
@@ -75,7 +82,11 @@ export default function StudentDetail() {
       .catch((e: Error) => { if (!cancelled) setError(e.message); });
     api
       .studentSubmissions(studentId, { limit: String(FETCH_LIMIT) })
-      .then((d) => { if (!cancelled) setRows(d.submissions); })
+      .then((d) => {
+        if (cancelled) return;
+        setRows(d.submissions);
+        setTotal(d.total);
+      })
       .catch((e: Error) => { if (!cancelled) setError(e.message); });
     return () => { cancelled = true; };
   }, [studentId]);
@@ -358,6 +369,12 @@ export default function StudentDetail() {
           </button>
         )}
       </h2>
+      {total !== null && rows !== null && total > rows.length && (
+        <p style={{ color: "var(--warn)", fontSize: 12, margin: "0 0 10px" }}>
+          Showing the {rows.length} most recent of {total} submissions — the
+          funnel above counts all {total}.
+        </p>
+      )}
       <div className="table-card">
         <DataTable
           columns={columns}

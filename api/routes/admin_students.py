@@ -107,18 +107,22 @@ def _stage_columns() -> list[Any]:
 
 
 def _stage_of(r: Any) -> str:
+    # Both toggles are non-nullable columns reached through an INNER
+    # join, so they are always real booleans here. That matters more
+    # than it looks: the whole point of the stage rule is telling "AI
+    # was switched off" apart from "a read was owed and vanished", and
+    # a NULL arriving from an outer join would coerce to False and
+    # report the second as the first — lost work rendered as a teacher's
+    # setting. `submissions.assignment_id` is NOT NULL with ON DELETE
+    # CASCADE, so an orphan submission cannot exist to produce one.
     return stage_for(
         extraction_present=bool(r.extraction_present),
         extraction_confirmed_at=r.extraction_confirmed_at,
         extraction_flagged_at=r.extraction_flagged_at,
         graded_at=r.graded_at,
         grade_published_at=r.grade_published_at,
-        # A submission whose assignment was deleted has no toggles to
-        # read. Treating a missing assignment as "AI was on" reports the
-        # honest thing (work was owed, nothing came) rather than
-        # inventing a teacher decision that was never made.
-        integrity_check_enabled=bool(r.integrity_check_enabled),
-        ai_grading_enabled=bool(r.ai_grading_enabled),
+        integrity_check_enabled=r.integrity_check_enabled,
+        ai_grading_enabled=r.ai_grading_enabled,
     )
 
 
@@ -195,7 +199,7 @@ async def student_detail(
     stage_rows = (await db.execute(
         select(*_stage_columns())
         .select_from(Submission)
-        .outerjoin(Assignment, Assignment.id == Submission.assignment_id)
+        .join(Assignment, Assignment.id == Submission.assignment_id)
         .outerjoin(
             SubmissionGrade, SubmissionGrade.submission_id == Submission.id
         )
@@ -337,7 +341,7 @@ async def student_submissions(
             *_stage_columns(),
         )
         .select_from(Submission)
-        .outerjoin(Assignment, Assignment.id == Submission.assignment_id)
+        .join(Assignment, Assignment.id == Submission.assignment_id)
         .outerjoin(Course, Course.id == Assignment.course_id)
         .outerjoin(
             SubmissionGrade, SubmissionGrade.submission_id == Submission.id
