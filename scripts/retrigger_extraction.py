@@ -103,6 +103,18 @@ async def main(submission_id: uuid.UUID, apply: bool) -> None:
     print("\n  running extraction (one Vision call, may take 5-15s)...")
     await _run_extraction_background(submission_id)
 
+    # Flush the cost log before the loop closes. _log_and_persist hands the
+    # llm_calls row to fire_and_forget_persist, which is a create_task —
+    # inside uvicorn the loop outlives the request and the row lands, but
+    # `asyncio.run` cancels pending tasks the moment main() returns. Without
+    # this the script makes a real, BILLED Vision call that appears nowhere:
+    # no cost row, no audit trail of a manual production intervention.
+    from api.core.llm_logging import _background_tasks
+
+    if _background_tasks:
+        print(f"  flushing {len(_background_tasks)} pending cost-log write(s)...")
+        await asyncio.gather(*list(_background_tasks), return_exceptions=True)
+
     # _run_extraction_background never re-raises, so confirm by re-reading
     # rather than trusting that it returned.
     async with get_session_factory()() as db:

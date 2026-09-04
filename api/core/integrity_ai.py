@@ -215,9 +215,17 @@ async def extract_student_work(
     # back as `max_tokens` instead of `tool_use`/`end_turn`. The
     # wrapper rejected the truncated response, the background task
     # caught silently, and submissions sat with extraction=null.
-    # 4096 gives comfortable headroom for the densest real submissions
-    # (well under Claude's output cap) without letting the prompt run
-    # away. Bump further if we ever see `max_tokens` again in logs.
+    # 4096 was NOT comfortable headroom. On 2026-09-04 a real 2-page,
+    # 10-problem Holy Ghost Prep submission truncated at exactly 4096
+    # and stranded the student again — the same failure this comment
+    # was written about, one order of magnitude up. Raised to 16384.
+    #
+    # This cap is nearly free to raise: output tokens are billed as
+    # produced, not as reserved, so a bigger ceiling costs nothing until
+    # a submission actually needs it. The asymmetry is stark — too low
+    # silently strands a student's homework with no retry path, too high
+    # costs a few cents on the densest page. Size it for the worst real
+    # submission, not the median one.
     # temperature=0 pins the read so the SAME photo extracts the SAME
     # work + final answers on every run. The grading call downstream is
     # already temp-0 (grading_ai.grade_submission_with_ai); pinning the
@@ -229,7 +237,7 @@ async def extract_student_work(
         LLMMode.INTEGRITY_EXTRACT,
         tool_schema=INTEGRITY_EXTRACT_SCHEMA,
         model=MODEL_REASON,
-        max_tokens=4096,
+        max_tokens=16384,
         temperature=0.0,
         user_id=user_id,
         submission_id=str(submission_id),
