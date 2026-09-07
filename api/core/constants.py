@@ -72,13 +72,29 @@ MAX_PDF_BYTES = 25 * 1024 * 1024
 # a quality ladder until it doesn't (this took a +35% low-quality-JPEG
 # case down to +8.7%).
 #
-# The worst measured growth across hostile inputs — high sensor noise,
-# source JPEGs down to quality 25 — is then 1.087. Budget 1.20 so the
-# margin is set by measurement plus real headroom rather than by the
-# worst case we happened to try. It costs ~2MB off a cap that no real
-# submission approaches (the largest ever recorded in production is
-# 6.1MB).
-_VISION_REENCODE_GROWTH = 1.20
+# The figure is an AGGREGATE, not a worst-case-per-file, because growth
+# and file size turn out to be anti-correlated. Measured over whole
+# submissions:
+#
+#   10x 1568px q60 phone pages, rotated   5.56MB -> 6.12MB   x1.100
+#   10x 4000px phone photos, rotated     71.91MB -> 4.92MB   x0.068
+#   6x large PNG scans                   18.19MB -> 18.19MB  x1.000
+#   10x small q25 JPEG (worst per file)   2.50MB -> 3.51MB   x1.402
+#
+# Files that inflate are small — a 1568px q25 JPEG is ~250KB, so ten of
+# them total 3.5MB against a 31MB budget. Anything large enough to
+# threaten the budget either downscales (and collapses) or is a PDF
+# (passed through at x1.0). So budgeting a worst-per-file ratio across
+# the ENTIRE cap prices in a submission that cannot exist, and the 1.20
+# that came from doing so dragged the total cap below MAX_PDF_BYTES —
+# re-creating, in the commit meant to prevent it, exactly the
+# caps-disagree bug this PR exists to fix.
+#
+# 1.05 covers realistic aggregate growth. The runtime guard in
+# extract_student_work measures the bytes actually assembled, so it,
+# not this estimate, is the real protection against the pathological
+# case.
+_VISION_REENCODE_GROWTH = 1.05
 # Whole-submission cap, in DECODED bytes — the most raw file content a
 # submission can carry and still be readable at the far end. Derived,
 # because a submission's whole purpose is to reach Vision: files are

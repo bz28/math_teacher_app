@@ -38,6 +38,19 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_with_headers)
 
 
+# This rejection happens BEFORE any route handler, so it is the one
+# error on the upload path that cannot say anything specific about what
+# was sent. It is also the one a student is most likely to hit, because
+# the clients still advertise per-file caps larger than a whole
+# submission may be. Name the actual remedy rather than restating the
+# status code: "too large" alone sent students round a retry loop for
+# two days with nothing to act on.
+_TOO_LARGE_BODY = (
+    '{"detail":"Upload too large to send. Remove a page, or retake it as a '
+    'photo instead of a scan, and try again."}'
+)
+
+
 class RequestSizeLimitMiddleware:
     def __init__(self, app: ASGIApp, max_size: int = 10 * 1024 * 1024) -> None:
         self.app = app
@@ -53,7 +66,7 @@ class RequestSizeLimitMiddleware:
         content_length = headers.get(b"content-length")
         if content_length and int(content_length) > self.max_size:
             response = Response(
-                content='{"detail":"Request body too large"}',
+                content=_TOO_LARGE_BODY,
                 status_code=413,
                 media_type="application/json",
             )
@@ -78,7 +91,7 @@ class RequestSizeLimitMiddleware:
         except ValueError as e:
             if "Request body too large" in str(e):
                 response = Response(
-                    content='{"detail":"Request body too large"}',
+                    content=_TOO_LARGE_BODY,
                     status_code=413,
                     media_type="application/json",
                 )

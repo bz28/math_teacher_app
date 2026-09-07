@@ -13,30 +13,27 @@ from api.core.constants import MAX_IMAGE_BYTES, MAX_PDF_BYTES
 # the vision-token cost. Matches the harness judge's _MAX_EDGE.
 VISION_MAX_EDGE = 1568
 
-# EXIF tag 0x0112 — the orientation flag `ImageOps.exif_transpose` acts on.
-_EXIF_ORIENTATION_TAG = 0x0112
-
-# EXIF orientations `ImageOps.exif_transpose` actually transforms.
-# Everything else (1, 0, out-of-range) leaves the pixels alone.
-_TRANSPOSABLE_ORIENTATIONS = frozenset(range(2, 9))
-
 # Modes safe to forward without a normalising re-encode. CMYK is
 # excluded on purpose (Adobe APP14 inversion); so is anything
 # multi-frame, checked separately.
 _PASSTHROUGH_SAFE_MODES = frozenset({"RGB", "RGBA", "L", "LA", "P"})
 
-# Retry ladder, used only when the default save came out LARGER than the
-# source — which happens when the source came from a stronger encoder
-# than PIL's defaults. Each step is tried in order and the smallest
-# result wins. The JPEG floor is 60: below that, compression artefacts
-# start eating faint pencil strokes, and an image the model can't read
-# is worse than one that costs a few KB more.
+# How much inflation is tolerated before trading quality for bytes.
+# Descending the ladder costs real fidelity on faint pencil, so a small
+# overage is cheaper to simply accept than to compress away.
+_LADDER_TRIGGER_RATIO = 1.05
+
+# Retry ladder, used only when the default save came out materially
+# LARGER than the source — which happens when the source came from a
+# stronger encoder than PIL's defaults. Each step is tried in order and
+# the smallest result wins. The JPEG floor is 70: extraction accuracy on
+# handwriting is this system's core function, and an image the model
+# reads worse is a bad trade for bytes we are not short of.
 _DENSE_SAVE_LADDER: dict[str, tuple[dict[str, Any], ...]] = {
     "PNG": ({"compress_level": 9, "optimize": True},),
     "JPEG": (
         {"quality": 82, "optimize": True},
         {"quality": 70, "optimize": True},
-        {"quality": 60, "optimize": True},
     ),
 }
 
@@ -138,24 +135,28 @@ def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
     try:
         raw = base64.b64decode(data_base64)
         with Image.open(io.BytesIO(raw)) as opened:
-            # `exif_transpose` only acts on orientations 2-8; 1, 0 and
-            # out-of-range values are no-ops there, so testing for
-            # "absent or 1" would re-encode an Orientation=0 image (some
-            # Android stacks and EXIF strippers write it) for nothing.
-            orientation = opened.getexif().get(_EXIF_ORIENTATION_TAG)
-            needs_rotate = orientation in _TRANSPOSABLE_ORIENTATIONS
-            # Modes/formats the save path used to normalise: CMYK JPEGs
-            # carry an Adobe inversion marker that not every decoder
-            # honours, and multi-frame files (APNG, MPO bursts) were
-            # silently flattened to frame one. Keep re-encoding those
-            # rather than newly forwarding them untouched — this early
-            # return is an optimisation and must not change what the
-            # model receives.
-            safe_to_skip = (
+            # Skip the re-encode only when it would provably change
+            # nothing. Three things make that non-trivial:
+            #
+            #  - EXIF. Re-encoding strips it (`img.save` is never handed
+            #    an `exif=`), so the save is also our only scrubbing
+            #    step. Forwarding a phone photo untouched would ship
+            #    camera make, model, timestamp and GPS to a third-party
+            #    processor, for photographs taken by minors. Any EXIF at
+            #    all — orientation included — means re-encode, which
+            #    subsumes the "does it need rotating" question.
+            #  - Mode. CMYK JPEGs carry an Adobe inversion marker that
+            #    not every decoder honours; the save normalised them.
+            #  - Frames. APNG / MPO bursts were flattened to frame one.
+            #
+            # The early return is a byte optimisation and must not change
+            # what the model receives, nor what leaves alongside it.
+            if (
                 opened.mode in _PASSTHROUGH_SAFE_MODES
                 and getattr(opened, "n_frames", 1) == 1
-            )
-            if not needs_rotate and safe_to_skip and max(opened.size) <= VISION_MAX_EDGE:
+                and not opened.getexif()
+                and max(opened.size) <= VISION_MAX_EDGE
+            ):
                 return data_base64
             img = ImageOps.exif_transpose(opened)
             if max(img.size) > VISION_MAX_EDGE:
@@ -177,8 +178,14 @@ def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
             # Walk the ladder until we're back under the source size,
             # keeping the smallest. Growth here is spent twice: against
             # Anthropic's request budget and in vision tokens.
+            # Only descend when the inflation is worth paying for. The
+            # ladder trades image quality for bytes, and a rung costs
+            # real fidelity on faint pencil — so gate it on MAGNITUDE,
+            # not on sign. Without this, a 0.9% overage (a few KB against
+            # a budget with megabytes of slack) drove a student's
+            # handwriting down a quality step for nothing.
             for options in _DENSE_SAVE_LADDER[fmt]:
-                if len(buf.getvalue()) <= len(raw):
+                if len(buf.getvalue()) <= len(raw) * _LADDER_TRIGGER_RATIO:
                     break
                 retry = io.BytesIO()
                 img.save(retry, format=fmt, **options)

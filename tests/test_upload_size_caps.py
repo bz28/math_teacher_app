@@ -136,56 +136,63 @@ def test_endpoint_total_size_check_is_reachable() -> None:
     )
 
 
-def test_live_mitigation_still_admits_a_maximal_submission() -> None:
+def test_any_configured_cap_still_admits_a_maximal_submission() -> None:
     """Never re-break the students unblocked by the hotfix.
 
     MAX_REQUEST_SIZE=31457280 (30MB) was set in Railway on 2026-09-07 to
-    unblock a class mid-deadline. The derived floor sits slightly BELOW
-    it (the preprocessing-growth allowance costs ~2MB), and that is
-    fine — `floor_request_size` only ever raises, so the override still
-    wins and the live cap does not drop. What must hold is that the
-    override still clears a maximal submission.
+    unblock a class mid-deadline. Whatever is configured — that value,
+    nothing, or something hostile — the effective cap must still clear a
+    maximal submission, because `floor_request_size` only ever raises.
     """
-    live_mitigation_bytes = 31_457_280
-    effective = _settings(max_request_size=live_mitigation_bytes).max_request_size
-    assert effective == live_mitigation_bytes, "clamp must not lower a larger override"
-    assert effective >= _worst_case_encoded_submission()
+    for configured in (None, 31_457_280, 1024, MIN_REQUEST_SIZE_BYTES * 4):
+        kwargs = {} if configured is None else {"max_request_size": configured}
+        effective = _settings(**kwargs).max_request_size
+        assert effective >= _worst_case_encoded_submission(), (
+            f"MAX_REQUEST_SIZE={configured} yields {effective}, below a "
+            f"maximal submission"
+        )
 
 
-def test_preprocessing_growth_stays_inside_the_budgeted_allowance() -> None:
-    """The guard budgets bytes measured AFTER vision preprocessing.
+def test_an_adversarial_cap_filling_submission_stays_under_budget() -> None:
+    """The property the guard actually depends on.
 
-    This is the regression for a bug found in review: the original slack
-    was 64KB (0.20% of the cap) and justified as covering base64 padding
-    — but `extract_student_work` accumulates AFTER
-    `preprocess_image_for_vision`, which RE-ENCODES. A rotated image
-    genuinely compresses differently, so real submissions overflowed a
-    padding-sized allowance and were told "couldn't read this".
+    An earlier version asserted per-file growth < the allowance and had
+    to be rewritten twice, because the allowance is an AGGREGATE and
+    growth is anti-correlated with size: the pages that inflate most
+    (small, low-quality JPEGs) are far too small to fill the cap, while
+    anything big enough to fill it either downscales or is a PDF passed
+    through unchanged.
 
-    Uses real images through the real function rather than arithmetic,
-    because the arithmetic was exactly what was wrong.
-
-    Covers BOTH formats. An earlier version of this test used only PNG
-    and passed for the wrong reason: PNG is the format where the dense
-    retry reliably beats PIL's default, while a low-quality source JPEG
-    was the case that actually blew the budget (+35%).
+    So build the worst submission that can actually exist — every page
+    slot spent on the highest-growth class, the remaining cap filled
+    with PDF bytes, which preprocessing never shrinks — and assert what
+    `extract_student_work` will measure stays under the request budget.
     """
+    import base64
+
     from api.core.image_utils import preprocess_image_for_vision
 
-    headroom = MAX_REQUEST_B64_BYTES / (MAX_SUBMISSION_TOTAL_BYTES * 4 / 3)
+    pages = [
+        _rotated_noisy_image("JPEG", 35, quality=25, optimize=True)
+        for _ in range(MAX_SUBMISSION_FILES - 1)
+    ]
+    processed = [len(preprocess_image_for_vision(p, "image/jpeg")) for p in pages]
 
-    for fmt, media_type, save_kwargs, noise, label in (
-        ("PNG", "image/png", {"compress_level": 9}, 30, "PNG level=9"),
-        ("JPEG", "image/jpeg", {"quality": 25}, 35, "JPEG q25 (worst measured)"),
-        ("JPEG", "image/jpeg", {"quality": 45}, 60, "JPEG q45, heavy noise"),
-    ):
-        encoded = _rotated_noisy_image(fmt, noise, **save_kwargs)
-        growth = len(preprocess_image_for_vision(encoded, media_type)) / len(encoded)
-        assert growth < headroom, (
-            f"{label}: preprocessing grew {(growth - 1) * 100:.1f}% but the "
-            f"derivation budgets only {(headroom - 1) * 100:.1f}% — a legal "
-            f"submission would be refused as unreadable"
-        )
+    images_decoded = sum(len(base64.b64decode(p)) for p in pages)
+    assert images_decoded < MAX_SUBMISSION_TOTAL_BYTES, (
+        "fixture pages already exceed the cap; they cannot model a filler"
+    )
+    # One PDF spends whatever cap the images left. PDFs skip
+    # preprocessing entirely, so they inflate by exactly base64's 4/3 —
+    # the worst any large payload can do.
+    pdf_decoded = MAX_SUBMISSION_TOTAL_BYTES - images_decoded
+    total_sent = sum(processed) + _b64_len(pdf_decoded)
+
+    assert total_sent <= MAX_REQUEST_B64_BYTES, (
+        f"a legal submission assembles {total_sent:,} bytes against a "
+        f"{MAX_REQUEST_B64_BYTES:,} budget — extract_student_work would "
+        f"refuse it as unreadable"
+    )
 
 
 def test_images_needing_no_work_are_not_re_encoded() -> None:
@@ -213,24 +220,87 @@ def test_images_needing_no_work_are_not_re_encoded() -> None:
     assert preprocess_image_for_vision(encoded, "image/png") is encoded
 
 
+def test_camera_metadata_never_reaches_the_model() -> None:
+    """EXIF must not survive the trip to a third-party processor.
+
+    Re-encoding strips EXIF as a side effect (`img.save` is never handed
+    an `exif=`), so before the passthrough existed every submitted photo
+    was scrubbed. Skipping the save for an image that needs no pixel
+    work would have forwarded camera make, model, timestamp and GPS —
+    for photographs taken by minors. The passthrough is a byte
+    optimisation and must not buy itself with their location.
+    """
+    import base64
+    import io
+
+    from PIL import Image
+
+    from api.core.image_utils import preprocess_image_for_vision
+
+    img = Image.new("RGB", (1200, 900), (210, 210, 210))
+    exif = img.getexif()
+    exif[0x010F] = "Apple"
+    exif[0x0110] = "iPhone 15 Pro"
+    exif[0x0132] = "2026:09:07 08:12:33"
+    exif[0x0112] = 1  # normal orientation — no pixel work needed
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", exif=exif)
+
+    encoded = base64.b64encode(buf.getvalue()).decode("ascii")
+    processed = preprocess_image_for_vision(encoded, "image/jpeg")
+
+    assert processed is not encoded, "an image carrying EXIF must be re-encoded"
+    survived = Image.open(io.BytesIO(base64.b64decode(processed))).getexif()
+    assert not survived, f"EXIF reached the model: {dict(survived)}"
+
+
+def test_a_small_inflation_does_not_cost_image_quality() -> None:
+    """The quality ladder must trigger on magnitude, not on sign.
+
+    Descending a rung costs real fidelity on faint pencil, and
+    extraction accuracy on handwriting is what this system does. Paying
+    that to claw back a few KB — against a budget with megabytes of
+    slack — is the wrong trade.
+    """
+    import base64
+    import io
+
+    from PIL import Image
+
+    from api.core.image_utils import preprocess_image_for_vision
+
+    # A source whose default re-encode lands only slightly larger.
+    encoded = _rotated_noisy_image("JPEG", 20, quality=75)
+    processed = preprocess_image_for_vision(encoded, "image/jpeg")
+    ratio = len(processed) / len(encoded)
+
+    assert processed is not encoded, "rotation must still be applied"
+    assert ratio <= 1.05, (
+        f"grew {ratio:.3f}x — above the ladder trigger, so this fixture no "
+        f"longer exercises the small-inflation case"
+    )
+    decoded = Image.open(io.BytesIO(base64.b64decode(processed)))
+    assert decoded.size == (1176, 1568), "rotation applied without downscaling"
+
+
 @pytest.mark.parametrize(
-    ("orientation", "expect_untouched"),
+    ("exif_tags", "expect_untouched"),
     [
-        (None, True),  # no EXIF at all
-        (0, True),  # written by some Android stacks / EXIF strippers
-        (1, True),  # explicitly "normal"
-        (9, True),  # out of range — exif_transpose ignores it
-        (6, False),  # a real rotation: must be applied
+        (None, True),  # no EXIF at all — a scan; the only skippable case
+        ({0x0112: 1}, False),  # "normal" orientation, but EXIF present
+        ({0x0112: 0}, False),  # written by some Android stacks
+        ({0x0112: 6}, False),  # a real rotation
+        ({0x010F: "Apple"}, False),  # no orientation, still identifying
     ],
 )
-def test_only_transposable_orientations_trigger_a_re_encode(
-    orientation: int | None, expect_untouched: bool
+def test_only_metadata_free_images_skip_the_re_encode(
+    exif_tags: dict[int, object] | None, expect_untouched: bool
 ) -> None:
-    """Skip the re-encode for every orientation that is a no-op.
+    """EXIF presence, not its value, decides whether we re-encode.
 
-    `ImageOps.exif_transpose` only transforms 2-8. Testing for
-    "absent or 1" would re-encode an Orientation=0 image for nothing —
-    exactly the inflation the passthrough exists to avoid.
+    The save is the only thing that strips metadata, so "does this image
+    need rotating" is the wrong question — an image with a benign
+    Orientation=1 still carries whatever else the camera wrote.
     """
     import base64
     import io
@@ -242,9 +312,10 @@ def test_only_transposable_orientations_trigger_a_re_encode(
     img = Image.new("RGB", (800, 600), (200, 200, 200))
     buf = io.BytesIO()
     save_kwargs = {}
-    if orientation is not None:
+    if exif_tags is not None:
         exif = img.getexif()
-        exif[0x0112] = orientation
+        for tag, value in exif_tags.items():
+            exif[tag] = value
         save_kwargs["exif"] = exif
     img.save(buf, format="PNG", **save_kwargs)
 
