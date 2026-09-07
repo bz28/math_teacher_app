@@ -25,14 +25,27 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_data)
 
 
+# Third-party loggers that must never emit DEBUG, however loud we set
+# our own. The Anthropic SDK logs its full request options at DEBUG
+# (`anthropic/_base_client.py`), and on pydantic v2 the `content`
+# exclusion does NOT apply — so a single DEBUG line carries the base64
+# of a student's homework photo into the log stream. httpx/httpcore are
+# merely deafening. LOG_LEVEL=DEBUG is set in production today, so this
+# ceiling is what makes honouring LOG_LEVEL safe at all.
+_THIRD_PARTY_LOG_CEILING = ("anthropic", "httpx", "httpcore", "openai", "urllib3")
+
+
 def setup_logging(level: str = "INFO") -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JSONFormatter())
     root = logging.getLogger()
     root.handlers.clear()
     root.addHandler(handler)
-    root.setLevel(getattr(logging, level.upper(), logging.INFO))
+    resolved = getattr(logging, level.upper(), logging.INFO)
+    root.setLevel(resolved)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    for name in _THIRD_PARTY_LOG_CEILING:
+        logging.getLogger(name).setLevel(max(resolved, logging.INFO))
 
 
 class LoggingMiddleware:

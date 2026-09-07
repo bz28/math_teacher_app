@@ -59,21 +59,29 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB after base64 decode
 # PDFs are larger by nature (multi-page scans); 25 MB matches the
 # teacher_documents.py upload cap and Anthropic's document-block limit.
 MAX_PDF_BYTES = 25 * 1024 * 1024
-# Slack so a MAXIMAL submission lands strictly UNDER the request budget
-# rather than exactly on it. base64 pads each file up to 4 bytes, and
-# vision preprocessing re-encodes images (which can nudge a small one
-# either way). Without this the largest legal submission sits exactly at
-# the budget, and a few bytes of padding would trip the extraction guard
-# on work the API would have accepted — rejecting a student's homework
-# over rounding.
-_SUBMISSION_SLACK_BYTES = 64 * 1024
+# Allowance for vision preprocessing GROWING an image on the way to the
+# model. `extract_student_work` budgets the bytes it actually sends,
+# which are measured AFTER `preprocess_image_for_vision`, so this has to
+# be part of the derivation rather than an afterthought.
+#
+# An image carrying an EXIF rotation must be re-encoded, and rotating
+# noisy scan content genuinely changes how well it compresses —
+# measured up to +6.1% even when re-saving at settings that match the
+# source encoder. (Images needing neither rotation nor downscaling are
+# now returned untouched, which removed a far worse +37% case; see
+# api/core/image_utils.py.) 10% covers the measured worst case with
+# room, and costs ~2MB of a cap no real submission approaches.
+_VISION_REENCODE_GROWTH = 1.10
 # Whole-submission cap, in DECODED bytes — the most raw file content a
 # submission can carry and still be readable at the far end. Derived,
 # because a submission's whole purpose is to reach Vision: files are
 # stored base64 and forwarded base64, so decoded bytes re-inflate by 4/3
-# on the way into the request budget above. A cap larger than this would
-# accept homework that can never be read.
-MAX_SUBMISSION_TOTAL_BYTES = (MAX_REQUEST_B64_BYTES - _SUBMISSION_SLACK_BYTES) * 3 // 4
+# on the way into the request budget above, and may grow again during
+# preprocessing. A cap larger than this would accept homework that can
+# never be read.
+MAX_SUBMISSION_TOTAL_BYTES = (
+    int(MAX_REQUEST_B64_BYTES / _VISION_REENCODE_GROWTH) * 3 // 4
+)
 # Transport cap floor: the smallest HTTP body limit that can still carry
 # a maximal legal submission. Files arrive base64 inside JSON, so the
 # body runs ~4/3 the decoded size, plus the JSON envelope (keys, quotes,

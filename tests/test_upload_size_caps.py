@@ -47,10 +47,14 @@ def _b64_len(decoded_bytes: int) -> int:
 def _worst_case_encoded_submission() -> int:
     """Encoded size of a maximal submission, split to maximise padding.
 
-    Each file pads independently, so the same total decoded bytes cost
-    more encoded when spread across the maximum file count.
+    Each file pads independently, so the same decoded total costs more
+    encoded when spread across the maximum file count. Sizes are nudged
+    to `n % 3 == 1`, the remainder that wastes the most padding — an
+    even split happens to land on a multiple of 3 and pad nothing, which
+    is the BEST case, not the worst.
     """
     per_file = MAX_SUBMISSION_TOTAL_BYTES // MAX_SUBMISSION_FILES
+    per_file -= (per_file - 1) % 3  # drop to the nearest n % 3 == 1
     remainder = MAX_SUBMISSION_TOTAL_BYTES - per_file * (MAX_SUBMISSION_FILES - 1)
     return sum(
         _b64_len(n) for n in [per_file] * (MAX_SUBMISSION_FILES - 1) + [remainder]
@@ -97,15 +101,96 @@ def test_endpoint_total_size_check_is_reachable() -> None:
     )
 
 
-def test_derived_caps_do_not_regress_below_the_live_mitigation() -> None:
+def test_live_mitigation_still_admits_a_maximal_submission() -> None:
     """Never re-break the students unblocked by the hotfix.
 
     MAX_REQUEST_SIZE=31457280 (30MB) was set in Railway on 2026-09-07 to
-    unblock a class mid-deadline. Deriving the cap must raise it, not
-    quietly lower it back under that.
+    unblock a class mid-deadline. The derived floor sits slightly BELOW
+    it (the preprocessing-growth allowance costs ~2MB), and that is
+    fine — `floor_request_size` only ever raises, so the override still
+    wins and the live cap does not drop. What must hold is that the
+    override still clears a maximal submission.
     """
     live_mitigation_bytes = 31_457_280
-    assert MIN_REQUEST_SIZE_BYTES >= live_mitigation_bytes
+    effective = _settings(max_request_size=live_mitigation_bytes).max_request_size
+    assert effective == live_mitigation_bytes, "clamp must not lower a larger override"
+    assert effective >= _worst_case_encoded_submission()
+
+
+def test_preprocessing_growth_stays_inside_the_budgeted_allowance() -> None:
+    """The guard budgets bytes measured AFTER vision preprocessing.
+
+    This is the regression for a bug found in review: the original slack
+    was 64KB (0.20% of the cap) and justified as covering base64 padding
+    — but `extract_student_work` accumulates AFTER
+    `preprocess_image_for_vision`, which RE-ENCODES. A rotated image
+    genuinely compresses differently, so real submissions overflowed a
+    padding-sized allowance and were told "couldn't read this".
+
+    Uses a real image through the real function rather than arithmetic,
+    because the arithmetic was exactly what was wrong.
+    """
+    import base64
+    import io
+    import random
+
+    from PIL import Image, ImageDraw
+
+    from api.core.image_utils import VISION_MAX_EDGE, preprocess_image_for_vision
+
+    random.seed(1)
+    img = Image.new("RGB", (VISION_MAX_EDGE, VISION_MAX_EDGE))
+    pixels = img.load()
+    assert pixels is not None
+    for y in range(img.height):  # sensor noise — the hostile case for PNG
+        for x in range(img.width):
+            value = 235 + random.randint(-15, 15)
+            pixels[x, y] = (value, value, value - 3)
+    draw = ImageDraw.Draw(img)
+    for i in range(40):
+        draw.line([(20, 38 * i), (1540, 38 * i + 18)], fill=(5, 5, 40), width=5)
+
+    # EXIF rotation forces the re-encode; small enough to skip downscale.
+    exif = img.getexif()
+    exif[0x0112] = 6
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", compress_level=9, exif=exif)
+
+    encoded = base64.b64encode(buf.getvalue()).decode("ascii")
+    processed = preprocess_image_for_vision(encoded, "image/png")
+    growth = len(processed) / len(encoded)
+
+    headroom = MAX_REQUEST_B64_BYTES / (MAX_SUBMISSION_TOTAL_BYTES * 4 / 3)
+    assert growth < headroom, (
+        f"preprocessing grew {(growth - 1) * 100:.1f}% but the derivation only "
+        f"budgets {(headroom - 1) * 100:.1f}% — a legal submission would be "
+        f"rejected as unreadable"
+    )
+
+
+def test_images_needing_no_work_are_not_re_encoded() -> None:
+    """A no-op re-encode is pure inflation, paid twice.
+
+    PIL's save defaults are weaker than most scanners', so passing an
+    already-good image through cost up to +37% — against the request
+    budget AND in vision tokens — for an identical picture.
+    """
+    import base64
+    import io
+
+    from PIL import Image, ImageDraw
+
+    from api.core.image_utils import preprocess_image_for_vision
+
+    img = Image.new("L", (1200, 1500), 255)
+    draw = ImageDraw.Draw(img)
+    for i in range(40):
+        draw.line([(50, 40 * i), (1150, 40 * i + 20)], fill=0, width=3)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", compress_level=9, optimize=True)
+
+    encoded = base64.b64encode(buf.getvalue()).decode("ascii")
+    assert preprocess_image_for_vision(encoded, "image/png") is encoded
 
 
 # ── The env override may raise the cap, never lower it ──────────────

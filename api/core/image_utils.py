@@ -13,6 +13,17 @@ from api.core.constants import MAX_IMAGE_BYTES, MAX_PDF_BYTES
 # the vision-token cost. Matches the harness judge's _MAX_EDGE.
 VISION_MAX_EDGE = 1568
 
+# EXIF tag 0x0112 — the orientation flag `ImageOps.exif_transpose` acts on.
+_EXIF_ORIENTATION_TAG = 0x0112
+
+# Fallback save settings, used only when the default save came out
+# LARGER than the source. quality=82 stays visually lossless for
+# handwriting while undercutting a high-quality source JPEG.
+_DENSE_SAVE_OPTIONS: dict[str, dict[str, Any]] = {
+    "PNG": {"compress_level": 9, "optimize": True},
+    "JPEG": {"quality": 82, "optimize": True},
+}
+
 
 def validate_and_decode_image(image_base64: str) -> tuple[bytes, str]:
     """Validate and decode a base64-encoded image.
@@ -89,18 +100,33 @@ def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
     rewrites the pixels to match the flag, then we cap the long edge at
     `VISION_MAX_EDGE`.
 
+    An image that needs NEITHER rotation nor downscaling is returned
+    untouched. Re-encoding it can only inflate it: PIL's defaults (PNG
+    `compress_level=6` with no filter search, JPEG `quality=75`) are
+    weaker than what scanners and phone cameras typically emit, and the
+    save never compares itself against the input. Measured growth on a
+    pass-through save was +37% for grayscale line art, +16% for an RGB
+    worksheet, +0.5% for a realistic full-page scan. Those bytes get
+    paid twice — once against Anthropic's per-request budget, once in
+    vision tokens — for an image identical to the one we already had.
+
     Only `image/*` is transformed; PDFs and unknown media types are returned
     unchanged (the document path must not be re-encoded as a flat image).
     On any decode/transform error the input base64 is returned untouched so
     a quirky-but-valid image still reaches the model.
 
-    Returns the re-encoded base64 string (same media_type / format).
+    Returns base64 of the same media_type / format.
     """
     if not media_type.startswith("image/"):
         return data_base64
     try:
         raw = base64.b64decode(data_base64)
         with Image.open(io.BytesIO(raw)) as opened:
+            # `exif_transpose` reads this same tag; anything other than
+            # absent-or-1 means the pixels need rewriting.
+            orientation = opened.getexif().get(_EXIF_ORIENTATION_TAG)
+            if orientation in (None, 1) and max(opened.size) <= VISION_MAX_EDGE:
+                return data_base64
             img = ImageOps.exif_transpose(opened)
             if max(img.size) > VISION_MAX_EDGE:
                 img.thumbnail(
@@ -115,6 +141,17 @@ def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
                 img = img.convert("RGB")
             buf = io.BytesIO()
             img.save(buf, format=fmt)
+            # A rotated image still has to be re-encoded, and PIL's
+            # defaults can land bigger than a source written by a
+            # stronger encoder. Retry once at settings that match or
+            # beat a typical scanner, and keep whichever is smaller —
+            # growth here is spent twice, against the request budget and
+            # in vision tokens.
+            if len(buf.getvalue()) > len(raw):
+                retry = io.BytesIO()
+                img.save(retry, format=fmt, **_DENSE_SAVE_OPTIONS[fmt])
+                if len(retry.getvalue()) < len(buf.getvalue()):
+                    buf = retry
             return base64.b64encode(buf.getvalue()).decode("ascii")
     except Exception:
         return data_base64
