@@ -291,10 +291,11 @@ def test_a_small_inflation_does_not_cost_image_quality() -> None:
         ({0x0112: 0}, False),  # written by some Android stacks
         ({0x0112: 6}, False),  # a real rotation
         ({0x010F: "Apple"}, False),  # no orientation, still identifying
+        ("gps-only", False),  # location and nothing else — the worst case
     ],
 )
 def test_only_metadata_free_images_skip_the_re_encode(
-    exif_tags: dict[int, object] | None, expect_untouched: bool
+    exif_tags: dict[int, object] | str | None, expect_untouched: bool
 ) -> None:
     """EXIF presence, not its value, decides whether we re-encode.
 
@@ -312,15 +313,28 @@ def test_only_metadata_free_images_skip_the_re_encode(
     img = Image.new("RGB", (800, 600), (200, 200, 200))
     buf = io.BytesIO()
     save_kwargs = {}
-    if exif_tags is not None:
+    if exif_tags == "gps-only":
+        # GPS lives in a sub-IFD, so this checks that top-level
+        # truthiness still catches a photo carrying location and
+        # nothing else — the leak with the worst consequences.
+        exif = img.getexif()
+        gps = exif.get_ifd(0x8825)
+        gps[1], gps[2] = "N", (40.0, 44.0, 54.0)
+        gps[3], gps[4] = "W", (73.0, 59.0, 12.0)
+        save_kwargs["exif"] = exif
+    elif exif_tags is not None:
         exif = img.getexif()
         for tag, value in exif_tags.items():
             exif[tag] = value
         save_kwargs["exif"] = exif
-    img.save(buf, format="PNG", **save_kwargs)
+    # GPS only round-trips through JPEG (PIL does not carry a GPS sub-IFD
+    # into PNG's eXIf chunk), and JPEG is what phone cameras emit anyway.
+    fmt = "JPEG" if exif_tags == "gps-only" else "PNG"
+    img.save(buf, format=fmt, **save_kwargs)
 
     encoded = base64.b64encode(buf.getvalue()).decode("ascii")
-    untouched = preprocess_image_for_vision(encoded, "image/png") is encoded
+    media_type = "image/jpeg" if fmt == "JPEG" else "image/png"
+    untouched = preprocess_image_for_vision(encoded, media_type) is encoded
     assert untouched is expect_untouched
 
 
