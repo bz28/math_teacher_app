@@ -28,18 +28,50 @@ DECOMPOSITION_CACHE_MAX_SIZE = 200
 WORK_SUBMISSION_TTL_MINUTES = 30  # Discard work diagnosis after this window
 
 # ---------------------------------------------------------------------------
+# Anthropic request budget
+# ---------------------------------------------------------------------------
+# Anthropic caps a single request at 32MB. That is the one physical
+# constraint on how much homework can move through this system, so the
+# upload caps below are DERIVED from it rather than picked separately.
+#
+# They used to be picked separately, and it cost us: a 10MB transport
+# cap written with the original scaffold and a 50MB submission cap added
+# eight weeks later never had any relationship to each other. The
+# transport cap silently rejected submissions the endpoint would have
+# happily accepted, surfacing as an opaque 413 on a student's phone, and
+# it made the endpoint's own 50MB check unreachable dead code. Deriving
+# both from this number is what makes that class of bug impossible
+# rather than merely fixed — so add new caps by deriving them here, not
+# by writing another literal somewhere else.
+ANTHROPIC_MAX_REQUEST_BYTES = 32 * 1024 * 1024
+# Headroom for the prompt, tool schema and JSON envelope that ride along
+# with the payload. These are kilobytes in practice and base64 needs no
+# JSON escaping, so a megabyte is generous. Over-reserving is not
+# "safe": it drops payloads the API would have accepted.
+_REQUEST_HEADROOM_BYTES = 1024 * 1024
+# The largest base64 payload we will put in a single Claude request.
+MAX_REQUEST_B64_BYTES = ANTHROPIC_MAX_REQUEST_BYTES - _REQUEST_HEADROOM_BYTES
+
+# ---------------------------------------------------------------------------
 # Image / file upload handling
 # ---------------------------------------------------------------------------
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB after base64 decode
 # PDFs are larger by nature (multi-page scans); 25 MB matches the
 # teacher_documents.py upload cap and Anthropic's document-block limit.
 MAX_PDF_BYTES = 25 * 1024 * 1024
-# Whole-submission cap. With ≤10 files at up to 25 MB each the worst
-# case is 250 MB, which we don't want hitting the row store. 50 MB is
-# generous for real homework (a 10-photo phone submission tops out
-# around 30 MB after client-side resize) and saves the DB from
-# pathological payloads.
-MAX_SUBMISSION_TOTAL_BYTES = 50 * 1024 * 1024
+# Whole-submission cap, in DECODED bytes — the most raw file content a
+# submission can carry and still be readable at the far end. Derived,
+# because a submission's whole purpose is to reach Vision: files are
+# stored base64 and forwarded base64, so decoded bytes re-inflate by 4/3
+# on the way into the request budget above. A cap larger than this would
+# accept homework that can never be read.
+MAX_SUBMISSION_TOTAL_BYTES = MAX_REQUEST_B64_BYTES * 3 // 4
+# Transport cap floor: the smallest HTTP body limit that can still carry
+# a maximal legal submission. Files arrive base64 inside JSON, so the
+# body runs ~4/3 the decoded size, plus the JSON envelope (keys, quotes,
+# commas, data: prefixes). `Settings.max_request_size` is floored at
+# this — see api/config.py for why it may be raised but never lowered.
+MIN_REQUEST_SIZE_BYTES = MAX_SUBMISSION_TOTAL_BYTES * 4 // 3 + 1024 * 1024
 # Hard cap on number of files per submission. Mirrors the teacher
 # upload cap. Real homework submissions are 1-3 pages; 10 leaves
 # headroom for multi-page worksheets.
