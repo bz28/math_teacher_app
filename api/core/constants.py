@@ -59,13 +59,21 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB after base64 decode
 # PDFs are larger by nature (multi-page scans); 25 MB matches the
 # teacher_documents.py upload cap and Anthropic's document-block limit.
 MAX_PDF_BYTES = 25 * 1024 * 1024
+# Slack so a MAXIMAL submission lands strictly UNDER the request budget
+# rather than exactly on it. base64 pads each file up to 4 bytes, and
+# vision preprocessing re-encodes images (which can nudge a small one
+# either way). Without this the largest legal submission sits exactly at
+# the budget, and a few bytes of padding would trip the extraction guard
+# on work the API would have accepted — rejecting a student's homework
+# over rounding.
+_SUBMISSION_SLACK_BYTES = 64 * 1024
 # Whole-submission cap, in DECODED bytes — the most raw file content a
 # submission can carry and still be readable at the far end. Derived,
 # because a submission's whole purpose is to reach Vision: files are
 # stored base64 and forwarded base64, so decoded bytes re-inflate by 4/3
 # on the way into the request budget above. A cap larger than this would
 # accept homework that can never be read.
-MAX_SUBMISSION_TOTAL_BYTES = MAX_REQUEST_B64_BYTES * 3 // 4
+MAX_SUBMISSION_TOTAL_BYTES = (MAX_REQUEST_B64_BYTES - _SUBMISSION_SLACK_BYTES) * 3 // 4
 # Transport cap floor: the smallest HTTP body limit that can still carry
 # a maximal legal submission. Files arrive base64 inside JSON, so the
 # body runs ~4/3 the decoded size, plus the JSON envelope (keys, quotes,

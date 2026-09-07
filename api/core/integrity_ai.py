@@ -21,6 +21,7 @@ from typing import Any, Literal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.constants import MAX_REQUEST_B64_BYTES
 from api.core.image_utils import preprocess_image_for_vision, to_content_block
 from api.core.llm_client import (
     MODEL_HAIKU,
@@ -185,6 +186,7 @@ async def extract_student_work(
     )
 
     content: list[dict[str, Any]] = []
+    total_b64_bytes = 0
     for page_number, f in enumerate(files, start=1):
         raw = f.get("data", "")
         recorded_media = f.get("media_type", "image/jpeg")
@@ -192,6 +194,7 @@ async def extract_student_work(
         # EXIF-orient + downscale phone photos before Vision sees them;
         # PDFs/non-images pass through untouched.
         base64_data = preprocess_image_for_vision(base64_data, media_type)
+        total_b64_bytes += len(base64_data)
         # Label every page before its image. Without this, asking the
         # model for a `page_index` would be asking it to count ordinal
         # image positions with nothing to count against — the blocks are
@@ -207,6 +210,35 @@ async def extract_student_work(
         "type": "text",
         "text": briefing + instruction if briefing else instruction,
     })
+
+    # Defence in depth against Anthropic's single-request cap. The
+    # submission caps are derived so a legal submission always fits
+    # (api/core/constants.py), so this should never fire — it exists to
+    # fail readably if that chain is ever broken, rather than as an
+    # opaque API error inside a fire-and-forget background task.
+    #
+    # Photos cannot realistically get here: preprocess_image_for_vision
+    # downscales every image to VISION_MAX_EDGE first. PDFs pass through
+    # RAW, so they are the only pages that can approach the budget.
+    #
+    # Refuse the WHOLE submission rather than dropping the pages that
+    # don't fit. The teacher-document path skips individual documents,
+    # and that is right for it — losing the sixth of six reference
+    # worksheets degrades generation. Here the stakes invert: silently
+    # dropping page 7 of a student's homework grades them on work the
+    # model never saw, and there is no way to tell them or the teacher
+    # that it happened. The "couldn't read this" sentinel below is
+    # already the system's word for that, and it routes through the
+    # unreadable gate to `record_unreadable_grading_skip`, which shows
+    # the teacher "needs manual grading" and grades nothing.
+    if total_b64_bytes > MAX_REQUEST_B64_BYTES:
+        logger.error(
+            "submission %s is %d encoded bytes, over the %d request "
+            "budget; refusing extraction so it routes to manual grading. "
+            "The derived submission caps should have prevented this.",
+            submission_id, total_b64_bytes, MAX_REQUEST_B64_BYTES,
+        )
+        return {"steps": [], "final_answers": [], "confidence": 0.0}
 
     # 1024 was too tight for real HW submissions: a multi-problem HW
     # with dense handwriting pushes the tool-use JSON (per-step
