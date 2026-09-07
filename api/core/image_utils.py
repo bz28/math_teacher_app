@@ -16,12 +16,28 @@ VISION_MAX_EDGE = 1568
 # EXIF tag 0x0112 — the orientation flag `ImageOps.exif_transpose` acts on.
 _EXIF_ORIENTATION_TAG = 0x0112
 
-# Fallback save settings, used only when the default save came out
-# LARGER than the source. quality=82 stays visually lossless for
-# handwriting while undercutting a high-quality source JPEG.
-_DENSE_SAVE_OPTIONS: dict[str, dict[str, Any]] = {
-    "PNG": {"compress_level": 9, "optimize": True},
-    "JPEG": {"quality": 82, "optimize": True},
+# EXIF orientations `ImageOps.exif_transpose` actually transforms.
+# Everything else (1, 0, out-of-range) leaves the pixels alone.
+_TRANSPOSABLE_ORIENTATIONS = frozenset(range(2, 9))
+
+# Modes safe to forward without a normalising re-encode. CMYK is
+# excluded on purpose (Adobe APP14 inversion); so is anything
+# multi-frame, checked separately.
+_PASSTHROUGH_SAFE_MODES = frozenset({"RGB", "RGBA", "L", "LA", "P"})
+
+# Retry ladder, used only when the default save came out LARGER than the
+# source — which happens when the source came from a stronger encoder
+# than PIL's defaults. Each step is tried in order and the smallest
+# result wins. The JPEG floor is 60: below that, compression artefacts
+# start eating faint pencil strokes, and an image the model can't read
+# is worse than one that costs a few KB more.
+_DENSE_SAVE_LADDER: dict[str, tuple[dict[str, Any], ...]] = {
+    "PNG": ({"compress_level": 9, "optimize": True},),
+    "JPEG": (
+        {"quality": 82, "optimize": True},
+        {"quality": 70, "optimize": True},
+        {"quality": 60, "optimize": True},
+    ),
 }
 
 
@@ -122,10 +138,24 @@ def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
     try:
         raw = base64.b64decode(data_base64)
         with Image.open(io.BytesIO(raw)) as opened:
-            # `exif_transpose` reads this same tag; anything other than
-            # absent-or-1 means the pixels need rewriting.
+            # `exif_transpose` only acts on orientations 2-8; 1, 0 and
+            # out-of-range values are no-ops there, so testing for
+            # "absent or 1" would re-encode an Orientation=0 image (some
+            # Android stacks and EXIF strippers write it) for nothing.
             orientation = opened.getexif().get(_EXIF_ORIENTATION_TAG)
-            if orientation in (None, 1) and max(opened.size) <= VISION_MAX_EDGE:
+            needs_rotate = orientation in _TRANSPOSABLE_ORIENTATIONS
+            # Modes/formats the save path used to normalise: CMYK JPEGs
+            # carry an Adobe inversion marker that not every decoder
+            # honours, and multi-frame files (APNG, MPO bursts) were
+            # silently flattened to frame one. Keep re-encoding those
+            # rather than newly forwarding them untouched — this early
+            # return is an optimisation and must not change what the
+            # model receives.
+            safe_to_skip = (
+                opened.mode in _PASSTHROUGH_SAFE_MODES
+                and getattr(opened, "n_frames", 1) == 1
+            )
+            if not needs_rotate and safe_to_skip and max(opened.size) <= VISION_MAX_EDGE:
                 return data_base64
             img = ImageOps.exif_transpose(opened)
             if max(img.size) > VISION_MAX_EDGE:
@@ -142,14 +172,16 @@ def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
             buf = io.BytesIO()
             img.save(buf, format=fmt)
             # A rotated image still has to be re-encoded, and PIL's
-            # defaults can land bigger than a source written by a
-            # stronger encoder. Retry once at settings that match or
-            # beat a typical scanner, and keep whichever is smaller —
-            # growth here is spent twice, against the request budget and
-            # in vision tokens.
-            if len(buf.getvalue()) > len(raw):
+            # defaults land bigger than a source written by a stronger
+            # encoder — measured up to +35% against a low-quality JPEG.
+            # Walk the ladder until we're back under the source size,
+            # keeping the smallest. Growth here is spent twice: against
+            # Anthropic's request budget and in vision tokens.
+            for options in _DENSE_SAVE_LADDER[fmt]:
+                if len(buf.getvalue()) <= len(raw):
+                    break
                 retry = io.BytesIO()
-                img.save(retry, format=fmt, **_DENSE_SAVE_OPTIONS[fmt])
+                img.save(retry, format=fmt, **options)
                 if len(retry.getvalue()) < len(buf.getvalue()):
                     buf = retry
             return base64.b64encode(buf.getvalue()).decode("ascii")

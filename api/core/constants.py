@@ -65,13 +65,20 @@ MAX_PDF_BYTES = 25 * 1024 * 1024
 # be part of the derivation rather than an afterthought.
 #
 # An image carrying an EXIF rotation must be re-encoded, and rotating
-# noisy scan content genuinely changes how well it compresses —
-# measured up to +6.1% even when re-saving at settings that match the
-# source encoder. (Images needing neither rotation nor downscaling are
-# now returned untouched, which removed a far worse +37% case; see
-# api/core/image_utils.py.) 10% covers the measured worst case with
-# room, and costs ~2MB of a cap no real submission approaches.
-_VISION_REENCODE_GROWTH = 1.10
+# noisy scan content genuinely changes how well it compresses. Two
+# mitigations in api/core/image_utils.py hold that down: images needing
+# neither rotation nor downscaling are returned untouched (this removed
+# a +37% case), and a re-encode that lands bigger than its source walks
+# a quality ladder until it doesn't (this took a +35% low-quality-JPEG
+# case down to +8.7%).
+#
+# The worst measured growth across hostile inputs — high sensor noise,
+# source JPEGs down to quality 25 — is then 1.087. Budget 1.20 so the
+# margin is set by measurement plus real headroom rather than by the
+# worst case we happened to try. It costs ~2MB off a cap that no real
+# submission approaches (the largest ever recorded in production is
+# 6.1MB).
+_VISION_REENCODE_GROWTH = 1.20
 # Whole-submission cap, in DECODED bytes — the most raw file content a
 # submission can carry and still be readable at the far end. Derived,
 # because a submission's whole purpose is to reach Vision: files are

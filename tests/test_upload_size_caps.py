@@ -44,6 +44,41 @@ def _b64_len(decoded_bytes: int) -> int:
     return 4 * math.ceil(decoded_bytes / 3)
 
 
+def _rotated_noisy_image(fmt: str, noise: int, **save_kwargs: Any) -> str:
+    """A page that forces the re-encode path, returned as base64.
+
+    Sensor noise plus an EXIF rotation is the hostile combination: the
+    rotation makes a re-encode unavoidable, and noisy content compresses
+    differently once rotated, so this is where growth actually happens.
+    Sized at/below VISION_MAX_EDGE so no downscale masks the effect.
+    """
+    import base64
+    import io
+    import random
+
+    from PIL import Image, ImageDraw
+
+    from api.core.image_utils import VISION_MAX_EDGE
+
+    random.seed(7)
+    img = Image.new("RGB", (VISION_MAX_EDGE, 1176))
+    pixels = img.load()
+    assert pixels is not None
+    for y in range(img.height):
+        for x in range(img.width):
+            value = 225 + random.randint(-noise, noise)
+            pixels[x, y] = (value, value, max(0, value - 4))
+    draw = ImageDraw.Draw(img)
+    for i in range(30):  # handwriting-ish strokes
+        draw.line([(20, 38 * i), (1540, 38 * i + 16)], fill=(5, 5, 40), width=5)
+
+    exif = img.getexif()
+    exif[0x0112] = 6  # rotate 90 — forces the re-encode
+    buf = io.BytesIO()
+    img.save(buf, format=fmt, exif=exif, **save_kwargs)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
 def _worst_case_encoded_submission() -> int:
     """Encoded size of a maximal submission, split to maximise padding.
 
@@ -127,45 +162,30 @@ def test_preprocessing_growth_stays_inside_the_budgeted_allowance() -> None:
     genuinely compresses differently, so real submissions overflowed a
     padding-sized allowance and were told "couldn't read this".
 
-    Uses a real image through the real function rather than arithmetic,
+    Uses real images through the real function rather than arithmetic,
     because the arithmetic was exactly what was wrong.
+
+    Covers BOTH formats. An earlier version of this test used only PNG
+    and passed for the wrong reason: PNG is the format where the dense
+    retry reliably beats PIL's default, while a low-quality source JPEG
+    was the case that actually blew the budget (+35%).
     """
-    import base64
-    import io
-    import random
-
-    from PIL import Image, ImageDraw
-
-    from api.core.image_utils import VISION_MAX_EDGE, preprocess_image_for_vision
-
-    random.seed(1)
-    img = Image.new("RGB", (VISION_MAX_EDGE, VISION_MAX_EDGE))
-    pixels = img.load()
-    assert pixels is not None
-    for y in range(img.height):  # sensor noise — the hostile case for PNG
-        for x in range(img.width):
-            value = 235 + random.randint(-15, 15)
-            pixels[x, y] = (value, value, value - 3)
-    draw = ImageDraw.Draw(img)
-    for i in range(40):
-        draw.line([(20, 38 * i), (1540, 38 * i + 18)], fill=(5, 5, 40), width=5)
-
-    # EXIF rotation forces the re-encode; small enough to skip downscale.
-    exif = img.getexif()
-    exif[0x0112] = 6
-    buf = io.BytesIO()
-    img.save(buf, format="PNG", compress_level=9, exif=exif)
-
-    encoded = base64.b64encode(buf.getvalue()).decode("ascii")
-    processed = preprocess_image_for_vision(encoded, "image/png")
-    growth = len(processed) / len(encoded)
+    from api.core.image_utils import preprocess_image_for_vision
 
     headroom = MAX_REQUEST_B64_BYTES / (MAX_SUBMISSION_TOTAL_BYTES * 4 / 3)
-    assert growth < headroom, (
-        f"preprocessing grew {(growth - 1) * 100:.1f}% but the derivation only "
-        f"budgets {(headroom - 1) * 100:.1f}% — a legal submission would be "
-        f"rejected as unreadable"
-    )
+
+    for fmt, media_type, save_kwargs, noise, label in (
+        ("PNG", "image/png", {"compress_level": 9}, 30, "PNG level=9"),
+        ("JPEG", "image/jpeg", {"quality": 25}, 35, "JPEG q25 (worst measured)"),
+        ("JPEG", "image/jpeg", {"quality": 45}, 60, "JPEG q45, heavy noise"),
+    ):
+        encoded = _rotated_noisy_image(fmt, noise, **save_kwargs)
+        growth = len(preprocess_image_for_vision(encoded, media_type)) / len(encoded)
+        assert growth < headroom, (
+            f"{label}: preprocessing grew {(growth - 1) * 100:.1f}% but the "
+            f"derivation budgets only {(headroom - 1) * 100:.1f}% — a legal "
+            f"submission would be refused as unreadable"
+        )
 
 
 def test_images_needing_no_work_are_not_re_encoded() -> None:
@@ -193,11 +213,89 @@ def test_images_needing_no_work_are_not_re_encoded() -> None:
     assert preprocess_image_for_vision(encoded, "image/png") is encoded
 
 
+@pytest.mark.parametrize(
+    ("orientation", "expect_untouched"),
+    [
+        (None, True),  # no EXIF at all
+        (0, True),  # written by some Android stacks / EXIF strippers
+        (1, True),  # explicitly "normal"
+        (9, True),  # out of range — exif_transpose ignores it
+        (6, False),  # a real rotation: must be applied
+    ],
+)
+def test_only_transposable_orientations_trigger_a_re_encode(
+    orientation: int | None, expect_untouched: bool
+) -> None:
+    """Skip the re-encode for every orientation that is a no-op.
+
+    `ImageOps.exif_transpose` only transforms 2-8. Testing for
+    "absent or 1" would re-encode an Orientation=0 image for nothing —
+    exactly the inflation the passthrough exists to avoid.
+    """
+    import base64
+    import io
+
+    from PIL import Image
+
+    from api.core.image_utils import preprocess_image_for_vision
+
+    img = Image.new("RGB", (800, 600), (200, 200, 200))
+    buf = io.BytesIO()
+    save_kwargs = {}
+    if orientation is not None:
+        exif = img.getexif()
+        exif[0x0112] = orientation
+        save_kwargs["exif"] = exif
+    img.save(buf, format="PNG", **save_kwargs)
+
+    encoded = base64.b64encode(buf.getvalue()).decode("ascii")
+    untouched = preprocess_image_for_vision(encoded, "image/png") is encoded
+    assert untouched is expect_untouched
+
+
+def test_passthrough_never_forwards_what_the_save_used_to_normalise() -> None:
+    """The optimisation must not change what the model receives.
+
+    Before the passthrough, every image was re-encoded, which silently
+    normalised two awkward classes: CMYK JPEGs (whose Adobe APP14
+    inversion marker not every decoder honours) and multi-frame files
+    (APNG / MPO bursts, collapsed to frame one). Forwarding those raw
+    would be a new behaviour, not a saved re-encode.
+    """
+    import base64
+    import io
+
+    from PIL import Image
+
+    from api.core.image_utils import preprocess_image_for_vision
+
+    cmyk = io.BytesIO()
+    Image.new("CMYK", (800, 600)).save(cmyk, format="JPEG")
+    cmyk_b64 = base64.b64encode(cmyk.getvalue()).decode("ascii")
+    assert preprocess_image_for_vision(cmyk_b64, "image/jpeg") is not cmyk_b64
+
+    animated = io.BytesIO()
+    Image.new("RGB", (400, 300), (10, 20, 30)).save(
+        animated,
+        format="PNG",
+        save_all=True,
+        append_images=[Image.new("RGB", (400, 300), (90, 80, 70))],
+    )
+    animated_b64 = base64.b64encode(animated.getvalue()).decode("ascii")
+    assert preprocess_image_for_vision(animated_b64, "image/png") is not animated_b64
+
+
 # ── The env override may raise the cap, never lower it ──────────────
 
 
 def _settings(**overrides: Any) -> Settings:
     base = {
+        # `_env_file=None` matches tests/test_config.py: without it
+        # Settings honours model_config["env_file"] = ".env", and the
+        # repo's own .env carries MAX_REQUEST_SIZE — so asserting on the
+        # derived default would go red for anyone who has the live
+        # mitigation set locally, testing their shell instead of the code.
+        "_env_file": None,
         "database_url": "postgresql+asyncpg://x:x@localhost:5432/x",
         "jwt_secret": "test-secret",
         "claude_api_key": "sk-ant-test",
@@ -205,7 +303,18 @@ def _settings(**overrides: Any) -> Settings:
     return Settings(**{**base, **overrides})  # type: ignore[arg-type]
 
 
-def test_default_request_size_is_the_derived_floor() -> None:
+def test_default_request_size_is_the_derived_floor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The unconfigured default is the derivation, not a literal.
+
+    `_env_file=None` stops Settings reading the repo's .env, but
+    pydantic-settings still reads the real environment — and
+    MAX_REQUEST_SIZE is set in production and on any machine carrying
+    the live mitigation. Clear it so this asserts the code's default
+    rather than whatever shell the suite happens to run in.
+    """
+    monkeypatch.delenv("MAX_REQUEST_SIZE", raising=False)
     assert _settings().max_request_size == MIN_REQUEST_SIZE_BYTES
 
 
