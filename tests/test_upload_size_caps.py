@@ -44,7 +44,9 @@ def _b64_len(decoded_bytes: int) -> int:
     return 4 * math.ceil(decoded_bytes / 3)
 
 
-def _rotated_noisy_image(fmt: str, noise: int, **save_kwargs: Any) -> str:
+def _rotated_noisy_image(
+    fmt: str, noise: int, square: bool = False, **save_kwargs: Any
+) -> str:
     """A page that forces the re-encode path, returned as base64.
 
     Sensor noise plus an EXIF rotation is the hostile combination: the
@@ -61,15 +63,16 @@ def _rotated_noisy_image(fmt: str, noise: int, **save_kwargs: Any) -> str:
     from api.core.image_utils import VISION_MAX_EDGE
 
     random.seed(7)
-    img = Image.new("RGB", (VISION_MAX_EDGE, 1176))
+    height = VISION_MAX_EDGE if square else 1176
+    img = Image.new("RGB", (VISION_MAX_EDGE, height))
     pixels = img.load()
     assert pixels is not None
     for y in range(img.height):
         for x in range(img.width):
-            value = 225 + random.randint(-noise, noise)
+            value = max(0, min(255, 225 - noise // 2 + random.randint(-noise, noise)))
             pixels[x, y] = (value, value, max(0, value - 4))
     draw = ImageDraw.Draw(img)
-    for i in range(30):  # handwriting-ish strokes
+    for i in range(height // 38):  # handwriting-ish strokes
         draw.line([(20, 38 * i), (1540, 38 * i + 16)], fill=(5, 5, 40), width=5)
 
     exif = img.getexif()
@@ -173,7 +176,9 @@ def test_an_adversarial_cap_filling_submission_stays_under_budget() -> None:
     from api.core.image_utils import preprocess_image_for_vision
 
     pages = [
-        _rotated_noisy_image("JPEG", 35, quality=25, optimize=True)
+        # 1568 square (legal, 33% more pixels than the earlier fixture)
+        # at the noise/quality that measured worst in review.
+        _rotated_noisy_image("JPEG", 90, quality=25, square=True)
         for _ in range(MAX_SUBMISSION_FILES - 1)
     ]
     processed = [len(preprocess_image_for_vision(p, "image/jpeg")) for p in pages]
@@ -259,28 +264,32 @@ def test_a_small_inflation_does_not_cost_image_quality() -> None:
 
     Descending a rung costs real fidelity on faint pencil, and
     extraction accuracy on handwriting is what this system does. Paying
-    that to claw back a few KB — against a budget with megabytes of
-    slack — is the wrong trade.
+    that to claw back a few KB is the wrong trade.
+
+    Asserts the output IS the plain default save — byte for byte — not
+    merely that it came out small. An earlier version checked only
+    `ratio <= 1.05`, which also holds when the ladder DOES descend, so
+    deleting the gate left it green.
     """
     import base64
     import io
 
-    from PIL import Image
+    from PIL import Image, ImageOps
 
     from api.core.image_utils import preprocess_image_for_vision
 
-    # A source whose default re-encode lands only slightly larger.
     encoded = _rotated_noisy_image("JPEG", 20, quality=75)
     processed = preprocess_image_for_vision(encoded, "image/jpeg")
-    ratio = len(processed) / len(encoded)
 
-    assert processed is not encoded, "rotation must still be applied"
-    assert ratio <= 1.05, (
-        f"grew {ratio:.3f}x — above the ladder trigger, so this fixture no "
-        f"longer exercises the small-inflation case"
+    # What the function produces before any ladder rung is considered.
+    source = Image.open(io.BytesIO(base64.b64decode(encoded)))
+    ungated = io.BytesIO()
+    ImageOps.exif_transpose(source).save(ungated, format="JPEG")
+
+    assert base64.b64decode(processed) == ungated.getvalue(), (
+        "the ladder descended on a sub-threshold inflation — a student's "
+        "handwriting was re-compressed to save a few KB"
     )
-    decoded = Image.open(io.BytesIO(base64.b64decode(processed)))
-    assert decoded.size == (1176, 1568), "rotation applied without downscaling"
 
 
 @pytest.mark.parametrize(

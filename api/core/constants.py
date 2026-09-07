@@ -59,42 +59,24 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB after base64 decode
 # PDFs are larger by nature (multi-page scans); 25 MB matches the
 # teacher_documents.py upload cap and Anthropic's document-block limit.
 MAX_PDF_BYTES = 25 * 1024 * 1024
-# Allowance for vision preprocessing GROWING an image on the way to the
-# model. `extract_student_work` budgets the bytes it actually sends,
-# which are measured AFTER `preprocess_image_for_vision`, so this has to
-# be part of the derivation rather than an afterthought.
+# Vision preprocessing runs between the submission cap and the request
+# budget, so whether it can GROW an image is part of this derivation.
 #
-# An image carrying an EXIF rotation must be re-encoded, and rotating
-# noisy scan content genuinely changes how well it compresses. Two
-# mitigations in api/core/image_utils.py hold that down: images needing
-# neither rotation nor downscaling are returned untouched (this removed
-# a +37% case), and a re-encode that lands bigger than its source walks
-# a quality ladder until it doesn't (this took a +35% low-quality-JPEG
-# case down to +8.7%).
+# This is not an estimate. `preprocess_image_for_vision` ENFORCES it:
+# after re-encoding it walks a quality ladder and then shrinks the image
+# until its output is within this ratio of its input. Growth is bounded
+# by construction, and the same constant drives both sides so they
+# cannot drift — which is the entire thesis of this module.
 #
-# The figure is an AGGREGATE, not a worst-case-per-file, because growth
-# and file size turn out to be anti-correlated. Measured over whole
-# submissions:
-#
-#   10x 1568px q60 phone pages, rotated   5.56MB -> 6.12MB   x1.100
-#   10x 4000px phone photos, rotated     71.91MB -> 4.92MB   x0.068
-#   6x large PNG scans                   18.19MB -> 18.19MB  x1.000
-#   10x small q25 JPEG (worst per file)   2.50MB -> 3.51MB   x1.402
-#
-# Files that inflate are small — a 1568px q25 JPEG is ~250KB, so ten of
-# them total 3.5MB against a 31MB budget. Anything large enough to
-# threaten the budget either downscales (and collapses) or is a PDF
-# (passed through at x1.0). So budgeting a worst-per-file ratio across
-# the ENTIRE cap prices in a submission that cannot exist, and the 1.20
-# that came from doing so dragged the total cap below MAX_PDF_BYTES —
-# re-creating, in the commit meant to prevent it, exactly the
-# caps-disagree bug this PR exists to fix.
-#
-# 1.05 covers realistic aggregate growth. The runtime guard in
-# extract_student_work measures the bytes actually assembled, so it,
-# not this estimate, is the real protection against the pathological
-# case.
-_VISION_REENCODE_GROWTH = 1.05
+# It was 1.20, then 1.05, both guessed from measurement, and both wrong
+# in the same way: a BUDGET for growth is a bet that no future image
+# exceeds it, and losing that bet refuses a student's homework as
+# unreadable after the server already accepted it. Bounding the growth
+# removes the bet. The 2% that remains is deliberate slack — it absorbs
+# base64's per-file padding and spares an image a resolution step for a
+# trivial overage.
+VISION_OUTPUT_GROWTH_CEILING = 1.02
+_VISION_REENCODE_GROWTH = VISION_OUTPUT_GROWTH_CEILING
 # Whole-submission cap, in DECODED bytes — the most raw file content a
 # submission can carry and still be readable at the far end. Derived,
 # because a submission's whole purpose is to reach Vision: files are

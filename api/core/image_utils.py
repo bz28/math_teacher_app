@@ -6,7 +6,11 @@ from typing import Any
 
 from PIL import Image, ImageOps
 
-from api.core.constants import MAX_IMAGE_BYTES, MAX_PDF_BYTES
+from api.core.constants import (
+    MAX_IMAGE_BYTES,
+    MAX_PDF_BYTES,
+    VISION_OUTPUT_GROWTH_CEILING,
+)
 
 # Anthropic vision downscales anything past ~1568px on the long edge
 # anyway, so we cap there before sending: same legibility, roughly half
@@ -17,6 +21,15 @@ VISION_MAX_EDGE = 1568
 # excluded on purpose (Adobe APP14 inversion); so is anything
 # multi-frame, checked separately.
 _PASSTHROUGH_SAFE_MODES = frozenset({"RGB", "RGBA", "L", "LA", "P"})
+
+# Shrink-to-fit, applied only once the quality ladder has failed to bring
+# a re-encode within VISION_OUTPUT_GROWTH_CEILING of its source size.
+# Each step takes 12% off the long edge; the floor is where handwriting
+# legibility starts to matter, and an image that small cannot threaten
+# the request budget anyway.
+_SHRINK_STEP = 0.88
+_SHRINK_ATTEMPTS = 4
+_SHRINK_FLOOR_EDGE = 900
 
 # How much inflation is tolerated before trading quality for bytes.
 # Descending the ladder costs real fidelity on faint pencil, so a small
@@ -191,6 +204,35 @@ def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
                 img.save(retry, format=fmt, **options)
                 if len(retry.getvalue()) < len(buf.getvalue()):
                     buf = retry
+            # Hard ceiling: preprocessing must never hand back MORE bytes
+            # than it was given. The ladder alone does not guarantee that
+            # — a heavily-noised low-quality JPEG re-encodes 1.4-2.1x
+            # larger even at the floor rung, because rotating noise
+            # destroys the correlation its original quantisation
+            # exploited.
+            #
+            # Without this ceiling the caller has to *budget* for growth,
+            # and no static budget is safe: a legal 10-file submission
+            # could assemble past Anthropic's request cap and be refused
+            # as unreadable AFTER the server accepted it. Shrinking a
+            # little is a far better trade — Anthropic downscales to
+            # ~1568px regardless, so a few percent off a rotated page
+            # costs nothing the model would have used.
+            for _ in range(_SHRINK_ATTEMPTS):
+                if len(buf.getvalue()) <= len(raw) * VISION_OUTPUT_GROWTH_CEILING:
+                    break
+                if max(img.size) <= _SHRINK_FLOOR_EDGE:
+                    # Too small to shrink further without hurting
+                    # legibility. Such an image is tiny in absolute
+                    # terms, so its growth cannot threaten the budget.
+                    break
+                img = img.resize(
+                    (max(1, int(img.width * _SHRINK_STEP)),
+                     max(1, int(img.height * _SHRINK_STEP))),
+                    Image.Resampling.LANCZOS,
+                )
+                buf = io.BytesIO()
+                img.save(buf, format=fmt, **_DENSE_SAVE_LADDER[fmt][-1])
             return base64.b64encode(buf.getvalue()).decode("ascii")
     except Exception:
         return data_base64
