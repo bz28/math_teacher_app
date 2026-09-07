@@ -1,0 +1,596 @@
+[
+  {
+    "ts": "2026-08-24T07:22:47.681455+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-24T07:42:12.330006+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-24T13:15:18.732964+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-24T13:33:46.713233+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-24T19:01:05.222878+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-24T19:16:47.860008+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-25T01:54:10.121077+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-25T02:06:14.847084+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-25T07:10:39.417720+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-25T07:27:54.330816+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-25T13:13:26.799492+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-25T13:31:46.514561+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-25T18:59:45.573918+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-25T19:14:38.828302+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-26T02:00:48.180540+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-26T02:11:58.282305+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-26T07:10:54.981787+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-26T07:29:10.458518+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-26T13:18:34.885092+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-26T13:37:55.469148+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-26T20:05:24.498335+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-26T21:10:39.017565+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-27T09:48:05.784566+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-27T10:27:56.779078+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-27T22:18:53.586108+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-27T22:33:14.882793+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-28T11:24:35.525830+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-28T12:09:20.373803+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-28T22:21:14.771339+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-28T22:36:12.721131+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-29T07:05:43.120652+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-29T07:20:08.480693+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-29T16:45:06.689676+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-29T16:51:33.612410+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-29T20:57:46.565809+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-29T21:09:50.916174+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-30T05:25:28.793294+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-30T05:45:23.944089+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-30T11:56:01.981660+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-30T12:11:20.809923+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-30T16:43:11.134777+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-30T16:56:34.629754+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-08-30T21:06:35.832471+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-30T21:29:40.994167+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "1 defect group(s)"
+  },
+  {
+    "ts": "2026-08-31T05:34:41.117177+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-31T06:03:19.250775+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "1 defect group(s)"
+  },
+  {
+    "ts": "2026-08-31T13:48:53.691312+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-31T14:23:07.240226+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "1 defect group(s)"
+  },
+  {
+    "ts": "2026-08-31T22:52:41.283100+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-08-31T23:00:39.104420+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-01T05:08:16.560060+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-01T05:36:21.113467+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-01T11:40:10.405216+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-01T11:59:14.293058+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-01T16:41:08.745043+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-01T16:53:38.957116+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-01T21:04:54.562909+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-01T21:17:43.156456+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-02T04:33:36.229747+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-02T05:01:16.129214+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-02T11:18:30.430335+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-02T11:41:09.171011+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-02T16:36:27.456075+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-02T16:50:26.767463+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-02T21:04:42.157795+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-02T21:14:39.191035+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-03T04:24:47.575311+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-03T04:59:21.047929+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-03T11:14:15.618720+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-03T11:41:06.902528+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-03T16:28:19.259055+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-03T16:39:42.550632+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-03T21:04:12.912340+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-03T21:18:35.905424+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-04T04:33:00.691283+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-04T05:02:45.163869+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-04T11:22:55.359881+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-04T11:42:53.378298+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-04T16:23:11.322838+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-04T16:34:55.915207+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-04T20:48:07.390408+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-04T21:00:42.030014+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-05T04:27:25.031572+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-05T04:54:50.097845+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-05T10:36:11.744441+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-05T10:54:06.973526+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-05T15:15:05.195644+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-05T15:30:53.720286+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-05T20:21:56.232542+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-05T20:41:24.262251+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-06T04:39:11.492773+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-06T05:02:44.656166+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-06T10:57:33.189687+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-06T11:18:43.993783+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-06T15:30:15.402920+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-06T15:43:29.986788+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-06T20:26:26.344086+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-09-06T20:46:42.149237+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-09-07T04:40:28.070216+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  }
+]
