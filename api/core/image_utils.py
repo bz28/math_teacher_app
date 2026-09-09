@@ -22,14 +22,27 @@ VISION_MAX_EDGE = 1568
 # multi-frame, checked separately.
 _PASSTHROUGH_SAFE_MODES = frozenset({"RGB", "RGBA", "L", "LA", "P"})
 
-# Shrink-to-fit, applied only once the quality ladder has failed to bring
-# a re-encode within VISION_OUTPUT_GROWTH_CEILING of its source size.
-# Each step takes 12% off the long edge; the floor is where handwriting
-# legibility starts to matter, and an image that small cannot threaten
-# the request budget anyway.
+# Shrink-to-fit, applied once the quality ladder has failed to bring a
+# re-encode within VISION_OUTPUT_GROWTH_CEILING of its source size. Each
+# step takes 12% off the long edge, which is ~23% of the area, so eight
+# steps can remove ~87% — enough for the ceiling to be reachable rather
+# than merely usually reached.
+#
+# The floor was 900px and the attempts 4, on the reasoning that an image
+# that small "cannot threaten the request budget anyway". That was the
+# same anti-correlation assumption that had already been wrong twice,
+# and it was wrong again: a sub-floor image skipped enforcement
+# entirely and grew up to 2.7x (a 900px q10 noisy JPEG), so nine of them
+# beside a PDF filling the cap assembled 32.9MB against a 31MB budget —
+# a fully legal submission refused as unreadable after acceptance.
+#
+# 320px is now a legibility floor and nothing else. Nothing is allowed
+# to depend on the floor being unreachable: measured across the
+# pathological cases, convergence takes 2-4 shrinks and lands at
+# 300-700px, well before it.
 _SHRINK_STEP = 0.88
-_SHRINK_ATTEMPTS = 4
-_SHRINK_FLOOR_EDGE = 900
+_SHRINK_ATTEMPTS = 8
+_SHRINK_FLOOR_EDGE = 320
 
 # How much inflation is tolerated before trading quality for bytes.
 # Descending the ladder costs real fidelity on faint pencil, so a small

@@ -45,7 +45,11 @@ def _b64_len(decoded_bytes: int) -> int:
 
 
 def _rotated_noisy_image(
-    fmt: str, noise: int, square: bool = False, **save_kwargs: Any
+    fmt: str,
+    noise: int,
+    square: bool = False,
+    edge: int | None = None,
+    **save_kwargs: Any,
 ) -> str:
     """A page that forces the re-encode path, returned as base64.
 
@@ -63,8 +67,9 @@ def _rotated_noisy_image(
     from api.core.image_utils import VISION_MAX_EDGE
 
     random.seed(7)
-    height = VISION_MAX_EDGE if square else 1176
-    img = Image.new("RGB", (VISION_MAX_EDGE, height))
+    width = edge or VISION_MAX_EDGE
+    height = width if square else 1176
+    img = Image.new("RGB", (width, height))
     pixels = img.load()
     assert pixels is not None
     for y in range(img.height):
@@ -73,7 +78,7 @@ def _rotated_noisy_image(
             pixels[x, y] = (value, value, max(0, value - 4))
     draw = ImageDraw.Draw(img)
     for i in range(height // 38):  # handwriting-ish strokes
-        draw.line([(20, 38 * i), (1540, 38 * i + 16)], fill=(5, 5, 40), width=5)
+        draw.line([(15, 38 * i), (width - 20, 38 * i + 14)], fill=(5, 5, 40), width=5)
 
     exif = img.getexif()
     exif[0x0112] = 6  # rotate 90 — forces the re-encode
@@ -198,6 +203,38 @@ def test_an_adversarial_cap_filling_submission_stays_under_budget() -> None:
         f"{MAX_REQUEST_B64_BYTES:,} budget — extract_student_work would "
         f"refuse it as unreadable"
     )
+
+
+def test_small_images_are_not_exempt_from_the_growth_ceiling() -> None:
+    """The shrink floor must not become an enforcement hole.
+
+    Regression for a bug found in review: the floor was 900px, justified
+    on the reasoning that an image that small "cannot threaten the
+    request budget anyway". It could. A 900px low-quality noisy JPEG
+    skipped enforcement and grew 2.7x, and nine of them beside a PDF
+    filling the cap assembled 32.9MB against a 31MB budget — a legal
+    submission refused as unreadable after the server accepted it.
+
+    This is the third time an assumption that growth and size are
+    anti-correlated turned out to be false, so the ceiling is asserted
+    directly rather than argued from size.
+    """
+    from api.core.constants import VISION_OUTPUT_GROWTH_CEILING
+    from api.core.image_utils import _SHRINK_FLOOR_EDGE, preprocess_image_for_vision
+
+    for edge in (900, 700, 500):
+        assert edge > _SHRINK_FLOOR_EDGE, (
+            f"{edge}px no longer sits above the shrink floor; pick sizes that "
+            f"still exercise the loop"
+        )
+        encoded = _rotated_noisy_image(
+            "JPEG", 110, square=True, edge=edge, quality=10
+        )
+        growth = len(preprocess_image_for_vision(encoded, "image/jpeg")) / len(encoded)
+        assert growth <= VISION_OUTPUT_GROWTH_CEILING, (
+            f"a {edge}px page grew {growth:.2f}x, over the "
+            f"{VISION_OUTPUT_GROWTH_CEILING} ceiling the derivation depends on"
+        )
 
 
 def test_images_needing_no_work_are_not_re_encoded() -> None:
