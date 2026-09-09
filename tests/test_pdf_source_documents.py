@@ -22,7 +22,7 @@ from sqlalchemy import text
 
 from api.core import document_vision as dv
 from api.core.auth import hash_password
-from api.core.constants import MAX_IMAGE_BYTES
+from api.core.constants import ANTHROPIC_MAX_REQUEST_BYTES, MAX_IMAGE_BYTES
 from api.core.document_vision import (
     MAX_TOTAL_SOURCE_B64_BYTES,
     MAX_VISION_IMAGES,
@@ -226,8 +226,8 @@ def test_budget_admits_a_realistic_full_size_image_selection() -> None:
 
 def test_budget_stays_under_the_anthropic_request_cap() -> None:
     """...while still leaving room for the prompt and tool schema."""
-    assert MAX_TOTAL_SOURCE_B64_BYTES < dv._ANTHROPIC_MAX_REQUEST_BYTES
-    headroom = dv._ANTHROPIC_MAX_REQUEST_BYTES - MAX_TOTAL_SOURCE_B64_BYTES
+    assert MAX_TOTAL_SOURCE_B64_BYTES < ANTHROPIC_MAX_REQUEST_BYTES
+    headroom = ANTHROPIC_MAX_REQUEST_BYTES - MAX_TOTAL_SOURCE_B64_BYTES
     # Prompt + schema + JSON envelope are kilobytes; base64 needs no
     # escaping. A megabyte is already generous.
     assert headroom >= 512 * 1024
@@ -237,4 +237,4 @@ def test_max_images_ceiling_cannot_be_silently_capped_by_the_budget() -> None:
     """MAX_VISION_IMAGES images only exceed the budget when the request
     would genuinely have failed — document the crossover explicitly."""
     at_ceiling = MAX_VISION_IMAGES * MAX_IMAGE_BYTES * _B64_GROWTH
-    assert at_ceiling > dv._ANTHROPIC_MAX_REQUEST_BYTES
+    assert at_ceiling > ANTHROPIC_MAX_REQUEST_BYTES

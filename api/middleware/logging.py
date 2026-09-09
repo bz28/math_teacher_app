@@ -25,13 +25,36 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_data)
 
 
+# Our own top-level logger namespace. LOG_LEVEL applies HERE, not to the
+# root, so third-party libraries never inherit DEBUG.
+#
+# This is deliberately an allowlist of ours rather than a blocklist of
+# theirs. Vendor SDKs log request and response bodies at DEBUG:
+# `anthropic/_base_client.py` dumps full request options (and on
+# pydantic v2 the `content` exclusion does NOT apply, so that is the
+# base64 of a student's homework photo), and `stripe/_util.log_debug`
+# emits complete request params and response bodies — a teacher's email,
+# name and address. An enumerated blocklist only covers the vendors
+# someone remembered; capping the root and opting our own namespace in
+# means the next dependency added is safe by default.
+#
+# LOG_LEVEL=DEBUG is set in production today, so this is what makes
+# honouring LOG_LEVEL safe at all.
+_OWN_LOGGER_NAMESPACE = "api"
+
+
 def setup_logging(level: str = "INFO") -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JSONFormatter())
     root = logging.getLogger()
     root.handlers.clear()
     root.addHandler(handler)
-    root.setLevel(getattr(logging, level.upper(), logging.INFO))
+    resolved = getattr(logging, level.upper(), logging.INFO)
+    # A record is gated by its ORIGINATING logger's effective level, not
+    # by root's, so our namespace still emits DEBUG through root's
+    # handler while everything else is floored at INFO.
+    root.setLevel(max(resolved, logging.INFO))
+    logging.getLogger(_OWN_LOGGER_NAMESPACE).setLevel(resolved)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 
