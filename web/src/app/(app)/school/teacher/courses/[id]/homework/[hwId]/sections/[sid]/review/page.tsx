@@ -142,6 +142,12 @@ const CONFIDENCE_HIGH = 0.85;
 // student's confirm/expand selections are scoped to their submission id.
 const EMPTY_ID_SET: ReadonlySet<string> = new Set<string>();
 
+// How many submission details to keep in memory. Each one carries the
+// student's files as base64, so this is a memory ceiling as much as a
+// hit-rate dial: enough to cover stepping back and forth around the
+// student you're on, not enough to hold a whole period.
+const DETAIL_CACHE_MAX = 5;
+
 function confidenceBand(c: number): "high" | "medium" | "low" {
   if (c >= CONFIDENCE_HIGH) return "high";
   if (c >= CONFIDENCE_LOW) return "medium";
@@ -405,6 +411,120 @@ function HomeworkSectionReview({
   // inventing them client-side would show a teacher scores that
   // aren't real. Refetch instead.
   const [reloadNonce, setReloadNonce] = useState(0);
+
+  // Details the teacher has already paid for, newest last. Submission
+  // files ship inside this payload as base64 (up to 50MB a piece), and
+  // "next student" is the hot path of the whole page — without a cache,
+  // stepping back to the student you just graded re-downloads all of it.
+  //
+  // A Map is the LRU: insertion order IS recency, so re-caching a key
+  // means delete-then-set, and eviction takes the first key. Small on
+  // purpose — these entries are large, and the useful window is the
+  // handful of students around the current one.
+  const detailCacheRef = useRef<Map<string, TeacherSubmissionDetail>>(
+    new Map(),
+  );
+  const cacheDetail = useCallback((d: TeacherSubmissionDetail) => {
+    const cache = detailCacheRef.current;
+    cache.delete(d.submission_id);
+    cache.set(d.submission_id, d);
+    while (cache.size > DETAIL_CACHE_MAX) {
+      const oldest = cache.keys().next().value;
+      if (oldest === undefined) break;
+      cache.delete(oldest);
+    }
+  }, []);
+
+  // Drop one submission because the server just changed it under us.
+  //
+  // Needed because every mutation applies its authoritative result
+  // through a GUARDED `setDetail` — `d.submission_id === submissionId ? …
+  // : d` — which returns the same reference, and therefore does nothing,
+  // when the teacher has already advanced. Before the cache that was
+  // harmless: a return visit refetched. With one, the pre-save copy is
+  // served back, and the panel would show "Published" for a grade the
+  // roster already knows is dirty. Called unconditionally alongside each
+  // of those updaters: when the detail IS on screen the write-through
+  // re-caches the fresh object a moment later, so evicting first costs
+  // nothing.
+  //
+  // Bumping the epoch is what makes this safe against a request already
+  // in the air: see `loadDetail`.
+  const forgetDetail = useCallback((submissionId: string) => {
+    detailCacheRef.current.delete(submissionId);
+    inflightRef.current.delete(submissionId);
+    cacheEpochRef.current += 1;
+  }, []);
+
+  // Drop everything, for a change that moved more than one submission.
+  const forgetAllDetails = useCallback(() => {
+    detailCacheRef.current.clear();
+    inflightRef.current.clear();
+    cacheEpochRef.current += 1;
+  }, []);
+
+  // One request per submission, shared by the fetch and the prefetch.
+  //
+  // Without this, advancing to the student being prefetched threw the
+  // in-flight response away and started the same download again — the
+  // prefetch only paid off if it beat the teacher, which is backwards
+  // for a page built around moving fast. Now the second caller awaits
+  // the first.
+  const inflightRef = useRef<Map<string, Promise<TeacherSubmissionDetail>>>(
+    new Map(),
+  );
+  // Incremented by every invalidation. A response carrying an older
+  // epoch describes the world before that change and must not be
+  // cached — without this, a 50MB photo submission requested just
+  // before a publish lands seconds after it and quietly reinstates the
+  // pre-publish state the clear had just removed.
+  const cacheEpochRef = useRef(0);
+  const loadDetail = useCallback(
+    (id: string) => {
+      const existing = inflightRef.current.get(id);
+      if (existing) return existing;
+      const epoch = cacheEpochRef.current;
+      const request = teacher
+        .submissionDetail(id)
+        .then((d) => {
+          if (cacheEpochRef.current === epoch) cacheDetail(d);
+          return d;
+        })
+        .finally(() => {
+          // Only if it's still ours: an invalidation may have cleared
+          // the map and a newer request taken this key.
+          if (inflightRef.current.get(id) === request) {
+            inflightRef.current.delete(id);
+          }
+        });
+      inflightRef.current.set(id, request);
+      return request;
+    },
+    [cacheDetail],
+  );
+
+  // A roster reload means server state moved under us, so everything
+  // cached against the old state is suspect. Drop all of it rather than
+  // hand a teacher a stale panel.
+  //
+  // This does NOT spare the detail on screen. An earlier comment here
+  // claimed it did, on the theory that this effect runs before the
+  // write-through below — but the write-through's deps are `[detail]`,
+  // which a nonce bump doesn't touch, so it doesn't re-run and nothing
+  // puts the current detail back. Dropping it too is the safe direction
+  // and it costs one refetch; the note is here so nobody rebuilds the
+  // ordering argument on a guarantee that was never real.
+  useEffect(() => {
+    forgetAllDetails();
+  }, [reloadNonce, forgetAllDetails]);
+
+  // Write through on every change to the live slot. `detail` is also
+  // where the optimistic grade/feedback/extraction edits land, so
+  // hooking the state rather than the fetch is what keeps the cache from
+  // drifting into serving a teacher their own edits back undone.
+  useEffect(() => {
+    if (detail) cacheDetail(detail);
+  }, [detail, cacheDetail]);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -620,10 +740,16 @@ function HomeworkSectionReview({
   useEffect(() => {
     if (!selectedSubmissionId) return;
     if (detail?.submission_id === selectedSubmissionId) return;
+    // Already paid for — including, thanks to the write-through above,
+    // any grades or feedback edited on it since.
+    const cached = detailCacheRef.current.get(selectedSubmissionId);
+    if (cached) {
+      setDetail(cached);
+      return;
+    }
     let cancelled = false;
     const id = selectedSubmissionId;
-    teacher
-      .submissionDetail(id)
+    loadDetail(id)
       .then((d) => {
         if (cancelled) return;
         setDetail(d);
@@ -642,7 +768,7 @@ function HomeworkSectionReview({
     return () => {
       cancelled = true;
     };
-  }, [selectedSubmissionId, detail?.submission_id]);
+  }, [selectedSubmissionId, detail?.submission_id, loadDetail]);
 
   // Fetch the full integrity detail in parallel. Independent of
   // submissionDetail so a missing/404 integrity record (HW had the
@@ -867,6 +993,7 @@ function HomeworkSectionReview({
             // response clobbering a fresh Approve. See the note at the top of
             // persistBreakdown.
           });
+          forgetDetail(submissionId);
           setDetail((d) =>
             d && d.submission_id === submissionId
               ? { ...d, grade_dirty: res.grade_dirty }
@@ -891,7 +1018,7 @@ function HomeworkSectionReview({
         });
       }
     },
-    [applyGradeToRoster],
+    [applyGradeToRoster, forgetDetail],
   );
 
   // Optimistic writer — mutates `detail.breakdown` in place so the
@@ -1106,6 +1233,14 @@ function HomeworkSectionReview({
           // snapshot, refreshed on next open like the other counters.)
           setFlaggedOtherSections(0);
         }
+        // Publish moves every row that qualified, not just the one on
+        // screen, and it does not bump `reloadNonce` — so nothing else
+        // invalidates the details cached for the students the teacher
+        // already visited. Without this, stepping back to one of them
+        // shows "Edited since publish" on a grade that was just
+        // republished. The open student is handled by the updater below,
+        // whose new object re-caches through the write-through.
+        forgetAllDetails();
         // If the open student's grade was part of the publish, clear
         // the local dirty flag on detail too so the strip updates
         // without a refetch.
@@ -1127,7 +1262,12 @@ function HomeworkSectionReview({
         setPublishing(false);
       }
     },
-    [assignmentId, pendingReviewedOtherSections, dirtyReviewedOtherSections],
+    [
+      assignmentId,
+      pendingReviewedOtherSections,
+      dirtyReviewedOtherSections,
+      forgetAllDetails,
+    ],
   );
 
   // Publish-button click gate. If every grade about to go out is approved
@@ -1198,6 +1338,7 @@ function HomeworkSectionReview({
               )
             : prev,
         );
+        forgetDetail(submissionId);
         setDetail((d) =>
           d && d.submission_id === submissionId
             ? { ...d, reviewed_at: res.reviewed_at }
@@ -1212,7 +1353,7 @@ function HomeworkSectionReview({
         setMarkingReviewedId(null);
       }
     },
-    [],
+    [forgetDetail],
   );
 
   // Undo an approval — clears reviewed_at server-side, then mirrors it
@@ -1239,6 +1380,7 @@ function HomeworkSectionReview({
               )
             : prev,
         );
+        forgetDetail(submissionId);
         setDetail((d) =>
           d && d.submission_id === submissionId
             ? { ...d, reviewed_at: null }
@@ -1253,7 +1395,7 @@ function HomeworkSectionReview({
         setMarkingReviewedId(null);
       }
     },
-    [],
+    [forgetDetail],
   );
 
   // Re-run AI grading with the assignment's current rubric. Overrides
@@ -1300,6 +1442,7 @@ function HomeworkSectionReview({
               )
             : prev,
         );
+        forgetDetail(submissionId);
         setDetail((d) =>
           d && d.submission_id === submissionId
             ? {
@@ -1322,7 +1465,7 @@ function HomeworkSectionReview({
         setRegradingSubmissionId(null);
       }
     },
-    [],
+    [forgetDetail],
   );
 
   // Next submitter whose grade isn't released to students yet —
@@ -1345,6 +1488,26 @@ function HomeworkSectionReview({
     }
     return null;
   }, [roster, selectedEntry]);
+
+  // Warm the next student while the teacher is still reading this one.
+  // Gated on the current detail having landed so the prefetch never
+  // competes with the fetch the teacher is actually waiting on, and on
+  // a cache miss so it doesn't re-download what we already hold.
+  // Failures are swallowed: this is speculative work, and the real fetch
+  // on arrival is what surfaces an error the teacher can act on.
+  const prefetchId = nextStudent?.submission?.id ?? null;
+  useEffect(() => {
+    if (!prefetchId || !detailIsCurrent) return;
+    if (detailCacheRef.current.has(prefetchId)) return;
+    // Deliberately NOT cancelled on cleanup — letting it finish is the
+    // entire point, because the case that matters is the teacher
+    // advancing onto the student being warmed. What makes outliving this
+    // effect safe is not that it writes to a ref (that is precisely what
+    // would let it outlive an invalidation) but the epoch check in
+    // `loadDetail`, which drops a response describing a world that has
+    // since moved.
+    void loadDetail(prefetchId).catch(() => {});
+  }, [prefetchId, detailIsCurrent, loadDetail]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-10">
