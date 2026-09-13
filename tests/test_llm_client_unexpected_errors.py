@@ -22,7 +22,7 @@ logging.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -31,13 +31,21 @@ from api.core.llm_schemas import DISTRACTOR_SCHEMA
 
 # The literal shape of the failure that took production down.
 _SDK_SIGNATURE_BREAK = TypeError(
-    "AsyncMessages.create() got an unexpected keyword argument 'temperature'"
+    "AsyncMessages.stream() got an unexpected keyword argument 'temperature'"
 )
 
 
 def _client_raising(exc: BaseException) -> Any:
     client = AsyncMock()
-    client.messages.create = AsyncMock(side_effect=exc)
+    # `call_claude_vision` streams: `async with client.messages.stream(...)`.
+    # `stream(...)` is called, not awaited, so this must be a sync Mock —
+    # an AsyncMock would return an un-awaited coroutine and the `async
+    # with` would fail on a different error than the one under test.
+    #
+    # Raising from the call itself is the faithful shape: the 2026-09-03
+    # break was a rejected kwarg, which blows up at call time, before any
+    # context manager is entered.
+    client.messages.stream = MagicMock(side_effect=exc)
     return client
 
 

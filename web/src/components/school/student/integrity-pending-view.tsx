@@ -11,7 +11,7 @@ interface Props {
    *  stays stuck at "extracting" even after Vision writes the
    *  extraction. We watch `sub.extraction` landing on the submission
    *  row and fire onReady so the parent can route to the confirm
-   *  screen instead of spinning the full 90s timeout. */
+   *  screen instead of spinning out the full timeout. */
   assignmentId: string;
   /** Called when the wait this view is responsible for has ended:
    *
@@ -29,17 +29,37 @@ interface Props {
 }
 
 const POLL_INTERVAL_MS = 3000;
-const TIMEOUT_MS = 90_000;
+// 90s was the original budget and it was measured against the wrong
+// thing. Production extraction latency runs p50 57.7s / p95 87.2s, so
+// this screen was quitting under three seconds after the 95th-percentile
+// read finished — roughly one student in twenty was shown "Couldn't
+// prepare your check" for work that had actually succeeded.
+//
+// It got worse once the server stopped discarding slow reads. Extraction
+// streams now (api/core/llm_client.py), so a dense page legitimately runs
+// past two minutes instead of dying at ninety seconds: one of the two
+// submissions stranded in production replays at 114s. At the old ceiling
+// this screen would still have called that a failure while the server was
+// busy succeeding.
+//
+// Sized above the slowest real read on record (179s) with headroom for
+// the post-confirm question-writing wait that shares this component.
+const TIMEOUT_MS = 240_000;
+// Past this the wait is no longer "about a minute" and pretending
+// otherwise is what makes a working system feel broken. The copy switches
+// to an honest slow-path message rather than the screen going quiet.
+const SLOW_AFTER_MS = 75_000;
 
 /**
  * Shown between homework submit and the integrity-check chat while
  * the background pipeline (Vision + Sonnet) prepares the follow-up
- * questions. Polls every 3s; gives up after 90s with an onTimeout
- * callback so the parent can render an error state.
+ * questions. Polls every 3s; gives up after TIMEOUT_MS with an
+ * onTimeout callback so the parent can render an error state.
  *
- * This whole screen exists because the integrity pipeline takes
- * 20–60s of real LLM work and can't run inline in the submit
- * request without timing out Railway.
+ * This whole screen exists because the integrity pipeline is real LLM
+ * work — p50 ~58s, and a dense multi-page submission runs past two
+ * minutes — which can't happen inline in the submit request without
+ * timing out Railway.
  */
 // Phase-aware copy. The view runs through two distinct waits with
 // very different operations in flight, so the spinner copy should
@@ -84,7 +104,7 @@ export function IntegrityPendingView({
 
   // Refs for stable callback identities inside the interval closure —
   // we don't want React re-running the poll effect every time a
-  // callback prop changes (which would reset the 90s timeout), and
+  // callback prop changes (which would reset the timeout), and
   // we don't want the poll loop to see stale callbacks.
   const onReadyRef = useRef(onReady);
   const onTimeoutRef = useRef(onTimeout);
@@ -188,11 +208,21 @@ export function IntegrityPendingView({
       </h1>
       <p className="mt-3 text-sm text-text-secondary">{copy.subtitle}</p>
       {/* Anchor expectations to the real budget: the poll times out at
-          90s (TIMEOUT_MS), so promising "about 20 seconds" while a live
-          counter ticks past it manufactures the exact anxiety this
-          screen exists to calm. "About a minute" sits inside the window. */}
+          TIMEOUT_MS, so promising "about 20 seconds" while a live counter
+          ticks past it manufactures the exact anxiety this screen exists
+          to calm. "About a minute" matches the p50 (57.7s).
+
+          Past SLOW_AFTER_MS that promise has visibly expired, and leaving
+          it up is worse than replacing it — the student is watching a
+          counter contradict the sentence above it. A dense page really can
+          take a few minutes now that slow reads are no longer discarded,
+          so the honest line is that it's a long one and still running,
+          with the reason (their pages are full) so it reads as the system
+          working rather than stuck. */}
       <p className="mt-4 text-xs text-text-muted">
-        This usually takes about a minute.
+        {elapsedMs >= SLOW_AFTER_MS
+          ? "Still going — looks like you wrote a lot. Hang tight, this one can take a few minutes."
+          : "This usually takes about a minute."}
         {seconds >= 10 && ` (${seconds}s)`}
       </p>
     </div>
