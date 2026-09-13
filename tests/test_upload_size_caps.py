@@ -26,6 +26,7 @@ import pytest
 from api.config import Settings
 from api.core.constants import (
     ANTHROPIC_MAX_REQUEST_BYTES,
+    MAX_PDF_BYTES,
     MAX_REQUEST_B64_BYTES,
     MAX_SUBMISSION_FILES,
     MAX_SUBMISSION_TOTAL_BYTES,
@@ -127,6 +128,45 @@ def test_transport_cap_clears_a_maximal_submission() -> None:
     the endpoint's explanatory message.
     """
     assert MIN_REQUEST_SIZE_BYTES >= _worst_case_encoded_submission()
+
+
+def test_transport_clears_every_upload_route_not_just_submissions() -> None:
+    """The derivation has to cover EVERY endpoint that takes an upload.
+
+    Regression for a bug four rounds missed: the transport floor was
+    derived from the student submission alone, so the teacher's document
+    upload — same `validate_and_decode_upload`, same base64-in-JSON
+    shape, `MAX_PDF_BYTES` per file — had a 33.3MB body against a 31.4MB
+    cap and died pre-handler with a bare 413. That is the very bug this
+    module exists to prevent, on the route the derivation forgot.
+    """
+    largest_single_upload = _b64_len(MAX_PDF_BYTES)
+    assert MIN_REQUEST_SIZE_BYTES >= largest_single_upload, (
+        f"a legal {MAX_PDF_BYTES / 1024 / 1024:.0f}MB upload is a "
+        f"{largest_single_upload / 1024 / 1024:.1f}MB body, over the "
+        f"{MIN_REQUEST_SIZE_BYTES / 1024 / 1024:.1f}MB transport cap"
+    )
+
+
+def test_the_growth_ceiling_holds_at_the_top_of_the_cap() -> None:
+    """What the derivation actually promises, re-inflated.
+
+    Every other test here relates the submission cap UPWARD to the
+    request budget. None checked the quantity the guard in
+    `extract_student_work` actually measures: the worst-case encoded
+    submission AFTER preprocessing may grow by the ceiling. Flooring on
+    the way down while base64 ceils on the way back up — and each file
+    padding independently — left that ~26 bytes over budget.
+    """
+    from api.core.constants import VISION_OUTPUT_GROWTH_CEILING
+
+    worst_after_growth = (
+        _worst_case_encoded_submission() * VISION_OUTPUT_GROWTH_CEILING
+    )
+    assert worst_after_growth <= MAX_REQUEST_B64_BYTES, (
+        f"a maximal submission assembles {worst_after_growth:,.0f} bytes "
+        f"against a {MAX_REQUEST_B64_BYTES:,} budget"
+    )
 
 
 def test_endpoint_total_size_check_is_reachable() -> None:
@@ -237,63 +277,62 @@ def test_small_images_are_not_exempt_from_the_growth_ceiling() -> None:
         )
 
 
-def test_images_needing_no_work_are_not_re_encoded() -> None:
-    """A no-op re-encode is pure inflation, paid twice.
+@pytest.mark.parametrize(
+    "container",
+    ["exif", "xmp", "png_text", "jpeg_comment"],
+)
+def test_no_metadata_container_reaches_the_model(container: str) -> None:
+    """Nothing the camera wrote may leave with the image.
 
-    PIL's save defaults are weaker than most scanners', so passing an
-    already-good image through cost up to +37% — against the request
-    budget AND in vision tokens — for an identical picture.
+    Re-encoding is the only thing that scrubs, and this is the test that
+    has to know it. An earlier version asserted on `Image.getexif()` —
+    the SAME predicate the code used to decide whether it could skip the
+    re-encode — so it was structurally incapable of catching the bug it
+    was written to prevent: `getexif()` reads only the Exif container,
+    while scan apps write GPS into XMP. Each container here is therefore
+    probed by searching the RETURNED BYTES, not by asking Pillow.
     """
     import base64
     import io
 
-    from PIL import Image, ImageDraw
+    from PIL import Image, PngImagePlugin
 
     from api.core.image_utils import preprocess_image_for_vision
 
-    img = Image.new("L", (1200, 1500), 255)
-    draw = ImageDraw.Draw(img)
-    for i in range(40):
-        draw.line([(50, 40 * i), (1150, 40 * i + 20)], fill=0, width=3)
+    secret = b"GPSLatitude-40-44-54-N"
+    xmp = (
+        b'<?xpacket begin="?"?><x:xmpmeta xmlns:x="adobe:ns:meta/">'
+        b'<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+        b'<rdf:Description exif:GPSLatitude="' + secret + b'"/>'
+        b"</rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
+    )
+
+    img = Image.new("RGB", (900, 700), (205, 205, 205))
     buf = io.BytesIO()
-    img.save(buf, format="PNG", compress_level=9, optimize=True)
+    if container == "exif":
+        exif = img.getexif()
+        exif[0x010F] = secret.decode()
+        img.save(buf, format="JPEG", exif=exif)
+        media_type = "image/jpeg"
+    elif container == "xmp":
+        img.save(buf, format="JPEG", xmp=xmp)
+        media_type = "image/jpeg"
+    elif container == "jpeg_comment":
+        img.save(buf, format="JPEG", comment=secret)
+        media_type = "image/jpeg"
+    else:
+        meta = PngImagePlugin.PngInfo()
+        meta.add_text("Author", secret.decode())
+        img.save(buf, format="PNG", pnginfo=meta)
+        media_type = "image/png"
 
     encoded = base64.b64encode(buf.getvalue()).decode("ascii")
-    assert preprocess_image_for_vision(encoded, "image/png") is encoded
+    assert secret in base64.b64decode(encoded), "fixture did not embed the metadata"
 
-
-def test_camera_metadata_never_reaches_the_model() -> None:
-    """EXIF must not survive the trip to a third-party processor.
-
-    Re-encoding strips EXIF as a side effect (`img.save` is never handed
-    an `exif=`), so before the passthrough existed every submitted photo
-    was scrubbed. Skipping the save for an image that needs no pixel
-    work would have forwarded camera make, model, timestamp and GPS —
-    for photographs taken by minors. The passthrough is a byte
-    optimisation and must not buy itself with their location.
-    """
-    import base64
-    import io
-
-    from PIL import Image
-
-    from api.core.image_utils import preprocess_image_for_vision
-
-    img = Image.new("RGB", (1200, 900), (210, 210, 210))
-    exif = img.getexif()
-    exif[0x010F] = "Apple"
-    exif[0x0110] = "iPhone 15 Pro"
-    exif[0x0132] = "2026:09:07 08:12:33"
-    exif[0x0112] = 1  # normal orientation — no pixel work needed
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", exif=exif)
-
-    encoded = base64.b64encode(buf.getvalue()).decode("ascii")
-    processed = preprocess_image_for_vision(encoded, "image/jpeg")
-
-    assert processed is not encoded, "an image carrying EXIF must be re-encoded"
-    survived = Image.open(io.BytesIO(base64.b64decode(processed))).getexif()
-    assert not survived, f"EXIF reached the model: {dict(survived)}"
+    returned = base64.b64decode(preprocess_image_for_vision(encoded, media_type))
+    assert secret not in returned, (
+        f"{container} survived preprocessing and would be sent to Anthropic"
+    )
 
 
 def test_a_small_inflation_does_not_cost_image_quality() -> None:
@@ -327,96 +366,6 @@ def test_a_small_inflation_does_not_cost_image_quality() -> None:
         "the ladder descended on a sub-threshold inflation — a student's "
         "handwriting was re-compressed to save a few KB"
     )
-
-
-@pytest.mark.parametrize(
-    ("exif_tags", "expect_untouched"),
-    [
-        (None, True),  # no EXIF at all — a scan; the only skippable case
-        ({0x0112: 1}, False),  # "normal" orientation, but EXIF present
-        ({0x0112: 0}, False),  # written by some Android stacks
-        ({0x0112: 6}, False),  # a real rotation
-        ({0x010F: "Apple"}, False),  # no orientation, still identifying
-        ("gps-only", False),  # location and nothing else — the worst case
-    ],
-)
-def test_only_metadata_free_images_skip_the_re_encode(
-    exif_tags: dict[int, object] | str | None, expect_untouched: bool
-) -> None:
-    """EXIF presence, not its value, decides whether we re-encode.
-
-    The save is the only thing that strips metadata, so "does this image
-    need rotating" is the wrong question — an image with a benign
-    Orientation=1 still carries whatever else the camera wrote.
-    """
-    import base64
-    import io
-
-    from PIL import Image
-
-    from api.core.image_utils import preprocess_image_for_vision
-
-    img = Image.new("RGB", (800, 600), (200, 200, 200))
-    buf = io.BytesIO()
-    save_kwargs = {}
-    if exif_tags == "gps-only":
-        # GPS lives in a sub-IFD, so this checks that top-level
-        # truthiness still catches a photo carrying location and
-        # nothing else — the leak with the worst consequences.
-        exif = img.getexif()
-        gps = exif.get_ifd(0x8825)
-        gps[1], gps[2] = "N", (40.0, 44.0, 54.0)
-        gps[3], gps[4] = "W", (73.0, 59.0, 12.0)
-        save_kwargs["exif"] = exif
-    elif exif_tags is not None:
-        exif = img.getexif()
-        for tag, value in exif_tags.items():
-            exif[tag] = value
-        save_kwargs["exif"] = exif
-    # GPS only round-trips through JPEG (PIL does not carry a GPS sub-IFD
-    # into PNG's eXIf chunk), and JPEG is what phone cameras emit anyway.
-    fmt = "JPEG" if exif_tags == "gps-only" else "PNG"
-    img.save(buf, format=fmt, **save_kwargs)
-
-    encoded = base64.b64encode(buf.getvalue()).decode("ascii")
-    media_type = "image/jpeg" if fmt == "JPEG" else "image/png"
-    untouched = preprocess_image_for_vision(encoded, media_type) is encoded
-    assert untouched is expect_untouched
-
-
-def test_passthrough_never_forwards_what_the_save_used_to_normalise() -> None:
-    """The optimisation must not change what the model receives.
-
-    Before the passthrough, every image was re-encoded, which silently
-    normalised two awkward classes: CMYK JPEGs (whose Adobe APP14
-    inversion marker not every decoder honours) and multi-frame files
-    (APNG / MPO bursts, collapsed to frame one). Forwarding those raw
-    would be a new behaviour, not a saved re-encode.
-    """
-    import base64
-    import io
-
-    from PIL import Image
-
-    from api.core.image_utils import preprocess_image_for_vision
-
-    cmyk = io.BytesIO()
-    Image.new("CMYK", (800, 600)).save(cmyk, format="JPEG")
-    cmyk_b64 = base64.b64encode(cmyk.getvalue()).decode("ascii")
-    assert preprocess_image_for_vision(cmyk_b64, "image/jpeg") is not cmyk_b64
-
-    animated = io.BytesIO()
-    Image.new("RGB", (400, 300), (10, 20, 30)).save(
-        animated,
-        format="PNG",
-        save_all=True,
-        append_images=[Image.new("RGB", (400, 300), (90, 80, 70))],
-    )
-    animated_b64 = base64.b64encode(animated.getvalue()).decode("ascii")
-    assert preprocess_image_for_vision(animated_b64, "image/png") is not animated_b64
-
-
-# ── The env override may raise the cap, never lower it ──────────────
 
 
 def _settings(**overrides: Any) -> Settings:

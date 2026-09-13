@@ -17,11 +17,6 @@ from api.core.constants import (
 # the vision-token cost. Matches the harness judge's _MAX_EDGE.
 VISION_MAX_EDGE = 1568
 
-# Modes safe to forward without a normalising re-encode. CMYK is
-# excluded on purpose (Adobe APP14 inversion); so is anything
-# multi-frame, checked separately.
-_PASSTHROUGH_SAFE_MODES = frozenset({"RGB", "RGBA", "L", "LA", "P"})
-
 # Shrink-to-fit, applied once the quality ladder has failed to bring a
 # re-encode within VISION_OUTPUT_GROWTH_CEILING of its source size. Each
 # step takes 12% off the long edge, which is ~23% of the area, so eight
@@ -44,10 +39,20 @@ _SHRINK_STEP = 0.88
 _SHRINK_ATTEMPTS = 8
 _SHRINK_FLOOR_EDGE = 320
 
-# How much inflation is tolerated before trading quality for bytes.
-# Descending the ladder costs real fidelity on faint pencil, so a small
-# overage is cheaper to simply accept than to compress away.
-_LADDER_TRIGGER_RATIO = 1.05
+# Keys Pillow will carry from a decoded image's `.info` back into the
+# re-encoded file, and which can describe the photographer rather than
+# the picture. Everything else in `.info` is dropped by the save anyway.
+_METADATA_INFO_KEYS = frozenset({"comment", "exif", "xmp"})
+
+# One threshold governs both remedies, and it is the ceiling the size
+# derivation depends on. There used to be a second, looser one here
+# (1.05) meant to spare an image a quality step for a small overage —
+# but the shrink below still fired at 1.02, so an image inflating 1.03x
+# skipped the gentle q82 rung and took a q70 save PLUS a 12% resolution
+# cut instead. The gate did not avoid the quality loss; it relocated it
+# and made it worse. With a single threshold the two remedies apply in
+# order of harm: re-compress first, resize only if that wasn't enough.
+_REMEDY_TRIGGER_RATIO = VISION_OUTPUT_GROWTH_CEILING
 
 # Retry ladder, used only when the default save came out materially
 # LARGER than the source — which happens when the source came from a
@@ -139,15 +144,29 @@ def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
     rewrites the pixels to match the flag, then we cap the long edge at
     `VISION_MAX_EDGE`.
 
-    An image that needs NEITHER rotation nor downscaling is returned
-    untouched. Re-encoding it can only inflate it: PIL's defaults (PNG
-    `compress_level=6` with no filter search, JPEG `quality=75`) are
-    weaker than what scanners and phone cameras typically emit, and the
-    save never compares itself against the input. Measured growth on a
-    pass-through save was +37% for grayscale line art, +16% for an RGB
-    worksheet, +0.5% for a realistic full-page scan. Those bytes get
-    paid twice — once against Anthropic's per-request budget, once in
-    vision tokens — for an image identical to the one we already had.
+    EVERY image is re-encoded, deliberately, because the save is also
+    the only thing that scrubs metadata: `img.save` is never handed an
+    `exif=`/`xmp=`/`pnginfo=`, so whatever the camera or scanner wrote
+    is dropped on the way out. These are photographs taken by minors,
+    and the destination is a third-party processor.
+
+    There used to be a passthrough here that skipped the re-encode when
+    the image needed neither rotation nor downscaling, to save the bytes
+    a re-encode can add. It was gated on `getexif()` being empty — and
+    that is not a test for "carries no metadata". `Image.getexif()` reads
+    only the Exif container; it never sees JPEG APP1-XMP, APP13/IPTC, the
+    COM marker, or PNG tEXt/iTXt/zTXt. Scan apps routinely strip the Exif
+    IFD while writing GPS and device identity into XMP, so the
+    passthrough forwarded a student's coordinates verbatim while its own
+    comment claimed to be preventing exactly that.
+
+    Enumerating every container Pillow might not surface is a losing
+    game, so the optimisation is gone rather than patched. Its original
+    justification is gone too: re-encoding used to be able to inflate an
+    image badly (+37% on line art), but the quality ladder and
+    shrink-to-fit below now bound output at
+    VISION_OUTPUT_GROWTH_CEILING of the input regardless. The cost of
+    always re-encoding is CPU, and nothing else.
 
     Only `image/*` is transformed; PDFs and unknown media types are returned
     unchanged (the document path must not be re-encoded as a flat image).
@@ -161,30 +180,23 @@ def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
     try:
         raw = base64.b64decode(data_base64)
         with Image.open(io.BytesIO(raw)) as opened:
-            # Skip the re-encode only when it would provably change
-            # nothing. Three things make that non-trivial:
-            #
-            #  - EXIF. Re-encoding strips it (`img.save` is never handed
-            #    an `exif=`), so the save is also our only scrubbing
-            #    step. Forwarding a phone photo untouched would ship
-            #    camera make, model, timestamp and GPS to a third-party
-            #    processor, for photographs taken by minors. Any EXIF at
-            #    all — orientation included — means re-encode, which
-            #    subsumes the "does it need rotating" question.
-            #  - Mode. CMYK JPEGs carry an Adobe inversion marker that
-            #    not every decoder honours; the save normalised them.
-            #  - Frames. APNG / MPO bursts were flattened to frame one.
-            #
-            # The early return is a byte optimisation and must not change
-            # what the model receives, nor what leaves alongside it.
-            if (
-                opened.mode in _PASSTHROUGH_SAFE_MODES
-                and getattr(opened, "n_frames", 1) == 1
-                and not opened.getexif()
-                and max(opened.size) <= VISION_MAX_EDGE
-            ):
-                return data_base64
             img = ImageOps.exif_transpose(opened)
+            # The save drops metadata by default because it is never
+            # handed `exif=`/`xmp=`/`pnginfo=` — with one exception:
+            # Pillow reads `comment` back out of `im.info` and writes it
+            # to the JPEG COM marker. So a comment survives a re-encode
+            # that strips everything else, and `exif_transpose` carries
+            # `.info` across.
+            #
+            # Enumerating keys is what failed in the old passthrough, but
+            # the shape is inverted here and that is what makes it safe:
+            # there, a container we forgot was forwarded wholesale;
+            # here, the default is to drop, and we name only the few keys
+            # that would otherwise be carried BACK. Rendering-relevant
+            # entries (icc_profile, transparency, dpi) are deliberately
+            # left alone — they are not metadata about the photographer.
+            for key in _METADATA_INFO_KEYS:
+                img.info.pop(key, None)
             if max(img.size) > VISION_MAX_EDGE:
                 img.thumbnail(
                     (VISION_MAX_EDGE, VISION_MAX_EDGE),
@@ -211,7 +223,7 @@ def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
             # a budget with megabytes of slack) drove a student's
             # handwriting down a quality step for nothing.
             for options in _DENSE_SAVE_LADDER[fmt]:
-                if len(buf.getvalue()) <= len(raw) * _LADDER_TRIGGER_RATIO:
+                if len(buf.getvalue()) <= len(raw) * _REMEDY_TRIGGER_RATIO:
                     break
                 retry = io.BytesIO()
                 img.save(retry, format=fmt, **options)
@@ -232,7 +244,7 @@ def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
             # ~1568px regardless, so a few percent off a rotated page
             # costs nothing the model would have used.
             for _ in range(_SHRINK_ATTEMPTS):
-                if len(buf.getvalue()) <= len(raw) * VISION_OUTPUT_GROWTH_CEILING:
+                if len(buf.getvalue()) <= len(raw) * _REMEDY_TRIGGER_RATIO:
                     break
                 if max(img.size) <= _SHRINK_FLOOR_EDGE:
                     # Too small to shrink further without hurting

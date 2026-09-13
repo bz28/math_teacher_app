@@ -77,6 +77,10 @@ MAX_PDF_BYTES = 25 * 1024 * 1024
 # trivial overage.
 VISION_OUTPUT_GROWTH_CEILING = 1.02
 _VISION_REENCODE_GROWTH = VISION_OUTPUT_GROWTH_CEILING
+# Hard cap on number of files per submission. Mirrors the teacher
+# upload cap. Real homework submissions are 1-3 pages; 10 leaves
+# headroom for multi-page worksheets.
+MAX_SUBMISSION_FILES = 10
 # Whole-submission cap, in DECODED bytes — the most raw file content a
 # submission can carry and still be readable at the far end. Derived,
 # because a submission's whole purpose is to reach Vision: files are
@@ -84,19 +88,45 @@ _VISION_REENCODE_GROWTH = VISION_OUTPUT_GROWTH_CEILING
 # on the way into the request budget above, and may grow again during
 # preprocessing. A cap larger than this would accept homework that can
 # never be read.
+#
+# Two corrections keep the round trip conservative rather than merely
+# close. The way down floors while base64 on the way back up CEILS, and
+# each FILE pads independently — so the sum of the parts exceeds base64
+# of the whole by up to 4 encoded bytes per file. Reserving that, and
+# flooring to a multiple of 4, is what makes the re-inflated worst case
+# land under the budget it was derived from instead of ~26 bytes over.
 MAX_SUBMISSION_TOTAL_BYTES = (
-    int(MAX_REQUEST_B64_BYTES / _VISION_REENCODE_GROWTH) * 3 // 4
+    (int(MAX_REQUEST_B64_BYTES / _VISION_REENCODE_GROWTH) - 4 * MAX_SUBMISSION_FILES)
+    // 4
+) * 3
+
+
+def _b64_len(decoded_bytes: int) -> int:
+    """Base64 length of `decoded_bytes`, including padding."""
+    return 4 * ((decoded_bytes + 2) // 3)
+
+
+# Transport cap floor: the smallest HTTP body limit that can carry the
+# largest payload any endpoint will accept. Files arrive base64 inside
+# JSON, so the body runs ~4/3 the decoded size, plus the JSON envelope
+# (keys, quotes, commas, data: prefixes).
+#
+# It takes the MAX of two routes, because deriving it from the student
+# submission alone left the teacher's document upload
+# (`teacher_documents.upload_document`, same `validate_and_decode_upload`,
+# same base64-in-JSON shape) rejected at the transport layer: a legal
+# 25MB source PDF is a 33.3MB body against a 31.4MB cap, so it died
+# pre-handler with a bare 413 — and, once the message got friendlier,
+# with advice about retaking a photo, addressed to a teacher uploading
+# course materials from a laptop.
+#
+# That is the exact bug this module exists to prevent, reproduced on the
+# route the derivation forgot. Any future endpoint that accepts an
+# upload belongs in this max(), not in a literal of its own.
+MIN_REQUEST_SIZE_BYTES = (
+    max(_b64_len(MAX_SUBMISSION_TOTAL_BYTES), _b64_len(MAX_PDF_BYTES))
+    + 1024 * 1024
 )
-# Transport cap floor: the smallest HTTP body limit that can still carry
-# a maximal legal submission. Files arrive base64 inside JSON, so the
-# body runs ~4/3 the decoded size, plus the JSON envelope (keys, quotes,
-# commas, data: prefixes). `Settings.max_request_size` is floored at
-# this — see api/config.py for why it may be raised but never lowered.
-MIN_REQUEST_SIZE_BYTES = MAX_SUBMISSION_TOTAL_BYTES * 4 // 3 + 1024 * 1024
-# Hard cap on number of files per submission. Mirrors the teacher
-# upload cap. Real homework submissions are 1-3 pages; 10 leaves
-# headroom for multi-page worksheets.
-MAX_SUBMISSION_FILES = 10
 
 # Per-field cap on the teacher's grading rubric. These four free-text
 # fields are rendered verbatim into the grading prompt
