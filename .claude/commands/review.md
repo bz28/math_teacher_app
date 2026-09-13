@@ -15,6 +15,7 @@ Workflow({ scriptPath: ".claude/workflows/review-loop.js", args: {
   intent: "<one paragraph: what this branch is trying to do>",
   priorConfirmed: <round N-1's confirmed list>,     // round >= 2
   sinceLastRound: "<sha round N-1 reviewed>",       // round >= 2
+  cwd: "<abs path>",                                // only if the branch is checked out in a worktree, not the session dir
 }})
 ```
 

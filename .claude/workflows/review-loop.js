@@ -18,6 +18,8 @@ export const meta = {
 //   intent: 'what the PR is trying to do (one paragraph, from the session)',
 //   verifyOnly: [...],              // skip the reviewer; run the skeptics on these findings (the
 //                                   //   in-session review's own findings, so they earn "confirmed" the same way)
+//   cwd: '<abs path>',              // the checkout/worktree where `head` is checked out (default: the session's
+//                                   //   working directory). Agents read files from disk, so the tree must be at head.
 // }
 let cfg = args
 if (typeof cfg === 'string') {
@@ -33,6 +35,10 @@ const SINCE = cfg.sinceLastRound || null
 const SKEPTICS = cfg.skeptics || 2
 const INTENT = cfg.intent || '(not provided)'
 const VERIFY_ONLY = cfg.verifyOnly || null
+const CWD = cfg.cwd || null
+const WHERE = CWD
+  ? `WORKING DIRECTORY: run every command and read every file inside \`${CWD}\` (\`cd ${CWD}\` first — the branch under review is checked out THERE, not in the session's default directory).\n\n`
+  : ''
 
 const FINDING_ITEM = {
   type: 'object',
@@ -111,7 +117,7 @@ Two extra obligations this round:
 ` : `
 THIS IS ROUND 1. prior_status should be an empty array.
 `
-  return `You are a world-class engineer doing a cold, independent review of a branch. You have no context on the conversation that produced it — that is the point. Ground every claim in code you read.
+  return `${WHERE}You are a world-class engineer doing a cold, independent review of a branch. You have no context on the conversation that produced it — that is the point. Ground every claim in code you read.
 
 WHAT THE BRANCH IS TRYING TO DO (author's intent, treat as a claim to check, not a fact):
 ${INTENT}
@@ -127,7 +133,7 @@ Two-pass rule: after your first sweep, re-verify every finding by re-reading the
 }
 
 function verifyPrompt(f, i) {
-  return `You are an independent skeptic (reviewer #${i + 1}). Your job is to REFUTE the finding below by reading the actual code — not to agree with it.
+  return `${WHERE}You are an independent skeptic (reviewer #${i + 1}). Your job is to REFUTE the finding below by reading the actual code — not to agree with it.
 
 BRANCH: compare \`${BASE}...${HEAD}\` (\`git diff ${BASE}...${HEAD} -- ${f.file}\` shows what changed in the cited file).
 
