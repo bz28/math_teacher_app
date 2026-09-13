@@ -482,9 +482,49 @@ async function refreshAccessToken(): Promise<RefreshResult> {
 
 // ── Core fetch ──
 
+/** Endpoints where a 401 means "these credentials are wrong", not "this
+ *  session expired" — refreshing would be pointless, and on the sign-in
+ *  paths there is no session to refresh yet.
+ *
+ *  This used to be `path.startsWith("/auth/")`, which was too broad by
+ *  half. `/auth/me` is an ordinary session-authenticated endpoint that
+ *  merely lives under the same prefix, and AuthProvider calls it on
+ *  every mount AND every tab focus. So fifteen minutes after signing
+ *  in — the moment the access token lapsed — the next focus event got a
+ *  401 that skipped refresh entirely, and the caller cleared BOTH
+ *  tokens. The week-long refresh token was thrown away unused, and the
+ *  student was bounced to the login screen mid-homework. In production
+ *  this showed up as 87 of 90 sessions in a day never rotating once,
+ *  and students signing in 6-12 times daily.
+ *
+ *  Prefix-matched, so `/auth/login` also covers `/auth/login/verify-mfa`.
+ *  Everything else under `/auth/` — `/auth/me`, `/auth/entitlements`,
+ *  `/auth/enrolled-courses`, `/auth/invite/section/claim` — is
+ *  session-authenticated and MUST go through the normal refresh path. */
+const CREDENTIAL_PATHS = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/refresh",
+  "/auth/check-email",
+  "/auth/forgot-password",
+  "/auth/set-password",
+] as const;
+
+export function isCredentialPath(path: string): boolean {
+  return CREDENTIAL_PATHS.some((p) => path.startsWith(p));
+}
+
 async function apiFetch<T>(
   path: string,
   options: RequestInit & { timeout?: number } = {},
+  // Set only by the post-refresh retry below. Bounds the retry at one
+  // attempt: without it, an endpoint that keeps 401ing after a
+  // SUCCESSFUL refresh (token revoked mid-flight, user deactivated,
+  // role changed) recurses forever, re-refreshing and burning a
+  // refresh-token row every lap. Dormant while /auth/me skipped the
+  // refresh branch entirely; widening that branch is exactly what would
+  // have woken it, on the most-called endpoint in the app.
+  retried = false,
 ): Promise<T> {
   const { timeout = DEFAULT_TIMEOUT, ...fetchOpts } = options;
 
@@ -523,14 +563,14 @@ async function apiFetch<T>(
     if (apiHealthDown) setApiHealth(false);
 
     if (res.status === 401) {
-      // Don't attempt token refresh for auth endpoints — their 401s
-      // mean invalid credentials, not expired sessions
-      const isAuthEndpoint = path.startsWith("/auth/");
-      if (!isAuthEndpoint) {
+      // A 401 on a credential endpoint means bad credentials, so there
+      // is nothing to refresh. Everywhere else it means the access
+      // token lapsed — swap in a fresh one and replay the request once.
+      if (!isCredentialPath(path) && !retried) {
         const result = await refreshAccessToken();
         if (result === "success") {
           clearTimeout(timer);
-          return apiFetch(path, options);
+          return apiFetch(path, options, true);
         }
         // Only clear tokens on a definitive auth rejection. Transient
         // errors (network blip, 5xx) leave tokens intact so a later

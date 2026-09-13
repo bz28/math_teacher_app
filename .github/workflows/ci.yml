@@ -158,7 +158,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # 22, not 20: the unit tests are plain `node --test` over .ts
+          # files, which needs native type-stripping (>=22.6). The mobile
+          # job above already runs 22. Nothing here pins a Node version
+          # for the deployed build — Vercel picks its own — so this only
+          # moves the CI check, and `pnpm build` is verified on 22+.
+          node-version: "22"
           cache: "pnpm"
           cache-dependency-path: web/pnpm-lock.yaml
 
@@ -169,6 +174,13 @@ jobs:
       - name: Lint
         working-directory: web
         run: pnpm lint
+
+      # Web unit tests did not run in CI at all until now, which is how a
+      # 401-handling regression reached production and logged students
+      # out every 15 minutes for weeks.
+      - name: Test
+        working-directory: web
+        run: pnpm test
 
       - name: Build
         working-directory: web
