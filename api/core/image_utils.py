@@ -40,9 +40,19 @@ _SHRINK_ATTEMPTS = 8
 _SHRINK_FLOOR_EDGE = 320
 
 # Keys Pillow will carry from a decoded image's `.info` back into the
-# re-encoded file, and which can describe the photographer rather than
-# the picture. Everything else in `.info` is dropped by the save anyway.
-_METADATA_INFO_KEYS = frozenset({"comment", "exif", "xmp"})
+# re-encoded file, and which can describe the photographer or the
+# capture device rather than the picture. Everything else in `.info` is
+# dropped by the save anyway.
+#
+# `icc_profile` is in here despite being colour data. It is an
+# arbitrary-length blob whose `desc` tag routinely names the scanner or
+# camera model, and Pillow only carries it back on the PNG path
+# (`PngImagePlugin._save` reads it from `im.info`; `JpegImagePlugin`
+# reads it from `encoderinfo` only). So keeping it would have meant a
+# PNG scan naming its flatbed while the identical JPEG did not — an
+# inconsistency, not a decision. Colour rendering of a handwriting
+# photo does not depend on it.
+_METADATA_INFO_KEYS = frozenset({"comment", "exif", "xmp", "icc_profile"})
 
 # One threshold governs both remedies, and it is the ceiling the size
 # derivation depends on. There used to be a second, looser one here
@@ -170,10 +180,23 @@ def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
 
     Only `image/*` is transformed; PDFs and unknown media types are returned
     unchanged (the document path must not be re-encoded as a flat image).
-    On any decode/transform error the input base64 is returned untouched so
-    a quirky-but-valid image still reaches the model.
+
+    An `image/*` that cannot be re-encoded RAISES rather than falling
+    back to the input bytes. The fallback used to return them untouched
+    so "a quirky-but-valid image still reaches the model" — but since
+    the save is the only thing that scrubs metadata, that path shipped
+    GPS and device identity verbatim on exactly the inputs least likely
+    to be scrutinised. It was the passthrough hole again, wearing an
+    `except`.
+
+    Refusing is the better trade in both directions: an image Pillow
+    cannot re-encode (truncated upload, decompression bomb) is one
+    Vision would likely fail to read anyway, and the caller already has
+    a teacher-visible path for work that could not be read, whereas a
+    leak has no path back.
 
     Returns base64 of the same media_type / format.
+    Raises ValueError if an image cannot be safely re-encoded.
     """
     if not media_type.startswith("image/"):
         return data_base64
@@ -259,8 +282,13 @@ def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
                 buf = io.BytesIO()
                 img.save(buf, format=fmt, **_DENSE_SAVE_LADDER[fmt][-1])
             return base64.b64encode(buf.getvalue()).decode("ascii")
-    except Exception:
-        return data_base64
+    except Exception as err:
+        # Fail closed. See the docstring: returning `data_base64` here
+        # would forward unscrubbed metadata on precisely the inputs
+        # nobody looks at twice.
+        raise ValueError(
+            f"Could not re-encode {media_type} for vision: {err}"
+        ) from err
 
 
 def to_content_block(media_type: str, data_base64: str) -> dict[str, Any]:

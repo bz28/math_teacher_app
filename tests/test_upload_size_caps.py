@@ -2,7 +2,7 @@
 
 These are the regression tests for a live incident: the transport cap
 (`Settings.max_request_size`, 10MB, written with the original scaffold)
-and the submission cap (`MAX_SUBMISSION_TOTAL_BYTES`, 50MB, added eight
+and the submission cap (`MAX_VISION_PAYLOAD_BYTES`, 50MB, added eight
 weeks later) were independent literals with no relationship. Files
 travel base64 inside JSON (~4/3 inflation), so the real ceiling was
 ~7.5MB of photo rather than the advertised 50MB, and students hit an
@@ -29,7 +29,7 @@ from api.core.constants import (
     MAX_PDF_BYTES,
     MAX_REQUEST_B64_BYTES,
     MAX_SUBMISSION_FILES,
-    MAX_SUBMISSION_TOTAL_BYTES,
+    MAX_VISION_PAYLOAD_BYTES,
     MIN_REQUEST_SIZE_BYTES,
 )
 
@@ -97,9 +97,9 @@ def _worst_case_encoded_submission() -> int:
     even split happens to land on a multiple of 3 and pad nothing, which
     is the BEST case, not the worst.
     """
-    per_file = MAX_SUBMISSION_TOTAL_BYTES // MAX_SUBMISSION_FILES
+    per_file = MAX_VISION_PAYLOAD_BYTES // MAX_SUBMISSION_FILES
     per_file -= (per_file - 1) % 3  # drop to the nearest n % 3 == 1
-    remainder = MAX_SUBMISSION_TOTAL_BYTES - per_file * (MAX_SUBMISSION_FILES - 1)
+    remainder = MAX_VISION_PAYLOAD_BYTES - per_file * (MAX_SUBMISSION_FILES - 1)
     return sum(
         _b64_len(n) for n in [per_file] * (MAX_SUBMISSION_FILES - 1) + [remainder]
     )
@@ -130,22 +130,64 @@ def test_transport_cap_clears_a_maximal_submission() -> None:
     assert MIN_REQUEST_SIZE_BYTES >= _worst_case_encoded_submission()
 
 
-def test_transport_clears_every_upload_route_not_just_submissions() -> None:
-    """The derivation has to cover EVERY endpoint that takes an upload.
+# Every route that accepts a base64 upload, and the largest REQUEST each
+# one's own validators admit. Adding a route without adding it here is
+# what this table exists to make loud.
+_UPLOAD_ROUTES = {
+    # student homework: whole-submission total, enforced in the handler
+    "school_student_practice": lambda: MAX_VISION_PAYLOAD_BYTES,
+    # teacher source documents: one file per request, no total
+    "teacher_documents": lambda: MAX_PDF_BYTES,
+    # teacher worksheet scan: whole-request total, enforced in the handler
+    "teacher_question_bank": lambda: MAX_VISION_PAYLOAD_BYTES,
+}
 
-    Regression for a bug four rounds missed: the transport floor was
-    derived from the student submission alone, so the teacher's document
-    upload — same `validate_and_decode_upload`, same base64-in-JSON
-    shape, `MAX_PDF_BYTES` per file — had a 33.3MB body against a 31.4MB
-    cap and died pre-handler with a bare 413. That is the very bug this
-    module exists to prevent, on the route the derivation forgot.
+
+def test_every_upload_route_is_accounted_for_in_the_derivation() -> None:
+    """A new upload route must not be able to appear unnoticed.
+
+    The previous version asserted
+    `MIN_REQUEST_SIZE_BYTES >= _b64_len(MAX_PDF_BYTES)` — true by
+    construction, since that term is inside the max() that DEFINES the
+    constant. It restated the formula instead of testing it, the same
+    anti-pattern as the old `getexif()` test, and the proof is that it
+    stayed green while teacher_question_bank was over the cap.
+
+    So this reads the routes out of the source: anything calling
+    `validate_and_decode_upload` is taking an upload and has to declare
+    what it admits.
     """
-    largest_single_upload = _b64_len(MAX_PDF_BYTES)
-    assert MIN_REQUEST_SIZE_BYTES >= largest_single_upload, (
-        f"a legal {MAX_PDF_BYTES / 1024 / 1024:.0f}MB upload is a "
-        f"{largest_single_upload / 1024 / 1024:.1f}MB body, over the "
-        f"{MIN_REQUEST_SIZE_BYTES / 1024 / 1024:.1f}MB transport cap"
+    import re
+    from pathlib import Path
+
+    routes_dir = Path(__file__).resolve().parents[1] / "api" / "routes"
+    callers = {
+        path.stem
+        for path in routes_dir.glob("*.py")
+        if re.search(r"\bvalidate_and_decode_upload\s*\(", path.read_text())
+    }
+    undeclared = callers - _UPLOAD_ROUTES.keys()
+    assert not undeclared, (
+        f"{sorted(undeclared)} accept uploads but are not in _UPLOAD_ROUTES, so "
+        f"the transport cap was never checked against them"
     )
+
+
+def test_transport_clears_every_upload_route() -> None:
+    """The middleware must not reject what any handler would accept.
+
+    Regression for a bug four rounds missed twice over: the floor was
+    derived from the student submission alone, leaving teacher document
+    uploads (a legal 25MB PDF is a 33.3MB body) and teacher worksheet
+    scans dying pre-handler with a bare 413 — this module's own bug, on
+    the routes the derivation forgot.
+    """
+    for route, largest in _UPLOAD_ROUTES.items():
+        body = _b64_len(largest())
+        assert MIN_REQUEST_SIZE_BYTES >= body, (
+            f"{route} admits a {body / 1024 / 1024:.1f}MB body, over the "
+            f"{MIN_REQUEST_SIZE_BYTES / 1024 / 1024:.1f}MB transport cap"
+        )
 
 
 def test_the_growth_ceiling_holds_at_the_top_of_the_cap() -> None:
@@ -178,7 +220,7 @@ def test_endpoint_total_size_check_is_reachable() -> None:
     where a body passes the middleware and is then rejected by the
     endpoint with its useful message.
     """
-    smallest_rejected_body = _b64_len(MAX_SUBMISSION_TOTAL_BYTES + 1)
+    smallest_rejected_body = _b64_len(MAX_VISION_PAYLOAD_BYTES + 1)
     assert smallest_rejected_body < MIN_REQUEST_SIZE_BYTES, (
         "no payload can reach the endpoint's size check — it is dead code"
     )
@@ -229,13 +271,13 @@ def test_an_adversarial_cap_filling_submission_stays_under_budget() -> None:
     processed = [len(preprocess_image_for_vision(p, "image/jpeg")) for p in pages]
 
     images_decoded = sum(len(base64.b64decode(p)) for p in pages)
-    assert images_decoded < MAX_SUBMISSION_TOTAL_BYTES, (
+    assert images_decoded < MAX_VISION_PAYLOAD_BYTES, (
         "fixture pages already exceed the cap; they cannot model a filler"
     )
     # One PDF spends whatever cap the images left. PDFs skip
     # preprocessing entirely, so they inflate by exactly base64's 4/3 —
     # the worst any large payload can do.
-    pdf_decoded = MAX_SUBMISSION_TOTAL_BYTES - images_decoded
+    pdf_decoded = MAX_VISION_PAYLOAD_BYTES - images_decoded
     total_sent = sum(processed) + _b64_len(pdf_decoded)
 
     assert total_sent <= MAX_REQUEST_B64_BYTES, (
@@ -275,6 +317,66 @@ def test_small_images_are_not_exempt_from_the_growth_ceiling() -> None:
             f"a {edge}px page grew {growth:.2f}x, over the "
             f"{VISION_OUTPUT_GROWTH_CEILING} ceiling the derivation depends on"
         )
+
+
+def test_an_unencodable_image_is_refused_not_forwarded() -> None:
+    """The error path must not become the new leak.
+
+    `preprocess_image_for_vision` used to fall back to returning the
+    input bytes on any exception, so "a quirky-but-valid image still
+    reaches the model". But the re-encode is the ONLY thing that scrubs
+    metadata, so that fallback shipped GPS verbatim on exactly the
+    inputs nobody scrutinises — the passthrough hole again, wearing an
+    `except`.
+    """
+    import base64
+    import io
+
+    from PIL import Image
+
+    from api.core.image_utils import preprocess_image_for_vision
+
+    secret = b"GPSLatitude-40-44-54-N"
+    img = Image.new("RGB", (400, 300), (200, 200, 200))
+    exif = img.getexif()
+    exif[0x010F] = secret.decode()
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", exif=exif)
+
+    truncated = buf.getvalue()[: int(len(buf.getvalue()) * 0.8)]
+    assert secret in truncated, "fixture lost the metadata before the test ran"
+
+    encoded = base64.b64encode(truncated).decode("ascii")
+    with pytest.raises(ValueError):
+        preprocess_image_for_vision(encoded, "image/jpeg")
+
+
+def test_the_icc_profile_does_not_survive_either() -> None:
+    """A colour profile names the capture device in its `desc` tag.
+
+    Pillow carries `icc_profile` back from `im.info` on the PNG path but
+    not the JPEG one, so leaving it in place meant a PNG scan naming its
+    flatbed while the identical JPEG did not — an inconsistency, not a
+    decision.
+    """
+    import base64
+    import io
+
+    from PIL import Image, ImageCms
+
+    from api.core.image_utils import preprocess_image_for_vision
+
+    profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+    img = Image.new("RGB", (400, 300), (200, 200, 200))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", icc_profile=profile)
+
+    encoded = base64.b64encode(buf.getvalue()).decode("ascii")
+    assert Image.open(io.BytesIO(base64.b64decode(encoded))).info.get("icc_profile")
+
+    processed = preprocess_image_for_vision(encoded, "image/png")
+    carried = Image.open(io.BytesIO(base64.b64decode(processed))).info.get("icc_profile")
+    assert not carried, "the ICC profile reached the model"
 
 
 @pytest.mark.parametrize(

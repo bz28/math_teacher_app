@@ -81,13 +81,17 @@ _VISION_REENCODE_GROWTH = VISION_OUTPUT_GROWTH_CEILING
 # upload cap. Real homework submissions are 1-3 pages; 10 leaves
 # headroom for multi-page worksheets.
 MAX_SUBMISSION_FILES = 10
-# Whole-submission cap, in DECODED bytes — the most raw file content a
-# submission can carry and still be readable at the far end. Derived,
-# because a submission's whole purpose is to reach Vision: files are
-# stored base64 and forwarded base64, so decoded bytes re-inflate by 4/3
-# on the way into the request budget above, and may grow again during
-# preprocessing. A cap larger than this would accept homework that can
-# never be read.
+# The most raw file content, in DECODED bytes, that any one request may
+# send to a single Vision call. Derived, because such a payload's whole
+# purpose is to reach the model: files are stored base64 and forwarded
+# base64, so decoded bytes re-inflate by 4/3 on the way into the request
+# budget above, and may grow again during preprocessing. A cap larger
+# than this would accept pages that can never be read.
+#
+# Named for the constraint rather than the route: a student submission
+# (school_student_practice) and a teacher's worksheet upload
+# (teacher_question_bank) both land in one Vision call and both spend
+# this same budget.
 #
 # Two corrections keep the round trip conservative rather than merely
 # close. The way down floors while base64 on the way back up CEILS, and
@@ -95,7 +99,7 @@ MAX_SUBMISSION_FILES = 10
 # of the whole by up to 4 encoded bytes per file. Reserving that, and
 # flooring to a multiple of 4, is what makes the re-inflated worst case
 # land under the budget it was derived from instead of ~26 bytes over.
-MAX_SUBMISSION_TOTAL_BYTES = (
+MAX_VISION_PAYLOAD_BYTES = (
     (int(MAX_REQUEST_B64_BYTES / _VISION_REENCODE_GROWTH) - 4 * MAX_SUBMISSION_FILES)
     // 4
 ) * 3
@@ -124,7 +128,7 @@ def _b64_len(decoded_bytes: int) -> int:
 # route the derivation forgot. Any future endpoint that accepts an
 # upload belongs in this max(), not in a literal of its own.
 MIN_REQUEST_SIZE_BYTES = (
-    max(_b64_len(MAX_SUBMISSION_TOTAL_BYTES), _b64_len(MAX_PDF_BYTES))
+    max(_b64_len(MAX_VISION_PAYLOAD_BYTES), _b64_len(MAX_PDF_BYTES))
     + 1024 * 1024
 )
 
