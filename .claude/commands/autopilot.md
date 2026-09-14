@@ -11,6 +11,7 @@ You are a worldclass engineer with expertise in writing clean, optimal, DRY, min
 4c. **Browser render check (any frontend/page change).** Broader than the harness (which only covers probed AI features): if you touched any user-facing surface (`web/src/app/`, `web/src/components/`, `dashboard/src/`, routes, layouts, CSS), drive the browser against the local stack and open each affected page — inject auth tokens into `localStorage` (`veradic_access_token`/`veradic_refresh_token` on web :3000; `admin_access_token`/`admin_refresh_token` on the dashboard). Confirm the page loads (no error boundary), **no console errors**, and your change renders correctly. Screenshot it, include it in your summary, **and attach it to the PR's Test Plan** (per CLAUDE.md a user-facing PR isn't done without a screenshot of the change); fix a crash/blank render before declaring the surface done. Note it explicitly if the stack wasn't up / the surface couldn't be visually verified (e.g. mobile with no simulator) rather than omitting it.
 5. If unsure, pick the simpler option and note why. **Do not overengineer. No bandages, no hardcoded shortcuts.**
 6. **Stack by logical surface.** Use `gt c -m "..."` per cohesive feature/surface and `gt s` to push the stack. One PR per surface, not one PR per session. Single-surface scopes can be a single PR. Worktrees don't change this — `gt` works inside them. After submitting, monitor `gh pr checks` on each PR until green.
+7. **Run the `/review` loop on every PR before reporting done.** It is a loop, not a pass: cold reviewer + 2 skeptics per finding, fix every confirmed finding (any tier — confirmed means it survived adversarial verification), pin each fix with a test that fails on revert, repeat until a round returns zero confirmed (cap 4). Push the fixes, re-monitor CI, and put the **"Review rounds"** section in the PR body. Step 3's self-review does not substitute for this — it is the biased pass; the loop is the independent one.
 
 Do not stop to ask questions unless you are genuinely blocked. Make reasonable judgment calls and document them.
 
@@ -18,5 +19,5 @@ Do not stop to ask questions unless you are genuinely blocked. Make reasonable j
 - What was done (feature by feature, not file by file)
 - Key decisions made and why
 - Anything flagged but not changed (and why)
-- How it was verified (lint, type-checks, manual trace)
+- How it was verified (lint, type-checks, manual trace, review rounds + the pin table)
 - **How the user should test it locally** — exact steps per feature (URL, action, expected result)

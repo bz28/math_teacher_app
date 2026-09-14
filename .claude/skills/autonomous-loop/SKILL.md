@@ -29,7 +29,7 @@ gh pr list --state open --json number,title,headRefName,author
 
 For each open PR **you created**:
 - **Green + cold-reviewed → merge** it (`--merge`, never squash; `--delete-branch`). Preserve history.
-- **Un-reviewed → spawn a cold review** (see §4) before merging. Never merge un-reviewed.
+- **Un-reviewed → run the `/review` loop** (see §4) before merging. Never merge un-reviewed; never merge on a round that still had confirmed findings.
 - **Red → never merge.** Read the failing check, fix the cause, push, re-monitor.
 - **Flaky CI (known-flaky mobile job) → re-run** rather than treating as a real fail.
 - **Superseded → close** with a note.
@@ -53,11 +53,11 @@ If a genuine product/design fork needs the user, **leave it noted and do other (
 - **Verify the blast radius of shared-code changes.** A change to a shared component / store / hook / API contract can silently break surfaces it didn't obviously touch — exercise every call site and adjacent screen, not just the new thing (and screenshot each affected surface, §5). List anything you couldn't verify as an explicit risk.
 - Cover a significant new feature with durable, conservative-assert coverage (harness probe for AI output; a flow for a multi-step journey). Trivial/cosmetic → browser render check only.
 
-## 4. Cold-review (mandatory before merge)
+## 4. Review loop (mandatory before merge)
 
-Spawn a **fresh independent review agent with no conversation context** (`general-purpose`, background, `git diff main...<branch>`). Two passes; label findings **confirmed** (traced) vs **suspected**; tier P0–P3. For higher-stakes PRs run both the in-session `/review` *and* the cold agent — they're complementary. **Fix every confirmed finding before merging.**
+Run `/review` — it is a **loop**, not a pass. Each round: a cold reviewer with no conversation context reads the branch diff + every touched file, then 2 independent skeptics try to refute each finding (strict, default-refute). **Fix every confirmed finding** (any tier — confirmed means it survived adversarial verification), pin each fix with a test that fails on revert, and run the next round. **Merge only when a round returns zero confirmed** (cap 4 rounds; if still churning, stop and surface it). The in-session two-pass review runs alongside the cold rounds — its findings go through the same skeptics via `verifyOnly` before they count.
 
-The cold review's findings are themselves hypotheses — **verify each against *current* `origin/main` before acting.** A finding computed against a stale local `main` can flag a "rogue change" that's actually already merged (e.g. `git diff origin/main...<branch> -- <file>` comes back empty). `git fetch` and confirm before you fix or block.
+"Not sure" is a to-do, not a label: dig until a finding is confirmed or refuted. Only a genuine product-behavior question goes to the user, with the evidence of what you tried. The loop fetches `origin/main` first so findings aren't computed against a stale local `main`.
 
 ## 5. Test (real evidence)
 
