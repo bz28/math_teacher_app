@@ -12,6 +12,14 @@ import {
   ImageResizeError,
   resizeImageForUpload,
 } from "@/lib/image-resize";
+import {
+  SNIFF_BYTES,
+  SUBMIT_FALLBACK_ERROR,
+  UNREADABLE_FILE_ERROR,
+  type UploadMediaType,
+  sniffUploadType,
+  submitErrorMessage,
+} from "@/lib/submit-errors";
 import { fileToBase64, formatFileSize } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -65,33 +73,28 @@ interface StagedFile {
   error?: string;
 }
 
-const SUBMIT_FALLBACK_ERROR =
-  "Something went wrong turning in your work. Please try again.";
-
 /**
  * Turn any submit failure into a student-safe line — a technical
  * exception message must never reach a kid.
  *
  *   - NetworkError already carries a friendly, plain-English message
  *     ("Can't reach our servers right now…"), so we pass it through.
- *   - A handful of ApiError statuses map to a specific, actionable
- *     line (already turned in, payload too big). We deliberately do
- *     NOT echo `err.message` for the general ApiError case — those
- *     details ("File 3: invalid magic bytes", validation text) are
- *     technical.
- *   - Everything else falls back to one fixed friendly line, rather
- *     than blanket-blaming the connection.
+ *   - Every status the endpoint can return maps to a specific line that
+ *     says what to DO. The mapping lives in `@/lib/submit-errors`, next
+ *     to the enumeration of the handler's raise sites, so the two stay
+ *     readable together.
+ *   - We still do NOT echo the server's `detail` — some of those
+ *     strings ("Invalid base64 data") are technical.
+ *
+ * This used to map only 409 and 413, so a 400 — the ONLY thing the
+ * handler returns for a file it cannot read — came out as "Something
+ * went wrong… Please try again". A student hit that three times over
+ * two days, took it for a login problem, signed in four times in three
+ * minutes, and never turned the work in.
  */
 function friendlySubmitError(err: unknown): string {
   if (err instanceof NetworkError) return err.message;
-  if (err instanceof ApiError) {
-    if (err.status === 409) {
-      return "This homework has already been turned in. Refresh to see your submission.";
-    }
-    if (err.status === 413) {
-      return "Your pages are too large all together. Remove a page or two, or retake a photo, and try again.";
-    }
-  }
+  if (err instanceof ApiError) return submitErrorMessage(err.status);
   return SUBMIT_FALLBACK_ERROR;
 }
 
@@ -147,11 +150,37 @@ export function SubmissionPanel({
   });
 
   async function stageOne(file: File): Promise<StagedFile> {
-    const accepted = ["image/jpeg", "image/png", "application/pdf"];
-    if (!accepted.includes(file.type)) {
-      return errorRow(file, "Only JPEG, PNG, and PDF are accepted");
+    // What the file IS, not what it is called. `File.type` is the
+    // browser's lookup of the FILENAME's extension, so anything renamed
+    // `.png` passed this gate and then 400'd at the server — after a
+    // full upload, with a message that did not say why.
+    //
+    // The old check also failed asymmetrically, which is why it survived
+    // so long: an image over 5MB is decoded by `createImageBitmap`
+    // during resizing, and a non-image throws there and lands in the
+    // catch below. Anything under 5MB skips resizing entirely and was
+    // never decoded at all. The file that prompted this was 7.2 KB.
+    let sniffed: UploadMediaType | null;
+    try {
+      const head = new Uint8Array(
+        await file.slice(0, SNIFF_BYTES).arrayBuffer(),
+      );
+      sniffed = sniffUploadType(head);
+    } catch {
+      // `Blob.arrayBuffer` missing, or the read failed. Fall back to the
+      // old extension check rather than block a student over a browser
+      // quirk — the server still has the final say either way.
+      sniffed =
+        file.type === "image/jpeg" ||
+        file.type === "image/png" ||
+        file.type === "application/pdf"
+          ? file.type
+          : null;
     }
-    const isPdf = file.type === "application/pdf";
+    if (sniffed === null) {
+      return errorRow(file, UNREADABLE_FILE_ERROR);
+    }
+    const isPdf = sniffed === "application/pdf";
 
     if (isPdf) {
       if (file.size > MAX_PDF_BYTES) {
@@ -183,8 +212,10 @@ export function SubmissionPanel({
       const dataUrl = await blobToDataUrl(blob);
       const comma = dataUrl.indexOf(",");
       const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+      // `sniffed`, not `file.type`: a JPEG that arrived named `.png` is
+      // stored by the server as image/jpeg, and the row should agree.
       const mediaType: StagedFile["mediaType"] =
-        blob === file ? (file.type as StagedFile["mediaType"]) : "image/jpeg";
+        blob === file ? sniffed : "image/jpeg";
       return {
         id: newRowId(),
         filename: file.name,
