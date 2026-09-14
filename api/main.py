@@ -18,6 +18,7 @@ from api.routes.admin_audit_logs import router as admin_audit_logs_router
 from api.routes.auth import router as auth_router
 from api.routes.billing import router as billing_router
 from api.routes.contact import router as contact_router
+from api.routes.extraction_drain import router as extraction_drain_router
 from api.routes.grading_drain import router as grading_drain_router
 from api.routes.health import router as health_router
 from api.routes.image import router as image_router
@@ -62,6 +63,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             dsn=settings.sentry_dsn,
             environment=settings.app_env,
             traces_sample_rate=1.0 if settings.app_env == "development" else 0.2,
+            # OFF, and not negotiable for this product. The SDK default
+            # is True: every error event carries the local variables of
+            # every frame in the traceback. On the extraction path those
+            # frames hold `files` (the student's photographed homework,
+            # base64) and `content` (the model's transcription of it),
+            # so an ordinary logged error would ship a child's schoolwork
+            # to a third-party processor. `max_value_length` does not
+            # save us either — it truncates, it does not omit.
+            #
+            # We sell to districts under an ids-counts-and-codes rule.
+            # The exception type, the message and the stack are what
+            # anyone actually debugs from; the variable values are the
+            # part we cannot send.
+            include_local_variables=False,
+            # OFF for the same reason, and it is a SEPARATE hole —
+            # turning off frame locals does not touch request bodies.
+            # The default is "medium", which captures any body under
+            # 10 KB verbatim, and the Starlette integration's JSON-body
+            # branch is not gated behind `send_default_pii`. The body of
+            # POST .../confirm-extraction is the student's own
+            # plain-English replacement for their handwritten work, and
+            # at a few hundred bytes it sails under that bound — so any
+            # error raised in that request shipped their schoolwork to a
+            # third-party processor.
+            max_request_body_size="never",
         )
 
     if settings.bypass_subscription and settings.app_env != "development":
@@ -114,6 +140,7 @@ app.include_router(work_router, prefix="/v1")
 app.include_router(admin_router, prefix="/v1")
 app.include_router(admin_audit_logs_router, prefix="/v1")
 app.include_router(grading_drain_router, prefix="/v1")
+app.include_router(extraction_drain_router, prefix="/v1")
 app.include_router(webhook_router, prefix="/v1")
 app.include_router(billing_router, prefix="/v1")
 app.include_router(contact_router, prefix="/v1")

@@ -1,0 +1,106 @@
+name: Extraction queue drain
+
+# The clock for the Vision-read queue.
+#
+# Extraction is no longer spawned as a background task when a student
+# submits — it is written to `extraction_jobs` and worked by a drain.
+# Something has to come along and act on that list; this is that something.
+#
+# It deliberately lives OUTSIDE the app, for the reason the queue exists at
+# all: an in-process promise dies with the process. On 2026-09-03 an SDK
+# change killed every extraction, and because the work was never written
+# down, one student's homework was stranded with no record it was owed.
+# Putting the timer inside the API would recreate that one level up.
+#
+# Submit also kicks a drain directly so a student's read starts in seconds.
+# That kick is an optimisation, not the guarantee — it dies with the
+# process, which is precisely what this workflow is here to survive. Without
+# it, `_reclaim_stale` (the recovery for a deploy landing mid-call) and every
+# retry would only run when some OTHER student happened to submit. For an
+# overnight submission or a small class that is no recovery at all.
+#
+# A SEPARATE workflow from grading-drain, not a second curl inside it:
+# extraction and grading fail for different reasons at different rates — the
+# 2026-09-03 outage broke every extraction while generation kept working —
+# and one job reporting a single verdict for two pipelines lets a total
+# extraction failure hide behind healthy grading counters.
+#
+# Config (Settings → Secrets and variables → Actions) — the SAME two the
+# grading drain uses; nothing new to set:
+#   GRADING_DRAIN_TOKEN (secret) — must match the backend's
+#                                  `grading_drain_token` setting.
+#   PROD_API_BASE (variable)     — prod API root incl. /v1.
+#
+# Until BOTH are set this job no-ops loudly rather than failing the run — a
+# red X every few minutes trains people to ignore the workflow.
+
+on:
+  schedule:
+    # Five minutes, the shortest interval GitHub actually honours for a
+    # scheduled workflow — asking for less does not get it. Treat this as
+    # a floor on latency, not a target: it is the ceiling on how long a
+    # RETRY leaves a student looking at "Couldn't prepare your check".
+    # First attempts do not wait for it, because submit kicks a drain
+    # directly; this is the path that runs when that kick dies with its
+    # process, which is the whole reason the queue exists.
+    #
+    # Note that GitHub delays scheduled runs under load and drops them
+    # outright on a busy queue, so the real interval is "about five
+    # minutes, usually". That is fine for a retry and would not be fine
+    # as the only trigger — hence the kick.
+    #
+    # Checking is nearly free: one indexed query returning zero rows when
+    # the queue is empty.
+    - cron: "*/5 * * * *"
+  workflow_dispatch: # manual kick, for verifying the wiring after setup
+
+# Never let two drains overlap. The endpoint is safe if they do — it claims
+# rows with FOR UPDATE SKIP LOCKED, so concurrent drains take disjoint work
+# rather than billing the same Vision call twice — but a backlog running
+# longer than the interval would otherwise pile runs on top of each other.
+concurrency:
+  group: extraction-drain
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Drain the extraction queue
+        env:
+          TOKEN: ${{ secrets.GRADING_DRAIN_TOKEN }}
+          API_BASE: ${{ vars.PROD_API_BASE }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$API_BASE" ]; then
+            echo "::notice::GRADING_DRAIN_TOKEN or PROD_API_BASE not set — skipping."
+            echo "Queued extractions will not run until both are configured."
+            exit 0
+          fi
+
+          # --max-time bounds the request. A pass is capped at 20 jobs
+          # server-side and each is a Vision call on multi-megabyte photos,
+          # so a full pass can legitimately take minutes. Anything unclaimed
+          # stays queued for the next run.
+          body=$(mktemp)
+          code=$(curl -sS -o "$body" -w "%{http_code}" \
+            --max-time 600 \
+            -X POST "$API_BASE/internal/extraction/drain" \
+            -H "X-Grading-Token: $TOKEN")
+
+          echo "HTTP $code"
+          cat "$body"
+          echo
+
+          case "$code" in
+            200) ;;
+            503)
+              # Backend token unset — the deploy hasn't got it yet. Not a
+              # failure worth alerting on; the next run picks it up.
+              echo "::warning::Drain endpoint reports not-configured (503)."
+              exit 0
+              ;;
+            *)
+              echo "::error::Drain failed with HTTP $code"
+              exit 1
+              ;;
+          esac
