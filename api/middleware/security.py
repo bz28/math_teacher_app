@@ -1,5 +1,6 @@
+import logging
 import uuid
-from collections.abc import MutableMapping
+from collections.abc import Awaitable, Callable, MutableMapping
 from typing import Any
 
 from starlette.requests import Request
@@ -38,10 +39,34 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_with_headers)
 
 
+logger = logging.getLogger(__name__)
+
+# Told about every body this middleware refuses: the raw ASGI scope and
+# the byte count that tripped the cap. Exists because a rejection here
+# happens before any handler runs — without a hook, nothing downstream
+# ever learns that a student was turned away.
+RejectHook = Callable[[Scope, int], Awaitable[None]]
+
+
 class RequestSizeLimitMiddleware:
-    def __init__(self, app: ASGIApp, max_size: int = 10 * 1024 * 1024) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        max_size: int = 10 * 1024 * 1024,
+        on_reject: RejectHook | None = None,
+    ) -> None:
         self.app = app
         self.max_size = max_size
+        self.on_reject = on_reject
+
+    async def _note_rejection(self, scope: Scope, size: int) -> None:
+        """Best-effort: the hook must never change what the client gets."""
+        if self.on_reject is None:
+            return
+        try:
+            await self.on_reject(scope, size)
+        except Exception:
+            logger.exception("request-size reject hook failed")
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -52,6 +77,7 @@ class RequestSizeLimitMiddleware:
         headers = dict(scope.get("headers", []))
         content_length = headers.get(b"content-length")
         if content_length and int(content_length) > self.max_size:
+            await self._note_rejection(scope, int(content_length))
             response = Response(
                 content='{"detail":"Request body too large"}',
                 status_code=413,
@@ -77,6 +103,9 @@ class RequestSizeLimitMiddleware:
             await self.app(scope, receive_with_limit, send)
         except ValueError as e:
             if "Request body too large" in str(e):
+                # No Content-Length, so the only size we know is how far
+                # the body got before it crossed the cap — a lower bound.
+                await self._note_rejection(scope, bytes_received)
                 response = Response(
                     content='{"detail":"Request body too large"}',
                     status_code=413,

@@ -290,6 +290,24 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
         ),
     },
     {
+      // The upload the platform turned away. Recorded from the handler
+      // (bad file, over a cap) and from the request-size middleware,
+      // where it may carry no actor at all — the row still counts.
+      action: "submission.rejected",
+      label: "Upload rejected",
+      detail: (m) => {
+        const mb = num(m, "request_bytes");
+        const size = mb !== undefined ? `${(mb / 1024 / 1024).toFixed(1)} MB` : undefined;
+        const why: Record<string, string> = {
+          upload_too_large: "Upload too large to send",
+          file_too_large: "A file was over its size cap",
+          file_invalid: "A file wasn't a readable image or PDF",
+          submission_too_large: "Submission over the total size cap",
+        };
+        return join(why[str(m, "reason")] ?? "Upload rejected", size);
+      },
+    },
+    {
       action: "submission.confirm_extraction",
       label: "Confirmed reading",
       detail: (m) => {

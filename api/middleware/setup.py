@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from api.config import settings
+from api.core.submission_rejections import note_transport_rejection
 from api.middleware.errors import UnhandledErrorMiddleware
 from api.middleware.logging import LoggingMiddleware
 from api.middleware.security import RequestSizeLimitMiddleware, SecurityHeadersMiddleware
@@ -19,8 +20,14 @@ def configure_middleware(app: FastAPI) -> None:
     # see api/middleware/errors.py for the measurement.
     app.add_middleware(UnhandledErrorMiddleware)
 
-    # Request size limit
-    app.add_middleware(RequestSizeLimitMiddleware, max_size=settings.max_request_size)
+    # Request size limit. A refused homework upload is recorded so the
+    # dashboard can show the student it blocked — see
+    # api/core/submission_rejections.py.
+    app.add_middleware(
+        RequestSizeLimitMiddleware,
+        max_size=settings.max_request_size,
+        on_reject=note_transport_rejection,
+    )
 
     # Security headers
     app.add_middleware(SecurityHeadersMiddleware)
