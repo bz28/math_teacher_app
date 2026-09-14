@@ -187,13 +187,37 @@ async def extract_student_work(
 
     content: list[dict[str, Any]] = []
     total_b64_bytes = 0
+    unusable_pages: list[int] = []
     for page_number, f in enumerate(files, start=1):
         raw = f.get("data", "")
         recorded_media = f.get("media_type", "image/jpeg")
         base64_data, media_type = _strip_data_url_prefix(raw, recorded_media)
         # EXIF-orient + downscale phone photos before Vision sees them;
         # PDFs/non-images pass through untouched.
-        base64_data = preprocess_image_for_vision(base64_data, media_type)
+        #
+        # A page we cannot re-encode is skipped, NOT allowed to fail the
+        # submission. `preprocess_image_for_vision` refuses rather than
+        # forwarding unscrubbed metadata, and that refusal used to
+        # propagate through this loop and out of the caller's
+        # `except Exception`, leaving `extraction` NULL — one corrupt
+        # page (an interrupted upload) stranding five good ones in the
+        # state that needs a teacher to notice and regrade by hand.
+        #
+        # Dropping the page is not silent: the count rides on the LLM
+        # call's metadata, and if NOTHING survives this returns the
+        # unreadable sentinel rather than an empty read dressed up as a
+        # successful one. Same shape as the teacher-document path, which
+        # skips an oversized document and records it.
+        try:
+            base64_data = preprocess_image_for_vision(base64_data, media_type)
+        except ValueError:
+            logger.warning(
+                "page %d of submission %s could not be re-encoded; "
+                "extracting without it",
+                page_number, submission_id,
+            )
+            unusable_pages.append(page_number)
+            continue
         total_b64_bytes += len(base64_data)
         # Label every page before its image. Without this, asking the
         # model for a `page_index` would be asking it to count ordinal
@@ -206,6 +230,13 @@ async def extract_student_work(
             "text": f"--- Page {page_number} of {len(files)} ---",
         })
         content.append(to_content_block(media_type, base64_data))
+    if not total_b64_bytes:
+        logger.error(
+            "no usable pages in submission %s (%d unreadable); routing to "
+            "manual grading",
+            submission_id, len(unusable_pages),
+        )
+        return {"steps": [], "final_answers": [], "confidence": 0.0}
     content.append({
         "type": "text",
         "text": briefing + instruction if briefing else instruction,
@@ -273,7 +304,10 @@ async def extract_student_work(
         temperature=0.0,
         user_id=user_id,
         submission_id=str(submission_id),
-        call_metadata={"phase": "vision_extract"},
+        call_metadata={
+            "phase": "vision_extract",
+            "unusable_pages": unusable_pages,
+        },
     )
     return result
 

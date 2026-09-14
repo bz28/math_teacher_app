@@ -319,6 +319,82 @@ def test_small_images_are_not_exempt_from_the_growth_ceiling() -> None:
         )
 
 
+@pytest.mark.asyncio
+async def test_one_unusable_page_does_not_cost_the_whole_submission() -> None:
+    """A corrupt page must not strand the pages either side of it.
+
+    Refusing to forward an un-re-encodable image (it would leak
+    unscrubbed metadata) raised straight through this loop and out of
+    `_run_extraction_background`'s `except Exception`, leaving
+    `extraction` NULL — one interrupted upload putting a whole
+    submission into the state that needs a teacher to notice and regrade
+    by hand. Skipping the page keeps the rest; the drop is recorded on
+    the call rather than swallowed.
+    """
+    import base64
+    import io
+
+    from PIL import Image
+
+    from api.core import integrity_ai
+
+    def _page() -> str:
+        buf = io.BytesIO()
+        Image.new("RGB", (400, 300), (200, 200, 200)).save(buf, format="JPEG")
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+
+    good = _page()
+    corrupt = base64.b64encode(base64.b64decode(_page())[:120]).decode("ascii")
+    files = [
+        {"data": good, "media_type": "image/jpeg"},
+        {"data": corrupt, "media_type": "image/jpeg"},
+        {"data": good, "media_type": "image/jpeg"},
+    ]
+
+    with patch.object(
+        integrity_ai,
+        "call_claude_vision",
+        new_callable=AsyncMock,
+        return_value={"steps": [], "final_answers": [], "confidence": 0.9},
+    ) as vision:
+        result = await _real_extract_student_work(
+            uuid.uuid4(), _StubSession(files),  # type: ignore[arg-type]
+        )
+
+    vision.assert_awaited_once(), "the good pages must still reach Vision"
+    assert result["confidence"] == 0.9
+    assert vision.await_args is not None
+    assert vision.await_args.kwargs["call_metadata"]["unusable_pages"] == [2], (
+        "the dropped page must be recorded, not silently swallowed"
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_submission_with_no_usable_page_is_marked_unreadable() -> None:
+    """If nothing survives, say so instead of calling Vision with none."""
+    import base64
+    import io
+
+    from PIL import Image
+
+    from api.core import integrity_ai
+
+    buf = io.BytesIO()
+    Image.new("RGB", (400, 300), (200, 200, 200)).save(buf, format="JPEG")
+    corrupt = base64.b64encode(buf.getvalue()[:120]).decode("ascii")
+
+    with patch.object(
+        integrity_ai, "call_claude_vision", new_callable=AsyncMock
+    ) as vision:
+        result = await _real_extract_student_work(
+            uuid.uuid4(),
+            _StubSession([{"data": corrupt, "media_type": "image/jpeg"}]),  # type: ignore[arg-type]
+        )
+
+    vision.assert_not_awaited()
+    assert result == {"steps": [], "final_answers": [], "confidence": 0.0}
+
+
 def test_an_unencodable_image_is_refused_not_forwarded() -> None:
     """The error path must not become the new leak.
 
