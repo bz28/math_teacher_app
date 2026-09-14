@@ -640,11 +640,11 @@ def derive_agent_posture(
     return "struggling_blank"
 
 
-def _tier_from_reason(reason: str | None) -> SubmissionTier:
+def tier_from_reason(reason: str | None) -> SubmissionTier:
     """Recover the SubmissionTier from a persisted selection_reason.
 
     Reverse of select_probe_problem's reason-setting. Used by
-    `_agent_posture_for_check` so process_student_turn can re-derive
+    `agent_posture_for_check` so process_student_turn can re-derive
     the posture without re-running correctness or storing a new
     column on the submission row.
     """
@@ -653,7 +653,7 @@ def _tier_from_reason(reason: str | None) -> SubmissionTier:
     return "struggling"
 
 
-async def _agent_posture_for_check(
+async def agent_posture_for_check(
     check: IntegrityCheckSubmission,
     db: AsyncSession,
 ) -> AgentPosture:
@@ -665,7 +665,7 @@ async def _agent_posture_for_check(
     problem row. Mirrors the derivation `start_integrity_check`
     runs once at chat start so per-turn calls land the same posture.
     """
-    tier = _tier_from_reason(check.probe_selection_reason)
+    tier = tier_from_reason(check.probe_selection_reason)
     row = (await db.execute(
         select(IntegrityCheckProblem)
         .where(
@@ -1317,9 +1317,9 @@ async def process_student_turn(
     # problem's slice → attempted_step_count). One read once per
     # process_student_turn call so every agent loop iteration below
     # uses a consistent system prompt.
-    posture = await _agent_posture_for_check(check, db)
+    posture = await agent_posture_for_check(check, db)
     system_prompt = build_agent_system_prompt(posture)
-    tier = _tier_from_reason(check.probe_selection_reason)
+    tier = tier_from_reason(check.probe_selection_reason)
 
     # Agent loop.
     for loop_iter in range(MAX_AGENT_LOOPS_PER_TURN):
@@ -1853,7 +1853,7 @@ async def _apply_finish_check(
     # specifically the guard on a clean `pass`.
     if (
         disposition == DISPOSITION_PASS
-        and _tier_from_reason(check.probe_selection_reason) == "verified"
+        and tier_from_reason(check.probe_selection_reason) == "verified"
         and scored_rubrics
     ):
         handled_scores = {"mid", "high"}

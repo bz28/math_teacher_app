@@ -112,6 +112,167 @@
         "title": "AssignmentRubric",
         "type": "object"
       },
+      "BlockedStudentRow": {
+        "description": "One student \u00d7 one homework they could not turn in. Grouped so\neleven log lines read as \"one person, eleven attempts, thirteen\nhours\" \u2014 the sentence an operator acts on.",
+        "properties": {
+          "assignment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Id"
+          },
+          "assignment_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Title"
+          },
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "course_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Name"
+          },
+          "first_at": {
+            "format": "date-time",
+            "title": "First At",
+            "type": "string"
+          },
+          "largest_request_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Largest Request Bytes"
+          },
+          "last_at": {
+            "format": "date-time",
+            "title": "Last At",
+            "type": "string"
+          },
+          "reasons": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Reasons",
+            "type": "object"
+          },
+          "school_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "School Id"
+          },
+          "student_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Email"
+          },
+          "student_id": {
+            "title": "Student Id",
+            "type": "string"
+          },
+          "student_name": {
+            "title": "Student Name",
+            "type": "string"
+          },
+          "submitted_since": {
+            "title": "Submitted Since",
+            "type": "boolean"
+          },
+          "top_reason": {
+            "title": "Top Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "student_id",
+          "student_name",
+          "student_email",
+          "assignment_id",
+          "assignment_title",
+          "course_name",
+          "school_id",
+          "attempts",
+          "first_at",
+          "last_at",
+          "largest_request_bytes",
+          "reasons",
+          "top_reason",
+          "submitted_since"
+        ],
+        "title": "BlockedStudentRow",
+        "type": "object"
+      },
+      "BlockedSubmissionsResponse": {
+        "properties": {
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "students": {
+            "items": {
+              "$ref": "#/components/schemas/BlockedStudentRow"
+            },
+            "title": "Students",
+            "type": "array"
+          },
+          "unattributed": {
+            "items": {
+              "$ref": "#/components/schemas/UnattributedBlockRow"
+            },
+            "title": "Unattributed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "days",
+          "since",
+          "students",
+          "unattributed"
+        ],
+        "title": "BlockedSubmissionsResponse",
+        "type": "object"
+      },
       "BreakdownEntry": {
         "properties": {
           "deductions": {
@@ -164,6 +325,620 @@
           "score_status"
         ],
         "title": "BreakdownEntry",
+        "type": "object"
+      },
+      "CaseFinal": {
+        "description": "The grade as it stands now \u2014 the AI's draft until a teacher\nedits it. `differs_from_ai` is the override signal.",
+        "properties": {
+          "differs_from_ai": {
+            "title": "Differs From Ai",
+            "type": "boolean"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback"
+          },
+          "percent": {
+            "title": "Percent",
+            "type": "number"
+          },
+          "score_status": {
+            "title": "Score Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "score_status",
+          "percent",
+          "feedback",
+          "differs_from_ai"
+        ],
+        "title": "CaseFinal",
+        "type": "object"
+      },
+      "CaseGrade": {
+        "description": "The AI's grade for one problem \u2014 the immutable `ai_breakdown`\nentry, reasoning and confidence intact.",
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "percent": {
+            "title": "Percent",
+            "type": "number"
+          },
+          "reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning"
+          },
+          "score_status": {
+            "title": "Score Status",
+            "type": "string"
+          },
+          "student_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Answer"
+          },
+          "student_feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Feedback"
+          }
+        },
+        "required": [
+          "score_status",
+          "percent",
+          "confidence",
+          "reasoning",
+          "student_feedback",
+          "student_answer"
+        ],
+        "title": "CaseGrade",
+        "type": "object"
+      },
+      "CaseGradeSummary": {
+        "properties": {
+          "ai_grading_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Grading Status"
+          },
+          "ai_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Score"
+          },
+          "final_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Score"
+          },
+          "grade_published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade Published At"
+          },
+          "graded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graded At"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "teacher_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teacher Notes"
+          }
+        },
+        "required": [
+          "ai_score",
+          "final_score",
+          "ai_grading_status",
+          "graded_at",
+          "reviewed_at",
+          "grade_published_at",
+          "teacher_notes"
+        ],
+        "title": "CaseGradeSummary",
+        "type": "object"
+      },
+      "CaseIntegrity": {
+        "properties": {
+          "activity_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntegrityActivitySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "check_id": {
+            "title": "Check Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "disposition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disposition"
+          },
+          "headline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headline"
+          },
+          "inline_variant_result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inline Variant Result"
+          },
+          "inline_variant_used": {
+            "title": "Inline Variant Used",
+            "type": "boolean"
+          },
+          "overall_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Summary"
+          },
+          "posture": {
+            "title": "Posture",
+            "type": "string"
+          },
+          "probe_selection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probe Selection Reason"
+          },
+          "resolution": {
+            "title": "Resolution",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolved_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By Name"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tier": {
+            "title": "Tier",
+            "type": "string"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/CaseTurn"
+            },
+            "title": "Turns",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "check_id",
+          "status",
+          "disposition",
+          "headline",
+          "overall_summary",
+          "probe_selection_reason",
+          "posture",
+          "tier",
+          "inline_variant_used",
+          "inline_variant_result",
+          "activity_summary",
+          "resolution",
+          "resolved_by_name",
+          "resolved_at",
+          "created_at",
+          "updated_at",
+          "turns"
+        ],
+        "title": "CaseIntegrity",
+        "type": "object"
+      },
+      "CaseIntegrityProblem": {
+        "description": "What the understanding check made of one problem.\n\n`kind` is the one word the case file leads with:\n  probed         \u2014 discussed in chat; a verdict with rubric landed\n  probed_pending \u2014 discussed in chat; the check is still running\n  inconclusive   \u2014 chat hit the turn cap before a verdict\n  diagnosed      \u2014 wrong on paper, never chatted; silent note\n  blank          \u2014 wrong on paper because nothing was written\n  unreadable     \u2014 the read was too poor to judge\n  diagnosis_failed \u2014 the silent-diagnosis call errored\nA problem the check never touched has no entry at all.",
+        "properties": {
+          "diagnosis_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosis Kind"
+          },
+          "diagnosis_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosis Note"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "problem_id": {
+            "title": "Problem Id",
+            "type": "string"
+          },
+          "reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning"
+          },
+          "rubric": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric"
+          },
+          "selected_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Reason"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "teacher_dismissal_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teacher Dismissal Reason"
+          },
+          "teacher_dismissed": {
+            "title": "Teacher Dismissed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "problem_id",
+          "kind",
+          "status",
+          "rubric",
+          "reasoning",
+          "diagnosis_kind",
+          "diagnosis_note",
+          "selected_reason",
+          "teacher_dismissed",
+          "teacher_dismissal_reason"
+        ],
+        "title": "CaseIntegrityProblem",
+        "type": "object"
+      },
+      "CaseProblem": {
+        "properties": {
+          "answer_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer Key"
+          },
+          "bank_item_id": {
+            "title": "Bank Item Id",
+            "type": "string"
+          },
+          "final": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseFinal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseGrade"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "integrity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseIntegrityProblem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "position",
+          "bank_item_id",
+          "question",
+          "answer_key",
+          "grade",
+          "final",
+          "integrity"
+        ],
+        "title": "CaseProblem",
+        "type": "object"
+      },
+      "CaseTurn": {
+        "description": "One row of the check's conversation. Tool calls and results are\nincluded \u2014 they are the agent's decisions, and the case file\nrenders them as events in the thread.",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "seconds_on_turn": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds On Turn"
+          },
+          "telemetry": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telemetry"
+          },
+          "tool_input": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Input"
+          },
+          "tool_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Name"
+          },
+          "tool_use_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Use Id"
+          }
+        },
+        "required": [
+          "ordinal",
+          "role",
+          "content",
+          "tool_name",
+          "tool_use_id",
+          "tool_input",
+          "seconds_on_turn",
+          "telemetry",
+          "created_at"
+        ],
+        "title": "CaseTurn",
         "type": "object"
       },
       "ChatMessage": {
@@ -3888,6 +4663,76 @@
         "title": "StudentSubmissionDetail",
         "type": "object"
       },
+      "SubmissionCase": {
+        "properties": {
+          "assignment_id": {
+            "title": "Assignment Id",
+            "type": "string"
+          },
+          "assignment_title": {
+            "title": "Assignment Title",
+            "type": "string"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseGradeSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "integrity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseIntegrity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/CaseProblem"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "student_id": {
+            "title": "Student Id",
+            "type": "string"
+          },
+          "student_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Name"
+          },
+          "submission_id": {
+            "title": "Submission Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "submission_id",
+          "student_id",
+          "student_name",
+          "assignment_id",
+          "assignment_title",
+          "problems",
+          "grade",
+          "integrity"
+        ],
+        "title": "SubmissionCase",
+        "type": "object"
+      },
       "SubmissionFileOut": {
         "additionalProperties": true,
         "description": "One file the student turned in. `data` is raw base64 (no `data:`\nprefix); `media_type` is image/jpeg, image/png, or application/pdf.",
@@ -4871,6 +5716,97 @@
           "edits"
         ],
         "title": "TypingCadence",
+        "type": "object"
+      },
+      "UnattributedBlockRow": {
+        "description": "Rejections the size cap refused before authentication where the\nbearer token could not name the student. Counted per homework so\nthe incident is still visible; the person is not.",
+        "properties": {
+          "assignment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Id"
+          },
+          "assignment_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Title"
+          },
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "course_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Name"
+          },
+          "first_at": {
+            "format": "date-time",
+            "title": "First At",
+            "type": "string"
+          },
+          "largest_request_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Largest Request Bytes"
+          },
+          "last_at": {
+            "format": "date-time",
+            "title": "Last At",
+            "type": "string"
+          },
+          "school_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "School Id"
+          },
+          "top_reason": {
+            "title": "Top Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assignment_id",
+          "assignment_title",
+          "course_name",
+          "school_id",
+          "attempts",
+          "first_at",
+          "last_at",
+          "largest_request_bytes",
+          "top_reason"
+        ],
+        "title": "UnattributedBlockRow",
         "type": "object"
       },
       "UpdateAssignmentRequest": {
@@ -6624,6 +7560,73 @@
           }
         ],
         "summary": "Audit Timeline Csv",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/blocked-submissions": {
+      "get": {
+        "operationId": "blocked_submissions_v1_admin_blocked_submissions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockedSubmissionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Blocked Submissions",
         "tags": [
           "admin"
         ]
@@ -9659,6 +10662,54 @@
           }
         ],
         "summary": "Student Submissions",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/submissions/{submission_id}/case": {
+      "get": {
+        "operationId": "submission_case_v1_admin_submissions__submission_id__case_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionCase"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submission Case",
         "tags": [
           "admin"
         ]
