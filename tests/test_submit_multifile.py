@@ -131,6 +131,9 @@ async def test_submit_homework_total_payload_guard_rejects() -> None:
     from unittest.mock import MagicMock
 
     fake_assignment = MagicMock()
+    # The refusal is recorded before it is raised; the recorder opens
+    # its own DB session, so stub it here and assert on the call.
+    recorded = _AsyncMock()
     with (
         patch.object(
             ssp,
@@ -142,6 +145,7 @@ async def test_submit_homework_total_payload_guard_rejects() -> None:
             "validate_and_decode_upload",
             return_value=(fake_decoded, "application/pdf"),
         ),
+        patch.object(ssp, "record_submission_rejection", new=recorded),
     ):
         # Existence check on the prior submission needs to not match.
         # Easiest path: stub the db.execute chain to return None for
@@ -159,16 +163,26 @@ async def test_submit_homework_total_payload_guard_rejects() -> None:
         # guard runs. This test is about a real student's upload.
         user.is_preview = False
 
+        request = MagicMock()
+        request.headers = {"content-length": "83886080"}
+        request.client = None
+
         try:
             await submit_homework(
                 assignment_id="00000000-0000-0000-0000-000000000002",
                 body=body,
+                request=request,
                 user=user,
                 db=db,
             )
         except HTTPException as exc:
             assert exc.status_code == 413
             assert "Submission too large" in exc.detail
+            recorded.assert_awaited_once()
+            kwargs = recorded.await_args.kwargs
+            assert kwargs["reason"] == "submission_too_large"
+            assert kwargs["decoded_bytes"] == 3 * len(fake_decoded)
+            assert kwargs["request_bytes"] == 83886080
             return
     raise AssertionError("expected total-payload guard to trip")
 

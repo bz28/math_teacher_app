@@ -36,7 +36,14 @@ _ACTION = re.compile(f'"({_ACTION_RE})"')
 # started as silently skipped all nine student actions — the registry
 # then failed the reverse test with no hint as to why. A loose pattern
 # would instead catch the unrelated `record_practice_activity` endpoint.
-_WRITERS = ("record_activity(", "record_student_activity(")
+_WRITERS = (
+    "record_activity(",
+    "record_student_activity(",
+    # The rejection recorder builds its row directly: it runs from the
+    # size-limit middleware, where there is no CurrentUser to hand to
+    # `record_activity`. The action literal sits on the constructor.
+    "ActivityLog(",
+)
 
 
 def _backend_actions() -> set[str]:
