@@ -1013,10 +1013,10 @@ export interface TeacherAssignment {
   total_students: number;
   submitted: number;
   graded: number;
-  /** Submitted (non-preview) submissions the teacher hasn't marked
-   *  reviewed yet — reviewed_at IS NULL, written only by /mark-reviewed
-   *  once every problem on the submission is addressed. A submission
-   *  with no grade row yet counts too. The honest "owes review" signal,
+  /** Submitted (non-preview) submissions the teacher doesn't stand
+   *  behind yet — reviewed_at IS NULL (an AI grade awaiting Approve, or
+   *  a hand grade with problems still unscored). A submission with no
+   *  grade row yet counts too. The honest "owes review" signal,
    *  unlike `graded` (final_score, set automatically on submit). */
   to_review: number;
   /** Submissions whose grade has been released to the student view
@@ -1629,21 +1629,21 @@ export const teacher = {
       final_score: number | null;
       grade_published_at: string | null;
       grade_dirty: boolean;
-      /** Current review state after the save. A grade save NEVER stamps it
-       *  (that's mark-reviewed's job), but editing an already-approved grade
-       *  REVOKES the stamp — approval means "I vouched for THIS grade," so a
-       *  change invalidates it. Also null after an un-grade (empty breakdown).
-       *  Mirror this back so the "Approved ✓" pill reverts to "Not reviewed". */
+      /** Review state after the save — authoritative, mirror it back. A
+       *  hand grade (no AI score) self-approves on the save that grades its
+       *  last problem and un-approves if one is cleared; an AI grade's
+       *  stamp is untouched by a save (editing an approved AI grade keeps
+       *  the approval). Null after an un-grade (empty breakdown). */
       reviewed_at: string | null;
     }>(`/teacher/submissions/${submissionId}/grade`, {
       method: "PATCH",
       body: JSON.stringify(data),
     });
   },
-  /** Approve the submission — stamp reviewed_at. The sole writer of the
-   *  review stamp; a grade save never marks review. The review page
+  /** Approve an AI-suggested grade — stamp reviewed_at. The review page
    *  calls this from the explicit "Approve" button, enabled only once
-   *  every problem has a grade. Requires an existing grade — 400s on an
+   *  every problem has a grade. Hand grades never need it (they
+   *  self-approve on save). Requires an existing grade — 400s on an
    *  ungraded / skipped-unreadable row. */
   markReviewed(submissionId: string) {
     return apiFetch<{ status: string; reviewed_at: string }>(
