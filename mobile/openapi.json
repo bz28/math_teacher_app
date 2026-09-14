@@ -17780,7 +17780,7 @@
     },
     "/v1/teacher/submissions/{submission_id}/mark-reviewed": {
       "post": {
-        "description": "Stamp `reviewed_at` once the teacher has addressed every problem.\n\nThis is the SOLE writer of the review stamp. A grade save (PATCH\n/grade) records a grade but never marks the submission reviewed \u2014\n\"reviewed\" means every problem has been addressed (each confident\ngrade confirmed or each uncertain one graded). The frontend tracks\nthat per-submission \"all addressed\" state and calls this endpoint at\nthe moment it completes (a bulk \"Confirm all\" or the last grade), so\na partially-graded submission can never read as reviewed.\n\nRequires a grade to exist (final_score set) \u2014 there's nothing to\n\"review\" on an ungraded or skipped-unreadable submission, so we 400;\nthe teacher grades those by hand instead.",
+        "description": "The teacher's explicit Approve \u2713 on an AI-suggested grade.\n\nStamps `reviewed_at`. The frontend enables the button only once\nevery problem carries a grade, so a partially-graded submission can\nnever read as reviewed. A hand grade (no AI score) never needs this\ncall \u2014 PATCH /grade stamps it itself once every problem is graded,\nbecause there is no AI number for the teacher to vouch for.\n\nRequires a grade to exist (final_score set) \u2014 there's nothing to\n\"review\" on an ungraded or skipped-unreadable submission, so we 400;\nthe teacher grades those by hand instead.",
         "operationId": "mark_submission_reviewed_v1_teacher_submissions__submission_id__mark_reviewed_post",
         "parameters": [
           {

@@ -298,7 +298,8 @@ function HomeworkSectionReview({
   //
   // Session-scoped on purpose: a reload clears it, which is honest,
   // because nothing about it is persisted server-side. The durable trust
-  // signal is `reviewed_at`, stamped only by the explicit Approve button.
+  // signal is `reviewed_at` — the explicit Approve on an AI grade, or a
+  // hand grade with every problem scored.
   const [confirmedBySubmission, setConfirmedBySubmission] = useState<
     ReadonlyMap<string, ReadonlySet<string>>
   >(() => new Map());
@@ -386,13 +387,13 @@ function HomeworkSectionReview({
   // Submission currently being marked reviewed via the explicit no-edit
   // affordance. Single slot — only one student is open at a time.
   const [markingReviewedId, setMarkingReviewedId] = useState<string | null>(null);
-  // Submissions with a grade-save PATCH in flight. A grade save revokes
-  // approval server-side, so we must NOT let the teacher click Approve
-  // (or Undo) mid-save — the stamp would land against a version the save
-  // is about to change, leaving the row DB-unapproved while the UI reads
-  // "Approved ✓". Disabling those controls while the save is in flight
-  // closes that TOCTOU window. A Set so concurrent per-submission saves
-  // are tracked independently.
+  // Submissions with a grade-save PATCH in flight. The save response
+  // carries the authoritative reviewed_at and is mirrored onto the row,
+  // so we must NOT let the teacher click Approve (or Undo) mid-save — a
+  // response from before the click would land after it and overwrite
+  // the fresh stamp in the UI. Disabling those controls while the save
+  // is in flight closes that window. A Set so concurrent per-submission
+  // saves are tracked independently.
   const [savingGradeIds, setSavingGradeIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -726,7 +727,7 @@ function HomeworkSectionReview({
       submissionId: string,
       patch: Pick<
         TeacherSubmissionRow,
-        "final_score" | "breakdown" | "grade_dirty"
+        "final_score" | "breakdown" | "grade_dirty" | "reviewed_at"
       >,
     ) => {
       setRoster((prev) =>
@@ -811,32 +812,6 @@ function HomeworkSectionReview({
       // Always remember the most recent snapshot to be saved.
       s.latest = breakdown;
 
-      // Editing an approved grade REVOKES the approval — approval means "I
-      // vouched for THIS grade," so changing it invalidates the stamp. The
-      // server does this unconditionally on every grade-save (revoke-if-set,
-      // else no-op; an un-grade clears it too), so a grade-save always leaves
-      // reviewed_at null. We mirror that optimistically here — the choke point
-      // every edit path flows through — so the "Approved ✓" pill flips back to
-      // "Not reviewed" instantly, without waiting on (or racing) the response.
-      // Clearing a null is a no-op, so first-grade saves are unaffected. We
-      // intentionally do NOT thread the save RESPONSE's reviewed_at back: a
-      // stale null landing after a fresh Approve click could clobber it, and
-      // this optimistic clear already matches the server exactly.
-      setDetail((d) =>
-        d && d.submission_id === submissionId && d.reviewed_at
-          ? { ...d, reviewed_at: null }
-          : d,
-      );
-      setRoster((prev) =>
-        prev
-          ? prev.map((e) =>
-              e.submission?.id === submissionId && e.submission?.reviewed_at
-                ? { ...e, submission: { ...e.submission, reviewed_at: null } }
-                : e,
-            )
-          : prev,
-      );
-
       // A save is already running — it will pick up `latest` when it drains.
       if (s.inFlight) return;
 
@@ -857,19 +832,22 @@ function HomeworkSectionReview({
           const res = await teacher.gradeSubmission(submissionId, {
             breakdown: toSave,
           });
+          // The save response's reviewed_at is authoritative: a hand
+          // grade (no AI score) self-approves on the save that grades
+          // its last problem and un-approves if one is cleared, while an
+          // AI grade's stamp is untouched by a save. Mirror it onto the
+          // roster row and the open detail. This can't clobber a fresh
+          // Approve click — the Approve/Undo buttons are disabled while
+          // a save is in flight.
           applyGradeToRoster(submissionId, {
             final_score: res.final_score,
             breakdown: toSave,
             grade_dirty: res.grade_dirty,
-            // reviewed_at is handled by the optimistic clear above, NOT
-            // threaded from `res` — a grade-save always revokes any approval
-            // server-side, and mirroring that at edit time avoids a stale
-            // response clobbering a fresh Approve. See the note at the top of
-            // persistBreakdown.
+            reviewed_at: res.reviewed_at,
           });
           setDetail((d) =>
             d && d.submission_id === submissionId
-              ? { ...d, grade_dirty: res.grade_dirty }
+              ? { ...d, grade_dirty: res.grade_dirty, reviewed_at: res.reviewed_at }
               : d,
           );
         }
@@ -1174,7 +1152,8 @@ function HomeworkSectionReview({
   }, [unreviewedToPublishTotal, flaggedToPublishTotal, handlePublish]);
 
   // Explicit approval — the teacher's deliberate "I've vouched for this"
-  // click on the Approve button (a grade save never stamps review).
+  // click on the Approve button of an AI grade (hand grades self-approve
+  // on save; see persistBreakdown).
   // Mirrors reviewed_at onto the roster row + open detail so the markers
   // flip without a refetch. Errors surface on the saveError channel
   // (scoped by id).
@@ -2685,16 +2664,22 @@ function rowStatusLabel(entry: RosterEntry): {
   return { text: "Needs review", dotClass: "bg-gray-400" };
 }
 
-// Per-student approval marker for the roster: distinguishes a grade the
-// teacher has explicitly approved from one that's graded but not yet
-// approved, so the teacher sees review progress at a glance. Returns null
-// when there's nothing to approve yet (no grade — ungraded /
-// skipped-unreadable, where the status label already tells the story).
+// Per-student approval marker for the roster, so the teacher sees review
+// progress at a glance. `reviewed_at` means she stands behind the grade:
+// the explicit Approve on an AI grade, or a hand grade (no AI score) with
+// every problem scored — the server stamps that itself, since there's no
+// AI number to vouch for. So an unstamped hand grade can only mean some
+// problems are still unscored, and the marker says that rather than
+// "Not reviewed", which would send her looking for an Approve button
+// that isn't there. Returns null when there's nothing to approve yet (no
+// grade — ungraded / skipped-unreadable, where the status label already
+// tells the story).
 function reviewMarker(
   sub: TeacherSubmissionRow,
 ): { text: string; tone: "reviewed" | "unreviewed" } | null {
   if (sub.final_score === null) return null;
   if (sub.reviewed_at) return { text: "Approved", tone: "reviewed" };
+  if (sub.ai_score === null) return { text: "Partly graded", tone: "unreviewed" };
   return { text: "Not reviewed", tone: "unreviewed" };
 }
 
@@ -2802,8 +2787,9 @@ function SubmissionDetailPanel({
   // Nothing is auto-confirmed — `confirmedIds` is a checklist the teacher
   // fills by pressing the AI's key (or the Confirm chip). It's a
   // grading-workflow aid (collapse/expand the confident rows), NOT the
-  // review stamp: the durable, server-side trust signal is `reviewed_at`,
-  // which is set only by the explicit Approve button.
+  // review stamp: the durable, server-side trust signal is `reviewed_at`
+  // (the explicit Approve on an AI grade; self-stamped on a complete hand
+  // grade).
   //
   // It lives on the PAGE, not here, because this panel is remounted on
   // every student switch — and switching students is the page's primary
@@ -2889,6 +2875,14 @@ function SubmissionDetailPanel({
   ).length;
   const allGraded =
     totalProblems > 0 && gradedProblemCount === totalProblems;
+  // No AI grade ever landed (unreadable photo, AI grading off, or the
+  // teacher got there first) — every score is the teacher's own typing.
+  // There's no AI number to vouch for, so these never show an Approve
+  // button: the server stamps reviewed_at itself on the save that
+  // grades the last problem. `approved` anticipates that stamp so the
+  // pill doesn't flash "n/n graded" for the round trip.
+  const handGraded = (detail.ai_breakdown?.length ?? 0) === 0;
+  const approved = !!detail.reviewed_at || (handGraded && allGraded);
   const toggleExpand = useCallback(
     (id: string) => {
       setExpandState((s) => {
@@ -3277,12 +3271,22 @@ function SubmissionDetailPanel({
               />
             </span>
           )}
-          {/* Review state + explicit approval. Approval is a deliberate
-              act — the Approve button stamps reviewed_at, enabled only
-              once every problem carries a grade (you can't vouch for a
-              half-graded submission). Not reviewed → Approved ✓, with an
-              Undo path to walk an approval back. Nothing auto-approves. */}
-          {!detail.reviewed_at && totalProblems > 0 && (
+          {/* Review state. `reviewed_at` means the teacher stands behind
+              the grade. An AI grade needs her explicit Approve ✓ — a
+              deliberate act, enabled only once every problem carries a
+              grade (you can't vouch for a half-graded submission) — with
+              an Undo path to walk it back. A hand grade has nothing to
+              approve, so it only shows progress until every problem is
+              scored, then reads Approved. */}
+          {handGraded && !approved && totalProblems > 0 && (
+            <span
+              className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-border-light bg-[color:var(--color-surface-alt-2)] px-2.5 py-1 text-[11px] font-bold text-text-muted tabular-nums"
+              title="Score every problem to finish grading this submission"
+            >
+              {gradedProblemCount}/{totalProblems} graded
+            </span>
+          )}
+          {!handGraded && !approved && totalProblems > 0 && (
             <>
               <span
                 className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-border-light bg-[color:var(--color-surface-alt-2)] px-2.5 py-1 text-[11px] font-bold text-text-muted tabular-nums"
@@ -3315,27 +3319,31 @@ function SubmissionDetailPanel({
               </button>
             </>
           )}
-          {detail.reviewed_at && (
+          {approved && (
             <>
               <span className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-[color:var(--color-success)]/30 bg-[color:var(--color-success)]/10 px-2.5 py-1 text-[11px] font-bold text-[color:var(--color-success)]">
                 <span aria-hidden>✓</span>
                 Approved
               </span>
-              <button
-                type="button"
-                onClick={onUnmarkReviewed}
-                disabled={marking || savingGrade || regrading}
-                title={
-                  regrading
-                    ? "Regrading — the approval will clear when the new grade lands"
-                    : savingGrade
-                      ? "Saving your grade edit — the approval will clear when it finishes"
-                      : "Undo approval — return this submission to not reviewed"
-                }
-                className="rounded-[--radius-md] border border-border-light bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary transition-colors hover:border-primary/40 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {marking ? "Undoing…" : "Undo"}
-              </button>
+              {/* Undo only makes sense for an approval she clicked; a hand
+                  grade would just re-stamp itself on the next save. */}
+              {!handGraded && (
+                <button
+                  type="button"
+                  onClick={onUnmarkReviewed}
+                  disabled={marking || savingGrade || regrading}
+                  title={
+                    regrading
+                      ? "Regrading — the approval will clear when the new grade lands"
+                      : savingGrade
+                        ? "Saving your grade edit — undo once it finishes"
+                        : "Undo approval — return this submission to not reviewed"
+                  }
+                  className="rounded-[--radius-md] border border-border-light bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary transition-colors hover:border-primary/40 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {marking ? "Undoing…" : "Undo"}
+                </button>
+              )}
             </>
           )}
           {/* Advance-or-publish. While there's a next unreleased submitter,
@@ -4141,13 +4149,11 @@ function ProblemGradeRow({
   const commitFeedback = () => {
     // A bare focus→blur (the teacher clicked in and out without typing)
     // leaves `feedbackBuffer` null — committing then would persist the
-    // displayed default as a phantom "edit" and, on an approved row,
-    // silently revoke the approval server-side. So only commit a value
-    // the teacher actually typed, and only when it differs from the
-    // effective current value shown in the field (the stored feedback,
-    // or "" when none is stored). Re-committing the unchanged value is a
-    // no-op — no PATCH, no revoke. Genuine edits (buffer differs from the
-    // effective value) still persist and revoke.
+    // displayed default as a phantom "edit" (and, post-publish, flip the
+    // row dirty). So only commit a value the teacher actually typed, and
+    // only when it differs from the effective current value shown in the
+    // field (the stored feedback, or "" when none is stored).
+    // Re-committing the unchanged value is a no-op — no PATCH.
     if (feedbackBuffer === null) return;
     const committed = feedbackBuffer;
     setFeedbackBuffer(null);

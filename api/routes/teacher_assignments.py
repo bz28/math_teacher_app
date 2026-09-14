@@ -390,10 +390,10 @@ async def bulk_assignment_stats(
     # 3b. To-review counts — submitted (non-preview) submissions whose
     # grade the teacher hasn't marked reviewed yet. LEFT JOIN so a
     # submission with no grade row also counts (reviewed_at reads NULL
-    # for the missing row). `reviewed_at` is written ONLY by
-    # POST /mark-reviewed, once every problem on the submission is
-    # addressed — so this is the honest "still owes teacher review"
-    # signal, unlike `graded` (final_score, set automatically on submit).
+    # for the missing row). `reviewed_at` is stamped by the teacher's
+    # Approve on an AI grade, or by a hand grade covering every problem
+    # — so this is the honest "still owes teacher review" signal, unlike
+    # `graded` (final_score, set automatically on submit).
     to_review_rows = (await db.execute(
         select(Submission.assignment_id, func.count().label("c"))
         .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
@@ -1854,7 +1854,9 @@ async def grade_submission(
     if not sub:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
 
-    await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
+    assignment = await get_teacher_assignment(
+        db, sub.assignment_id, current_user.user_id,
+    )
 
     # Race-safe upsert: two concurrent grade requests (same teacher in
     # two tabs) used to 500 on the UNIQUE(submission_id) constraint
@@ -1879,23 +1881,35 @@ async def grade_submission(
         if normalized:
             grade.final_score = sum(e["percent"] for e in normalized) / len(normalized)
             grade.graded_at = now
-            # A grade save NEVER auto-stamps `reviewed_at` / `reviewed_by`.
-            # Saving a grade records THE GRADE — it does not mean the teacher
-            # has vetted the whole submission. "Reviewed" means every problem
-            # has been addressed; the frontend tracks that and calls POST
-            # /mark-reviewed (the sole writer of the stamp) only once the set is
-            # complete. Auto-stamping here would let "publish only reviewed"
-            # release a submission the moment the teacher touched one problem.
+            # `reviewed_at` means "a teacher stands behind this grade". The
+            # explicit Approve step (POST /mark-reviewed) exists so the
+            # teacher vouches for numbers the AI produced. A grade with no
+            # AI score is entirely the teacher's own typing — there is
+            # nothing to vouch for — so it counts as reviewed the moment
+            # every problem carries a grade, and drops back out if one is
+            # un-graded. Partial hand grades stay un-stamped: "publish
+            # only reviewed" must never release a half-graded submission.
             #
-            # But editing an ALREADY-approved grade REVOKES the approval:
-            # approval means "I vouched for THIS grade," so changing the grade
-            # invalidates it. Clear the stamp so the row returns to "Not
-            # reviewed" and the teacher must re-approve the version they just
-            # changed — otherwise "publish only reviewed" would release a
-            # changed grade under a stale approval.
-            if grade.reviewed_at is not None:
-                grade.reviewed_at = None
-                grade.reviewed_by = None
+            # An AI grade is left alone here. Editing one problem of an
+            # AI grade the teacher already approved is her own change to
+            # a grade she already vouched for, not a reason to make her
+            # approve it again; and touching one problem of an
+            # unapproved AI grade does not vouch for the rest.
+            if grade.ai_score is None:
+                hydrated = await hydrate_assignment_content(db, assignment)
+                problem_ids = {
+                    str(p["bank_item_id"])
+                    for p in ((hydrated or {}).get("problems") or [])
+                    if p.get("bank_item_id")
+                }
+                graded_ids = {str(e["problem_id"]) for e in normalized}
+                if problem_ids and problem_ids <= graded_ids:
+                    if grade.reviewed_at is None:
+                        grade.reviewed_at = now
+                        grade.reviewed_by = current_user.user_id
+                else:
+                    grade.reviewed_at = None
+                    grade.reviewed_by = None
         else:
             # Un-grade: clear every grade-state field so the row honestly
             # reflects "not graded" — including the review stamp, since there
@@ -1929,11 +1943,11 @@ async def grade_submission(
         "final_score": grade.final_score,
         "grade_published_at": grade.grade_published_at.isoformat() if grade.grade_published_at else None,
         "grade_dirty": _is_grade_dirty(grade),
-        # Current review state after this save. A grade save never STAMPS
-        # review (that's the mark-reviewed endpoint's job), but editing an
-        # already-approved grade REVOKES the stamp (and an un-grade clears it),
-        # so this can go from set → null on save. Surfaced so the frontend can
-        # reconcile the "Approved ✓" → "Not reviewed" revert without a refresh.
+        # Review state after this save — authoritative. A hand grade
+        # (no AI score) self-approves on the save that grades its last
+        # problem and un-approves if one is cleared; an AI grade's stamp
+        # is untouched by a save. The frontend mirrors this value onto
+        # the roster row and the open detail.
         "reviewed_at": grade.reviewed_at.isoformat() if grade.reviewed_at else None,
     }
 
@@ -1944,15 +1958,13 @@ async def mark_submission_reviewed(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Stamp `reviewed_at` once the teacher has addressed every problem.
+    """The teacher's explicit Approve ✓ on an AI-suggested grade.
 
-    This is the SOLE writer of the review stamp. A grade save (PATCH
-    /grade) records a grade but never marks the submission reviewed —
-    "reviewed" means every problem has been addressed (each confident
-    grade confirmed or each uncertain one graded). The frontend tracks
-    that per-submission "all addressed" state and calls this endpoint at
-    the moment it completes (a bulk "Confirm all" or the last grade), so
-    a partially-graded submission can never read as reviewed.
+    Stamps `reviewed_at`. The frontend enables the button only once
+    every problem carries a grade, so a partially-graded submission can
+    never read as reviewed. A hand grade (no AI score) never needs this
+    call — PATCH /grade stamps it itself once every problem is graded,
+    because there is no AI number for the teacher to vouch for.
 
     Requires a grade to exist (final_score set) — there's nothing to
     "review" on an ungraded or skipped-unreadable submission, so we 400;
@@ -2280,10 +2292,9 @@ async def regrade_submission(
 
 
 class PublishGradesRequest(BaseModel):
-    # When True, only grades the teacher has explicitly vetted
-    # (reviewed_at IS NOT NULL — stamped solely by the explicit Approve
-    # action via POST /mark-reviewed; editing any score REVOKES it) are
-    # released. The "publish only what I've checked" path the review-page
+    # When True, only grades the teacher stands behind (reviewed_at IS
+    # NOT NULL — the explicit Approve on an AI grade, or a hand grade
+    # with every problem scored) are released. The "publish only what I've checked" path the review-page
     # dialog offers alongside "Publish all". Default False preserves the
     # publish-everything behaviour.
     reviewed_only: bool = False
@@ -2471,10 +2482,10 @@ class TeacherSubmissionDetail(BaseModel):
     # was too low-confidence to auto-grade and the teacher must grade
     # manually. Null on the normal path (a real grade lives on breakdown).
     ai_grading_status: str | None = None
-    # When the teacher has vetted this grade — either by editing any
-    # problem score (editing == reviewing, auto-stamped in grade_submission)
-    # or by an explicit "Mark reviewed" click. Null = the AI-suggested
-    # grade is still unopened. Drives the review-state marker + the
+    # When the teacher stands behind this grade — the explicit Approve
+    # click on an AI grade, or a hand grade with every problem scored
+    # (auto-stamped in grade_submission). Null = an AI-suggested grade
+    # not yet approved, or a partial hand grade. Drives the review-state marker + the
     # publish dialog's trust disclosure.
     reviewed_at: datetime | None = None
 
