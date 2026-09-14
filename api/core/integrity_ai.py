@@ -230,11 +230,29 @@ async def extract_student_work(
             "text": f"--- Page {page_number} of {len(files)} ---",
         })
         content.append(to_content_block(media_type, base64_data))
-    if not total_b64_bytes:
+    if unusable_pages:
+        # ANY unreadable page sends the whole submission to manual
+        # grading, rather than extracting the rest and letting the
+        # missing one be graded as blank.
+        #
+        # Skipping and carrying on was the first attempt, with the drop
+        # recorded on the Vision call's metadata. That is an operator
+        # channel: the student would have seen an extraction quietly
+        # missing a page, and the teacher a normally-graded submission,
+        # while the work on that page scored zero. It is the same
+        # silent-truncation the budget guard below refuses for exactly
+        # this reason — and writing it here while that comment sat
+        # thirty lines down was inconsistent, not a trade-off.
+        #
+        # The unreadable sentinel is the honest answer: it is already
+        # the system's word for "we could not read this", it is visible
+        # to the teacher, and it fabricates no score. Losing automatic
+        # grading on a submission with a corrupt page is a far smaller
+        # harm than grading a student on work nobody ever saw.
         logger.error(
-            "no usable pages in submission %s (%d unreadable); routing to "
-            "manual grading",
-            submission_id, len(unusable_pages),
+            "submission %s has %d unreadable page(s) %s; routing the whole "
+            "submission to manual grading",
+            submission_id, len(unusable_pages), unusable_pages,
         )
         return {"steps": [], "final_answers": [], "confidence": 0.0}
     content.append({
@@ -304,10 +322,7 @@ async def extract_student_work(
         temperature=0.0,
         user_id=user_id,
         submission_id=str(submission_id),
-        call_metadata={
-            "phase": "vision_extract",
-            "unusable_pages": unusable_pages,
-        },
+        call_metadata={"phase": "vision_extract"},
     )
     return result
 

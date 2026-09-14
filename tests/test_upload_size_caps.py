@@ -320,16 +320,17 @@ def test_small_images_are_not_exempt_from_the_growth_ceiling() -> None:
 
 
 @pytest.mark.asyncio
-async def test_one_unusable_page_does_not_cost_the_whole_submission() -> None:
-    """A corrupt page must not strand the pages either side of it.
+async def test_any_unreadable_page_routes_the_submission_to_manual_grading() -> None:
+    """Never grade a student on work the model never saw.
 
-    Refusing to forward an un-re-encodable image (it would leak
-    unscrubbed metadata) raised straight through this loop and out of
-    `_run_extraction_background`'s `except Exception`, leaving
-    `extraction` NULL — one interrupted upload putting a whole
-    submission into the state that needs a teacher to notice and regrade
-    by hand. Skipping the page keeps the rest; the drop is recorded on
-    the call rather than swallowed.
+    Two wrong answers were tried before this one. Letting the refusal
+    propagate stranded the whole submission with a NULL extraction —
+    invisible until a teacher noticed. Skipping the page and carrying on
+    graded the work on it as blank, with the drop recorded only in
+    LLM-call metadata, which no student or teacher reads.
+
+    The unreadable sentinel is the system's existing word for "we could
+    not read this": teacher-visible, and it fabricates no score.
     """
     import base64
     import io
@@ -345,33 +346,37 @@ async def test_one_unusable_page_does_not_cost_the_whole_submission() -> None:
 
     good = _page()
     corrupt = base64.b64encode(base64.b64decode(_page())[:120]).decode("ascii")
-    files = [
-        {"data": good, "media_type": "image/jpeg"},
-        {"data": corrupt, "media_type": "image/jpeg"},
-        {"data": good, "media_type": "image/jpeg"},
-    ]
 
     with patch.object(
-        integrity_ai,
-        "call_claude_vision",
-        new_callable=AsyncMock,
-        return_value={"steps": [], "final_answers": [], "confidence": 0.9},
+        integrity_ai, "call_claude_vision", new_callable=AsyncMock
     ) as vision:
         result = await _real_extract_student_work(
-            uuid.uuid4(), _StubSession(files),  # type: ignore[arg-type]
+            uuid.uuid4(),
+            _StubSession([  # type: ignore[arg-type]
+                {"data": good, "media_type": "image/jpeg"},
+                {"data": corrupt, "media_type": "image/jpeg"},
+                {"data": good, "media_type": "image/jpeg"},
+            ]),
         )
 
-    vision.assert_awaited_once(), "the good pages must still reach Vision"
-    assert result["confidence"] == 0.9
-    assert vision.await_args is not None
-    assert vision.await_args.kwargs["call_metadata"]["unusable_pages"] == [2], (
-        "the dropped page must be recorded, not silently swallowed"
+    vision.assert_not_awaited()
+    assert result == {"steps": [], "final_answers": [], "confidence": 0.0}
+    assert result["confidence"] < integrity_ai.UNREADABLE_THRESHOLD, (
+        "must fall under the unreadable gate so the teacher is told"
     )
 
 
 @pytest.mark.asyncio
-async def test_a_submission_with_no_usable_page_is_marked_unreadable() -> None:
-    """If nothing survives, say so instead of calling Vision with none."""
+async def test_every_readable_page_is_sent_with_its_original_number() -> None:
+    """All pages reach Vision, labelled by their index in the upload.
+
+    Pins two things the previous version of this test missed: that EVERY
+    good page is sent (an `assert_awaited_once` passes just as happily
+    when the loop breaks early), and that the "Page N of M" markers keep
+    their original numbering — the prompt asks the model to read
+    page_index off them, so a renumbering would mis-attribute a
+    student's work to the wrong page.
+    """
     import base64
     import io
 
@@ -379,20 +384,38 @@ async def test_a_submission_with_no_usable_page_is_marked_unreadable() -> None:
 
     from api.core import integrity_ai
 
-    buf = io.BytesIO()
-    Image.new("RGB", (400, 300), (200, 200, 200)).save(buf, format="JPEG")
-    corrupt = base64.b64encode(buf.getvalue()[:120]).decode("ascii")
+    def _page() -> str:
+        buf = io.BytesIO()
+        Image.new("RGB", (400, 300), (200, 200, 200)).save(buf, format="JPEG")
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+
+    files = [{"data": _page(), "media_type": "image/jpeg"} for _ in range(3)]
 
     with patch.object(
-        integrity_ai, "call_claude_vision", new_callable=AsyncMock
+        integrity_ai,
+        "call_claude_vision",
+        new_callable=AsyncMock,
+        return_value={"steps": [], "final_answers": [], "confidence": 0.9},
     ) as vision:
-        result = await _real_extract_student_work(
-            uuid.uuid4(),
-            _StubSession([{"data": corrupt, "media_type": "image/jpeg"}]),  # type: ignore[arg-type]
+        await _real_extract_student_work(
+            uuid.uuid4(), _StubSession(files),  # type: ignore[arg-type]
         )
 
-    vision.assert_not_awaited()
-    assert result == {"steps": [], "final_answers": [], "confidence": 0.0}
+    vision.assert_awaited_once()
+    assert vision.await_args is not None
+    content = vision.await_args.args[0]
+    images = [b for b in content if b.get("type") == "image"]
+    labels = [
+        b["text"]
+        for b in content
+        if b.get("type") == "text" and b["text"].startswith("--- Page")
+    ]
+    assert len(images) == 3, f"only {len(images)} of 3 pages reached the model"
+    assert labels == [
+        "--- Page 1 of 3 ---",
+        "--- Page 2 of 3 ---",
+        "--- Page 3 of 3 ---",
+    ]
 
 
 def test_an_unencodable_image_is_refused_not_forwarded() -> None:
