@@ -298,7 +298,8 @@ function HomeworkSectionReview({
   //
   // Session-scoped on purpose: a reload clears it, which is honest,
   // because nothing about it is persisted server-side. The durable trust
-  // signal is `reviewed_at`, stamped only by the explicit Approve button.
+  // signal is `reviewed_at` — the explicit Approve on an AI grade, or a
+  // hand grade with every problem scored.
   const [confirmedBySubmission, setConfirmedBySubmission] = useState<
     ReadonlyMap<string, ReadonlySet<string>>
   >(() => new Map());
@@ -2786,8 +2787,9 @@ function SubmissionDetailPanel({
   // Nothing is auto-confirmed — `confirmedIds` is a checklist the teacher
   // fills by pressing the AI's key (or the Confirm chip). It's a
   // grading-workflow aid (collapse/expand the confident rows), NOT the
-  // review stamp: the durable, server-side trust signal is `reviewed_at`,
-  // which is set only by the explicit Approve button.
+  // review stamp: the durable, server-side trust signal is `reviewed_at`
+  // (the explicit Approve on an AI grade; self-stamped on a complete hand
+  // grade).
   //
   // It lives on the PAGE, not here, because this panel is remounted on
   // every student switch — and switching students is the page's primary

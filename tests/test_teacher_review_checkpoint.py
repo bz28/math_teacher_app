@@ -124,6 +124,7 @@ async def _seed_hw(
         await s.commit()
         return {
             "teacher_token": create_access_token(str(teacher.id), "teacher"),
+            "teacher_id": str(teacher.id),
             "assignment_id": assignment.id,
             "section_id": section.id,
             "bank_item_id": bank_item_ids[0],
@@ -417,6 +418,37 @@ async def test_regrade_after_approval_revokes_it(client: AsyncClient) -> None:
     assert r.status_code == 200, r.text
     assert r.json()["published_count"] == 0
     assert (await _get_grade(sub_id)).grade_published_at is None
+
+
+async def test_unreadable_photo_hand_grade_self_approves(
+    client: AsyncClient,
+) -> None:
+    """The headline case: the AI skipped an unreadable photo, so the
+    teacher grades by hand. Scoring every problem stamps reviewed_at with
+    her id — no Approve click — and a breakdown carrying an extra entry
+    for a problem no longer on the assignment doesn't block it."""
+    world = await _seed_hw(n_problems=2)
+    sub_id = world["submission_ids"][0]
+    pids = world["bank_item_ids"]
+    await _add_grade(
+        sub_id, final_score=None, reviewed=False,
+        ai_grading_status="skipped_unreadable",
+    )
+
+    r = await client.patch(
+        f"/v1/teacher/submissions/{sub_id}/grade",
+        headers=_auth(world["teacher_token"]),
+        json={"breakdown": [
+            {"problem_id": pids[0], "score_status": "full"},
+            {"problem_id": pids[1], "score_status": "zero"},
+            {"problem_id": str(uuid.uuid4()), "score_status": "full"},
+        ]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["reviewed_at"] is not None
+    grade = await _get_grade(sub_id)
+    assert grade.reviewed_at is not None
+    assert str(grade.reviewed_by) == world["teacher_id"]
 
 
 async def test_partial_hand_grade_stays_unreviewed(

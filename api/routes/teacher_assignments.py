@@ -1900,6 +1900,7 @@ async def grade_submission(
                 problem_ids = {
                     str(p["bank_item_id"])
                     for p in ((hydrated or {}).get("problems") or [])
+                    if p.get("bank_item_id")
                 }
                 graded_ids = {str(e["problem_id"]) for e in normalized}
                 if problem_ids and problem_ids <= graded_ids:
