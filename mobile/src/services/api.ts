@@ -426,12 +426,28 @@ export type HomeworkDetail = Schemas["StudentHomeworkDetail"];
 export const getHomework = (assignmentId: string) =>
   apiGet<HomeworkDetail>(`/school/student/homework/${assignmentId}`);
 
-/** Submit photos of handwritten work. 30s — server kicks off extraction. */
+// The submit body is every page inline as base64, so its wall-clock is
+// the phone's upload speed, not the server (which only inserts a row
+// and kicks off extraction in the background). A fixed 30s aborted
+// multi-page submits on cellular and the student saw a connection
+// error (prod, 2026-09-14, web). Budget by size: a round-trip floor
+// plus the bytes at a pessimistic 100 KB/s, capped so a dead link
+// still fails.
+const UPLOAD_TIMEOUT_FLOOR_MS = 30_000;
+const UPLOAD_TIMEOUT_CEILING_MS = 10 * 60_000;
+const UPLOAD_SLOW_LINK_BYTES_PER_SEC = 100 * 1024;
+
+export function uploadTimeoutFor(bodyBytes: number): number {
+  const transferMs = (bodyBytes / UPLOAD_SLOW_LINK_BYTES_PER_SEC) * 1000;
+  return Math.min(UPLOAD_TIMEOUT_CEILING_MS, UPLOAD_TIMEOUT_FLOOR_MS + transferMs);
+}
+
+/** Submit photos of handwritten work. Timeout scales with payload size. */
 export const submitHomework = (assignmentId: string, files: string[]) =>
   apiPost<{ submission_id: string; submitted_at: string; is_late: boolean }>(
     `/school/student/homework/${assignmentId}/submit`,
     { files },
-    30_000,
+    uploadTimeoutFor(files.reduce((n, f) => n + f.length, 0)),
   );
 
 // The Vision extraction wire shape — a flat list of steps and final

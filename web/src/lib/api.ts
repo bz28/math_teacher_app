@@ -18,6 +18,23 @@ const DEFAULT_TIMEOUT = 15_000;
 const LLM_TIMEOUT = 30_000;
 const SESSION_CREATE_TIMEOUT = 90_000;
 
+// A homework submit carries every page inline as base64, so its wall-
+// clock is the student's upload speed, not our server. A fixed timeout
+// punishes slow links: at 30s, four phone photos (~24MB on the wire)
+// aborted every time on a ~5 Mbps home upload — the browser cancelled
+// mid-body, the API never saw the POST, and the student got the
+// "trouble reaching our servers" banner (prod, 2026-09-14). Budget by
+// size instead: a floor for the round-trip plus the bytes at a
+// pessimistic 100 KB/s, capped so a genuinely dead link still fails.
+const UPLOAD_TIMEOUT_FLOOR_MS = 30_000;
+const UPLOAD_TIMEOUT_CEILING_MS = 10 * 60_000;
+const UPLOAD_SLOW_LINK_BYTES_PER_SEC = 100 * 1024;
+
+export function uploadTimeoutFor(bodyBytes: number): number {
+  const transferMs = (bodyBytes / UPLOAD_SLOW_LINK_BYTES_PER_SEC) * 1000;
+  return Math.min(UPLOAD_TIMEOUT_CEILING_MS, UPLOAD_TIMEOUT_FLOOR_MS + transferMs);
+}
+
 // ── Types ──
 
 export interface TokenPair {
@@ -2551,10 +2568,11 @@ export const schoolStudent = {
     assignmentId: string,
     body: { files: string[] },
   ) {
+    const json = JSON.stringify(body);
     return apiFetch<SubmitHomeworkResponse>(`/school/student/homework/${assignmentId}/submit`, {
       method: "POST",
-      body: JSON.stringify(body),
-      timeout: 30_000,
+      body: json,
+      timeout: uploadTimeoutFor(json.length),
     });
   },
   getMySubmission(assignmentId: string) {
