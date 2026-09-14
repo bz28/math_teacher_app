@@ -230,7 +230,7 @@ async def _load_my_submission(
     return sub
 
 
-async def _load_check_for_submission(
+async def load_check_for_submission(
     db: AsyncSession, submission_id: uuid.UUID,
 ) -> IntegrityCheckSubmission | None:
     return (await db.execute(
@@ -240,7 +240,7 @@ async def _load_check_for_submission(
     )).scalar_one_or_none()
 
 
-async def _load_problems(
+async def load_check_problems(
     db: AsyncSession, check_id: uuid.UUID,
 ) -> list[IntegrityCheckProblem]:
     return list((await db.execute(
@@ -250,7 +250,7 @@ async def _load_problems(
     )).scalars().all())
 
 
-async def _load_transcript(
+async def load_transcript(
     db: AsyncSession, check_id: uuid.UUID,
 ) -> list[IntegrityConversationTurn]:
     return list((await db.execute(
@@ -342,7 +342,7 @@ def _problem_summaries(
     ]
 
 
-async def _load_hw_positions(
+async def load_hw_positions(
     db: AsyncSession, submission_id: uuid.UUID,
 ) -> dict[uuid.UUID, int]:
     """Return {bank_item_id: 1-based HW position} for the assignment
@@ -445,7 +445,7 @@ async def _build_state_response(
         p for p in problems if p.status != PROBLEM_STATUS_DIAGNOSIS_ONLY
     ]
     questions = await _load_problem_questions(db, chat_probed)
-    hw_positions = await _load_hw_positions(db, submission_id)
+    hw_positions = await load_hw_positions(db, submission_id)
     return IntegrityStateResponse(
         submission_id=str(submission_id),
         overall_status=check.status,
@@ -478,7 +478,7 @@ async def get_my_integrity_state(
       - "skipped_unreadable" : handwriting was unreadable
     """
     submission = await _load_my_submission(db, submission_id, user.id)
-    check = await _load_check_for_submission(db, submission_id)
+    check = await load_check_for_submission(db, submission_id)
 
     if check is None:
         enabled = (await db.execute(
@@ -490,8 +490,8 @@ async def get_my_integrity_state(
             fallback_status="extracting" if enabled else "no_check",
         )
 
-    problems = await _load_problems(db, check.id)
-    turns = await _load_transcript(db, check.id)
+    problems = await load_check_problems(db, check.id)
+    turns = await load_transcript(db, check.id)
     return await _build_state_response(
         submission_id, check, problems, turns, db, fallback_status="no_check",
     )
@@ -506,7 +506,7 @@ async def post_student_turn(
 ) -> IntegrityStateResponse:
     """Append a student turn, run the agent loop, return fresh state."""
     await _load_my_submission(db, submission_id, user.id)
-    check = await _load_check_for_submission(db, submission_id)
+    check = await load_check_for_submission(db, submission_id)
     if check is None:
         raise HTTPException(
             status_code=404, detail="No integrity check for this submission",
@@ -550,8 +550,8 @@ async def post_student_turn(
     # expire_on_commit=False, so attrs are already current. Problems +
     # transcript are re-read fresh so the response reflects any tool
     # calls that landed during the agent loop.
-    problems = await _load_problems(db, check.id)
-    turns = await _load_transcript(db, check.id)
+    problems = await load_check_problems(db, check.id)
+    turns = await load_transcript(db, check.id)
     return await _build_state_response(
         submission_id, check, problems, turns, db, fallback_status="no_check",
     )
@@ -693,7 +693,7 @@ async def teacher_get_integrity_detail(
         request=request,
     )
 
-    check = await _load_check_for_submission(db, submission_id)
+    check = await load_check_for_submission(db, submission_id)
     # Lazy on-read finalization: if the student abandoned the interview
     # and it's been stuck past the wall-clock deadline, flip it to a
     # terminal inconclusive state here so the teacher sees "interview
@@ -729,7 +729,7 @@ async def teacher_get_integrity_detail(
         if resolver is not None:
             resolved_by_name = resolver.name or resolver.email
 
-    problems = await _load_problems(db, check.id)
+    problems = await load_check_problems(db, check.id)
 
     # One hydration query for the bank items so we can surface the
     # question text alongside the extraction.
@@ -745,7 +745,7 @@ async def teacher_get_integrity_detail(
     # 1-based HW position per bank item — same map the student-facing
     # state endpoint uses, so the teacher sees the same "Problem N"
     # label the student saw in chat.
-    hw_positions = await _load_hw_positions(db, submission_id)
+    hw_positions = await load_hw_positions(db, submission_id)
 
     problem_rows: list[TeacherIntegrityProblemRow] = []
     for p in problems:
@@ -769,7 +769,7 @@ async def teacher_get_integrity_detail(
             diagnosis_kind=p.diagnosis_kind,
         ))
 
-    turns = await _load_transcript(db, check.id)
+    turns = await load_transcript(db, check.id)
     transcript_rows = [
         TeacherTranscriptTurn(
             ordinal=t.ordinal,
@@ -824,7 +824,7 @@ async def teacher_dismiss_problem(
         raise HTTPException(status_code=404, detail="Submission not found")
     await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
 
-    check = await _load_check_for_submission(db, submission_id)
+    check = await load_check_for_submission(db, submission_id)
     if check is None:
         raise HTTPException(status_code=404, detail="Problem not found")
 
@@ -884,7 +884,7 @@ async def teacher_resolve_integrity(
         raise HTTPException(status_code=404, detail="Submission not found")
     await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
 
-    check = await _load_check_for_submission(db, submission_id)
+    check = await load_check_for_submission(db, submission_id)
     if check is None:
         raise HTTPException(status_code=404, detail="Integrity check not found")
 
