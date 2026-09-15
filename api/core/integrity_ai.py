@@ -195,27 +195,15 @@ async def extract_student_work(
         # EXIF-orient + downscale phone photos before Vision sees them;
         # PDFs/non-images pass through untouched.
         #
-        # A page we cannot re-encode is skipped, NOT allowed to fail the
-        # submission. `preprocess_image_for_vision` refuses rather than
-        # forwarding unscrubbed metadata, and that refusal used to
-        # propagate through this loop and out of the caller's
-        # `except Exception`, leaving `extraction` NULL — one corrupt
-        # page (an interrupted upload) stranding five good ones in the
-        # state that needs a teacher to notice and regrade by hand.
-        #
-        # Dropping the page is not silent: the count rides on the LLM
-        # call's metadata, and if NOTHING survives this returns the
-        # unreadable sentinel rather than an empty read dressed up as a
-        # successful one. Same shape as the teacher-document path, which
-        # skips an oversized document and records it.
+        # `preprocess_image_for_vision` refuses an image it cannot
+        # re-encode rather than forwarding it with its metadata
+        # unscrubbed. Collect those pages; the decision about what to do
+        # with them is made once, after the loop — see below. Collecting
+        # rather than bailing on the first only buys a complete list for
+        # the log, since any unusable page routes the whole submission.
         try:
             base64_data = preprocess_image_for_vision(base64_data, media_type)
         except ValueError:
-            logger.warning(
-                "page %d of submission %s could not be re-encoded; "
-                "extracting without it",
-                page_number, submission_id,
-            )
             unusable_pages.append(page_number)
             continue
         total_b64_bytes += len(base64_data)
@@ -250,9 +238,12 @@ async def extract_student_work(
         # grading on a submission with a corrupt page is a far smaller
         # harm than grading a student on work nobody ever saw.
         logger.error(
-            "submission %s has %d unreadable page(s) %s; routing the whole "
-            "submission to manual grading",
-            submission_id, len(unusable_pages), unusable_pages,
+            "submission %s: page(s) %s could not be re-encoded (corrupt or "
+            "truncated file, not unreadable handwriting); routing the whole "
+            "submission to manual grading. The student and teacher are shown "
+            "the generic unreadable message — there is no field to tell them "
+            "which page it was.",
+            submission_id, unusable_pages,
         )
         return {"steps": [], "final_answers": [], "confidence": 0.0}
     content.append({
