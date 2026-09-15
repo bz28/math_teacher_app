@@ -28,22 +28,109 @@ DECOMPOSITION_CACHE_MAX_SIZE = 200
 WORK_SUBMISSION_TTL_MINUTES = 30  # Discard work diagnosis after this window
 
 # ---------------------------------------------------------------------------
+# Anthropic request budget
+# ---------------------------------------------------------------------------
+# Anthropic caps a single request at 32MB. That is the one physical
+# constraint on how much homework can move through this system, so the
+# upload caps below are DERIVED from it rather than picked separately.
+#
+# They used to be picked separately, and it cost us: a 10MB transport
+# cap written with the original scaffold and a 50MB submission cap added
+# eight weeks later never had any relationship to each other. The
+# transport cap silently rejected submissions the endpoint would have
+# happily accepted, surfacing as an opaque 413 on a student's phone, and
+# it made the endpoint's own 50MB check unreachable dead code. Deriving
+# both from this number is what makes that class of bug impossible
+# rather than merely fixed — so add new caps by deriving them here, not
+# by writing another literal somewhere else.
+ANTHROPIC_MAX_REQUEST_BYTES = 32 * 1024 * 1024
+# Headroom for the prompt, tool schema and JSON envelope that ride along
+# with the payload. These are kilobytes in practice and base64 needs no
+# JSON escaping, so a megabyte is generous. Over-reserving is not
+# "safe": it drops payloads the API would have accepted.
+_REQUEST_HEADROOM_BYTES = 1024 * 1024
+# The largest base64 payload we will put in a single Claude request.
+MAX_REQUEST_B64_BYTES = ANTHROPIC_MAX_REQUEST_BYTES - _REQUEST_HEADROOM_BYTES
+
+# ---------------------------------------------------------------------------
 # Image / file upload handling
 # ---------------------------------------------------------------------------
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB after base64 decode
 # PDFs are larger by nature (multi-page scans); 25 MB matches the
 # teacher_documents.py upload cap and Anthropic's document-block limit.
 MAX_PDF_BYTES = 25 * 1024 * 1024
-# Whole-submission cap. With ≤10 files at up to 25 MB each the worst
-# case is 250 MB, which we don't want hitting the row store. 50 MB is
-# generous for real homework (a 10-photo phone submission tops out
-# around 30 MB after client-side resize) and saves the DB from
-# pathological payloads.
-MAX_SUBMISSION_TOTAL_BYTES = 50 * 1024 * 1024
+# Vision preprocessing runs between the submission cap and the request
+# budget, so whether it can GROW an image is part of this derivation.
+#
+# This is not an estimate. `preprocess_image_for_vision` ENFORCES it:
+# after re-encoding it walks a quality ladder and then shrinks the image
+# until its output is within this ratio of its input. Growth is bounded
+# by construction, and the same constant drives both sides so they
+# cannot drift — which is the entire thesis of this module.
+#
+# It was 1.20, then 1.05, both guessed from measurement, and both wrong
+# in the same way: a BUDGET for growth is a bet that no future image
+# exceeds it, and losing that bet refuses a student's homework as
+# unreadable after the server already accepted it. Bounding the growth
+# removes the bet. The 2% that remains is deliberate slack — it absorbs
+# base64's per-file padding and spares an image a resolution step for a
+# trivial overage.
+VISION_OUTPUT_GROWTH_CEILING = 1.02
+_VISION_REENCODE_GROWTH = VISION_OUTPUT_GROWTH_CEILING
 # Hard cap on number of files per submission. Mirrors the teacher
 # upload cap. Real homework submissions are 1-3 pages; 10 leaves
 # headroom for multi-page worksheets.
 MAX_SUBMISSION_FILES = 10
+# The most raw file content, in DECODED bytes, that any one request may
+# send to a single Vision call. Derived, because such a payload's whole
+# purpose is to reach the model: files are stored base64 and forwarded
+# base64, so decoded bytes re-inflate by 4/3 on the way into the request
+# budget above, and may grow again during preprocessing. A cap larger
+# than this would accept pages that can never be read.
+#
+# Named for the constraint rather than the route: a student submission
+# (school_student_practice) and a teacher's worksheet upload
+# (teacher_question_bank) both land in one Vision call and both spend
+# this same budget.
+#
+# Two corrections keep the round trip conservative rather than merely
+# close. The way down floors while base64 on the way back up CEILS, and
+# each FILE pads independently — so the sum of the parts exceeds base64
+# of the whole by up to 4 encoded bytes per file. Reserving that, and
+# flooring to a multiple of 4, is what makes the re-inflated worst case
+# land under the budget it was derived from instead of ~26 bytes over.
+MAX_VISION_PAYLOAD_BYTES = (
+    (int(MAX_REQUEST_B64_BYTES / _VISION_REENCODE_GROWTH) - 4 * MAX_SUBMISSION_FILES)
+    // 4
+) * 3
+
+
+def _b64_len(decoded_bytes: int) -> int:
+    """Base64 length of `decoded_bytes`, including padding."""
+    return 4 * ((decoded_bytes + 2) // 3)
+
+
+# Transport cap floor: the smallest HTTP body limit that can carry the
+# largest payload any endpoint will accept. Files arrive base64 inside
+# JSON, so the body runs ~4/3 the decoded size, plus the JSON envelope
+# (keys, quotes, commas, data: prefixes).
+#
+# It takes the MAX of two routes, because deriving it from the student
+# submission alone left the teacher's document upload
+# (`teacher_documents.upload_document`, same `validate_and_decode_upload`,
+# same base64-in-JSON shape) rejected at the transport layer: a legal
+# 25MB source PDF is a 33.3MB body against a 31.4MB cap, so it died
+# pre-handler with a bare 413 — and, once the message got friendlier,
+# with advice about retaking a photo, addressed to a teacher uploading
+# course materials from a laptop.
+#
+# That is the exact bug this module exists to prevent, reproduced on the
+# route the derivation forgot. Any future endpoint that accepts an
+# upload belongs in this max(), not in a literal of its own.
+MIN_REQUEST_SIZE_BYTES = (
+    max(_b64_len(MAX_VISION_PAYLOAD_BYTES), _b64_len(MAX_PDF_BYTES))
+    + 1024 * 1024
+)
 
 # Per-field cap on the teacher's grading rubric. These four free-text
 # fields are rendered verbatim into the grading prompt

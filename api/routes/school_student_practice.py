@@ -40,7 +40,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import record_student_activity
-from api.core.constants import MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
+from api.core.constants import MAX_SUBMISSION_FILES, MAX_VISION_PAYLOAD_BYTES
 from api.core.image_utils import validate_and_decode_upload
 from api.core.integrity_pipeline import (
     spawn_diagnosis_seeding,
@@ -1950,12 +1950,12 @@ async def submit_homework(
             ) from e
         total_bytes += len(decoded)
         validated_files.append({"data": b64, "media_type": media_type})
-    if total_bytes > MAX_SUBMISSION_TOTAL_BYTES:
+    if total_bytes > MAX_VISION_PAYLOAD_BYTES:
         raise HTTPException(
             status_code=413,
             detail=(
                 f"Submission too large: {total_bytes / 1024 / 1024:.1f}MB "
-                f"(max {MAX_SUBMISSION_TOTAL_BYTES // 1024 // 1024}MB total)"
+                f"(max {MAX_VISION_PAYLOAD_BYTES // 1024 // 1024}MB total)"
             ),
         )
 

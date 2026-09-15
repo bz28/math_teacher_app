@@ -11,6 +11,7 @@ from sqlalchemy import delete, or_, text
 
 from api.config import settings
 from api.core.entitlements import EntitlementError
+from api.middleware.logging import setup_logging
 from api.middleware.rate_limit import limiter
 from api.middleware.setup import configure_middleware
 from api.routes.admin import router as admin_router
@@ -55,6 +56,20 @@ async def _cleanup_expired_tokens() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Startup
+    # Structured JSON logs with correlation IDs. `setup_logging` existed
+    # since the scaffold but was never called, so LOG_LEVEL did nothing
+    # and production emitted uvicorn's plain access lines instead of the
+    # format docs/operations.md documents — no request_id, no user_id,
+    # no status_code to filter on. That is not cosmetic: it is why a
+    # two-day run of 413s on the student submit endpoint left no
+    # queryable trace and the payload sizes behind them are gone for
+    # good.
+    #
+    # Called here rather than at import so that merely importing
+    # api.main (tests, scripts, the prod-deps smoke check) doesn't
+    # reconfigure root logging out from under the caller.
+    setup_logging(settings.log_level)
+
     if settings.sentry_dsn and settings.sentry_dsn.startswith("https://"):
         import sentry_sdk
 
