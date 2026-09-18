@@ -4521,6 +4521,14 @@
             "title": "Is Late",
             "type": "boolean"
           },
+          "other_drawings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TeacherSubmissionDrawing"
+            },
+            "title": "Other Drawings",
+            "type": "array"
+          },
           "other_work": {
             "default": [],
             "items": {

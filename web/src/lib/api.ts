@@ -2054,6 +2054,9 @@ export interface TeacherSubmissionDetail {
    *  them rather than leaving the teacher behind the model. Empty on a
    *  clean submission. */
   other_work: TeacherSubmissionStep[];
+  /** Drawings the extractor couldn't tie to a problem; the grader sees
+   *  them as context under Other work, so the teacher does too. */
+  other_drawings: TeacherSubmissionDrawing[];
   breakdown: GradeBreakdownEntry[] | null;
   ai_breakdown: AiGradeEntry[] | null;
   final_score: number | null;

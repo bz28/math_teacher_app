@@ -5931,6 +5931,11 @@ export interface components {
             /** Is Late */
             is_late: boolean;
             /**
+             * Other Drawings
+             * @default []
+             */
+            other_drawings: components["schemas"]["TeacherSubmissionDrawing"][];
+            /**
              * Other Work
              * @default []
              */

@@ -31,6 +31,7 @@ import {
   type TeacherRubric,
   type TeacherSubmissionDetail,
   type TeacherSubmissionDetailProblem,
+  type TeacherSubmissionDrawing,
   type TeacherSubmissionRow,
   type TeacherSubmissionStep,
 } from "@/lib/api";
@@ -3623,8 +3624,8 @@ function SubmissionDetailPanel({
           })}
         </div>
 
-        {detail.other_work.length > 0 && (
-          <OtherWorkDisclosure steps={detail.other_work} />
+        {(detail.other_work.length > 0 || detail.other_drawings.length > 0) && (
+          <OtherWorkDisclosure steps={detail.other_work} drawings={detail.other_drawings} />
         )}
       </div>
 
@@ -3971,8 +3972,15 @@ function StudentStepRow({
  * Collapsed by default: a clean submission has none of this, and the
  * ones that do shouldn't push the grade controls down the page.
  */
-function OtherWorkDisclosure({ steps }: { steps: TeacherSubmissionStep[] }) {
+function OtherWorkDisclosure({
+  steps,
+  drawings,
+}: {
+  steps: TeacherSubmissionStep[];
+  drawings: TeacherSubmissionDrawing[];
+}) {
   const [open, setOpen] = useState(false);
+  const count = steps.length + drawings.length;
   return (
     <div className="mt-3 rounded-[--radius-md] border border-dashed border-border bg-[color:var(--color-surface-alt-2)]/50 px-3 py-2.5">
       <button
@@ -3984,7 +3992,7 @@ function OtherWorkDisclosure({ steps }: { steps: TeacherSubmissionStep[] }) {
         <span aria-hidden>{open ? "▾" : "▸"}</span>
         Other work
         <span className="font-normal normal-case tracking-normal text-text-muted">
-          · {steps.length} {steps.length === 1 ? "line" : "lines"}
+          · {count} {count === 1 ? "item" : "items"}
         </span>
       </button>
       {open && (
@@ -3997,6 +4005,19 @@ function OtherWorkDisclosure({ steps }: { steps: TeacherSubmissionStep[] }) {
           <div className="mt-2 space-y-2 text-sm text-text-primary">
             {steps.map((step, i) => (
               <StudentStepRow key={i} step={step} index={i} />
+            ))}
+            {drawings.map((d, i) => (
+              <p key={`d-${i}`} className="flex gap-2 text-xs leading-relaxed">
+                <span aria-hidden className="shrink-0">✏️</span>
+                <span className="text-text-secondary">
+                  <span className="font-semibold capitalize text-text-primary">
+                    {d.kind.replace("_", " ")}
+                  </span>{" "}
+                  · {d.plotted_elements.length} plotted
+                  {d.verified && " · checked ✓"}
+                  {d.description && <span className="block">{d.description}</span>}
+                </span>
+              </p>
             ))}
           </div>
         </>
