@@ -879,6 +879,108 @@ INTEGRITY_EXTRACT_SCHEMA: ToolSchema = {
                     "these as the authoritative per-problem answers."
                 ),
             },
+            # Drawings are work too. Text-only steps lose them entirely —
+            # a one-line squiggle and two properly plotted lines both used
+            # to reach the grader as "student drew a graph" (when they
+            # reached it at all). This channel carries what was actually
+            # drawn, and an explicit "nothing drawn" for problems that
+            # asked for one, so the grader never has to infer a drawing
+            # from the algebra beside it.
+            "visual_work": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "problem_position": {
+                            "type": ["integer", "null"],
+                            "description": "1-based problem this drawing belongs to; null if unclear.",
+                        },
+                        "kind": {
+                            "type": "string",
+                            "enum": ["graph", "number_line", "diagram", "table", "sketch", "other"],
+                            "description": "What sort of drawing it is.",
+                        },
+                        "present": {
+                            "type": "boolean",
+                            "description": (
+                                "True when the student actually drew something for "
+                                "this problem. False for an entry that records a "
+                                "MISSING drawing on a problem whose statement asked "
+                                "for one (graph / sketch / draw / plot / shade)."
+                            ),
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": (
+                                "What is on the page, concretely: which lines or "
+                                "curves are plotted (name them by equation when "
+                                "readable), labeled points, axes and scale, shading, "
+                                "arrows, table headings. Empty when present is false."
+                            ),
+                        },
+                        "plotted_elements": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "One entry per distinct line / curve / object that is "
+                                "ACTUALLY DRAWN, each described by features you can see "
+                                "on the page: its direction, where it crosses the axes, "
+                                "its endpoints, its style (e.g. \"line rising left-to-"
+                                "right, crossing the y-axis just below the origin\"). "
+                                "Trace each stroke; do not add an element because the "
+                                "problem or the algebra implies it should exist. Empty "
+                                "for a table or an unplotted figure."
+                            ),
+                        },
+                        "labeled_points": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Points the student labeled on the drawing, e.g. \"(2, 3)\".",
+                        },
+                        "answer_on_drawing": {
+                            "type": ["string", "null"],
+                            "description": (
+                                "An answer that exists ONLY on the drawing — an "
+                                "intersection the student marked, a shaded solution "
+                                "region, a circled value on a number line — in LaTeX "
+                                "or plain text. Null when the drawing carries no answer."
+                            ),
+                        },
+                        "page_index": {
+                            "type": ["integer", "null"],
+                            "description": "1-based page the drawing is on, as for steps.",
+                        },
+                        "bbox": {
+                            "type": ["object", "null"],
+                            "description": (
+                                "Where the drawing sits on its page, as fractions of the "
+                                "page's width and height (0 = left/top, 1 = right/bottom). "
+                                "Generous is fine — it is used to crop and zoom for a "
+                                "second look. Null when present is false."
+                            ),
+                            "properties": {
+                                "x0": {"type": "number"}, "y0": {"type": "number"},
+                                "x1": {"type": "number"}, "y1": {"type": "number"},
+                            },
+                            "required": ["x0", "y0", "x1", "y1"],
+                            "additionalProperties": False,
+                        },
+                    },
+                    "required": [
+                        "problem_position", "kind", "present", "description",
+                        "plotted_elements", "labeled_points", "answer_on_drawing",
+                        "page_index", "bbox",
+                    ],
+                    "additionalProperties": False,
+                },
+                "description": (
+                    "One entry per drawing the student made (graph, number line, "
+                    "diagram, table, sketch), plus one present=false entry for "
+                    "each problem that asked the student to draw something and "
+                    "has no drawing. Empty when the submission has no drawings "
+                    "and no problem asked for one."
+                ),
+            },
             "confidence": {
                 "type": "number",
                 "description": (
@@ -887,7 +989,62 @@ INTEGRITY_EXTRACT_SCHEMA: ToolSchema = {
                 ),
             },
         },
-        "required": ["steps", "final_answers", "confidence"],
+        "required": ["steps", "final_answers", "visual_work", "confidence"],
+        "additionalProperties": False,
+    },
+}
+
+# The second look at one drawing, cropped and enlarged. Deliberately knows
+# nothing about the problem or the algebra: on the full page the model
+# reads "y = 2x - 1, y = -x + 5" beside a sketch and reports two lines
+# when one is drawn. Isolated and zoomed, it counts strokes.
+VISUAL_WORK_VERIFY_SCHEMA: ToolSchema = {
+    "name": "return_drawing_inventory",
+    "description": "Report exactly what is drawn in this cropped image.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "has_drawing": {
+                "type": "boolean",
+                "description": "False if the crop shows no graph/diagram/sketch at all (only text, or blank).",
+            },
+            "plotted_elements": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "One entry per line, curve, or shape drawn IN ADDITION to any axes, "
+                    "each described by what is visible: direction, roughly where it "
+                    "starts and ends, whether it crosses an axis. Trace strokes; never "
+                    "guess from context."
+                ),
+            },
+            "labeled_points": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Points ON the drawing that have a coordinate written right beside them, "
+                    "e.g. \"(2, 3)\". Unlabeled dots do not count; numbers elsewhere on the page "
+                    "do not count."
+                ),
+            },
+            "unlabeled_dots": {
+                "type": "integer",
+                "description": "Dots or marks with no coordinate written beside them.",
+            },
+            "answer_on_drawing": {
+                "type": ["string", "null"],
+                "description": (
+                    "A value that reads as an answer ON the drawing itself — a labeled "
+                    "intersection, a shaded region, a circled number on a number line. "
+                    "Never text written elsewhere on the page. Null if none."
+                ),
+            },
+            "description": {"type": "string", "description": "One or two sentences of what is on the crop."},
+        },
+        "required": [
+            "has_drawing", "plotted_elements", "labeled_points", "unlabeled_dots",
+            "answer_on_drawing", "description",
+        ],
         "additionalProperties": False,
     },
 }
