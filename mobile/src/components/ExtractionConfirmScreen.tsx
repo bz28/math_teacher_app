@@ -338,6 +338,19 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
           })
         )}
 
+        {/* What confirming leads to, read the moment before the choice.
+            Students drop off here in prod, so the reason to keep going
+            lives on this screen too — not only inside the chat. */}
+        {state.integrity_check_enabled && (
+          <View style={styles.nextCard}>
+            <Text style={styles.nextTitle}>Next: a quick chat about your work</Text>
+            <Text style={styles.nextBody}>
+              Your teacher reads it when grading — it's the best way to get credit for what you
+              understand. Answer in your own words; nothing to look up.
+            </Text>
+          </View>
+        )}
+
         <View style={styles.actions}>
           <Button label="Looks right" onPress={doConfirm} loading={acting} />
           <Button
@@ -429,6 +442,18 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   answerRow: { gap: spacing.xs, marginTop: spacing.xs },
   answerLabel: { ...typography.eyebrow, fontSize: 10, color: colors.textMuted },
   answerField: { ...typography.bodyBold },
+  nextCard: {
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 4,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
+    backgroundColor: colors.primaryBg,
+    gap: 4,
+  },
+  nextTitle: { ...typography.body, fontSize: 14, fontWeight: "600", color: colors.primaryDark },
+  nextBody: { ...typography.body, fontSize: 13, lineHeight: 19, color: colors.primaryDark },
   actions: { gap: spacing.md, marginTop: spacing.lg },
   flagHint: { ...typography.caption, color: colors.textMuted, fontSize: 12, textAlign: "center" },
 
