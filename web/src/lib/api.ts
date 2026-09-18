@@ -2001,6 +2001,18 @@ export interface TeacherSubmissionStep {
   original_plain_english?: string | null;
 }
 
+export interface TeacherSubmissionDrawing {
+  kind: string;
+  present: boolean;
+  description: string;
+  /** One entry per line/curve actually drawn, in the extractor's words. */
+  plotted_elements: string[];
+  labeled_points: string[];
+  answer_on_drawing: string | null;
+  /** A cropped second look confirmed this inventory. */
+  verified: boolean;
+}
+
 export interface TeacherSubmissionDetailProblem {
   bank_item_id: string;
   position: number;
@@ -2010,6 +2022,11 @@ export interface TeacherSubmissionDetailProblem {
   /** Step-by-step extracted work for this problem. Empty when the
    *  student left this problem blank or extraction never ran. */
   student_steps: TeacherSubmissionStep[];
+  /** Drawings the extractor inventoried for this problem (graph, number
+   *  line, diagram…) — the same facts the grader was given. `present:
+   *  false` records a required drawing that's missing. Empty on rows
+   *  extracted before the channel existed. */
+  drawings: TeacherSubmissionDrawing[];
   /** 1-based page(s) of `files` this problem's work was written on,
    *  derived from the extraction and range-checked against the real file
    *  count. Empty when the extractor didn't tag it — every row from

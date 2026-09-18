@@ -4612,6 +4612,57 @@ function ProblemGradeRow({
         </div>
       )}
 
+      {/* Drawings — what the extractor inventoried on the page, in the
+          same words the grader was given. A required-but-missing
+          drawing is called out in the warning tone: that's the case
+          the AI used to give full credit on, and the teacher should
+          see the fact before the verdict that rests on it. */}
+      {problem.drawings.length > 0 && (
+        <div className="mt-3 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2.5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+            Drawings
+          </p>
+          <ul className="mt-1.5 space-y-1.5 text-xs leading-relaxed">
+            {problem.drawings.map((d, i) => (
+              <li key={i} className="flex gap-2">
+                <span aria-hidden className="shrink-0">{d.present ? "✏️" : "⚠️"}</span>
+                {d.present ? (
+                  <span className="text-text-primary">
+                    <span className="font-semibold capitalize">{d.kind.replace("_", " ")}</span>
+                    <span className="text-text-secondary">
+                      {" "}· {d.plotted_elements.length} plotted
+                      {d.verified && (
+                        <span title="Confirmed by a zoomed-in second look at the drawing"> · checked ✓</span>
+                      )}
+                    </span>
+                    {d.labeled_points.length > 0 && (
+                      <span className="text-text-secondary">
+                        {" "}· labeled: <MathText text={d.labeled_points.join(", ")} />
+                      </span>
+                    )}
+                    {d.answer_on_drawing && (
+                      <span className="text-text-secondary">
+                        {" "}· answer on drawing: <MathText text={d.answer_on_drawing} />
+                      </span>
+                    )}
+                    {d.plotted_elements.length > 0 && (
+                      <span className="block text-text-secondary">{d.plotted_elements.join("; ")}</span>
+                    )}
+                    {d.description && (
+                      <span className="block text-text-secondary">{d.description}</span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="font-semibold text-[color:var(--color-warning-dark)]">
+                    No {d.kind.replace("_", " ")} drawn — the problem asked for one.
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* AI grading hero — the AI's call is visible before the grade
           buttons, with reasoning inline instead of buried below. When
           no AI grade is present (pipeline failed / disabled), this

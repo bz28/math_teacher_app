@@ -4632,6 +4632,11 @@ export interface components {
             final_answers: components["schemas"]["ExtractionFinalAnswerOut"][];
             /** Steps */
             steps: components["schemas"]["ExtractionStepOut"][];
+            /**
+             * Visual Work
+             * @default []
+             */
+            visual_work: components["schemas"]["ExtractionVisualWorkOut"][];
         } & {
             [key: string]: unknown;
         };
@@ -4650,6 +4655,48 @@ export interface components {
             problem_position: number | null;
             /** Step Num */
             step_num: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ExtractionVisualWorkOut
+         * @description One drawing Vision found (or noted missing) — graph, number line,
+         *     diagram, table, sketch. `present=False` records a problem that asked
+         *     for a drawing and got none. The grader reads these as its only
+         *     source of truth about what was drawn.
+         */
+        ExtractionVisualWorkOut: {
+            /** Answer On Drawing */
+            answer_on_drawing?: string | null;
+            /** Bbox */
+            bbox?: {
+                [key: string]: number;
+            } | null;
+            /** Description */
+            description: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Labeled Points
+             * @default []
+             */
+            labeled_points: string[];
+            /** Page Index */
+            page_index?: number | null;
+            /**
+             * Plotted Elements
+             * @default []
+             */
+            plotted_elements: string[];
+            /** Present */
+            present: boolean;
+            /** Problem Position */
+            problem_position: number | null;
+            /**
+             * Verified
+             * @default false
+             */
+            verified: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -5912,6 +5959,11 @@ export interface components {
         TeacherSubmissionDetailProblem: {
             /** Bank Item Id */
             bank_item_id: string;
+            /**
+             * Drawings
+             * @default []
+             */
+            drawings: components["schemas"]["TeacherSubmissionDrawing"][];
             /** Final Answer */
             final_answer: string | null;
             /**
@@ -5930,6 +5982,38 @@ export interface components {
              * @default []
              */
             student_steps: components["schemas"]["TeacherSubmissionStep"][];
+        };
+        /**
+         * TeacherSubmissionDrawing
+         * @description One drawing the extractor inventoried for this problem — or the
+         *     record that a required one is missing (`present=False`). Shown
+         *     beside the student's steps so the teacher sees the same drawing
+         *     facts the grader was given.
+         */
+        TeacherSubmissionDrawing: {
+            /** Answer On Drawing */
+            answer_on_drawing?: string | null;
+            /** Description */
+            description: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Labeled Points
+             * @default []
+             */
+            labeled_points: string[];
+            /**
+             * Plotted Elements
+             * @default []
+             */
+            plotted_elements: string[];
+            /** Present */
+            present: boolean;
+            /**
+             * Verified
+             * @default false
+             */
+            verified: boolean;
         };
         /**
          * TeacherSubmissionStep
