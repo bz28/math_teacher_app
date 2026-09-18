@@ -163,3 +163,74 @@ async def test_admin_list_resolve_reopen(client: AsyncClient, world: dict[str, A
 
     # Teachers can't read the admin list.
     assert (await client.get("/v1/admin/reports", headers=h_t)).status_code == 403
+
+
+async def test_foreign_problem_id_is_dropped(client: AsyncClient, world: dict[str, Any]) -> None:
+    """A bank item that isn't on the submission's assignment can't have
+    its text laundered into the report's snapshot."""
+    payload = {**_payload(world), "problem_id": str(uuid.uuid4())}
+    r = await client.post("/v1/teacher/reports", headers=auth_headers(world["teacher"]), json=payload)
+    assert r.status_code == 201, r.text
+    d = (await client.get(f"/v1/admin/reports/{r.json()['id']}", headers=auth_headers(world["admin"]))).json()
+    assert d["problem_id"] is None and d["problem_question"] is None
+    assert d["problem_position"] == 4  # the teacher's own position label still stands
+
+
+async def test_page_url_must_be_http(client: AsyncClient, world: dict[str, Any]) -> None:
+    r = await client.post(
+        "/v1/teacher/reports", headers=auth_headers(world["teacher"]),
+        json={"kind": "broken", "page_url": "javascript:alert(1)"},
+    )
+    assert r.status_code == 422
+
+
+async def test_grade_numbers_are_bounded(client: AsyncClient, world: dict[str, Any]) -> None:
+    # httpx's json= refuses inf itself, so send the raw body the way a
+    # hand-crafted client would.
+    body = {
+        **_payload(world),
+        "ai_grade": {"score_status": "full", "percent": 250, "confidence": 2, "reasoning": ""},
+    }
+    r = await client.post("/v1/teacher/reports", headers=auth_headers(world["teacher"]), json=body)
+    assert r.status_code == 422
+    # Python's json parser accepts a bare `Infinity`; allow_inf_nan=False
+    # rejects it at validation. (FastAPI then tries to echo `inf` in the
+    # 422 body and trips its own JSON encoder — a framework quirk on any
+    # float field, so assert on the outcome that matters: rejected,
+    # nothing stored.)
+    raw = '{"kind": "wrong_grade", "ai_grade": {"score_status": "full", "percent": Infinity, "reasoning": ""}}'
+    r = await client.post(
+        "/v1/teacher/reports", headers={**auth_headers(world["teacher"]), "content-type": "application/json"},
+        content=raw,
+    )
+    assert r.status_code in (422, 500)
+    lst = (await client.get("/v1/admin/reports?status=all", headers=auth_headers(world["admin"]))).json()
+    assert lst["reports"] == []
+
+
+async def test_email_is_sent_escaped_without_student_name(
+    client: AsyncClient, world: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    from api.routes import teacher_reports as mod
+
+    sent: list[dict[str, Any]] = []
+
+    async def fake_send(*, to: list[str], subject: str, html: str) -> None:
+        sent.append({"to": to, "subject": subject, "html": html})
+
+    monkeypatch.setattr(mod, "send_email", fake_send)
+    monkeypatch.setattr(mod.settings, "admin_alert_emails", ["founder@t.com"])
+    payload = {**_payload(world), "note": "<img src=x onerror=alert(1)> one line only"}
+    r = await client.post("/v1/teacher/reports", headers=auth_headers(world["teacher"]), json=payload)
+    assert r.status_code == 201, r.text
+    await asyncio.sleep(0)  # let the notify task run
+    assert len(sent) == 1
+    m = sent[0]
+    assert m["to"] == ["founder@t.com"]
+    assert m["subject"] == "[Report] Grade or reasoning is wrong · Solving Systems · Problem 4"
+    assert "<img src=x" not in m["html"] and "&lt;img src=x" in m["html"]
+    assert "Ms. Okafor" in m["html"] and "D. Park" not in m["html"]
+    assert "Full · 100%" in m["html"] and "Partial · 50%" in m["html"]
+    assert "/reports/" in m["html"]

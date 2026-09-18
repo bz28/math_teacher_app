@@ -4413,6 +4413,26 @@ function ProblemGradeRow({
             <ConfidenceSignal confidence={aiGrade.confidence} />
           </span>
         </button>
+        {/* Collapsed rows are the confident ones — exactly where a wrong
+            call hides best — so the report trigger lives here too, not
+            only in the expanded Suggestion card. */}
+        <ReportProblemTrigger
+          iconOnly
+          label={`Report a problem with the AI's grade on problem ${problem.position}`}
+          context={{
+            ...reportBase,
+            problem_id: problem.bank_item_id,
+            problem_position: problem.position,
+            ai_grade: {
+              score_status: aiGrade.score_status,
+              percent: aiGrade.percent,
+              confidence: aiGrade.confidence,
+              reasoning: aiGrade.reasoning ?? "",
+            },
+            teacher_grade: { score_status: current ?? null, percent: entry?.percent ?? null },
+            labels: [`Problem ${problem.position}`, `AI: ${verdict.label}`],
+          }}
+        />
         {confirmed ? (
           <span className="inline-flex shrink-0 items-center gap-1.5 rounded-[--radius-md] border border-[color:var(--color-success)]/30 bg-[color:var(--color-success)]/10 px-2.5 py-1.5 text-[11px] font-bold text-[color:var(--color-success)]">
             <span aria-hidden>✓</span> Confirmed

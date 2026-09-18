@@ -149,7 +149,7 @@ export default function ReportDetail() {
             {r.teacher_id && (
               <Link to={`/teachers/${r.teacher_id}`} style={btnGhost}>Teacher ↗</Link>
             )}
-            {r.page_url && (
+            {r.page_url && /^https?:\/\//i.test(r.page_url) && (
               <a href={r.page_url} target="_blank" rel="noreferrer" style={btnGhost}>Page they were on ↗</a>
             )}
           </div>

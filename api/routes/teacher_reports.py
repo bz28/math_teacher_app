@@ -18,7 +18,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,10 +32,16 @@ from api.models.question_bank import QuestionBankItem
 from api.models.teacher_report import REPORT_KINDS, TeacherReport
 from api.models.user import User
 from api.routes.teacher_courses import get_teacher_course
+from api.services.bank import problem_ids_in_content
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# The email is this feature's only push channel, so the fire-and-forget
+# task is pinned here until it finishes — an unreferenced task can be
+# garbage-collected mid-flight and the founder never hears about it.
+_notify_tasks: set[asyncio.Task[None]] = set()
 
 KIND_LABELS = {
     "wrong_grade": "Grade or reasoning is wrong",
@@ -48,21 +54,28 @@ KIND_LABELS = {
 
 
 class ReportedAiGrade(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
     score_status: str = Field(max_length=20)
-    percent: float
-    confidence: float | None = None
+    percent: float = Field(ge=0, le=100)
+    confidence: float | None = Field(default=None, ge=0, le=1)
     reasoning: str = Field(default="", max_length=4000)
 
 
 class ReportedTeacherGrade(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
     score_status: str | None = Field(default=None, max_length=20)
-    percent: float | None = None
+    percent: float | None = Field(default=None, ge=0, le=100)
 
 
 class CreateReportRequest(BaseModel):
     kind: str
     note: str | None = Field(default=None, max_length=4000)
-    page_url: str | None = Field(default=None, max_length=2000)
+    # The admin console renders this as a link — only http(s) may land
+    # in an href, or a teacher account could plant `javascript:` for an
+    # admin to click.
+    page_url: str | None = Field(default=None, max_length=2000, pattern=r"^https?://")
     submission_id: uuid.UUID | None = None
     assignment_id: uuid.UUID | None = None
     course_id: uuid.UUID | None = None
@@ -91,11 +104,12 @@ def _notify(report: TeacherReport) -> None:
     this lands in an inbox as HTML."""
     if not settings.admin_alert_emails:
         return
+    # No student name here on purpose — email leaves our systems; the
+    # admin console link carries the full case.
     where = " · ".join(
         html.escape(x) for x in (
             report.course_name, report.assignment_title,
             f"Problem {report.problem_position}" if report.problem_position else None,
-            report.student_name,
         ) if x
     ) or "no submission attached"
     note_block = (
@@ -141,7 +155,9 @@ def _notify(report: TeacherReport) -> None:
         except Exception:  # noqa: BLE001 — never let notification failure surface to the teacher
             logger.exception("teacher report email failed report=%s", report.id)
 
-    asyncio.create_task(_send())
+    task = asyncio.create_task(_send())
+    _notify_tasks.add(task)
+    task.add_done_callback(_notify_tasks.discard)
 
 
 @router.post("/reports", status_code=status.HTTP_201_CREATED)
@@ -186,7 +202,9 @@ async def create_report(
         report.section_id = submission.section_id
         report.student_id = submission.student_id
         report.student_name = student.name if student else None
-        if body.problem_id:
+        # The problem must be on THIS assignment — otherwise any bank
+        # item's text could be laundered into a report's snapshot.
+        if body.problem_id and str(body.problem_id) in problem_ids_in_content(assignment.content):
             item = (await db.execute(
                 select(QuestionBankItem).where(QuestionBankItem.id == body.problem_id)
             )).scalar_one_or_none()
