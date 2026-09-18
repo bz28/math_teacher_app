@@ -726,6 +726,7 @@
             "anyOf": [
               {
                 "maxLength": 2000,
+                "pattern": "^https?://",
                 "type": "string"
               },
               {
@@ -2863,6 +2864,8 @@
           "confidence": {
             "anyOf": [
               {
+                "maximum": 1.0,
+                "minimum": 0.0,
                 "type": "number"
               },
               {
@@ -2872,6 +2875,8 @@
             "title": "Confidence"
           },
           "percent": {
+            "maximum": 100.0,
+            "minimum": 0.0,
             "title": "Percent",
             "type": "number"
           },
@@ -2899,6 +2904,8 @@
           "percent": {
             "anyOf": [
               {
+                "maximum": 100.0,
+                "minimum": 0.0,
                 "type": "number"
               },
               {
