@@ -9,6 +9,7 @@ import logging
 from typing import Any
 
 from api.core.constants import MAX_STORED_TEXT_LENGTH
+from api.core.safe_errors import safe_error, traceback_is_safe
 
 logger = logging.getLogger(__name__)
 
@@ -264,7 +265,17 @@ async def persist_llm_call(
             db.add(record)
             await db.commit()
     except Exception as e:
-        logger.error("Failed to persist LLM call log: %s", e, exc_info=True)
+        # `safe_error`, not `%s`, and a guarded `exc_info`. The INSERT
+        # above binds `input_text` and `output_text` — for an extraction
+        # call those ARE the student's transcribed handwriting — so a
+        # failure here raises a StatementError carrying them in its
+        # parameters. Formatting it verbatim, or tracing it, published a
+        # child's schoolwork to the log stream and to Sentry.
+        logger.error(
+            "Failed to persist LLM call log: %s",
+            safe_error(e),
+            exc_info=traceback_is_safe(e),
+        )
 
 
 _background_tasks: set[asyncio.Task[None]] = set()

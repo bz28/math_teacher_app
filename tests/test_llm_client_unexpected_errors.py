@@ -86,8 +86,10 @@ async def test_the_original_exception_propagates_unchanged() -> None:
     """Logging is a side effect, never a behaviour change.
 
     If the catch-all wrapped or swallowed, callers upstream would see a
-    different type than before the fix — `_run_extraction_background`
-    catches broadly, but the retry/circuit logic elsewhere does not.
+    different type than before the fix. That matters more now than when
+    this was written: `run_extraction_for_submission` used to catch
+    broadly and now deliberately raises, so the extraction queue keys
+    its retry-vs-park decision on the exception that comes out of here.
     """
     with (
         patch(
