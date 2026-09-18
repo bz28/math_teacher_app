@@ -32,19 +32,24 @@ from collections.abc import Coroutine
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import delete as sql_delete
 from sqlalchemy import distinct, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.audit_log import record_student_activity
+from api.core.audit_log import client_ip, record_student_activity
 from api.core.constants import MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
 from api.core.image_utils import validate_and_decode_upload
 from api.core.integrity_pipeline import (
     spawn_diagnosis_seeding,
     start_integrity_check,
+)
+from api.core.submission_rejections import (
+    REASON_SUBMISSION_TOO_LARGE,
+    reason_for_file_error,
+    record_submission_rejection,
 )
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
@@ -1893,10 +1898,22 @@ async def linked_practice_for_homework(
     )
 
 
+def _declared_request_bytes(request: Request) -> int | None:
+    """The transport size of the upload, as the client declared it —
+    the same number the size-limit middleware measures, so a handler
+    rejection and a middleware rejection report bytes on one scale."""
+    raw = request.headers.get("content-length")
+    try:
+        return int(raw) if raw else None
+    except ValueError:
+        return None
+
+
 @router.post("/homework/{assignment_id}/submit")
 async def submit_homework(
     assignment_id: uuid.UUID,
     body: SubmitHomeworkRequest,
+    request: Request,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> SubmitHomeworkResponse:
@@ -1934,6 +1951,22 @@ async def submit_homework(
     # problem answer extraction. Each file is validated by magic bytes
     # against per-format size caps; we also enforce a whole-submission
     # cap so a 10-PDF payload can't blow up the row store.
+    #
+    # Every refusal below is recorded before it is raised. A rejected
+    # upload writes no submission row, so without the record the student
+    # is indistinguishable from one who never tried — the exact blind
+    # spot the dashboard's blocked-students panel exists to close.
+    async def _rejected(reason: str, detail: str, decoded_bytes: int) -> None:
+        await record_submission_rejection(
+            actor_user_id=user.id,
+            assignment_id=assignment_id,
+            reason=reason,
+            request_bytes=_declared_request_bytes(request),
+            decoded_bytes=decoded_bytes,
+            detail=detail,
+            ip_address=client_ip(request),
+        )
+
     validated_files: list[dict[str, str]] = []
     total_bytes = 0
     for i, raw in enumerate(body.files):
@@ -1944,20 +1977,18 @@ async def submit_homework(
         try:
             decoded, media_type = validate_and_decode_upload(b64)
         except ValueError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File {i + 1}: {e}",
-            ) from e
+            detail = f"File {i + 1}: {e}"
+            await _rejected(reason_for_file_error(str(e)), detail, total_bytes)
+            raise HTTPException(status_code=400, detail=detail) from e
         total_bytes += len(decoded)
         validated_files.append({"data": b64, "media_type": media_type})
     if total_bytes > MAX_SUBMISSION_TOTAL_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"Submission too large: {total_bytes / 1024 / 1024:.1f}MB "
-                f"(max {MAX_SUBMISSION_TOTAL_BYTES // 1024 // 1024}MB total)"
-            ),
+        detail = (
+            f"Submission too large: {total_bytes / 1024 / 1024:.1f}MB "
+            f"(max {MAX_SUBMISSION_TOTAL_BYTES // 1024 // 1024}MB total)"
         )
+        await _rejected(REASON_SUBMISSION_TOO_LARGE, detail, total_bytes)
+        raise HTTPException(status_code=413, detail=detail)
 
     # The submissions schema requires a section_id on the row.
     section_id = await _section_for_student_work(db, user, assignment)
