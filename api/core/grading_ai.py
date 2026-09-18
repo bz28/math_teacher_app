@@ -87,16 +87,17 @@ AND the problem's required method or drawing (below) is satisfied, give full cre
 - Required method or drawing. When the problem statement names a method ("by \
 graphing", "using elimination", "by substitution", "by factoring", "using the \
 quadratic formula", "by completing the square") or asks for something drawn \
-("graph", "sketch", "draw", "plot", "shade", "construct", "label"), that method or \
-drawing is part of the answer, not a suggestion. A correct final answer reached by \
+("graph", "sketch", "draw", "plot", "shade"), that method or drawing is part of \
+the answer, not a suggestion. A printed figure the problem refers to ("using the \
+graph shown") is not a request to draw, and "label your answer" is not either. A correct final answer reached by \
 a different method, or without the required drawing, is NOT full credit — grade it \
 as "right answer, required method missing" partial credit (the rubric's Partial \
 credit anchors say how much). A required drawing that is present but incomplete \
 (one of two lines plotted, the intersection not marked, an unlabeled axis) is a \
-smaller deduction than a missing one. A named algebraic method is held to the \
-same standard as a drawing: substitution when elimination was required IS \
-"required method missing" (around 50%), not a minor deviation — the problem is \
-testing that method. Name the requirement in `reasoning` \
+smaller deduction than a missing one. A named algebraic method that wasn't used \
+(substitution when elimination was required) is also "required method missing": \
+never full credit, and itemize it as its own deduction so the teacher can size \
+it — the problem was testing that method. Name the requirement in `reasoning` \
 ("the problem requires solving by graphing; the student solved algebraically"). \
 When no method or drawing is specified, any valid method earns full credit — \
 never penalize a legitimate alternative.
@@ -253,13 +254,23 @@ def _format_visual_work(v: dict[str, Any]) -> str:
 
 def _bucket_visual_work_by_position(
     visual_work: list[dict[str, Any]], valid_positions: set[int],
-) -> dict[int, list[dict[str, Any]]]:
+) -> tuple[dict[int, list[dict[str, Any]]], list[dict[str, Any]]]:
+    """Same split as steps: entries tagged with a position on this
+    assignment go per-problem; the rest (null / foreign position) are
+    returned separately for the "Other work" block. A drawing the
+    extractor couldn't place must not vanish — vanishing reads to the
+    grader as "no drawing exists", which is a penalty."""
     out: dict[int, list[dict[str, Any]]] = {}
+    other: list[dict[str, Any]] = []
     for v in visual_work:
+        if not isinstance(v, dict):
+            continue
         pos = v.get("problem_position")
         if isinstance(pos, int) and not isinstance(pos, bool) and pos in valid_positions:
             out.setdefault(pos, []).append(v)
-    return out
+        else:
+            other.append(v)
+    return out, other
 
 
 def _format_final_answer(fa: dict[str, Any]) -> str:
@@ -383,7 +394,9 @@ def _build_user_message(
     final_answers = extraction.get("final_answers", [])
     visual_work = extraction.get("visual_work") or []
     valid_positions = {p["position"] for p in problems}
-    visual_by_pos = _bucket_visual_work_by_position(visual_work, valid_positions)
+    visual_by_pos, unattributed_visuals = _bucket_visual_work_by_position(
+        visual_work, valid_positions
+    )
 
     # Bucket steps + final answers by problem_position. Integer keys
     # matching a problem on this assignment go per-problem; everything
@@ -429,6 +442,13 @@ def _build_user_message(
             if problem_visuals:
                 for v in problem_visuals:
                     lines.append(f"  {_format_visual_work(v)}")
+            elif unattributed_visuals:
+                # A drawing exists somewhere that couldn't be tied to a
+                # problem — say so, rather than asserting there is none.
+                lines.append(
+                    "  (no drawing attributed to this problem — but see the "
+                    "unattributed drawings under \"Other work\")"
+                )
             else:
                 lines.append("  (no drawing for this problem)")
 
@@ -447,7 +467,7 @@ def _build_user_message(
 
         lines.append("")  # blank line between problem blocks
 
-    if unattributed_steps or unattributed_finals:
+    if unattributed_steps or unattributed_finals or unattributed_visuals:
         lines.append("## Other work (not attributed to a specific problem)")
         lines.append(
             "These entries couldn't be tied to one problem on this "
@@ -459,6 +479,8 @@ def _build_user_message(
             lines.append(f"  {_format_step(s)}")
         for fa in unattributed_finals:
             lines.append(f"  Final answer: {_format_final_answer(fa)}")
+        for v in unattributed_visuals:
+            lines.append(f"  Drawing: {_format_visual_work(v)}")
         lines.append("</student_work>")
 
     return "\n".join(lines)

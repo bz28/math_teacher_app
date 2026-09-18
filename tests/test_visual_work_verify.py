@@ -169,6 +169,53 @@ class TestVerifyVisualWork:
         await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
         assert ext["visual_work"][0]["verified"] is True
 
+    async def test_no_drawing_with_no_wider_crop_is_not_trusted(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """If the wider retry can't even be cropped, one 'nothing here'
+        look must not stand as verified."""
+        from api.core import image_utils
+
+        async def fake_vision(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            return {"has_drawing": False, "plotted_elements": [], "labeled_points": [],
+                    "unlabeled_dots": 0, "answer_on_drawing": None, "description": ""}
+
+        real = image_utils.crop_region_for_vision
+
+        def crop_once(*args: Any, **kwargs: Any) -> str | None:
+            return None if kwargs.get("margin") == 0.8 else real(*args, **kwargs)
+
+        monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
+        monkeypatch.setattr(integrity_ai, "crop_region_for_vision", crop_once)
+        ext = {"steps": [], "final_answers": [], "visual_work": [_entry()], "confidence": 0.9}
+        await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
+        v = ext["visual_work"][0]
+        assert v["verified"] is False and v["plotted_elements"] == ["line (y = 2x - 1)", "line (y = -x + 5)"]
+
+    async def test_bounded_and_concurrent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import asyncio
+
+        active = 0
+        peak = 0
+        n = 0
+
+        async def fake_vision(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            nonlocal active, peak, n
+            active += 1
+            peak = max(peak, active)
+            n += 1
+            await asyncio.sleep(0.01)
+            active -= 1
+            return {"has_drawing": True, "plotted_elements": ["x"], "labeled_points": [],
+                    "unlabeled_dots": 0, "answer_on_drawing": None, "description": "d"}
+
+        monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
+        entries = [_entry(problem_position=i) for i in range(1, 10)]  # 9 drawings
+        ext = {"steps": [], "final_answers": [], "visual_work": entries, "confidence": 0.9}
+        await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
+        assert n == integrity_ai._VERIFY_MAX_DRAWINGS
+        assert 1 < peak <= integrity_ai._VERIFY_CONCURRENCY
+        assert sum(1 for v in ext["visual_work"] if v["verified"]) == integrity_ai._VERIFY_MAX_DRAWINGS
+        assert all(v["verified"] is False for v in ext["visual_work"][integrity_ai._VERIFY_MAX_DRAWINGS:])
+
     async def test_vision_failure_leaves_entry_unverified(self, monkeypatch: pytest.MonkeyPatch) -> None:
         async def fail(*args: Any, **kwargs: Any) -> dict[str, Any]:
             raise RuntimeError("api down")

@@ -13,6 +13,7 @@ Two surfaces:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import uuid
@@ -307,83 +308,111 @@ async def verify_visual_work(
     from a claimed one. Failures keep the unverified entry — a report is
     better than none — and never fail the extraction.
     """
-    entries = extraction.get("visual_work") or []
+    entries = [v for v in (extraction.get("visual_work") or []) if isinstance(v, dict)]
     for v in entries:
-        if not isinstance(v, dict) or not v.get("present"):
-            continue
-        v.setdefault("verified", False)
-        page = v.get("page_index")
-        if not isinstance(page, int) or isinstance(page, bool):
-            page = 1 if len(files) == 1 else None
-        bbox = v.get("bbox")
-        if page is None or not (1 <= page <= len(files)) or not isinstance(bbox, dict):
-            continue
-        f = files[page - 1]
-        raw = f.get("data", "")
-        base64_data, media_type = _strip_data_url_prefix(raw, f.get("media_type", "image/jpeg"))
-        # The model's boxes are rough — off by a tenth of the page is
-        # normal. A crop that shows no drawing gets one wider retry
-        # before we believe it.
-        seen: Any = None
-        for margin in (0.35, 0.8):
-            crop = crop_region_for_vision(base64_data, media_type, bbox, margin=margin)
-            if crop is None:
-                break
-            try:
-                seen = await call_claude_vision(
-                    [to_content_block("image/jpeg", crop), {"type": "text", "text": _VERIFY_PROMPT}],
-                    LLMMode.INTEGRITY_EXTRACT,
-                    tool_schema=VISUAL_WORK_VERIFY_SCHEMA,
-                    model=MODEL_REASON,
-                    max_tokens=1500,
-                    temperature=0.0,
-                    user_id=user_id,
-                    submission_id=submission_id,
-                    call_metadata={
-                        "phase": "vision_verify_drawing",
-                        "problem_position": v.get("problem_position"),
-                        "margin": margin,
-                    },
-                )
-            except Exception:  # noqa: BLE001 — verification is best-effort
-                logger.exception("visual_work verify failed submission=%s", submission_id)
-                seen = None
-                break
-            if isinstance(seen, dict) and seen.get("has_drawing", True):
-                break
-        if not isinstance(seen, dict):
-            continue
-        if not seen.get("has_drawing", True):
-            # Two crops around the reported spot show no drawing. Don't
-            # flip `present` on a possibly-bad box, but the inventory the
-            # grader reads must not credit lines nobody could find — and
-            # the description must say so, or the grader would be handed
-            # "two lines plotted" beside "nothing plotted".
-            v["plotted_elements"] = []
-            v["labeled_points"] = []
-            v["answer_on_drawing"] = None
-            v["description"] = (
-                "A zoomed second look at the reported location found no drawing; "
-                "the first-pass description could not be confirmed."
+        if v.get("present"):
+            v.setdefault("verified", False)
+    # Bounded and concurrent: this runs on the student's path to the
+    # confirm screen, so a page with many sketches must not turn into a
+    # long serial chain of vision calls. Past the cap, entries stay as
+    # the first pass reported them (verified=False says so).
+    candidates = [v for v in entries if v.get("present")][:_VERIFY_MAX_DRAWINGS]
+    sem = asyncio.Semaphore(_VERIFY_CONCURRENCY)
+
+    async def _one(v: dict[str, Any]) -> None:
+        async with sem:
+            await _verify_one(v, files, user_id=user_id, submission_id=submission_id)
+
+    await asyncio.gather(*(_one(v) for v in candidates))
+
+
+_VERIFY_MAX_DRAWINGS = 6
+_VERIFY_CONCURRENCY = 3
+
+
+async def _verify_one(
+    v: dict[str, Any],
+    files: list[Any],
+    *,
+    user_id: str | None,
+    submission_id: str | None,
+) -> None:
+    """One drawing's second look; mutates `v` in place. See verify_visual_work."""
+    page = v.get("page_index")
+    if not isinstance(page, int) or isinstance(page, bool):
+        page = 1 if len(files) == 1 else None
+    bbox = v.get("bbox")
+    if page is None or not (1 <= page <= len(files)) or not isinstance(bbox, dict):
+        return
+    f = files[page - 1]
+    raw = f.get("data", "")
+    base64_data, media_type = _strip_data_url_prefix(raw, f.get("media_type", "image/jpeg"))
+    # The model's boxes are rough — off by a tenth of the page is
+    # normal. A crop that shows no drawing gets one wider retry
+    # before we believe it.
+    seen: Any = None
+    for margin in (0.35, 0.8):
+        crop = crop_region_for_vision(base64_data, media_type, bbox, margin=margin)
+        if crop is None:
+            # Can't take the (wider) look — don't let a single
+            # "nothing here" from the narrower crop stand as verified.
+            seen = None
+            break
+        try:
+            seen = await call_claude_vision(
+                [to_content_block("image/jpeg", crop), {"type": "text", "text": _VERIFY_PROMPT}],
+                LLMMode.INTEGRITY_EXTRACT,
+                tool_schema=VISUAL_WORK_VERIFY_SCHEMA,
+                model=MODEL_REASON,
+                max_tokens=1500,
+                temperature=0.0,
+                user_id=user_id,
+                submission_id=submission_id,
+                call_metadata={
+                    "phase": "vision_verify_drawing",
+                    "problem_position": v.get("problem_position"),
+                    "margin": margin,
+                },
             )
-            v["verified"] = True
-            continue
-        raw_elements = seen.get("plotted_elements")
-        raw_points = seen.get("labeled_points")
-        v["plotted_elements"] = [
-            e for e in (raw_elements if isinstance(raw_elements, list) else [])
-            if isinstance(e, str) and e.strip()
-        ]
-        v["labeled_points"] = [
-            pt for pt in (raw_points if isinstance(raw_points, list) else [])
-            if isinstance(pt, str) and pt.strip()
-        ]
-        ans = seen.get("answer_on_drawing")
-        v["answer_on_drawing"] = ans if isinstance(ans, str) and ans.strip() else None
-        desc = seen.get("description")
-        if isinstance(desc, str) and desc.strip():
-            v["description"] = desc.strip()
+        except Exception:  # noqa: BLE001 — verification is best-effort
+            logger.exception("visual_work verify failed submission=%s", submission_id)
+            seen = None
+            break
+        if isinstance(seen, dict) and seen.get("has_drawing", True):
+            break
+    if not isinstance(seen, dict):
+        return
+    if not seen.get("has_drawing", True):
+        # Two crops around the reported spot show no drawing. Don't
+        # flip `present` on a possibly-bad box, but the inventory the
+        # grader reads must not credit lines nobody could find — and
+        # the description must say so, or the grader would be handed
+        # "two lines plotted" beside "nothing plotted".
+        v["plotted_elements"] = []
+        v["labeled_points"] = []
+        v["answer_on_drawing"] = None
+        v["description"] = (
+            "A zoomed second look at the reported location found no drawing; "
+            "the first-pass description could not be confirmed."
+        )
         v["verified"] = True
+        return
+    raw_elements = seen.get("plotted_elements")
+    raw_points = seen.get("labeled_points")
+    v["plotted_elements"] = [
+        e for e in (raw_elements if isinstance(raw_elements, list) else [])
+        if isinstance(e, str) and e.strip()
+    ]
+    v["labeled_points"] = [
+        pt for pt in (raw_points if isinstance(raw_points, list) else [])
+        if isinstance(pt, str) and pt.strip()
+    ]
+    ans = seen.get("answer_on_drawing")
+    v["answer_on_drawing"] = ans if isinstance(ans, str) and ans.strip() else None
+    desc = seen.get("description")
+    if isinstance(desc, str) and desc.strip():
+        v["description"] = desc.strip()
+    v["verified"] = True
 
 
 # ── Conversational agent ────────────────────────────────────────────

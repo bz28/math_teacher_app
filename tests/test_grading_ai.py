@@ -689,7 +689,7 @@ class TestBuildUserMessageDrawings:
         msg = _build_user_message(extraction, self._problems())
         assert "drawing" not in msg.lower()
 
-    def test_unattributed_or_foreign_position_drawings_are_ignored(self) -> None:
+    def test_unattributed_or_foreign_position_drawings_go_to_other_work(self) -> None:
         extraction = {
             "steps": [], "final_answers": [],
             "visual_work": [
@@ -703,8 +703,19 @@ class TestBuildUserMessageDrawings:
             "confidence": 0.9,
         }
         msg = _build_user_message(extraction, self._problems())
-        assert "doodle" not in msg and "stale tag" not in msg and "bool tag" not in msg
+        # They're not lost — they land under Other work, like steps do —
+        # and the per-problem line stops asserting "none exists".
+        other = msg[msg.index("## Other work"):]
+        assert "Drawing: sketch" in other and "doodle" in other
+        assert "stale tag" in other and "bool tag" in other
+        assert "(no drawing for this problem)" not in msg
+        assert msg.count("no drawing attributed to this problem") == 2
+
+    def test_no_drawings_at_all_says_none_for_each_problem(self) -> None:
+        extraction = {"steps": [], "final_answers": [], "visual_work": [], "confidence": 0.9}
+        msg = _build_user_message(extraction, self._problems())
         assert msg.count("(no drawing for this problem)") == 2
+        assert "## Other work" not in msg
 
     def test_system_prompt_carries_the_method_rule(self) -> None:
         prompt = _build_system_prompt(None, self._problems())

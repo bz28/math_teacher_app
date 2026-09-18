@@ -107,7 +107,7 @@ def _prob(question: str, answer: str) -> list[dict[str, Any]]:
 
 
 # ── The golden set ────────────────────────────────────────────────────────
-# 17 cases, ≥2 per matrix row. Rubric is None throughout, so the grader applies
+# 18 cases, ≥2 per matrix row. Rubric is None throughout, so the grader applies
 # the shipped DEFAULT rubric — i.e. exactly what a teacher who authors no rubric
 # gets. Two cases are physics (a2, b3) per the "a couple physics" ask.
 
@@ -443,6 +443,25 @@ GOLDEN_CASES: list[GradingCase] = [
         rationale="Control: no method named, clean substitution → must stay full (no over-penalizing).",
     ),
     GradingCase(
+        name="f6-printed-graph-control-full",
+        category="f",
+        problems=_prob(
+            "Using the graph of f shown below, find f(2) and state the y-intercept. "
+            "Label your answer with units where appropriate.",
+            "f(2) = 5; y-intercept 1",
+        ),
+        extraction=_vis(
+            _ext([(1, "f(2) = 5"), (2, "\\text{y-intercept} = 1")], "f(2) = 5, y\\text{-int} = 1"),
+            [],
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale=(
+            "Control: 'the graph shown' is a printed figure and 'label your answer' is "
+            "not a drawing request — no drawing required, correct reading → full."
+        ),
+    ),
+    GradingCase(
         name="e2-blank",
         category="e",
         problems=_prob("Solve x^2 - 5x + 6 = 0.", "x = 2 or x = 3"),
@@ -477,7 +496,7 @@ class GradingProbe(Probe):
     name = "grading"
     needs_browser = False
     default_constraint = (
-        "Grading-quality golden set: 17 hand-labeled submissions spanning "
+        "Grading-quality golden set: 18 hand-labeled submissions spanning "
         "clean-correct, valid-alternative-method, broken-work-right-answer, "
         "arithmetic-slip, plainly-wrong, and required-method/drawing. Asserts the AI grader's "
         "score_status matches the label."
