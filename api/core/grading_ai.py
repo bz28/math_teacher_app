@@ -82,8 +82,29 @@ same problem numbers — grade problem N against problem N's answer key and \
 problem N's student work. Emit one grade per problem listed under "THE \
 ASSIGNMENT".
 - Grade ONLY based on the student's extracted work — do not solve the problem yourself.
-- If the student's answer matches the answer key exactly (or is mathematically equivalent), \
-give full credit.
+- If the student's answer matches the answer key exactly (or is mathematically equivalent) \
+AND the problem's required method or drawing (below) is satisfied, give full credit.
+- Required method or drawing. When the problem statement names a method ("by \
+graphing", "using elimination", "by substitution", "by factoring", "using the \
+quadratic formula", "by completing the square") or asks for something drawn \
+("graph", "sketch", "draw", "plot", "shade", "construct", "label"), that method or \
+drawing is part of the answer, not a suggestion. A correct final answer reached by \
+a different method, or without the required drawing, is NOT full credit — grade it \
+as "right answer, required method missing" partial credit (the rubric's Partial \
+credit anchors say how much). A required drawing that is present but incomplete \
+(one of two lines plotted, the intersection not marked, an unlabeled axis) is a \
+smaller deduction than a missing one. A named algebraic method is held to the \
+same standard as a drawing: substitution when elimination was required IS \
+"required method missing" (around 50%), not a minor deviation — the problem is \
+testing that method. Name the requirement in `reasoning` \
+("the problem requires solving by graphing; the student solved algebraically"). \
+When no method or drawing is specified, any valid method earns full credit — \
+never penalize a legitimate alternative.
+- "Student's drawings" is your ONLY source of truth about what was drawn. Never \
+infer a graph from the algebra beside it, and never assume a drawing is complete \
+because the answer is right. "(no drawing for this problem)" means none exists.
+- An answer that exists only on a drawing — an intersection the student marked, a \
+shaded region, a circled value on a number line — counts as a stated final answer.
 - If the student's approach is correct but they made an arithmetic or sign error, give \
 partial credit.
 - If no extracted answer exists for a problem (student skipped it), give zero \
@@ -155,13 +176,17 @@ _DEFAULT_FULL_CREDIT = (
     "followable — students can skip routine or mental steps as long "
     "as the path from set-up to answer is unambiguous to the grader, "
     "with no non-obvious leaps. A bare final answer with no set-up "
-    "doesn't qualify."
+    "doesn't qualify. If the problem names a method (\"by graphing\", "
+    "\"using elimination\") or asks for a graph or drawing, full credit "
+    "requires that method or drawing."
 )
 _DEFAULT_PARTIAL_CREDIT = (
     "Anchor partial credit on how much of the correct reasoning is "
     "intact. Right approach with a small execution error (sign flip, "
     "arithmetic slip) — around 95%. Right approach with multiple "
-    "errors or stopped mid-solution — around 60%. Right setup but "
+    "errors or stopped mid-solution — around 60%. Correct answer but "
+    "the method or drawing the problem asked for is missing — around "
+    "50%; present but incomplete — around 75%. Right setup but "
     "substantially incomplete, or a plausible attempt with a wrong "
     "method — around 30%. Use judgment between these anchors. "
     "Incoherent attempts that show no sign of the right concept are "
@@ -202,6 +227,39 @@ def _format_step(step: dict[str, Any]) -> str:
     if latex and plain:
         return f"{label}: {latex} — {plain}"
     return f"{label}: {latex or plain or '(empty step)'}"
+
+
+def _format_visual_work(v: dict[str, Any]) -> str:
+    """Render one `visual_work` entry for the grader — the literal
+    inventory of the drawing, so "graphed the system" can't be inferred
+    from a single stray line."""
+    kind = (v.get("kind") or "drawing").replace("_", " ")
+    if not v.get("present", True):
+        return f"{kind}: NOT PRESENT — the problem asked for one and nothing is drawn"
+    parts = [kind]
+    elements = [e for e in (v.get("plotted_elements") or []) if isinstance(e, str) and e.strip()]
+    if elements:
+        parts.append(f"{len(elements)} plotted: " + "; ".join(elements))
+    else:
+        parts.append("nothing plotted (axes/figure only)")
+    points = v.get("labeled_points") or []
+    parts.append(f"labeled points: {', '.join(points)}" if points else "labeled points: none")
+    ans = v.get("answer_on_drawing")
+    parts.append(f"answer marked on drawing: {ans}" if ans else "answer marked on drawing: none")
+    desc = (v.get("description") or "").strip()
+    line = " — ".join(parts)
+    return f"{line}. {desc}" if desc else line
+
+
+def _bucket_visual_work_by_position(
+    visual_work: list[dict[str, Any]], valid_positions: set[int],
+) -> dict[int, list[dict[str, Any]]]:
+    out: dict[int, list[dict[str, Any]]] = {}
+    for v in visual_work:
+        pos = v.get("problem_position")
+        if isinstance(pos, int) and not isinstance(pos, bool) and pos in valid_positions:
+            out.setdefault(pos, []).append(v)
+    return out
 
 
 def _format_final_answer(fa: dict[str, Any]) -> str:
@@ -323,7 +381,9 @@ def _build_user_message(
     attribution — same behavior as before the upgrade."""
     steps = extraction.get("steps", [])
     final_answers = extraction.get("final_answers", [])
+    visual_work = extraction.get("visual_work") or []
     valid_positions = {p["position"] for p in problems}
+    visual_by_pos = _bucket_visual_work_by_position(visual_work, valid_positions)
 
     # Bucket steps + final answers by problem_position. Integer keys
     # matching a problem on this assignment go per-problem; everything
@@ -359,6 +419,18 @@ def _build_user_message(
                 lines.append(f"  {_format_step(s)}")
         else:
             lines.append("  (no work shown for this problem)")
+
+        # Drawings, when the extractor had the channel. Rows extracted
+        # before it existed carry no key at all — say nothing rather than
+        # assert "no drawing" about a page we didn't inventory.
+        if "visual_work" in extraction:
+            problem_visuals = visual_by_pos.get(position, [])
+            lines.append("Student's drawings:")
+            if problem_visuals:
+                for v in problem_visuals:
+                    lines.append(f"  {_format_visual_work(v)}")
+            else:
+                lines.append("  (no drawing for this problem)")
 
         problem_finals = finals_by_pos.get(position, [])
         if not problem_finals:
