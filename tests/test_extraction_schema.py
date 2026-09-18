@@ -48,7 +48,10 @@ def test_producer_shaped_extraction_round_trips_exactly() -> None:
         "confidence": 0.92,
     }
     dumped = ExtractionOut.model_validate(raw).model_dump()
-    assert dumped == raw
+    # `visual_work` is the one key the contract ADDS: rows extracted
+    # before the drawings channel existed serialize with an empty list
+    # so every client sees a stable shape. Everything else is exact.
+    assert dumped == {**raw, "visual_work": []}
 
 
 def test_extraction_preserves_unforeseen_extra_keys() -> None:
@@ -82,7 +85,7 @@ def test_extraction_preserves_unforeseen_extra_keys() -> None:
     assert dumped["steps"][0]["confidence_per_step"] == 0.8
     assert dumped["final_answers"][0]["units"] == "cm"
     # Nothing dropped: the full input is a subset of the output.
-    assert dumped == raw
+    assert dumped == {**raw, "visual_work": []}
 
 
 def test_submission_file_round_trips_and_filename_defaults_none() -> None:

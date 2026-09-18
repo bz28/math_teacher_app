@@ -293,11 +293,10 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
     extraction && Array.isArray(extraction.steps)
       ? groupExtraction({
           steps: extraction.steps,
-          // Normalize a possibly-partial wire shape — final_answers/confidence
-          // may be absent on the loose Record payload, and groupExtraction
-          // iterates final_answers unconditionally.
+          // Normalize a possibly-partial wire shape — final_answers may be
+          // absent on the loose Record payload, and groupExtraction
+          // iterates it unconditionally.
           final_answers: Array.isArray(extraction.final_answers) ? extraction.final_answers : [],
-          confidence: typeof extraction.confidence === "number" ? extraction.confidence : 0,
         })
       : [];
   const hasReference = extractionGroups.length > 0;

@@ -18,9 +18,9 @@ import { GradingPreview } from "@/components/school/teacher/_pieces/grading-prev
 // is exactly what the AI grader applies.
 export const GRADING_SETUP_DEFAULTS = {
   full_credit:
-    "Correct final answer (mathematically equivalent forms like 1/2 and 0.5 both count). Enough work shown that the reasoning is followable — students can skip routine or mental steps as long as the path from set-up to answer is unambiguous to the grader, with no non-obvious leaps. A bare final answer with no set-up doesn't qualify.",
+    "Correct final answer (mathematically equivalent forms like 1/2 and 0.5 both count). Enough work shown that the reasoning is followable — students can skip routine or mental steps as long as the path from set-up to answer is unambiguous to the grader, with no non-obvious leaps. A bare final answer with no set-up doesn't qualify. If the problem names a method (\"by graphing\", \"using elimination\") or asks for a graph or drawing, full credit requires that method or drawing.",
   partial_credit:
-    "Anchor partial credit on how much of the correct reasoning is intact. Right approach with a small execution error (sign flip, arithmetic slip) — around 95%. Right approach with multiple errors or stopped mid-solution — around 60%. Right setup but substantially incomplete, or a plausible attempt with a wrong method — around 30%. Use judgment between these anchors. Incoherent attempts that show no sign of the right concept are zero, not partial.",
+    "Anchor partial credit on how much of the correct reasoning is intact. Right approach with a small execution error (sign flip, arithmetic slip) — around 95%. Right approach with multiple errors or stopped mid-solution — around 60%. Correct answer but the method or drawing the problem asked for is missing — around 50%; present but incomplete — around 75%. Right setup but substantially incomplete, or a plausible attempt with a wrong method — around 30%. Use judgment between these anchors. Incoherent attempts that show no sign of the right concept are zero, not partial.",
 } as const;
 
 const COMMON_MISTAKES_PLACEHOLDER =

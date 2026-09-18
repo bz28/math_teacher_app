@@ -2423,6 +2423,22 @@ class TeacherSubmissionStep(BaseModel):
     original_plain_english: str | None = None
 
 
+class TeacherSubmissionDrawing(BaseModel):
+    """One drawing the extractor inventoried for this problem — or the
+    record that a required one is missing (`present=False`). Shown
+    beside the student's steps so the teacher sees the same drawing
+    facts the grader was given."""
+
+    kind: str
+    present: bool
+    description: str
+    plotted_elements: list[str] = []
+    labeled_points: list[str] = []
+    answer_on_drawing: str | None = None
+    # True when a cropped second look confirmed the inventory.
+    verified: bool = False
+
+
 class TeacherSubmissionDetailProblem(BaseModel):
     bank_item_id: str
     position: int
@@ -2435,6 +2451,9 @@ class TeacherSubmissionDetailProblem(BaseModel):
     # extraction lives on Submission.extraction; we slice it here so
     # the frontend doesn't need to filter client-side.
     student_steps: list[TeacherSubmissionStep] = []
+    # Drawings the extractor inventoried for this problem. Empty on rows
+    # extracted before the channel existed.
+    drawings: list[TeacherSubmissionDrawing] = []
     # 1-based page(s) of `Submission.files` this problem's work was
     # written on, derived from the extraction's `page_index` and
     # range-checked against the real file count. Empty when the extractor
@@ -2462,6 +2481,10 @@ class TeacherSubmissionDetail(BaseModel):
     # grader receives these as context, so the review page has to be able
     # to show them — see the bucketing note in `get_submission_detail`.
     other_work: list[TeacherSubmissionStep] = []
+    # Drawings the extractor couldn't tie to a problem — shown under
+    # Other work for the same reason the steps are: the grader is told
+    # about them, so the teacher must be too.
+    other_drawings: list[TeacherSubmissionDrawing] = []
     # Current grading state. None when the teacher hasn't touched this
     # submission yet. `breakdown` + `final_score` are teacher-draft
     # until `grade_published_at` is set, at which point the student
@@ -2711,6 +2734,8 @@ async def get_submission_detail(
         )
 
     steps_by_position: dict[int, list[TeacherSubmissionStep]] = {}
+    drawings_by_position: dict[int, list[TeacherSubmissionDrawing]] = {}
+    other_drawings: list[TeacherSubmissionDrawing] = []
     # Work the extractor couldn't tie to a problem on this assignment.
     # These used to be dropped here, which put the teacher behind the
     # grader: `grading_ai._build_user_message` hands the model the exact
@@ -2764,6 +2789,30 @@ async def get_submission_detail(
                 if readable:
                     _record_page(position, step)
                 steps_by_position.setdefault(position, []).append(built)
+
+        # Drawings, bucketed the way the grader buckets them — a position
+        # on this assignment goes per-problem; anything else lands in
+        # Other work, exactly as the grader receives it.
+        for v in sub.extraction.get("visual_work") or []:
+            if not isinstance(v, dict):
+                continue
+            position = _real_position(v.get("problem_position"))
+            points = v.get("labeled_points") or []
+            elements = v.get("plotted_elements") or []
+            bucket = (
+                drawings_by_position.setdefault(position, [])
+                if position is not None and position in valid_positions
+                else other_drawings
+            )
+            bucket.append(TeacherSubmissionDrawing(
+                kind=str(v.get("kind") or "drawing"),
+                present=bool(v.get("present", True)),
+                description=str(v.get("description") or ""),
+                plotted_elements=[str(e) for e in elements if isinstance(e, str)],
+                verified=bool(v.get("verified", False)),
+                labeled_points=[str(pt) for pt in points if isinstance(pt, str)],
+                answer_on_drawing=str(v["answer_on_drawing"]) if v.get("answer_on_drawing") else None,
+            ))
 
         # Final answers the extractor couldn't place either. The grader
         # buckets these into the SAME "Other work" block as the steps
@@ -2888,6 +2937,7 @@ async def get_submission_detail(
             final_answer=item.final_answer,
             student_answer=student_answer,
             student_steps=steps_by_position.get(pos, []),
+            drawings=drawings_by_position.get(pos, []),
             pages=sorted(pages_by_position.get(pos, [])),
         ))
 
@@ -2909,6 +2959,7 @@ async def get_submission_detail(
         files=sub.files,
         problems=problems,
         other_work=other_work,
+        other_drawings=other_drawings,
         breakdown=grade.breakdown if grade else None,
         ai_breakdown=ai_breakdown_grades,
         final_score=grade.final_score if grade else None,

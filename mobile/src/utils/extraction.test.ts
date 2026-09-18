@@ -4,6 +4,7 @@ import type { Extraction } from "../services/api";
 const ex = (over: Partial<Extraction>): Extraction => ({
   steps: [],
   final_answers: [],
+  visual_work: [],
   confidence: 1,
   ...over,
 });

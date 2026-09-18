@@ -17,6 +17,8 @@ a five-way matrix:
   (c) right answer but broken/circular work   → partial/zero (catch-wrong-work)
   (d) right method, one arithmetic slip        → "partial"
   (e) plainly wrong / blank                    → "zero"
+  (f) required method / drawing (by graphing, using elimination)
+                                               → partial when skipped, full when done
 
 The probe runs `grade_submission_with_ai` on each case and passes the case when
 the returned `score_status` lands in that case's accepted set (a near-match
@@ -81,12 +83,31 @@ def _ext(steps: list[tuple[int, str]], final: str) -> dict[str, Any]:
     }
 
 
+def _draw(
+    kind: str, *, present: bool, plotted: list[str] | None = None,
+    points: list[str] | None = None, answer: str | None = None, description: str = "",
+) -> dict[str, Any]:
+    """One `visual_work` entry in the extractor's shape (position 1)."""
+    return {
+        "problem_position": 1, "kind": kind, "present": present,
+        "description": description, "plotted_elements": plotted or [],
+        "labeled_points": points or [], "answer_on_drawing": answer,
+    }
+
+
+def _vis(extraction: dict[str, Any], visual_work: list[dict[str, Any]]) -> dict[str, Any]:
+    """Attach the drawings channel — including an EMPTY one, which tells
+    the grader "no drawing" for every problem (unlike a legacy row with no
+    key at all, which says nothing)."""
+    return {**extraction, "visual_work": visual_work}
+
+
 def _prob(question: str, answer: str) -> list[dict[str, Any]]:
     return [{"position": 1, "question": question, "final_answer": answer}]
 
 
 # ── The golden set ────────────────────────────────────────────────────────
-# 12 cases, ≥2 per matrix row. Rubric is None throughout, so the grader applies
+# 18 cases, ≥2 per matrix row. Rubric is None throughout, so the grader applies
 # the shipped DEFAULT rubric — i.e. exactly what a teacher who authors no rubric
 # gets. Two cases are physics (a2, b3) per the "a couple physics" ask.
 
@@ -305,6 +326,141 @@ GOLDEN_CASES: list[GradingCase] = [
             "equation, wrong answer. Default rubric: incoherent → zero."
         ),
     ),
+    # (f) required method / drawing — the prod failure from Sep 2026 -----
+    # "Solve by graphing" problems on a live assignment were graded Full
+    # when the student solved algebraically and sketched one line (or
+    # nothing). Teacher overrode 6/8. The text-only grader had no way to
+    # know what was drawn; `visual_work` gives it one. These mirror that
+    # submission (same equations, same answers).
+    GradingCase(
+        name="f1-graph-required-algebra-one-line-sketch",
+        category="f",
+        extra={"percent_band": [30, 75]},
+        problems=_prob(
+            "Solve the system by graphing. Identify the solution as an ordered pair. "
+            "y = 2x - 1 and y = -x + 5",
+            "(2, 3)",
+        ),
+        extraction=_vis(
+            _ext(
+                [(1, "y = 2x - 1 \\\\ y = -x + 5"), (2, "2x - 1 = -x + 5"), (3, "x = 2"), (4, "y = 3")],
+                "(2, 3)",
+            ),
+            [_draw("graph", present=True,
+                   plotted=["one line rising left-to-right, crossing the y-axis just below the origin"],
+                   description="Small axes with tick marks; a single line drawn through them; no point marked.")],
+        ),
+        expected="partial",
+        accepts={"partial"},
+        rationale=(
+            "Correct answer via algebra; the problem requires graphing and the "
+            "sketch has one of two lines and no intersection. Method missing → partial."
+        ),
+    ),
+    GradingCase(
+        name="f2-graph-required-no-drawing",
+        category="f",
+        extra={"percent_band": [30, 75]},
+        problems=_prob(
+            "Solve the system by graphing. State whether the system is consistent or "
+            "inconsistent, and identify the solution if one exists. y = 3x + 4 and y = 3x - 2",
+            "No solution (parallel lines, inconsistent)",
+        ),
+        extraction=_vis(
+            _ext([(1, "y = 3x + 4 \\\\ y = 3x - 2"), (2, "\\text{parallel lines}")],
+                 "\\text{no solution}"),
+            [_draw("graph", present=False)],
+        ),
+        expected="partial",
+        accepts={"partial"},
+        rationale="Right conclusion, but the required graph was never drawn → partial.",
+    ),
+    GradingCase(
+        name="f3-graph-required-answer-only-on-graph",
+        category="f",
+        problems=_prob(
+            "Solve the system by graphing. Identify the solution as an ordered pair. "
+            "y = 2x - 1 and y = -x + 5",
+            "(2, 3)",
+        ),
+        extraction=_vis(
+            {
+                **_ext([(1, "y = 2x - 1 \\\\ y = -x + 5")], "(2, 3)"),
+                "final_answers": [{"problem_position": 1, "answer_latex": "(2, 3)",
+                                   "answer_plain": "(2, 3) — marked on graph"}],
+            },
+            [_draw("graph", present=True,
+                   plotted=["line rising left-to-right, y-intercept at -1",
+                            "line falling left-to-right, y-intercept at 5"],
+                   points=["(2, 3)"], answer="(2, 3)",
+                   description="Both lines plotted on labeled axes; intersection circled and labeled (2, 3).")],
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale=(
+            "The graph IS the method and the answer is marked on it — the student did "
+            "exactly what was asked even though no ordered pair is written in the algebra."
+        ),
+    ),
+    GradingCase(
+        name="f4-elimination-required-substitution-used",
+        category="f",
+        # No percent band: teachers differ on how much a wrong-but-valid
+        # algebraic method costs (the grader settles on a small deduction
+        # at temp 0). What must hold is that it is NOT full and the
+        # method miss is itemized so the teacher sees it.
+        extra={"requires_deduction_mentioning": "method"},
+        problems=_prob(
+            "Solve the system using the elimination method. 3x + y = 11 and 3x - y = 5",
+            "(8/3, 3)",
+        ),
+        extraction=_vis(
+            _ext(
+                [(1, "y = 11 - 3x"), (2, "3x - (11 - 3x) = 5"), (3, "6x = 16"),
+                 (4, "x = 8/3"), (5, "y = 3")],
+                "(8/3, 3)",
+            ),
+            [],
+        ),
+        expected="partial",
+        accepts={"partial"},
+        rationale="Correct answer by substitution when elimination was required → partial.",
+    ),
+    GradingCase(
+        name="f5-any-method-control-full",
+        category="f",
+        problems=_prob(
+            "Solve the system using any algebraic method. 2x + y = 10 and 5x - 3y = 3",
+            "(3, 4)",
+        ),
+        extraction=_vis(
+            _ext([(1, "y = 10 - 2x"), (2, "5x - 3(10 - 2x) = 3"), (3, "11x = 33"),
+                  (4, "x = 3"), (5, "y = 4")], "(3, 4)"),
+            [],
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale="Control: no method named, clean substitution → must stay full (no over-penalizing).",
+    ),
+    GradingCase(
+        name="f6-printed-graph-control-full",
+        category="f",
+        problems=_prob(
+            "Using the graph of f shown below, find f(2) and state the y-intercept. "
+            "Label your answer with units where appropriate.",
+            "f(2) = 5; y-intercept 1",
+        ),
+        extraction=_vis(
+            _ext([(1, "f(2) = 5"), (2, "\\text{y-intercept} = 1")], "f(2) = 5, y\\text{-int} = 1"),
+            [],
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale=(
+            "Control: 'the graph shown' is a printed figure and 'label your answer' is "
+            "not a drawing request — no drawing required, correct reading → full."
+        ),
+    ),
     GradingCase(
         name="e2-blank",
         category="e",
@@ -340,9 +496,9 @@ class GradingProbe(Probe):
     name = "grading"
     needs_browser = False
     default_constraint = (
-        "Grading-quality golden set: 12 hand-labeled submissions spanning "
+        "Grading-quality golden set: 18 hand-labeled submissions spanning "
         "clean-correct, valid-alternative-method, broken-work-right-answer, "
-        "arithmetic-slip, and plainly-wrong. Asserts the AI grader's "
+        "arithmetic-slip, plainly-wrong, and required-method/drawing. Asserts the AI grader's "
         "score_status matches the label."
     )
 
@@ -425,6 +581,8 @@ class GradingProbe(Probe):
                         "rationale": case.rationale,
                         "grade": (result.get("grades") or [{}])[0],
                         "persisted_deductions": persisted_deductions,
+                        "percent_band": case.extra.get("percent_band"),
+                        "requires_deduction_mentioning": case.extra.get("requires_deduction_mentioning"),
                     },
                 )
             )
@@ -450,6 +608,40 @@ class GradingProbe(Probe):
                 "" if ok else f"got {actual!r}, accept {sorted(accepts)}",
             )
         ]
+
+        # Teacher-calibrated percent band, where the label alone is too
+        # loose. "Partial" at 95 for a skipped required method is the
+        # wrong answer even though the status is right — the prod
+        # teacher gave 50. Only cases that declare a band are checked.
+        band = item.raw.get("percent_band")
+        grade_pct = (item.raw.get("grade") or {}).get("percent")
+        if band and isinstance(grade_pct, (int, float)):
+            lo, hi = band
+            in_band = lo <= float(grade_pct) <= hi
+            checks.append(
+                CheckResult(
+                    f"percent within teacher band [{lo}, {hi}] (got {grade_pct})",
+                    in_band,
+                    "" if in_band else f"{grade_pct} outside [{lo}, {hi}]",
+                )
+            )
+
+        # The miss must be itemized, not just priced in — the teacher
+        # reads the ledger to see WHY, and "required method" has to be
+        # there for the deduction to be actionable.
+        needle = item.raw.get("requires_deduction_mentioning")
+        if needle:
+            ded = (item.raw.get("grade") or {}).get("deductions") or []
+            found = any(
+                needle in str(d.get("reason", "")).lower() for d in ded if isinstance(d, dict)
+            )
+            checks.append(
+                CheckResult(
+                    f"a deduction names the {needle!r} miss",
+                    found,
+                    "" if found else f"no deduction reason mentions {needle!r}: {ded}",
+                )
+            )
 
         # Ledger reconciles to the score: 100 − sum(points_off) ≈ percent.
         # The deduction ledger must be a faithful receipt for the grade, not

@@ -1365,6 +1365,14 @@
             },
             "title": "Steps",
             "type": "array"
+          },
+          "visual_work": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ExtractionVisualWorkOut"
+            },
+            "title": "Visual Work",
+            "type": "array"
           }
         },
         "required": [
@@ -1421,6 +1429,100 @@
           "plain_english"
         ],
         "title": "ExtractionStepOut",
+        "type": "object"
+      },
+      "ExtractionVisualWorkOut": {
+        "additionalProperties": true,
+        "description": "One drawing Vision found (or noted missing) \u2014 graph, number line,\ndiagram, table, sketch. `present=False` records a problem that asked\nfor a drawing and got none. The grader reads these as its only\nsource of truth about what was drawn.",
+        "properties": {
+          "answer_on_drawing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer On Drawing"
+          },
+          "bbox": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bbox"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "labeled_points": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Labeled Points",
+            "type": "array"
+          },
+          "page_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Index"
+          },
+          "plotted_elements": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Plotted Elements",
+            "type": "array"
+          },
+          "present": {
+            "title": "Present",
+            "type": "boolean"
+          },
+          "problem_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem Position"
+          },
+          "verified": {
+            "default": false,
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "problem_position",
+          "kind",
+          "present",
+          "description"
+        ],
+        "title": "ExtractionVisualWorkOut",
         "type": "object"
       },
       "FlagRequest": {
@@ -4633,6 +4735,14 @@
             "title": "Is Late",
             "type": "boolean"
           },
+          "other_drawings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TeacherSubmissionDrawing"
+            },
+            "title": "Other Drawings",
+            "type": "array"
+          },
           "other_work": {
             "default": [],
             "items": {
@@ -4720,6 +4830,14 @@
             "title": "Bank Item Id",
             "type": "string"
           },
+          "drawings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TeacherSubmissionDrawing"
+            },
+            "title": "Drawings",
+            "type": "array"
+          },
           "final_answer": {
             "anyOf": [
               {
@@ -4775,6 +4893,62 @@
           "student_answer"
         ],
         "title": "TeacherSubmissionDetailProblem",
+        "type": "object"
+      },
+      "TeacherSubmissionDrawing": {
+        "description": "One drawing the extractor inventoried for this problem \u2014 or the\nrecord that a required one is missing (`present=False`). Shown\nbeside the student's steps so the teacher sees the same drawing\nfacts the grader was given.",
+        "properties": {
+          "answer_on_drawing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer On Drawing"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "labeled_points": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Labeled Points",
+            "type": "array"
+          },
+          "plotted_elements": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Plotted Elements",
+            "type": "array"
+          },
+          "present": {
+            "title": "Present",
+            "type": "boolean"
+          },
+          "verified": {
+            "default": false,
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "present",
+          "description"
+        ],
+        "title": "TeacherSubmissionDrawing",
         "type": "object"
       },
       "TeacherSubmissionStep": {

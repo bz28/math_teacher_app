@@ -35,6 +35,7 @@ import {
   type TeacherRubric,
   type TeacherSubmissionDetail,
   type TeacherSubmissionDetailProblem,
+  type TeacherSubmissionDrawing,
   type TeacherSubmissionRow,
   type TeacherSubmissionStep,
 } from "@/lib/api";
@@ -3651,8 +3652,8 @@ function SubmissionDetailPanel({
           })}
         </div>
 
-        {detail.other_work.length > 0 && (
-          <OtherWorkDisclosure steps={detail.other_work} />
+        {(detail.other_work.length > 0 || detail.other_drawings.length > 0) && (
+          <OtherWorkDisclosure steps={detail.other_work} drawings={detail.other_drawings} />
         )}
       </div>
 
@@ -3999,8 +4000,15 @@ function StudentStepRow({
  * Collapsed by default: a clean submission has none of this, and the
  * ones that do shouldn't push the grade controls down the page.
  */
-function OtherWorkDisclosure({ steps }: { steps: TeacherSubmissionStep[] }) {
+function OtherWorkDisclosure({
+  steps,
+  drawings,
+}: {
+  steps: TeacherSubmissionStep[];
+  drawings: TeacherSubmissionDrawing[];
+}) {
   const [open, setOpen] = useState(false);
+  const count = steps.length + drawings.length;
   return (
     <div className="mt-3 rounded-[--radius-md] border border-dashed border-border bg-[color:var(--color-surface-alt-2)]/50 px-3 py-2.5">
       <button
@@ -4012,7 +4020,7 @@ function OtherWorkDisclosure({ steps }: { steps: TeacherSubmissionStep[] }) {
         <span aria-hidden>{open ? "▾" : "▸"}</span>
         Other work
         <span className="font-normal normal-case tracking-normal text-text-muted">
-          · {steps.length} {steps.length === 1 ? "line" : "lines"}
+          · {count} {count === 1 ? "item" : "items"}
         </span>
       </button>
       {open && (
@@ -4025,6 +4033,19 @@ function OtherWorkDisclosure({ steps }: { steps: TeacherSubmissionStep[] }) {
           <div className="mt-2 space-y-2 text-sm text-text-primary">
             {steps.map((step, i) => (
               <StudentStepRow key={i} step={step} index={i} />
+            ))}
+            {drawings.map((d, i) => (
+              <p key={`d-${i}`} className="flex gap-2 text-xs leading-relaxed">
+                <span aria-hidden className="shrink-0">✏️</span>
+                <span className="text-text-secondary">
+                  <span className="font-semibold capitalize text-text-primary">
+                    {d.kind.replace("_", " ")}
+                  </span>{" "}
+                  · {d.plotted_elements.length} plotted
+                  {d.verified && " · checked ✓"}
+                  {d.description && <span className="block">{d.description}</span>}
+                </span>
+              </p>
             ))}
           </div>
         </>
@@ -4659,6 +4680,57 @@ function ProblemGradeRow({
               )}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Drawings — what the extractor inventoried on the page, in the
+          same words the grader was given. A required-but-missing
+          drawing is called out in the warning tone: that's the case
+          the AI used to give full credit on, and the teacher should
+          see the fact before the verdict that rests on it. */}
+      {problem.drawings.length > 0 && (
+        <div className="mt-3 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2.5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+            Drawings
+          </p>
+          <ul className="mt-1.5 space-y-1.5 text-xs leading-relaxed">
+            {problem.drawings.map((d, i) => (
+              <li key={i} className="flex gap-2">
+                <span aria-hidden className="shrink-0">{d.present ? "✏️" : "⚠️"}</span>
+                {d.present ? (
+                  <span className="text-text-primary">
+                    <span className="font-semibold capitalize">{d.kind.replace("_", " ")}</span>
+                    <span className="text-text-secondary">
+                      {" "}· {d.plotted_elements.length} plotted
+                      {d.verified && (
+                        <span title="Confirmed by a zoomed-in second look at the drawing"> · checked ✓</span>
+                      )}
+                    </span>
+                    {d.labeled_points.length > 0 && (
+                      <span className="text-text-secondary">
+                        {" "}· labeled: <MathText text={d.labeled_points.join(", ")} />
+                      </span>
+                    )}
+                    {d.answer_on_drawing && (
+                      <span className="text-text-secondary">
+                        {" "}· answer on drawing: <MathText text={d.answer_on_drawing} />
+                      </span>
+                    )}
+                    {d.plotted_elements.length > 0 && (
+                      <span className="block text-text-secondary">{d.plotted_elements.join("; ")}</span>
+                    )}
+                    {d.description && (
+                      <span className="block text-text-secondary">{d.description}</span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="font-semibold text-[color:var(--color-warning-dark)]">
+                    No {d.kind.replace("_", " ")} drawn — the problem asked for one.
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

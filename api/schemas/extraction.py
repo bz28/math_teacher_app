@@ -61,6 +61,28 @@ class ExtractionFinalAnswerOut(BaseModel):
     page_index: int | None = None
 
 
+class ExtractionVisualWorkOut(BaseModel):
+    """One drawing Vision found (or noted missing) — graph, number line,
+    diagram, table, sketch. `present=False` records a problem that asked
+    for a drawing and got none. The grader reads these as its only
+    source of truth about what was drawn."""
+
+    model_config = ConfigDict(extra="allow")
+
+    problem_position: int | None
+    kind: str
+    present: bool
+    description: str
+    plotted_elements: list[str] = []
+    labeled_points: list[str] = []
+    answer_on_drawing: str | None = None
+    page_index: int | None = None
+    # Fractions of the page, for the crop-and-zoom second look.
+    bbox: dict[str, float] | None = None
+    # True once the crop-and-zoom pass has replaced the inventory.
+    verified: bool = False
+
+
 class ExtractionOut(BaseModel):
     """Full Vision extraction: ordered steps + per-problem final answers
     + overall confidence. Also used for the per-problem *slice* mirror
@@ -71,6 +93,8 @@ class ExtractionOut(BaseModel):
 
     steps: list[ExtractionStepOut]
     final_answers: list[ExtractionFinalAnswerOut]
+    # Drawings. Empty on rows extracted before the channel existed.
+    visual_work: list[ExtractionVisualWorkOut] = []
     # 0.0-1.0 — how confident the extractor is the read is accurate.
     # Below ~0.3 means the handwriting was effectively unreadable.
     confidence: float

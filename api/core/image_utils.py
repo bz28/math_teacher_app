@@ -120,6 +120,59 @@ def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
         return data_base64
 
 
+def crop_region_for_vision(
+    data_base64: str, media_type: str, bbox: dict[str, Any], *, margin: float = 0.35,
+    min_frac: float = 0.22, upscale_to: int = 1200,
+) -> str | None:
+    """Crop a normalized `bbox` (fractions of the ORIENTED page) out of the
+    original photo and hand it back enlarged, for a second look at a
+    small drawing. The full-page pass downsizes a phone photo to
+    `VISION_MAX_EDGE`, which turns a 2-inch sketch into a thumbnail the
+    model can't read — it then fills the gap from the algebra beside it.
+
+    `margin` pads the box (the model's boxes are rough), `min_frac`
+    guarantees a usable window even when it under-reports the size, and
+    the crop is upscaled so strokes have pixels. Returns None for
+    non-images or an unusable box; the caller then keeps the unverified
+    inventory.
+    """
+    if not media_type.startswith("image/"):
+        return None
+    try:
+        x0, y0, x1, y1 = (float(bbox[k]) for k in ("x0", "y0", "x1", "y1"))
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1):
+        return None
+    try:
+        raw = base64.b64decode(data_base64)
+        with Image.open(io.BytesIO(raw)) as opened:
+            img = ImageOps.exif_transpose(opened)
+            w, h = img.size
+            bw, bh = max(x1 - x0, min_frac), max(y1 - y0, min_frac)
+            cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+            bw, bh = bw * (1 + margin), bh * (1 + margin)
+            left = int(max(0.0, cx - bw / 2) * w)
+            top = int(max(0.0, cy - bh / 2) * h)
+            right = int(min(1.0, cx + bw / 2) * w)
+            bottom = int(min(1.0, cy + bh / 2) * h)
+            if right - left < 16 or bottom - top < 16:
+                return None
+            crop = img.crop((left, top, right, bottom))
+            if max(crop.size) < upscale_to:
+                scale = upscale_to / max(crop.size)
+                crop = crop.resize(
+                    (int(crop.width * scale), int(crop.height * scale)), Image.Resampling.LANCZOS,
+                )
+            if crop.mode not in ("RGB", "L"):
+                crop = crop.convert("RGB")
+            buf = io.BytesIO()
+            crop.save(buf, format="JPEG", quality=90)
+            return base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        return None
+
+
 def to_content_block(media_type: str, data_base64: str) -> dict[str, Any]:
     """Build the Anthropic content block for a base64 payload.
 

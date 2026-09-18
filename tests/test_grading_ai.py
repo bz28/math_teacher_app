@@ -612,3 +612,114 @@ class TestExtractorInjectionGuardrail:
         # And specifically that it must not steer final_answers.
         assert "final_answers" in _EXTRACT_SYSTEM
         assert "actual worked math" in prompt
+
+
+class TestBuildUserMessageDrawings:
+    """The `visual_work` channel: what the grader is told about drawings.
+
+    The failure this guards against is real: on a "solve by graphing"
+    problem the extractor used to emit "student draws a graph" for a
+    single stray line, and the text-only grader gave full credit. Now
+    the grader gets a literal inventory per problem — or an explicit
+    "no drawing" — and nothing at all for rows extracted before the
+    channel existed (no false "no drawing" claims about old pages)."""
+
+    def _problems(self) -> list[dict[str, Any]]:
+        return [
+            {"position": 1, "question": "Solve the system by graphing.", "final_answer": "(2, 3)"},
+            {"position": 2, "question": "Solve using elimination.", "final_answer": "(3, 4)"},
+        ]
+
+    def test_present_drawing_is_inventoried_under_its_problem(self) -> None:
+        extraction = {
+            "steps": [{"step_num": 1, "latex": "x = 2", "plain_english": "", "problem_position": 1}],
+            "final_answers": [],
+            "visual_work": [
+                {
+                    "problem_position": 1, "kind": "graph", "present": True,
+                    "description": "Small axes with one line through the origin.",
+                    "plotted_elements": ["one line rising left-to-right through the origin"],
+                    "labeled_points": [], "answer_on_drawing": None,
+                },
+            ],
+            "confidence": 0.9,
+        }
+        msg = _build_user_message(extraction, self._problems())
+        p1 = _sections_by_position(msg)[1]
+        assert "Student's drawings:" in p1
+        assert (
+            "graph — 1 plotted: one line rising left-to-right through the origin — "
+            "labeled points: none — answer marked on drawing: none"
+        ) in p1
+        assert "one line through the origin" in p1
+        # Problem 2 had no entry → an explicit "no drawing", not silence.
+        assert "(no drawing for this problem)" in _sections_by_position(msg)[2]
+
+    def test_missing_required_drawing_is_stated_loudly(self) -> None:
+        extraction = {
+            "steps": [], "final_answers": [],
+            "visual_work": [
+                {"problem_position": 1, "kind": "graph", "present": False, "description": "",
+                 "plotted_elements": [], "labeled_points": [], "answer_on_drawing": None},
+            ],
+            "confidence": 0.9,
+        }
+        p1 = _sections_by_position(_build_user_message(extraction, self._problems()))[1]
+        assert "graph: NOT PRESENT — the problem asked for one and nothing is drawn" in p1
+
+    def test_answer_on_drawing_and_labeled_points_render(self) -> None:
+        extraction = {
+            "steps": [], "final_answers": [],
+            "visual_work": [
+                {"problem_position": 1, "kind": "graph", "present": True,
+                 "description": "Both lines plotted; intersection circled.",
+                 "plotted_elements": ["line falling left-to-right", "line rising left-to-right"],
+                 "labeled_points": ["(2, 3)"], "answer_on_drawing": "(2, 3)"},
+            ],
+            "confidence": 0.9,
+        }
+        p1 = _sections_by_position(_build_user_message(extraction, self._problems()))[1]
+        assert (
+            "2 plotted: line falling left-to-right; line rising left-to-right — "
+            "labeled points: (2, 3) — answer marked on drawing: (2, 3)"
+        ) in p1
+
+    def test_legacy_extraction_without_channel_says_nothing_about_drawings(self) -> None:
+        extraction = {"steps": [], "final_answers": [], "confidence": 0.9}
+        msg = _build_user_message(extraction, self._problems())
+        assert "drawing" not in msg.lower()
+
+    def test_unattributed_or_foreign_position_drawings_go_to_other_work(self) -> None:
+        extraction = {
+            "steps": [], "final_answers": [],
+            "visual_work": [
+                {"problem_position": None, "kind": "sketch", "present": True, "description": "doodle",
+                 "plotted_elements": [], "labeled_points": [], "answer_on_drawing": None},
+                {"problem_position": 9, "kind": "graph", "present": True, "description": "stale tag",
+                 "plotted_elements": ["a", "b"], "labeled_points": [], "answer_on_drawing": None},
+                {"problem_position": True, "kind": "graph", "present": True, "description": "bool tag",
+                 "plotted_elements": ["a", "b"], "labeled_points": [], "answer_on_drawing": None},
+            ],
+            "confidence": 0.9,
+        }
+        msg = _build_user_message(extraction, self._problems())
+        # They're not lost — they land under Other work, like steps do —
+        # and the per-problem line stops asserting "none exists".
+        other = msg[msg.index("## Other work"):]
+        assert "Drawing: sketch" in other and "doodle" in other
+        assert "stale tag" in other and "bool tag" in other
+        assert "(no drawing for this problem)" not in msg
+        assert msg.count("no drawing attributed to this problem") == 2
+
+    def test_no_drawings_at_all_says_none_for_each_problem(self) -> None:
+        extraction = {"steps": [], "final_answers": [], "visual_work": [], "confidence": 0.9}
+        msg = _build_user_message(extraction, self._problems())
+        assert msg.count("(no drawing for this problem)") == 2
+        assert "## Other work" not in msg
+
+    def test_system_prompt_carries_the_method_rule(self) -> None:
+        prompt = _build_system_prompt(None, self._problems())
+        assert "Required method or drawing" in prompt
+        assert "by graphing" in prompt
+        # The default rubric the teacher sees says the same thing.
+        assert "full credit requires that method or drawing" in prompt
