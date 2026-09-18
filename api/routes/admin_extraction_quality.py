@@ -358,19 +358,35 @@ def _step_count(extraction: Any) -> int:
     return len(steps) if isinstance(steps, list) else 0
 
 
-def _read_text(primary: Any, fallback: Any) -> str | None:
-    """What the AI actually transcribed for one row.
+def _read_text(primary: Any, fallback: Any) -> tuple[str | None, bool]:
+    """What the AI transcribed for one row, and whether it is LaTeX.
 
     Vision routes a transcription to `latex` when the student wrote
     maths and to the prose field when it narrates instead, so a row
     carries one or the other. Reading a single field would blank out
     half the table.
+
+    Returns `(text, is_latex)` rather than just the text, because the
+    caller needs to know WHICH field won. This used to collapse both
+    into a string, and the dashboard then printed maths rows as raw
+    markup — `y = \\frac{2}{5}x + \\frac{17}{5}` instead of the
+    typeset fraction the student was shown.
+
+    That is not cosmetic on this screen. Its whole job is spotting a
+    misread by eye against the photo beside it, and on 2026-09-04 the
+    one real error in a 52-step submission was a 2 read as a 3 inside
+    exactly such a fraction. Comparing raw markup to handwriting is the
+    hard version of the task the screen exists to make easy.
+
+    The flag is on the ROW, not sniffed from the text downstream:
+    guessing "does this look like LaTeX?" from backslashes would
+    misfire on prose that legitimately contains one.
     """
-    for value in (primary, fallback):
-        text = str(value).strip() if value is not None else ""
-        if text:
-            return text
-    return None
+    if primary is not None and str(primary).strip():
+        return str(primary).strip(), True
+    if fallback is not None and str(fallback).strip():
+        return str(fallback).strip(), False
+    return None, False
 
 
 @router.get("/extraction-quality/{submission_id}")
@@ -454,13 +470,20 @@ async def extraction_detail(
         # the modal that opened from it.
         unattributed = key is None
         corrected = None if key is None else edits.get(key)
+        step_read, step_is_latex = _read_text(
+            step.get("latex"), step.get("plain_english"),
+        )
         rows_out.append({
             "key": key or f"unattributed:{i}",
             "problem_position": step.get("problem_position"),
             "step_num": step.get("step_num"),
             "kind": "step",
             "unattributed": unattributed,
-            "ai_read": _read_text(step.get("latex"), step.get("plain_english")),
+            "ai_read": step_read,
+            # The student edits the LaTeX SOURCE when a row has one (see
+            # the confirm view), so their correction is LaTeX exactly
+            # when the AI read was — one flag covers both columns.
+            "is_latex": step_is_latex,
             "student_said": corrected,
             # An empty-string edit means the student CLEARED the row — the
             # overlay drops it entirely. That is a deletion, and rendering
@@ -486,6 +509,9 @@ async def extraction_detail(
         # unplaceable.
         unattributed = key is None
         corrected = None if key is None else edits.get(key)
+        fa_read, fa_is_latex = _read_text(
+            fa.get("answer_latex"), fa.get("answer_plain"),
+        )
         rows_out.append({
             "key": key or f"unattributed-final:{i}",
             "problem_position": fa.get("problem_position"),
@@ -494,12 +520,38 @@ async def extraction_detail(
             "unattributed": unattributed,
             # answer_plain, NOT answer_text — the latter exists nowhere in
             # the schema, so every prose answer rendered "nothing read".
-            "ai_read": _read_text(fa.get("answer_latex"), fa.get("answer_plain")),
+            "ai_read": fa_read,
+            "is_latex": fa_is_latex,
             "student_said": corrected,
             "deleted": key is not None and key in edits
             and not (corrected or "").strip(),
             "changed": key is not None and key in edits,
         })
+
+    # Order by PROBLEM, then step — Vision does not emit steps in problem
+    # order, and until this sort existed the page rendered the raw array.
+    # On the 2026-09-04 Holy Ghost submission that array opened at
+    # problem 3, so a reviewer scrolling from the top saw P3-P10 and
+    # reasonably concluded P1 and P2 had not been read at all. They had;
+    # they were buried mid-list among 62 rows.
+    #
+    # The student's confirm view has grouped and sorted by
+    # problem_position all along. Two screens showing the same extraction
+    # in different orders is its own bug: the one built for diagnosing a
+    # misread was the incoherent one.
+    #
+    # Unattributed rows sort last, matching the student view. They have
+    # no position to sort by, and leading with rows nobody could place
+    # buries the ones a reviewer came for.
+    rows_out.sort(
+        key=lambda r: (
+            r["problem_position"] is None,
+            r["problem_position"] or 0,
+            # A final answer belongs after the steps that reach it.
+            r["kind"] == "final_answer",
+            r["step_num"] if r["step_num"] is not None else 0,
+        )
+    )
 
     # The grade stamps decide the stage, and a submission that was never
     # graded has no row here at all — so absence is expected and `.first()`

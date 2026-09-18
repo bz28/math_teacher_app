@@ -1,4 +1,40 @@
+import katex from "katex";
+// The stylesheet, or the typeset output renders as unstyled spans. This
+// repo imports it per-component (see TeacherActivitySection,
+// AssignmentDetail) rather than globally, and Vite dedupes — so a
+// component that renders KaTeX must bring its own. ExtractionReadout
+// appears in the extraction-quality modal and the submission trace,
+// neither of which loads it otherwise.
+import "katex/dist/katex.min.css";
+
 import type { ExtractionDetail } from "../lib/api";
+
+/** One transcribed cell — typeset when the row carried LaTeX.
+ *
+ *  NOT MathText: that component expects prose with `$...$` islands, the
+ *  convention the question bank stores. An extraction row's `latex`
+ *  field is BARE LaTeX with no delimiters, so MathText finds no `$`,
+ *  treats the whole string as prose, and prints the markup — which is
+ *  the bug this fixes, not a fix for it.
+ *
+ *  `throwOnError: false` plus the try/catch means malformed LaTeX
+ *  degrades to the raw string. On a screen for diagnosing bad reads, a
+ *  row that fails to typeset is itself evidence; a row that throws takes
+ *  the whole list with it.
+ */
+function ReadCell({ text, isLatex }: { text: string; isLatex: boolean }) {
+  if (!isLatex) return <p>{text}</p>;
+  let html: string;
+  try {
+    html = katex.renderToString(text, {
+      throwOnError: false,
+      displayMode: false,
+    });
+  } catch {
+    return <p>{text}</p>;
+  }
+  return <p dangerouslySetInnerHTML={{ __html: html }} />;
+}
 
 /**
  * The strokes beside the transcription — evidence next to interpretation.
@@ -44,7 +80,11 @@ export function ReadRow({ row }: { row: ExtractionDetail["rows"][number] }) {
       <div className="xq-row-pair">
         <div className="xq-read">
           <span className="xq-read-label">AI read</span>
-          <p>{row.ai_read ?? <em>nothing read</em>}</p>
+          {row.ai_read ? (
+            <ReadCell text={row.ai_read} isLatex={row.is_latex} />
+          ) : (
+            <p><em>nothing read</em></p>
+          )}
         </div>
         {changed ? (
           <div className="xq-read xq-read-fixed">
@@ -55,7 +95,7 @@ export function ReadRow({ row }: { row: ExtractionDetail["rows"][number] }) {
               // screen built to surface misreads.
               <p><em>row deleted — nothing was written here</em></p>
             ) : (
-              <p>{row.student_said}</p>
+              <ReadCell text={row.student_said ?? ""} isLatex={row.is_latex} />
             )}
           </div>
         ) : (

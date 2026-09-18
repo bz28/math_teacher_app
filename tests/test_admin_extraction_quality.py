@@ -16,6 +16,7 @@ The load-bearing rules pinned here:
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -225,6 +226,109 @@ async def test_drill_in_pairs_the_read_against_the_correction(
     # endpoint read a `text` field it would be None here.
     assert row["ai_read"] == "(x + 2)(x + 3)"
     assert row["student_said"] == "(x + z)(x + 3)"
+
+
+async def test_rows_come_back_in_problem_order_not_vision_order(
+    seeded: dict[str, Any], client: AsyncClient,
+) -> None:
+    """Vision does not emit steps in problem order, and this page used to
+    render the raw array.
+
+    On the 2026-09-04 Holy Ghost submission the array opened at problem
+    3, so a reviewer scrolling from the top saw P3-P10 and concluded P1
+    and P2 had never been read. They had — buried mid-list among 62 rows.
+    The student's confirm view has grouped and sorted by problem_position
+    all along; the screen built for diagnosing a misread was the
+    incoherent one.
+
+    Seeds its own submission with DELIBERATELY shuffled steps. The shared
+    fixture gives each submission a single step at (1,1), so a test using
+    it passes whether or not the sort exists — which is how the first
+    version of this test proved nothing.
+    """
+    scrambled = {
+        "steps": [
+            # The order the real submission arrived in: 3, then 4, then
+            # 1 — never 1, 2, 3.
+            {"problem_position": 3, "step_num": 1, "latex": "p3s1",
+             "plain_english": ""},
+            {"problem_position": 3, "step_num": 2, "latex": "p3s2",
+             "plain_english": ""},
+            {"problem_position": 4, "step_num": 1, "latex": "p4s1",
+             "plain_english": ""},
+            {"problem_position": 1, "step_num": 2, "latex": "p1s2",
+             "plain_english": ""},
+            {"problem_position": 1, "step_num": 1, "latex": "p1s1",
+             "plain_english": ""},
+            {"problem_position": 2, "step_num": 1, "latex": "p2s1",
+             "plain_english": ""},
+            # Vision could not place this one.
+            {"problem_position": None, "step_num": 1, "latex": "orphan",
+             "plain_english": ""},
+        ],
+        # Its answer must land after problem 1's steps, not before them.
+        "final_answers": [
+            {"problem_position": 1, "answer_latex": "p1ans",
+             "answer_plain": ""},
+        ],
+        "confidence": 0.8,
+    }
+
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE submissions SET extraction = :e WHERE id = :i"),
+            {"e": json.dumps(scrambled), "i": seeded["clean_id"]},
+        )
+        await s.commit()
+
+    r = await client.get(
+        f"{URL}/{seeded['clean_id']}",
+        headers=auth_headers(seeded["admin_token"]),
+    )
+    assert r.status_code == 200, r.text
+    rows = r.json()["rows"]
+
+    placed = [x for x in rows if not x["unattributed"]]
+    positions = [x["problem_position"] for x in placed]
+    assert positions == sorted(positions), (
+        f"rows are not in problem order: {positions}"
+    )
+    # The bug as a reviewer met it: problem 1 must not be below problem 3.
+    assert positions[0] == 1, f"problem 1 is not first: {positions}"
+
+    # Unattributed sorts last — it has no position, and leading with rows
+    # nobody could place buries the ones a reviewer came for.
+    assert rows[-1]["unattributed"] is True
+
+    # Within a problem: steps ascend, and the answer follows them.
+    p1 = [x for x in rows if x["problem_position"] == 1]
+    assert [x["kind"] for x in p1] == ["step", "step", "final_answer"]
+    assert [x["step_num"] for x in p1 if x["kind"] == "step"] == [1, 2]
+
+
+async def test_a_maths_row_is_flagged_for_typesetting(
+    seeded: dict[str, Any], client: AsyncClient,
+) -> None:
+    """`is_latex` says WHICH field the read came from.
+
+    The endpoint used to collapse `latex` and `plain_english` into one
+    string and discard the distinction, so the dashboard printed maths
+    rows as raw markup — `\\frac{2}{5}` instead of the typeset fraction
+    the student was shown. That is not cosmetic on a screen whose whole
+    job is spotting a misread by eye against the photo beside it.
+
+    Sent by the server rather than sniffed client-side: guessing "does
+    this look like LaTeX?" from backslashes misfires on prose that
+    legitimately contains one.
+    """
+    r = await client.get(
+        f"{URL}/{seeded['repaired_id']}",
+        headers=auth_headers(seeded["admin_token"]),
+    )
+    assert r.status_code == 200, r.text
+    row = next(x for x in r.json()["rows"] if x["key"] == "1:1")
+    # This row's transcription lives in `latex` (see the sibling test).
+    assert row["is_latex"] is True
 
 
 async def test_a_cleared_row_reads_as_a_deletion_not_no_change(
