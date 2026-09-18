@@ -17,6 +17,7 @@ from api.routes.admin_leads import router as leads_router
 from api.routes.admin_llm import router as llm_router
 from api.routes.admin_overview import router as overview_router
 from api.routes.admin_quality import router as quality_router
+from api.routes.admin_reports import router as reports_router
 from api.routes.admin_school_overview import router as school_overview_router
 from api.routes.admin_schools import router as schools_router
 from api.routes.admin_students import router as students_router
@@ -35,6 +36,7 @@ router.include_router(leads_router)
 router.include_router(llm_router)
 router.include_router(overview_router)
 router.include_router(quality_router)
+router.include_router(reports_router)
 router.include_router(school_overview_router)
 router.include_router(schools_router)
 router.include_router(students_router)

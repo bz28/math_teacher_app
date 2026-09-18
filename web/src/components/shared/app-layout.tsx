@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ReportProblemTrigger } from "@/components/school/teacher/report-problem";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
@@ -442,6 +443,11 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
             <CompassIcon />
             Take the tour
           </button>
+
+          {/* The catch-all report — no context attached beyond the page
+              the teacher is on. Per-grade reports live next to each AI
+              verdict on the review page; this is for everything else. */}
+          <ReportProblemTrigger variant="nav" context={{}} />
         </nav>
 
         {/* Bottom */}

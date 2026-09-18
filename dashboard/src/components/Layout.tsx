@@ -39,6 +39,7 @@ const SCHOOL_LINKS: { to: (id: string) => string; label: string }[] = [
  */
 const PRIMARY: NavItem[] = [
   { to: "/ai-quality", label: "Quality" },
+  { to: "/reports", label: "Teacher reports" },
 ];
 
 /**

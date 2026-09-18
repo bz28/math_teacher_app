@@ -1,6 +1,10 @@
 "use client";
 
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ReportProblemTrigger,
+  type ReportProblemContext,
+} from "@/components/school/teacher/report-problem";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { MathText, mathPlainText } from "@/components/shared/math-text";
@@ -1507,6 +1511,13 @@ function HomeworkSectionReview({
             {detailIsCurrent && detail && selectedEntry?.submission && (
               <SubmissionDetailPanel
                 detail={detail}
+                reportBase={{
+                  submission_id: detail.submission_id,
+                  assignment_id: detail.assignment_id,
+                  course_id: courseId,
+                  section_id: sectionId,
+                  student_id: detail.student_id,
+                }}
                 integrity={
                   integrity?.submission_id === selectedSubmissionId
                     ? integrity
@@ -2717,9 +2728,13 @@ function SubmissionDetailPanel({
   onConfirmProblems,
   announceGrade,
   announce,
+  reportBase,
 }: {
   detail: TeacherSubmissionDetail;
   integrity: TeacherIntegrityDetail | null;
+  /** Ids identifying this submission for "Report a problem" — the panel
+   *  and each grade row extend it with what they're pointing at. */
+  reportBase: ReportProblemContext;
   rubric: TeacherRubric | null;
   rubricOpen: boolean;
   onToggleRubric: (open: boolean) => void;
@@ -3395,6 +3410,18 @@ function SubmissionDetailPanel({
               No more students
             </span>
           )}
+          {/* Whole-submission report — "it misread the page", "wrong
+              student's work", anything not tied to one problem. Per-
+              problem reports sit on each AI verdict below. Icon-only so
+              it never competes with Approve / Next student. */}
+          <ReportProblemTrigger
+            iconOnly
+            label="Report a problem with this submission"
+            context={{
+              ...reportBase,
+              labels: [detail.assignment_title, detail.student_name, "Whole submission"],
+            }}
+          />
         </div>
       </div>
 
@@ -3605,6 +3632,7 @@ function SubmissionDetailPanel({
                   announceGrade(p.position, "confirmed the AI's grade");
                 }}
                 onToggleExpand={() => toggleExpand(p.bank_item_id)}
+                reportBase={reportBase}
                 rowRef={(el) => {
                   rowRefs.current[i] = el;
                 }}
@@ -4042,10 +4070,12 @@ function ProblemGradeRow({
   onChange,
   onFeedbackChange,
   onOpenPage,
+  reportBase,
 }: {
   problem: TeacherSubmissionDetailProblem;
   entry: GradeBreakdownEntry | null;
   aiGrade: AiGradeEntry | null;
+  reportBase: ReportProblemContext;
   /** This row is the keyboard-focused problem — draws the left accent
    *  bar + ring and receives real DOM focus via `rowRef`. */
   focused: boolean;
@@ -4383,6 +4413,26 @@ function ProblemGradeRow({
             <ConfidenceSignal confidence={aiGrade.confidence} />
           </span>
         </button>
+        {/* Collapsed rows are the confident ones — exactly where a wrong
+            call hides best — so the report trigger lives here too, not
+            only in the expanded Suggestion card. */}
+        <ReportProblemTrigger
+          iconOnly
+          label={`Report a problem with the AI's grade on problem ${problem.position}`}
+          context={{
+            ...reportBase,
+            problem_id: problem.bank_item_id,
+            problem_position: problem.position,
+            ai_grade: {
+              score_status: aiGrade.score_status,
+              percent: aiGrade.percent,
+              confidence: aiGrade.confidence,
+              reasoning: aiGrade.reasoning ?? "",
+            },
+            teacher_grade: { score_status: current ?? null, percent: entry?.percent ?? null },
+            labels: [`Problem ${problem.position}`, `AI: ${verdict.label}`],
+          }}
+        />
         {confirmed ? (
           <span className="inline-flex shrink-0 items-center gap-1.5 rounded-[--radius-md] border border-[color:var(--color-success)]/30 bg-[color:var(--color-success)]/10 px-2.5 py-1.5 text-[11px] font-bold text-[color:var(--color-success)]">
             <span aria-hidden>✓</span> Confirmed
@@ -4628,6 +4678,36 @@ function ProblemGradeRow({
             <span className="text-primary">Suggestion:</span>
             <span>{aiGradeLabel}</span>
             <ConfidenceSignal confidence={aiGrade.confidence} />
+            {/* "Report a problem" lives on the AI's call itself — the
+                natural place to say "you got this one wrong". Snapshots
+                the AI grade and the teacher's current grade so the report
+                still makes sense after a regrade. */}
+            <ReportProblemTrigger
+              className="ml-auto"
+              label="Report"
+              context={{
+                ...reportBase,
+                problem_id: problem.bank_item_id,
+                problem_position: problem.position,
+                ai_grade: {
+                  score_status: aiGrade.score_status,
+                  percent: aiGrade.percent,
+                  confidence: aiGrade.confidence,
+                  reasoning: aiGrade.reasoning ?? "",
+                },
+                teacher_grade: {
+                  score_status: current ?? null,
+                  percent: entry?.percent ?? null,
+                },
+                labels: [
+                  `Problem ${problem.position}`,
+                  `AI: ${aiGradeLabel}`,
+                  current
+                    ? `Your grade: ${current === "full" ? "Full" : current === "zero" ? "No credit" : `Partial ${Math.round(entry?.percent ?? 0)}%`}`
+                    : "Your grade: not set",
+                ],
+              }}
+            />
           </p>
           {aiGrade.reasoning && (
             // Grader reasoning regularly references math ($-17$,
