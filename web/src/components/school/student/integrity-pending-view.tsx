@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { schoolStudent } from "@/lib/api";
+import {
+  type Phase,
+  showsSlowCopy,
+  timeoutFor,
+} from "./pending-timeouts";
 
 interface Props {
   submissionId: string;
@@ -29,32 +34,13 @@ interface Props {
 }
 
 const POLL_INTERVAL_MS = 3000;
-// 90s was the original budget and it was measured against the wrong
-// thing. Production extraction latency runs p50 57.7s / p95 87.2s, so
-// this screen was quitting under three seconds after the 95th-percentile
-// read finished — roughly one student in twenty was shown "Couldn't
-// prepare your check" for work that had actually succeeded.
-//
-// It got worse once the server stopped discarding slow reads. Extraction
-// streams now (api/core/llm_client.py), so a dense page legitimately runs
-// past two minutes instead of dying at ninety seconds: one of the two
-// submissions stranded in production replays at 114s. At the old ceiling
-// this screen would still have called that a failure while the server was
-// busy succeeding.
-//
-// Sized above the slowest real read on record (179s) with headroom for
-// the post-confirm question-writing wait that shares this component.
-const TIMEOUT_MS = 240_000;
-// Past this the wait is no longer "about a minute" and pretending
-// otherwise is what makes a working system feel broken. The copy switches
-// to an honest slow-path message rather than the screen going quiet.
-const SLOW_AFTER_MS = 75_000;
 
 /**
  * Shown between homework submit and the integrity-check chat while
  * the background pipeline (Vision + Sonnet) prepares the follow-up
- * questions. Polls every 3s; gives up after TIMEOUT_MS with an
- * onTimeout callback so the parent can render an error state.
+ * questions. Polls every 3s; gives up after the bound for the phase
+ * it's in (see timeoutFor) with an onTimeout callback so the parent
+ * can render an error state.
  *
  * This whole screen exists because the integrity pipeline is real LLM
  * work — p50 ~58s, and a dense multi-page submission runs past two
@@ -69,7 +55,7 @@ const SLOW_AFTER_MS = 75_000;
 // poll lands we don't know which phase we're in (a refresh on
 // post-confirm hits this view too), so we render a phase-neutral
 // fallback rather than mislabeling.
-type Phase = "pre_confirm" | "post_confirm";
+
 
 const PHASE_COPY: Record<Phase, { title: string; subtitle: string }> = {
   pre_confirm: {
@@ -108,9 +94,18 @@ export function IntegrityPendingView({
   // we don't want the poll loop to see stale callbacks.
   const onReadyRef = useRef(onReady);
   const onTimeoutRef = useRef(onTimeout);
+  // Same reason the poll effect can't depend on `phase`: re-running it
+  // would reset `startedAt` and restart the clock every time the phase
+  // resolves. The loop reads the phase through a ref, or its closure
+  // holds the initial `null` forever and every wait silently gets the
+  // extraction bound. Synced in an effect, not during render — writing a
+  // ref while rendering is the anti-pattern this file already avoids for
+  // the two callbacks above.
+  const phaseRef = useRef<Phase | null>(null);
   useEffect(() => {
     onReadyRef.current = onReady;
     onTimeoutRef.current = onTimeout;
+    phaseRef.current = phase;
   });
 
   useEffect(() => {
@@ -174,7 +169,7 @@ export function IntegrityPendingView({
         // will catch genuine failures.
       }
 
-      if (Date.now() - startedAt >= TIMEOUT_MS) {
+      if (Date.now() - startedAt >= timeoutFor(phaseRef.current)) {
         if (!cancelled) onTimeoutRef.current();
         return;
       }
@@ -207,10 +202,10 @@ export function IntegrityPendingView({
         {copy.title}…
       </h1>
       <p className="mt-3 text-sm text-text-secondary">{copy.subtitle}</p>
-      {/* Anchor expectations to the real budget: the poll times out at
-          TIMEOUT_MS, so promising "about 20 seconds" while a live counter
-          ticks past it manufactures the exact anxiety this screen exists
-          to calm. "About a minute" matches the p50 (57.7s).
+      {/* Anchor expectations to the real budget: promising "about 20
+          seconds" while a live counter ticks past it manufactures the
+          exact anxiety this screen exists to calm. "About a minute"
+          matches extraction's p50 (57.7s).
 
           Past SLOW_AFTER_MS that promise has visibly expired, and leaving
           it up is worse than replacing it — the student is watching a
@@ -218,9 +213,15 @@ export function IntegrityPendingView({
           take a few minutes now that slow reads are no longer discarded,
           so the honest line is that it's a long one and still running,
           with the reason (their pages are full) so it reads as the system
-          working rather than stuck. */}
+          working rather than stuck.
+
+          Extraction only. That reassurance is true of a long READ; in the
+          post-confirm phase, which is p50 4.1s, 75s means something has
+          stalled — and blaming the student's page count for a stall is
+          both wrong and unhelpful. That phase keeps the neutral line and
+          hits its own shorter timeout instead. */}
       <p className="mt-4 text-xs text-text-muted">
-        {elapsedMs >= SLOW_AFTER_MS
+        {showsSlowCopy(elapsedMs, phase)
           ? "Still going — looks like you wrote a lot. Hang tight, this one can take a few minutes."
           : "This usually takes about a minute."}
         {seconds >= 10 && ` (${seconds}s)`}
