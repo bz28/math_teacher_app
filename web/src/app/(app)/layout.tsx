@@ -5,6 +5,7 @@ import { AuthGuard } from "@/components/auth/auth-guard";
 import { AppLayout } from "@/components/shared/app-layout";
 import { PageTransition } from "@/components/shared/page-transition";
 import { TourProvider, type TourPersona } from "@/components/tour";
+import { ReportProblemProvider } from "@/components/school/teacher/report-problem";
 import { useAuthStore } from "@/stores/auth";
 
 export default function AppRouteLayout({
@@ -28,9 +29,14 @@ export default function AppRouteLayout({
           components/tour/tours.ts. Dismissal (skip/finish) persists via
           markTourSeen so a persona's tour auto-mounts only once. */}
       <TourProvider onComplete={handleTourComplete}>
-        <AppLayout>
-          <PageTransition>{children}</PageTransition>
-        </AppLayout>
+        {/* One "Report a problem" dialog host for the whole workspace —
+            the sidebar fallback and every per-grade trigger on the
+            review page open the same dialog with different context. */}
+        <ReportProblemProvider>
+          <AppLayout>
+            <PageTransition>{children}</PageTransition>
+          </AppLayout>
+        </ReportProblemProvider>
       </TourProvider>
     </AuthGuard>
   );

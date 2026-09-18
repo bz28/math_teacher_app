@@ -492,6 +492,19 @@ export function IntegrityCheckChat({
                   Just answer here in your own words — staying on this
                   page helps us see it&rsquo;s really you.
                 </p>
+                {/* Why it's worth finishing. Honest on purpose: the chat
+                    doesn't move a score by itself — the teacher reads it
+                    and decides — so "improves your grade" is the wrong
+                    promise. "Best way to get credit for what you
+                    understand" is the true one, and it's the reason a
+                    student shouldn't tap Leave. */}
+                <p className="mt-2.5 rounded-[--radius-sm] border border-primary/25 bg-primary-bg px-3 py-2 text-sm leading-relaxed text-primary-dark">
+                  <span className="font-semibold">
+                    Your teacher reads this conversation when they grade your work.
+                  </span>{" "}
+                  Explaining your thinking here is the best way to get credit for
+                  what you understand.
+                </p>
               </div>
             )}
             {visibleTranscript.map((t) => (

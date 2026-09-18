@@ -16,6 +16,8 @@ import GoldenSet from "./pages/GoldenSet";
 import Users from "./pages/Users";
 import LeadDetail from "./pages/LeadDetail";
 import Leads from "./pages/Leads";
+import ReportDetail from "./pages/ReportDetail";
+import Reports from "./pages/Reports";
 import Schools from "./pages/Schools";
 import SchoolDetail from "./pages/SchoolDetail";
 import IndependentStudents from "./pages/IndependentStudents";
@@ -50,6 +52,8 @@ export default function App() {
         >
           {/* Landing = the "what's broken" home. Monitor first. */}
           <Route path="/" element={<Navigate to="/overview" replace />} />
+          <Route path="/reports" element={<Reports />} />
+          <Route path="/reports/:reportId" element={<ReportDetail />} />
           <Route path="/leads" element={<Leads />} />
           <Route path="/leads/:leadId" element={<LeadDetail />} />
           <Route path="/schools" element={<Schools />} />

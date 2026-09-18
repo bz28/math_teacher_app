@@ -1334,6 +1334,28 @@ export interface SectionStudentInsightsResponse {
   students: StudentInsight[];
 }
 
+/** A teacher's "Report a problem" — the context is a snapshot of what
+ *  they were looking at, so every field is nullable. */
+export interface TeacherReportPayload {
+  kind: string;
+  note: string | null;
+  page_url: string | null;
+  submission_id: string | null;
+  assignment_id: string | null;
+  course_id: string | null;
+  section_id: string | null;
+  student_id: string | null;
+  problem_id: string | null;
+  problem_position: number | null;
+  ai_grade: {
+    score_status: string;
+    percent: number;
+    confidence: number | null;
+    reasoning: string;
+  } | null;
+  teacher_grade: { score_status: string | null; percent: number | null } | null;
+}
+
 export const teacher = {
   courses() {
     return apiFetch<{ courses: TeacherCourse[] }>("/teacher/courses");
@@ -1403,6 +1425,12 @@ export const teacher = {
       `/teacher/courses/${courseId}/sections/${sectionId}/invites/${inviteId}`,
       { method: "DELETE" },
     );
+  },
+  reportProblem(payload: TeacherReportPayload) {
+    return apiFetch<{ id: string }>("/teacher/reports", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   },
   removeStudent(courseId: string, sectionId: string, studentId: string) {
     return apiFetch<{ status: string }>(`/teacher/courses/${courseId}/sections/${sectionId}/students/${studentId}`, { method: "DELETE" });

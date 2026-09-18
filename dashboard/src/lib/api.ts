@@ -741,6 +741,14 @@ export const api = {
 
   teacherStudents: (teacherId: string, params?: Record<string, string>) =>
     request<TeacherStudentsData>(`/admin/users/${teacherId}/students`, params),
+  // Teacher reports ("Report a problem")
+  reports: (status: ReportStatus | "all") =>
+    request<{ reports: TeacherReportData[]; counts: Record<ReportStatus, number> }>(
+      "/admin/reports", { status },
+    ),
+  report: (id: string) => request<TeacherReportData>(`/admin/reports/${id}`),
+  updateReport: (id: string, patch: { status: ReportStatus; resolution_note?: string | null }) =>
+    mutate<TeacherReportData>(`/admin/reports/${id}`, "PATCH", patch),
   // Leads
   leads: () => request<{ leads: ContactLeadData[] }>("/admin/leads"),
   lead: (id: string) => request<LeadDetail>(`/admin/leads/${id}`),
@@ -1059,6 +1067,46 @@ export type MeetingType =
   | "dm"
   | "text"
   | "linkedin";
+
+export type ReportStatus = "open" | "resolved";
+export type ReportKind =
+  | "wrong_grade"
+  | "misread_work"
+  | "understanding_check"
+  | "broken"
+  | "confusing"
+  | "other";
+
+/** One teacher-filed "Report a problem". Names/titles are snapshots
+ *  taken when it was filed; the ids are for drill-in and may be null
+ *  if the underlying row was deleted since. */
+export interface TeacherReportData {
+  id: string;
+  created_at: string;
+  status: ReportStatus;
+  kind: ReportKind;
+  note: string | null;
+  page_url: string | null;
+  teacher_id: string | null;
+  teacher_name: string | null;
+  teacher_email: string | null;
+  school_id: string | null;
+  submission_id: string | null;
+  assignment_id: string | null;
+  assignment_title: string | null;
+  course_id: string | null;
+  course_name: string | null;
+  section_id: string | null;
+  student_id: string | null;
+  student_name: string | null;
+  problem_id: string | null;
+  problem_position: number | null;
+  problem_question: string | null;
+  ai_grade: { score_status: string; percent: number; confidence: number | null; reasoning: string } | null;
+  teacher_grade: { score_status: string | null; percent: number | null } | null;
+  resolution_note: string | null;
+  resolved_at: string | null;
+}
 
 export interface ContactLeadData {
   id: string;

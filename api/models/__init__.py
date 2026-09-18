@@ -30,6 +30,7 @@ from api.models import (  # noqa: F401
     stripe_event,
     student_record_access_log,
     teacher_invite,
+    teacher_report,
     unit,
     user,
     visibility,
