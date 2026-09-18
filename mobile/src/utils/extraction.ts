@@ -10,7 +10,12 @@ export interface ExtractionGroup {
   finalAnswer: ExtractionFinalAnswer | null;
 }
 
-export function groupExtraction(extraction: Extraction): ExtractionGroup[] {
+// Only the two lists are read, so callers that assemble a partial wire
+// shape by hand (the chat's reference panel) don't have to fabricate the
+// rest of the contract.
+export function groupExtraction(
+  extraction: Pick<Extraction, "steps" | "final_answers">,
+): ExtractionGroup[] {
   const groups = new Map<string, ExtractionGroup>();
   const keyOf = (p: number | null) => (p == null ? "null" : String(p));
   const ensure = (position: number | null) => {
