@@ -601,8 +601,16 @@ export function SubmissionExtractionConfirmView({
           Next: a quick chat about your work
         </p>
         <p className="mt-1 text-sm text-text-secondary">
-          {BUDGET_COPY[device]} Stay in this window and answer in your
+          {BUDGET_COPY[device]}{" "}Stay in this window and answer in your
           own words — you don&rsquo;t need to look anything up.
+        </p>
+        {/* The reason to go through with it. This is where students
+            drop off in prod (25 of 96 submissions never confirmed), so
+            the "your teacher reads it" line lives here too, not only
+            inside the chat they haven't reached yet. */}
+        <p className="mt-2 text-sm font-semibold text-primary-dark">
+          Your teacher reads it when grading — it&rsquo;s the best way to
+          get credit for what you understand.
         </p>
       </div>
 
