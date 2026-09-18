@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.constants import MAX_REQUEST_B64_BYTES
 from api.core.image_utils import to_content_block
 from api.models.course import Document
 
@@ -28,25 +29,24 @@ _SUPPORTED_SOURCE_TYPES = {"image/jpeg", "image/png", "application/pdf"}
 # Cap documents per call to avoid token limits
 MAX_VISION_IMAGES = 5
 
-# Anthropic caps a single request at 32MB. Budget the cumulative encoded
-# size so an oversized selection degrades to "fewer documents" (visible
-# in the attachment metadata) instead of an opaque API error.
+# Budget the cumulative encoded size so an oversized selection degrades
+# to "fewer documents" (visible in the attachment metadata) instead of
+# an opaque API error. Five 5MB images (the MAX_VISION_IMAGES ceiling)
+# encode to ~33MB, so the cap can still bite — but only where the
+# request would genuinely have failed.
 #
-# Keep the headroom tight. Everything else in the request — prompt, tool
-# schema, JSON envelope — is kilobytes, and base64 needs no JSON
-# escaping, so a megabyte is already generous. An over-conservative
-# budget is not "safe": it silently drops a document the API would have
-# accepted, which is the exact failure this module exists to prevent.
-# Five 5MB images (the MAX_VISION_IMAGES ceiling) encode to ~33MB, so
-# the cap can still bite — but only where the request would genuinely
-# have failed.
+# The budget itself now lives in api.core.constants as
+# MAX_REQUEST_B64_BYTES, shared with the submission path: both are
+# spending the same Anthropic request allowance, and stating it twice is
+# how the upload caps drifted apart in the first place. The rationale
+# for its size (tight headroom, because over-reserving silently drops a
+# document the API would have accepted) is documented there.
 #
 # Note the residual gap: base64 inflates by ~4/3, so this admits ~23MB
 # of raw bytes while uploads accept a 25MB PDF (MAX_PDF_BYTES). A PDF
 # between those two sizes is stored and previewable but can't be sent.
 # Surfacing that to the teacher is the follow-up to this fix.
-_ANTHROPIC_MAX_REQUEST_BYTES = 32 * 1024 * 1024
-MAX_TOTAL_SOURCE_B64_BYTES = _ANTHROPIC_MAX_REQUEST_BYTES - 1024 * 1024
+MAX_TOTAL_SOURCE_B64_BYTES = MAX_REQUEST_B64_BYTES
 
 
 async def fetch_source_documents(

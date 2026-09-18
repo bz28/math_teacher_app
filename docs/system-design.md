@@ -189,7 +189,7 @@ Ordered outermost → innermost (a request hits them in this order):
 
 | # | Middleware | Purpose |
 |---|-----------|---------|
-| 1 | **RequestSizeLimit** | Reject bodies > 10 MB before reading them |
+| 1 | **RequestSizeLimit** | Reject oversized bodies before reading them (limit derived in `api/core/constants.py`, ~34 MB) |
 | 2 | **SecurityHeaders** | Add HSTS, CSP, X-Frame-Options, etc. to every response |
 | 3 | **CORS** | Validate origin, handle preflight requests |
 | 4 | **Logging** | Generate request ID, log method/path/status/duration as JSON |

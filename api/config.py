@@ -1,7 +1,10 @@
 import json
+import logging
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
+
+from api.core.constants import MIN_REQUEST_SIZE_BYTES
 
 
 class Settings(BaseSettings):
@@ -62,8 +65,12 @@ class Settings(BaseSettings):
     # Cost Alerting
     daily_cost_limit_usd: float = 50.0
 
-    # Request size limit (bytes) - 10MB
-    max_request_size: int = 10 * 1024 * 1024
+    # Body-size limit for every request (bytes), enforced by
+    # RequestSizeLimitMiddleware. DERIVED from the submission cap, not
+    # chosen: it has to clear a maximal legal submission after base64
+    # inflation, or the middleware rejects payloads the endpoint would
+    # have accepted. See api/core/constants.py for the derivation chain.
+    max_request_size: int = MIN_REQUEST_SIZE_BYTES
 
     # Frontend URL (used for password reset links, etc.)
     frontend_url: str = "https://veradicai.com"
@@ -94,6 +101,31 @@ class Settings(BaseSettings):
     def parse_string_list(cls, v: str | list[str]) -> list[str]:
         if isinstance(v, str):
             return [str(item) for item in json.loads(v)]
+        return v
+
+    @field_validator("max_request_size")
+    @classmethod
+    def floor_request_size(cls, v: int) -> int:
+        """Raise a too-small MAX_REQUEST_SIZE to the derived floor.
+
+        The env var can raise the transport cap (a bigger box, a future
+        format) but must never lower it below what the submission
+        endpoint will accept. That gap IS the bug this derivation
+        exists to prevent, and it fails as an opaque 413 on a student's
+        phone — the least visible place in the system.
+
+        Clamping rather than raising deliberately: this runs at import,
+        so rejecting would take the API down on a bad env value, and an
+        unbootable server is a worse outcome than a silently-widened
+        limit. It is logged so the stale override still gets found.
+        """
+        if v < MIN_REQUEST_SIZE_BYTES:
+            logging.getLogger(__name__).warning(
+                "MAX_REQUEST_SIZE=%d is below the %d needed to carry a "
+                "maximal submission; using the floor. Unset the override.",
+                v, MIN_REQUEST_SIZE_BYTES,
+            )
+            return MIN_REQUEST_SIZE_BYTES
         return v
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}

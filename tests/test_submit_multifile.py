@@ -119,7 +119,7 @@ async def test_submit_homework_total_payload_guard_rejects() -> None:
     )
 
     # Pretend each file is a valid 20 MB PDF. Three of them total 60 MB
-    # which exceeds the 50 MB MAX_SUBMISSION_TOTAL_BYTES.
+    # which exceeds MAX_VISION_PAYLOAD_BYTES (22.79 MB, derived).
     fake_decoded = b"\x00" * (20 * 1024 * 1024)
     body = SubmitHomeworkRequest(files=["AAAA", "BBBB", "CCCC"])
 

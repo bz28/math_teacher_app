@@ -15,7 +15,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import record_activity, record_question_edit
-from api.core.constants import SOLUTION_FAILED_SENTINEL_PREFIX
+from api.core.constants import (
+    MAX_SUBMISSION_FILES,
+    MAX_VISION_PAYLOAD_BYTES,
+    SOLUTION_FAILED_SENTINEL_PREFIX,
+)
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.image_utils import validate_and_decode_upload
 from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
@@ -123,8 +127,8 @@ class UploadWorksheetRequest(BaseModel):
     def _validate_images(cls, v: list[str]) -> list[str]:
         if not v:
             raise ValueError("At least one file is required")
-        if len(v) > 10:
-            raise ValueError("Maximum 10 files per upload")
+        if len(v) > MAX_SUBMISSION_FILES:
+            raise ValueError(f"Maximum {MAX_SUBMISSION_FILES} files per upload")
         return v
 
 
@@ -430,16 +434,34 @@ async def upload_worksheet(
         )
 
     # Validate each file (image or PDF) and build the stored payload.
+    #
+    # The whole-request total matters as much as the per-file cap: these
+    # pages are headed for one Vision call, so the same Anthropic
+    # request budget that bounds a student submission bounds this. Ten
+    # files at the per-file cap would be 250MB — a body no transport
+    # limit can carry, so without this the teacher hits a bare
+    # pre-handler 413 instead of a message naming the problem.
     validated_files = []
+    total_bytes = 0
     for i, file_b64 in enumerate(body.images):
         try:
-            _, media_type = validate_and_decode_upload(file_b64)
+            raw, media_type = validate_and_decode_upload(file_b64)
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"File {i + 1}: {e}",
             ) from e
+        total_bytes += len(raw)
         validated_files.append({"data": file_b64, "media_type": media_type})
+    if total_bytes > MAX_VISION_PAYLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=(
+                f"Upload too large: {total_bytes / 1024 / 1024:.1f}MB "
+                f"(max {MAX_VISION_PAYLOAD_BYTES // 1024 // 1024}MB total). "
+                f"Upload fewer pages at a time."
+            ),
+        )
 
     # Validate the assignment belongs to this teacher + this course.
     assignment = await get_teacher_assignment(db, body.assignment_id, current_user.user_id)

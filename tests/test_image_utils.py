@@ -206,9 +206,15 @@ class TestPreprocessImageForVision:
             preprocess_image_for_vision(pdf_b64, "application/pdf") == pdf_b64
         )
 
-    def test_undecodable_input_returned_untouched(self) -> None:
-        # A claimed image that isn't actually decodable falls back to the
-        # original base64 rather than raising — a quirky-but-valid image
-        # still reaches the model.
-        junk = base64.b64encode(b"not really a jpeg").decode("ascii")
-        assert preprocess_image_for_vision(junk, "image/jpeg") == junk
+    def test_undecodable_input_is_refused(self) -> None:
+        """Fail closed: an image we cannot re-encode is not forwarded.
+
+        This used to assert the input was returned untouched. That
+        contract was the metadata leak in miniature — the re-encode is
+        the only thing that scrubs, so forwarding raw bytes on the error
+        path shipped EXIF/GPS verbatim. Refusing routes the page to the
+        teacher-visible manual path instead.
+        """
+        junk = base64.b64encode(b"\xff\xd8not-a-real-jpeg").decode()
+        with pytest.raises(ValueError):
+            preprocess_image_for_vision(junk, "image/jpeg")

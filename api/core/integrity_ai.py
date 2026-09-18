@@ -21,6 +21,7 @@ from typing import Any, Literal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.constants import MAX_REQUEST_B64_BYTES
 from api.core.image_utils import preprocess_image_for_vision, to_content_block
 from api.core.llm_client import (
     MODEL_HAIKU,
@@ -185,13 +186,27 @@ async def extract_student_work(
     )
 
     content: list[dict[str, Any]] = []
+    total_b64_bytes = 0
+    unusable_pages: list[int] = []
     for page_number, f in enumerate(files, start=1):
         raw = f.get("data", "")
         recorded_media = f.get("media_type", "image/jpeg")
         base64_data, media_type = _strip_data_url_prefix(raw, recorded_media)
         # EXIF-orient + downscale phone photos before Vision sees them;
         # PDFs/non-images pass through untouched.
-        base64_data = preprocess_image_for_vision(base64_data, media_type)
+        #
+        # `preprocess_image_for_vision` refuses an image it cannot
+        # re-encode rather than forwarding it with its metadata
+        # unscrubbed. Collect those pages; the decision about what to do
+        # with them is made once, after the loop — see below. Collecting
+        # rather than bailing on the first only buys a complete list for
+        # the log, since any unusable page routes the whole submission.
+        try:
+            base64_data = preprocess_image_for_vision(base64_data, media_type)
+        except ValueError:
+            unusable_pages.append(page_number)
+            continue
+        total_b64_bytes += len(base64_data)
         # Label every page before its image. Without this, asking the
         # model for a `page_index` would be asking it to count ordinal
         # image positions with nothing to count against — the blocks are
@@ -203,10 +218,67 @@ async def extract_student_work(
             "text": f"--- Page {page_number} of {len(files)} ---",
         })
         content.append(to_content_block(media_type, base64_data))
+    if unusable_pages:
+        # ANY unreadable page sends the whole submission to manual
+        # grading, rather than extracting the rest and letting the
+        # missing one be graded as blank.
+        #
+        # Skipping and carrying on was the first attempt, with the drop
+        # recorded on the Vision call's metadata. That is an operator
+        # channel: the student would have seen an extraction quietly
+        # missing a page, and the teacher a normally-graded submission,
+        # while the work on that page scored zero. It is the same
+        # silent-truncation the budget guard below refuses for exactly
+        # this reason — and writing it here while that comment sat
+        # thirty lines down was inconsistent, not a trade-off.
+        #
+        # The unreadable sentinel is the honest answer: it is already
+        # the system's word for "we could not read this", it is visible
+        # to the teacher, and it fabricates no score. Losing automatic
+        # grading on a submission with a corrupt page is a far smaller
+        # harm than grading a student on work nobody ever saw.
+        logger.error(
+            "submission %s: page(s) %s could not be re-encoded (corrupt or "
+            "truncated file, not unreadable handwriting); routing the whole "
+            "submission to manual grading. The student and teacher are shown "
+            "the generic unreadable message — there is no field to tell them "
+            "which page it was.",
+            submission_id, unusable_pages,
+        )
+        return {"steps": [], "final_answers": [], "confidence": 0.0}
     content.append({
         "type": "text",
         "text": briefing + instruction if briefing else instruction,
     })
+
+    # Defence in depth against Anthropic's single-request cap. The
+    # submission caps are derived so a legal submission always fits
+    # (api/core/constants.py), so this should never fire — it exists to
+    # fail readably if that chain is ever broken, rather than as an
+    # opaque API error inside a fire-and-forget background task.
+    #
+    # Photos cannot realistically get here: preprocess_image_for_vision
+    # downscales every image to VISION_MAX_EDGE first. PDFs pass through
+    # RAW, so they are the only pages that can approach the budget.
+    #
+    # Refuse the WHOLE submission rather than dropping the pages that
+    # don't fit. The teacher-document path skips individual documents,
+    # and that is right for it — losing the sixth of six reference
+    # worksheets degrades generation. Here the stakes invert: silently
+    # dropping page 7 of a student's homework grades them on work the
+    # model never saw, and there is no way to tell them or the teacher
+    # that it happened. The "couldn't read this" sentinel below is
+    # already the system's word for that, and it routes through the
+    # unreadable gate to `record_unreadable_grading_skip`, which shows
+    # the teacher "needs manual grading" and grades nothing.
+    if total_b64_bytes > MAX_REQUEST_B64_BYTES:
+        logger.error(
+            "submission %s is %d encoded bytes, over the %d request "
+            "budget; refusing extraction so it routes to manual grading. "
+            "The derived submission caps should have prevented this.",
+            submission_id, total_b64_bytes, MAX_REQUEST_B64_BYTES,
+        )
+        return {"steps": [], "final_answers": [], "confidence": 0.0}
 
     # 1024 was too tight for real HW submissions: a multi-problem HW
     # with dense handwriting pushes the tool-use JSON (per-step
