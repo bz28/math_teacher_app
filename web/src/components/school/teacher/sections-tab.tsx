@@ -179,6 +179,12 @@ function SectionCard({
   const [copied, setCopied] = useState(false);
   const [confirmingRegen, setConfirmingRegen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingRevokeId, setConfirmingRevokeId] = useState<string | null>(null);
+  // Remove is one click away from a student vanishing from the roster, so
+  // it confirms inline like Delete section / Revoke invite do. Only the
+  // enrollment row is deleted server-side — submissions and grades stay —
+  // which is why the confirm copy promises their work comes back on re-add.
+  const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -195,7 +201,15 @@ function SectionCard({
   }, [editingName]);
 
   useEffect(() => {
-    if (!expanded) return;
+    if (!expanded) {
+      // Closing the panel abandons any half-finished confirm — otherwise
+      // it reopens already armed and one stray click fires the action.
+      setConfirmingRegen(false);
+      setConfirmingDelete(false);
+      setConfirmingRevokeId(null);
+      setConfirmingRemoveId(null);
+      return;
+    }
     setLoadingDetail(true);
     teacher
       .section(courseId, section.id)
@@ -210,12 +224,6 @@ function SectionCard({
   };
 
   const [flash, setFlash] = useState<string | null>(null);
-  const [confirmingRevokeId, setConfirmingRevokeId] = useState<string | null>(null);
-  // Remove is one click away from a student vanishing from the roster, so
-  // it confirms inline like Delete section / Revoke invite do. Only the
-  // enrollment row is deleted server-side — submissions and grades stay —
-  // which is why the confirm copy promises their work comes back on re-add.
-  const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
 
   const removeStudent = (studentId: string) =>
     run(async () => {
@@ -521,8 +529,6 @@ function SectionCard({
                     confirmingRemoveId === s.id ? (
                       <div
                         key={s.id}
-                        role="alertdialog"
-                        aria-label={`Remove ${s.name} from ${section.name}?`}
                         className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[--radius-sm] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] px-3 py-2 text-sm"
                       >
                         <div className="min-w-0">
