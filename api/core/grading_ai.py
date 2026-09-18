@@ -89,8 +89,9 @@ graphing", "using elimination", "by substitution", "by factoring", "using the \
 quadratic formula", "by completing the square") or asks for something drawn \
 ("graph", "sketch", "draw", "plot", "shade"), that method or drawing is part of \
 the answer, not a suggestion. A printed figure the problem refers to ("using the \
-graph shown") is not a request to draw, and "label your answer" is not either. A correct final answer reached by \
-a different method, or without the required drawing, is NOT full credit — grade it \
+graph shown") is not a request to draw, and "label your answer" is not either. A \
+correct final answer reached by a different method, or without the required \
+drawing, is NOT full credit — grade it \
 as "right answer, required method missing" partial credit (the rubric's Partial \
 credit anchors say how much). A required drawing that is present but incomplete \
 (one of two lines plotted, the intersection not marked, an unlabeled axis) is a \
@@ -103,7 +104,10 @@ When no method or drawing is specified, any valid method earns full credit — \
 never penalize a legitimate alternative.
 - "Student's drawings" is your ONLY source of truth about what was drawn. Never \
 infer a graph from the algebra beside it, and never assume a drawing is complete \
-because the answer is right. "(no drawing for this problem)" means none exists.
+because the answer is right. "(no drawing for this problem)" means none exists. \
+"(no drawing attributed to this problem …)" means a drawing exists somewhere on the \
+page that couldn't be tied to a problem — check "Other work" before deducting for a \
+missing drawing, and give the benefit of the doubt when it plausibly belongs here.
 - An answer that exists only on a drawing — an intersection the student marked, a \
 shaded region, a circled value on a number line — counts as a stated final answer.
 - If the student's approach is correct but they made an arithmetic or sign error, give \
