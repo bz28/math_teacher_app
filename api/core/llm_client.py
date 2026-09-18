@@ -86,6 +86,19 @@ _DEFAULT_PRICING = _PRICING[MODEL_SONNET]
 
 MAX_RETRIES = 3
 
+# Vision timeout. This is passed to a STREAMING call, where it behaves as
+# a stall detector rather than a generation budget: httpx applies the read
+# timeout to the gap between chunks, so it fires only when nothing at all
+# arrives for this long. Total generation time is deliberately unbounded —
+# that is the entire point of the switch. A dense page that needs three
+# minutes to transcribe now takes three minutes instead of being thrown
+# away at ninety seconds.
+#
+# Sized against time-to-FIRST-token, not total output: the model has to
+# ingest up to ten images before it emits anything, and a stall longer
+# than this is a real fault worth surfacing rather than waiting out.
+VISION_STREAM_TIMEOUT_S = 120.0
+
 # Prompt-cache price multipliers, relative to the model's base INPUT rate.
 # A cache write costs 25% more than fresh input (you pay a premium to
 # store the prefix); a subsequent read costs a tenth. Both are Anthropic
@@ -1031,16 +1044,42 @@ async def call_claude_vision(
 
     start = time.monotonic()
     try:
-        response = await client.messages.create(
+        # Streamed, not `messages.create`. A non-streaming request has to
+        # produce its ENTIRE body inside one timeout, and this call's body
+        # is large — a dense homework page runs 5-8k output tokens, and
+        # latency tracks output volume almost linearly (measured r=0.83
+        # over production extractions).
+        #
+        # That made the old 90s ceiling a coin toss rather than a safety
+        # net: p50 57.7s, p95 87.2s. Under three seconds of headroom at
+        # p95, on a number that has to cover the worst page a student can
+        # hand in. Anthropic's throughput legitimately varies about 2x
+        # (observed 42 vs 94 output tok/s); on the slow half the same page
+        # needs ~175s and every attempt died. Retries did not help, because
+        # a retry re-runs the identical request inside the same slow
+        # window — which is why both production failures landed on an
+        # identical 271s (3 x 90s, all three timing out).
+        #
+        # Streaming re-bases the timeout onto time-between-events instead
+        # of total generation time, so a slow read arrives slowly rather
+        # than being discarded whole. Anthropic's own guidance for long
+        # requests, and what the SDK's own timeout docs assume.
+        #
+        # `get_final_message()` returns the same Message this code already
+        # expects — stop_reason, content blocks, usage — so everything
+        # downstream (tool extraction, cache accounting, cost logging) is
+        # untouched. The only behavioural change is how the bytes arrive.
+        async with client.messages.stream(
             model=use_model,
             max_tokens=max_tokens,
             system=_system_with_cache(_with_safety(None)),
             messages=[{"role": "user", "content": user_content}],
             tools=tools,
             tool_choice=effective_tool_choice,
-            timeout=90.0,
+            timeout=VISION_STREAM_TIMEOUT_S,
             **thinking_kwargs,
-        )
+        ) as stream:
+            response = await stream.get_final_message()
         latency_ms = round((time.monotonic() - start) * 1000, 2)
 
         # When forcing tool use, expected stop_reason is "tool_use" (or

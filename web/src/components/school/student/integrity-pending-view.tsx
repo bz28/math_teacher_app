@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { schoolStudent } from "@/lib/api";
+import {
+  type Phase,
+  showsSlowCopy,
+  timeoutFor,
+} from "./pending-timeouts";
 
 interface Props {
   submissionId: string;
@@ -11,7 +16,7 @@ interface Props {
    *  stays stuck at "extracting" even after Vision writes the
    *  extraction. We watch `sub.extraction` landing on the submission
    *  row and fire onReady so the parent can route to the confirm
-   *  screen instead of spinning the full 90s timeout. */
+   *  screen instead of spinning out the full timeout. */
   assignmentId: string;
   /** Called when the wait this view is responsible for has ended:
    *
@@ -29,17 +34,18 @@ interface Props {
 }
 
 const POLL_INTERVAL_MS = 3000;
-const TIMEOUT_MS = 90_000;
 
 /**
  * Shown between homework submit and the integrity-check chat while
  * the background pipeline (Vision + Sonnet) prepares the follow-up
- * questions. Polls every 3s; gives up after 90s with an onTimeout
- * callback so the parent can render an error state.
+ * questions. Polls every 3s; gives up after the bound for the phase
+ * it's in (see timeoutFor) with an onTimeout callback so the parent
+ * can render an error state.
  *
- * This whole screen exists because the integrity pipeline takes
- * 20–60s of real LLM work and can't run inline in the submit
- * request without timing out Railway.
+ * This whole screen exists because the integrity pipeline is real LLM
+ * work — p50 ~58s, and a dense multi-page submission runs past two
+ * minutes — which can't happen inline in the submit request without
+ * timing out Railway.
  */
 // Phase-aware copy. The view runs through two distinct waits with
 // very different operations in flight, so the spinner copy should
@@ -49,7 +55,7 @@ const TIMEOUT_MS = 90_000;
 // poll lands we don't know which phase we're in (a refresh on
 // post-confirm hits this view too), so we render a phase-neutral
 // fallback rather than mislabeling.
-type Phase = "pre_confirm" | "post_confirm";
+
 
 const PHASE_COPY: Record<Phase, { title: string; subtitle: string }> = {
   pre_confirm: {
@@ -84,13 +90,22 @@ export function IntegrityPendingView({
 
   // Refs for stable callback identities inside the interval closure —
   // we don't want React re-running the poll effect every time a
-  // callback prop changes (which would reset the 90s timeout), and
+  // callback prop changes (which would reset the timeout), and
   // we don't want the poll loop to see stale callbacks.
   const onReadyRef = useRef(onReady);
   const onTimeoutRef = useRef(onTimeout);
+  // Same reason the poll effect can't depend on `phase`: re-running it
+  // would reset `startedAt` and restart the clock every time the phase
+  // resolves. The loop reads the phase through a ref, or its closure
+  // holds the initial `null` forever and every wait silently gets the
+  // extraction bound. Synced in an effect, not during render — writing a
+  // ref while rendering is the anti-pattern this file already avoids for
+  // the two callbacks above.
+  const phaseRef = useRef<Phase | null>(null);
   useEffect(() => {
     onReadyRef.current = onReady;
     onTimeoutRef.current = onTimeout;
+    phaseRef.current = phase;
   });
 
   useEffect(() => {
@@ -154,7 +169,7 @@ export function IntegrityPendingView({
         // will catch genuine failures.
       }
 
-      if (Date.now() - startedAt >= TIMEOUT_MS) {
+      if (Date.now() - startedAt >= timeoutFor(phaseRef.current)) {
         if (!cancelled) onTimeoutRef.current();
         return;
       }
@@ -187,12 +202,28 @@ export function IntegrityPendingView({
         {copy.title}…
       </h1>
       <p className="mt-3 text-sm text-text-secondary">{copy.subtitle}</p>
-      {/* Anchor expectations to the real budget: the poll times out at
-          90s (TIMEOUT_MS), so promising "about 20 seconds" while a live
-          counter ticks past it manufactures the exact anxiety this
-          screen exists to calm. "About a minute" sits inside the window. */}
+      {/* Anchor expectations to the real budget: promising "about 20
+          seconds" while a live counter ticks past it manufactures the
+          exact anxiety this screen exists to calm. "About a minute"
+          matches extraction's p50 (57.7s).
+
+          Past SLOW_AFTER_MS that promise has visibly expired, and leaving
+          it up is worse than replacing it — the student is watching a
+          counter contradict the sentence above it. A dense page really can
+          take a few minutes now that slow reads are no longer discarded,
+          so the honest line is that it's a long one and still running,
+          with the reason (their pages are full) so it reads as the system
+          working rather than stuck.
+
+          Extraction only. That reassurance is true of a long READ; in the
+          post-confirm phase, which is p50 4.1s, 75s means something has
+          stalled — and blaming the student's page count for a stall is
+          both wrong and unhelpful. That phase keeps the neutral line and
+          hits its own shorter timeout instead. */}
       <p className="mt-4 text-xs text-text-muted">
-        This usually takes about a minute.
+        {showsSlowCopy(elapsedMs, phase)
+          ? "Still going — looks like you wrote a lot. Hang tight, this one can take a few minutes."
+          : "This usually takes about a minute."}
         {seconds >= 10 && ` (${seconds}s)`}
       </p>
     </div>
