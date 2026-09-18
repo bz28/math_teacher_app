@@ -321,7 +321,13 @@ async def verify_visual_work(
 
     async def _one(v: dict[str, Any]) -> None:
         async with sem:
-            await _verify_one(v, files, user_id=user_id, submission_id=submission_id)
+            try:
+                await _verify_one(v, files, user_id=user_id, submission_id=submission_id)
+            except Exception:  # noqa: BLE001 — the extraction must land regardless
+                logger.exception(
+                    "visual_work verify crashed submission=%s position=%s",
+                    submission_id, v.get("problem_position"),
+                )
 
     await asyncio.gather(*(_one(v) for v in candidates))
 

@@ -216,6 +216,14 @@ class TestVerifyVisualWork:
         assert sum(1 for v in ext["visual_work"] if v["verified"]) == integrity_ai._VERIFY_MAX_DRAWINGS
         assert all(v["verified"] is False for v in ext["visual_work"][integrity_ai._VERIFY_MAX_DRAWINGS:])
 
+    async def test_unexpected_crash_never_fails_extraction(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A malformed file entry (not a dict) must not strand the
+        submission — the extraction lands with the entry unverified."""
+        ext = {"steps": [], "final_answers": [], "visual_work": [_entry()], "confidence": 0.9}
+        await integrity_ai.verify_visual_work(ext, ["not-a-file-dict"])  # type: ignore[list-item]
+        v = ext["visual_work"][0]
+        assert v["verified"] is False and v["plotted_elements"] == ["line (y = 2x - 1)", "line (y = -x + 5)"]
+
     async def test_vision_failure_leaves_entry_unverified(self, monkeypatch: pytest.MonkeyPatch) -> None:
         async def fail(*args: Any, **kwargs: Any) -> dict[str, Any]:
             raise RuntimeError("api down")
