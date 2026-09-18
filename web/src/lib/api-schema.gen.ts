@@ -762,6 +762,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Reports */
+        get: operations["list_reports_v1_admin_reports_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/reports/{report_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Report */
+        get: operations["get_report_v1_admin_reports__report_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Report */
+        patch: operations["update_report_v1_admin_reports__report_id__patch"];
+        trace?: never;
+    };
     "/v1/admin/schools": {
         parameters: {
             query?: never;
@@ -3846,6 +3881,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Report */
+        post: operations["create_report_v1_teacher_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/rubric-sources": {
         parameters: {
             query?: never;
@@ -4424,6 +4476,31 @@ export interface components {
             all_problems?: string[];
             /** Problem */
             problem: string;
+        };
+        /** CreateReportRequest */
+        CreateReportRequest: {
+            ai_grade?: components["schemas"]["ReportedAiGrade"] | null;
+            /** Assignment Id */
+            assignment_id?: string | null;
+            /** Course Id */
+            course_id?: string | null;
+            /** Kind */
+            kind: string;
+            /** Note */
+            note?: string | null;
+            /** Page Url */
+            page_url?: string | null;
+            /** Problem Id */
+            problem_id?: string | null;
+            /** Problem Position */
+            problem_position?: number | null;
+            /** Section Id */
+            section_id?: string | null;
+            /** Student Id */
+            student_id?: string | null;
+            /** Submission Id */
+            submission_id?: string | null;
+            teacher_grade?: components["schemas"]["ReportedTeacherGrade"] | null;
         };
         /** CreateSchoolRequest */
         CreateSchoolRequest: {
@@ -5294,6 +5371,27 @@ export interface components {
             section_invite_token?: string | null;
             /** Signup School Name */
             signup_school_name?: string | null;
+        };
+        /** ReportedAiGrade */
+        ReportedAiGrade: {
+            /** Confidence */
+            confidence?: number | null;
+            /** Percent */
+            percent: number;
+            /**
+             * Reasoning
+             * @default
+             */
+            reasoning: string;
+            /** Score Status */
+            score_status: string;
+        };
+        /** ReportedTeacherGrade */
+        ReportedTeacherGrade: {
+            /** Percent */
+            percent?: number | null;
+            /** Score Status */
+            score_status?: string | null;
         };
         /** RerunPayload */
         RerunPayload: {
@@ -6190,6 +6288,13 @@ export interface components {
             scheduled_at?: string | null;
             /** Type */
             type?: string | null;
+        };
+        /** UpdateReportRequest */
+        UpdateReportRequest: {
+            /** Resolution Note */
+            resolution_note?: string | null;
+            /** Status */
+            status: string;
         };
         /** UpdateRoleRequest */
         UpdateRoleRequest: {
@@ -7847,6 +7952,110 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_reports_v1_admin_reports_get: {
+        parameters: {
+            query?: {
+                status?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_report_v1_admin_reports__report_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_report_v1_admin_reports__report_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateReportRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -12939,6 +13148,41 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_report_v1_teacher_reports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
                     };
                 };
             };

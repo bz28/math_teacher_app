@@ -99,8 +99,8 @@ export function ReportProblemDialog({
           </h2>
           <p className="text-sm leading-relaxed text-text-secondary">
             Your report went straight to the Veradic team with everything attached.
-            {onSubmission && " Your grade stands — reporting never changes it."} We&rsquo;ll
-            email you if we need anything else.
+            {onSubmission && " Your grade stands — reporting never changes it."}{" "}
+            We&rsquo;ll email you if we need anything else.
           </p>
           <div className="flex justify-end">
             <Button size="sm" onClick={onClose}>
