@@ -32,9 +32,13 @@ VISION_MAX_EDGE = 1568
 # a fully legal submission refused as unreadable after acceptance.
 #
 # 320px is now a legibility floor and nothing else. Nothing is allowed
-# to depend on the floor being unreachable: measured across the
-# pathological cases, convergence takes 2-4 shrinks and lands at
-# 300-700px, well before it.
+# to depend on the floor being unreachable — measured across the
+# pathological cases, convergence takes 2-4 shrinks and lands between
+# roughly 300 and 700px, so the smallest of those reaches the floor and
+# breaks out still over the ceiling. That is safe on its own terms (an
+# image that small cannot threaten the budget, asserted directly by
+# test_small_images_are_not_exempt_from_the_growth_ceiling) rather than
+# because the floor is never touched.
 _SHRINK_STEP = 0.88
 _SHRINK_ATTEMPTS = 8
 _SHRINK_FLOOR_EDGE = 320

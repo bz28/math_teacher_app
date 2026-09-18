@@ -66,7 +66,11 @@ How we protect student data, prevent abuse, and keep the system safe. Written so
 - During cooldown, all LLM calls fail immediately instead of piling up retries against a broken service.
 
 ### Request Size Limit
-- **10 MB** max request body, enforced by middleware.
+- Max request body enforced by middleware. The limit is **derived**
+  in `api/core/constants.py` from Anthropic's 32 MB per-request cap
+  (~34 MB today) — do not hard-code a number here or in a reverse
+  proxy. A proxy limit below the submission cap reinstates the 413 that
+  blocked a class from turning in homework.
 - Fast-reject on `Content-Length` header; also tracks bytes for chunked transfers.
 - Images validated separately: **5 MB** max after base64 decode, magic-byte format check (JPEG/PNG only).
 

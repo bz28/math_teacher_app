@@ -2,7 +2,7 @@
 
 These are the regression tests for a live incident: the transport cap
 (`Settings.max_request_size`, 10MB, written with the original scaffold)
-and the submission cap (`MAX_VISION_PAYLOAD_BYTES`, 50MB, added eight
+and the submission cap (`MAX_VISION_PAYLOAD_BYTES`, then 50MB, added eight
 weeks later) were independent literals with no relationship. Files
 travel base64 inside JSON (~4/3 inflation), so the real ceiling was
 ~7.5MB of photo rather than the advertised 50MB, and students hit an
@@ -35,8 +35,8 @@ from api.core.constants import (
 
 # Bound at import, which happens at collection — BEFORE conftest's
 # autouse `_mock_integrity_ai` fixture replaces the module attribute
-# with an AsyncMock. These two tests are the only ones in the suite that
-# need the real Vision wrapper; everything else wants the mock.
+# with an AsyncMock. The handful of tests below that exercise the real
+# Vision wrapper use this; everything else in the suite wants the mock.
 from api.core.integrity_ai import extract_student_work as _real_extract_student_work
 
 

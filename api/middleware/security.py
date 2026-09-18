@@ -6,6 +6,8 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from api.core.constants import MIN_REQUEST_SIZE_BYTES
+
 
 class SecurityHeadersMiddleware:
     def __init__(self, app: ASGIApp) -> None:
@@ -52,7 +54,16 @@ _TOO_LARGE_BODY = (
 
 
 class RequestSizeLimitMiddleware:
-    def __init__(self, app: ASGIApp, max_size: int = 10 * 1024 * 1024) -> None:
+    # The default is DERIVED, not a literal. It used to be 10MB — the
+    # very value that rejected students' homework, kept here as the
+    # fallback for any construction that omits `max_size`. Today the one
+    # instantiation always passes it, so nothing was broken; but a
+    # second ASGI mount or a test harness adding this middleware without
+    # the kwarg would have silently reconstituted the incident under a
+    # 22.79MB submission endpoint, and no test covers construction
+    # sites. constants.py asks for exactly this: derive, don't write
+    # another literal somewhere else.
+    def __init__(self, app: ASGIApp, max_size: int = MIN_REQUEST_SIZE_BYTES) -> None:
         self.app = app
         self.max_size = max_size
 

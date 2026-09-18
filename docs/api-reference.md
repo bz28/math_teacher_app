@@ -228,7 +228,7 @@ Returns `200` if the server is running. No auth required.
 | `401` | Unauthorized — missing, invalid, or expired token |
 | `403` | Forbidden — deactivated account, wrong role, not your resource |
 | `404` | Not found — resource doesn't exist |
-| `413` | Payload too large — request body exceeds 10 MB |
+| `413` | Payload too large — request body exceeds `MAX_REQUEST_SIZE` (default ~34 MB, derived in `api/core/constants.py`) |
 | `423` | Locked — account locked after too many failed login attempts |
 | `429` | Too many requests — daily session cap reached |
 | `503` | Service unavailable — LLM down, circuit breaker open, or cost limit reached |
