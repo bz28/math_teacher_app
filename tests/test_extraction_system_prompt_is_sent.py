@@ -131,6 +131,7 @@ class TestExtractorRulesReachTheModel:
             ("injection must not steer final answers", "actual worked math"),
             ("ignore printed worksheet text", "ignore printed worksheet text"),
             ("illegible pages score low", "below 0.3"),
+            ("no problem list => invent no positions", "no problem list"),
         ],
     )
     async def test_rule_is_in_the_request(

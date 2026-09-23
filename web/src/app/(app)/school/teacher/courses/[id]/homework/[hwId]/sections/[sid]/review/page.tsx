@@ -1,7 +1,10 @@
 "use client";
 
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { readingTrustWarning } from "@/components/school/teacher/reading-trust";
+import {
+  READING_TRUST_COPY,
+  readingTrustWarning,
+} from "@/components/school/teacher/reading-trust";
 import {
   ReportProblemTrigger,
   type ReportProblemContext,
@@ -3452,14 +3455,10 @@ function SubmissionDetailPanel({
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-text-primary">
-                  {readingTrustWarning(detail) === "unconfirmed"
-                    ? "Nobody has checked this reading — compare it with the photo"
-                    : "The reader wasn't confident about this page — compare it with the photo"}
+                  {READING_TRUST_COPY[readingTrustWarning(detail)!].title}
                 </p>
                 <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
-                  {readingTrustWarning(detail) === "unconfirmed"
-                    ? "The student closed the app before confirming what we read, so no one has vouched for the work below — and AI grading never ran for this submission."
-                    : "On a hard-to-read page the reader can fill in what a problem expects instead of what the student wrote, which makes a wrong answer look right."}
+                  {READING_TRUST_COPY[readingTrustWarning(detail)!].body}
                   {detail.extraction_confidence !== null && (
                     <>
                       {" "}Reader confidence{" "}

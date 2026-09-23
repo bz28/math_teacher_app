@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
   LOW_READ_CONFIDENCE,
+  READING_TRUST_COPY,
   readingTrustWarning,
   type ReadingTrustInput,
 } from "./reading-trust.ts";
@@ -64,4 +65,17 @@ test("the student's own 'the reader got it wrong' owns that case", () => {
     }),
     null,
   );
+});
+
+test("the unconfirmed copy states the fact and never infers a cause", () => {
+  const { title, body } = READING_TRUST_COPY.unconfirmed;
+  const text = `${title} ${body}`.toLowerCase();
+  // A teacher watching submissions arrive sees this during the ordinary
+  // window between the read finishing and the student pressing Confirm —
+  // prod median is 108s, p99 about three hours. Claiming the student left
+  // is wrong for every one of those students.
+  for (const claim of ["closed the app", "abandoned", "gave up", "never confirmed", "left"]) {
+    assert.equal(text.includes(claim), false, `copy must not claim the student ${claim}`);
+  }
+  assert.ok(text.includes("hasn't confirmed"));
 });

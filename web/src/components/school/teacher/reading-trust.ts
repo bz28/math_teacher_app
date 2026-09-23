@@ -32,7 +32,38 @@ export function readingTrustWarning(d: ReadingTrustInput): ReadingTrustWarning {
   // toggles off, that the student closed the app — blaming a student for
   // the teacher's own setting.
   if (d.extraction_confidence === null) return null;
+  // No time gate on purpose. A teacher watching submissions arrive sees
+  // this during the ordinary window between the read finishing and the
+  // student pressing Confirm, so the copy states the fact ("hasn't
+  // confirmed") rather than inferring a cause ("closed the app"). Prod:
+  // median confirm is 108s after the read, but p90 is 11min and p99 ~3h,
+  // so any threshold would call a slow-but-present student absent.
   if (d.extraction_confirmed_at === null) return "unconfirmed";
   if (d.extraction_confidence < LOW_READ_CONFIDENCE) return "low-confidence";
   return null;
 }
+
+/** The strip's wording, here rather than in the page so it is covered by
+ *  the same tests as the conditions. The unconfirmed case states a FACT
+ *  ("hasn't confirmed") and never infers a cause: a teacher watching
+ *  submissions land sees this during the ordinary confirm window, and
+ *  telling them a present student "closed the app" is both wrong and the
+ *  kind of thing that makes a teacher stop trusting the strip. */
+export const READING_TRUST_COPY: Record<
+  Exclude<ReadingTrustWarning, null>,
+  { title: string; body: string }
+> = {
+  unconfirmed: {
+    title: "The student hasn't confirmed this reading — compare it with the photo",
+    body:
+      "Nobody has checked the work below against their paper, and AI grading only " +
+      "runs once they confirm. Students usually confirm within a couple of minutes, " +
+      "but some take hours.",
+  },
+  "low-confidence": {
+    title: "The reader wasn't confident about this page — compare it with the photo",
+    body:
+      "On a hard-to-read page the reader can fill in what a problem expects instead " +
+      "of what the student wrote, which makes a wrong answer look right.",
+  },
+};

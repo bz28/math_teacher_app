@@ -95,8 +95,10 @@ Rules:
 - List every distinct step the student wrote, in order from top to bottom.
 - For each step, provide both the LaTeX representation and a plain-English description.
 - **Attribute each step to a problem**: set `problem_position` to the 1-based index of \
-the homework problem the step belongs to (as shown in the problem list in the user \
-message). Use spatial cues (student-written labels like "1.", "Problem 2:", "(a)"; \
+the homework problem the step belongs to, as shown in the problem list in the user \
+message. When the user message carries NO problem list, you have nothing to attribute \
+against — set every `problem_position` to null and emit no `final_answers` rather than \
+inventing positions. Use spatial cues (student-written labels like "1.", "Problem 2:", "(a)"; \
 adjacency on the page; visual separation) AND content cues (does the math match the \
 question?). Set `problem_position` to null only when the step genuinely can't be \
 attributed — scratch work, cross-problem setup, notes to themselves. Don't guess \
