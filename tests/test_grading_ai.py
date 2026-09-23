@@ -611,20 +611,6 @@ class TestExtractorInjectionGuardrail:
     REQUEST. What is kept here is the wiring check that would have caught it.
     """
 
-    def test_the_extractor_actually_passes_its_system_prompt(self) -> None:
-        # Read the file rather than inspect the attribute: other suites
-        # monkeypatch `extract_student_work` to an AsyncMock, and a wiring
-        # guard must not depend on import order to do its job.
-        from pathlib import Path
-
-        import api.core.integrity_ai as integrity_ai
-
-        source = Path(integrity_ai.__file__).read_text()
-        assert "system_prompt=_EXTRACT_SYSTEM" in source, (
-            "extract_student_work must pass _EXTRACT_SYSTEM to call_claude_vision — "
-            "writing the prompt is not the same as sending it"
-        )
-
     def test_vision_helper_accepts_a_system_prompt(self) -> None:
         """The asymmetry that caused the bug: call_claude_json took a system
         prompt as its first positional argument, call_claude_vision took none,

@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { readingTrustWarning } from "@/components/school/teacher/reading-trust";
 import {
   ReportProblemTrigger,
   type ReportProblemContext,
@@ -146,13 +147,6 @@ const CONFIDENCE_HIGH = 0.85;
 // derivation — avoids allocating a new Set on every render while a
 // student's confirm/expand selections are scoped to their submission id.
 const EMPTY_ID_SET: ReadonlySet<string> = new Set<string>();
-
-/** Below this, the reader's own confidence is low enough that the teacher
- *  should compare the transcript against the photo before approving. Set at
- *  0.65 from prod: clean phone photos score 0.82-0.92, while every misread
- *  found by hand sat at 0.62 or below. Deliberately far above the 0.3
- *  unreadable gate, which is for pages we refuse to grade at all. */
-const LOW_READ_CONFIDENCE = 0.65;
 
 function confidenceBand(c: number): "high" | "medium" | "low" {
   if (c >= CONFIDENCE_HIGH) return "high";
@@ -3444,12 +3438,9 @@ function SubmissionDetailPanel({
           this is "check the photo", not "something is wrong".
           Suppressed when the student explicitly flagged the reading —
           that gets the louder red callout directly below. */}
-      {!detail.extraction_flagged_at &&
-        (detail.extraction_confirmed_at === null ||
-          (detail.extraction_confidence !== null &&
-            detail.extraction_confidence < LOW_READ_CONFIDENCE)) && (
+      {readingTrustWarning(detail) !== null && (
           <div
-            className="rounded-[--radius-xl] border border-[color:var(--color-warning-bg)] bg-[color:var(--color-warning-bg)]/60 p-3"
+            className="rounded-[--radius-xl] border border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-bg)]/60 p-3"
             role="status"
           >
             <div className="flex items-start gap-3">
@@ -3461,12 +3452,12 @@ function SubmissionDetailPanel({
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-text-primary">
-                  {detail.extraction_confirmed_at === null
+                  {readingTrustWarning(detail) === "unconfirmed"
                     ? "Nobody has checked this reading — compare it with the photo"
                     : "The reader wasn't confident about this page — compare it with the photo"}
                 </p>
                 <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
-                  {detail.extraction_confirmed_at === null
+                  {readingTrustWarning(detail) === "unconfirmed"
                     ? "The student closed the app before confirming what we read, so no one has vouched for the work below — and AI grading never ran for this submission."
                     : "On a hard-to-read page the reader can fill in what a problem expects instead of what the student wrote, which makes a wrong answer look right."}
                   {detail.extraction_confidence !== null && (
@@ -3492,7 +3483,7 @@ function SubmissionDetailPanel({
           an ordinary ungraded submission and the dodge (or the genuine
           misread) would slip by. Honor-code by design — no interview is
           forced — so the teacher is the backstop. */}
-      {row?.extraction_flagged_at && (
+      {detail.extraction_flagged_at && (
         <div
           className="rounded-[--radius-xl] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] p-3"
           role="status"

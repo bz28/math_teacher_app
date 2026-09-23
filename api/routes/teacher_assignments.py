@@ -1629,13 +1629,6 @@ async def list_submissions(
                 sub.extraction_flagged_at.isoformat()
                 if sub.extraction_flagged_at else None
             ),
-            # Never confirmed AND never flagged = the student closed the app
-            # at the read-back screen. Nothing checked that transcript, and
-            # grading never ran for it either (it is queued on confirm).
-            "extraction_confirmed_at": (
-                sub.extraction_confirmed_at.isoformat()
-                if sub.extraction_confirmed_at else None
-            ),
         })
 
     return {"submissions": submissions}

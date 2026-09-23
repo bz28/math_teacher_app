@@ -2010,8 +2010,6 @@ export interface TeacherSubmissionRow {
    *  post-submit confirm screen. Non-null = no AI grading or
    *  integrity ran — teacher grades manually. Folded into the
    *  Submissions-inbox flagged count. */
-  /** Null (with no flag) means the student never confirmed the reading. */
-  extraction_confirmed_at: string | null;
   extraction_flagged_at: string | null;
 }
 

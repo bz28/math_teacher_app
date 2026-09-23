@@ -20,13 +20,19 @@ in what we send.
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 import pytest
 
-from api.core import llm_client
+from api.core import integrity_ai, llm_client
 from api.core.integrity_ai import _EXTRACT_SYSTEM
 from api.core.llm_schemas import INTEGRITY_EXTRACT_SCHEMA
+
+# conftest's autouse fixture replaces `integrity_ai.extract_student_work`
+# with an AsyncMock for every test, so grab the real function now, at
+# import time, before any fixture runs.
+_REAL_EXTRACT_STUDENT_WORK = integrity_ai.extract_student_work
 
 pytestmark = pytest.mark.anyio
 
@@ -36,6 +42,7 @@ class _Captured:
 
     def __init__(self) -> None:
         self.kwargs: dict[str, Any] = {}
+        self.persisted: dict[str, Any] = {}
         self.messages = self
 
     async def create(self, **kwargs: Any) -> Any:
@@ -77,10 +84,13 @@ def captured(monkeypatch: pytest.MonkeyPatch) -> _Captured:
         return None
 
     monkeypatch.setattr(llm_client.cost_tracker, "check_limit", _ok)
-    async def _noop(*args: Any, **kwargs: Any) -> None:
-        return None
+    persisted: dict[str, Any] = {}
 
-    monkeypatch.setattr(llm_client, "_log_and_persist", _noop)
+    async def _capture(*args: Any, **kwargs: Any) -> None:
+        persisted.update(kwargs)
+
+    monkeypatch.setattr(llm_client, "_log_and_persist", _capture)
+    client.persisted = persisted
     return client
 
 
@@ -133,3 +143,57 @@ class TestExtractorRulesReachTheModel:
             system_prompt=_EXTRACT_SYSTEM,
         )
         assert needle in _system_text(captured.kwargs).lower(), f"{rule!r} missing from the request"
+
+
+async def test_what_we_log_matches_what_we_sent(captured: _Captured) -> None:
+    """The payload log is how this bug was found and how a regression would
+    be caught: prod showed `integrity_extract` carrying a 928-char system
+    prompt next to `ai_grading`'s 11k. The vision paths logged
+    `_with_safety(None)` regardless of what they actually sent, so the log
+    would have kept reporting 928 chars while the fix was live — and kept
+    reporting it if the fix were reverted."""
+    await llm_client.call_claude_vision(
+        [{"type": "text", "text": "page"}],
+        llm_client.LLMMode.INTEGRITY_EXTRACT,
+        tool_schema=INTEGRITY_EXTRACT_SCHEMA,
+        system_prompt=_EXTRACT_SYSTEM,
+    )
+    logged = captured.persisted.get("system_prompt") or ""
+    assert "do not solve the problem yourself" in logged.lower()
+    assert logged == _system_text(captured.kwargs), (
+        "the logged system prompt must be the one actually sent"
+    )
+
+
+async def test_the_extractor_hands_its_prompt_to_the_vision_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Drive the real `extract_student_work` and assert on the kwarg it
+    passes. Asserting on the module constant is what let this bug live for
+    five months; asserting on the source text would pass on a commented-out
+    line. Only the call itself proves the wiring."""
+    sent: dict[str, Any] = {}
+
+    async def _fake_vision(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        sent.update(kwargs)
+        return {"steps": [], "final_answers": [], "visual_work": [], "confidence": 0.9}
+
+    async def _no_verify(*args: Any, **kwargs: Any) -> None:
+        return None
+
+    class _Row:
+        def scalar_one_or_none(self) -> list[dict[str, str]]:
+            return [{"data": "iVBORw0KGgo=", "media_type": "image/png"}]
+
+    class _Db:
+        async def execute(self, *args: Any, **kwargs: Any) -> _Row:
+            return _Row()
+
+    monkeypatch.setattr(integrity_ai, "call_claude_vision", _fake_vision)
+    monkeypatch.setattr(integrity_ai, "verify_visual_work", _no_verify)
+    await _REAL_EXTRACT_STUDENT_WORK(uuid.uuid4(), _Db())  # type: ignore[arg-type]
+
+    assert sent.get("system_prompt") == _EXTRACT_SYSTEM, (
+        "extract_student_work must hand _EXTRACT_SYSTEM to call_claude_vision — "
+        "writing the prompt is not the same as sending it"
+    )
