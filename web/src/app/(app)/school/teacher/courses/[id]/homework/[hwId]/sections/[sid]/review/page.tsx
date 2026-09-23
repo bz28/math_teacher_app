@@ -3233,7 +3233,7 @@ function SubmissionDetailPanel({
             {detail.extraction_flagged_at && (
               <span
                 className="ml-1.5 font-semibold text-[color:var(--color-error)] "
-                title="Student flagged: 'Reader got something wrong' — no AI grading ran"
+                title="Student flagged: 'Reader got something wrong' — AI grading was skipped at submit"
               >
                 · student-flagged reading · grade manually
               </span>

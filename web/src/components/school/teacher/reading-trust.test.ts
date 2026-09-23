@@ -45,10 +45,17 @@ test("no copy claims when AI grading runs", () => {
   // A teacher can regrade an unconfirmed submission by hand, so the strip
   // renders over already-graded rows; any claim about grading would be
   // contradicted by the screen it sits on.
+  // Matched by shape, not by phrase: the first version of this guard
+  // checked literal substrings, so "grading runs only after they confirm"
+  // would have sailed through the very rule it was written for.
+  const claimsAboutGrading = /grad\w*[^.]{0,40}\b(runs?|ran|only|never)\b|\b(runs?|ran|never)\b[^.]{0,40}grad\w*/;
   for (const key of ["unconfirmed", "low-confidence", "both"] as const) {
     const text = `${READING_TRUST_COPY[key].title} ${READING_TRUST_COPY[key].body}`.toLowerCase();
-    assert.equal(text.includes("grading only runs"), false, `${key} must not claim when grading runs`);
-    assert.equal(text.includes("never ran"), false, `${key} must not claim grading never ran`);
+    assert.equal(
+      claimsAboutGrading.test(text),
+      false,
+      `${key} copy must make no claim about when AI grading runs — a teacher can regrade by hand`,
+    );
   }
 });
 

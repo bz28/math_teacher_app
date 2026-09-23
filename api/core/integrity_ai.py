@@ -97,8 +97,10 @@ Rules:
 - **Attribute each step to a problem**: set `problem_position` to the 1-based index of \
 the homework problem the step belongs to, as shown in the problem list in the user \
 message. When the user message carries no problem list at all (an assignment with \
-no problems yet), there is nothing to attribute against — set every \
-`problem_position` to null rather than inventing positions. Use spatial cues \
+no problems yet), there is nothing to attribute against — set every step's \
+`problem_position` to null and emit an EMPTY `final_answers` list. A \
+final answer has to carry a position and the schema gives it no null, so \
+reporting one there would mean inventing a problem that does not exist. Use spatial cues \
 (student-written labels like "1.", "Problem 2:", "(a)"; \
 adjacency on the page; visual separation) AND content cues (does the math match the \
 question?). Set `problem_position` to null only when the step genuinely can't be \

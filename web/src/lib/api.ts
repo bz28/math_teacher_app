@@ -2089,7 +2089,8 @@ export interface TeacherSubmissionDetail {
    *  rows extracted before this was surfaced. */
   extraction_confidence: number | null;
   /** When the student signed off on the reading. Null + no flag means
-   *  nobody ever checked this transcript — and grading never ran. */
+   *  nobody ever checked this transcript. It does NOT mean grading never
+   *  ran: a teacher can regrade an unconfirmed submission by hand. */
   extraction_confirmed_at: string | null;
   extraction_flagged_at: string | null;
   breakdown: GradeBreakdownEntry[] | null;
