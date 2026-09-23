@@ -1629,6 +1629,13 @@ async def list_submissions(
                 sub.extraction_flagged_at.isoformat()
                 if sub.extraction_flagged_at else None
             ),
+            # Never confirmed AND never flagged = the student closed the app
+            # at the read-back screen. Nothing checked that transcript, and
+            # grading never ran for it either (it is queued on confirm).
+            "extraction_confirmed_at": (
+                sub.extraction_confirmed_at.isoformat()
+                if sub.extraction_confirmed_at else None
+            ),
         })
 
     return {"submissions": submissions}
@@ -2485,6 +2492,14 @@ class TeacherSubmissionDetail(BaseModel):
     # Other work for the same reason the steps are: the grader is told
     # about them, so the teacher must be too.
     other_drawings: list[TeacherSubmissionDrawing] = []
+    # How sure the reader was it read this page correctly (0-1), and
+    # whether the STUDENT ever signed off on that reading. Both are shown
+    # to the teacher: a transcript nobody has vouched for, or one the
+    # reader itself was unsure of, is exactly the one to check against the
+    # photo before approving. Null on rows from before this shipped.
+    extraction_confidence: float | None = None
+    extraction_confirmed_at: datetime | None = None
+    extraction_flagged_at: datetime | None = None
     # Current grading state. None when the teacher hasn't touched this
     # submission yet. `breakdown` + `final_score` are teacher-draft
     # until `grade_published_at` is set, at which point the student
@@ -2948,6 +2963,13 @@ async def get_submission_detail(
         ai_breakdown_grades = grade.ai_breakdown.get("grades")
 
     return TeacherSubmissionDetail(
+        extraction_confidence=(
+            float(raw_confidence)
+            if isinstance(raw_confidence, (int, float)) and not isinstance(raw_confidence, bool)
+            else None
+        ),
+        extraction_confirmed_at=sub.extraction_confirmed_at,
+        extraction_flagged_at=sub.extraction_flagged_at,
         submission_id=str(sub.id),
         assignment_id=str(assignment.id),
         assignment_title=assignment.title,

@@ -2010,6 +2010,8 @@ export interface TeacherSubmissionRow {
    *  post-submit confirm screen. Non-null = no AI grading or
    *  integrity ran — teacher grades manually. Folded into the
    *  Submissions-inbox flagged count. */
+  /** Null (with no flag) means the student never confirmed the reading. */
+  extraction_confirmed_at: string | null;
   extraction_flagged_at: string | null;
 }
 
@@ -2085,6 +2087,13 @@ export interface TeacherSubmissionDetail {
   /** Drawings the extractor couldn't tie to a problem; the grader sees
    *  them as context under Other work, so the teacher does too. */
   other_drawings: TeacherSubmissionDrawing[];
+  /** How sure the reader was it read this page correctly (0-1). Null on
+   *  rows extracted before this was surfaced. */
+  extraction_confidence: number | null;
+  /** When the student signed off on the reading. Null + no flag means
+   *  nobody ever checked this transcript — and grading never ran. */
+  extraction_confirmed_at: string | null;
+  extraction_flagged_at: string | null;
   breakdown: GradeBreakdownEntry[] | null;
   ai_breakdown: AiGradeEntry[] | null;
   final_score: number | null;

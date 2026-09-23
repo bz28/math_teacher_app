@@ -147,6 +147,13 @@ const CONFIDENCE_HIGH = 0.85;
 // student's confirm/expand selections are scoped to their submission id.
 const EMPTY_ID_SET: ReadonlySet<string> = new Set<string>();
 
+/** Below this, the reader's own confidence is low enough that the teacher
+ *  should compare the transcript against the photo before approving. Set at
+ *  0.65 from prod: clean phone photos score 0.82-0.92, while every misread
+ *  found by hand sat at 0.62 or below. Deliberately far above the 0.3
+ *  unreadable gate, which is for pages we refuse to grade at all. */
+const LOW_READ_CONFIDENCE = 0.65;
+
 function confidenceBand(c: number): "high" | "medium" | "low" {
   if (c >= CONFIDENCE_HIGH) return "high";
   if (c >= CONFIDENCE_LOW) return "medium";
@@ -3425,6 +3432,57 @@ function SubmissionDetailPanel({
           />
         </div>
       </div>
+
+      {/* Unvouched-reading callout. The page a teacher grades from is a
+          machine transcript, and two things make one untrustworthy:
+          the reader itself was unsure (low confidence), or the student
+          never signed off on it. Until now both rendered identically to
+          a transcript the student had confirmed — the worst row on the
+          page looked like the best. A real misread in prod (a student's
+          `y = x` transcribed as the worksheet's `y = √x`, confidence
+          0.62, never confirmed) is what surfaced it. Amber, not red:
+          this is "check the photo", not "something is wrong".
+          Suppressed when the student explicitly flagged the reading —
+          that gets the louder red callout directly below. */}
+      {!detail.extraction_flagged_at &&
+        (detail.extraction_confirmed_at === null ||
+          (detail.extraction_confidence !== null &&
+            detail.extraction_confidence < LOW_READ_CONFIDENCE)) && (
+          <div
+            className="rounded-[--radius-xl] border border-[color:var(--color-warning-bg)] bg-[color:var(--color-warning-bg)]/60 p-3"
+            role="status"
+          >
+            <div className="flex items-start gap-3">
+              <span
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-warning-dark)] text-sm font-bold text-white"
+                aria-hidden
+              >
+                ?
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-text-primary">
+                  {detail.extraction_confirmed_at === null
+                    ? "Nobody has checked this reading — compare it with the photo"
+                    : "The reader wasn't confident about this page — compare it with the photo"}
+                </p>
+                <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
+                  {detail.extraction_confirmed_at === null
+                    ? "The student closed the app before confirming what we read, so no one has vouched for the work below — and AI grading never ran for this submission."
+                    : "On a hard-to-read page the reader can fill in what a problem expects instead of what the student wrote, which makes a wrong answer look right."}
+                  {detail.extraction_confidence !== null && (
+                    <>
+                      {" "}Reader confidence{" "}
+                      <span className="font-semibold tabular-nums">
+                        {Math.round(detail.extraction_confidence * 100)}%
+                      </span>
+                      .
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
       {/* Reader-misread callout — the student declined the OCR reading
           ("the reader got my work wrong") on the confirm screen, so the
