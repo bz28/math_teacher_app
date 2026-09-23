@@ -24,6 +24,34 @@ test("never confirmed => nobody vouched for this transcript", () => {
   );
 });
 
+test("unconfirmed AND unsure reports both — the case that started this", () => {
+  // The prod misread was a 0.62 read that was never confirmed. Reporting
+  // only "unconfirmed" there drops the sentence telling the teacher what
+  // to look for.
+  assert.equal(
+    readingTrustWarning({
+      ...base,
+      extraction_confidence: 0.62,
+      extraction_confirmed_at: null,
+    }),
+    "both",
+  );
+  const { body } = READING_TRUST_COPY.both;
+  assert.ok(body.includes("fill in what a problem expects"));
+  assert.ok(body.includes("against their paper"));
+});
+
+test("no copy claims when AI grading runs", () => {
+  // A teacher can regrade an unconfirmed submission by hand, so the strip
+  // renders over already-graded rows; any claim about grading would be
+  // contradicted by the screen it sits on.
+  for (const key of ["unconfirmed", "low-confidence", "both"] as const) {
+    const text = `${READING_TRUST_COPY[key].title} ${READING_TRUST_COPY[key].body}`.toLowerCase();
+    assert.equal(text.includes("grading only runs"), false, `${key} must not claim when grading runs`);
+    assert.equal(text.includes("never ran"), false, `${key} must not claim grading never ran`);
+  }
+});
+
 test("confirmed but the reader was unsure => compare with the photo", () => {
   assert.equal(
     readingTrustWarning({ ...base, extraction_confidence: 0.62 }),

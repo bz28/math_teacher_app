@@ -3230,7 +3230,7 @@ function SubmissionDetailPanel({
                 · late
               </span>
             )}
-            {row?.extraction_flagged_at && (
+            {detail.extraction_flagged_at && (
               <span
                 className="ml-1.5 font-semibold text-[color:var(--color-error)] "
                 title="Student flagged: 'Reader got something wrong' — no AI grading ran"
