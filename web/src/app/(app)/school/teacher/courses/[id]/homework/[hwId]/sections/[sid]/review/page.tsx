@@ -3198,6 +3198,11 @@ function SubmissionDetailPanel({
     return () => document.removeEventListener("keydown", handleGradingKey, true);
   }, [handleGradingKey]);
 
+  // Computed once: the guard and the copy must never disagree, and a
+  // non-null assertion at the use site would be one refactor away from
+  // throwing in a teacher's face.
+  const readingWarning = readingTrustWarning(detail);
+
   return (
     <div className="space-y-4">
       {/* Compact student strip — name on the left, progress + next on
@@ -3441,7 +3446,7 @@ function SubmissionDetailPanel({
           this is "check the photo", not "something is wrong".
           Suppressed when the student explicitly flagged the reading —
           that gets the louder red callout directly below. */}
-      {readingTrustWarning(detail) !== null && (
+      {readingWarning !== null && (
           <div
             className="rounded-[--radius-xl] border border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-bg)]/60 p-3"
             role="status"
@@ -3455,10 +3460,10 @@ function SubmissionDetailPanel({
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-text-primary">
-                  {READING_TRUST_COPY[readingTrustWarning(detail)!].title}
+                  {READING_TRUST_COPY[readingWarning].title}
                 </p>
                 <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
-                  {READING_TRUST_COPY[readingTrustWarning(detail)!].body}
+                  {READING_TRUST_COPY[readingWarning].body}
                   {detail.extraction_confidence !== null && (
                     <>
                       {" "}Reader confidence{" "}
