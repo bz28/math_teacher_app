@@ -259,6 +259,15 @@ async def extract_student_work(
         content,
         LLMMode.INTEGRITY_EXTRACT,
         tool_schema=INTEGRITY_EXTRACT_SCHEMA,
+        # Until 2026-09 this prompt was written, tested, and never sent:
+        # `call_claude_vision` had no system-prompt parameter, so the
+        # extractor ran on the safety preamble and the tool schema alone.
+        # Every behavioural rule here was dead — "transcribe, don't solve",
+        # the injection guard, "ignore printed worksheet text", and the
+        # below-0.3-confidence rule for illegible pages. A real misread in
+        # prod (a student's `y = x` transcribed as the worksheet's
+        # `y = √x`) is what surfaced it.
+        system_prompt=_EXTRACT_SYSTEM,
         model=MODEL_REASON,
         max_tokens=16384,
         temperature=0.0,
