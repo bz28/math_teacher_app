@@ -140,16 +140,14 @@ export function AddStepButton({
   onClick,
   busy,
   label = "Add step",
-  buttonRef,
 }: {
   onClick: () => void;
   busy: boolean;
   label?: string;
-  buttonRef?: React.Ref<HTMLButtonElement>;
 }) {
   return (
     <button
-      ref={buttonRef}
+      data-step-add
       type="button"
       onClick={onClick}
       disabled={busy}

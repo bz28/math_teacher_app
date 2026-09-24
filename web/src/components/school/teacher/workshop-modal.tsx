@@ -117,7 +117,11 @@ export function WorkshopModal({
   const [addingStep, setAddingStep] = useState(false);
   const [confirmingStepDelete, setConfirmingStepDelete] = useState<number | null>(null);
   const stepsRef = useRef<HTMLDivElement | null>(null);
-  const addStepRef = useRef<HTMLButtonElement | null>(null);
+  // Where keyboard focus should land after a structural step edit:
+  // selectors inside the steps container, first enabled match wins.
+  // Applied by an effect once the save's busy state has cleared —
+  // focusing earlier hits controls that are still disabled.
+  const [pendingFocus, setPendingFocus] = useState<string[] | null>(null);
   // Chat is open by default in both modes — the panel is almost always
   // needed during review and should be discoverable. Toggleable via the
   // 💬 AI button or C key.
@@ -186,6 +190,9 @@ export function WorkshopModal({
       setConfirmingClearChat(false);
     } else if (new Date(sourceItem.updated_at).getTime() > new Date(liveItem.updated_at).getTime()) {
       setLiveItem(sourceItem);
+      // A fresher copy may have a different step list; an index-keyed
+      // delete-confirm could now point at another step.
+      setConfirmingStepDelete(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceItem?.id, sourceItem?.updated_at]);
@@ -366,16 +373,11 @@ export function WorkshopModal({
     // Keep keyboard focus on the step that moved, not the slot it left.
     // At an edge the same-direction button is disabled, so fall back to
     // the other one.
-    requestAnimationFrame(() => {
-      const root = stepsRef.current;
-      const want = root?.querySelector<HTMLButtonElement>(
-        `[data-step-move="${dir < 0 ? "up" : "down"}-${to}"]`,
-      );
-      const other = root?.querySelector<HTMLButtonElement>(
-        `[data-step-move="${dir < 0 ? "down" : "up"}-${to}"]`,
-      );
-      (want && !want.disabled ? want : other)?.focus();
-    });
+    const [same, opposite] = dir < 0 ? ["up", "down"] : ["down", "up"];
+    setPendingFocus([
+      `[data-step-move="${same}-${to}"]`,
+      `[data-step-move="${opposite}-${to}"]`,
+    ]);
   };
 
   const deleteStep = async (idx: number) => {
@@ -383,9 +385,22 @@ export function WorkshopModal({
     if (!steps[idx]) return;
     if (await saveSteps(steps.filter((_, i) => i !== idx))) {
       setConfirmingStepDelete(null);
-      requestAnimationFrame(() => addStepRef.current?.focus());
+      setPendingFocus(["[data-step-add]"]);
     }
   };
+
+  useEffect(() => {
+    if (!pendingFocus || busy) return;
+    const root = stepsRef.current;
+    for (const sel of pendingFocus) {
+      const el = root?.querySelector<HTMLButtonElement>(sel);
+      if (el && !el.disabled) {
+        el.focus();
+        break;
+      }
+    }
+    setPendingFocus(null);
+  }, [pendingFocus, busy]);
 
   const saveFinalAnswer = (next: string) =>
     run(async () => {
@@ -560,12 +575,14 @@ export function WorkshopModal({
       if (busy) return;
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
-      // Enter/Space/arrows on a focused control belong to that control —
-      // otherwise Enter on "Move step up" (or any click-to-edit button)
-      // would approve the question instead.
+      // Keys pressed on a focused step control belong to that control:
+      // Enter on "Move step up" must move the step, not approve the
+      // question, and ↑↓ mustn't collapse the list out from under it.
+      // Scoped to the steps list on purpose — footer buttons keep focus
+      // after a mouse click, and Enter there must still approve.
       if (
         ["Enter", " ", "ArrowUp", "ArrowDown"].includes(e.key) &&
-        target.closest("button, a[href], select, [role='button']")
+        stepsRef.current?.contains(target)
       ) {
         return;
       }
@@ -1014,12 +1031,11 @@ export function WorkshopModal({
                         onCommit={addStep}
                         onCancel={() => {
                           setAddingStep(false);
-                          requestAnimationFrame(() => addStepRef.current?.focus());
+                          setPendingFocus(["[data-step-add]"]);
                         }}
                       />
                     ) : (
                       <AddStepButton
-                        buttonRef={addStepRef}
                         busy={busy}
                         label={previewSteps.length === 0 ? "Add the first step" : "Add step"}
                         onClick={() => {
