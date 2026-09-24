@@ -5,7 +5,7 @@ import {
   READING_TRUST_COPY,
   needsReadingCheck,
   type ReadingTrustInput,
-} from "./reading-trust";
+} from "./reading-trust.ts";
 
 const base: ReadingTrustInput = {
   extraction_confidence: 0.88,
