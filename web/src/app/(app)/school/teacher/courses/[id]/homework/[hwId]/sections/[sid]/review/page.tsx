@@ -409,12 +409,6 @@ function HomeworkSectionReview({
   // Whether the pinned work rail (wide layout) shows the photo inline.
   // A session preference — lifted here so it persists across students.
   const [photoPinned, setPhotoPinned] = useState(true);
-  // Bumped to re-run the roster load effect. Grading happens
-  // server-side after the request returns, so there is nothing to
-  // patch optimistically — the grades genuinely don't exist yet, and
-  // inventing them client-side would show a teacher scores that
-  // aren't real. Refetch instead.
-  const [reloadNonce, setReloadNonce] = useState(0);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -428,6 +422,16 @@ function HomeworkSectionReview({
     { forSubmissionId: string; message: string } | null
   >(null);
   const [regradeConfirmOpenFor, setRegradeConfirmOpenFor] = useState<string | null>(null);
+  // Submissions the teacher sent to the AI grader ("Grade with AI" or
+  // "Grade all") whose grade hasn't landed yet. Grading runs on the
+  // server's queue after the request returns, so the page polls these
+  // until each one settles — see the polling effect below.
+  const [aiPendingIds, setAiPendingIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [aiGradeError, setAiGradeError] = useState<
+    { forSubmissionId: string; message: string } | null
+  >(null);
 
   // Load HW + section roster + submissions and merge into one list:
   // every enrolled student in this section, with their submission if
@@ -554,12 +558,8 @@ function HomeworkSectionReview({
                 (e) => e.student_id === focusStudentId && e.submission !== null,
               )
             : undefined;
-        // Only auto-select on a FIRST load. This effect also re-runs on
-        // a post-grading refetch, and re-picking there would throw a
-        // teacher who was reading student #12 back to the first
-        // unreleased submitter — they pressed "Grade all", they didn't
-        // ask to be moved. Roster clicks don't write `?student=`, so
-        // `focused` can't preserve their place either.
+        // Keep a selection the teacher already made if this effect
+        // re-runs; auto-pick only when there is none.
         setSelectedStudentId((current) => {
           if (current && merged.some((e) => e.student_id === current)) {
             return current;
@@ -567,6 +567,19 @@ function HomeworkSectionReview({
           const pick = focused ?? firstUnreleased ?? firstSubmitter;
           return pick ? pick.student_id : current;
         });
+        // A grade already mid-flight when the page opened (a drain
+        // running, or a click from another tab) — watch it like one
+        // sent from here, so the row resolves without a reload.
+        const inFlight = merged
+          .map((e) => e.submission)
+          .filter(
+            (s): s is TeacherSubmissionRow =>
+              !!s && s.final_score === null && s.grading_job_status === "running",
+          )
+          .map((s) => s.id);
+        if (inFlight.length > 0) {
+          setAiPendingIds((prev) => new Set([...prev, ...inFlight]));
+        }
       })
       .catch((e) => {
         if (cancelled) return;
@@ -575,7 +588,7 @@ function HomeworkSectionReview({
     return () => {
       cancelled = true;
     };
-  }, [assignmentId, courseId, sectionId, focusStudentId, reloadNonce]);
+  }, [assignmentId, courseId, sectionId, focusStudentId]);
 
   // Item analysis is HW-wide and read-only, so it loads independently
   // of the roster/detail panels — a failure here never blocks grading.
@@ -1021,11 +1034,30 @@ function HomeworkSectionReview({
   // count only ever falls when the teacher asks. Section-scoped: the
   // button acts on this HW, and showing a HW-wide number next to a
   // section-scoped action would misdescribe what pressing it does.
-  const ungradedInSection = useMemo(() => {
-    if (!roster) return 0;
-    // Action count — "Grade N now" does grade her rehearsal too.
-    return roster.filter((e) => isAwaitingGrade(e)).length;
-  }, [roster]);
+  //
+  // Counts only what the button will actually send to the grader — the
+  // server's `ai_grade_block` rule, minus anything already in flight.
+  // It used to count every score-less row, including work the student
+  // never confirmed (no grading job existed, so the click moved zero
+  // jobs and the count never went down). Ungraded work the AI can't
+  // take is counted separately so it's explained, not hidden.
+  const { ungradedInSection, cantAiGradeInSection } = useMemo(() => {
+    let gradeable = 0;
+    let cant = 0;
+    // Action counts — "Grade N ungraded" does grade her rehearsal too.
+    for (const e of roster ?? []) {
+      const sub = e.submission;
+      if (!sub) continue;
+      if (canAiGrade(sub) && !isAiGrading(sub, aiPendingIds)) gradeable += 1;
+      if (
+        sub.ai_grade_block === "unreadable" ||
+        sub.ai_grade_block === "no_extraction"
+      ) {
+        cant += 1;
+      }
+    }
+    return { ungradedInSection: gradeable, cantAiGradeInSection: cant };
+  }, [roster, aiPendingIds]);
   // Reviewed vs unopened split of the full to-release set (HW-wide).
   const toReleaseTotal = pendingTotal + dirtyTotal;
   const reviewedToPublishTotal =
@@ -1126,7 +1158,7 @@ function HomeworkSectionReview({
   // "Grade all". AI grading is queued and normally runs when the due
   // date passes; a HW with no due date never grades on its own, so for
   // those this is the only path. Grading happens server-side after the
-  // request returns, so we refetch rather than patching state
+  // request returns, so we poll rather than patching state
   // optimistically — the grades genuinely aren't ready yet, and showing
   // scores that don't exist would be worse than showing a spinner.
   const [gradingAll, setGradingAll] = useState(false);
@@ -1134,13 +1166,17 @@ function HomeworkSectionReview({
   const onGradeAllClick = useCallback(async () => {
     setGradingAll(true);
     setGradeAllError(null);
+    // Exactly the rows the server will act on (same rule, same scope).
+    const sent = (roster ?? [])
+      .map((e) => e.submission)
+      .filter(
+        (s): s is TeacherSubmissionRow =>
+          !!s && canAiGrade(s) && !isAiGrading(s, aiPendingIds),
+      )
+      .map((s) => s.id);
     try {
       await teacher.gradePendingSubmissions(assignmentId, sectionId);
-      // The server kicks a drain immediately, but grading a class is
-      // several seconds of LLM calls — so this refetch is a first look,
-      // not a guarantee everything has landed. Anything still in flight
-      // shows as ungraded and the button stays available.
-      setReloadNonce((n) => n + 1);
+      setAiPendingIds((prev) => new Set([...prev, ...sent]));
     } catch (e) {
       setGradeAllError(
         e instanceof Error ? e.message : "Couldn't start grading",
@@ -1148,7 +1184,118 @@ function HomeworkSectionReview({
     } finally {
       setGradingAll(false);
     }
-  }, [assignmentId, sectionId]);
+  }, [assignmentId, sectionId, roster, aiPendingIds]);
+
+  // "Grade with AI" on the open submission. First grading only — the
+  // server refuses anything with grade data, and the button is only
+  // offered when `ai_grade_block` is null.
+  const onGradeWithAi = useCallback(async (submissionId: string) => {
+    setAiGradeError((prev) =>
+      prev?.forSubmissionId === submissionId ? null : prev,
+    );
+    setAiPendingIds((prev) => new Set(prev).add(submissionId));
+    try {
+      await teacher.gradeSubmissionNow(submissionId);
+    } catch (e) {
+      setAiPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(submissionId);
+        return next;
+      });
+      setAiGradeError({
+        forSubmissionId: submissionId,
+        message: e instanceof Error ? e.message : "Couldn't start AI grading",
+      });
+    }
+  }, []);
+
+  // Poll until every submission sent to the grader settles. A grade
+  // lands in seconds to a minute; the old single refetch right after
+  // "Grade all" almost always ran before any grade existed, so the page
+  // showed the same ungraded state it started from. Only the watched
+  // rows are merged back, so an in-flight grade edit elsewhere on the
+  // roster can't be overwritten by a poll.
+  const aiPendingRef = useRef(aiPendingIds);
+  const selectedSubmissionIdRef = useRef(selectedSubmissionId);
+  useEffect(() => {
+    aiPendingRef.current = aiPendingIds;
+    selectedSubmissionIdRef.current = selectedSubmissionId;
+  }, [aiPendingIds, selectedSubmissionId]);
+  const polling = aiPendingIds.size > 0;
+  useEffect(() => {
+    if (!polling) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = Date.now() + AI_GRADE_POLL_TIMEOUT_MS;
+    const tick = async () => {
+      try {
+        const res = await teacher.submissions(assignmentId);
+        if (cancelled) return;
+        const watched = aiPendingRef.current;
+        const fresh = new Map(
+          res.submissions
+            .filter((r) => watched.has(r.id))
+            .map((r) => [r.id, r] as const),
+        );
+        const settled: TeacherSubmissionRow[] = [];
+        for (const r of fresh.values()) {
+          const inFlight =
+            r.final_score === null &&
+            (r.grading_job_status === "queued" ||
+              r.grading_job_status === "running");
+          if (!inFlight) settled.push(r);
+        }
+        // The open detail pane caches its own copy — reload it so the
+        // AI's per-problem grades appear without a click away and back.
+        // Fetched BEFORE the pending set shrinks: emptying it ends this
+        // effect, and a fetch still awaiting then would be discarded.
+        const openId = selectedSubmissionIdRef.current;
+        const openLanded = settled.find(
+          (r) => r.id === openId && r.final_score !== null,
+        );
+        if (openLanded) {
+          const d = await teacher.submissionDetail(openLanded.id);
+          if (cancelled) return;
+          setDetail((cur) => (cur?.submission_id === d.submission_id ? d : cur));
+        }
+        // Row and pane update in the same render, so the header never
+        // flashes "Not graded yet" between the two.
+        setRoster((prev) =>
+          prev
+            ? prev.map((e) => {
+                const r = e.submission && fresh.get(e.submission.id);
+                return r ? { ...e, submission: r } : e;
+              })
+            : prev,
+        );
+        for (const r of settled) {
+          if (r.grading_job_status === "failed" && r.final_score === null) {
+            setAiGradeError({
+              forSubmissionId: r.id,
+              message: "The AI couldn't grade this one. Try again, or grade it by hand.",
+            });
+          }
+        }
+        const timedOut = Date.now() > deadline;
+        if (settled.length > 0 || timedOut) {
+          setAiPendingIds((prev) => {
+            if (timedOut) return new Set();
+            const next = new Set(prev);
+            for (const r of settled) next.delete(r.id);
+            return next;
+          });
+        }
+      } catch {
+        // A failed poll is not a failed grade — try again next tick.
+      }
+      if (!cancelled) timer = setTimeout(tick, AI_GRADE_POLL_MS);
+    };
+    timer = setTimeout(tick, AI_GRADE_POLL_MS);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [polling, assignmentId]);
 
   const onPublishClick = useCallback(() => {
     if (unreviewedToPublishTotal === 0 && flaggedToPublishTotal === 0) {
@@ -1432,6 +1579,14 @@ function HomeworkSectionReview({
                 {gradeAllError}
               </p>
             )}
+            {cantAiGradeInSection > 0 && (
+              // Ungraded work the button won't touch — said once, here,
+              // so the count beside it reads as complete rather than
+              // quietly short. Each row names its own reason.
+              <p className="text-[11.5px] text-text-muted">
+                {`${cantAiGradeInSection} can’t be AI-graded — no readable work`}
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -1493,6 +1648,7 @@ function HomeworkSectionReview({
                 filter={rosterFilter}
                 selectedStudentId={selectedStudentId}
                 onSelect={setSelectedStudentId}
+                aiPendingIds={aiPendingIds}
               />
             </div>
           </aside>
@@ -1558,6 +1714,15 @@ function HomeworkSectionReview({
                 }
                 onRegradeRequest={() =>
                   setRegradeConfirmOpenFor(selectedEntry.submission!.id)
+                }
+                aiGrading={isAiGrading(selectedEntry.submission, aiPendingIds)}
+                aiGradeError={
+                  aiGradeError?.forSubmissionId === selectedEntry.submission.id
+                    ? aiGradeError.message
+                    : null
+                }
+                onGradeWithAi={() =>
+                  void onGradeWithAi(selectedEntry.submission!.id)
                 }
                 confirmedIds={
                   confirmedBySubmission.get(selectedEntry.submission.id) ??
@@ -2136,6 +2301,30 @@ function isAwaitingGrade(entry: RosterEntry): boolean {
   return sub.ai_grading_status !== "skipped_unreadable";
 }
 
+/** The server says the AI grader can take this submission: never
+ *  graded in any form, readable work, AI grading on. Confirmed by the
+ *  student or not — the teacher approves every AI grade regardless. */
+function canAiGrade(sub: TeacherSubmissionRow): boolean {
+  return sub.ai_grade_block === null;
+}
+
+/** A grade is on its way: sent from this page and not yet landed, or a
+ *  drain is working on it right now. */
+function isAiGrading(
+  sub: TeacherSubmissionRow,
+  pending: ReadonlySet<string>,
+): boolean {
+  if (sub.final_score !== null) return false;
+  return pending.has(sub.id) || sub.grading_job_status === "running";
+}
+
+// One grade usually lands in 10–40s; a class takes longer because the
+// queue grades the first submission alone to warm the shared prompt
+// cache. Past the timeout the page stops watching and shows the
+// server's state as-is — a still-queued row offers the button again.
+const AI_GRADE_POLL_MS = 3000;
+const AI_GRADE_POLL_TIMEOUT_MS = 4 * 60 * 1000;
+
 function hasLowConfidence(entry: RosterEntry): boolean {
   const breakdown = entry.submission?.breakdown;
   if (!breakdown) return false;
@@ -2375,11 +2564,13 @@ function TriageRoster({
   filter,
   selectedStudentId,
   onSelect,
+  aiPendingIds,
 }: {
   roster: RosterEntry[];
   filter: RosterFilter;
   selectedStudentId: string | null;
   onSelect: (id: string) => void;
+  aiPendingIds: ReadonlySet<string>;
 }) {
   const needsEyes: RosterEntry[] = [];
   const awaitingGrade: RosterEntry[] = [];
@@ -2440,6 +2631,7 @@ function TriageRoster({
         entry={e}
         selected={e.student_id === selectedStudentId}
         onSelect={() => onSelect(e.student_id)}
+        aiGrading={!!e.submission && isAiGrading(e.submission, aiPendingIds)}
       />
     ));
 
@@ -2529,13 +2721,15 @@ function StudentRow({
   entry,
   selected,
   onSelect,
+  aiGrading,
 }: {
   entry: RosterEntry;
   selected: boolean;
   onSelect: () => void;
+  aiGrading: boolean;
 }) {
   const sub = entry.submission;
-  const statusLabel = rowStatusLabel(entry);
+  const statusLabel = rowStatusLabel(entry, aiGrading);
   const review = sub ? reviewMarker(sub) : null;
   const mutedName = sub === null;
   const overview = sub?.integrity_overview ?? null;
@@ -2635,13 +2829,25 @@ function StudentRow({
   );
 }
 
-function rowStatusLabel(entry: RosterEntry): {
+function rowStatusLabel(
+  entry: RosterEntry,
+  aiGrading = false,
+): {
   text: string;
   dotClass: string;
 } {
   const sub = entry.submission;
   if (!sub) {
     return { text: "Not submitted", dotClass: "bg-gray-300" };
+  }
+  // Sent to the AI grader, grade not back yet. Above the flagged branch
+  // on purpose: the teacher chose to AI-grade a flagged submission, and
+  // "Reader misread" would read as though her click did nothing.
+  if (aiGrading) {
+    return {
+      text: "AI grading…",
+      dotClass: "animate-pulse bg-primary",
+    };
   }
   // Student said "the reader got my work wrong" on the confirm screen —
   // the submission skipped AI grading + integrity entirely and needs a
@@ -2662,7 +2868,11 @@ function rowStatusLabel(entry: RosterEntry): {
   // amber token the dirty/ungraded states use. Surfaces even after a
   // manual grade exists isn't a concern: once graded, the published /
   // graded branches above take over.
-  if (sub.ai_grading_status === "skipped_unreadable" && sub.final_score === null) {
+  if (
+    (sub.ai_grading_status === "skipped_unreadable" ||
+      sub.ai_grade_block === "unreadable") &&
+    sub.final_score === null
+  ) {
     return {
       text: "Couldn't read · grade manually",
       dotClass: "bg-[color:var(--color-warning)]",
@@ -2676,6 +2886,9 @@ function rowStatusLabel(entry: RosterEntry): {
   }
   if (sub.final_score !== null) {
     return { text: "Graded, not published", dotClass: "bg-[color:var(--color-warning)]" };
+  }
+  if (sub.ai_grade_block === "no_extraction") {
+    return { text: "Work not read yet", dotClass: "bg-gray-400" };
   }
   return { text: "Needs review", dotClass: "bg-gray-400" };
 }
@@ -2729,6 +2942,9 @@ function SubmissionDetailPanel({
   regrading,
   regradeError,
   onRegradeRequest,
+  aiGrading,
+  aiGradeError,
+  onGradeWithAi,
   confirmedIds,
   onConfirmProblems,
   announceGrade,
@@ -2764,6 +2980,12 @@ function SubmissionDetailPanel({
   regrading: boolean;
   regradeError: string | null;
   onRegradeRequest: () => void;
+  /** Sent to the AI grader and the grade hasn't landed yet. */
+  aiGrading: boolean;
+  aiGradeError: string | null;
+  /** "Grade with AI" — only offered when the server says the AI can
+   *  take this submission (`ai_grade_block` null). */
+  onGradeWithAi: () => void;
   /** Bank-item ids the teacher has ticked on THIS submission. Owned by
    *  the page so it survives this panel being remounted on a switch. */
   confirmedIds: ReadonlySet<string>;
@@ -2795,8 +3017,10 @@ function SubmissionDetailPanel({
   // explains why there's no AI suggestion. Drops away once the teacher
   // has put a grade on it (final_score set).
   const skippedUnreadable =
-    detail.ai_grading_status === "skipped_unreadable" &&
+    (detail.ai_grading_status === "skipped_unreadable" ||
+      row?.ai_grade_block === "unreadable") &&
     detail.final_score === null;
+  const offerAiGrade = !!row && canAiGrade(row) && !aiGrading;
 
   // ── Triage: collapse the confident grades, keep the uncertain open ──
   //
@@ -3256,10 +3480,26 @@ function SubmissionDetailPanel({
               <span className="font-semibold text-text-primary">
                 AI graded · not yet published
               </span>
+            ) : aiGrading ? (
+              <span className="font-semibold text-primary">
+                AI grading — the grade appears here for you to review
+              </span>
+            ) : row?.ai_grade_block === "no_extraction" ? (
+              <span className="text-text-muted">
+                Not graded yet · work not read, so grade by hand
+              </span>
             ) : (
               <span className="text-text-muted">Not graded yet</span>
             )}
           </p>
+          {aiGradeError && (
+            <p
+              role="alert"
+              className="mt-1 text-[11px] font-semibold text-[color:var(--color-error)]"
+            >
+              {aiGradeError}
+            </p>
+          )}
           {saveError && (
             <p className="mt-1 text-[11px] font-semibold text-[color:var(--color-error)]">
               {saveError}
@@ -3300,7 +3540,41 @@ function SubmissionDetailPanel({
               an Undo path to walk it back. A hand grade has nothing to
               approve, so it only shows progress until every problem is
               scored, then reads Approved. */}
-          {handGraded && !approved && totalProblems > 0 && (
+          {/* Grade with AI — first grading only. Offered on work nobody
+              has graded in any form (no AI grade, no hand score, not
+              even one problem), with readable work; the server enforces
+              the same rule. The grade lands as a suggestion she still
+              approves, so an unconfirmed submission is fine to send.
+              Solid because, on an ungraded submission, it is the one
+              thing to do here. */}
+          {(offerAiGrade || aiGrading) && (
+            <button
+              type="button"
+              onClick={onGradeWithAi}
+              disabled={aiGrading || savingGrade}
+              aria-busy={aiGrading}
+              title={
+                aiGrading
+                  ? "The AI is grading this submission"
+                  : "Have the AI suggest a grade — you review it before students see anything"
+              }
+              className="inline-flex items-center gap-1.5 rounded-[--radius-md] bg-primary px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {aiGrading ? (
+                <>
+                  <span
+                    aria-hidden
+                    className="inline-block h-3 w-3 animate-spin rounded-full border-[1.5px] border-current border-t-transparent"
+                  />
+                  Grading…
+                </>
+              ) : (
+                "Grade with AI"
+              )}
+            </button>
+          )}
+          {/* "0/N graded" says nothing the AI button beside it doesn't. */}
+          {handGraded && !approved && totalProblems > 0 && !offerAiGrade && !aiGrading && (
             <span
               className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-border-light bg-[color:var(--color-surface-alt-2)] px-2.5 py-1 text-[11px] font-bold text-text-muted tabular-nums"
               title="Score every problem to finish grading this submission"

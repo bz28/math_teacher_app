@@ -1725,7 +1725,9 @@ export const teacher = {
       grade_dirty: boolean;
     }>(`/teacher/submissions/${submissionId}/regrade`, { method: "POST" });
   },
-  /** Grade everything turned in so far, now.
+  /** AI-grade every never-graded submission in this section, now —
+   *  exactly the rows whose `ai_grade_block` is null, including work
+   *  the student never confirmed.
    *
    *  AI grading is queued and normally runs when the homework's due
    *  date passes, so the whole class grades together and shares one
@@ -1733,9 +1735,9 @@ export const teacher = {
    *  automatically — there's no moment that means "the class is in" —
    *  so for those this is the only way work ever gets graded.
    *
-   *  Also revives anything that previously failed. Already-graded and
-   *  in-flight submissions are left alone; `queued: 0` means there was
-   *  simply nothing to do, which is not an error. */
+   *  Also revives anything that previously failed. In-flight and
+   *  finished jobs are left alone; `queued: 0` means there was simply
+   *  nothing to do, which is not an error. */
   gradePendingSubmissions(assignmentId: string, sectionId: string) {
     // Section-scoped on purpose: an assignment spans sections, and the
     // review page counts (and promises) only this one.
@@ -1744,7 +1746,10 @@ export const teacher = {
       { method: "POST" },
     );
   },
-  /** Grade one student's submission now, ahead of the schedule.
+  /** "Grade with AI" — first grading of one never-graded submission,
+   *  confirmed by the student or not. 409 if it has any grade data, no
+   *  transcription, or an unreadable photo; 400 if AI grading is off.
+   *  Never a regrade.
    *
    *  Deliberately forfeits the shared cached prefix — a single call has
    *  nothing to share with — which is the right trade when the teacher
@@ -2011,7 +2016,17 @@ export interface TeacherSubmissionRow {
    *  integrity ran — teacher grades manually. Folded into the
    *  Submissions-inbox flagged count. */
   extraction_flagged_at: string | null;
+  /** Null when "Grade with AI" can act on this submission; otherwise
+   *  why not. The server's rule (`grading_queue.ai_grade_block`) — the
+   *  same one grade-now / grade-pending enforce — so the button and the
+   *  "Grade N ungraded" count never promise what the action won't do. */
+  ai_grade_block: AiGradeBlock | null;
+  /** This submission's grading-queue job, if one exists. `running`
+   *  means a grade is in flight; `failed` means the last try gave up. */
+  grading_job_status: "queued" | "running" | "done" | "skipped" | "failed" | null;
 }
+
+export type AiGradeBlock = "ai_disabled" | "graded" | "unreadable" | "no_extraction";
 
 /** One line of student work, attributed by the backend to a specific
  *  HW problem. `latex` and `plain_english` carry the *current* view —
