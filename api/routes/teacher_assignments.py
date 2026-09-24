@@ -2437,6 +2437,9 @@ class TeacherSubmissionDrawing(BaseModel):
     answer_on_drawing: str | None = None
     # True when a cropped second look confirmed the inventory.
     verified: bool = False
+    # True when that second look found no drawing where the first pass
+    # reported one — shown as "couldn't confirm", never as checked.
+    unconfirmed: bool = False
 
 
 class TeacherSubmissionDetailProblem(BaseModel):
@@ -2818,6 +2821,7 @@ async def get_submission_detail(
                 description=str(v.get("description") or ""),
                 plotted_elements=[str(e) for e in elements if isinstance(e, str)],
                 verified=bool(v.get("verified", False)),
+                unconfirmed=bool(v.get("unconfirmed", False)),
                 labeled_points=[str(pt) for pt in points if isinstance(pt, str)],
                 answer_on_drawing=str(v["answer_on_drawing"]) if v.get("answer_on_drawing") else None,
             ))
