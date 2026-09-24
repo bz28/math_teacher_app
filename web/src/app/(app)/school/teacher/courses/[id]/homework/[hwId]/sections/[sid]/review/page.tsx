@@ -2,6 +2,10 @@
 
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  READING_TRUST_COPY,
+  needsReadingCheck,
+} from "@/components/school/teacher/reading-trust";
+import {
   ReportProblemTrigger,
   type ReportProblemContext,
 } from "@/components/school/teacher/report-problem";
@@ -3194,6 +3198,8 @@ function SubmissionDetailPanel({
     return () => document.removeEventListener("keydown", handleGradingKey, true);
   }, [handleGradingKey]);
 
+  const showReadingCheck = needsReadingCheck(detail);
+
   return (
     <div className="space-y-4">
       {/* Compact student strip — name on the left, progress + next on
@@ -3221,10 +3227,10 @@ function SubmissionDetailPanel({
                 · late
               </span>
             )}
-            {row?.extraction_flagged_at && (
+            {detail.extraction_flagged_at && (
               <span
                 className="ml-1.5 font-semibold text-[color:var(--color-error)] "
-                title="Student flagged: 'Reader got something wrong' — no AI grading ran"
+                title="Student flagged: 'Reader got something wrong' — AI grading was skipped at submit"
               >
                 · student-flagged reading · grade manually
               </span>
@@ -3426,6 +3432,40 @@ function SubmissionDetailPanel({
         </div>
       </div>
 
+      {/* Unvouched-reading callout. The page a teacher grades from is a
+          machine transcript, and until now one nobody had checked
+          rendered identically to one the student had confirmed — the
+          worst row on the page looked like the best. A real misread in
+          prod (a student's `y = x` transcribed as the worksheet's
+          `y = √x`, never confirmed) is what surfaced it; the teacher
+          hand-graded from the transcript and saw a correct answer.
+          Amber, not red: this is "check the photo", not "something is
+          wrong". Suppressed when the student explicitly flagged the
+          reading — that gets the louder red callout directly below. */}
+      {showReadingCheck && (
+          <div
+            className="rounded-[--radius-xl] border border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-bg)]/60 p-3"
+            role="status"
+          >
+            <div className="flex items-start gap-3">
+              <span
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-warning-dark)] text-sm font-bold text-white"
+                aria-hidden
+              >
+                ?
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-text-primary">
+                  {READING_TRUST_COPY.title}
+                </p>
+                <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
+                  {READING_TRUST_COPY.body}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
       {/* Reader-misread callout — the student declined the OCR reading
           ("the reader got my work wrong") on the confirm screen, so the
           submission skipped AI grading + integrity entirely. There's no
@@ -3434,7 +3474,7 @@ function SubmissionDetailPanel({
           an ordinary ungraded submission and the dodge (or the genuine
           misread) would slip by. Honor-code by design — no interview is
           forced — so the teacher is the backstop. */}
-      {row?.extraction_flagged_at && (
+      {detail.extraction_flagged_at && (
         <div
           className="rounded-[--radius-xl] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] p-3"
           role="status"

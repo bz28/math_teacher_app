@@ -7,6 +7,7 @@ changeset to the probe(s) that should run (`for-diff`).
 from collections.abc import Callable
 
 from tests.harness.probe import Probe
+from tests.harness.probes.extraction_fidelity import ExtractionFidelityProbe
 from tests.harness.probes.generation import GenerationProbe
 from tests.harness.probes.geometry import GeometryProbe
 from tests.harness.probes.grading import GradingProbe
@@ -29,4 +30,8 @@ PROBES: dict[str, Callable[[int], Probe]] = {
     # the corpus, not --count. $0 replay gates the scaffolding; --mode record
     # re-records for a judgment sweep.
     "integrity": lambda count: IntegrityProbe(),
+    # Extraction fidelity: synthetic pages with known ground truth, drawn small
+    # and soft so the reader is under pressure to guess. The suite size is a
+    # property of the corpus, not --count.
+    "extraction-fidelity": lambda count: ExtractionFidelityProbe(),
 }

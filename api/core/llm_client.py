@@ -127,9 +127,11 @@ SAFETY_PREAMBLE = (
 def _with_safety(user_system_prompt: str | None) -> str:
     """Prepend the safety preamble to a task-specific system prompt.
 
-    An empty string for `user_system_prompt` is valid — some callers (e.g.
-    call_claude_vision today) pass only the preamble and rely on the
-    tool-use schema to constrain output.
+    An empty string / None for `user_system_prompt` is valid — a caller may
+    rely on the tool-use schema alone to constrain output. Most vision
+    callers do; the work extractor does NOT (see
+    `integrity_ai.extract_student_work`), because "transcribe, never solve"
+    is a rule about behaviour that no field description can carry.
     """
     if not user_system_prompt:
         return SAFETY_PREAMBLE
@@ -968,6 +970,7 @@ async def call_claude_vision(
     mode: str,
     *,
     tool_schema: ToolSchema,
+    system_prompt: str | None = None,
     session_id: str | None = None,
     user_id: str | None = None,
     model: str | None = None,
@@ -1034,7 +1037,7 @@ async def call_claude_vision(
         response = await client.messages.create(
             model=use_model,
             max_tokens=max_tokens,
-            system=_system_with_cache(_with_safety(None)),
+            system=_system_with_cache(_with_safety(system_prompt)),
             messages=[{"role": "user", "content": user_content}],
             tools=tools,
             tool_choice=effective_tool_choice,
@@ -1062,7 +1065,7 @@ async def call_claude_vision(
             submission_id=submission_id,
             generation_job_id=generation_job_id, call_metadata=call_metadata,
             cache_read_tokens=cache_read, cache_write_tokens=cache_write,
-            system_prompt=_with_safety(None),
+            system_prompt=_with_safety(system_prompt),
             tool_schema_text=_tool_schema_text(tools),
         )
         _circuit.record_success()
@@ -1077,7 +1080,7 @@ async def call_claude_vision(
             input_text=input_summary, output_text=str(e),
             submission_id=submission_id,
             generation_job_id=generation_job_id, call_metadata=call_metadata,
-            system_prompt=_with_safety(None),
+            system_prompt=_with_safety(system_prompt),
             tool_schema_text=_tool_schema_text(tools),
         )
         raise RuntimeError(f"Claude Vision API error: {e}") from e
@@ -1096,7 +1099,7 @@ async def call_claude_vision(
             input_text=input_summary, output_text=str(e),
             submission_id=submission_id,
             generation_job_id=generation_job_id, call_metadata=call_metadata,
-            system_prompt=_with_safety(None),
+            system_prompt=_with_safety(system_prompt),
             tool_schema_text=_tool_schema_text(tools),
         )
         raise RuntimeError(f"Failed to parse Claude Vision response: {e}") from e
@@ -1124,7 +1127,7 @@ async def call_claude_vision(
                 submission_id=submission_id,
                 generation_job_id=generation_job_id,
                 call_metadata=call_metadata,
-                system_prompt=_with_safety(None),
+                system_prompt=_with_safety(system_prompt),
                 tool_schema_text=_tool_schema_text(tools),
             )
         except Exception:

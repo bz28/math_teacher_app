@@ -11,8 +11,10 @@ data on QuestionBankItem rows.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select, text
 
@@ -1874,3 +1876,57 @@ async def test_flag_does_not_disturb_extraction_edits(
         assert sub.extraction_flagged_at is not None
         assert sub.extraction_edits is None
         assert sub.extraction_edited_at is None
+
+
+async def test_teacher_detail_surfaces_whether_the_reading_was_vouched_for(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The teacher grades from a machine transcript. Two things make one
+    untrustworthy — the reader was unsure, or the student never signed off —
+    and until 2026-09 neither reached the teacher's page, so an unchecked
+    reading rendered identically to a confirmed one. A real prod misread
+    (confidence 0.62, never confirmed, the student's `y = x` transcribed as
+    the worksheet's `y = √x`) is what surfaced it."""
+    submit_resp = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"files": [TINY_PNG]},
+    )
+    submission_id = submit_resp.json()["submission_id"]
+    # Submit kicks off extraction in the background; let it finish before
+    # staging our own, or it lands on top of the fixture mid-test.
+    await drain_integrity_background_tasks()
+
+    async with get_session_factory()() as s:
+        sub = await s.get(Submission, uuid.UUID(submission_id))
+        assert sub is not None
+        sub.extraction = {
+            "steps": [], "final_answers": [], "visual_work": [], "confidence": 0.62,
+        }
+        sub.extraction_confirmed_at = None
+        await s.commit()
+
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}", headers=_auth(world["teacher_token"])
+    )
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["extraction_confidence"] == pytest.approx(0.62)
+    assert out["extraction_confirmed_at"] is None
+    assert out["extraction_flagged_at"] is None
+
+    # Once the student signs off, the same page reports it — the UI uses
+    # this to stop warning about a reading a human has now vouched for.
+    async with get_session_factory()() as s:
+        sub = await s.get(Submission, uuid.UUID(submission_id))
+        assert sub is not None
+        sub.extraction_confirmed_at = datetime.now(UTC)
+        await s.commit()
+
+    out2 = (
+        await client.get(
+            f"/v1/teacher/submissions/{submission_id}",
+            headers=_auth(world["teacher_token"]),
+        )
+    ).json()
+    assert out2["extraction_confirmed_at"] is not None

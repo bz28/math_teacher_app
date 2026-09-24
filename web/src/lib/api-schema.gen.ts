@@ -6016,6 +6016,12 @@ export interface components {
             breakdown: {
                 [key: string]: unknown;
             }[] | null;
+            /** Extraction Confidence */
+            extraction_confidence?: number | null;
+            /** Extraction Confirmed At */
+            extraction_confirmed_at?: string | null;
+            /** Extraction Flagged At */
+            extraction_flagged_at?: string | null;
             /** Files */
             files: {
                 [key: string]: string;
