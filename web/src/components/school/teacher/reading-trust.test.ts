@@ -1,44 +1,87 @@
-import { strict as assert } from "node:assert";
+import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import {
-  LOW_READ_CONFIDENCE,
   READING_TRUST_COPY,
-  readingTrustWarning,
+  needsReadingCheck,
   type ReadingTrustInput,
-} from "./reading-trust.ts";
+} from "./reading-trust";
 
 const base: ReadingTrustInput = {
-  extraction_confidence: 0.9,
-  extraction_confirmed_at: "2026-09-22T18:30:00Z",
+  extraction_confidence: 0.88,
+  extraction_confirmed_at: "2026-09-20T10:00:00Z",
   extraction_flagged_at: null,
 };
 
-test("a confirmed, confident reading warns about nothing", () => {
-  assert.equal(readingTrustWarning(base), null);
+test("a reading the student confirmed needs no check", () => {
+  assert.equal(needsReadingCheck(base), false);
 });
 
 test("never confirmed => nobody vouched for this transcript", () => {
   assert.equal(
-    readingTrustWarning({ ...base, extraction_confirmed_at: null }),
-    "unconfirmed",
+    needsReadingCheck({ ...base, extraction_confirmed_at: null }),
+    true,
   );
 });
 
-test("unconfirmed AND unsure reports both — the case that started this", () => {
-  // The prod misread was a 0.62 read that was never confirmed. Reporting
-  // only "unconfirmed" there drops the sentence telling the teacher what
-  // to look for.
+test("the student's own 'the reader got it wrong' owns that case", () => {
+  // It has a louder red callout that also states AI grading was skipped.
+  // Two callouts stacked would bury the more serious one.
   assert.equal(
-    readingTrustWarning({
+    needsReadingCheck({
       ...base,
-      extraction_confidence: 0.62,
+      extraction_confirmed_at: null,
+      extraction_flagged_at: "2026-09-20T10:05:00Z",
+    }),
+    false,
+  );
+});
+
+test("no reading at all never blames the student", () => {
+  // Both AI toggles off => extraction never runs => nothing to vouch for.
+  // Without this the strip would fire on every submission of such an
+  // assignment and read as "the student skipped a step they were never shown".
+  assert.equal(
+    needsReadingCheck({
+      ...base,
+      extraction_confidence: null,
       extraction_confirmed_at: null,
     }),
-    "both",
+    false,
   );
-  const { body } = READING_TRUST_COPY.both;
-  assert.ok(body.includes("fill in what a problem expects"));
-  assert.ok(body.includes("against their paper"));
+});
+
+test("the reader's own confidence never changes the answer", () => {
+  // The score does not separate: across 82 graded problems 0.72 carried the
+  // same 16% flattering rate as 0.62, and in probe runs the reader invented
+  // an answer at 0.72 while reading a page correctly at 0.45. Gating on it
+  // would miss real cases and fire on clean ones. This asserts the whole
+  // ladder the model actually emits.
+  for (const c of [0.42, 0.52, 0.62, 0.72, 0.78, 0.82, 0.88, 0.92, 0.97]) {
+    assert.equal(
+      needsReadingCheck({ ...base, extraction_confidence: c }),
+      false,
+      `confirmed reading at confidence ${c} must not warn`,
+    );
+    assert.equal(
+      needsReadingCheck({
+        ...base,
+        extraction_confidence: c,
+        extraction_confirmed_at: null,
+      }),
+      true,
+      `unconfirmed reading at confidence ${c} must warn`,
+    );
+  }
+});
+
+test("the copy states the fact and never infers a cause", () => {
+  // A student who didn't tap may have closed the app, lost signal, or never
+  // seen the screen. The strip reports what did not happen, not why.
+  const text = `${READING_TRUST_COPY.title} ${READING_TRUST_COPY.body}`.toLowerCase();
+  const blamesTheStudent =
+    /\b(ignored|skipped|refused|didn't bother|couldn't be bothered|dodged)\b/;
+  assert.equal(blamesTheStudent.test(text), false);
 });
 
 test("no copy claims when AI grading runs", () => {
@@ -48,88 +91,25 @@ test("no copy claims when AI grading runs", () => {
   // Matched by shape, not by phrase: the first version of this guard
   // checked literal substrings, so "grading runs only after they confirm"
   // would have sailed through the very rule it was written for.
-  const claimsAboutGrading = /grad\w*[^.]{0,40}\b(runs?|ran|only|never)\b|\b(runs?|ran|never)\b[^.]{0,40}grad\w*/;
-  for (const key of ["unconfirmed", "low-confidence", "both"] as const) {
-    const text = `${READING_TRUST_COPY[key].title} ${READING_TRUST_COPY[key].body}`.toLowerCase();
-    assert.equal(
-      claimsAboutGrading.test(text),
-      false,
-      `${key} copy must make no claim about when AI grading runs — a teacher can regrade by hand`,
-    );
-  }
+  const claimsAboutGrading =
+    /grad\w*[^.]{0,40}\b(runs?|ran|only|never)\b|\b(runs?|ran|never)\b[^.]{0,40}grad\w*/;
+  const text = `${READING_TRUST_COPY.title} ${READING_TRUST_COPY.body}`.toLowerCase();
+  assert.equal(claimsAboutGrading.test(text), false);
 });
 
-test("no copy pins the reader's doubt on a single page", () => {
-  // The reader scores the whole submission once: every page goes into one
-  // Vision call and the schema asks for a single `confidence` for the
-  // extraction as a whole. 79% of prod submissions are multi-page, so
-  // "this page" / "a hard-to-read page" misdescribes four in five and
-  // sends the teacher hunting for a bad page nothing ever identified.
-  // Matched by shape so a reworded singular ("the page it struggled on")
-  // is caught too; the plural "pages" stays legal.
+test("no copy claims the reader was unsure", () => {
+  // The strip no longer reads the confidence score, so copy that mentions
+  // the reader's certainty would describe a signal it does not consult.
+  const claimsCertainty =
+    /\b(unsure|uncertain|confiden\w*|not sure|wasn't sure|struggled)\b/;
+  const text = `${READING_TRUST_COPY.title} ${READING_TRUST_COPY.body}`.toLowerCase();
+  assert.equal(claimsCertainty.test(text), false);
+});
+
+test("no copy pins anything on a single page", () => {
+  // Every page goes into one Vision call, so there is no per-page signal;
+  // 79% of prod submissions are multi-page. The plural stays legal.
   const pinsOnOnePage = /\b(this|that|a|one|the)\s+(\w+[- ]){0,3}page\b(?!s)/;
-  for (const key of ["unconfirmed", "low-confidence", "both"] as const) {
-    const text = `${READING_TRUST_COPY[key].title} ${READING_TRUST_COPY[key].body}`.toLowerCase();
-    assert.equal(
-      pinsOnOnePage.test(text),
-      false,
-      `${key} copy must not attribute the reader's doubt to one page — the score covers the whole submission`,
-    );
-  }
-});
-
-test("confirmed but the reader was unsure => compare with the photo", () => {
-  assert.equal(
-    readingTrustWarning({ ...base, extraction_confidence: 0.62 }),
-    "low-confidence",
-  );
-});
-
-test("the threshold is exclusive at the boundary", () => {
-  assert.equal(
-    readingTrustWarning({ ...base, extraction_confidence: LOW_READ_CONFIDENCE }),
-    null,
-  );
-  assert.equal(
-    readingTrustWarning({ ...base, extraction_confidence: LOW_READ_CONFIDENCE - 0.01 }),
-    "low-confidence",
-  );
-});
-
-test("no reading at all never blames the student", () => {
-  // AI grading + understanding check both off => extraction never runs,
-  // so extraction_confirmed_at is null forever. Warning here would tell
-  // the teacher the student closed the app, on every single submission.
-  assert.equal(
-    readingTrustWarning({
-      extraction_confidence: null,
-      extraction_confirmed_at: null,
-      extraction_flagged_at: null,
-    }),
-    null,
-  );
-});
-
-test("the student's own 'the reader got it wrong' owns that case", () => {
-  assert.equal(
-    readingTrustWarning({
-      extraction_confidence: 0.2,
-      extraction_confirmed_at: null,
-      extraction_flagged_at: "2026-09-22T18:35:00Z",
-    }),
-    null,
-  );
-});
-
-test("the unconfirmed copy states the fact and never infers a cause", () => {
-  const { title, body } = READING_TRUST_COPY.unconfirmed;
-  const text = `${title} ${body}`.toLowerCase();
-  // A teacher watching submissions arrive sees this during the ordinary
-  // window between the read finishing and the student pressing Confirm —
-  // prod median is 108s, p99 about three hours. Claiming the student left
-  // is wrong for every one of those students.
-  for (const claim of ["closed the app", "abandoned", "gave up", "never confirmed", "left"]) {
-    assert.equal(text.includes(claim), false, `copy must not claim the student ${claim}`);
-  }
-  assert.ok(text.includes("hasn't confirmed"));
+  const text = `${READING_TRUST_COPY.title} ${READING_TRUST_COPY.body}`.toLowerCase();
+  assert.equal(pinsOnOnePage.test(text), false);
 });

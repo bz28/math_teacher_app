@@ -3,7 +3,7 @@
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   READING_TRUST_COPY,
-  readingTrustWarning,
+  needsReadingCheck,
 } from "@/components/school/teacher/reading-trust";
 import {
   ReportProblemTrigger,
@@ -3198,10 +3198,7 @@ function SubmissionDetailPanel({
     return () => document.removeEventListener("keydown", handleGradingKey, true);
   }, [handleGradingKey]);
 
-  // Computed once: the guard and the copy must never disagree, and a
-  // non-null assertion at the use site would be one refactor away from
-  // throwing in a teacher's face.
-  const readingWarning = readingTrustWarning(detail);
+  const showReadingCheck = needsReadingCheck(detail);
 
   return (
     <div className="space-y-4">
@@ -3436,17 +3433,16 @@ function SubmissionDetailPanel({
       </div>
 
       {/* Unvouched-reading callout. The page a teacher grades from is a
-          machine transcript, and two things make one untrustworthy:
-          the reader itself was unsure (low confidence), or the student
-          never signed off on it. Until now both rendered identically to
-          a transcript the student had confirmed — the worst row on the
-          page looked like the best. A real misread in prod (a student's
-          `y = x` transcribed as the worksheet's `y = √x`, confidence
-          0.62, never confirmed) is what surfaced it. Amber, not red:
-          this is "check the photo", not "something is wrong".
-          Suppressed when the student explicitly flagged the reading —
-          that gets the louder red callout directly below. */}
-      {readingWarning !== null && (
+          machine transcript, and until now one nobody had checked
+          rendered identically to one the student had confirmed — the
+          worst row on the page looked like the best. A real misread in
+          prod (a student's `y = x` transcribed as the worksheet's
+          `y = √x`, never confirmed) is what surfaced it; the teacher
+          hand-graded from the transcript and saw a correct answer.
+          Amber, not red: this is "check the photo", not "something is
+          wrong". Suppressed when the student explicitly flagged the
+          reading — that gets the louder red callout directly below. */}
+      {showReadingCheck && (
           <div
             className="rounded-[--radius-xl] border border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-bg)]/60 p-3"
             role="status"
@@ -3460,19 +3456,10 @@ function SubmissionDetailPanel({
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-text-primary">
-                  {READING_TRUST_COPY[readingWarning].title}
+                  {READING_TRUST_COPY.title}
                 </p>
                 <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
-                  {READING_TRUST_COPY[readingWarning].body}
-                  {detail.extraction_confidence !== null && (
-                    <>
-                      {" "}Reader confidence{" "}
-                      <span className="font-semibold tabular-nums">
-                        {Math.round(detail.extraction_confidence * 100)}%
-                      </span>
-                      .
-                    </>
-                  )}
+                  {READING_TRUST_COPY.body}
                 </p>
               </div>
             </div>
