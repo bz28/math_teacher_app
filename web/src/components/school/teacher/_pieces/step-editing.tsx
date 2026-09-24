@@ -77,6 +77,7 @@ export function StepControls({
         <span className="text-[11px] font-semibold text-text-secondary">Delete step {n}?</span>
         <button
           type="button"
+          data-step-delete-confirm
           onClick={onConfirmDelete}
           disabled={busy}
           className="rounded-[--radius-md] border border-red-300 px-2 py-0.5 text-[11px] font-bold text-red-700 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 disabled:opacity-50 dark:border-red-500/40 dark:text-red-300 dark:hover:bg-red-500/10"
@@ -209,6 +210,16 @@ export function StepDraft({
       className="rounded-[--radius-lg] border border-dashed border-primary/50 bg-primary-bg/10 p-4"
       role="group"
       aria-label={`New step ${number}`}
+      // Esc anywhere in the draft (including its buttons) cancels the
+      // draft. Stopped here so the workshop's window-level Esc doesn't
+      // also close the whole modal.
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          onCancel();
+        }
+      }}
     >
       <div className="flex items-start gap-3">
         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-primary/60 bg-surface text-xs font-bold text-primary">
@@ -229,6 +240,7 @@ export function StepDraft({
             }}
             placeholder="Step title, like “Factor the quadratic”"
             aria-label={`Step ${number} title`}
+            data-step-draft-title
             maxLength={200}
             autoFocus
             className={`${fieldClass} text-sm font-semibold`}
@@ -257,6 +269,7 @@ export function StepDraft({
               </button>
               <button
                 type="button"
+                data-step-draft-submit
                 onClick={commit}
                 disabled={busy || empty}
                 className="rounded-[--radius-md] bg-primary px-3 py-1 text-xs font-bold text-white shadow-sm hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-40"

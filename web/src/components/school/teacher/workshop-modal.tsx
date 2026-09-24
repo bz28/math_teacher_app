@@ -356,8 +356,17 @@ export function WorkshopModal({
     void saveSteps(steps.map((s, i) => (i === idx ? { ...s, [field]: next } : s)));
   };
 
+  // Every structural save below restores focus on success AND failure:
+  // the control that was clicked is disabled while busy, which drops
+  // focus to <body>, where the next Enter would hit the window-level
+  // shortcut and approve the question.
   const addStep = async (step: BankSolutionStep) => {
-    if (await saveSteps([...liveSteps(liveItem), step])) setAddingStep(false);
+    if (await saveSteps([...liveSteps(liveItem), step])) {
+      setAddingStep(false);
+      setPendingFocus(["[data-step-add]"]);
+    } else {
+      setPendingFocus(["[data-step-draft-submit]", "[data-step-draft-title]"]);
+    }
   };
 
   const moveStep = async (idx: number, dir: -1 | 1) => {
@@ -369,14 +378,14 @@ export function WorkshopModal({
     setConfirmingStepDelete(null);
     const next = [...steps];
     [next[idx], next[to]] = [next[to], next[idx]];
-    if (!(await saveSteps(next))) return;
-    // Keep keyboard focus on the step that moved, not the slot it left.
-    // At an edge the same-direction button is disabled, so fall back to
-    // the other one.
     const [same, opposite] = dir < 0 ? ["up", "down"] : ["down", "up"];
+    // Keep keyboard focus on the step that moved, not the slot it left
+    // (or on the button pressed, if the save failed). At an edge the
+    // same-direction button is disabled, so fall back to the other one.
+    const at = (await saveSteps(next)) ? to : idx;
     setPendingFocus([
-      `[data-step-move="${same}-${to}"]`,
-      `[data-step-move="${opposite}-${to}"]`,
+      `[data-step-move="${same}-${at}"]`,
+      `[data-step-move="${opposite}-${at}"]`,
     ]);
   };
 
@@ -386,6 +395,9 @@ export function WorkshopModal({
     if (await saveSteps(steps.filter((_, i) => i !== idx))) {
       setConfirmingStepDelete(null);
       setPendingFocus(["[data-step-add]"]);
+    } else {
+      // The confirm stays open; put focus back on it.
+      setPendingFocus(["[data-step-delete-confirm]"]);
     }
   };
 
