@@ -357,6 +357,9 @@ export function WorkshopModal({
     const steps = liveSteps(liveItem);
     const to = idx + dir;
     if (to < 0 || to >= steps.length) return;
+    // An open delete-confirm is keyed by index; a move would shift it
+    // onto a different step.
+    setConfirmingStepDelete(null);
     const next = [...steps];
     [next[idx], next[to]] = [next[to], next[idx]];
     if (!(await saveSteps(next))) return;
