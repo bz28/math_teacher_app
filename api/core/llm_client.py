@@ -771,9 +771,12 @@ def _normalize_arrays(
             # string through let the call log as a success and then blow up in
             # the caller, outside any retry. Raise so call_claude_json re-asks
             # the model instead.
+            logger.warning(
+                "Unparseable stringified array in tool field %r: %.300r", key, value,
+            )
             raise ValueError(
                 f"Tool field {key!r} is declared as an array but came back as "
-                f"an unparseable string ({len(value)} chars): {value[:200]!r}"
+                f"an unparseable string ({len(value)} chars)"
             )
         result[key] = plain
     return result
