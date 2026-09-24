@@ -72,16 +72,22 @@ export const READING_TRUST_COPY: Record<
     body: "Nobody has checked the work below against their paper.",
   },
   "low-confidence": {
-    title: "The reader wasn't confident about this page — compare it with the photo",
+    // "this work", never "this page". The reader scores the whole
+    // submission once — every page goes into a single call and the schema
+    // asks for one `confidence` for the extraction as a whole — so there
+    // is no per-page score to point at. 79% of prod submissions are
+    // multi-page, so naming a page would misdescribe four in five and
+    // send the teacher looking for a bad page that was never identified.
+    title: "The reader wasn't confident about this work — compare it with the photo",
     body:
-      "On a hard-to-read page the reader can fill in what a problem expects instead " +
-      "of what the student wrote, which makes a wrong answer look right.",
+      "Where the handwriting was hard to read, the reader can fill in what a problem " +
+      "expects instead of what the student wrote, which makes a wrong answer look right.",
   },
   both: {
     title: "The reader wasn't sure, and the student hasn't confirmed — compare it with the photo",
     body:
-      "On a hard-to-read page the reader can fill in what a problem expects instead " +
-      "of what the student wrote, which makes a wrong answer look right — and nobody " +
-      "has checked the work below against their paper.",
+      "Where the handwriting was hard to read, the reader can fill in what a problem " +
+      "expects instead of what the student wrote, which makes a wrong answer look right " +
+      "— and nobody has checked the work below against their paper.",
   },
 };

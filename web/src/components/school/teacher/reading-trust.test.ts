@@ -59,6 +59,25 @@ test("no copy claims when AI grading runs", () => {
   }
 });
 
+test("no copy pins the reader's doubt on a single page", () => {
+  // The reader scores the whole submission once: every page goes into one
+  // Vision call and the schema asks for a single `confidence` for the
+  // extraction as a whole. 79% of prod submissions are multi-page, so
+  // "this page" / "a hard-to-read page" misdescribes four in five and
+  // sends the teacher hunting for a bad page nothing ever identified.
+  // Matched by shape so a reworded singular ("the page it struggled on")
+  // is caught too; the plural "pages" stays legal.
+  const pinsOnOnePage = /\b(this|that|a|one|the)\s+(\w+[- ]){0,3}page\b(?!s)/;
+  for (const key of ["unconfirmed", "low-confidence", "both"] as const) {
+    const text = `${READING_TRUST_COPY[key].title} ${READING_TRUST_COPY[key].body}`.toLowerCase();
+    assert.equal(
+      pinsOnOnePage.test(text),
+      false,
+      `${key} copy must not attribute the reader's doubt to one page — the score covers the whole submission`,
+    );
+  }
+});
+
 test("confirmed but the reader was unsure => compare with the photo", () => {
   assert.equal(
     readingTrustWarning({ ...base, extraction_confidence: 0.62 }),
