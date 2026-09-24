@@ -4026,6 +4026,12 @@ function StudentStepRow({
   );
 }
 
+// A drawing the extractor reported but a zoomed second look couldn't
+// find — often a bad location, sometimes nothing drawn. The AI was told
+// not to credit it; the teacher should glance at the page.
+const UNCONFIRMED_DRAWING_TITLE =
+  "A zoomed-in second look couldn't find this drawing, so the AI didn't credit it. Check the student's page.";
+
 /**
  * Work the extractor couldn't tie to any problem on this assignment.
  *
@@ -4081,8 +4087,14 @@ function OtherWorkDisclosure({
                   <span className="font-semibold capitalize text-text-primary">
                     {d.kind.replace("_", " ")}
                   </span>{" "}
-                  · {d.plotted_elements.length} plotted
-                  {d.verified && " · checked ✓"}
+                  {d.unconfirmed ? (
+                    <span title={UNCONFIRMED_DRAWING_TITLE} className="text-[color:var(--color-warning-dark)]">· couldn&rsquo;t confirm</span>
+                  ) : (
+                    <>
+                      · {d.plotted_elements.length} plotted
+                      {d.verified && " · checked ✓"}
+                    </>
+                  )}
                   {d.description && <span className="block">{d.description}</span>}
                 </span>
               </p>
@@ -4741,9 +4753,15 @@ function ProblemGradeRow({
                   <span className="text-text-primary">
                     <span className="font-semibold capitalize">{d.kind.replace("_", " ")}</span>
                     <span className="text-text-secondary">
-                      {" "}· {d.plotted_elements.length} plotted
-                      {d.verified && (
-                        <span title="Confirmed by a zoomed-in second look at the drawing"> · checked ✓</span>
+                      {d.unconfirmed ? (
+                        <span title={UNCONFIRMED_DRAWING_TITLE} className="text-[color:var(--color-warning-dark)]"> · couldn&rsquo;t confirm</span>
+                      ) : (
+                        <>
+                          {" "}· {d.plotted_elements.length} plotted
+                          {d.verified && (
+                            <span title="Confirmed by a zoomed-in second look at the drawing"> · checked ✓</span>
+                          )}
+                        </>
                       )}
                     </span>
                     {d.labeled_points.length > 0 && (
