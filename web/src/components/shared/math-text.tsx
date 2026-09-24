@@ -3,6 +3,7 @@
 import { Suspense, lazy, useMemo } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
+import { allowMathBreaks } from "@/lib/math-break-points";
 import { sanitizeSvg } from "@/lib/sanitize-svg";
 
 const ChemDiagram = lazy(() => import("./chem-diagram").then((m) => ({ default: m.ChemDiagram })));
@@ -229,6 +230,11 @@ function renderKatex(latex: string, displayMode: boolean): string {
 interface MathTextProps {
   text: string;
   className?: string;
+  /** Let inline math wrap between the parts of a multi-part answer
+   *  (after separating commas / `\quad`) — see `allowMathBreaks`. For
+   *  narrow boxes; off by default so every other surface renders
+   *  exactly as KaTeX lays it out. */
+  breakInline?: boolean;
 }
 
 /**
@@ -287,7 +293,7 @@ export function mathPlainText(input: string): string {
  * a top-level <div> here, and the HTML spec forbids <div> inside <p>.
  * Browsers auto-close the <p> on hydration → React mismatch error.
  */
-export function MathText({ text, className }: MathTextProps) {
+export function MathText({ text, className, breakInline = false }: MathTextProps) {
   const segments = useMemo(() => parse(text), [text]);
 
   return (
@@ -301,14 +307,27 @@ export function MathText({ text, className }: MathTextProps) {
             // **Entry $h_{11}$**) renders correctly instead of as raw text.
             return (
               <strong key={i}>
-                <MathText text={seg.content} />
+                <MathText text={seg.content} breakInline={breakInline} />
               </strong>
             );
           case "math-inline":
             return (
               <span
                 key={i}
-                dangerouslySetInnerHTML={{ __html: renderKatex(seg.content, false) }}
+                // Once inline math can wrap, two lines of tall content
+                // (a `\left(` delimiter over a `\sum`'s upper limit) sit
+                // strut-to-strut with no leading and their ink touches.
+                // A little headroom on every box after the first — the
+                // only ones that can begin a wrapped line — separates
+                // them. Not on the first box, so a lone short answer
+                // (`$\frac34$`, `$x = 4$`) keeps its exact height.
+                className={breakInline ? "[&_.base+.base>.strut]:mt-[0.2em]" : undefined}
+                dangerouslySetInnerHTML={{
+                  __html: renderKatex(
+                    breakInline ? allowMathBreaks(seg.content) : seg.content,
+                    false,
+                  ),
+                }}
               />
             );
           case "math-display":

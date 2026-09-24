@@ -470,30 +470,3 @@ html {
   text-transform: uppercase;
   color: var(--color-text-secondary);
 }
-
-/* Let INLINE KaTeX wrap inside a narrow box. KaTeX renders inline math
-   as `.base` boxes that are `inline-block; white-space: nowrap`, and
-   only starts a new `.base` after a relation or binary operator — so a
-   multi-part answer like `$a)\ \text{acute},\ b)\ \text{right},\ …$` is
-   ONE atomic box that can't break at its commas or spaces and runs out
-   of its column. Making `.base` a plain wrapping inline turns the gaps
-   between its children (KaTeX's spacing spans, punctuation, relations)
-   into legal break points, while `nowrap` on the children keeps each
-   atom whole — a number never parts from its superscript (`90` / `°`).
-   The zero-width `.strut` is dropped: once `.base` wraps, the gap after
-   it becomes a break point too, and a too-wide atom (a long fraction)
-   would wrap below it and leave an empty line above. Each atom carries
-   its own height, so the line box still sizes correctly without it.
-   Display math is excluded: it sits in its own scroll box, and a
-   wrapped equation block reads wrong. Pair with `overflow-x-auto` for
-   whatever is still atomic (a wide fraction or matrix). */
-.math-wrap :not(.katex-display) > .katex .base {
-  display: inline;
-  white-space: normal;
-}
-.math-wrap :not(.katex-display) > .katex .base > * {
-  white-space: nowrap;
-}
-.math-wrap :not(.katex-display) > .katex .base > .strut {
-  display: none;
-}
