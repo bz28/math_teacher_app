@@ -136,6 +136,12 @@ test("the tex annotation carries the ORIGINAL source", () => {
   );
 });
 
+test("annotation restore is literal — `$` replacement patterns in the source don't expand", () => {
+  const src = "\\$5, \\$`x";
+  const html = renderBreakableInlineMath(src, lenient);
+  assert.equal(annotation(html), annotation(lenient(src)));
+});
+
 test("unchanged input takes the plain lenient path", () => {
   assert.equal(renderBreakableInlineMath("x = 4", lenient), lenient("x = 4"));
 });

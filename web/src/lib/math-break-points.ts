@@ -144,8 +144,10 @@ export function renderBreakableInlineMath(
     return renderLenient(latex);
   }
   const annotation = `<annotation encoding="application/x-tex">${escapeHtml(rewritten)}</annotation>`;
+  // Function replacer: a string replacement would expand `$`` / `$$`
+  // patterns that can appear in the source (e.g. `\$` next to a backtick).
   return html.replace(
     annotation,
-    `<annotation encoding="application/x-tex">${escapeHtml(latex)}</annotation>`,
+    () => `<annotation encoding="application/x-tex">${escapeHtml(latex)}</annotation>`,
   );
 }
