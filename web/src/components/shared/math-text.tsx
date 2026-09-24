@@ -3,7 +3,7 @@
 import { Suspense, lazy, useMemo } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
-import { allowMathBreaks } from "@/lib/math-break-points";
+import { renderBreakableInlineMath } from "@/lib/math-break-points";
 import { sanitizeSvg } from "@/lib/sanitize-svg";
 
 const ChemDiagram = lazy(() => import("./chem-diagram").then((m) => ({ default: m.ChemDiagram })));
@@ -323,10 +323,9 @@ export function MathText({ text, className, breakInline = false }: MathTextProps
                 // (`$\frac34$`, `$x = 4$`) keeps its exact height.
                 className={breakInline ? "[&_.base+.base>.strut]:mt-[0.2em]" : undefined}
                 dangerouslySetInnerHTML={{
-                  __html: renderKatex(
-                    breakInline ? allowMathBreaks(seg.content) : seg.content,
-                    false,
-                  ),
+                  __html: breakInline
+                    ? renderBreakableInlineMath(seg.content, (l) => renderKatex(l, false))
+                    : renderKatex(seg.content, false),
                 }}
               />
             );
