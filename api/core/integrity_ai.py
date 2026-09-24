@@ -112,7 +112,7 @@ the last step of that problem's work), include a `final_answers` entry with the 
 problem's position and the answer in LaTeX + plain English. Omit problems that have \
 no discernible final answer.
 - **Drawings are work — record them in `visual_work`.** For every graph, number \
-line, diagram, table, or sketch the student drew, emit one entry saying concretely \
+line, diagram, or sketch the student drew, emit one entry saying concretely \
 what is on the page: each line or curve that is actually drawn (one `plotted_elements` \
 entry each, described by what you can see — direction, where it crosses the axes), \
 labeled points, axes and scale, shading. Count by tracing strokes, never by what the \
@@ -228,7 +228,7 @@ async def extract_student_work_from_pages(
         "and the page_index (the N from the marker above it) it was written "
         "on. Extract each problem's final answer when the student wrote one, "
         "tagged the same way. Record every drawing (graph, number line, "
-        "diagram, table, sketch) in visual_work, and a present=false entry "
+        "diagram, sketch) in visual_work, and a present=false entry "
         "for any problem that asked for a drawing and has none."
     )
 
@@ -339,9 +339,11 @@ async def verify_visual_work(
     free vision call on its crop, and what the crop says REPLACES the
     inventory the grader will read (`plotted_elements`, `labeled_points`,
     `answer_on_drawing`). `verified` records which happened, so the
-    teacher UI and the admin quality views can tell a checked inventory
-    from a claimed one. Failures keep the unverified entry — a report is
-    better than none — and never fail the extraction.
+    teacher UI can tell a checked inventory from a claimed one. When
+    both crops find no drawing at all, the inventory is emptied and the
+    entry is marked `unconfirmed` (never `verified`). Failures keep the
+    unverified entry — a report is better than none — and never fail
+    the extraction.
     """
     entries = [v for v in (extraction.get("visual_work") or []) if isinstance(v, dict)]
     for v in entries:
@@ -426,17 +428,17 @@ async def _verify_one(
     if not seen.get("has_drawing", True):
         # Two crops around the reported spot show no drawing. Don't
         # flip `present` on a possibly-bad box, but the inventory the
-        # grader reads must not credit lines nobody could find — and
-        # the description must say so, or the grader would be handed
-        # "two lines plotted" beside "nothing plotted".
+        # grader reads must not credit lines nobody could find. This is
+        # NOT a confirmation — `unconfirmed` records the failed look so
+        # the grader is told not to credit the drawing and the teacher
+        # sees "couldn't confirm" instead of a checkmark. `description`
+        # stays the first pass's own words (the teacher reads it); the
+        # grader formatter drops it for an unconfirmed entry.
         v["plotted_elements"] = []
         v["labeled_points"] = []
         v["answer_on_drawing"] = None
-        v["description"] = (
-            "A zoomed second look at the reported location found no drawing; "
-            "the first-pass description could not be confirmed."
-        )
-        v["verified"] = True
+        v["verified"] = False
+        v["unconfirmed"] = True
         return
     raw_elements = seen.get("plotted_elements")
     raw_points = seen.get("labeled_points")

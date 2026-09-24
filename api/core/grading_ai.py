@@ -241,6 +241,14 @@ def _format_visual_work(v: dict[str, Any]) -> str:
     kind = (v.get("kind") or "drawing").replace("_", " ")
     if not v.get("present", True):
         return f"{kind}: NOT PRESENT — the problem asked for one and nothing is drawn"
+    if v.get("unconfirmed"):
+        # The first pass claimed a drawing here but a zoomed look found
+        # none. Its description is exactly the primed claim we couldn't
+        # back up, so it is withheld — the grader gets the fact, not it.
+        return (
+            f"{kind}: UNCONFIRMED — reported on the page, but a zoomed second "
+            "look found no drawing there; credit nothing as drawn from it"
+        )
     parts = [kind]
     elements = [e for e in (v.get("plotted_elements") or []) if isinstance(e, str) and e.strip()]
     if elements:

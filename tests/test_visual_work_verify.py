@@ -6,7 +6,8 @@ Guards the mechanism that fixed the Sep 2026 "solve by graphing" misgrades:
     and enlarged;
   - the crop's inventory REPLACES the primed full-page one;
   - a "no drawing here" crop gets one wider retry, then empties the
-    inventory and says so in the description;
+    inventory and marks the entry unconfirmed (never verified, and no
+    pipeline text in the teacher-visible description);
   - absent / unusable bbox, non-present entries, and verify failures leave
     the entry untouched (never fail the extraction).
 """
@@ -116,10 +117,16 @@ class TestVerifyVisualWork:
         await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
         v = ext["visual_work"][0]
         assert margins == [0.35, 0.8]
-        assert v["verified"] is True
+        # Finding nothing is NOT a confirmation (prod bb8536f1: a proof's
+        # Statements|Reasons columns logged as a "table" showed the
+        # teacher "checked ✓" beside pipeline prose).
+        assert v["verified"] is False
+        assert v["unconfirmed"] is True
         assert v["plotted_elements"] == [] and v["labeled_points"] == [] and v["answer_on_drawing"] is None
-        assert "could not be confirmed" in v["description"]
-        assert "Two lines" not in v["description"]
+        # The teacher-visible description stays the first pass's own
+        # words — never internal pipeline status text.
+        assert v["description"] == "Two lines plotted intersecting at (2, 3)."
+        assert "zoomed" not in v["description"].lower()
 
     async def test_retry_stops_once_a_drawing_is_found(self, monkeypatch: pytest.MonkeyPatch) -> None:
         answers = iter([
@@ -140,6 +147,7 @@ class TestVerifyVisualWork:
         await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
         v = ext["visual_work"][0]
         assert n == 2 and v["plotted_elements"] == ["a line"] and v["answer_on_drawing"] == "(3, 0)"
+        assert v["verified"] is True and "unconfirmed" not in v
 
     @pytest.mark.parametrize("over", [
         {"present": False},
@@ -189,6 +197,7 @@ class TestVerifyVisualWork:
         await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
         v = ext["visual_work"][0]
         assert v["verified"] is False and v["plotted_elements"] == ["line (y = 2x - 1)", "line (y = -x + 5)"]
+        assert "unconfirmed" not in v
 
     async def test_bounded_and_concurrent(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import asyncio
@@ -223,6 +232,7 @@ class TestVerifyVisualWork:
         await integrity_ai.verify_visual_work(ext, ["not-a-file-dict"])  # type: ignore[list-item]
         v = ext["visual_work"][0]
         assert v["verified"] is False and v["plotted_elements"] == ["line (y = 2x - 1)", "line (y = -x + 5)"]
+        assert "unconfirmed" not in v
 
     async def test_vision_failure_leaves_entry_unverified(self, monkeypatch: pytest.MonkeyPatch) -> None:
         async def fail(*args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -233,3 +243,16 @@ class TestVerifyVisualWork:
         await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
         v = ext["visual_work"][0]
         assert v["verified"] is False and v["plotted_elements"] == ["line (y = 2x - 1)", "line (y = -x + 5)"]
+        assert "unconfirmed" not in v
+
+
+def test_table_is_not_a_drawing_kind() -> None:
+    """A two-column proof's Statements|Reasons grid is text the steps
+    already carry. Offering "table" as a drawing kind made the extractor
+    log it as a drawing the zoomed pass (told to ignore text) then
+    couldn't find (prod bb8536f1)."""
+    from api.core.llm_schemas import INTEGRITY_EXTRACT_SCHEMA
+
+    item = INTEGRITY_EXTRACT_SCHEMA["input_schema"]["properties"]["visual_work"]["items"]
+    assert "table" not in item["properties"]["kind"]["enum"]
+    assert "table" not in integrity_ai._EXTRACT_SYSTEM.split("`visual_work`", 1)[1].split("\n- **", 1)[0]
