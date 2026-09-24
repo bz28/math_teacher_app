@@ -7,12 +7,15 @@ this script share DATABASE_URL + JWT_SECRET:
     WEB_BASE=http://localhost:3411 .venv/bin/python -m scripts.capture_grade_with_ai
 
 Seeds `seed_review_screens.seed()` (every submission AI-graded), then
-adds four never-graded students:
+adds six never-graded students:
 
-- Jordan, Emma — readable work, never confirmed by the student (no
-  grading job existed; the old "Grade all" moved nothing for them)
+- Jordan, Emma — readable work the student confirmed, no grading job
+  (as when AI grading was off at confirm; the old "Grade all" moved
+  nothing for them)
+- Leo — readable work the student hasn't confirmed yet (waits for them)
 - Priya — unreadable photo (confidence under the bar)
-- Ethan — the work was never read (no extraction)
+- Ethan — the work was never read (no extraction, submitted long ago)
+- Ava — just submitted, still being read
 
 The "grade lands" shot waits for the API's real queue → drain → write
 path, so it needs a grader: locally that was the API with the LLM call
@@ -63,18 +66,21 @@ def _extraction(confidence: float) -> dict[str, Any]:
 async def _add_ungraded(world: dict[str, str]) -> dict[str, str]:
     """Four never-graded submissions; returns name → student id."""
     now = datetime.now(UTC)
+    # (name, extraction, confirmed, minutes since submit)
     specs = [
-        ("Jordan Lee", _extraction(0.92)),
-        ("Emma Novak", _extraction(0.88)),
-        ("Priya Shah", _extraction(0.12)),
-        ("Ethan Cole", None),
+        ("Jordan Lee", _extraction(0.92), True, 40),
+        ("Emma Novak", _extraction(0.88), True, 40),
+        ("Leo Park", _extraction(0.9), False, 40),
+        ("Priya Shah", _extraction(0.12), True, 40),
+        ("Ethan Cole", None, False, 120),
+        ("Ava Brooks", None, False, 1),
     ]
     ids: dict[str, str] = {}
     async with get_session_factory()() as s:
         assignment = (await s.execute(
             select(Assignment).where(Assignment.id == uuid.UUID(world["assignment_id"]))
         )).scalar_one()
-        for name, extraction in specs:
+        for name, extraction, confirmed, minutes_ago in specs:
             u = User(
                 email=f"{name.split()[0].lower()}_{uuid.uuid4().hex[:6]}@school.edu",
                 password_hash=hash_password("x"), grade_level=9, role="student",
@@ -91,7 +97,8 @@ async def _add_ungraded(world: dict[str, str]) -> dict[str, str]:
                 section_id=uuid.UUID(world["section_id"]),
                 status="submitted", files=[_file_obj()],
                 extraction=extraction,
-                submitted_at=now - timedelta(minutes=40),
+                extraction_confirmed_at=now if confirmed else None,
+                submitted_at=now - timedelta(minutes=minutes_ago),
             ))
             ids[name.split()[0].lower()] = str(u.id)
         await s.commit()
@@ -154,9 +161,11 @@ async def main() -> int:
             await _shot(page, "unreadable")
             await open_student("ethan")
             await _shot(page, "not-read")
+            await open_student("leo")
+            await _shot(page, "awaiting-confirmation")
 
-            # "Grade all" now grades the one it counts (Emma, never
-            # confirmed) and the page follows it until it lands.
+            # "Grade all" now grades the one it counts (Emma, confirmed
+            # with no job) and the page follows it until it lands.
             await open_student("emma")
             await page.get_by_role("button", name="Grade 1 ungraded").click()
             await page.get_by_text("AI graded · not yet published").wait_for(timeout=90_000)
