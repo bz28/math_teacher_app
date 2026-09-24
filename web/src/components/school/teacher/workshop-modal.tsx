@@ -10,15 +10,24 @@ import {
   type BankChatProposal,
   type BankItem,
   type BankJob,
+  type BankSolutionStep,
   type TeacherUnit,
 } from "@/lib/api";
-import { WORKSHOP_UNDO_GRACE_MS } from "@/lib/constants";
+import { SOLUTION_FAILED_PREFIX, WORKSHOP_UNDO_GRACE_MS } from "@/lib/constants";
 import { subfoldersOf, topUnits } from "@/lib/units";
 import { ClickToEditText } from "@/components/school/shared/click-to-edit-text";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { GenerateSimilarDialog } from "./_pieces/generate-similar-dialog";
 import { InlineTitleEdit } from "./_pieces/inline-title-edit";
 import { SimilarJobStrip } from "./_pieces/similar-job-strip";
+import { AddStepButton, StepControls, StepDraft } from "./_pieces/step-editing";
+
+// Historical data can contain null entries from an early version of the
+// accept path. Every read AND every write goes through this so the
+// rendered index is the index that gets saved.
+function liveSteps(item: BankItem | undefined): BankSolutionStep[] {
+  return (item?.solution_steps ?? []).filter((s) => s != null);
+}
 
 const STATUS_BADGE: Record<string, string> = {
   pending: "bg-[color:var(--color-warning-bg)] text-[color:var(--color-warning-dark)]",
@@ -102,7 +111,13 @@ export function WorkshopModal({
   const [showUndo, setShowUndo] = useState(sourceItem?.has_previous_version ?? false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [confirmingClearChat, setConfirmingClearChat] = useState(false);
-  const [solutionOpen, setSolutionOpen] = useState(false);
+  // An item with no steps opens its solution section: there's nothing to
+  // hide, and the empty state is where the teacher adds the first step.
+  const [solutionOpen, setSolutionOpen] = useState(liveSteps(sourceItem).length === 0);
+  const [addingStep, setAddingStep] = useState(false);
+  const [confirmingStepDelete, setConfirmingStepDelete] = useState<number | null>(null);
+  const stepsRef = useRef<HTMLDivElement | null>(null);
+  const addStepRef = useRef<HTMLButtonElement | null>(null);
   // Chat is open by default in both modes — the panel is almost always
   // needed during review and should be discoverable. Toggleable via the
   // 💬 AI button or C key.
@@ -164,7 +179,9 @@ export function WorkshopModal({
     if (!sourceItem) return;
     if (!liveItem || sourceItem.id !== liveItem.id) {
       setLiveItem(sourceItem);
-      setSolutionOpen(false);
+      setSolutionOpen(liveSteps(sourceItem).length === 0);
+      setAddingStep(false);
+      setConfirmingStepDelete(null);
       setConfirmingDelete(false);
       setConfirmingClearChat(false);
     } else if (new Date(sourceItem.updated_at).getTime() > new Date(liveItem.updated_at).getTime()) {
@@ -249,6 +266,7 @@ export function WorkshopModal({
     return false;
   };
   const isLocked = liveItem?.locked ?? false;
+  const answerFailed = (liveItem?.final_answer ?? "").startsWith(SOLUTION_FAILED_PREFIX);
 
   // Fetch units once per course so the header can show a unit picker.
   // Intentionally depends only on course_id, not on liveItem itself —
@@ -307,21 +325,72 @@ export function WorkshopModal({
       replaceLiveItem(updated);
     });
 
-  const saveStep = (idx: number, field: "title" | "description", next: string) =>
-    run(async () => {
+  // Every step change — text edit, add, delete, reorder — replaces the
+  // whole array in one PATCH (one undo snapshot, one edit record).
+  // Steps are moved as whole objects so a step's figure travels with it.
+  // Resolves true only when the save landed, so callers can keep a
+  // draft open on failure instead of losing the teacher's text.
+  const saveSteps = async (next: BankSolutionStep[]): Promise<boolean> => {
+    let saved = false;
+    await run(async () => {
       if (!liveItem || blockIfPending()) return;
-      if (!liveItem.solution_steps) return;
-      const updated = liveItem.solution_steps.map((s, i) =>
-        i === idx ? { ...s, [field]: next } : s,
-      );
-      const next_ = await teacher.updateBankItem(liveItem.id, { solution_steps: updated });
-      replaceLiveItem(next_);
+      const updated = await teacher.updateBankItem(liveItem.id, { solution_steps: next });
+      replaceLiveItem(updated);
+      saved = true;
     });
+    return saved;
+  };
+
+  const saveStep = (idx: number, field: "title" | "description", next: string) => {
+    const steps = liveSteps(liveItem);
+    // Blur always commits; an unchanged value isn't an edit, and saving
+    // it would overwrite the one-level undo with the current state.
+    if (!steps[idx] || (steps[idx][field] ?? "") === next) return;
+    void saveSteps(steps.map((s, i) => (i === idx ? { ...s, [field]: next } : s)));
+  };
+
+  const addStep = async (step: BankSolutionStep) => {
+    if (await saveSteps([...liveSteps(liveItem), step])) setAddingStep(false);
+  };
+
+  const moveStep = async (idx: number, dir: -1 | 1) => {
+    const steps = liveSteps(liveItem);
+    const to = idx + dir;
+    if (to < 0 || to >= steps.length) return;
+    const next = [...steps];
+    [next[idx], next[to]] = [next[to], next[idx]];
+    if (!(await saveSteps(next))) return;
+    // Keep keyboard focus on the step that moved, not the slot it left.
+    // At an edge the same-direction button is disabled, so fall back to
+    // the other one.
+    requestAnimationFrame(() => {
+      const root = stepsRef.current;
+      const want = root?.querySelector<HTMLButtonElement>(
+        `[data-step-move="${dir < 0 ? "up" : "down"}-${to}"]`,
+      );
+      const other = root?.querySelector<HTMLButtonElement>(
+        `[data-step-move="${dir < 0 ? "down" : "up"}-${to}"]`,
+      );
+      (want && !want.disabled ? want : other)?.focus();
+    });
+  };
+
+  const deleteStep = async (idx: number) => {
+    const steps = liveSteps(liveItem);
+    if (!steps[idx]) return;
+    if (await saveSteps(steps.filter((_, i) => i !== idx))) {
+      setConfirmingStepDelete(null);
+      requestAnimationFrame(() => addStepRef.current?.focus());
+    }
+  };
 
   const saveFinalAnswer = (next: string) =>
     run(async () => {
       if (!liveItem || blockIfPending()) return;
       if (next === (liveItem.final_answer ?? "")) return;
+      // The failed-solve placeholder is shown as an empty field; leaving
+      // that field blank isn't an edit.
+      if (answerFailed && !next.trim()) return;
       const updated = await teacher.updateBankItem(liveItem.id, { final_answer: next });
       replaceLiveItem(updated);
     });
@@ -488,6 +557,15 @@ export function WorkshopModal({
       if (busy) return;
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+      // Enter/Space/arrows on a focused control belong to that control —
+      // otherwise Enter on "Move step up" (or any click-to-edit button)
+      // would approve the question instead.
+      if (
+        ["Enter", " ", "ArrowUp", "ArrowDown"].includes(e.key) &&
+        target.closest("button, a[href], select, [role='button']")
+      ) {
+        return;
+      }
 
       if (e.key === "Escape") {
         e.preventDefault();
@@ -535,7 +613,10 @@ export function WorkshopModal({
 
   // ── Preview computation ──────────────────────────────────────────
   const previewQuestion = pendingProposal?.question ?? liveItem.question;
-  const previewSteps = pendingProposal?.solution_steps ?? liveItem.solution_steps;
+  const currentSteps = liveSteps(liveItem);
+  const previewSteps = pendingProposal?.solution_steps
+    ? pendingProposal.solution_steps.filter((s) => s != null)
+    : currentSteps;
   const previewAnswer = pendingProposal?.final_answer ?? liveItem.final_answer;
   const questionChanged = pendingProposal?.question != null;
   const stepsChanged = pendingProposal?.solution_steps != null;
@@ -563,8 +644,8 @@ export function WorkshopModal({
   // card blue when only one was edited.
   const stepChanged = (idx: number): boolean => {
     if (!stepsChanged) return false;
-    const prev = liveItem.solution_steps?.[idx];
-    const next = previewSteps?.[idx];
+    const prev = currentSteps[idx];
+    const next = previewSteps[idx];
     if (!prev || !next) return true;
     return prev.title !== next.title || prev.description !== next.description;
   };
@@ -803,11 +884,14 @@ export function WorkshopModal({
               <button
                 type="button"
                 onClick={() => setSolutionOpen(!solutionOpen)}
+                aria-expanded={solutionOpen}
                 className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)] hover:text-text-primary"
               >
-                <span>{solutionOpen ? "▾" : "▸"}</span>
+                <span aria-hidden="true">{solutionOpen ? "▾" : "▸"}</span>
                 {solutionOpen ? "Hide" : "Show"} solution
-                {previewSteps && ` (${previewSteps.length} steps)`}
+                {previewSteps.length > 0
+                  ? ` (${previewSteps.length} step${previewSteps.length === 1 ? "" : "s"})`
+                  : " (no steps)"}
                 {stepsChanged && (
                   <span className="ml-2 rounded-[--radius-pill] bg-[color:var(--color-info-light)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-info)]">
                     Preview
@@ -816,79 +900,132 @@ export function WorkshopModal({
               </button>
 
               {solutionOpen && (
-                <div className="mt-3 space-y-3">
-                  {previewSteps && previewSteps.length > 0 ? (
-                    // Historical data can contain null entries from an
-                    // early version of the accept path. Skip them rather
-                    // than crashing on s.title.
-                    previewSteps.filter((s) => s != null).map((s, i) => {
-                      const changed = stepChanged(i);
-                      const prev = liveItem.solution_steps?.[i];
-                      return (
-                        <div
-                          key={i}
-                          className={`rounded-[--radius-lg] border p-4 ${
-                            changed
-                              ? "border-blue-300 bg-blue-50/50 dark:border-blue-500/40 dark:bg-blue-500/10"
+                <div ref={stepsRef} className="mt-3 space-y-3">
+                  {previewSteps.map((s, i) => {
+                    const changed = stepChanged(i);
+                    const prev = currentSteps[i];
+                    return (
+                      <div
+                        key={i}
+                        className={`group/step rounded-[--radius-lg] border p-4 ${
+                          changed
+                            ? "border-blue-300 bg-blue-50/50 dark:border-blue-500/40 dark:bg-blue-500/10"
+                            : confirmingStepDelete === i
+                              ? "border-red-300 bg-red-50/40 dark:border-red-500/40 dark:bg-red-500/5"
                               : "border-border-light bg-surface"
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white shadow-sm">
-                              {i + 1}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              {changed && prev && (
-                                <BeforeBlock>
-                                  <div className="text-sm font-semibold text-text-secondary">
-                                    <MathText text={prev.title ?? ""} />
-                                  </div>
-                                  <div className="mt-2 h-px bg-border-light/70" />
-                                  <div className="mt-2 text-xs leading-relaxed text-text-muted">
-                                    <MathText text={prev.description ?? ""} />
-                                  </div>
-                                </BeforeBlock>
-                              )}
-                              <div className="text-sm font-semibold text-text-primary">
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white shadow-sm">
+                            {i + 1}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            {changed && prev && (
+                              <BeforeBlock>
+                                <div className="text-sm font-semibold text-text-secondary">
+                                  <MathText text={prev.title ?? ""} />
+                                </div>
+                                <div className="mt-2 h-px bg-border-light/70" />
+                                <div className="mt-2 text-xs leading-relaxed text-text-muted">
+                                  <MathText text={prev.description ?? ""} />
+                                </div>
+                              </BeforeBlock>
+                            )}
+                            <div className="flex items-start gap-2">
+                              <div className="min-w-0 flex-1 text-sm font-semibold text-text-primary">
                                 {isProposalPending ? (
                                   <MathText text={s.title ?? ""} />
                                 ) : (
                                   <ClickToEditText
                                     value={s.title ?? ""}
                                     inline
+                                    placeholder="Add a title"
                                     onSave={(next) => saveStep(i, "title", next)}
                                     busy={busy}
                                   />
                                 )}
                               </div>
-                              <div className="mt-2 h-px bg-border-light" />
-                              {/* Per-step geometry figure when present
-                                  (e.g. "drop an altitude from B to AC"
-                                  shown as the updated triangle). */}
-                              {s.figure_svg && (
-                                <FigureDisplay svg={s.figure_svg} className="max-h-44" />
+                              {/* Structural edits are live-item only: a
+                                  pending proposal is a preview whose
+                                  indices don't match what's saved. */}
+                              {!isProposalPending && !isLocked && (
+                                <StepControls
+                                  index={i}
+                                  count={previewSteps.length}
+                                  busy={busy}
+                                  confirmingDelete={confirmingStepDelete === i}
+                                  onMove={(dir) => moveStep(i, dir)}
+                                  onStartDelete={() => {
+                                    setError(null);
+                                    setConfirmingStepDelete(i);
+                                  }}
+                                  onConfirmDelete={() => deleteStep(i)}
+                                  onCancelDelete={() => setConfirmingStepDelete(null)}
+                                />
                               )}
-                              <div className="mt-2 text-xs leading-relaxed text-text-secondary">
-                                {isProposalPending ? (
-                                  <MathText text={s.description ?? ""} />
-                                ) : (
-                                  <ClickToEditText
-                                    value={s.description ?? ""}
-                                    multiline
-                                    onSave={(next) => saveStep(i, "description", next)}
-                                    busy={busy}
-                                  />
-                                )}
-                              </div>
+                            </div>
+                            <div className="mt-2 h-px bg-border-light" />
+                            {/* Per-step geometry figure when present
+                                (e.g. "drop an altitude from B to AC"
+                                shown as the updated triangle). */}
+                            {s.figure_svg && (
+                              <FigureDisplay svg={s.figure_svg} className="max-h-44" />
+                            )}
+                            <div className="mt-2 text-xs leading-relaxed text-text-secondary">
+                              {isProposalPending ? (
+                                <MathText text={s.description ?? ""} />
+                              ) : (
+                                <ClickToEditText
+                                  value={s.description ?? ""}
+                                  multiline
+                                  placeholder="Add an explanation"
+                                  onSave={(next) => saveStep(i, "description", next)}
+                                  busy={busy}
+                                />
+                              )}
                             </div>
                           </div>
                         </div>
-                      );
-                    })
-                  ) : (
-                    <p className="rounded-[--radius-md] bg-bg-subtle p-4 text-xs italic text-text-muted">
-                      No solution steps recorded.
-                    </p>
+                      </div>
+                    );
+                  })}
+
+                  {previewSteps.length === 0 && !addingStep && (
+                    <div className="rounded-[--radius-md] bg-bg-subtle px-4 py-3 text-xs text-text-muted">
+                      <p className="font-semibold text-text-secondary">No solution steps yet.</p>
+                      {!isProposalPending && !isLocked && (
+                        <p className="mt-0.5">
+                          Write out the worked solution one step at a time. The
+                          understanding check and practice tutor work from these
+                          steps.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {!isProposalPending && !isLocked && (
+                    addingStep ? (
+                      <StepDraft
+                        number={previewSteps.length + 1}
+                        busy={busy}
+                        onCommit={addStep}
+                        onCancel={() => {
+                          setAddingStep(false);
+                          requestAnimationFrame(() => addStepRef.current?.focus());
+                        }}
+                      />
+                    ) : (
+                      <AddStepButton
+                        buttonRef={addStepRef}
+                        busy={busy}
+                        label={previewSteps.length === 0 ? "Add the first step" : "Add step"}
+                        onClick={() => {
+                          setError(null);
+                          setConfirmingStepDelete(null);
+                          setAddingStep(true);
+                        }}
+                      />
+                    )
                   )}
                 </div>
               )}
@@ -909,6 +1046,12 @@ export function WorkshopModal({
                     <span className="text-blue-700 dark:text-blue-300">Preview</span>
                   )}
                 </div>
+                {answerFailed && !answerChanged && (
+                  <p className="mt-1 text-xs font-semibold text-[color:var(--color-warning-dark)]">
+                    Automatic solving failed on this problem. Type the answer to
+                    approve it.
+                  </p>
+                )}
                 {answerChanged && liveItem.final_answer && (
                   <BeforeBlock>
                     <div className="text-base font-bold text-text-muted">
@@ -921,7 +1064,11 @@ export function WorkshopModal({
                     <MathText text={previewAnswer ?? ""} />
                   ) : (
                     <ClickToEditText
-                      value={liveItem.final_answer ?? ""}
+                      // The failed-solve placeholder isn't an answer —
+                      // show an empty field so the teacher types into a
+                      // blank input instead of deleting the sentinel.
+                      value={answerFailed ? "" : (liveItem.final_answer ?? "")}
+                      placeholder="Click to add the final answer"
                       onSave={saveFinalAnswer}
                       busy={busy}
                     />

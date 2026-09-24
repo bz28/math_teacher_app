@@ -20,12 +20,16 @@ export function ClickToEditText({
   inline,
   onSave,
   busy,
+  placeholder,
 }: {
   value: string;
   multiline?: boolean;
   inline?: boolean;
   onSave: (next: string) => void;
   busy: boolean;
+  /** Shown (muted) when `value` is empty, and in the editor. Without it
+   *  an empty value renders as a near-invisible click target. */
+  placeholder?: string;
 }) {
   const [editing, setEditing] = useState(false);
 
@@ -44,7 +48,11 @@ export function ClickToEditText({
         aria-label="Click to edit text"
         disabled={busy}
       >
-        <MathText text={value || " "} />
+        {!value && placeholder ? (
+          <span className="font-normal italic text-text-muted">{placeholder}</span>
+        ) : (
+          <MathText text={value || " "} />
+        )}
       </button>
     );
   }
@@ -54,17 +62,33 @@ export function ClickToEditText({
   const cancel = () => setEditing(false);
 
   if (multiline) {
-    return <MultilineEditor initialValue={value} onCommit={handleSave} onCancel={cancel} />;
+    return (
+      <MultilineEditor
+        initialValue={value}
+        placeholder={placeholder}
+        onCommit={handleSave}
+        onCancel={cancel}
+      />
+    );
   }
-  return <SingleLineEditor initialValue={value} onCommit={handleSave} onCancel={cancel} />;
+  return (
+    <SingleLineEditor
+      initialValue={value}
+      placeholder={placeholder}
+      onCommit={handleSave}
+      onCancel={cancel}
+    />
+  );
 }
 
 function SingleLineEditor({
   initialValue,
+  placeholder,
   onCommit,
   onCancel,
 }: {
   initialValue: string;
+  placeholder?: string;
   onCommit: (next: string) => void;
   onCancel: () => void;
 }) {
@@ -73,6 +97,7 @@ function SingleLineEditor({
     <input
       type="text"
       value={draft}
+      placeholder={placeholder}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => onCommit(draft)}
       onKeyDown={(e) => {
@@ -97,10 +122,12 @@ function SingleLineEditor({
  */
 function MultilineEditor({
   initialValue,
+  placeholder,
   onCommit,
   onCancel,
 }: {
   initialValue: string;
+  placeholder?: string;
   onCommit: (next: string) => void;
   onCancel: () => void;
 }) {
@@ -119,6 +146,7 @@ function MultilineEditor({
     <textarea
       ref={ref}
       value={draft}
+      placeholder={placeholder}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => onCommit(draft)}
       onKeyDown={(e) => {
