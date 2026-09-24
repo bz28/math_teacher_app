@@ -471,7 +471,7 @@ GOLDEN_CASES: list[GradingCase] = [
         extra={
             "forbids_deduction_mentioning": ["graph", "drawing", "drawn", "method"],
             "requires_reasoning_mentioning": "photo",
-            "max_confidence": 0.6,
+            "max_confidence": 0.5,  # strictly under the review page's CONFIDENCE_LOW (0.6)
         },
         problems=_prob(
             "Solve the system by graphing. Identify the solution as an ordered pair. "
