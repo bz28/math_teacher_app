@@ -2712,17 +2712,20 @@ export interface paths {
          *
          *     Acts on exactly the submissions `ai_grade_block` clears — the same
          *     rule the review page counts with, so "Grade N ungraded" moves N.
-         *     That includes work the student never confirmed or flagged: a
-         *     grading job used to be created ONLY by the student's confirm, so
-         *     unconfirmed work counted as ungraded while this endpoint moved zero
-         *     jobs for it, and the button refetched to the identical state
-         *     forever. Now a missing job is created here.
+         *     It used to count every score-less submission, including work the
+         *     student hadn't confirmed (which has no grading job, so this moved
+         *     zero jobs for it and the count never went down). Those now read as
+         *     waiting on the student instead. A confirmed or flagged submission
+         *     with no job — AI grading was off when it was confirmed, or it was
+         *     flagged, which never enqueues — gets one created here.
          *
          *     `enqueue_submission` does the rest: a queued job is pulled forward,
-         *     a `failed` one revived with its retry budget reset, and a `running`
-         *     or `done` one left alone — re-running either would double-charge.
-         *     Anything with grade data of any kind is not eligible at all; that is
-         *     a regrade, and this never regrades.
+         *     a `failed` or `skipped` one revived with its retry budget reset, and
+         *     a `running` one left alone. A `done` job is revived too
+         *     (`revive_done`) — safe only because eligibility already proved there
+         *     is no grade data: the teacher hand-graded before the drain, then
+         *     cleared it. Anything with grade data of any kind is not eligible at
+         *     all; that is a regrade, and this never regrades.
          *
          *     `section_id` scopes this to one class. The review page is
          *     per-section and its button counts only that section, so without the
@@ -3980,17 +3983,11 @@ export interface paths {
          *
          *     First grading only — never a regrade. Refused (409) when the
          *     submission carries grade data of ANY kind (AI, hand, partial,
-         *     reviewed, previously published), when there is no transcription to
-         *     grade, or when the photo was unreadable; 400 when AI grading is off
-         *     for the homework. The rule is `grading_queue.ai_grade_block`, the
-         *     same one the review page uses to decide whether to show the button.
-         *
-         *     Does not require the student to have confirmed the transcription:
-         *     the teacher approves every AI grade before a student sees it. If the
-         *     student confirms afterwards, the confirm's enqueue finds the job
-         *     `running` or `done` and leaves it alone (see `enqueue_submission`),
-         *     so the work is never graded twice; if the job is still `queued`, the
-         *     drain grades the student's corrected reading.
+         *     reviewed, previously published), when the student hasn't confirmed
+         *     or flagged the reading yet, when there is no transcription to grade,
+         *     or when the photo was unreadable; 400 when AI grading is off for the
+         *     homework. The rule is `grading_queue.ai_grade_block`, the same one
+         *     the review page uses to decide whether to show the button.
          *
          *     Deliberately forfeits the shared cached prefix — one call has
          *     nothing to share with — which is the right trade when a teacher
