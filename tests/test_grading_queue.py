@@ -790,10 +790,11 @@ async def test_a_teacher_can_revive_a_failed_job() -> None:
 
 
 async def test_reenqueue_never_touches_running_or_finished_work() -> None:
-    """The double-grade guard. A teacher's "Grade with AI" and the
-    student's later confirm both enqueue the same submission; before
-    this, the second reset a `running` job to `queued`, and a second
-    drain claimed it and billed the same grade twice in parallel."""
+    """The double-grade guard. Several callers can enqueue the same
+    submission close together (a double click, "Grade all" racing
+    "Grade with AI", a retried confirm); resetting a `running` job to
+    `queued` let a second drain claim it and bill the same grade twice
+    in parallel."""
     world = await _seed_hw(n_submissions=3)
     await _prepare(world["assignment_id"], world["submission_ids"], due_at=None)
     running_sub, done_sub, skipped_sub = world["submission_ids"]
@@ -812,12 +813,27 @@ async def test_reenqueue_never_touches_running_or_finished_work() -> None:
             job.status = st
         await s.commit()
 
-    # Both callers: the teacher's run-now and the student's confirm.
     for sid in (running_sub, done_sub):
         assert await _enqueue_now(world["assignment_id"], sid) is False
         await _enqueue(world["assignment_id"], sid)
     assert (await _job(running_sub)).status == STATUS_RUNNING  # type: ignore[union-attr]
     assert (await _job(done_sub)).status == STATUS_DONE  # type: ignore[union-attr]
+
+    # The teacher path's `revive_done` (caller has proved no grade data
+    # exists) brings a `done` job back — never a `running` one.
+    async with get_session_factory()() as s:
+        assignment = (await s.execute(
+            select(Assignment).where(Assignment.id == world["assignment_id"])
+        )).scalar_one()
+        assert await enqueue_submission(
+            s, running_sub, assignment, run_now=True, revive_done=True,
+        ) is False
+        assert await enqueue_submission(
+            s, done_sub, assignment, run_now=True, revive_done=True,
+        ) is True
+        await s.commit()
+    assert (await _job(running_sub)).status == STATUS_RUNNING  # type: ignore[union-attr]
+    assert (await _job(done_sub)).status == STATUS_QUEUED  # type: ignore[union-attr]
 
     # `skipped` closed with no grade (AI was switched off before the
     # drain reached it). Callers only enqueue work they have already

@@ -34,7 +34,7 @@ from api.middleware.auth import CurrentUser, get_current_user_full, require_teac
 from api.middleware.rate_limit import limiter
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course
-from api.models.grading_job import GradingJob
+from api.models.grading_job import STATUS_RUNNING, GradingJob
 from api.models.integrity_check import (
     IntegrityCheckProblem,
     IntegrityCheckSubmission,
@@ -2070,8 +2070,15 @@ _AI_GRADE_BLOCK_DETAIL = {
         "The AI couldn't read this submission's photo — grade it by hand"
     ),
     "no_extraction": (
-        "This submission's work hasn't been read yet — nothing for the AI "
-        "to grade"
+        "This submission's work was never read — nothing for the AI to "
+        "grade. Grade it by hand."
+    ),
+    "extracting": (
+        "This submission's work is still being read — try again in a minute"
+    ),
+    "awaiting_confirmation": (
+        "Waiting for the student to confirm the reading of their work — "
+        "AI grading opens once they do"
     ),
 }
 
@@ -2092,17 +2099,20 @@ async def grade_pending_submissions(
 
     Acts on exactly the submissions `ai_grade_block` clears — the same
     rule the review page counts with, so "Grade N ungraded" moves N.
-    That includes work the student never confirmed or flagged: a
-    grading job used to be created ONLY by the student's confirm, so
-    unconfirmed work counted as ungraded while this endpoint moved zero
-    jobs for it, and the button refetched to the identical state
-    forever. Now a missing job is created here.
+    It used to count every score-less submission, including work the
+    student hadn't confirmed (which has no grading job, so this moved
+    zero jobs for it and the count never went down). Those now read as
+    waiting on the student instead. A confirmed or flagged submission
+    with no job — AI grading was off when it was confirmed, or it was
+    flagged, which never enqueues — gets one created here.
 
     `enqueue_submission` does the rest: a queued job is pulled forward,
-    a `failed` one revived with its retry budget reset, and a `running`
-    or `done` one left alone — re-running either would double-charge.
-    Anything with grade data of any kind is not eligible at all; that is
-    a regrade, and this never regrades.
+    a `failed` or `skipped` one revived with its retry budget reset, and
+    a `running` one left alone. A `done` job is revived too
+    (`revive_done`) — safe only because eligibility already proved there
+    is no grade data: the teacher hand-graded before the drain, then
+    cleared it. Anything with grade data of any kind is not eligible at
+    all; that is a regrade, and this never regrades.
 
     `section_id` scopes this to one class. The review page is
     per-section and its button counts only that section, so without the
@@ -2140,6 +2150,7 @@ async def grade_pending_submissions(
         if await enqueue_submission(
             db, sub.id, assignment,
             requested_by_id=current_user.user_id, run_now=True,
+            revive_done=True,
         ):
             queued += 1
     await db.commit()
@@ -2158,17 +2169,11 @@ async def grade_submission_now(
 
     First grading only — never a regrade. Refused (409) when the
     submission carries grade data of ANY kind (AI, hand, partial,
-    reviewed, previously published), when there is no transcription to
-    grade, or when the photo was unreadable; 400 when AI grading is off
-    for the homework. The rule is `grading_queue.ai_grade_block`, the
-    same one the review page uses to decide whether to show the button.
-
-    Does not require the student to have confirmed the transcription:
-    the teacher approves every AI grade before a student sees it. If the
-    student confirms afterwards, the confirm's enqueue finds the job
-    `running` or `done` and leaves it alone (see `enqueue_submission`),
-    so the work is never graded twice; if the job is still `queued`, the
-    drain grades the student's corrected reading.
+    reviewed, previously published), when the student hasn't confirmed
+    or flagged the reading yet, when there is no transcription to grade,
+    or when the photo was unreadable; 400 when AI grading is off for the
+    homework. The rule is `grading_queue.ai_grade_block`, the same one
+    the review page uses to decide whether to show the button.
 
     Deliberately forfeits the shared cached prefix — one call has
     nothing to share with — which is the right trade when a teacher
@@ -2205,7 +2210,21 @@ async def grade_submission_now(
     queued = await enqueue_submission(
         db, sub.id, assignment,
         requested_by_id=current_user.user_id, run_now=True,
+        revive_done=True,
     )
+    if not queued:
+        # With `revive_done`, only a `running` job refuses the write —
+        # the grade is in flight, which is success. Anything else would
+        # be a button that said "grade" and did nothing, so say so.
+        job_status = (await db.execute(
+            select(GradingJob.status)
+            .where(GradingJob.submission_id == sub.id)
+        )).scalar_one_or_none()
+        if job_status != STATUS_RUNNING:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Couldn't queue this submission for AI grading",
+            )
     await db.commit()
     if queued:
         _spawn_drain(drain)

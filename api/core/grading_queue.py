@@ -80,6 +80,7 @@ async def enqueue_submission(
     *,
     requested_by_id: uuid.UUID | None = None,
     run_now: bool = False,
+    revive_done: bool = False,
 ) -> bool:
     """Record that a submission owes an AI grade.
 
@@ -101,15 +102,24 @@ async def enqueue_submission(
     run now back to a future schedule.
 
     A `running` or `done` row is left exactly as it is, and that is the
-    double-grade guard. Both callers can fire for the same submission —
-    a teacher grades an unconfirmed submission, then the student
-    confirms — and before this the confirm reset a `running` job to
-    `queued`, so a second drain could claim it and bill the same grade
+    double-grade guard. Several callers can reach the same submission
+    close together — a double-clicked "Grade with AI", "Grade all"
+    racing it, a retried confirm — and resetting a `running` job to
+    `queued` would let a second drain claim it and bill the same grade
     twice in parallel. `done` means a grade landed; changing it is a
     regrade's job, not a re-queue's.
 
-    Returns whether a row was written — False means the job was already
-    running or done, so nothing new is on its way from this call.
+    `revive_done` is for the teacher's buttons only, and only once the
+    caller has checked `ai_grade_block` — i.e. the submission carries no
+    grade data at all. A `done` job then means the drain saw a grade
+    that has since gone: the teacher hand-graded before the due date
+    (the drain skips the LLM and closes the job `done`), then cleared
+    it. Without the revive the button showed, the click wrote nothing,
+    and the grade never came. `running` is never revived.
+
+    Returns whether a row was written — False means the job was
+    running (or `done`, without `revive_done`), so nothing new is on its
+    way from this call.
     """
     scheduled_for = _now() if run_now else assignment.due_at
 
@@ -150,7 +160,10 @@ async def enqueue_submission(
                     GradingJob.scheduled_for, stmt.excluded.scheduled_for,
                 ),
             },
-            where=GradingJob.status.notin_((STATUS_RUNNING, STATUS_DONE)),
+            where=GradingJob.status.notin_(
+                (STATUS_RUNNING,) if revive_done
+                else (STATUS_RUNNING, STATUS_DONE),
+            ),
         ),
     ))
     return bool(result.rowcount)
@@ -176,6 +189,16 @@ BLOCK_AI_DISABLED = "ai_disabled"
 BLOCK_GRADED = "graded"
 BLOCK_UNREADABLE = "unreadable"
 BLOCK_NO_EXTRACTION = "no_extraction"
+BLOCK_EXTRACTING = "extracting"
+BLOCK_AWAITING_CONFIRMATION = "awaiting_confirmation"
+
+# Reading a submission is a background Vision call that normally lands
+# within a minute or two of submit. Work with no reading younger than
+# this is presumed still being read, not failed — the review page says
+# "reading…" rather than filing it under "can't be AI-graded". There is
+# no extraction-status column to ask instead; past this window a missing
+# reading is treated as a failed one.
+EXTRACTION_GRACE = timedelta(minutes=15)
 
 
 def has_any_grade(grade: SubmissionGrade | None) -> bool:
@@ -221,13 +244,17 @@ def ai_grade_block(
     One rule, shared by the per-student button, "Grade all" and the
     count on it, so the label and the action can't disagree.
 
-    Deliberately NOT gated on the student confirming the transcription.
-    An unconfirmed (or student-flagged) submission with a readable
-    extraction is gradeable — the teacher reviews and approves every AI
-    grade before a student sees it, so nothing reaches anyone
-    unchecked. What IS required is a reading worth grading: an
-    extraction exists and clears the same unreadable bar the submit
-    pipeline and the drain apply.
+    Requires the student to have answered the confirm screen: either
+    confirmed the reading, or flagged it ("reader got something wrong").
+    Work the student hasn't looked at yet waits for them — grading it
+    would grade a reading they may still correct. A flagged submission
+    is graded on its extraction as-is (a flag stores no edits); the
+    teacher sees the flag beside the grade and approves it either way.
+
+    Beyond that, a reading worth grading: an extraction exists and
+    clears the same unreadable bar the submit pipeline and the drain
+    apply. A hand grade the teacher cleared (and never published)
+    leaves no grade data, so that submission is eligible again.
     """
     from api.core.grading_ai import GRADING_STATUS_SKIPPED_UNREADABLE
     from api.core.integrity_ai import UNREADABLE_THRESHOLD
@@ -237,12 +264,16 @@ def ai_grade_block(
     if has_any_grade(grade):
         return BLOCK_GRADED
     if sub.extraction is None:
+        if sub.submitted_at and _now() - sub.submitted_at < EXTRACTION_GRACE:
+            return BLOCK_EXTRACTING
         return BLOCK_NO_EXTRACTION
     if (
         grade is not None
         and grade.ai_grading_status == GRADING_STATUS_SKIPPED_UNREADABLE
     ) or sub.extraction.get("confidence", 0.0) < UNREADABLE_THRESHOLD:
         return BLOCK_UNREADABLE
+    if sub.extraction_confirmed_at is None and sub.extraction_flagged_at is None:
+        return BLOCK_AWAITING_CONFIRMATION
     return None
 
 

@@ -893,8 +893,16 @@ async def run_ai_grading_for_submission(
         .values(submission_id=sub.id)
         .on_conflict_do_nothing(index_elements=["submission_id"])
     )
+    # Locked from here to the caller's commit — after the LLM call, so
+    # the lock is held for a few writes, never a model round trip. It
+    # closes the gap between this read and that commit: a teacher's hand
+    # grade saved in between now waits, and the `final_score` check
+    # below sees it rather than a stale row.
     grade = (await db.execute(
-        select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
+        select(SubmissionGrade)
+        .where(SubmissionGrade.submission_id == sub.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )).scalar_one()
 
     grade.ai_breakdown = result
