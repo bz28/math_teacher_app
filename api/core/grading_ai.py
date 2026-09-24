@@ -95,7 +95,9 @@ drawing, is NOT full credit — grade it \
 as "right answer, required method missing" partial credit (the rubric's Partial \
 credit anchors say how much). A required drawing that is present but incomplete \
 (one of two lines plotted, the intersection not marked, an unlabeled axis) is a \
-smaller deduction than a missing one. A named algebraic method that wasn't used \
+smaller deduction than a missing one. A required drawing listed as UNCONFIRMED \
+(see below) is the exception: it is neither missing nor incomplete, so it is \
+never a "required method missing" deduction. A named algebraic method that wasn't used \
 (substitution when elimination was required) is also "required method missing": \
 never full credit, and itemize it as its own deduction so the teacher can size \
 it — the problem was testing that method. Name the requirement in `reasoning` \
@@ -108,6 +110,14 @@ because the answer is right. "(no drawing for this problem)" means none exists. 
 "(no drawing attributed to this problem …)" means a drawing exists somewhere on the \
 page that couldn't be tied to a problem — check "Other work" before deducting for a \
 missing drawing, and give the benefit of the doubt when it plausibly belongs here.
+- "<kind>: UNCONFIRMED" means a drawing was reported on the page but a zoomed-in \
+second look couldn't find it — usually a misplaced location. What was drawn is \
+UNKNOWN, not absent. Don't credit anything as coming from the drawing (no answer \
+or points read off it), and do NOT deduct for a required drawing or graphing method \
+because of it: treat that requirement as met and grade the rest of the work. The \
+teacher decides from the photo: say in `reasoning` that the drawing couldn't be \
+verified and the teacher should check the photo, and set `confidence` no higher \
+than 0.6.
 - An answer that exists only on a drawing — an intersection the student marked, a \
 shaded region, a circled value on a number line — counts as a stated final answer.
 - If the student's approach is correct but they made an arithmetic or sign error, give \
@@ -247,7 +257,9 @@ def _format_visual_work(v: dict[str, Any]) -> str:
         # back up, so it is withheld — the grader gets the fact, not it.
         return (
             f"{kind}: UNCONFIRMED — reported on the page, but a zoomed second "
-            "look found no drawing there; credit nothing as drawn from it"
+            "look couldn't find it; what was drawn is unknown — treat any "
+            "drawing requirement as met, credit nothing from it, and have the "
+            "teacher check the photo (see the UNCONFIRMED rule)"
         )
     parts = [kind]
     elements = [e for e in (v.get("plotted_elements") or []) if isinstance(e, str) and e.strip()]

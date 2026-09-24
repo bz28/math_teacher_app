@@ -705,7 +705,7 @@ class TestBuildUserMessageDrawings:
         }
         p1 = _sections_by_position(_build_user_message(extraction, self._problems()))[1]
         assert "graph: UNCONFIRMED" in p1
-        assert "credit nothing as drawn" in p1
+        assert "what was drawn is unknown" in p1
         # The primed first-pass claim is exactly what couldn't be backed up.
         assert "Two lines plotted" not in p1
         assert "nothing plotted" not in p1
@@ -742,6 +742,17 @@ class TestBuildUserMessageDrawings:
         msg = _build_user_message(extraction, self._problems())
         assert msg.count("(no drawing for this problem)") == 2
         assert "## Other work" not in msg
+
+    def test_system_prompt_explains_unconfirmed(self) -> None:
+        """An unconfirmed drawing (often just a bad bbox) must neither be
+        credited nor treated as missing — the teacher decides from the
+        photo."""
+        prompt = _build_system_prompt(None, self._problems())
+        assert '"<kind>: UNCONFIRMED"' in prompt
+        assert "UNKNOWN, not absent" in prompt
+        assert "do NOT deduct for a required drawing" in prompt
+        assert "never a \"required method missing\" deduction" in prompt
+        assert "teacher should check the photo" in prompt
 
     def test_system_prompt_carries_the_method_rule(self) -> None:
         prompt = _build_system_prompt(None, self._problems())

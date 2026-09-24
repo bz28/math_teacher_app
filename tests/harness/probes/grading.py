@@ -107,7 +107,7 @@ def _prob(question: str, answer: str) -> list[dict[str, Any]]:
 
 
 # ── The golden set ────────────────────────────────────────────────────────
-# 18 cases, ≥2 per matrix row. Rubric is None throughout, so the grader applies
+# 19 cases, ≥2 per matrix row. Rubric is None throughout, so the grader applies
 # the shipped DEFAULT rubric — i.e. exactly what a teacher who authors no rubric
 # gets. Two cases are physics (a2, b3) per the "a couple physics" ask.
 
@@ -462,6 +462,39 @@ GOLDEN_CASES: list[GradingCase] = [
         ),
     ),
     GradingCase(
+        # The zoomed second look couldn't find the reported graph (a bad
+        # bbox does this). Unknown is not absent: no "required drawing
+        # missing" deduction, no credit for drawn content, and the
+        # teacher is told to check the photo.
+        name="f7-graph-required-unconfirmed-surfaces-for-teacher",
+        category="f",
+        extra={
+            "forbids_deduction_mentioning": ["graph", "drawing", "drawn", "method"],
+            "requires_reasoning_mentioning": "photo",
+            "max_confidence": 0.6,
+        },
+        problems=_prob(
+            "Solve the system by graphing. Identify the solution as an ordered pair. "
+            "y = 2x - 1 and y = -x + 5",
+            "(2, 3)",
+        ),
+        extraction=_vis(
+            _ext(
+                [(1, "y = 2x - 1 \\\\ y = -x + 5"), (2, "2x - 1 = -x + 5"), (3, "x = 2"), (4, "y = 3")],
+                "(2, 3)",
+            ),
+            [{**_draw("graph", present=True,
+                      description="Axes with two lines crossing near (2, 3)."),
+              "verified": False, "unconfirmed": True}],
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale=(
+            "Correct answer; the graph was reported but couldn't be confirmed. "
+            "Unknown is not missing: no method deduction, low confidence, teacher checks the photo."
+        ),
+    ),
+    GradingCase(
         name="e2-blank",
         category="e",
         problems=_prob("Solve x^2 - 5x + 6 = 0.", "x = 2 or x = 3"),
@@ -496,7 +529,7 @@ class GradingProbe(Probe):
     name = "grading"
     needs_browser = False
     default_constraint = (
-        "Grading-quality golden set: 18 hand-labeled submissions spanning "
+        "Grading-quality golden set: 19 hand-labeled submissions spanning "
         "clean-correct, valid-alternative-method, broken-work-right-answer, "
         "arithmetic-slip, plainly-wrong, and required-method/drawing. Asserts the AI grader's "
         "score_status matches the label."
@@ -583,6 +616,9 @@ class GradingProbe(Probe):
                         "persisted_deductions": persisted_deductions,
                         "percent_band": case.extra.get("percent_band"),
                         "requires_deduction_mentioning": case.extra.get("requires_deduction_mentioning"),
+                        "forbids_deduction_mentioning": case.extra.get("forbids_deduction_mentioning"),
+                        "requires_reasoning_mentioning": case.extra.get("requires_reasoning_mentioning"),
+                        "max_confidence": case.extra.get("max_confidence"),
                     },
                 )
             )
@@ -640,6 +676,48 @@ class GradingProbe(Probe):
                     f"a deduction names the {needle!r} miss",
                     found,
                     "" if found else f"no deduction reason mentions {needle!r}: {ded}",
+                )
+            )
+
+        # Unknown must not be priced as absent: none of these words may
+        # appear in a deduction reason (the unconfirmed-drawing case).
+        forbidden = item.raw.get("forbids_deduction_mentioning") or []
+        if forbidden:
+            ded = (item.raw.get("grade") or {}).get("deductions") or []
+            hits = [
+                str(d.get("reason", "")) for d in ded
+                if isinstance(d, dict)
+                and any(w in str(d.get("reason", "")).lower() for w in forbidden)
+            ]
+            checks.append(
+                CheckResult(
+                    f"no deduction mentions {forbidden}",
+                    not hits,
+                    "" if not hits else f"deductions: {hits}",
+                )
+            )
+
+        # The teacher is told what to check, and the row is surfaced.
+        note = item.raw.get("requires_reasoning_mentioning")
+        if note:
+            reasoning = str((item.raw.get("grade") or {}).get("reasoning", ""))
+            ok_note = note in reasoning.lower()
+            checks.append(
+                CheckResult(
+                    f"reasoning mentions {note!r}",
+                    ok_note,
+                    "" if ok_note else f"reasoning: {reasoning!r}",
+                )
+            )
+        cap = item.raw.get("max_confidence")
+        if cap is not None:
+            conf = (item.raw.get("grade") or {}).get("confidence")
+            ok_conf = isinstance(conf, (int, float)) and float(conf) <= cap
+            checks.append(
+                CheckResult(
+                    f"confidence <= {cap} (got {conf})",
+                    ok_conf,
+                    "" if ok_conf else f"confidence {conf!r} above {cap}",
                 )
             )
 
