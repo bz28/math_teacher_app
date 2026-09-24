@@ -50,10 +50,12 @@ def _clean_solution_steps(raw: list[Any]) -> list[dict[str, Any]] | None:
     The editor sends the whole array (add / delete / reorder / edit all
     replace it wholesale), so this is the one gate between arbitrary JSON
     and every reader downstream — student practice, the integrity agent's
-    canonical steps, the step-chat tutor. Each entry must be an object
-    with a non-empty title or description; anything else is a 400 rather
-    than a silent drop, because dropping would quietly lose a step the
-    teacher believes they saved. Extra keys (figure_spec / figure_svg)
+    canonical steps, the step-chat tutor. A malformed entry (not an
+    object, or non-text title/description) is a 400. A step whose title
+    and description are both blank carries nothing for any reader, so it
+    is dropped rather than rejected: clearing both fields of a step
+    removes it, and a blank step left over from older edits can't block
+    every later save of the list. Extra keys (figure_spec / figure_svg)
     ride through untouched so a reorder never strips a step's figure.
 
     An empty list is stored as None — the generation pipeline's own
@@ -76,10 +78,7 @@ def _clean_solution_steps(raw: list[Any]) -> list[dict[str, Any]] | None:
                 )
             fields[key] = (value or "").strip()
         if not fields["title"] and not fields["description"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Step {n} is empty — give it a title or description, or delete it",
-            )
+            continue
         cleaned.append({**step, **fields})
     return cleaned or None
 

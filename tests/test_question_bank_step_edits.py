@@ -8,7 +8,8 @@ agent's canonical steps, the step-chat tutor). These pin:
 - add / delete / reorder each land as one undoable edit and one
   question_edits row (field=solution),
 - a reorder moves whole step objects — a step's figure travels with it,
-- blank or malformed steps are refused without touching the undo slot,
+- malformed steps are refused without touching the undo slot; blank
+  ones are dropped (so a leftover blank step can't block later saves),
 - deleting the last step stores None (the pipeline's "no steps"),
 - locked items refuse step edits.
 
@@ -175,7 +176,7 @@ async def test_titles_and_descriptions_are_trimmed(
     assert r.status_code == 200, r.text
 
 
-async def test_blank_or_malformed_steps_are_refused_without_losing_undo(
+async def test_malformed_steps_are_refused_without_losing_undo(
     client: AsyncClient, world: dict[str, Any],
 ) -> None:
     item_id = await _setup(world, [A])
@@ -183,11 +184,10 @@ async def test_blank_or_malformed_steps_are_refused_without_losing_undo(
     assert (await _patch(client, world, item_id, [A, B])).status_code == 200
 
     for bad in (
-        [A, {"title": "  ", "description": ""}],
-        [A, {"title": None, "description": None}],
         [A, None],
         [A, "just a string"],
         [{"title": 3, "description": "x"}],
+        [{"title": "x", "description": ["y"]}],
     ):
         r = await _patch(client, world, item_id, bad)
         assert r.status_code == 400, (bad, r.text)
@@ -196,6 +196,32 @@ async def test_blank_or_malformed_steps_are_refused_without_losing_undo(
     assert row["steps"] == [A, B]
     assert row["previous_steps"] == [A]
     assert row["edits"] == [("solution", "edit_manual")]
+
+
+async def test_blank_steps_are_dropped_not_rejected(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """A blank step carries nothing for any reader. Rejecting it would let
+    one blank step left over from older data block every later save of
+    the list (the editor always resends the whole array), so it's dropped:
+    clearing both fields of a step removes it."""
+    blank_legacy = {"title": "", "description": "   "}
+    item_id = await _setup(world, [A, blank_legacy, B])
+
+    # Editing a different step on an item that still carries a blank one.
+    edited_b = {**B, "description": "x = 2 or x = 3, check both"}
+    r = await _patch(client, world, item_id, [A, blank_legacy, edited_b])
+    assert r.status_code == 200, r.text
+    assert (await _row(item_id))["steps"] == [A, edited_b]
+
+    r = await _patch(client, world, item_id, [A, {"title": None, "description": None}])
+    assert r.status_code == 200, r.text
+    assert (await _row(item_id))["steps"] == [A]
+
+    # All blank → no steps at all.
+    r = await _patch(client, world, item_id, [{"title": " ", "description": ""}])
+    assert r.status_code == 200, r.text
+    assert (await _row(item_id))["steps"] is None
 
 
 async def test_locked_item_refuses_step_edits(
