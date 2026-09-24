@@ -581,7 +581,36 @@ async def grade_submission_with_ai(
         submission_id=submission_id,
         call_metadata={"phase": "ai_grading"},
     )
+    _cap_confidence_for_unconfirmed_drawings(result, extraction)
     return result
+
+
+# A grade that rests on an UNCONFIRMED drawing must land in the review
+# page's "Low confidence" filter, which is `confidence < CONFIDENCE_LOW`
+# (0.6, strict) in web/.../review/page.tsx. The prompt asks for ≤ 0.6, but
+# 0.6 itself misses the filter and a prompt is a request, not a guarantee —
+# so the cap is enforced here, safely under the web threshold. There is no
+# shared constants module between api/ and web/; keep the two in step.
+_UNCONFIRMED_DRAWING_MAX_CONFIDENCE = 0.5
+
+
+def _cap_confidence_for_unconfirmed_drawings(
+    result: dict[str, Any], extraction: dict[str, Any],
+) -> None:
+    """Lower (never raise) the confidence of every grade whose problem has
+    an unconfirmed drawing, in place. Deterministic, so the teacher is
+    always pointed at the photo whatever the model returned."""
+    positions = {
+        v.get("problem_position")
+        for v in extraction.get("visual_work") or []
+        if isinstance(v, dict) and v.get("unconfirmed")
+    }
+    for g in result.get("grades") or []:
+        if not isinstance(g, dict) or g.get("problem_position") not in positions:
+            continue
+        conf = g.get("confidence")
+        if not isinstance(conf, (int, float)) or conf > _UNCONFIRMED_DRAWING_MAX_CONFIDENCE:
+            g["confidence"] = _UNCONFIRMED_DRAWING_MAX_CONFIDENCE
 
 
 # ── Pipeline integration ───────────────────────────────────────────
