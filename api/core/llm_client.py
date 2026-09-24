@@ -746,6 +746,9 @@ def _normalize_arrays(
     nothing from the `\f\v\b\r` family won't trip detection here — those are caught
     by the frontend restore net (math-text.tsx). The common case (any `\frac`/
     `\vec`/etc. present) does trip it and fixes the whole element.
+
+    A field that is still a string after both parses raises ValueError, which
+    `call_claude_json` treats as a bad response and retries with a fresh call.
     """
     properties = schema.get("input_schema", {}).get("properties", {})
     for key, prop in properties.items():
@@ -761,8 +764,18 @@ def _normalize_arrays(
             if safe is not None and not _has_corruption(safe):
                 result[key] = safe
                 continue
-        if plain is not None:
-            result[key] = plain
+        if plain is None:
+            # Neither parse recovered a list — typically unescaped `"` inside
+            # the stringified array (quoted English like **"If $p$, then $q$"**),
+            # which no amount of re-escaping can disambiguate. Passing the
+            # string through let the call log as a success and then blow up in
+            # the caller, outside any retry. Raise so call_claude_json re-asks
+            # the model instead.
+            raise ValueError(
+                f"Tool field {key!r} is declared as an array but came back as "
+                f"an unparseable string ({len(value)} chars): {value[:200]!r}"
+            )
+        result[key] = plain
     return result
 
 
