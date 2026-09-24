@@ -4035,8 +4035,9 @@ function UnconfirmedDrawingNote({ description }: { description: string }) {
   return (
     <>
       <span className="block text-text-muted">
-        A zoomed-in look couldn&rsquo;t find it, so the AI didn&rsquo;t credit
-        it &mdash; check the student&rsquo;s photo.
+        A zoomed-in look couldn&rsquo;t find it, so the AI didn&rsquo;t count
+        it for or against the student &mdash; check the photo and adjust if
+        needed.
       </span>
       {description && (
         <span className="block italic text-text-muted">
