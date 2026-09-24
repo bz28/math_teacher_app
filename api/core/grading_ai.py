@@ -904,7 +904,13 @@ async def run_ai_grading_for_submission(
     # the teacher has edited the rubric since this run.
     grade.rubric_snapshot = assignment.rubric
 
-    if force or grade.reviewed_by is None:
+    # `final_score` set HERE, on the non-force path, can only mean a
+    # teacher saved a hand grade while the model was thinking — the
+    # guard at the top returned early if one existed beforehand. A
+    # partial hand grade carries no review stamp, so without this the
+    # AI's breakdown silently replaced the problems she had just scored.
+    # Her grade wins; the AI read is still kept on `ai_breakdown`.
+    if force or (grade.reviewed_by is None and grade.final_score is None):
         grade.breakdown = breakdown
         grade.final_score = ai_score
         grade.graded_at = datetime.now(UTC)

@@ -9,6 +9,7 @@ They also have to be safe against the money-losing mistakes: re-running a
 submission that is already graded, or one a drain is already working.
 """
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -18,9 +19,9 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from api.core.grading_queue import enqueue_submission
+from api.core.grading_queue import drain, enqueue_submission
 from api.database import get_session_factory
-from api.models.assignment import Assignment, Submission
+from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.grading_job import (
     STATUS_DONE,
     STATUS_QUEUED,
@@ -320,3 +321,347 @@ async def test_grade_now_rejects_a_hw_with_ai_grading_off(
         headers=_auth(world["teacher_token"]),
     )
     assert r.status_code == 400
+
+
+# ── "Grade with AI" on work that was never graded ────────────────────
+#
+# A grading job used to be created ONLY when the student confirmed the
+# transcription. Everything else — unconfirmed, flagged — counted as
+# "ungraded" on the review page while both buttons moved zero jobs for
+# it: a silent no-op on a quarter of a week's submissions in prod.
+
+
+async def _unconfirmed_world(
+    n_submissions: int = 1, **sub_fields: Any,
+) -> dict[str, Any]:
+    """Submissions with a readable extraction the student never
+    confirmed — so no grading job exists — on a no-due-date homework."""
+    world = await _seed_hw(n_submissions=n_submissions)
+    async with get_session_factory()() as s:
+        assignment = (await s.execute(
+            select(Assignment).where(Assignment.id == world["assignment_id"])
+        )).scalar_one()
+        assignment.ai_grading_enabled = True
+        assignment.integrity_check_enabled = False
+        assignment.due_at = None
+        for sid in world["submission_ids"]:
+            sub = (await s.execute(
+                select(Submission).where(Submission.id == sid)
+            )).scalar_one()
+            sub.extraction = _EXTRACTION
+            for k, v in sub_fields.items():
+                setattr(sub, k, v)
+        await s.commit()
+    return world
+
+
+async def _fake_grade(
+    submission_id: uuid.UUID, extraction: Any, db: Any, **kwargs: Any,
+) -> None:
+    """The grader, minus the LLM: writes an AI grade the way the real
+    one does, so the drain sees a grade land."""
+    db.add(SubmissionGrade(
+        submission_id=submission_id, ai_score=100.0, final_score=100.0,
+        ai_breakdown={"grades": []}, breakdown=[],
+    ))
+    await db.flush()
+
+
+def _graded_ids(grader: AsyncMock) -> list[uuid.UUID]:
+    return [c.args[0] for c in grader.await_args_list]
+
+
+async def _grade_now(
+    client: AsyncClient, world: dict[str, Any], sid: uuid.UUID,
+) -> Any:
+    with patch("api.core.grading_queue.drain", new=AsyncMock(return_value={})):
+        return await client.post(
+            f"/v1/teacher/submissions/{sid}/grade-now",
+            headers=_auth(world["teacher_token"]),
+        )
+
+
+@pytest.mark.parametrize("flagged", [False, True], ids=["unconfirmed", "flagged"])
+async def test_grade_now_grades_work_the_student_never_confirmed(
+    client: AsyncClient, flagged: bool,
+) -> None:
+    fields = {"extraction_flagged_at": datetime.now(UTC)} if flagged else {}
+    world = await _unconfirmed_world(**fields)
+    sid = world["submission_ids"][0]
+    assert await _job(sid) is None  # the old dead end: nothing to move
+
+    r = await _grade_now(client, world, sid)
+    assert r.status_code == 200, r.text
+    assert r.json()["queued"] == 1
+    job = await _job(sid)
+    assert job is not None
+    assert job.status == STATUS_QUEUED
+    assert job.scheduled_for is not None
+    assert job.scheduled_for <= datetime.now(UTC)
+    assert str(job.requested_by_id) == world["teacher_id"]
+
+    grader = AsyncMock(side_effect=_fake_grade)
+    with patch("api.core.grading_ai.run_ai_grading_for_submission", new=grader):
+        await drain()
+    # Other tests' due jobs share the table; count only this one's.
+    assert _graded_ids(grader).count(sid) == 1
+    assert (await _job(sid)).status == STATUS_DONE  # type: ignore[union-attr]
+    async with get_session_factory()() as s:
+        grade = (await s.execute(
+            select(SubmissionGrade).where(SubmissionGrade.submission_id == sid)
+        )).scalar_one()
+    assert grade.final_score == 100.0
+    # Lands as a suggestion — the teacher still approves it.
+    assert grade.reviewed_at is None
+
+
+_GRADED_FORMS: dict[str, dict[str, Any]] = {
+    "ai_grade": {
+        "ai_score": 80.0, "final_score": 80.0, "ai_breakdown": {"grades": []},
+    },
+    # A cleared AI grade keeps its AI fields — still a regrade.
+    "cleared_ai_grade": {"ai_score": 80.0, "ai_breakdown": {"grades": []}},
+    "hand_grade": {
+        "final_score": 100.0,
+        "breakdown": [{"problem_id": "x", "percent": 100}],
+        "graded_at": datetime.now(UTC),
+    },
+    # One problem scored of several: PATCH /grade writes a breakdown and
+    # a final_score averaged over what's scored so far.
+    "partial_hand_grade": {
+        "breakdown": [{"problem_id": "x", "percent": 50}], "final_score": 50.0,
+    },
+    "breakdown_only": {"breakdown": [{"problem_id": "x", "percent": 50}]},
+    "legacy_teacher_score": {"teacher_score": 90.0},
+    "reviewed": {"reviewed_at": datetime.now(UTC)},
+    # Published, then un-graded: the student was shown a grade.
+    "published_then_cleared": {
+        "published_final_score": 70.0, "grade_published_at": datetime.now(UTC),
+    },
+}
+
+
+@pytest.mark.parametrize("form", list(_GRADED_FORMS))
+async def test_grade_now_refuses_anything_already_graded(
+    client: AsyncClient, form: str,
+) -> None:
+    """Never a regrade. Any grade data at all — AI, hand, partial,
+    reviewed, previously published — and the endpoint refuses without
+    creating a job."""
+    world = await _unconfirmed_world()
+    sid = world["submission_ids"][0]
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(submission_id=sid, **_GRADED_FORMS[form]))
+        await s.commit()
+
+    r = await _grade_now(client, world, sid)
+    assert r.status_code == 409, r.text
+    assert "already has a grade" in r.json()["detail"]
+    assert await _job(sid) is None
+
+
+async def test_teacher_notes_alone_do_not_count_as_a_grade(
+    client: AsyncClient,
+) -> None:
+    world = await _unconfirmed_world()
+    sid = world["submission_ids"][0]
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(submission_id=sid, teacher_notes="see me"))
+        await s.commit()
+
+    r = await _grade_now(client, world, sid)
+    assert r.status_code == 200, r.text
+    assert r.json()["queued"] == 1
+
+
+async def test_grade_now_refuses_an_unreadable_photo(client: AsyncClient) -> None:
+    # Unconfirmed: the confirm path never ran, so nothing stamped the
+    # skip — the confidence itself has to be checked.
+    world = await _unconfirmed_world(
+        extraction={**_EXTRACTION, "confidence": 0.1},
+    )
+    sid = world["submission_ids"][0]
+    r = await _grade_now(client, world, sid)
+    assert r.status_code == 409, r.text
+    assert "couldn't read" in r.json()["detail"]
+    assert await _job(sid) is None
+
+    # Confirmed and stamped `skipped_unreadable` by the submit pipeline.
+    world = await _unconfirmed_world()
+    sid = world["submission_ids"][0]
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(
+            submission_id=sid, ai_grading_status="skipped_unreadable",
+        ))
+        await s.commit()
+    r = await _grade_now(client, world, sid)
+    assert r.status_code == 409, r.text
+    assert await _job(sid) is None
+
+
+async def test_grade_now_refuses_work_that_was_never_read(
+    client: AsyncClient,
+) -> None:
+    world = await _unconfirmed_world(extraction=None)
+    sid = world["submission_ids"][0]
+    r = await _grade_now(client, world, sid)
+    assert r.status_code == 409, r.text
+    assert "hasn't been read" in r.json()["detail"]
+    assert await _job(sid) is None
+
+
+async def test_double_click_makes_one_job(client: AsyncClient) -> None:
+    world = await _unconfirmed_world()
+    sid = world["submission_ids"][0]
+    with patch("api.core.grading_queue.drain", new=AsyncMock(return_value={})):
+        results = await asyncio.gather(*(
+            client.post(
+                f"/v1/teacher/submissions/{sid}/grade-now",
+                headers=_auth(world["teacher_token"]),
+            )
+            for _ in range(2)
+        ))
+    assert all(r.status_code == 200 for r in results), [r.text for r in results]
+    async with get_session_factory()() as s:
+        jobs = (await s.execute(
+            select(GradingJob).where(GradingJob.submission_id == sid)
+        )).scalars().all()
+    assert len(jobs) == 1
+
+
+async def test_grade_all_picks_up_unconfirmed_work_and_only_what_it_can_grade(
+    client: AsyncClient,
+) -> None:
+    """The count on the button and the jobs it moves are one rule."""
+    world = await _unconfirmed_world(n_submissions=4)
+    eligible, graded, unreadable, unread = world["submission_ids"]
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(submission_id=graded, final_score=50.0))
+        for sid, extraction in (
+            (unreadable, {**_EXTRACTION, "confidence": 0.1}),
+            (unread, None),
+        ):
+            sub = (await s.execute(
+                select(Submission).where(Submission.id == sid)
+            )).scalar_one()
+            sub.extraction = extraction
+        await s.commit()
+
+    with patch("api.core.grading_queue.drain", new=AsyncMock(return_value={})):
+        r = await client.post(
+            f"/v1/teacher/assignments/{world['assignment_id']}/grade-pending"
+            f"?section_id={world['section_id']}",
+            headers=_auth(world["teacher_token"]),
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["queued"] == 1
+    assert (await _job(eligible)) is not None
+    for sid in (graded, unreadable, unread):
+        assert await _job(sid) is None
+
+    # And the roster says the same thing, per row.
+    r = await client.get(
+        f"/v1/teacher/assignments/{world['assignment_id']}/submissions",
+        headers=_auth(world["teacher_token"]),
+    )
+    rows = {row["id"]: row for row in r.json()["submissions"]}
+    assert rows[str(eligible)]["ai_grade_block"] is None
+    assert rows[str(eligible)]["grading_job_status"] == STATUS_QUEUED
+    assert rows[str(graded)]["ai_grade_block"] == "graded"
+    assert rows[str(unreadable)]["ai_grade_block"] == "unreadable"
+    assert rows[str(unread)]["ai_grade_block"] == "no_extraction"
+    assert rows[str(unread)]["grading_job_status"] is None
+
+
+async def test_a_hand_grade_saved_mid_ai_grade_is_not_overwritten() -> None:
+    """The teacher presses "Grade with AI", then starts scoring by hand
+    while the model is still thinking. A partial hand grade carries no
+    review stamp, so the AI's result used to replace it on landing."""
+    from tests.test_teacher_review_checkpoint import _real_run_ai_grading
+
+    world = await _unconfirmed_world()
+    sid = world["submission_ids"][0]
+    hand = [{"problem_id": world["bank_item_id"], "score_status": "zero",
+             "percent": 0, "feedback": None}]
+
+    async def _model_while_teacher_grades(*_: Any, **__: Any) -> dict[str, Any]:
+        async with get_session_factory()() as s:
+            s.add(SubmissionGrade(
+                submission_id=sid, breakdown=hand, final_score=0.0,
+                graded_at=datetime.now(UTC),
+            ))
+            await s.commit()
+        return {"grades": [{
+            "problem_position": 1, "score_status": "full", "confidence": 0.9,
+            "student_feedback": "ok", "reasoning": "matches the key",
+        }]}
+
+    with patch(
+        "api.core.grading_ai.grade_submission_with_ai",
+        new=AsyncMock(side_effect=_model_while_teacher_grades),
+    ):
+        async with get_session_factory()() as s:
+            await _real_run_ai_grading(sid, _EXTRACTION, s)
+            await s.commit()
+
+    async with get_session_factory()() as s:
+        grade = (await s.execute(
+            select(SubmissionGrade).where(SubmissionGrade.submission_id == sid)
+        )).scalar_one()
+    assert grade.final_score == 0.0
+    assert grade.breakdown == hand
+    # The AI's read is kept for reference, not lost.
+    assert grade.ai_score == 100.0
+
+
+@pytest.mark.parametrize("job_state", [STATUS_RUNNING, STATUS_DONE])
+async def test_student_confirming_after_the_teacher_graded_does_not_grade_twice(
+    client: AsyncClient, job_state: str,
+) -> None:
+    """The teacher grades an unconfirmed submission; the student then
+    confirms. The confirm's enqueue must leave a job that is mid-grade
+    (`running`) or finished (`done`) alone — resetting it to `queued`
+    let a second drain grade and bill it again."""
+    from api.routes.school_student_practice import (
+        _run_integrity_and_grading_background,
+    )
+
+    world = await _unconfirmed_world()
+    sid = world["submission_ids"][0]
+    assert (await _grade_now(client, world, sid)).status_code == 200
+
+    if job_state == STATUS_DONE:
+        with patch(
+            "api.core.grading_ai.run_ai_grading_for_submission",
+            new=AsyncMock(side_effect=_fake_grade),
+        ):
+            await drain()
+    else:
+        async with get_session_factory()() as s:
+            job = (await s.execute(
+                select(GradingJob).where(GradingJob.submission_id == sid)
+            )).scalar_one()
+            job.status = STATUS_RUNNING
+            job.started_at = datetime.now(UTC)
+            await s.commit()
+    before = await _job(sid)
+    assert before is not None and before.status == job_state
+
+    # The student confirms (the endpoint stamps, then spawns this).
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == sid)
+        )).scalar_one()
+        sub.extraction_confirmed_at = datetime.now(UTC)
+        await s.commit()
+    await _run_integrity_and_grading_background(sid)
+
+    after = await _job(sid)
+    assert after is not None
+    assert after.status == job_state
+    assert after.updated_at == before.updated_at
+    # Nothing claimable was left for a second drain to pick up.
+    grader = AsyncMock(side_effect=_fake_grade)
+    with patch("api.core.grading_ai.run_ai_grading_for_submission", new=grader):
+        await drain()
+    assert sid not in _graded_ids(grader)

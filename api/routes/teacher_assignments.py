@@ -34,6 +34,7 @@ from api.middleware.auth import CurrentUser, get_current_user_full, require_teac
 from api.middleware.rate_limit import limiter
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course
+from api.models.grading_job import GradingJob
 from api.models.integrity_check import (
     IntegrityCheckProblem,
     IntegrityCheckSubmission,
@@ -1486,6 +1487,8 @@ async def list_submissions(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    from api.core.grading_queue import ai_grade_block
+
     a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
 
     # Include preview submissions so teachers can verify their own
@@ -1525,6 +1528,16 @@ async def list_submissions(
     check_by_sub: dict[uuid.UUID, IntegrityCheckSubmission] = {
         c.submission_id: c for c in check_rows
     }
+
+    # Grading-queue state per submission, so the review page can show a
+    # grade in flight instead of offering the button again, and stop
+    # polling once a job has settled without a grade (failed, skipped).
+    job_status_by_sub: dict[uuid.UUID, str] = dict(
+        (await db.execute(
+            select(GradingJob.submission_id, GradingJob.status)
+            .where(GradingJob.submission_id.in_(sub_ids))
+        )).tuples().all()
+    ) if sub_ids else {}
 
     # For in-progress checks, we also want to show progress — how
     # many sampled problems have received a verdict. One grouped
@@ -1629,6 +1642,13 @@ async def list_submissions(
                 sub.extraction_flagged_at.isoformat()
                 if sub.extraction_flagged_at else None
             ),
+            # Null when "Grade with AI" can act on this submission;
+            # otherwise why not (ai_disabled / graded / unreadable /
+            # no_extraction). The page shows the button and counts
+            # "Grade N ungraded" from this, so both agree with what the
+            # grade-now / grade-pending endpoints will actually do.
+            "ai_grade_block": ai_grade_block(sub, grade, a),
+            "grading_job_status": job_status_by_sub.get(sub.id),
         })
 
     return {"submissions": submissions}
@@ -2038,6 +2058,24 @@ async def unmark_submission_reviewed(
     return {"status": "ok", "reviewed_at": None}
 
 
+# What the teacher is told when "Grade with AI" can't act on a
+# submission. Keyed by `grading_queue.ai_grade_block`.
+_AI_GRADE_BLOCK_DETAIL = {
+    "ai_disabled": "AI grading is not enabled for this homework",
+    "graded": (
+        "This submission already has a grade — AI grading only runs on "
+        "work nobody has graded yet"
+    ),
+    "unreadable": (
+        "The AI couldn't read this submission's photo — grade it by hand"
+    ),
+    "no_extraction": (
+        "This submission's work hasn't been read yet — nothing for the AI "
+        "to grade"
+    ),
+}
+
+
 @router.post("/assignments/{assignment_id}/grade-pending")
 async def grade_pending_submissions(
     assignment_id: uuid.UUID,
@@ -2045,35 +2083,38 @@ async def grade_pending_submissions(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """"Grade all" — grade everything turned in so far, right now.
+    """"Grade all" — AI-grade every never-graded submission, right now.
 
     The teacher's escape hatch from the schedule. Two cases need it: an
     assignment with no due date never grades on its own (there is no
     moment that means "the class is in"), and a teacher who wants a head
     start before Friday shouldn't have to wait for the deadline.
 
-    Moves `queued` jobs, and REVIVES `failed` ones with their retry
-    budget reset — otherwise `failed` is a dead end nothing escapes, and
-    a submission that ran out of retries during an API incident would
-    stay ungraded forever.
+    Acts on exactly the submissions `ai_grade_block` clears — the same
+    rule the review page counts with, so "Grade N ungraded" moves N.
+    That includes work the student never confirmed or flagged: a
+    grading job used to be created ONLY by the student's confirm, so
+    unconfirmed work counted as ungraded while this endpoint moved zero
+    jobs for it, and the button refetched to the identical state
+    forever. Now a missing job is created here.
 
-    Leaves `running` alone (already in flight) and `done` alone (needs a
-    regrade, not a re-queue) — re-running either would double-charge.
-    Leaves `skipped` alone too: there is nothing gradeable there, so a
-    re-run would find the same nothing.
+    `enqueue_submission` does the rest: a queued job is pulled forward,
+    a `failed` one revived with its retry budget reset, and a `running`
+    or `done` one left alone — re-running either would double-charge.
+    Anything with grade data of any kind is not eligible at all; that is
+    a regrade, and this never regrades.
 
     `section_id` scopes this to one class. The review page is
     per-section and its button counts only that section, so without the
     scope a teacher would be billed for every other section of the same
-    homework.
+    homework. Omitted = the whole homework.
 
     The drain is kicked immediately rather than left to the next cron
     tick, because a teacher is standing there waiting. It is still only
     an optimisation: the rows are already durable, so if this process
-    dies mid-drain the scheduled drain picks the work up anyway. That is
-    the whole reason the queue exists.
+    dies mid-drain the scheduled drain picks the work up anyway.
     """
-    from api.core.grading_queue import drain, request_now
+    from api.core.grading_queue import ai_grade_block, drain, enqueue_submission
 
     assignment = await get_teacher_assignment(
         db, assignment_id, current_user.user_id,
@@ -2081,23 +2122,30 @@ async def grade_pending_submissions(
     if not assignment.ai_grading_enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="AI grading is not enabled for this homework",
+            detail=_AI_GRADE_BLOCK_DETAIL["ai_disabled"],
         )
-    # `section_id` scopes this to one class. The review page is
-    # per-section and its button says "Grade N ungraded" counting THIS
-    # section — so without the scope a teacher would be billed for every
-    # other section of the same homework too. Omitted = the whole
-    # homework, which is what a HW-level caller would mean.
-    moved = await request_now(
-        db,
-        assignment_id=assignment_id,
-        requested_by_id=current_user.user_id,
-        section_id=section_id,
+    stmt = (
+        select(Submission, SubmissionGrade)
+        .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .where(Submission.assignment_id == assignment_id)
     )
+    if section_id is not None:
+        stmt = stmt.where(Submission.section_id == section_id)
+    rows = (await db.execute(stmt)).all()
+
+    queued = 0
+    for sub, grade in rows:
+        if ai_grade_block(sub, grade, assignment) is not None:
+            continue
+        if await enqueue_submission(
+            db, sub.id, assignment,
+            requested_by_id=current_user.user_id, run_now=True,
+        ):
+            queued += 1
     await db.commit()
-    if moved:
+    if queued:
         _spawn_drain(drain)
-    return {"status": "ok", "queued": moved}
+    return {"status": "ok", "queued": queued}
 
 
 @router.post("/submissions/{submission_id}/grade-now")
@@ -2106,18 +2154,31 @@ async def grade_submission_now(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """"Grade now" on one student's row.
+    """"Grade with AI" on one student's submission.
 
-    Same escape hatch, one submission. Deliberately forfeits the shared
-    cached prefix — one call has nothing to share with — which is the
-    right trade when a teacher needs this student's grade in front of
-    them now. They are making that choice knowingly by clicking.
+    First grading only — never a regrade. Refused (409) when the
+    submission carries grade data of ANY kind (AI, hand, partial,
+    reviewed, previously published), when there is no transcription to
+    grade, or when the photo was unreadable; 400 when AI grading is off
+    for the homework. The rule is `grading_queue.ai_grade_block`, the
+    same one the review page uses to decide whether to show the button.
 
-    Returns `queued: 0` rather than erroring when there is nothing to
-    do (already graded, or already running). Nothing went wrong; the
-    grade is simply already on its way.
+    Does not require the student to have confirmed the transcription:
+    the teacher approves every AI grade before a student sees it. If the
+    student confirms afterwards, the confirm's enqueue finds the job
+    `running` or `done` and leaves it alone (see `enqueue_submission`),
+    so the work is never graded twice; if the job is still `queued`, the
+    drain grades the student's corrected reading.
+
+    Deliberately forfeits the shared cached prefix — one call has
+    nothing to share with — which is the right trade when a teacher
+    needs this student's grade in front of them now.
+
+    Returns `queued: 0` rather than erroring when a grade is already in
+    flight (a double click, or "Grade all" got there first). Nothing
+    went wrong; the grade is simply already on its way.
     """
-    from api.core.grading_queue import drain, request_now
+    from api.core.grading_queue import ai_grade_block, drain, enqueue_submission
 
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
@@ -2129,21 +2190,26 @@ async def grade_submission_now(
     assignment = await get_teacher_assignment(
         db, sub.assignment_id, current_user.user_id,
     )
-    if not assignment.ai_grading_enabled:
+    grade = (await db.execute(
+        select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
+    )).scalar_one_or_none()
+    block = ai_grade_block(sub, grade, assignment)
+    if block is not None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="AI grading is not enabled for this homework",
+            status_code=(
+                status.HTTP_400_BAD_REQUEST if block == "ai_disabled"
+                else status.HTTP_409_CONFLICT
+            ),
+            detail=_AI_GRADE_BLOCK_DETAIL[block],
         )
-    moved = await request_now(
-        db,
-        assignment_id=sub.assignment_id,
-        requested_by_id=current_user.user_id,
-        submission_id=submission_id,
+    queued = await enqueue_submission(
+        db, sub.id, assignment,
+        requested_by_id=current_user.user_id, run_now=True,
     )
     await db.commit()
-    if moved:
+    if queued:
         _spawn_drain(drain)
-    return {"status": "ok", "queued": moved}
+    return {"status": "ok", "queued": int(queued)}
 
 
 @router.post("/submissions/{submission_id}/regrade")

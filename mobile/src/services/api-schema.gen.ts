@@ -2703,33 +2703,36 @@ export interface paths {
         put?: never;
         /**
          * Grade Pending Submissions
-         * @description "Grade all" — grade everything turned in so far, right now.
+         * @description "Grade all" — AI-grade every never-graded submission, right now.
          *
          *     The teacher's escape hatch from the schedule. Two cases need it: an
          *     assignment with no due date never grades on its own (there is no
          *     moment that means "the class is in"), and a teacher who wants a head
          *     start before Friday shouldn't have to wait for the deadline.
          *
-         *     Moves `queued` jobs, and REVIVES `failed` ones with their retry
-         *     budget reset — otherwise `failed` is a dead end nothing escapes, and
-         *     a submission that ran out of retries during an API incident would
-         *     stay ungraded forever.
+         *     Acts on exactly the submissions `ai_grade_block` clears — the same
+         *     rule the review page counts with, so "Grade N ungraded" moves N.
+         *     That includes work the student never confirmed or flagged: a
+         *     grading job used to be created ONLY by the student's confirm, so
+         *     unconfirmed work counted as ungraded while this endpoint moved zero
+         *     jobs for it, and the button refetched to the identical state
+         *     forever. Now a missing job is created here.
          *
-         *     Leaves `running` alone (already in flight) and `done` alone (needs a
-         *     regrade, not a re-queue) — re-running either would double-charge.
-         *     Leaves `skipped` alone too: there is nothing gradeable there, so a
-         *     re-run would find the same nothing.
+         *     `enqueue_submission` does the rest: a queued job is pulled forward,
+         *     a `failed` one revived with its retry budget reset, and a `running`
+         *     or `done` one left alone — re-running either would double-charge.
+         *     Anything with grade data of any kind is not eligible at all; that is
+         *     a regrade, and this never regrades.
          *
          *     `section_id` scopes this to one class. The review page is
          *     per-section and its button counts only that section, so without the
          *     scope a teacher would be billed for every other section of the same
-         *     homework.
+         *     homework. Omitted = the whole homework.
          *
          *     The drain is kicked immediately rather than left to the next cron
          *     tick, because a teacher is standing there waiting. It is still only
          *     an optimisation: the rows are already durable, so if this process
-         *     dies mid-drain the scheduled drain picks the work up anyway. That is
-         *     the whole reason the queue exists.
+         *     dies mid-drain the scheduled drain picks the work up anyway.
          */
         post: operations["grade_pending_submissions_v1_teacher_assignments__assignment_id__grade_pending_post"];
         delete?: never;
@@ -3973,16 +3976,29 @@ export interface paths {
         put?: never;
         /**
          * Grade Submission Now
-         * @description "Grade now" on one student's row.
+         * @description "Grade with AI" on one student's submission.
          *
-         *     Same escape hatch, one submission. Deliberately forfeits the shared
-         *     cached prefix — one call has nothing to share with — which is the
-         *     right trade when a teacher needs this student's grade in front of
-         *     them now. They are making that choice knowingly by clicking.
+         *     First grading only — never a regrade. Refused (409) when the
+         *     submission carries grade data of ANY kind (AI, hand, partial,
+         *     reviewed, previously published), when there is no transcription to
+         *     grade, or when the photo was unreadable; 400 when AI grading is off
+         *     for the homework. The rule is `grading_queue.ai_grade_block`, the
+         *     same one the review page uses to decide whether to show the button.
          *
-         *     Returns `queued: 0` rather than erroring when there is nothing to
-         *     do (already graded, or already running). Nothing went wrong; the
-         *     grade is simply already on its way.
+         *     Does not require the student to have confirmed the transcription:
+         *     the teacher approves every AI grade before a student sees it. If the
+         *     student confirms afterwards, the confirm's enqueue finds the job
+         *     `running` or `done` and leaves it alone (see `enqueue_submission`),
+         *     so the work is never graded twice; if the job is still `queued`, the
+         *     drain grades the student's corrected reading.
+         *
+         *     Deliberately forfeits the shared cached prefix — one call has
+         *     nothing to share with — which is the right trade when a teacher
+         *     needs this student's grade in front of them now.
+         *
+         *     Returns `queued: 0` rather than erroring when a grade is already in
+         *     flight (a double click, or "Grade all" got there first). Nothing
+         *     went wrong; the grade is simply already on its way.
          */
         post: operations["grade_submission_now_v1_teacher_submissions__submission_id__grade_now_post"];
         delete?: never;
