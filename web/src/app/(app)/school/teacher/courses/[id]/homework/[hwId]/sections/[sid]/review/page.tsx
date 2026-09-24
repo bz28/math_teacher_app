@@ -432,6 +432,16 @@ function HomeworkSectionReview({
   const [aiGradeError, setAiGradeError] = useState<
     { forSubmissionId: string; message: string } | null
   >(null);
+  // When the page last started watching a grade. The poll's back-off and
+  // its give-up deadline both run from here, so a second click mid-poll
+  // gets the full window and a fast first look instead of inheriting
+  // the tail of the first one's.
+  const watchSinceRef = useRef(0);
+  const watchGrades = useCallback((ids: readonly string[]) => {
+    if (ids.length === 0) return;
+    watchSinceRef.current = Date.now();
+    setAiPendingIds((prev) => new Set([...prev, ...ids]));
+  }, []);
 
   // Load HW + section roster + submissions and merge into one list:
   // every enrolled student in this section, with their submission if
@@ -577,9 +587,7 @@ function HomeworkSectionReview({
               !!s && s.final_score === null && s.grading_job_status === "running",
           )
           .map((s) => s.id);
-        if (inFlight.length > 0) {
-          setAiPendingIds((prev) => new Set([...prev, ...inFlight]));
-        }
+        watchGrades(inFlight);
       })
       .catch((e) => {
         if (cancelled) return;
@@ -588,7 +596,7 @@ function HomeworkSectionReview({
     return () => {
       cancelled = true;
     };
-  }, [assignmentId, courseId, sectionId, focusStudentId]);
+  }, [assignmentId, courseId, sectionId, focusStudentId, watchGrades]);
 
   // Item analysis is HW-wide and read-only, so it loads independently
   // of the roster/detail panels — a failure here never blocks grading.
@@ -1038,26 +1046,35 @@ function HomeworkSectionReview({
   // Counts only what the button will actually send to the grader — the
   // server's `ai_grade_block` rule, minus anything already in flight.
   // It used to count every score-less row, including work the student
-  // never confirmed (no grading job existed, so the click moved zero
-  // jobs and the count never went down). Ungraded work the AI can't
-  // take is counted separately so it's explained, not hidden.
-  const { ungradedInSection, cantAiGradeInSection } = useMemo(() => {
-    let gradeable = 0;
-    let cant = 0;
-    // Action counts — "Grade N ungraded" does grade her rehearsal too.
-    for (const e of roster ?? []) {
-      const sub = e.submission;
-      if (!sub) continue;
-      if (canAiGrade(sub) && !isAiGrading(sub, aiPendingIds)) gradeable += 1;
-      if (
-        sub.ai_grade_block === "unreadable" ||
-        sub.ai_grade_block === "no_extraction"
-      ) {
-        cant += 1;
+  // hadn't confirmed (no grading job existed, so the click moved zero
+  // jobs and the count never went down). Ungraded work the AI won't
+  // take is counted separately so it's explained, not hidden: waiting
+  // on the student, or no readable work. Work still being read is in
+  // neither — it becomes one or the other in a minute.
+  const { ungradedInSection, awaitingStudentInSection, cantAiGradeInSection } =
+    useMemo(() => {
+      let gradeable = 0;
+      let awaiting = 0;
+      let cant = 0;
+      // Action counts — "Grade N ungraded" does grade her rehearsal too.
+      for (const e of roster ?? []) {
+        const sub = e.submission;
+        if (!sub) continue;
+        if (canAiGrade(sub) && !isAiGrading(sub, aiPendingIds)) gradeable += 1;
+        if (sub.ai_grade_block === "awaiting_confirmation") awaiting += 1;
+        if (
+          sub.ai_grade_block === "unreadable" ||
+          sub.ai_grade_block === "no_extraction"
+        ) {
+          cant += 1;
+        }
       }
-    }
-    return { ungradedInSection: gradeable, cantAiGradeInSection: cant };
-  }, [roster, aiPendingIds]);
+      return {
+        ungradedInSection: gradeable,
+        awaitingStudentInSection: awaiting,
+        cantAiGradeInSection: cant,
+      };
+    }, [roster, aiPendingIds]);
   // Reviewed vs unopened split of the full to-release set (HW-wide).
   const toReleaseTotal = pendingTotal + dirtyTotal;
   const reviewedToPublishTotal =
@@ -1176,7 +1193,7 @@ function HomeworkSectionReview({
       .map((s) => s.id);
     try {
       await teacher.gradePendingSubmissions(assignmentId, sectionId);
-      setAiPendingIds((prev) => new Set([...prev, ...sent]));
+      watchGrades(sent);
     } catch (e) {
       setGradeAllError(
         e instanceof Error ? e.message : "Couldn't start grading",
@@ -1184,7 +1201,7 @@ function HomeworkSectionReview({
     } finally {
       setGradingAll(false);
     }
-  }, [assignmentId, sectionId, roster, aiPendingIds]);
+  }, [assignmentId, sectionId, roster, aiPendingIds, watchGrades]);
 
   // "Grade with AI" on the open submission. First grading only — the
   // server refuses anything with grade data, and the button is only
@@ -1193,7 +1210,7 @@ function HomeworkSectionReview({
     setAiGradeError((prev) =>
       prev?.forSubmissionId === submissionId ? null : prev,
     );
-    setAiPendingIds((prev) => new Set(prev).add(submissionId));
+    watchGrades([submissionId]);
     try {
       await teacher.gradeSubmissionNow(submissionId);
     } catch (e) {
@@ -1207,7 +1224,7 @@ function HomeworkSectionReview({
         message: e instanceof Error ? e.message : "Couldn't start AI grading",
       });
     }
-  }, []);
+  }, [watchGrades]);
 
   // Poll until every submission sent to the grader settles. A grade
   // lands in seconds to a minute; the old single refetch right after
@@ -1226,7 +1243,6 @@ function HomeworkSectionReview({
     if (!polling) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const deadline = Date.now() + AI_GRADE_POLL_TIMEOUT_MS;
     const tick = async () => {
       try {
         const res = await teacher.submissions(assignmentId);
@@ -1276,7 +1292,8 @@ function HomeworkSectionReview({
             });
           }
         }
-        const timedOut = Date.now() > deadline;
+        const timedOut =
+          Date.now() - watchSinceRef.current > AI_GRADE_POLL_TIMEOUT_MS;
         if (settled.length > 0 || timedOut) {
           setAiPendingIds((prev) => {
             if (timedOut) return new Set();
@@ -1288,9 +1305,11 @@ function HomeworkSectionReview({
       } catch {
         // A failed poll is not a failed grade — try again next tick.
       }
-      if (!cancelled) timer = setTimeout(tick, AI_GRADE_POLL_MS);
+      if (!cancelled) {
+        timer = setTimeout(tick, aiGradePollDelay(Date.now() - watchSinceRef.current));
+      }
     };
-    timer = setTimeout(tick, AI_GRADE_POLL_MS);
+    timer = setTimeout(tick, aiGradePollDelay(0));
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
@@ -1579,12 +1598,21 @@ function HomeworkSectionReview({
                 {gradeAllError}
               </p>
             )}
-            {cantAiGradeInSection > 0 && (
+            {(awaitingStudentInSection > 0 || cantAiGradeInSection > 0) && (
               // Ungraded work the button won't touch — said once, here,
               // so the count beside it reads as complete rather than
               // quietly short. Each row names its own reason.
               <p className="text-[11.5px] text-text-muted">
-                {`${cantAiGradeInSection} can’t be AI-graded — no readable work`}
+                {[
+                  awaitingStudentInSection > 0 &&
+                    `${awaitingStudentInSection} waiting on ${
+                      awaitingStudentInSection === 1 ? "the student" : "students"
+                    } to confirm`,
+                  cantAiGradeInSection > 0 &&
+                    `${cantAiGradeInSection} can’t be AI-graded — no readable work`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </p>
             )}
           </div>
@@ -2302,8 +2330,8 @@ function isAwaitingGrade(entry: RosterEntry): boolean {
 }
 
 /** The server says the AI grader can take this submission: never
- *  graded in any form, readable work, AI grading on. Confirmed by the
- *  student or not — the teacher approves every AI grade regardless. */
+ *  graded in any form, readable work the student has confirmed (or
+ *  flagged), AI grading on. */
 function canAiGrade(sub: TeacherSubmissionRow): boolean {
   return sub.ai_grade_block === null;
 }
@@ -2322,8 +2350,15 @@ function isAiGrading(
 // queue grades the first submission alone to warm the shared prompt
 // cache. Past the timeout the page stops watching and shows the
 // server's state as-is — a still-queued row offers the button again.
-const AI_GRADE_POLL_MS = 3000;
+// Each poll reads the whole homework's roster (there is no lighter
+// endpoint), so it backs off: quick while a single grade is likely to
+// land, slower once it's clearly a class-sized batch.
 const AI_GRADE_POLL_TIMEOUT_MS = 4 * 60 * 1000;
+function aiGradePollDelay(elapsedMs: number): number {
+  if (elapsedMs < 20_000) return 3000;
+  if (elapsedMs < 60_000) return 5000;
+  return 10_000;
+}
 
 function hasLowConfidence(entry: RosterEntry): boolean {
   const breakdown = entry.submission?.breakdown;
@@ -2886,6 +2921,12 @@ function rowStatusLabel(
   }
   if (sub.final_score !== null) {
     return { text: "Graded, not published", dotClass: "bg-[color:var(--color-warning)]" };
+  }
+  if (sub.ai_grade_block === "awaiting_confirmation") {
+    return { text: "Waiting for student to confirm", dotClass: "bg-gray-300" };
+  }
+  if (sub.ai_grade_block === "extracting") {
+    return { text: "Reading work…", dotClass: "animate-pulse bg-gray-400" };
   }
   if (sub.ai_grade_block === "no_extraction") {
     return { text: "Work not read yet", dotClass: "bg-gray-400" };
@@ -3483,6 +3524,14 @@ function SubmissionDetailPanel({
             ) : aiGrading ? (
               <span className="font-semibold text-primary">
                 AI grading — the grade appears here for you to review
+              </span>
+            ) : row?.ai_grade_block === "awaiting_confirmation" ? (
+              <span className="text-text-muted">
+                Not graded yet · waiting for the student to confirm their work
+              </span>
+            ) : row?.ai_grade_block === "extracting" ? (
+              <span className="text-text-muted">
+                Not graded yet · reading the work…
               </span>
             ) : row?.ai_grade_block === "no_extraction" ? (
               <span className="text-text-muted">

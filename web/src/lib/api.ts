@@ -1726,8 +1726,7 @@ export const teacher = {
     }>(`/teacher/submissions/${submissionId}/regrade`, { method: "POST" });
   },
   /** AI-grade every never-graded submission in this section, now —
-   *  exactly the rows whose `ai_grade_block` is null, including work
-   *  the student never confirmed.
+   *  exactly the rows whose `ai_grade_block` is null.
    *
    *  AI grading is queued and normally runs when the homework's due
    *  date passes, so the whole class grades together and shares one
@@ -1746,10 +1745,10 @@ export const teacher = {
       { method: "POST" },
     );
   },
-  /** "Grade with AI" — first grading of one never-graded submission,
-   *  confirmed by the student or not. 409 if it has any grade data, no
-   *  transcription, or an unreadable photo; 400 if AI grading is off.
-   *  Never a regrade.
+  /** "Grade with AI" — first grading of one never-graded submission the
+   *  student has confirmed or flagged. 409 if it has any grade data, is
+   *  still waiting on the student, or has no readable work; 400 if AI
+   *  grading is off. Never a regrade.
    *
    *  Deliberately forfeits the shared cached prefix — a single call has
    *  nothing to share with — which is the right trade when the teacher
@@ -2026,7 +2025,13 @@ export interface TeacherSubmissionRow {
   grading_job_status: "queued" | "running" | "done" | "skipped" | "failed" | null;
 }
 
-export type AiGradeBlock = "ai_disabled" | "graded" | "unreadable" | "no_extraction";
+export type AiGradeBlock =
+  | "ai_disabled"
+  | "graded"
+  | "unreadable"
+  | "no_extraction"
+  | "extracting"
+  | "awaiting_confirmation";
 
 /** One line of student work, attributed by the backend to a specific
  *  HW problem. `latex` and `plain_english` carry the *current* view —
