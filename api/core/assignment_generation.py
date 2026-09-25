@@ -405,7 +405,7 @@ async def generate_solutions(
                 "final_answer": decomp.final_answer,
             }
         except Exception:
-            logger.warning("Failed to solve question: %s", q["text"][:80])
+            logger.exception("Failed to solve question: %s", q["text"][:80])
             return {
                 "question_text": q["text"],
                 "steps": [],
