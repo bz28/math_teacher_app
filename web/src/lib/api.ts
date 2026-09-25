@@ -1734,8 +1734,9 @@ export const teacher = {
    *  automatically — there's no moment that means "the class is in" —
    *  so for those this is the only way work ever gets graded.
    *
-   *  Also revives anything that previously failed. In-flight and
-   *  finished jobs are left alone; `queued: 0` means there was simply
+   *  Also revives failed, skipped and `done` jobs whose submission has
+   *  no grade data (e.g. a hand grade cleared after the drain). Only an
+   *  in-flight job is left alone; `queued: 0` means there was simply
    *  nothing to do, which is not an error. */
   gradePendingSubmissions(assignmentId: string, sectionId: string) {
     // Section-scoped on purpose: an assignment spans sections, and the

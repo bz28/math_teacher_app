@@ -23,6 +23,9 @@ stubbed to a canned result.
 
 Writes docs/design/shots-grade-with-ai-*.png. `--only-header before`
 shoots just the header (for a before shot against the old frontend).
+`--unwatched` marks Jordan's job `running` (a drain that never reports
+back), waits out the page's 4-minute poll, and shoots the
+"still grading — refresh to check" state.
 """
 
 from __future__ import annotations
@@ -105,6 +108,20 @@ async def _add_ungraded(world: dict[str, str]) -> dict[str, str]:
     return ids
 
 
+async def _mark_running(student_id: str) -> None:
+    from api.models.grading_job import STATUS_RUNNING, GradingJob
+
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.student_id == uuid.UUID(student_id))
+        )).scalar_one()
+        s.add(GradingJob(
+            submission_id=sub.id, assignment_id=sub.assignment_id,
+            status=STATUS_RUNNING, started_at=datetime.now(UTC), attempts=1,
+        ))
+        await s.commit()
+
+
 async def _shot(page: Any, name: str, *, header_only: bool = False) -> None:
     out = OUT_DIR / f"shots-grade-with-ai-{name}.png"
     if header_only:
@@ -117,6 +134,7 @@ async def _shot(page: Any, name: str, *, header_only: bool = False) -> None:
 async def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--only-header", default=None)
+    parser.add_argument("--unwatched", action="store_true")
     args = parser.parse_args()
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -137,6 +155,15 @@ async def main() -> int:
                 await page.goto(f"{base}?student={students.get(key, key)}")
                 await page.wait_for_load_state("networkidle")
                 await page.wait_for_timeout(800)
+
+            if args.unwatched:
+                await _mark_running(students["jordan"])
+                await open_student("jordan")
+                await page.get_by_text("Still grading — refresh to check").wait_for(
+                    timeout=6 * 60_000,
+                )
+                await _shot(page, "unwatched")
+                return 0
 
             if args.only_header:
                 await open_student("jordan")

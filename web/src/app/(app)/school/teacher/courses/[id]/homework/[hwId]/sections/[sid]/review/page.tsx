@@ -437,9 +437,19 @@ function HomeworkSectionReview({
   // gets the full window and a fast first look instead of inheriting
   // the tail of the first one's.
   const watchSinceRef = useRef(0);
+  // Bumped on every new watch so the polling effect restarts: the timer
+  // already scheduled at the old, slower back-off is cleared and the
+  // next look happens at the fast interval.
+  const [pollKick, setPollKick] = useState(0);
+  // The poll gave up (timeout) while a grade was still running on the
+  // server. Such rows say "still grading — refresh to check" rather
+  // than spinning forever with nobody watching.
+  const [aiPollGaveUp, setAiPollGaveUp] = useState(false);
   const watchGrades = useCallback((ids: readonly string[]) => {
     if (ids.length === 0) return;
     watchSinceRef.current = Date.now();
+    setAiPollGaveUp(false);
+    setPollKick((n) => n + 1);
     setAiPendingIds((prev) => new Set([...prev, ...ids]));
   }, []);
 
@@ -1292,11 +1302,8 @@ function HomeworkSectionReview({
             });
           }
         }
-        const timedOut =
-          Date.now() - watchSinceRef.current > AI_GRADE_POLL_TIMEOUT_MS;
-        if (settled.length > 0 || timedOut) {
+        if (settled.length > 0) {
           setAiPendingIds((prev) => {
-            if (timedOut) return new Set();
             const next = new Set(prev);
             for (const r of settled) next.delete(r.id);
             return next;
@@ -1304,6 +1311,16 @@ function HomeworkSectionReview({
         }
       } catch {
         // A failed poll is not a failed grade — try again next tick.
+      }
+      // Outside the try on purpose: a poll that keeps failing must still
+      // give up. A successful last tick has just refetched the watched
+      // rows, so anything still `running` on the server keeps its
+      // in-progress state from that fresh read, labelled as unwatched.
+      if (cancelled) return;
+      if (Date.now() - watchSinceRef.current > AI_GRADE_POLL_TIMEOUT_MS) {
+        setAiPollGaveUp(true);
+        setAiPendingIds(new Set());
+        return;
       }
       if (!cancelled) {
         timer = setTimeout(tick, aiGradePollDelay(Date.now() - watchSinceRef.current));
@@ -1314,7 +1331,7 @@ function HomeworkSectionReview({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [polling, assignmentId]);
+  }, [polling, assignmentId, pollKick]);
 
   const onPublishClick = useCallback(() => {
     if (unreviewedToPublishTotal === 0 && flaggedToPublishTotal === 0) {
@@ -1677,6 +1694,7 @@ function HomeworkSectionReview({
                 selectedStudentId={selectedStudentId}
                 onSelect={setSelectedStudentId}
                 aiPendingIds={aiPendingIds}
+                aiPollGaveUp={aiPollGaveUp}
               />
             </div>
           </aside>
@@ -1744,6 +1762,10 @@ function HomeworkSectionReview({
                   setRegradeConfirmOpenFor(selectedEntry.submission!.id)
                 }
                 aiGrading={isAiGrading(selectedEntry.submission, aiPendingIds)}
+                aiGradingUnwatched={
+                  aiPollGaveUp &&
+                  !aiPendingIds.has(selectedEntry.submission.id)
+                }
                 aiGradeError={
                   aiGradeError?.forSubmissionId === selectedEntry.submission.id
                     ? aiGradeError.message
@@ -2600,12 +2622,14 @@ function TriageRoster({
   selectedStudentId,
   onSelect,
   aiPendingIds,
+  aiPollGaveUp,
 }: {
   roster: RosterEntry[];
   filter: RosterFilter;
   selectedStudentId: string | null;
   onSelect: (id: string) => void;
   aiPendingIds: ReadonlySet<string>;
+  aiPollGaveUp: boolean;
 }) {
   const needsEyes: RosterEntry[] = [];
   const awaitingGrade: RosterEntry[] = [];
@@ -2666,7 +2690,13 @@ function TriageRoster({
         entry={e}
         selected={e.student_id === selectedStudentId}
         onSelect={() => onSelect(e.student_id)}
-        aiGrading={!!e.submission && isAiGrading(e.submission, aiPendingIds)}
+        aiGrading={
+          !!e.submission && isAiGrading(e.submission, aiPendingIds)
+            ? aiPollGaveUp && !aiPendingIds.has(e.submission.id)
+              ? "unwatched"
+              : "watched"
+            : false
+        }
       />
     ));
 
@@ -2761,7 +2791,9 @@ function StudentRow({
   entry: RosterEntry;
   selected: boolean;
   onSelect: () => void;
-  aiGrading: boolean;
+  /** "unwatched" = still running on the server after the page's poll
+   *  gave up, so the row can't promise to update itself. */
+  aiGrading: false | "watched" | "unwatched";
 }) {
   const sub = entry.submission;
   const statusLabel = rowStatusLabel(entry, aiGrading);
@@ -2866,7 +2898,7 @@ function StudentRow({
 
 function rowStatusLabel(
   entry: RosterEntry,
-  aiGrading = false,
+  aiGrading: false | "watched" | "unwatched" = false,
 ): {
   text: string;
   dotClass: string;
@@ -2878,6 +2910,12 @@ function rowStatusLabel(
   // Sent to the AI grader, grade not back yet. Above the flagged branch
   // on purpose: the teacher chose to AI-grade a flagged submission, and
   // "Reader misread" would read as though her click did nothing.
+  if (aiGrading === "unwatched") {
+    return {
+      text: "Still grading · refresh to check",
+      dotClass: "bg-primary",
+    };
+  }
   if (aiGrading) {
     return {
       text: "AI grading…",
@@ -2984,6 +3022,7 @@ function SubmissionDetailPanel({
   regradeError,
   onRegradeRequest,
   aiGrading,
+  aiGradingUnwatched,
   aiGradeError,
   onGradeWithAi,
   confirmedIds,
@@ -3023,6 +3062,8 @@ function SubmissionDetailPanel({
   onRegradeRequest: () => void;
   /** Sent to the AI grader and the grade hasn't landed yet. */
   aiGrading: boolean;
+  /** Still running on the server after the page stopped polling. */
+  aiGradingUnwatched: boolean;
   aiGradeError: string | null;
   /** "Grade with AI" — only offered when the server says the AI can
    *  take this submission (`ai_grade_block` null). */
@@ -3521,6 +3562,10 @@ function SubmissionDetailPanel({
               <span className="font-semibold text-text-primary">
                 AI graded · not yet published
               </span>
+            ) : aiGrading && aiGradingUnwatched ? (
+              <span className="font-semibold text-primary">
+                Still grading — refresh to check
+              </span>
             ) : aiGrading ? (
               <span className="font-semibold text-primary">
                 AI grading — the grade appears here for you to review
@@ -3592,10 +3637,10 @@ function SubmissionDetailPanel({
           {/* Grade with AI — first grading only. Offered on work nobody
               has graded in any form (no AI grade, no hand score, not
               even one problem), with readable work; the server enforces
-              the same rule. The grade lands as a suggestion she still
-              approves, so an unconfirmed submission is fine to send.
-              Solid because, on an ungraded submission, it is the one
-              thing to do here. */}
+              the same rule — which also requires the student to have
+              confirmed (or flagged) the reading. The grade lands as a
+              suggestion she still approves. Solid because, on an
+              ungraded submission, it is the one thing to do here. */}
           {(offerAiGrade || aiGrading) && (
             <button
               type="button"
