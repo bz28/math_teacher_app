@@ -4626,14 +4626,27 @@ function ProblemGradeRow({
           </button>
         )}
       </div>
+      {/* Both value boxes must CONTAIN their content. KaTeX only breaks
+          inline math after a relation or operator — never at a comma,
+          `\quad` or `\text{}` — so a multi-part answer such as
+          `$a)\ \text{acute},\ b)\ \text{right},\ …$` rendered as one
+          unbreakable run wider than the column and painted straight over
+          the answer key beside it. `min-w-0` lets each grid cell shrink
+          below its content; `breakInline` adds KaTeX-native break points
+          between answer parts (after `,` / `\quad`); `break-words` wraps long
+          prose tokens; `overflow-x-auto` scrolls only what is still
+          atomic (a wide fraction or matrix). `overflow-y-hidden` because
+          x-auto forces y to auto too, and KaTeX's sub-pixel overhang
+          would otherwise put a 1px vertical scrollbar on every answer
+          wherever scrollbars aren't overlays. */}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <div>
+        <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             Student answer
           </p>
-          <div className="mt-1 rounded-[--radius-sm] bg-surface px-2 py-1 text-sm text-text-primary">
+          <div className="mt-1 overflow-x-auto overflow-y-hidden break-words rounded-[--radius-sm] bg-surface px-2 py-1 text-sm text-text-primary">
             {problem.student_answer ? (
-              <MathText text={problem.student_answer} />
+              <MathText text={problem.student_answer} breakInline />
             ) : (
               <span className="inline-flex items-center gap-1 text-xs font-semibold text-[color:var(--color-warning-dark)] ">
                 <span aria-hidden>⚠</span>
@@ -4642,13 +4655,13 @@ function ProblemGradeRow({
             )}
           </div>
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             Answer key
           </p>
-          <div className="mt-1 rounded-[--radius-sm] bg-surface px-2 py-1 text-sm text-text-primary">
+          <div className="mt-1 overflow-x-auto overflow-y-hidden break-words rounded-[--radius-sm] bg-surface px-2 py-1 text-sm text-text-primary">
             {problem.final_answer ? (
-              <MathText text={problem.final_answer} />
+              <MathText text={problem.final_answer} breakInline />
             ) : (
               <span className="italic text-text-muted">—</span>
             )}
