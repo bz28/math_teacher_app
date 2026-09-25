@@ -4026,6 +4026,28 @@ function StudentStepRow({
   );
 }
 
+// The body of a drawing the extractor reported but a zoomed second look
+// couldn't find (often a bad location, sometimes nothing drawn). The
+// explanation is visible text, not a hover title, so it reaches touch
+// screens too; the first pass's description is framed as a claim, not
+// fact, and omitted when there is none (rows repaired by cp1000085).
+function UnconfirmedDrawingNote({ description }: { description: string }) {
+  return (
+    <>
+      <span className="block text-text-muted">
+        A zoomed-in look couldn&rsquo;t find it, so the AI didn&rsquo;t count
+        it for or against the student &mdash; check the photo and adjust if
+        needed.
+      </span>
+      {description && (
+        <span className="block italic text-text-muted">
+          AI first reported: {description}
+        </span>
+      )}
+    </>
+  );
+}
+
 /**
  * Work the extractor couldn't tie to any problem on this assignment.
  *
@@ -4081,9 +4103,19 @@ function OtherWorkDisclosure({
                   <span className="font-semibold capitalize text-text-primary">
                     {d.kind.replace("_", " ")}
                   </span>{" "}
-                  · {d.plotted_elements.length} plotted
-                  {d.verified && " · checked ✓"}
-                  {d.description && <span className="block">{d.description}</span>}
+                  {d.unconfirmed ? (
+                    <span className="text-[color:var(--color-warning-dark)]">· couldn&rsquo;t confirm</span>
+                  ) : (
+                    <>
+                      · {d.plotted_elements.length} plotted
+                      {d.verified && " · checked ✓"}
+                    </>
+                  )}
+                  {d.unconfirmed ? (
+                    <UnconfirmedDrawingNote description={d.description} />
+                  ) : (
+                    d.description && <span className="block">{d.description}</span>
+                  )}
                 </span>
               </p>
             ))}
@@ -4754,9 +4786,15 @@ function ProblemGradeRow({
                   <span className="text-text-primary">
                     <span className="font-semibold capitalize">{d.kind.replace("_", " ")}</span>
                     <span className="text-text-secondary">
-                      {" "}· {d.plotted_elements.length} plotted
-                      {d.verified && (
-                        <span title="Confirmed by a zoomed-in second look at the drawing"> · checked ✓</span>
+                      {d.unconfirmed ? (
+                        <span className="text-[color:var(--color-warning-dark)]"> · couldn&rsquo;t confirm</span>
+                      ) : (
+                        <>
+                          {" "}· {d.plotted_elements.length} plotted
+                          {d.verified && (
+                            <span title="Confirmed by a zoomed-in second look at the drawing"> · checked ✓</span>
+                          )}
+                        </>
                       )}
                     </span>
                     {d.labeled_points.length > 0 && (
@@ -4772,8 +4810,12 @@ function ProblemGradeRow({
                     {d.plotted_elements.length > 0 && (
                       <span className="block text-text-secondary">{d.plotted_elements.join("; ")}</span>
                     )}
-                    {d.description && (
-                      <span className="block text-text-secondary">{d.description}</span>
+                    {d.unconfirmed ? (
+                      <UnconfirmedDrawingNote description={d.description} />
+                    ) : (
+                      d.description && (
+                        <span className="block text-text-secondary">{d.description}</span>
+                      )
                     )}
                   </span>
                 ) : (

@@ -95,7 +95,9 @@ drawing, is NOT full credit — grade it \
 as "right answer, required method missing" partial credit (the rubric's Partial \
 credit anchors say how much). A required drawing that is present but incomplete \
 (one of two lines plotted, the intersection not marked, an unlabeled axis) is a \
-smaller deduction than a missing one. A named algebraic method that wasn't used \
+smaller deduction than a missing one. A required drawing listed as UNCONFIRMED \
+(see below) is the exception: it is neither missing nor incomplete, so it is \
+never a "required method missing" deduction. A named algebraic method that wasn't used \
 (substitution when elimination was required) is also "required method missing": \
 never full credit, and itemize it as its own deduction so the teacher can size \
 it — the problem was testing that method. Name the requirement in `reasoning` \
@@ -108,6 +110,14 @@ because the answer is right. "(no drawing for this problem)" means none exists. 
 "(no drawing attributed to this problem …)" means a drawing exists somewhere on the \
 page that couldn't be tied to a problem — check "Other work" before deducting for a \
 missing drawing, and give the benefit of the doubt when it plausibly belongs here.
+- "<kind>: UNCONFIRMED" means a drawing was reported on the page but a zoomed-in \
+second look couldn't find it — usually a misplaced location. What was drawn is \
+UNKNOWN, not absent. Don't credit anything as coming from the drawing (no answer \
+or points read off it), and do NOT deduct for a required drawing or graphing method \
+because of it: treat that requirement as met and grade the rest of the work. The \
+teacher decides from the photo: say in `reasoning` that the drawing couldn't be \
+verified and the teacher should check the photo, and set `confidence` no higher \
+than 0.6.
 - An answer that exists only on a drawing — an intersection the student marked, a \
 shaded region, a circled value on a number line — counts as a stated final answer.
 - If the student's approach is correct but they made an arithmetic or sign error, give \
@@ -241,6 +251,16 @@ def _format_visual_work(v: dict[str, Any]) -> str:
     kind = (v.get("kind") or "drawing").replace("_", " ")
     if not v.get("present", True):
         return f"{kind}: NOT PRESENT — the problem asked for one and nothing is drawn"
+    if v.get("unconfirmed"):
+        # The first pass claimed a drawing here but a zoomed look found
+        # none. Its description is exactly the primed claim we couldn't
+        # back up, so it is withheld — the grader gets the fact, not it.
+        return (
+            f"{kind}: UNCONFIRMED — reported on the page, but a zoomed second "
+            "look couldn't find it; what was drawn is unknown — treat any "
+            "drawing requirement as met, credit nothing from it, and have the "
+            "teacher check the photo (see the UNCONFIRMED rule)"
+        )
     parts = [kind]
     elements = [e for e in (v.get("plotted_elements") or []) if isinstance(e, str) and e.strip()]
     if elements:
@@ -561,7 +581,36 @@ async def grade_submission_with_ai(
         submission_id=submission_id,
         call_metadata={"phase": "ai_grading"},
     )
+    _cap_confidence_for_unconfirmed_drawings(result, extraction)
     return result
+
+
+# A grade that rests on an UNCONFIRMED drawing must land in the review
+# page's "Low confidence" filter, which is `confidence < CONFIDENCE_LOW`
+# (0.6, strict) in web/.../review/page.tsx. The prompt asks for ≤ 0.6, but
+# 0.6 itself misses the filter and a prompt is a request, not a guarantee —
+# so the cap is enforced here, safely under the web threshold. There is no
+# shared constants module between api/ and web/; keep the two in step.
+_UNCONFIRMED_DRAWING_MAX_CONFIDENCE = 0.5
+
+
+def _cap_confidence_for_unconfirmed_drawings(
+    result: dict[str, Any], extraction: dict[str, Any],
+) -> None:
+    """Lower (never raise) the confidence of every grade whose problem has
+    an unconfirmed drawing, in place. Deterministic, so the teacher is
+    always pointed at the photo whatever the model returned."""
+    positions = {
+        v.get("problem_position")
+        for v in extraction.get("visual_work") or []
+        if isinstance(v, dict) and v.get("unconfirmed")
+    }
+    for g in result.get("grades") or []:
+        if not isinstance(g, dict) or g.get("problem_position") not in positions:
+            continue
+        conf = g.get("confidence")
+        if not isinstance(conf, (int, float)) or conf > _UNCONFIRMED_DRAWING_MAX_CONFIDENCE:
+            g["confidence"] = _UNCONFIRMED_DRAWING_MAX_CONFIDENCE
 
 
 # ── Pipeline integration ───────────────────────────────────────────

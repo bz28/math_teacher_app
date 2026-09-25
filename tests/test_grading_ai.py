@@ -692,6 +692,24 @@ class TestBuildUserMessageDrawings:
             "labeled points: (2, 3) — answer marked on drawing: (2, 3)"
         ) in p1
 
+    def test_unconfirmed_drawing_is_not_credited_and_hides_first_pass_claim(self) -> None:
+        extraction = {
+            "steps": [], "final_answers": [],
+            "visual_work": [
+                {"problem_position": 1, "kind": "graph", "present": True,
+                 "description": "Two lines plotted intersecting at (2, 3).",
+                 "plotted_elements": [], "labeled_points": [], "answer_on_drawing": None,
+                 "verified": False, "unconfirmed": True},
+            ],
+            "confidence": 0.9,
+        }
+        p1 = _sections_by_position(_build_user_message(extraction, self._problems()))[1]
+        assert "graph: UNCONFIRMED" in p1
+        assert "what was drawn is unknown" in p1
+        # The primed first-pass claim is exactly what couldn't be backed up.
+        assert "Two lines plotted" not in p1
+        assert "nothing plotted" not in p1
+
     def test_legacy_extraction_without_channel_says_nothing_about_drawings(self) -> None:
         extraction = {"steps": [], "final_answers": [], "confidence": 0.9}
         msg = _build_user_message(extraction, self._problems())
@@ -724,6 +742,17 @@ class TestBuildUserMessageDrawings:
         msg = _build_user_message(extraction, self._problems())
         assert msg.count("(no drawing for this problem)") == 2
         assert "## Other work" not in msg
+
+    def test_system_prompt_explains_unconfirmed(self) -> None:
+        """An unconfirmed drawing (often just a bad bbox) must neither be
+        credited nor treated as missing — the teacher decides from the
+        photo."""
+        prompt = _build_system_prompt(None, self._problems())
+        assert '"<kind>: UNCONFIRMED"' in prompt
+        assert "UNKNOWN, not absent" in prompt
+        assert "do NOT deduct for a required drawing" in prompt
+        assert "never a \"required method missing\" deduction" in prompt
+        assert "teacher should check the photo" in prompt
 
     def test_system_prompt_carries_the_method_rule(self) -> None:
         prompt = _build_system_prompt(None, self._problems())

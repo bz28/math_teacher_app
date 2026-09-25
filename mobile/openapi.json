@@ -1433,7 +1433,7 @@
       },
       "ExtractionVisualWorkOut": {
         "additionalProperties": true,
-        "description": "One drawing Vision found (or noted missing) \u2014 graph, number line,\ndiagram, table, sketch. `present=False` records a problem that asked\nfor a drawing and got none. The grader reads these as its only\nsource of truth about what was drawn.",
+        "description": "One drawing Vision found (or noted missing) \u2014 graph, number line,\ndiagram, sketch. `present=False` records a problem that asked\nfor a drawing and got none. The grader reads these as its only\nsource of truth about what was drawn.",
         "properties": {
           "answer_on_drawing": {
             "anyOf": [
@@ -1509,6 +1509,11 @@
               }
             ],
             "title": "Problem Position"
+          },
+          "unconfirmed": {
+            "default": false,
+            "title": "Unconfirmed",
+            "type": "boolean"
           },
           "verified": {
             "default": false,
@@ -4970,6 +4975,11 @@
           },
           "present": {
             "title": "Present",
+            "type": "boolean"
+          },
+          "unconfirmed": {
+            "default": false,
+            "title": "Unconfirmed",
             "type": "boolean"
           },
           "verified": {

@@ -63,7 +63,7 @@ class ExtractionFinalAnswerOut(BaseModel):
 
 class ExtractionVisualWorkOut(BaseModel):
     """One drawing Vision found (or noted missing) — graph, number line,
-    diagram, table, sketch. `present=False` records a problem that asked
+    diagram, sketch. `present=False` records a problem that asked
     for a drawing and got none. The grader reads these as its only
     source of truth about what was drawn."""
 
@@ -81,6 +81,9 @@ class ExtractionVisualWorkOut(BaseModel):
     bbox: dict[str, float] | None = None
     # True once the crop-and-zoom pass has replaced the inventory.
     verified: bool = False
+    # True when the crop-and-zoom pass found no drawing where the first
+    # pass reported one: inventory emptied, nothing confirmed.
+    unconfirmed: bool = False
 
 
 class ExtractionOut(BaseModel):

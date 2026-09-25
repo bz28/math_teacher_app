@@ -2039,6 +2039,8 @@ export interface TeacherSubmissionDrawing {
   answer_on_drawing: string | null;
   /** A cropped second look confirmed this inventory. */
   verified: boolean;
+  /** That second look found no drawing where the first pass reported one. */
+  unconfirmed: boolean;
 }
 
 export interface TeacherSubmissionDetailProblem {
