@@ -2190,8 +2190,10 @@ async def flag_extraction_submission(
     """Student said "Reader got something wrong" on the confirm screen.
 
     Stamps `extraction_flagged_at` and sends the submission straight
-    to the teacher for manual grading — does NOT spawn integrity or
-    AI grading. No further AI calls run on this submission.
+    to the teacher — does NOT spawn integrity or AI grading. No AI call
+    runs on it automatically; the teacher may still choose "Grade with
+    AI" on the review page, which grades the extraction as-is next to
+    the flag.
 
     Rejects:
       • 404 if the submission doesn't exist.

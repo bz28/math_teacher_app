@@ -35,7 +35,6 @@ from api.core.grading_queue import (
     _reclaim_stale,
     drain,
     enqueue_submission,
-    request_now,
 )
 from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission, SubmissionGrade
@@ -98,14 +97,20 @@ async def _enqueue(
         await s.commit()
 
 
-async def _teacher_id(assignment_id: uuid.UUID) -> uuid.UUID:
-    """_seed_hw doesn't hand back the teacher, and adding it there would
-    edit a fixture five other test modules depend on. Read it off the
-    assignment instead."""
+async def _enqueue_now(
+    assignment_id: uuid.UUID, submission_id: uuid.UUID,
+) -> bool:
+    """A teacher's "Grade with AI" as the queue sees it."""
     async with get_session_factory()() as s:
-        return (await s.execute(
-            select(Assignment.teacher_id).where(Assignment.id == assignment_id)
+        assignment = (await s.execute(
+            select(Assignment).where(Assignment.id == assignment_id)
         )).scalar_one()
+        written = await enqueue_submission(
+            s, submission_id, assignment,
+            requested_by_id=assignment.teacher_id, run_now=True,
+        )
+        await s.commit()
+    return written
 
 
 async def _fake_grade(
@@ -235,14 +240,8 @@ async def test_grade_all_pulls_the_whole_assignment_forward() -> None:
     for sid in world["submission_ids"]:
         await _enqueue(world["assignment_id"], sid)
 
-    async with get_session_factory()() as s:
-        moved = await request_now(
-            s,
-            assignment_id=world["assignment_id"],
-            requested_by_id=await _teacher_id(world["assignment_id"]),
-        )
-        await s.commit()
-    assert moved == len(world["submission_ids"])
+    for sid in world["submission_ids"]:
+        assert await _enqueue_now(world["assignment_id"], sid) is True
 
     async with get_session_factory()() as s:
         claimed = await _claim_due(s, 100)
@@ -259,15 +258,7 @@ async def test_grade_now_pulls_only_that_student_forward() -> None:
         await _enqueue(world["assignment_id"], sid)
 
     target = world["submission_ids"][0]
-    async with get_session_factory()() as s:
-        moved = await request_now(
-            s,
-            assignment_id=world["assignment_id"],
-            requested_by_id=await _teacher_id(world["assignment_id"]),
-            submission_id=target,
-        )
-        await s.commit()
-    assert moved == 1
+    assert await _enqueue_now(world["assignment_id"], target) is True
 
     async with get_session_factory()() as s:
         claimed = await _claim_due(s, 100)
@@ -283,14 +274,7 @@ async def test_grade_now_works_on_an_unscheduled_job() -> None:
     await _enqueue(world["assignment_id"], sid)
     assert (await _job(sid)).scheduled_for is None  # type: ignore[union-attr]
 
-    async with get_session_factory()() as s:
-        await request_now(
-            s,
-            assignment_id=world["assignment_id"],
-            requested_by_id=await _teacher_id(world["assignment_id"]),
-            submission_id=sid,
-        )
-        await s.commit()
+    await _enqueue_now(world["assignment_id"], sid)
 
     async with get_session_factory()() as s:
         claimed = await _claim_due(s, 100)
@@ -307,14 +291,7 @@ async def test_reenqueue_is_idempotent_and_keeps_the_earlier_schedule() -> None:
     await _enqueue(world["assignment_id"], sid)
 
     # Teacher says "grade this now"...
-    async with get_session_factory()() as s:
-        await request_now(
-            s,
-            assignment_id=world["assignment_id"],
-            requested_by_id=await _teacher_id(world["assignment_id"]),
-            submission_id=sid,
-        )
-        await s.commit()
+    await _enqueue_now(world["assignment_id"], sid)
 
     # ...and then the submission is re-confirmed, which enqueues again
     # with the assignment's future due date. The teacher's request must
@@ -794,15 +771,7 @@ async def test_a_teacher_can_revive_a_failed_job() -> None:
             await drain()
     assert (await _job(sid)).status == STATUS_FAILED  # type: ignore[union-attr]
 
-    async with get_session_factory()() as s:
-        moved = await request_now(
-            s,
-            assignment_id=world["assignment_id"],
-            requested_by_id=await _teacher_id(world["assignment_id"]),
-            submission_id=sid,
-        )
-        await s.commit()
-    assert moved == 1
+    assert await _enqueue_now(world["assignment_id"], sid) is True
 
     job = await _job(sid)
     assert job is not None
@@ -820,34 +789,57 @@ async def test_a_teacher_can_revive_a_failed_job() -> None:
     assert (await _job(sid)).status == STATUS_DONE  # type: ignore[union-attr]
 
 
-async def test_reviving_does_not_touch_finished_or_skipped_work() -> None:
-    world = await _seed_hw(n_submissions=2)
+async def test_reenqueue_never_touches_running_or_finished_work() -> None:
+    """The double-grade guard. Several callers can enqueue the same
+    submission close together (a double click, "Grade all" racing
+    "Grade with AI", a retried confirm); resetting a `running` job to
+    `queued` let a second drain claim it and bill the same grade twice
+    in parallel."""
+    world = await _seed_hw(n_submissions=3)
     await _prepare(world["assignment_id"], world["submission_ids"], due_at=None)
-    done_sub, skipped_sub = world["submission_ids"]
+    running_sub, done_sub, skipped_sub = world["submission_ids"]
     for sid in world["submission_ids"]:
         await _enqueue(world["assignment_id"], sid)
 
     async with get_session_factory()() as s:
-        for sid, st in ((done_sub, STATUS_DONE), (skipped_sub, STATUS_SKIPPED)):
+        for sid, st in (
+            (running_sub, STATUS_RUNNING),
+            (done_sub, STATUS_DONE),
+            (skipped_sub, STATUS_SKIPPED),
+        ):
             job = (await s.execute(
                 select(GradingJob).where(GradingJob.submission_id == sid)
             )).scalar_one()
             job.status = st
         await s.commit()
 
-    async with get_session_factory()() as s:
-        moved = await request_now(
-            s,
-            assignment_id=world["assignment_id"],
-            requested_by_id=await _teacher_id(world["assignment_id"]),
-        )
-        await s.commit()
-
-    # Neither is re-runnable: `done` needs a regrade, `skipped` has
-    # nothing to grade. Re-running either would double-charge.
-    assert moved == 0
+    for sid in (running_sub, done_sub):
+        assert await _enqueue_now(world["assignment_id"], sid) is False
+        await _enqueue(world["assignment_id"], sid)
+    assert (await _job(running_sub)).status == STATUS_RUNNING  # type: ignore[union-attr]
     assert (await _job(done_sub)).status == STATUS_DONE  # type: ignore[union-attr]
-    assert (await _job(skipped_sub)).status == STATUS_SKIPPED  # type: ignore[union-attr]
+
+    # The teacher path's `revive_done` (caller has proved no grade data
+    # exists) brings a `done` job back — never a `running` one.
+    async with get_session_factory()() as s:
+        assignment = (await s.execute(
+            select(Assignment).where(Assignment.id == world["assignment_id"])
+        )).scalar_one()
+        assert await enqueue_submission(
+            s, running_sub, assignment, run_now=True, revive_done=True,
+        ) is False
+        assert await enqueue_submission(
+            s, done_sub, assignment, run_now=True, revive_done=True,
+        ) is True
+        await s.commit()
+    assert (await _job(running_sub)).status == STATUS_RUNNING  # type: ignore[union-attr]
+    assert (await _job(done_sub)).status == STATUS_QUEUED  # type: ignore[union-attr]
+
+    # `skipped` closed with no grade (AI was switched off before the
+    # drain reached it). Callers only enqueue work they have already
+    # judged gradeable, so it comes back rather than being unreachable.
+    assert await _enqueue_now(world["assignment_id"], skipped_sub) is True
+    assert (await _job(skipped_sub)).status == STATUS_QUEUED  # type: ignore[union-attr]
 
 
 # ── The drain endpoint (the scheduled clock knocks here) ─────────────
