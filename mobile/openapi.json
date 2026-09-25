@@ -13451,7 +13451,7 @@
     },
     "/v1/school/student/submissions/{submission_id}/flag-extraction": {
       "post": {
-        "description": "Student said \"Reader got something wrong\" on the confirm screen.\n\nStamps `extraction_flagged_at` and sends the submission straight\nto the teacher for manual grading \u2014 does NOT spawn integrity or\nAI grading. No further AI calls run on this submission.\n\nRejects:\n  \u2022 404 if the submission doesn't exist.\n  \u2022 403 if it belongs to another student.\n  \u2022 409 if extraction hasn't finished (nothing to flag yet).\n  \u2022 409 if the student already confirmed (can't flag after\n    confirm \u2014 integrity + grading may have already fired).\n\nIdempotent on re-flag: duplicate call returns 200 no-op.",
+        "description": "Student said \"Reader got something wrong\" on the confirm screen.\n\nStamps `extraction_flagged_at` and sends the submission straight\nto the teacher \u2014 does NOT spawn integrity or AI grading. No AI call\nruns on it automatically; the teacher may still choose \"Grade with\nAI\" on the review page, which grades the extraction as-is next to\nthe flag.\n\nRejects:\n  \u2022 404 if the submission doesn't exist.\n  \u2022 403 if it belongs to another student.\n  \u2022 409 if extraction hasn't finished (nothing to flag yet).\n  \u2022 409 if the student already confirmed (can't flag after\n    confirm \u2014 integrity + grading may have already fired).\n\nIdempotent on re-flag: duplicate call returns 200 no-op.",
         "operationId": "flag_extraction_submission_v1_school_student_submissions__submission_id__flag_extraction_post",
         "parameters": [
           {

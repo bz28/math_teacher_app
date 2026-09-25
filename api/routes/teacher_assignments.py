@@ -1643,8 +1643,8 @@ async def list_submissions(
                 if sub.extraction_flagged_at else None
             ),
             # Null when "Grade with AI" can act on this submission;
-            # otherwise why not (ai_disabled / graded / unreadable /
-            # no_extraction). The page shows the button and counts
+            # otherwise why not (ai_disabled / graded / extracting /
+            # no_extraction / unreadable / awaiting_confirmation). The page shows the button and counts
             # "Grade N ungraded" from this, so both agree with what the
             # grade-now / grade-pending endpoints will actually do.
             "ai_grade_block": ai_grade_block(sub, grade, a),
@@ -1888,8 +1888,13 @@ async def grade_submission(
         .values(submission_id=sub.id)
         .on_conflict_do_nothing(index_elements=["submission_id"])
     )
+    # Row lock, shared with the AI grader's write (grading_ai), so a hand
+    # save and an AI result landing together serialize instead of one
+    # silently overwriting the other.
     grade = (await db.execute(
-        select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
+        select(SubmissionGrade)
+        .where(SubmissionGrade.submission_id == sub.id)
+        .with_for_update()
     )).scalar_one()
 
     now = datetime.now(UTC)

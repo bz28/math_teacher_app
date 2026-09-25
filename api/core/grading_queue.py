@@ -466,6 +466,26 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> str:
                 await db.commit()
                 return _SKIPPED
 
+            # Grade data appeared since this was queued (a hand grade, or
+            # a cleared AI grade whose `ai_score` survives). The grader
+            # would decline anyway; closing here stops that decline from
+            # reading as "grader returned no grades" and being retried.
+            # `done` when a live grade exists, `skipped` when only
+            # residue does — `done` asserts a grade.
+            existing = (await db.execute(
+                select(SubmissionGrade)
+                .where(SubmissionGrade.submission_id == submission_id)
+            )).scalar_one_or_none()
+            if has_any_grade(existing):
+                outcome = (
+                    _GRADED
+                    if existing is not None and existing.final_score is not None
+                    else _SKIPPED
+                )
+                await _finish(db, job_id, outcome=outcome, error=None)
+                await db.commit()
+                return outcome
+
             await run_ai_grading_for_submission(
                 submission_id, extraction, db, user_id=str(sub.student_id),
             )

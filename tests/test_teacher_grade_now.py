@@ -700,10 +700,56 @@ async def test_grade_all_grades_only_what_it_can_grade(
     assert rows[str(unconfirmed)]["ai_grade_block"] == "awaiting_confirmation"
 
 
-async def test_a_hand_grade_saved_mid_ai_grade_is_not_overwritten() -> None:
+@pytest.mark.parametrize(
+    "residue",
+    [
+        {"ai_score": 80.0, "ai_breakdown": {"grades": []}},  # cleared AI grade
+        {"reviewed_at": datetime.now(UTC)},
+        {"breakdown": [{"problem_id": "x", "percent": 50}]},
+    ],
+    ids=["cleared_ai_grade", "review_stamp", "breakdown_only"],
+)
+async def test_grader_skips_the_model_on_any_grade_data(
+    residue: dict[str, Any],
+) -> None:
+    """The grader's own pre-model guard uses the same "any grade data"
+    rule as the button. It used to look only at `final_score`, so a job
+    revived or queued around a cleared AI grade paid for a second call."""
+    from tests.test_teacher_review_checkpoint import _real_run_ai_grading
+
+    world = await _ungraded_world()
+    sid = world["submission_ids"][0]
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(submission_id=sid, **residue))
+        await s.commit()
+
+    llm = AsyncMock(return_value={"grades": []})
+    with patch("api.core.grading_ai.grade_submission_with_ai", new=llm):
+        async with get_session_factory()() as s:
+            await _real_run_ai_grading(sid, _EXTRACTION, s)
+            await s.commit()
+    llm.assert_not_awaited()
+
+    # And a queued job over that residue closes cleanly instead of
+    # retrying "grader returned no grades" until it parks in `failed`.
+    async with get_session_factory()() as s:
+        assignment = (await s.execute(
+            select(Assignment).where(Assignment.id == world["assignment_id"])
+        )).scalar_one()
+        await enqueue_submission(s, sid, assignment, run_now=True)
+        await s.commit()
+    await drain()
+    job = await _job(sid)
+    assert job is not None and job.status == STATUS_SKIPPED
+    assert job.attempts == 1
+
+
+async def test_a_hand_grade_saved_during_the_model_call_wins_the_recheck() -> None:
     """The teacher presses "Grade with AI", then starts scoring by hand
     while the model is still thinking. A partial hand grade carries no
-    review stamp, so the AI's result used to replace it on landing."""
+    review stamp, so the AI's result used to replace it on landing. Her
+    save commits before the grader's write, so this pins the post-call
+    re-check (the row lock covers saves that land during the write)."""
     from tests.test_teacher_review_checkpoint import _real_run_ai_grading
 
     world = await _ungraded_world()

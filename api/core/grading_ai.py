@@ -833,18 +833,21 @@ async def run_ai_grading_for_submission(
     if not sub:
         return
 
-    # Idempotency: if this submission is already AI-graded (final_score
-    # set) and the caller isn't a teacher-initiated regrade, skip the
-    # LLM call. Guards against a concurrent spawn (e.g. confirm called
-    # twice in quick succession) re-running grading and racing writers
-    # on the same SubmissionGrade row.
+    # Idempotency: unless this is a teacher-initiated regrade, skip the
+    # LLM call when the submission carries grade data of ANY kind — the
+    # same `has_any_grade` rule that decides whether a teacher may send
+    # it here at all. Checking only `final_score` let a cleared AI grade
+    # (its `ai_score` survives) or a bare review stamp be graded — and
+    # billed — again by a job revived or queued around it.
     if not force:
+        from api.core.grading_queue import has_any_grade
+
         existing = (await db.execute(
-            select(SubmissionGrade.final_score).where(
+            select(SubmissionGrade).where(
                 SubmissionGrade.submission_id == submission_id,
             )
         )).scalar_one_or_none()
-        if existing is not None:
+        if has_any_grade(existing):
             return
 
     assignment = (await db.execute(
@@ -894,10 +897,11 @@ async def run_ai_grading_for_submission(
         .on_conflict_do_nothing(index_elements=["submission_id"])
     )
     # Locked from here to the caller's commit — after the LLM call, so
-    # the lock is held for a few writes, never a model round trip. It
-    # closes the gap between this read and that commit: a teacher's hand
-    # grade saved in between now waits, and the `final_score` check
-    # below sees it rather than a stale row.
+    # the lock is held for a few writes, never a model round trip.
+    # PATCH /grade takes the same row lock, so the two writers serialize:
+    # a hand grade committed before this read is seen by the re-check
+    # below (populate_existing bypasses the session's cached copy); one
+    # arriving after waits for this commit and then writes over it.
     grade = (await db.execute(
         select(SubmissionGrade)
         .where(SubmissionGrade.submission_id == sub.id)
@@ -912,9 +916,9 @@ async def run_ai_grading_for_submission(
     # the teacher has edited the rubric since this run.
     grade.rubric_snapshot = assignment.rubric
 
-    # `final_score` set HERE, on the non-force path, can only mean a
-    # teacher saved a hand grade while the model was thinking — the
-    # guard at the top returned early if one existed beforehand. A
+    # The re-check. Teacher grade data here, on the non-force path, can
+    # only mean she saved a hand grade while the model was thinking —
+    # the guard at the top returned early if any existed beforehand. A
     # partial hand grade carries no review stamp, so without this the
     # AI's breakdown silently replaced the problems she had just scored.
     # Her grade wins; the AI read is still kept on `ai_breakdown`.
