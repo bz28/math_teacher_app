@@ -44,6 +44,45 @@ from api.routes.teacher_courses import get_teacher_course
 from api.services.bank import snapshot_bank_items, used_in_assignments_map, used_in_for_item
 
 
+def _clean_solution_steps(raw: list[Any]) -> list[dict[str, Any]] | None:
+    """Validate a teacher-edited step list from the Workshop.
+
+    The editor sends the whole array (add / delete / reorder / edit all
+    replace it wholesale), so this is the one gate between arbitrary JSON
+    and every reader downstream — student practice, the integrity agent's
+    canonical steps, the step-chat tutor. A malformed entry (not an
+    object, or non-text title/description) is a 400. A step whose title
+    and description are both blank carries nothing for any reader, so it
+    is dropped rather than rejected: clearing both fields of a step
+    removes it, and a blank step left over from older edits can't block
+    every later save of the list. Extra keys (figure_spec / figure_svg)
+    ride through untouched so a reorder never strips a step's figure.
+
+    An empty list is stored as None — the generation pipeline's own
+    representation of "no steps" (`s.get("steps") or None`).
+    """
+    cleaned: list[dict[str, Any]] = []
+    for n, step in enumerate(raw, start=1):
+        if not isinstance(step, dict):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Step {n} is malformed",
+            )
+        fields: dict[str, str] = {}
+        for key in ("title", "description"):
+            value = step.get(key)
+            if value is not None and not isinstance(value, str):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Step {n} {key} must be text",
+                )
+            fields[key] = (value or "").strip()
+        if not fields["title"] and not fields["description"]:
+            continue
+        cleaned.append({**step, **fields})
+    return cleaned or None
+
+
 def _ensure_unlocked(item: QuestionBankItem) -> None:
     if item.locked:
         raise HTTPException(
@@ -514,6 +553,14 @@ async def update_bank_item(
     )
     if content_changing:
         _ensure_unlocked(item)
+    # Validated before the undo snapshot so a rejected edit can't clobber
+    # the teacher's one-level undo.
+    new_steps = (
+        _clean_solution_steps(body.solution_steps)
+        if body.solution_steps is not None
+        else None
+    )
+    if content_changing:
         snapshot_history(item)
 
     # Captured before the mutations below so the activity row can name the
@@ -537,7 +584,7 @@ async def update_bank_item(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Question cannot be empty")
         item.question = q
     if body.solution_steps is not None:
-        item.solution_steps = body.solution_steps
+        item.solution_steps = new_steps
     if body.final_answer is not None:
         # Stripped like `question` above. Unstripped, a re-save differing
         # only in trailing whitespace counts as a repair and inflates the

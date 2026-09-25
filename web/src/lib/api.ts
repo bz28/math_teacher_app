@@ -1853,7 +1853,9 @@ export const teacher = {
   updateBankItem(itemId: string, data: {
     title?: string;
     question?: string;
-    solution_steps?: { title: string; description: string }[];
+    /** Whole-array replace. Steps keep any figure_spec/figure_svg they
+     *  carry, so reorder/delete must move whole step objects. */
+    solution_steps?: BankSolutionStep[];
     final_answer?: string;
     /** MCQ wrong-answer choices. Must be exactly 3 strings when set
      *  so the composed [correct, ...wrong] yields 4 choices. */
@@ -2132,6 +2134,13 @@ export interface AiGradeEntry {
   student_feedback: string | null;
 }
 
+export interface BankSolutionStep {
+  title: string;
+  description: string;
+  figure_spec?: Record<string, unknown> | null;
+  figure_svg?: string | null;
+}
+
 export interface BankChatProposal {
   question: string | null;
   solution_steps: {
@@ -2170,12 +2179,7 @@ export interface BankItem {
    *  SVG) when the construction evolves between steps (e.g. dropping
    *  an altitude). figure_spec is the canonical source-of-truth for a
    *  future visual editor; figure_svg is what gets rendered. */
-  solution_steps: {
-    title: string;
-    description: string;
-    figure_spec?: Record<string, unknown> | null;
-    figure_svg?: string | null;
-  }[] | null;
+  solution_steps: BankSolutionStep[] | null;
   final_answer: string | null;
   /** 3 wrong-answer choices generated alongside the solution. Empty
    *  for FRQ items where distractor generation failed. The MCQ
