@@ -84,12 +84,15 @@ ASSIGNMENT".
 - Grade ONLY based on the student's extracted work — do not solve the problem yourself.
 - If the student's answer matches the answer key exactly (or is mathematically equivalent) \
 AND the problem's required method or drawing (below) is satisfied, give full credit.
-- Required method or drawing. When the problem statement names a method ("by \
-graphing", "using elimination", "by substitution", "by factoring", "using the \
-quadratic formula", "by completing the square") or asks for something drawn \
-("graph", "sketch", "draw", "plot", "shade"), that method or drawing is part of \
-the answer, not a suggestion. A printed figure the problem refers to ("using the \
-graph shown") is not a request to draw, and "label your answer" is not either. A \
+- Required method or drawing. A drawing is required ONLY on a problem whose \
+work block says "Requires a drawing: yes" — that flag is set on the question \
+and is the source of truth; never infer a required drawing from the wording, and \
+on an unmarked problem never require, credit, or deduct for any drawing (a \
+printed figure, "label your answer", or a proof's Statements/Reasons table is \
+not a drawing request). A named method ("by graphing", "using elimination", \
+"by substitution", "by factoring", "using the quadratic formula", "by completing \
+the square") is read from the problem statement as before. A required method or \
+drawing is part of the answer, not a suggestion. A \
 correct final answer reached by a different method, or without the required \
 drawing, is NOT full credit — grade it \
 as "right answer, required method missing" partial credit (the rubric's Partial \
@@ -251,6 +254,14 @@ def _format_visual_work(v: dict[str, Any]) -> str:
     kind = (v.get("kind") or "drawing").replace("_", " ")
     if not v.get("present", True):
         return f"{kind}: NOT PRESENT — the problem asked for one and nothing is drawn"
+    if v.get("kind") == "table":
+        # A table is text in a grid: nothing is "plotted", and the zoomed
+        # check can't read it, so it is reported as written — neither
+        # confirmed nor doubted.
+        desc = (v.get("description") or "").strip()
+        return f"table (the student's own table; its entries are also in the steps): {desc}" if desc else (
+            "table (the student's own table; its entries are also in the steps)"
+        )
     if v.get("unconfirmed"):
         # The first pass claimed a drawing here but a zoomed look found
         # none. Its description is exactly the primed claim we couldn't
@@ -457,10 +468,14 @@ def _build_user_message(
         else:
             lines.append("  (no work shown for this problem)")
 
-        # Drawings, when the extractor had the channel. Rows extracted
-        # before it existed carry no key at all — say nothing rather than
-        # assert "no drawing" about a page we didn't inventory.
-        if "visual_work" in extraction:
+        # Drawings, only where the question requires one — the flag on
+        # the bank item is the source of truth, and drawings elsewhere
+        # are neither required nor inventoried. Rows extracted before
+        # the channel existed carry no key at all — say nothing rather
+        # than assert "no drawing" about a page we didn't inventory.
+        if p.get("requires_drawing"):
+            lines.append("Requires a drawing: yes")
+        if p.get("requires_drawing") and "visual_work" in extraction:
             problem_visuals = visual_by_pos.get(position, [])
             lines.append("Student's drawings:")
             if problem_visuals:

@@ -1093,6 +1093,8 @@ async def start_integrity_check(
                 "position": hw_position_by_id[cid],
                 "question": items_by_id[cid].question,
                 "final_answer": items_by_id[cid].final_answer,
+                # Gates the drawings channel (see load_problems_for_assignment).
+                "requires_drawing": bool(items_by_id[cid].requires_drawing),
             }
             for cid in candidate_uuids
             if cid in items_by_id

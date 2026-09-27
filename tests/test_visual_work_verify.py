@@ -104,6 +104,29 @@ class TestVerifyVisualWork:
         assert "y = 2x" not in calls[0]["content"][1]["text"]
         assert calls[0]["call_metadata"]["phase"] == "vision_verify_drawing"
 
+    async def test_agreeing_crop_confirms_and_keeps_the_first_read(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """drawing-eval case a: both lines read correctly first; the crop
+        agreed on the count but described one as a curve with the wrong
+        intercepts, and the grader docked a correct graph to 50%."""
+        async def fake_vision(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            return {
+                "has_drawing": True,
+                "plotted_elements": ["a curve through the origin", "a steep falling line"],
+                "labeled_points": ["(2,3)"], "unlabeled_dots": 0, "answer_on_drawing": "(2,3)",
+                "description": "A curve and a line.",
+            }
+
+        monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
+        entry = _entry()
+        ext = {"steps": [], "final_answers": [], "visual_work": [entry], "confidence": 0.9}
+        await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
+        v = ext["visual_work"][0]
+        assert v["verified"] is True and "unconfirmed" not in v
+        assert v["plotted_elements"] == ["line (y = 2x - 1)", "line (y = -x + 5)"]
+        assert v["description"] == "Two lines plotted intersecting at (2, 3)."
+
     async def test_no_drawing_retries_wider_then_empties_inventory(self, monkeypatch: pytest.MonkeyPatch) -> None:
         margins: list[float] = []
 
@@ -246,13 +269,69 @@ class TestVerifyVisualWork:
         assert "unconfirmed" not in v
 
 
-def test_table_is_not_a_drawing_kind() -> None:
-    """A two-column proof's Statements|Reasons grid is text the steps
-    already carry. Offering "table" as a drawing kind made the extractor
-    log it as a drawing the zoomed pass (told to ignore text) then
-    couldn't find (prod bb8536f1)."""
+async def test_tables_are_never_sent_to_the_zoomed_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The zoomed look ignores text, so for a table it can only say "no
+    drawing" — which used to turn a required table into a false
+    "couldn't confirm". Tables stay unverified and are never unconfirmed."""
+    async def boom(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("a table must not be sent to the verify pass")
+
+    monkeypatch.setattr(integrity_ai, "call_claude_vision", boom)
+    table = _entry(kind="table", description="x | y table of values", plotted_elements=[])
+    ext = {"steps": [], "final_answers": [], "visual_work": [table], "confidence": 0.9}
+    await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
+    v = ext["visual_work"][0]
+    assert v["verified"] is False and "unconfirmed" not in v
+    assert v["description"] == "x | y table of values"
+
+
+def test_table_is_a_drawing_kind_again() -> None:
+    """A required table of values is real drawn work; "table" stays a kind.
+    The proof-grid false positives are handled by the requires_drawing
+    gate instead (see test_extraction_post_filter)."""
     from api.core.llm_schemas import INTEGRITY_EXTRACT_SCHEMA
 
     item = INTEGRITY_EXTRACT_SCHEMA["input_schema"]["properties"]["visual_work"]["items"]
-    assert "table" not in item["properties"]["kind"]["enum"]
-    assert "table" not in integrity_ai._EXTRACT_SYSTEM.split("`visual_work`", 1)[1].split("\n- **", 1)[0]
+    assert "table" in item["properties"]["kind"]["enum"]
+
+
+class TestExtractionPostFilter:
+    """`keep_visual_work_for_flagged_problems`: the deterministic backstop
+    behind the prompt. Prod had 11 visual_work entries, all on problems
+    that asked for no drawing."""
+
+    def _problems(self) -> list[dict[str, Any]]:
+        return [
+            {"position": 1, "question": "Solve by graphing.", "requires_drawing": True},
+            {"position": 3, "question": "Write a two-column proof.", "requires_drawing": False},
+        ]
+
+    def test_drops_entries_on_unflagged_problems(self) -> None:
+        ext = {"visual_work": [
+            _entry(problem_position=1),
+            _entry(problem_position=3, kind="table", description="Statements | Reasons"),
+        ]}
+        integrity_ai.keep_visual_work_for_flagged_problems(ext, self._problems())
+        assert [v["problem_position"] for v in ext["visual_work"]] == [1]
+
+    def test_unattributed_kept_only_when_something_is_flagged(self) -> None:
+        stray = _entry(problem_position=None)
+        foreign = _entry(problem_position=9)
+        ext = {"visual_work": [stray, foreign]}
+        integrity_ai.keep_visual_work_for_flagged_problems(ext, self._problems())
+        assert len(ext["visual_work"]) == 2
+        ext = {"visual_work": [stray, foreign]}
+        integrity_ai.keep_visual_work_for_flagged_problems(
+            ext, [{"position": 3, "requires_drawing": False}],
+        )
+        assert ext["visual_work"] == []
+
+    def test_no_problems_means_no_drawings(self) -> None:
+        ext = {"visual_work": [_entry()]}
+        integrity_ai.keep_visual_work_for_flagged_problems(ext, None)
+        assert ext["visual_work"] == []
+
+    def test_briefing_marks_flagged_problems(self) -> None:
+        briefing = integrity_ai._format_problems_briefing(self._problems())
+        assert "Problem 1 [requires a drawing]: Solve by graphing." in briefing
+        assert "Problem 3: Write a two-column proof." in briefing

@@ -63,7 +63,7 @@ class ExtractionFinalAnswerOut(BaseModel):
 
 class ExtractionVisualWorkOut(BaseModel):
     """One drawing Vision found (or noted missing) — graph, number line,
-    diagram, sketch. `present=False` records a problem that asked
+    diagram, table, sketch. `present=False` records a problem that asked
     for a drawing and got none. The grader reads these as its only
     source of truth about what was drawn."""
 

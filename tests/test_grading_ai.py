@@ -630,12 +630,18 @@ class TestBuildUserMessageDrawings:
     single stray line, and the text-only grader gave full credit. Now
     the grader gets a literal inventory per problem — or an explicit
     "no drawing" — and nothing at all for rows extracted before the
-    channel existed (no false "no drawing" claims about old pages)."""
+    channel existed (no false "no drawing" claims about old pages).
+
+    Only problems flagged `requires_drawing` get a drawings section: the
+    flag on the question is the grader's source of truth, and drawings on
+    other problems are neither required nor shown to it."""
 
     def _problems(self) -> list[dict[str, Any]]:
         return [
-            {"position": 1, "question": "Solve the system by graphing.", "final_answer": "(2, 3)"},
-            {"position": 2, "question": "Solve using elimination.", "final_answer": "(3, 4)"},
+            {"position": 1, "question": "Solve the system by graphing.", "final_answer": "(2, 3)",
+             "requires_drawing": True},
+            {"position": 2, "question": "Solve using elimination.", "final_answer": "(3, 4)",
+             "requires_drawing": False},
         ]
 
     def test_present_drawing_is_inventoried_under_its_problem(self) -> None:
@@ -660,8 +666,9 @@ class TestBuildUserMessageDrawings:
             "labeled points: none — answer marked on drawing: none"
         ) in p1
         assert "one line through the origin" in p1
-        # Problem 2 had no entry → an explicit "no drawing", not silence.
-        assert "(no drawing for this problem)" in _sections_by_position(msg)[2]
+        assert "Requires a drawing: yes" in p1
+        # Problem 2 doesn't require a drawing → no drawings section at all.
+        assert "drawing" not in _sections_by_position(msg)[2].lower()
 
     def test_missing_required_drawing_is_stated_loudly(self) -> None:
         extraction = {
@@ -713,7 +720,7 @@ class TestBuildUserMessageDrawings:
     def test_legacy_extraction_without_channel_says_nothing_about_drawings(self) -> None:
         extraction = {"steps": [], "final_answers": [], "confidence": 0.9}
         msg = _build_user_message(extraction, self._problems())
-        assert "drawing" not in msg.lower()
+        assert "Student's drawings" not in msg and "no drawing" not in msg
 
     def test_unattributed_or_foreign_position_drawings_go_to_other_work(self) -> None:
         extraction = {
@@ -735,13 +742,43 @@ class TestBuildUserMessageDrawings:
         assert "Drawing: sketch" in other and "doodle" in other
         assert "stale tag" in other and "bool tag" in other
         assert "(no drawing for this problem)" not in msg
-        assert msg.count("no drawing attributed to this problem") == 2
+        # Only the flagged problem points at them; problem 2 never needed one.
+        assert msg.count("no drawing attributed to this problem") == 1
 
     def test_no_drawings_at_all_says_none_for_each_problem(self) -> None:
         extraction = {"steps": [], "final_answers": [], "visual_work": [], "confidence": 0.9}
         msg = _build_user_message(extraction, self._problems())
-        assert msg.count("(no drawing for this problem)") == 2
+        assert msg.count("(no drawing for this problem)") == 1
         assert "## Other work" not in msg
+
+    def test_drawing_on_an_unflagged_problem_is_never_shown(self) -> None:
+        """Defence in depth behind the extractor's post-filter: a proof
+        grid tagged to a problem that doesn't require a drawing must not
+        reach the grader as a drawing (prod bb8536f1)."""
+        extraction = {
+            "steps": [], "final_answers": [], "confidence": 0.9,
+            "visual_work": [
+                {"problem_position": 2, "kind": "table", "present": True,
+                 "description": "Statements | Reasons", "plotted_elements": [],
+                 "labeled_points": [], "answer_on_drawing": None},
+            ],
+        }
+        p2 = _sections_by_position(_build_user_message(extraction, self._problems()))[2]
+        assert "Statements" not in p2 and "drawing" not in p2.lower()
+
+    def test_required_table_is_reported_neutrally(self) -> None:
+        extraction = {
+            "steps": [], "final_answers": [], "confidence": 0.9,
+            "visual_work": [
+                {"problem_position": 1, "kind": "table", "present": True,
+                 "description": "x: -1, 0, 1, 2; y: -3, -1, 1, 3",
+                 "plotted_elements": [], "labeled_points": [], "answer_on_drawing": None,
+                 "verified": False},
+            ],
+        }
+        p1 = _sections_by_position(_build_user_message(extraction, self._problems()))[1]
+        assert "table (the student's own table" in p1 and "y: -3, -1, 1, 3" in p1
+        assert "UNCONFIRMED" not in p1 and "nothing plotted" not in p1
 
     def test_system_prompt_explains_unconfirmed(self) -> None:
         """An unconfirmed drawing (often just a bad bbox) must neither be

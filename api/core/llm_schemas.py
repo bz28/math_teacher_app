@@ -897,7 +897,7 @@ INTEGRITY_EXTRACT_SCHEMA: ToolSchema = {
                         },
                         "kind": {
                             "type": "string",
-                            "enum": ["graph", "number_line", "diagram", "sketch", "other"],
+                            "enum": ["graph", "number_line", "diagram", "table", "sketch", "other"],
                             "description": "What sort of drawing it is.",
                         },
                         "present": {
@@ -915,7 +915,7 @@ INTEGRITY_EXTRACT_SCHEMA: ToolSchema = {
                                 "What is on the page, concretely: which lines or "
                                 "curves are plotted (name them by equation when "
                                 "readable), labeled points, axes and scale, shading, "
-                                "arrows. Empty when present is false."
+                                "arrows, table headings. Empty when present is false."
                             ),
                         },
                         "plotted_elements": {
@@ -929,7 +929,7 @@ INTEGRITY_EXTRACT_SCHEMA: ToolSchema = {
                                 "right, crossing the y-axis just below the origin\"). "
                                 "Trace each stroke; do not add an element because the "
                                 "problem or the algebra implies it should exist. Empty "
-                                "for an unplotted figure."
+                                "for a table or an unplotted figure."
                             ),
                         },
                         "labeled_points": {
@@ -974,11 +974,11 @@ INTEGRITY_EXTRACT_SCHEMA: ToolSchema = {
                     "additionalProperties": False,
                 },
                 "description": (
-                    "One entry per drawing the student made (graph, number line, "
-                    "diagram, sketch), plus one present=false entry for "
-                    "each problem that asked the student to draw something and "
-                    "has no drawing. Empty when the submission has no drawings "
-                    "and no problem asked for one."
+                    "One entry per drawing (graph, number line, diagram, table, "
+                    "sketch) the student made for a problem marked [requires a "
+                    "drawing], plus one present=false entry for each such "
+                    "problem with no drawing. Never for unmarked problems. "
+                    "Empty when no problem is marked."
                 ),
             },
             "confidence": {
