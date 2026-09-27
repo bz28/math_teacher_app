@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import record_activity, record_question_edit
 from api.core.constants import SOLUTION_FAILED_SENTINEL_PREFIX
+from api.core.drawing_requirement import requires_drawing
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.image_utils import validate_and_decode_upload
 from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
@@ -34,6 +35,7 @@ from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
 from api.models.question_edit import (
     EDIT_MANUAL,
     EDIT_WORKSHOP,
+    FIELD_REQUIRES_DRAWING,
     REGEN_FRESH,
     REGEN_GUIDED,
     REJECT,
@@ -133,6 +135,10 @@ class UpdateBankItemRequest(BaseModel):
     question: str | None = None
     solution_steps: list[Any] | None = None
     final_answer: str | None = None
+    # Teacher override of the "requires a drawing" flag (Workshop toggle).
+    # It decides whether a drawing is part of the answer, so it's a
+    # content edit: refused while the item is in a published homework.
+    requires_drawing: bool | None = None
     # MCQ wrong-answer choices. None = leave unchanged; must be a
     # 3-element list when set so the renderer always has exactly 4
     # choices (correct + 3 wrong). Used by the workshop modal's
@@ -220,6 +226,7 @@ def _serialize_item(
         "format": item.format,
         "status": item.status,
         "locked": bool(item.locked),
+        "requires_drawing": bool(item.requires_drawing),
         "source": item.source,
         "parent_question_id": str(item.parent_question_id) if item.parent_question_id else None,
         "used_in": used_in or [],
@@ -515,6 +522,12 @@ async def update_bank_item(
     if content_changing:
         _ensure_unlocked(item)
         snapshot_history(item)
+    # Not part of the one-level undo: the toggle is its own undo.
+    drawing_changed = (
+        body.requires_drawing is not None and body.requires_drawing != item.requires_drawing
+    )
+    if drawing_changed:
+        _ensure_unlocked(item)
 
     # Captured before the mutations below so the activity row can name the
     # fields that ACTUALLY changed. A PATCH that re-sends identical values
@@ -562,6 +575,13 @@ async def update_bank_item(
         item.difficulty = body.difficulty
     if body.unit_id is not None:
         item.unit_id = body.unit_id
+    if drawing_changed:
+        prev_flag = "yes" if item.requires_drawing else "no"
+        item.requires_drawing = bool(body.requires_drawing)
+        await record_question_edit(
+            db, item, EDIT_MANUAL, current_user,
+            changes=[(FIELD_REQUIRES_DRAWING, prev_flag, "yes" if item.requires_drawing else "no")],
+        )
 
     # A generated question a teacher had to rewrite is the clearest
     # signal the generation prompt is wrong. No-ops when the question
@@ -584,6 +604,8 @@ async def update_bank_item(
         )
         if before != after
     ]
+    if drawing_changed:
+        changed_content.append("requires_drawing")
     if changed_content:
         await record_activity(
             db, current_user, "bank_item.edit", "bank_item", item.id,
@@ -962,6 +984,9 @@ async def accept_chat_proposal(
 
     if proposal.get("question") is not None:
         item.question = str(proposal["question"]).strip()
+        # New AI-written text re-derives the drawing requirement, as
+        # regenerate does; the Workshop toggle overrides it.
+        item.requires_drawing = requires_drawing(item.question)
     if proposal.get("solution_steps") is not None:
         # Belt-and-suspenders: defense against malformed steps lingering
         # in old chat_messages written before question_bank_chat.py

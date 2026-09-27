@@ -2544,6 +2544,9 @@ class TeacherSubmissionDetailProblem(BaseModel):
     # extraction lives on Submission.extraction; we slice it here so
     # the frontend doesn't need to filter client-side.
     student_steps: list[TeacherSubmissionStep] = []
+    # The question asks the student to draw (graph, sketch, table of
+    # values…). Only these problems get drawings inventoried and graded.
+    requires_drawing: bool = False
     # Drawings the extractor inventoried for this problem. Empty on rows
     # extracted before the channel existed.
     drawings: list[TeacherSubmissionDrawing] = []
@@ -3039,6 +3042,7 @@ async def get_submission_detail(
             final_answer=item.final_answer,
             student_answer=student_answer,
             student_steps=steps_by_position.get(pos, []),
+            requires_drawing=bool(item.requires_drawing),
             drawings=drawings_by_position.get(pos, []),
             pages=sorted(pages_by_position.get(pos, [])),
         ))

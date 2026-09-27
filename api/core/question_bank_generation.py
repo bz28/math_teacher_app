@@ -27,6 +27,7 @@ from api.core.document_vision import (
     build_vision_content,
     fetch_source_documents,
 )
+from api.core.drawing_requirement import requires_drawing
 from api.core.geometry import render_figure_or_none
 from api.core.image_utils import to_content_block
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
@@ -489,6 +490,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             originating_assignment_id=job.originating_assignment_id,
             title=q.get("title") or None,
             question=q["text"],
+            requires_drawing=requires_drawing(q["text"]),
             solution_steps=s.get("steps") or None,
             final_answer=s.get("final_answer") or "",
             distractors=item_distractors,
@@ -636,6 +638,9 @@ async def regenerate_one(
     if new_title:
         item.title = str(new_title)[:120]
     item.question = str(new_question)
+    # A regenerated question is new AI text, so its drawing requirement
+    # is re-derived; a teacher's manual text edit keeps their flag.
+    item.requires_drawing = requires_drawing(item.question)
     item.solution_steps = (
         _render_step_figures(new_steps) if isinstance(new_steps, list) else None
     )

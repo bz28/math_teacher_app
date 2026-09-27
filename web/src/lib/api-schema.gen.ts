@@ -4753,7 +4753,7 @@ export interface components {
         /**
          * ExtractionVisualWorkOut
          * @description One drawing Vision found (or noted missing) — graph, number line,
-         *     diagram, sketch. `present=False` records a problem that asked
+         *     diagram, table, sketch. `present=False` records a problem that asked
          *     for a drawing and got none. The grader reads these as its only
          *     source of truth about what was drawn.
          */
@@ -6104,6 +6104,11 @@ export interface components {
             position: number;
             /** Question */
             question: string;
+            /**
+             * Requires Drawing
+             * @default false
+             */
+            requires_drawing: boolean;
             /** Student Answer */
             student_answer: string | null;
             /**
@@ -6340,6 +6345,8 @@ export interface components {
             final_answer?: string | null;
             /** Question */
             question?: string | null;
+            /** Requires Drawing */
+            requires_drawing?: boolean | null;
             /** Solution Steps */
             solution_steps?: unknown[] | null;
             /** Title */

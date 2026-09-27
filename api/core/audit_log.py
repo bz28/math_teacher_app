@@ -221,8 +221,15 @@ async def record_question_edit(
     item: "QuestionBankItem",
     kind: str,
     actor: "CurrentUser | None" = None,
+    *,
+    changes: list[tuple[str, str | None, str | None]] | None = None,
 ) -> None:
     """Record one teacher edit to a generated question.
+
+    `changes` replaces the snapshot diff with explicit (field, before,
+    after) triples, for edits that don't go through `snapshot_history`
+    (the requires-drawing toggle). Diffing the snapshot there would
+    re-report whatever the LAST content edit changed.
 
     Call AFTER the mutation. `snapshot_history` has already put the old
     question into `previous_question`, so both halves are on the item by
@@ -278,13 +285,14 @@ async def record_question_edit(
             # undo, which is a separate change.
         ]
 
-        if kind == REJECT:
+        changed: list[tuple[str, str | None, str | None]]
+        if changes is not None:
+            changed = [(f, b, a) for f, b, a in changes if b != a]
+        elif kind == REJECT:
             # Nothing changed — the teacher binned the question as written.
             # Record the rejected text with no replacement, so the drill-in
             # can still show what was thrown out.
-            changed: list[tuple[str, str | None, str | None]] = [
-                (FIELD_QUESTION, item.question, None)
-            ]
+            changed = [(FIELD_QUESTION, item.question, None)]
         else:
             changed = [(f, b, a) for f, b, a in pairs if b != a]
 

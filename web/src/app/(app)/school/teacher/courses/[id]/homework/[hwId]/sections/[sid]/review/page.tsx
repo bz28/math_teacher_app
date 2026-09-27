@@ -4417,6 +4417,28 @@ function UnconfirmedDrawingNote({ description }: { description: string }) {
 }
 
 /**
+ * The status after a drawing's kind. A table is text in a grid — nothing
+ * is "plotted" and the zoomed check can't read it — so it gets no status
+ * at all rather than "0 plotted" or a doubt it never earned.
+ */
+function DrawingStatus({ drawing: d }: { drawing: TeacherSubmissionDrawing }) {
+  if (d.unconfirmed) {
+    return (
+      <span className="text-[color:var(--color-warning-dark)]"> · couldn&rsquo;t confirm</span>
+    );
+  }
+  if (d.kind === "table") return null;
+  return (
+    <>
+      {" "}· {d.plotted_elements.length} plotted
+      {d.verified && (
+        <span title="Confirmed by a zoomed-in second look at the drawing"> · checked ✓</span>
+      )}
+    </>
+  );
+}
+
+/**
  * Work the extractor couldn't tie to any problem on this assignment.
  *
  * This exists because the grader already sees it. `_build_user_message`
@@ -4470,15 +4492,8 @@ function OtherWorkDisclosure({
                 <span className="text-text-secondary">
                   <span className="font-semibold capitalize text-text-primary">
                     {d.kind.replace("_", " ")}
-                  </span>{" "}
-                  {d.unconfirmed ? (
-                    <span className="text-[color:var(--color-warning-dark)]">· couldn&rsquo;t confirm</span>
-                  ) : (
-                    <>
-                      · {d.plotted_elements.length} plotted
-                      {d.verified && " · checked ✓"}
-                    </>
-                  )}
+                  </span>
+                  <DrawingStatus drawing={d} />
                   {d.unconfirmed ? (
                     <UnconfirmedDrawingNote description={d.description} />
                   ) : (
@@ -5145,6 +5160,11 @@ function ProblemGradeRow({
         <div className="mt-3 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2.5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
             Drawings
+            {problem.requires_drawing && (
+              <span className="font-normal normal-case tracking-normal text-text-muted">
+                {" "}· this question requires one
+              </span>
+            )}
           </p>
           <ul className="mt-1.5 space-y-1.5 text-xs leading-relaxed">
             {problem.drawings.map((d, i) => (
@@ -5154,16 +5174,7 @@ function ProblemGradeRow({
                   <span className="text-text-primary">
                     <span className="font-semibold capitalize">{d.kind.replace("_", " ")}</span>
                     <span className="text-text-secondary">
-                      {d.unconfirmed ? (
-                        <span className="text-[color:var(--color-warning-dark)]"> · couldn&rsquo;t confirm</span>
-                      ) : (
-                        <>
-                          {" "}· {d.plotted_elements.length} plotted
-                          {d.verified && (
-                            <span title="Confirmed by a zoomed-in second look at the drawing"> · checked ✓</span>
-                          )}
-                        </>
-                      )}
+                      <DrawingStatus drawing={d} />
                     </span>
                     {d.labeled_points.length > 0 && (
                       <span className="text-text-secondary">

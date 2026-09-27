@@ -1867,6 +1867,9 @@ export const teacher = {
     /** Move the item to a different unit. Required to be a real id
      *  when set (Uncategorized bucket removed). */
     unit_id?: string;
+    /** Override whether a drawing is part of the answer. Refused (409)
+     *  while the item is in a published homework. */
+    requires_drawing?: boolean;
   }) {
     return apiFetch<BankItem>(`/teacher/question-bank/${itemId}`, {
       method: "PATCH",
@@ -2077,6 +2080,8 @@ export interface TeacherSubmissionDetailProblem {
    *  line, diagram…) — the same facts the grader was given. `present:
    *  false` records a required drawing that's missing. Empty on rows
    *  extracted before the channel existed. */
+  /** The question asks for a drawing; only these problems show one. */
+  requires_drawing: boolean;
   drawings: TeacherSubmissionDrawing[];
   /** 1-based page(s) of `files` this problem's work was written on,
    *  derived from the extraction and range-checked against the real file
@@ -2212,6 +2217,10 @@ export interface BankItem {
   format: string;
   status: string;
   locked: boolean;
+  /** The question asks the student to draw (graph, sketch, table of
+   *  values…). Only these problems get drawings read and graded. Set
+   *  from the question text; the teacher can override it. */
+  requires_drawing: boolean;
   source: string;
   parent_question_id: string | null;
   used_in: {
