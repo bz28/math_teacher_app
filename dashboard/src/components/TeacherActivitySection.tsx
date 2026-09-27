@@ -1,8 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import * as pdfjsLib from "pdfjs-dist";
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import "katex/dist/katex.min.css";
 import {
   api,
   type ActivityLogData,
@@ -22,13 +19,9 @@ import {
 } from "../lib/activityActions";
 import { fmtCost, formatRelativeDate } from "../lib/format";
 import { PAGE_SIZE } from "../lib/pagination";
+import { base64ToBytes, pdfjsLib } from "../lib/pdf";
 import MathText from "./MathText";
 import { Pagination } from "./Pagination";
-
-// Wire pdf.js to its bundled worker. Vite fingerprints the worker via the
-// `?url` import and serves it as a real asset, so the classic "fake worker"
-// / worker-not-found breakage doesn't happen. Set once at module load.
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 // The teacher observability hub, rendered inside TeacherDetail. Two
 // panels off one teacher id: the unified action timeline (what they DO)
@@ -584,13 +577,6 @@ function DocumentThumb({ docId, filename, fileType }: { docId: string; filename:
     return <PdfThumb b64={doc.image_data} label={filename} />;
   }
   return <div style={placeholderStyle}>{filename} ({fileType})</div>;
-}
-
-function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
 }
 
 // Render the first page of a stored PDF to a canvas thumbnail via pdf.js.

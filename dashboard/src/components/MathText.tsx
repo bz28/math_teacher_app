@@ -1,5 +1,9 @@
 import { Fragment, useMemo } from "react";
 import katex from "katex";
+// Every MathText brings its own stylesheet: without it KaTeX output is
+// unstyled markup, and a page that renders math must not depend on some
+// other page having been visited first to load it.
+import "katex/dist/katex.min.css";
 
 // Renders a string of mixed prose + LaTeX. Math is delimited with $...$
 // (inline) or $$...$$ (display), the same convention the question bank stores.
