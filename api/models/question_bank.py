@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSON, JSONB, UUID
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import Mapped, mapped_column
@@ -104,6 +104,15 @@ class QuestionBankItem(Base):
     # True while at least one published assignment references this item.
     # While locked, content edits / status changes / delete are refused.
     locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Does the question ask the student to draw (graph / sketch / plot /
+    # shade / construct / a table of values)? Set from the question text
+    # at creation (api/core/drawing_requirement.py), teacher-overridable
+    # in the Workshop. Gates the drawings channel: the extractor only
+    # inventories drawings on flagged problems, and the grader's
+    # required-drawing rule reads this instead of the wording.
+    requires_drawing: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false"),
+    )
     # Provenance: generated (AI), imported (PDF), manual (typed by teacher).
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="generated")
     # Variation tree — set by "generate similar" later.
