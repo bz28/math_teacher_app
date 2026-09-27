@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { MathText } from "@/components/shared/math-text";
 
 /**
@@ -32,15 +32,30 @@ export function ClickToEditText({
   placeholder?: string;
 }) {
   const [editing, setEditing] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  // Set when the editor closes from the keyboard (Enter / Esc). The editor
+  // unmounts, which drops focus to <body> — where a host's window-level
+  // shortcuts live (the Workshop approves on Enter). Put focus back on
+  // the text the teacher was editing. Waits for `busy` to clear, since
+  // the button is disabled (unfocusable) while the save is in flight.
+  // A blur-commit (clicked elsewhere) leaves focus where they clicked.
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (!refocus.current || editing || busy) return;
+    buttonRef.current?.focus();
+    refocus.current = false;
+  }, [editing, busy]);
 
-  const handleSave = (next: string) => {
+  const handleSave = (next: string, fromKeyboard = false) => {
     onSave(next);
     setEditing(false);
+    if (fromKeyboard) refocus.current = true;
   };
 
   if (!editing) {
     return (
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setEditing(true)}
         className={`group ${inline ? "inline" : "block w-full"} cursor-text rounded-[--radius-sm] text-left text-text-primary decoration-text-muted/30 decoration-dotted underline-offset-4 transition-colors hover:bg-primary-bg/20 hover:underline hover:decoration-primary/40 focus-visible:bg-primary-bg/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40`}
@@ -59,7 +74,10 @@ export function ClickToEditText({
 
   // Editor is mounted fresh for each edit session, so its draft state is
   // safely seeded from `value` once at mount with no need for a sync effect.
-  const cancel = () => setEditing(false);
+  const cancel = () => {
+    setEditing(false);
+    refocus.current = true;
+  };
 
   if (multiline) {
     return (
@@ -89,7 +107,7 @@ function SingleLineEditor({
 }: {
   initialValue: string;
   placeholder?: string;
-  onCommit: (next: string) => void;
+  onCommit: (next: string, fromKeyboard?: boolean) => void;
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState(initialValue);
@@ -106,7 +124,7 @@ function SingleLineEditor({
           onCancel();
         } else if (e.key === "Enter") {
           e.preventDefault();
-          onCommit(draft);
+          onCommit(draft, true);
         }
       }}
       className="w-full rounded-[--radius-sm] border border-primary bg-bg-base px-2 py-0.5 text-sm text-text-primary focus:outline-none"
@@ -128,7 +146,7 @@ function MultilineEditor({
 }: {
   initialValue: string;
   placeholder?: string;
-  onCommit: (next: string) => void;
+  onCommit: (next: string, fromKeyboard?: boolean) => void;
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState(initialValue);
@@ -155,7 +173,7 @@ function MultilineEditor({
           onCancel();
         } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
           e.preventDefault();
-          onCommit(draft);
+          onCommit(draft, true);
         }
       }}
       rows={2}
