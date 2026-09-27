@@ -213,8 +213,6 @@ function parse(input: string): Segment[] {
   return segments;
 }
 
-
-
 interface MathTextProps {
   text: string;
   className?: string;
