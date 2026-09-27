@@ -80,7 +80,8 @@ async def enqueue_submission(
     *,
     requested_by_id: uuid.UUID | None = None,
     run_now: bool = False,
-) -> None:
+    revive_done: bool = False,
+) -> bool:
     """Record that a submission owes an AI grade.
 
     `scheduled_for` is the whole policy:
@@ -94,10 +95,31 @@ async def enqueue_submission(
       in", so it waits for a teacher rather than being graded one-at-a-
       time at full price. It still shows in their to-review count.
 
-    Idempotent on `submission_id`. A re-enqueue (regrade, double confirm)
-    resets an existing row to queued and clears the previous error, but
-    never lowers a row that a teacher has explicitly asked to run now
-    back to a future schedule.
+    Idempotent on `submission_id`. A re-enqueue (a teacher's "Grade with
+    AI" / "Grade all", or the student confirming after one) resets a
+    `queued`, `failed` or `skipped` row to queued with a fresh retry
+    budget, but never lowers a row that a teacher has explicitly asked to
+    run now back to a future schedule.
+
+    A `running` or `done` row is left exactly as it is, and that is the
+    double-grade guard. Several callers can reach the same submission
+    close together — a double-clicked "Grade with AI", "Grade all"
+    racing it, a retried confirm — and resetting a `running` job to
+    `queued` would let a second drain claim it and bill the same grade
+    twice in parallel. `done` means a grade landed; changing it is a
+    regrade's job, not a re-queue's.
+
+    `revive_done` is for the teacher's buttons only, and only once the
+    caller has checked `ai_grade_block` — i.e. the submission carries no
+    grade data at all. A `done` job then means the drain saw a grade
+    that has since gone: the teacher hand-graded before the due date
+    (the drain skips the LLM and closes the job `done`), then cleared
+    it. Without the revive the button showed, the click wrote nothing,
+    and the grade never came. `running` is never revived.
+
+    Returns whether a row was written — False means the job was
+    running (or `done`, without `revive_done`), so nothing new is on its
+    way from this call.
     """
     scheduled_for = _now() if run_now else assignment.due_at
 
@@ -113,7 +135,7 @@ async def enqueue_submission(
         "finished_at": None,
     }
     stmt = pg_insert(GradingJob).values(**values)
-    await db.execute(
+    result = cast("CursorResult[Any]", await db.execute(
         stmt.on_conflict_do_update(
             index_elements=["submission_id"],
             set_={
@@ -138,8 +160,13 @@ async def enqueue_submission(
                     GradingJob.scheduled_for, stmt.excluded.scheduled_for,
                 ),
             },
+            where=GradingJob.status.notin_(
+                (STATUS_RUNNING,) if revive_done
+                else (STATUS_RUNNING, STATUS_DONE),
+            ),
         ),
-    )
+    ))
+    return bool(result.rowcount)
 
 
 def _earliest(existing: Any, incoming: Any) -> Any:
@@ -155,68 +182,99 @@ def _earliest(existing: Any, incoming: Any) -> Any:
     return func.least(existing, incoming)
 
 
-async def request_now(
-    db: AsyncSession,
-    *,
-    assignment_id: uuid.UUID,
-    requested_by_id: uuid.UUID,
-    submission_id: uuid.UUID | None = None,
-    section_id: uuid.UUID | None = None,
-) -> int:
-    """Teacher-triggered grading: pull work forward to the next drain.
+# Why a teacher's "Grade with AI" / "Grade all" can't act on a
+# submission. None means it can. The review page renders these as the
+# reason in place of a button that would do nothing.
+BLOCK_AI_DISABLED = "ai_disabled"
+BLOCK_GRADED = "graded"
+BLOCK_UNREADABLE = "unreadable"
+BLOCK_NO_EXTRACTION = "no_extraction"
+BLOCK_EXTRACTING = "extracting"
+BLOCK_AWAITING_CONFIRMATION = "awaiting_confirmation"
 
-    With `submission_id`, that one submission ("Grade now" on a row).
-    Without, every still-queued submission on the assignment ("Grade
-    all"). Returns how many jobs were moved.
+# Reading a submission is a background Vision call that normally lands
+# within a minute or two of submit. Work with no reading younger than
+# this is presumed still being read, not failed — the review page says
+# "reading…" rather than filing it under "can't be AI-graded". There is
+# no extraction-status column to ask instead; past this window a missing
+# reading is treated as a failed one.
+EXTRACTION_GRACE = timedelta(minutes=15)
 
-    Also REVIVES `failed` jobs, with the retry budget reset. Without
-    this, `failed` is a dead end — nothing in the system could move a
-    job out of it, so a submission that exhausted its retries during an
-    Anthropic incident would stay ungraded forever with no way back
-    short of a database edit. The teacher pressing the button they
-    already have is the natural retry, and resetting `attempts` is what
-    makes it mean anything: the failure was three tries ago and
-    conditions have presumably changed.
 
-    Still won't touch `running` (already in flight), `done` (needs a
-    regrade, not a re-queue) or `skipped` (nothing to grade) — silently
-    re-running any of those would double-charge.
+def has_any_grade(grade: SubmissionGrade | None) -> bool:
+    """Does this submission carry grade data of ANY kind?
+
+    The teacher-triggered path is first grading only, never a regrade,
+    so this errs wide. Every way a grade gets onto the row counts:
+
+    - an AI grade — `ai_score` / `ai_breakdown`, which outlive a teacher
+      clearing the live grade, so a cleared AI grade still reads graded;
+    - a hand grade, including a partial one — `PATCH /grade` writes
+      `breakdown` AND a `final_score` averaged over just the problems
+      scored so far, so a single scored problem already sets both;
+    - a review stamp, or a legacy `teacher_score`;
+    - a grade that was published and later un-graded — `published_*`
+      still holds what the student was shown.
+
+    `teacher_notes` alone is not a grade, and `ai_grading_status` is a
+    disposition (why there's no grade), handled by the caller.
     """
-    stmt = (
-        update(GradingJob)
-        .where(
-            GradingJob.assignment_id == assignment_id,
-            GradingJob.status.in_((STATUS_QUEUED, STATUS_FAILED)),
-        )
-        .values(
-            status=STATUS_QUEUED,
-            scheduled_for=_now(),
-            requested_by_id=requested_by_id,
-            attempts=0,
-            started_at=None,
-            finished_at=None,
-            updated_at=_now(),
-        )
-    )
-    if submission_id is not None:
-        stmt = stmt.where(GradingJob.submission_id == submission_id)
-    if section_id is not None:
-        # An assignment spans sections, and the review page is
-        # per-section: its button counts THIS section's ungraded work
-        # and says so. Without this filter the endpoint moved every
-        # queued job on the homework, so a teacher told "Grade 2
-        # ungraded" could be billed for the whole grade level. The
-        # label and the action have to describe the same thing.
-        stmt = stmt.where(
-            GradingJob.submission_id.in_(
-                select(Submission.id).where(
-                    Submission.assignment_id == assignment_id,
-                    Submission.section_id == section_id,
-                )
-            )
-        )
-    result = cast("CursorResult[Any]", await db.execute(stmt))
-    return int(result.rowcount or 0)
+    if grade is None:
+        return False
+    return any((
+        grade.final_score is not None,
+        grade.ai_score is not None,
+        bool(grade.ai_breakdown),
+        grade.teacher_score is not None,
+        bool(grade.breakdown),
+        grade.graded_at is not None,
+        grade.reviewed_at is not None,
+        grade.published_final_score is not None,
+        bool(grade.published_breakdown),
+    ))
+
+
+def ai_grade_block(
+    sub: Submission,
+    grade: SubmissionGrade | None,
+    assignment: Assignment,
+) -> str | None:
+    """Can a teacher send this submission to the AI grader? None = yes.
+
+    One rule, shared by the per-student button, "Grade all" and the
+    count on it, so the label and the action can't disagree.
+
+    Requires the student to have answered the confirm screen: either
+    confirmed the reading, or flagged it ("reader got something wrong").
+    Work the student hasn't looked at yet waits for them — grading it
+    would grade a reading they may still correct. A flagged submission
+    is graded on its extraction as-is (a flag stores no edits); the
+    teacher sees the flag beside the grade and approves it either way.
+
+    Beyond that, a reading worth grading: an extraction exists and
+    clears the same unreadable bar the submit pipeline and the drain
+    apply. A hand grade the teacher cleared (and never published)
+    leaves no grade data, so that submission is eligible again.
+    """
+    from api.core.grading_ai import GRADING_STATUS_SKIPPED_UNREADABLE
+    from api.core.integrity_ai import UNREADABLE_THRESHOLD
+
+    if not assignment.ai_grading_enabled:
+        return BLOCK_AI_DISABLED
+    if has_any_grade(grade):
+        return BLOCK_GRADED
+    if sub.extraction is None:
+        if sub.submitted_at and _now() - sub.submitted_at < EXTRACTION_GRACE:
+            return BLOCK_EXTRACTING
+        return BLOCK_NO_EXTRACTION
+    if (
+        grade is not None
+        and grade.ai_grading_status == GRADING_STATUS_SKIPPED_UNREADABLE
+    ) or sub.extraction.get("confidence", 0.0) < UNREADABLE_THRESHOLD:
+        return BLOCK_UNREADABLE
+    if sub.extraction_confirmed_at is None and sub.extraction_flagged_at is None:
+        return BLOCK_AWAITING_CONFIRMATION
+    return None
 
 
 async def reschedule_assignment(
@@ -407,6 +465,26 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> str:
                 await _finish(db, job_id, outcome=_SKIPPED, error=None)
                 await db.commit()
                 return _SKIPPED
+
+            # Grade data appeared since this was queued (a hand grade, or
+            # a cleared AI grade whose `ai_score` survives). The grader
+            # would decline anyway; closing here stops that decline from
+            # reading as "grader returned no grades" and being retried.
+            # `done` when a live grade exists, `skipped` when only
+            # residue does — `done` asserts a grade.
+            existing = (await db.execute(
+                select(SubmissionGrade)
+                .where(SubmissionGrade.submission_id == submission_id)
+            )).scalar_one_or_none()
+            if has_any_grade(existing):
+                outcome = (
+                    _GRADED
+                    if existing is not None and existing.final_score is not None
+                    else _SKIPPED
+                )
+                await _finish(db, job_id, outcome=outcome, error=None)
+                await db.commit()
+                return outcome
 
             await run_ai_grading_for_submission(
                 submission_id, extraction, db, user_id=str(sub.student_id),
