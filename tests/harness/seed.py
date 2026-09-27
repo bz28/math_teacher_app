@@ -322,6 +322,42 @@ async def seed_joinable_section(seed: Seed) -> str:
     return code
 
 
+# Minimal but real: a step with a figure, so the workshop flow can assert a
+# reorder moves the figure with its step.
+WORKSHOP_FLOW_FIGURE = "<svg viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10'/></svg>"
+
+
+async def seed_workshop_item(seed: Seed) -> str:
+    """A pending generated question on the seeded homework with three
+    solution steps (the middle one carrying a figure) — the precondition for
+    the workshop step-editing flow. Pending + not in the HW's content, so
+    it's unlocked even though the seeded HW is published. Returns its id.
+    """
+    async with get_session_factory()() as s:
+        item = QuestionBankItem(
+            course_id=uuid.UUID(seed.course_id),
+            unit_id=uuid.UUID(seed.unit_id),
+            originating_assignment_id=uuid.UUID(seed.assignment_id),
+            title="Workshop flow item",
+            question="Solve x^2 - 5x + 6 = 0",
+            solution_steps=[
+                {"title": "A", "description": "a"},
+                {
+                    "title": "B", "description": "b",
+                    "figure_spec": {"kind": "flow"},
+                    "figure_svg": WORKSHOP_FLOW_FIGURE,
+                },
+                {"title": "C", "description": "c"},
+            ],
+            final_answer="x = 2 or x = 3",
+            status="pending",
+            source="generated",
+        )
+        s.add(item)
+        await s.commit()
+        return str(item.id)
+
+
 async def seed_submitted_submission(seed: Seed) -> str:
     """A fresh student enrolled in the seeded section with one SUBMITTED
     submission on the seeded homework — the precondition for the
