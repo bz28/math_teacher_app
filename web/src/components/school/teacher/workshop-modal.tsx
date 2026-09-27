@@ -184,6 +184,12 @@ export function WorkshopModal({
     if (!liveItem || sourceItem.id !== liveItem.id) {
       setLiveItem(sourceItem);
       setSolutionOpen(liveSteps(sourceItem).length === 0);
+      // Undo belongs to the item it was offered on. Without this, an
+      // "Undo last change" from the previous queue item stays up on the
+      // next one (the effect below only ever turns it ON), and clicking
+      // it reverts — or errors on — an item the teacher never edited.
+      // The effect re-enables it if the new item has its own snapshot.
+      setShowUndo(false);
       setAddingStep(false);
       setConfirmingStepDelete(null);
       setConfirmingDelete(false);
@@ -489,7 +495,10 @@ export function WorkshopModal({
 
   const undo = () =>
     run(async () => {
-      if (!liveItem) return;
+      // Same gate as every other content change: undo while a proposal is
+      // pending would swap the content the proposal preview diffs against,
+      // and a locked item's content is what students are working from.
+      if (!liveItem || blockIfPending()) return;
       const next = await teacher.revertBankItem(liveItem.id);
       replaceLiveItem(next);
       setShowUndo(false);
@@ -752,7 +761,7 @@ export function WorkshopModal({
                 {liveItem.source_doc_ids.length === 1 ? "" : "s"}
               </span>
             )}
-            {showUndo && (
+            {showUndo && !isLocked && (
               <button
                 onClick={undo}
                 disabled={busy}
