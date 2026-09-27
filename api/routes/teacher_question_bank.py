@@ -663,6 +663,10 @@ async def revert_bank_item(
 ) -> dict[str, Any]:
     """Restore the previous_* snapshot. One level of undo only — after this
     call, previous_* is cleared so the teacher can't ping-pong forever."""
+    # Undo rewrites question / steps / answer exactly like a content PATCH,
+    # so it's held to the same lock: an item in a published homework keeps
+    # the content students are working from.
+    _ensure_unlocked(item)
     if item.previous_question is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

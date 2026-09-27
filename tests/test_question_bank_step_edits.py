@@ -269,3 +269,30 @@ async def test_failed_solve_item_becomes_approvable_after_manual_fix(
 
     r = await client.post(f"/v1/teacher/question-bank/{item_id}/approve", headers=hdr)
     assert r.status_code == 200, r.text
+
+
+async def test_locked_item_refuses_undo(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """Undo rewrites content exactly like a PATCH, so it must honour the
+    same lock. Found in the Workshop bug-bash: an item edited before its
+    homework was published still carried an undo snapshot, and /revert
+    restored it straight into the published homework."""
+    item_id = await _setup(world, [A])
+    # Edit while unlocked → leaves a one-level undo snapshot behind.
+    assert (await _patch(client, world, item_id, [A, B])).status_code == 200
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE question_bank_items SET locked=true WHERE id=:id"),
+            {"id": item_id},
+        )
+        await s.commit()
+
+    r = await client.post(
+        f"/v1/teacher/question-bank/{item_id}/revert",
+        headers={"Authorization": f"Bearer {world['teacher_token']}"},
+    )
+    assert r.status_code == 409, r.text
+    row = await _row(item_id)
+    assert row["steps"] == [A, B]
+    assert row["has_undo"]  # snapshot kept for after an unpublish
