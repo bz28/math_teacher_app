@@ -596,14 +596,18 @@ export function WorkshopModal({
       if (busy) return;
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
-      // Keys pressed on a focused step control belong to that control:
-      // Enter on "Move step up" must move the step, not approve the
-      // question, and ↑↓ mustn't collapse the list out from under it.
-      // Scoped to the steps list on purpose — footer buttons keep focus
-      // after a mouse click, and Enter there must still approve.
+      // Keys pressed on a focused editing control belong to that control:
+      // Enter on "Move step up" must move the step and Enter on a
+      // click-to-edit field (question, step, final answer, distractor) must
+      // open it — not approve the question. ↑↓ inside the steps list
+      // mustn't collapse it out from under the teacher. Scoped to those
+      // controls on purpose: footer buttons keep focus after a mouse click,
+      // and Enter there must still approve.
+      const inSteps = stepsRef.current?.contains(target) ?? false;
+      const inEditable = target.closest("[data-click-to-edit]") !== null;
       if (
-        ["Enter", " ", "ArrowUp", "ArrowDown"].includes(e.key) &&
-        stepsRef.current?.contains(target)
+        (["Enter", " "].includes(e.key) && (inSteps || inEditable)) ||
+        (["ArrowUp", "ArrowDown"].includes(e.key) && inSteps)
       ) {
         return;
       }

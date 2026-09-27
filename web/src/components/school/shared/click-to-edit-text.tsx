@@ -42,8 +42,11 @@ export function ClickToEditText({
   const refocus = useRef(false);
   useEffect(() => {
     if (!refocus.current || editing || busy) return;
-    buttonRef.current?.focus();
     refocus.current = false;
+    // Only reclaim focus nobody else has: if the teacher moved on (e.g.
+    // clicked into the chat box) while the save was in flight, leave it.
+    const active = document.activeElement;
+    if (active === null || active === document.body) buttonRef.current?.focus();
   }, [editing, busy]);
 
   const handleSave = (next: string, fromKeyboard = false) => {
@@ -56,6 +59,9 @@ export function ClickToEditText({
     return (
       <button
         ref={buttonRef}
+        // Lets a host's window-level shortcuts recognise this as an editing
+        // control (the Workshop skips its Enter-to-approve here).
+        data-click-to-edit
         type="button"
         onClick={() => setEditing(true)}
         className={`group ${inline ? "inline" : "block w-full"} cursor-text rounded-[--radius-sm] text-left text-text-primary decoration-text-muted/30 decoration-dotted underline-offset-4 transition-colors hover:bg-primary-bg/20 hover:underline hover:decoration-primary/40 focus-visible:bg-primary-bg/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40`}
