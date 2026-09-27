@@ -1,9 +1,8 @@
 "use client";
 
 import { Suspense, lazy, useMemo } from "react";
-import katex from "katex";
 import "katex/dist/katex.min.css";
-import { renderBreakableInlineMath } from "@/lib/math-break-points";
+import { renderBreakableInlineMath, renderKatex } from "@/lib/math-break-points";
 import { sanitizeSvg } from "@/lib/sanitize-svg";
 
 const ChemDiagram = lazy(() => import("./chem-diagram").then((m) => ({ default: m.ChemDiagram })));
@@ -214,17 +213,6 @@ function parse(input: string): Segment[] {
   return segments;
 }
 
-function renderKatex(latex: string, displayMode: boolean): string {
-  try {
-    return katex.renderToString(latex, {
-      displayMode,
-      throwOnError: false,
-      strict: false,
-    });
-  } catch {
-    return latex;
-  }
-}
 
 
 interface MathTextProps {
