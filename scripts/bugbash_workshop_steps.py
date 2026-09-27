@@ -15,10 +15,18 @@ Standalone (not a CI test). Seeds its own worlds into the stack's DB:
 
 import asyncio
 import os
+import re
 import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+
+# This script seeds users/courses/items. Refuse anything but a local DB so
+# it can never write into a shared or production database.
+_DB = os.environ.get("DATABASE_URL", "")
+if not re.search(r"@(localhost|127\.0\.0\.1)(:\d+)?/", _DB):
+    _host = _DB.split("@")[-1].split("/")[0] if _DB else "unset"  # never echo credentials
+    raise SystemExit(f"refusing to run: DATABASE_URL must point at localhost (host: {_host})")
 
 import httpx
 
@@ -674,10 +682,94 @@ async def scenario_keyboard(browser) -> None:
         check("9/'a' shortcut still approves", srv["status"] == "approved", srv["status"])
 
 
+async def scenario_keyboard_fields(browser) -> None:
+    """Enter-commit on the NON-step click-to-edit fields must not approve;
+    Enter from the page body and after a mouse click on a footer button
+    still approves; a slow save never yanks focus out of the chat box."""
+    focus_js = ("document.activeElement === document.body ? 'BODY' : "
+                "(document.activeElement?.getAttribute('aria-label') || document.activeElement?.tagName)")
+    for field in ["question", "answer"]:
+        w = await seed([{"title": "Kq", "steps": ABC}, {"title": "Kq2", "steps": ABC}])
+        iid = w["ids"]["Kq"]
+        async with browser.authed_page(w["t"], w["tr"]) as page:
+            await page.set_viewport_size({"width": 1440, "height": 1600})
+            ui = UI(page, w)
+            await ui.open_review("Kq")
+            if field == "question":
+                btn = page.get_by_role("button", name="Click to edit text").first
+            else:
+                box = page.locator("div.border-2").filter(has_text="Final answer").first
+                btn = box.get_by_role("button", name="Click to edit text")
+            await btn.focus()
+            await page.keyboard.press("Enter")          # opens the editor
+            await page.keyboard.press("End")
+            await page.keyboard.type(" edited")
+            # single-line commits on Enter; the multiline question on Cmd/Ctrl+Enter
+            await page.keyboard.press("Control+Enter" if field == "question" else "Enter")
+            await ui.settle(1200)
+            f = await page.evaluate(focus_js)
+            await page.keyboard.press("Enter")          # must re-open the field, not approve
+            await ui.settle(900)
+            srv = await server_item(w, iid)
+            val = srv["question"] if field == "question" else srv["final_answer"]
+            check(f"9b/{field}: Enter-commit saved", "edited" in val, val)
+            check(f"9b/{field}: focus back on the field after commit", f == "Click to edit text", f)
+            check(f"9b/{field}: next Enter does not approve", srv["status"] == "pending", srv["status"])
+
+    # Enter from body still approves; footer mouse-click then Enter still approves.
+    w = await seed([{"title": "Kb1", "steps": ABC}, {"title": "Kb2", "steps": ABC}])
+    async with browser.authed_page(w["t"], w["tr"]) as page:
+        await page.set_viewport_size({"width": 1440, "height": 1600})
+        ui = UI(page, w)
+        await page.goto(f"{WEB}/school/teacher/courses/{w['course']}/homework/{w['hw']}/review",
+                        wait_until="networkidle", timeout=60000)
+        await ui.settle(1200)
+        first = "Kb1" if await page.get_by_text("Kb1", exact=True).count() else "Kb2"
+        second = "Kb2" if first == "Kb1" else "Kb1"
+        await page.evaluate("document.activeElement && document.activeElement.blur()")
+        await page.keyboard.press("Enter")
+        await ui.settle(1500)
+        check("9b/Enter from body approves", (await server_item(w, w["ids"][first]))["status"] == "approved")
+        await page.get_by_role("button", name="Hide", exact=False).last.click()   # footer chat toggle
+        await ui.settle(300)
+        await page.keyboard.press("Enter")
+        await ui.settle(1500)
+        check("9b/footer mouse-click then Enter approves",
+              (await server_item(w, w["ids"][second]))["status"] == "approved")
+
+    # Slow save: commit with Enter, click into chat before the save lands.
+    w = await seed([{"title": "Ks", "steps": ABC}])
+    async with browser.authed_page(w["t"], w["tr"]) as page:
+        await page.set_viewport_size({"width": 1440, "height": 1600})
+        ui = UI(page, w)
+        await ui.open_review("Ks")
+
+        async def slow(route):
+            if route.request.method == "PATCH":
+                await asyncio.sleep(2.5)
+            await route.continue_()
+
+        await page.route("**/question-bank/**", slow)
+        card = page.locator("div.group\\/step").nth(0)
+        await card.get_by_role("button", name="Click to edit text").first.focus()
+        await page.keyboard.press("Enter")
+        await page.keyboard.type("!")
+        await page.keyboard.press("Enter")
+        await ui.settle(200)
+        # The chat box is disabled while a save is in flight, so move focus to
+        # something that stays focusable (as Tab would): the page's back link.
+        await page.get_by_role("link", name="Back to homework", exact=False).first.focus()
+        await ui.settle(3500)                            # save lands, busy clears
+        tag = await page.evaluate("document.activeElement?.tagName")
+        check("9b/slow save doesn't steal focus the teacher moved", tag == "A", str(tag))
+        await page.unroute("**/question-bank/**")
+
+
 SCENARIOS = {
     "undo": scenario_single_undos, "seq": scenario_sequences, "rapid": scenario_rapid,
     "fig": scenario_figures, "guards": scenario_guards, "queue": scenario_queue,
     "student": scenario_student, "net": scenario_network, "kbd": scenario_keyboard,
+    "kbd2": scenario_keyboard_fields,
 }
 
 
