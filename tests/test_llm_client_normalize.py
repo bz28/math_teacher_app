@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from api.core.llm_client import _normalize_arrays
 
 _STEPS_SCHEMA = {"input_schema": {"properties": {"steps": {"type": "array"}}}}
@@ -72,3 +74,28 @@ def test_non_array_schema_field_ignored() -> None:
     schema = {"input_schema": {"properties": {"answer": {"type": "string"}}}}
     out = _normalize_arrays({"answer": r'["$\frac{1}{2}$"]'}, schema)
     assert out["answer"] == r'["$\frac{1}{2}$"]'  # string field, not coerced
+
+
+# Trimmed from a real prod solve (Sep 2026) that saved "(solution failed —
+# please solve manually)" to the bank: `steps` came back as a stringified array
+# whose description quotes English with UNESCAPED double quotes. Neither the
+# plain nor the LaTeX-escaped parse can recover it.
+_UNESCAPED_QUOTES_STEPS = (
+    '[\n  {\n    "title": "Identify p and q",\n    "description": "Every '
+    'conditional statement has the form **"If $p$, then $q$"** — also written '
+    '$p \\\\Rightarrow q$.\\n\\nBreak the original sentence into its two '
+    'parts:\\n\\n- $p$ (the **hypothesis**): *"Two angles are vertical '
+    'angles"*\\n- $q$ (the **conclusion**): *"They are congruent"*"\n  }\n]'
+)
+
+
+def test_unparseable_stringified_array_raises() -> None:
+    # Passing the string through let the call log as a success and fail later
+    # in the caller, outside call_claude_json's retry loop.
+    with pytest.raises(ValueError, match="'steps'"):
+        _norm(_UNESCAPED_QUOTES_STEPS)
+
+
+def test_non_list_json_string_raises() -> None:
+    with pytest.raises(ValueError, match="'steps'"):
+        _norm('{"title": "not a list"}')
