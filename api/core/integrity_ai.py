@@ -95,8 +95,13 @@ Rules:
 - List every distinct step the student wrote, in order from top to bottom.
 - For each step, provide both the LaTeX representation and a plain-English description.
 - **Attribute each step to a problem**: set `problem_position` to the 1-based index of \
-the homework problem the step belongs to (as shown in the problem list in the user \
-message). Use spatial cues (student-written labels like "1.", "Problem 2:", "(a)"; \
+the homework problem the step belongs to, as shown in the problem list in the user \
+message. When the user message carries no problem list at all (an assignment with \
+no problems yet), there is nothing to attribute against — set every step's \
+`problem_position` to null and emit an EMPTY `final_answers` list. A \
+final answer has to carry a position and the schema gives it no null, so \
+reporting one there would mean inventing a problem that does not exist. Use spatial cues \
+(student-written labels like "1.", "Problem 2:", "(a)"; \
 adjacency on the page; visual separation) AND content cues (does the math match the \
 question?). Set `problem_position` to null only when the step genuinely can't be \
 attributed — scratch work, cross-problem setup, notes to themselves. Don't guess \
@@ -193,6 +198,26 @@ async def extract_student_work(
         )
         return {"steps": [], "final_answers": [], "visual_work": [], "confidence": 0.0}
 
+    return await extract_student_work_from_pages(
+        files, problems=problems, user_id=user_id, submission_id=submission_id,
+    )
+
+
+async def extract_student_work_from_pages(
+    files: list[Any],
+    *,
+    problems: list[dict[str, Any]] | None = None,
+    user_id: str | None = None,
+    submission_id: uuid.UUID | None = None,
+) -> dict[str, Any]:
+    """Read pages that are already in hand. Split out from
+    `extract_student_work` so the reader can be exercised on a page
+    without a submission row behind it — the fidelity probe
+    (`tests/harness/probes/extraction_fidelity.py`) draws its own pages
+    with known ground truth, which is the only way to assert that the
+    transcript says what the ink says.
+    """
+
     briefing = _format_problems_briefing(problems)
     instruction = (
         "Extract the student's handwritten work from this homework submission. "
@@ -259,15 +284,25 @@ async def extract_student_work(
         content,
         LLMMode.INTEGRITY_EXTRACT,
         tool_schema=INTEGRITY_EXTRACT_SCHEMA,
+        # Until 2026-09 this prompt was written, tested, and never sent:
+        # `call_claude_vision` had no system-prompt parameter, so the
+        # extractor ran on the safety preamble and the tool schema alone.
+        # Every behavioural rule here was dead — "transcribe, don't solve",
+        # the injection guard, "ignore printed worksheet text", and the
+        # below-0.3-confidence rule for illegible pages. A real misread in
+        # prod (a student's `y = x` transcribed as the worksheet's
+        # `y = √x`) is what surfaced it.
+        system_prompt=_EXTRACT_SYSTEM,
         model=MODEL_REASON,
         max_tokens=16384,
         temperature=0.0,
         user_id=user_id,
-        submission_id=str(submission_id),
+        submission_id=str(submission_id) if submission_id else None,
         call_metadata={"phase": "vision_extract"},
     )
     await verify_visual_work(
-        result, files, user_id=user_id, submission_id=str(submission_id),
+        result, files, user_id=user_id,
+        submission_id=str(submission_id) if submission_id else None,
     )
     return result
 
