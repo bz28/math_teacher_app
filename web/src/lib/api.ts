@@ -2065,8 +2065,12 @@ export interface TeacherSubmissionDrawing {
   answer_on_drawing: string | null;
   /** A cropped second look confirmed this inventory. */
   verified: boolean;
-  /** That second look found no drawing where the first pass reported one. */
+  /** That second look couldn't confirm the first pass. */
   unconfirmed: boolean;
+  /** "not_found" (also older rows, as null) or "labeled_points_disagree". */
+  unconfirmed_reason: string | null;
+  /** The crop's reading of the labeled points, when it disagreed. */
+  zoomed_labeled_points: string[];
 }
 
 export interface TeacherSubmissionDetailProblem {

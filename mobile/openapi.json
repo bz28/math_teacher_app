@@ -1515,10 +1515,29 @@
             "title": "Unconfirmed",
             "type": "boolean"
           },
+          "unconfirmed_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unconfirmed Reason"
+          },
           "verified": {
             "default": false,
             "title": "Verified",
             "type": "boolean"
+          },
+          "zoomed_labeled_points": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Zoomed Labeled Points",
+            "type": "array"
           }
         },
         "required": [
@@ -4987,10 +5006,29 @@
             "title": "Unconfirmed",
             "type": "boolean"
           },
+          "unconfirmed_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unconfirmed Reason"
+          },
           "verified": {
             "default": false,
             "title": "Verified",
             "type": "boolean"
+          },
+          "zoomed_labeled_points": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Zoomed Labeled Points",
+            "type": "array"
           }
         },
         "required": [

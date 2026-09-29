@@ -4469,13 +4469,26 @@ function StudentStepRow({
 // explanation is visible text, not a hover title, so it reaches touch
 // screens too; the first pass's description is framed as a claim, not
 // fact, and omitted when there is none (rows repaired by cp1000085).
-function UnconfirmedDrawingNote({ description }: { description: string }) {
+function UnconfirmedDrawingNote({ drawing }: { drawing: TeacherSubmissionDrawing }) {
+  const description = drawing.description;
+  const pointsDisagree = drawing.unconfirmed_reason === "labeled_points_disagree";
   return (
     <>
       <span className="block text-text-muted">
-        A zoomed-in look couldn&rsquo;t find it, so the AI didn&rsquo;t count
-        it for or against the student &mdash; check the photo and adjust if
-        needed.
+        {pointsDisagree ? (
+          <>
+            Up close, the labeled points read as{" "}
+            {drawing.zoomed_labeled_points.join(", ") || "none"}, so the AI
+            didn&rsquo;t count them for or against the student &mdash; check the
+            photo and adjust if needed.
+          </>
+        ) : (
+          <>
+            A zoomed-in look couldn&rsquo;t find it, so the AI didn&rsquo;t count
+            it for or against the student &mdash; check the photo and adjust if
+            needed.
+          </>
+        )}
       </span>
       {description && (
         <span className="block italic text-text-muted">
@@ -4589,7 +4602,7 @@ function DrawingsPanel({
                   <span className="block text-text-secondary">{d.plotted_elements.join("; ")}</span>
                 )}
                 {d.unconfirmed ? (
-                  <UnconfirmedDrawingNote description={d.description} />
+                  <UnconfirmedDrawingNote drawing={d} />
                 ) : (
                   d.description && (
                     <span className="block text-text-secondary">{d.description}</span>
@@ -4705,7 +4718,7 @@ function OtherWorkDisclosure({
                     <span className="text-text-muted"> · not used for grading</span>
                   )}
                   {anyRequired && d.unconfirmed ? (
-                    <UnconfirmedDrawingNote description={d.description} />
+                    <UnconfirmedDrawingNote drawing={d} />
                   ) : (
                     d.description && <span className="block">{d.description}</span>
                   )}

@@ -321,8 +321,7 @@ _VERIFY_PROMPT = (
     "what is DRAWN: for each line, curve, or shape in addition to the axes, describe "
     "it by what you can see (direction, where it starts and ends, which axis it "
     "crosses). Count by tracing strokes. Then list any point on that drawing with a "
-    "coordinate written right beside it, count unlabeled dots, and say whether "
-    "anything on the drawing itself reads as an answer."
+    "coordinate written right beside it, and count unlabeled dots."
 )
 
 
@@ -459,29 +458,42 @@ async def _verify_one(
         v["answer_on_drawing"] = None
         v["verified"] = False
         v["unconfirmed"] = True
+        v["unconfirmed_reason"] = UNCONFIRMED_NOT_FOUND
         return
-    raw_elements = seen.get("plotted_elements")
-    raw_points = seen.get("labeled_points")
+    # What counts as "plotted" depends on the drawing: on a graph, the
+    # lines and curves (a dot or a note about where lines cross is not a
+    # line); on anything else, every drawn mark. Counting the typed
+    # elements — never a free-text list — is what keeps an observation
+    # ("the two lines intersect near the y-axis") from becoming "line 3"
+    # (drawing-eval, case e).
+    counted_types = _GRAPH_PLOTTED_TYPES if v.get("kind") == "graph" else _DRAWN_TYPES
+    raw_elements = seen.get("elements")
     seen_elements = [
-        e for e in (raw_elements if isinstance(raw_elements, list) else [])
-        if isinstance(e, str) and e.strip()
+        str(e.get("description") or e.get("type")).strip()
+        for e in (raw_elements if isinstance(raw_elements, list) else [])
+        if isinstance(e, dict) and e.get("type") in counted_types
     ]
+    raw_points = seen.get("labeled_points")
     seen_points = [
         pt for pt in (raw_points if isinstance(raw_points, list) else [])
         if isinstance(pt, str) and pt.strip()
     ]
-    ans = seen.get("answer_on_drawing")
-    seen_answer = ans if isinstance(ans, str) and ans.strip() else None
     first_elements = [
         e for e in (v.get("plotted_elements") or []) if isinstance(e, str) and e.strip()
     ]
-    # Points and the answer on the drawing are what the crop checks
-    # directly, so the crop's reading wins wherever it differs from (or
-    # omits) the first read's — only a match keeps the first read's text.
-    if _same_marks(v.get("labeled_points"), seen_points) is False:
-        v["labeled_points"] = seen_points
-    if _same_marks([v.get("answer_on_drawing")], [seen_answer]) is False:
-        v["answer_on_drawing"] = seen_answer
+    # The answer on the drawing is NOT checked here: the crop has no
+    # problem text, so it can't know a shaded ray is "the answer" — the
+    # first read (which has the question) stays its source (case d).
+    # Labeled points ARE checkable context-free (a coordinate written
+    # beside a point). A disagreement there is a doubt, not a correction:
+    # the entry is marked unconfirmed for the teacher, not silently
+    # rewritten.
+    if not _same_marks(v.get("labeled_points"), seen_points):
+        v["verified"] = False
+        v["unconfirmed"] = True
+        v["unconfirmed_reason"] = UNCONFIRMED_POINTS_DISAGREE
+        v["zoomed_labeled_points"] = seen_points
+        return
     if len(seen_elements) == len(first_elements):
         # The crop agrees on how many lines are drawn, so the count is
         # confirmed — and the first read's line descriptions stand. It saw
@@ -500,6 +512,14 @@ async def _verify_one(
     if isinstance(desc, str) and desc.strip():
         v["description"] = desc.strip()
     v["verified"] = True
+
+
+_GRAPH_PLOTTED_TYPES = frozenset({"line", "curve"})
+_DRAWN_TYPES = frozenset({"line", "curve", "ray", "segment", "point", "shaded_region"})
+# Why an entry is unconfirmed (shown to the teacher, told to the grader).
+# Rows written before the reason existed carry none and mean NOT_FOUND.
+UNCONFIRMED_NOT_FOUND = "not_found"
+UNCONFIRMED_POINTS_DISAGREE = "labeled_points_disagree"
 
 
 def _same_marks(first: Any, seen: list[Any]) -> bool:

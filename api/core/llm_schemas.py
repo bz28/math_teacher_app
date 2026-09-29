@@ -1008,14 +1008,40 @@ VISUAL_WORK_VERIFY_SCHEMA: ToolSchema = {
                 "type": "boolean",
                 "description": "False if the crop shows no graph/diagram/sketch at all (only text, or blank).",
             },
-            "plotted_elements": {
+            "elements": {
                 "type": "array",
-                "items": {"type": "string"},
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": ["line", "curve", "ray", "segment", "point",
+                                     "shaded_region", "axis", "other"],
+                            "description": "What kind of stroke or mark this is.",
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": (
+                                "What is visible: direction, roughly where it starts "
+                                "and ends, whether it crosses an axis."
+                            ),
+                        },
+                    },
+                    "required": ["type", "description"],
+                    "additionalProperties": False,
+                },
                 "description": (
-                    "One entry per line, curve, or shape drawn IN ADDITION to any axes, "
-                    "each described by what is visible: direction, roughly where it "
-                    "starts and ends, whether it crosses an axis. Trace strokes; never "
-                    "guess from context."
+                    "One entry per thing actually DRAWN in addition to any axes — each "
+                    "stroke, mark, or shaded area. Trace strokes; never guess from "
+                    "context. Observations ABOUT the drawing (where two lines cross, "
+                    "what it looks like overall) are not elements — put them in notes."
+                ),
+            },
+            "notes": {
+                "type": "string",
+                "description": (
+                    "Observations about the drawing that are not themselves drawn "
+                    "elements, e.g. where two lines intersect. Empty if none."
                 ),
             },
             "labeled_points": {
@@ -1031,19 +1057,11 @@ VISUAL_WORK_VERIFY_SCHEMA: ToolSchema = {
                 "type": "integer",
                 "description": "Dots or marks with no coordinate written beside them.",
             },
-            "answer_on_drawing": {
-                "type": ["string", "null"],
-                "description": (
-                    "A value that reads as an answer ON the drawing itself — a labeled "
-                    "intersection, a shaded region, a circled number on a number line. "
-                    "Never text written elsewhere on the page. Null if none."
-                ),
-            },
             "description": {"type": "string", "description": "One or two sentences of what is on the crop."},
         },
         "required": [
-            "has_drawing", "plotted_elements", "labeled_points", "unlabeled_dots",
-            "answer_on_drawing", "description",
+            "has_drawing", "elements", "notes", "labeled_points", "unlabeled_dots",
+            "description",
         ],
         "additionalProperties": False,
     },

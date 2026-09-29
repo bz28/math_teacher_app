@@ -819,6 +819,22 @@ class TestBuildUserMessageDrawings:
         assert "named ALGEBRAIC method" in prompt
         assert '"by graphing", "using elimination"' not in prompt
 
+    def test_points_disagreement_is_unconfirmed_with_both_readings(self) -> None:
+        extraction = {
+            "steps": [], "final_answers": [], "confidence": 0.9,
+            "visual_work": [
+                {"problem_position": 1, "kind": "graph", "present": True,
+                 "description": "Both lines; (2, 3) labeled.", "plotted_elements": ["a", "b"],
+                 "labeled_points": ["(2, 3)"], "answer_on_drawing": "(2, 3)",
+                 "verified": False, "unconfirmed": True,
+                 "unconfirmed_reason": "labeled_points_disagree", "zoomed_labeled_points": ["(1, 3)"]},
+            ],
+        }
+        p1 = _sections_by_position(_build_user_message(extraction, self._problems()))[1]
+        assert "graph: UNCONFIRMED" in p1
+        assert "full page: (2, 3); zoomed look: (1, 3)" in p1
+        assert "treat the drawing / graphing requirement as met".lower() in p1.lower()
+
     def test_required_table_is_reported_neutrally(self) -> None:
         extraction = {
             "steps": [], "final_answers": [], "confidence": 0.9,

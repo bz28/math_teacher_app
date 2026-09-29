@@ -2543,9 +2543,14 @@ class TeacherSubmissionDrawing(BaseModel):
     answer_on_drawing: str | None = None
     # True when a cropped second look confirmed the inventory.
     verified: bool = False
-    # True when that second look found no drawing where the first pass
-    # reported one — shown as "couldn't confirm", never as checked.
+    # True when that second look couldn't confirm the first pass — shown
+    # as "couldn't confirm", never as checked. `unconfirmed_reason` says
+    # why: "not_found" (no drawing where reported; also every row written
+    # before the reason existed) or "labeled_points_disagree" (the crop
+    # read different coordinates, in `zoomed_labeled_points`).
     unconfirmed: bool = False
+    unconfirmed_reason: str | None = None
+    zoomed_labeled_points: list[str] = []
 
 
 class TeacherSubmissionDetailProblem(BaseModel):
@@ -2931,6 +2936,12 @@ async def get_submission_detail(
                 plotted_elements=[str(e) for e in elements if isinstance(e, str)],
                 verified=bool(v.get("verified", False)),
                 unconfirmed=bool(v.get("unconfirmed", False)),
+                unconfirmed_reason=(
+                    str(v["unconfirmed_reason"]) if v.get("unconfirmed_reason") else None
+                ),
+                zoomed_labeled_points=[
+                    str(pt) for pt in (v.get("zoomed_labeled_points") or []) if isinstance(pt, str)
+                ],
                 labeled_points=[str(pt) for pt in points if isinstance(pt, str)],
                 answer_on_drawing=str(v["answer_on_drawing"]) if v.get("answer_on_drawing") else None,
             ))

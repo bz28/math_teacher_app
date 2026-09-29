@@ -43,6 +43,7 @@ async def test_unconfirmed_and_verified_drawings_reach_the_teacher_distinctly(
             _drawing(
                 kind="diagram", description="Two-column proof layout.",
                 plotted_elements=[], verified=False, unconfirmed=True,
+                unconfirmed_reason="labeled_points_disagree", zoomed_labeled_points=["(1, 3)"],
             ),
         ],
     }
@@ -61,4 +62,7 @@ async def test_unconfirmed_and_verified_drawings_reach_the_teacher_distinctly(
     checked, unconfirmed = drawings
     assert checked["verified"] is True and checked["unconfirmed"] is False
     assert unconfirmed["verified"] is False and unconfirmed["unconfirmed"] is True
+    assert unconfirmed["unconfirmed_reason"] == "labeled_points_disagree"
+    assert unconfirmed["zoomed_labeled_points"] == ["(1, 3)"]
+    assert checked["unconfirmed_reason"] is None
     assert unconfirmed["description"] == "Two-column proof layout."

@@ -70,6 +70,11 @@ class TestCropRegion:
 _FLAGGED = set(range(1, 20))
 
 
+def _lines(descs: list[str]) -> list[dict[str, str]]:
+    """The verify schema's typed elements, all plotted lines."""
+    return [{"type": "line", "description": d} for d in descs]
+
+
 def _entry(**over: Any) -> dict[str, Any]:
     base = {
         "problem_position": 4, "kind": "graph", "present": True,
@@ -89,8 +94,8 @@ class TestVerifyVisualWork:
             calls.append({"content": content, **kwargs})
             return {
                 "has_drawing": True,
-                "plotted_elements": ["one line rising left-to-right through the origin"],
-                "labeled_points": [], "unlabeled_dots": 2, "answer_on_drawing": None,
+                "elements": _lines(["one line rising left-to-right through the origin"]), "notes": "",
+                "labeled_points": ["(2,3)"], "unlabeled_dots": 2,
                 "description": "Axes with tick marks and a single line; two unlabeled dots.",
             }
 
@@ -102,7 +107,9 @@ class TestVerifyVisualWork:
         v = ext["visual_work"][0]
         assert v["verified"] is True
         assert v["plotted_elements"] == ["one line rising left-to-right through the origin"]
-        assert v["labeled_points"] == [] and v["answer_on_drawing"] is None
+        # The answer on the drawing comes from the first read (it has the
+        # question); the matching labeled point keeps the first read's text.
+        assert v["labeled_points"] == ["(2, 3)"] and v["answer_on_drawing"] == "(2, 3)"
         assert "single line" in v["description"]
         assert v["present"] is True  # the second look never flips presence
         assert len(calls) == 1
@@ -120,7 +127,7 @@ class TestVerifyVisualWork:
         async def fake_vision(*args: Any, **kwargs: Any) -> dict[str, Any]:
             return {
                 "has_drawing": True,
-                "plotted_elements": ["a curve through the origin", "a steep falling line"],
+                "elements": _lines(["a curve through the origin", "a steep falling line"]), "notes": "",
                 "labeled_points": ["(2,3)"], "unlabeled_dots": 0, "answer_on_drawing": "(2,3)",
                 "description": "A curve and a line.",
             }
@@ -141,7 +148,7 @@ class TestVerifyVisualWork:
 
         async def fake_vision(content: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
             margins.append(kwargs["call_metadata"]["margin"])
-            return {"has_drawing": False, "plotted_elements": [], "labeled_points": [],
+            return {"has_drawing": False, "elements": _lines([]), "notes": "", "labeled_points": [],
                     "unlabeled_dots": 0, "answer_on_drawing": None, "description": "Only text."}
 
         monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
@@ -164,10 +171,10 @@ class TestVerifyVisualWork:
 
     async def test_retry_stops_once_a_drawing_is_found(self, monkeypatch: pytest.MonkeyPatch) -> None:
         answers = iter([
-            {"has_drawing": False, "plotted_elements": [], "labeled_points": [], "unlabeled_dots": 0,
+            {"has_drawing": False, "elements": _lines([]), "notes": "", "labeled_points": [], "unlabeled_dots": 0,
              "answer_on_drawing": None, "description": ""},
-            {"has_drawing": True, "plotted_elements": ["a line"], "labeled_points": ["(3, 0)"],
-             "unlabeled_dots": 0, "answer_on_drawing": "(3, 0)", "description": "found it"},
+            {"has_drawing": True, "elements": _lines(["a line"]), "notes": "", "labeled_points": ["(2, 3)"],
+             "unlabeled_dots": 0, "description": "found it"},
         ])
         n = 0
 
@@ -182,7 +189,7 @@ class TestVerifyVisualWork:
             ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
         )
         v = ext["visual_work"][0]
-        assert n == 2 and v["plotted_elements"] == ["a line"] and v["answer_on_drawing"] == "(3, 0)"
+        assert n == 2 and v["plotted_elements"] == ["a line"] and v["answer_on_drawing"] == "(2, 3)"
         assert v["verified"] is True and "unconfirmed" not in v
 
     @pytest.mark.parametrize("over", [
@@ -207,7 +214,7 @@ class TestVerifyVisualWork:
 
     async def test_single_page_infers_page_index(self, monkeypatch: pytest.MonkeyPatch) -> None:
         async def fake_vision(*args: Any, **kwargs: Any) -> dict[str, Any]:
-            return {"has_drawing": True, "plotted_elements": ["x"], "labeled_points": [],
+            return {"has_drawing": True, "elements": _lines(["x"]), "notes": "", "labeled_points": ["(2, 3)"],
                     "unlabeled_dots": 0, "answer_on_drawing": None, "description": "d"}
 
         monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
@@ -223,7 +230,7 @@ class TestVerifyVisualWork:
         from api.core import image_utils
 
         async def fake_vision(*args: Any, **kwargs: Any) -> dict[str, Any]:
-            return {"has_drawing": False, "plotted_elements": [], "labeled_points": [],
+            return {"has_drawing": False, "elements": _lines([]), "notes": "", "labeled_points": [],
                     "unlabeled_dots": 0, "answer_on_drawing": None, "description": ""}
 
         real = image_utils.crop_region_for_vision
@@ -255,7 +262,7 @@ class TestVerifyVisualWork:
             n += 1
             await asyncio.sleep(0.01)
             active -= 1
-            return {"has_drawing": True, "plotted_elements": ["x"], "labeled_points": [],
+            return {"has_drawing": True, "elements": _lines(["x"]), "notes": "", "labeled_points": ["(2, 3)"],
                     "unlabeled_dots": 0, "answer_on_drawing": None, "description": "d"}
 
         monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
@@ -349,14 +356,14 @@ def test_briefing_is_unmarked_and_prompt_records_everywhere() -> None:
     assert "For every graph, number line, diagram, table, or sketch" in integrity_ai._EXTRACT_SYSTEM
 
 
-async def test_verify_prefers_the_crops_points_and_answer_when_they_differ(
+async def test_points_disagreement_marks_unconfirmed_not_replaced(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Same line count, but the crop reads a different labeled point and no
-    answer on the drawing: the crop checked those, so its reading wins."""
+    """Same line count, but the crop reads a different labeled point: that
+    is a doubt for the teacher, not a silent correction."""
     async def fake_vision(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        return {"has_drawing": True, "plotted_elements": ["a", "b"], "labeled_points": ["(1, 3)"],
-                "unlabeled_dots": 0, "answer_on_drawing": None, "description": "two lines"}
+        return {"has_drawing": True, "elements": _lines(["a", "b"]), "notes": "",
+                "labeled_points": ["(1, 3)"], "unlabeled_dots": 0, "description": "two lines"}
 
     monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
     ext = {"steps": [], "final_answers": [], "visual_work": [_entry()], "confidence": 0.9}
@@ -364,16 +371,74 @@ async def test_verify_prefers_the_crops_points_and_answer_when_they_differ(
         ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
     )
     v = ext["visual_work"][0]
-    assert v["plotted_elements"] == ["line (y = 2x - 1)", "line (y = -x + 5)"]  # count agreed
-    assert v["labeled_points"] == ["(1, 3)"] and v["answer_on_drawing"] is None
+    assert v["verified"] is False and v["unconfirmed"] is True
+    assert v["unconfirmed_reason"] == "labeled_points_disagree"
+    assert v["zoomed_labeled_points"] == ["(1, 3)"]
+    # nothing silently rewritten
+    assert v["labeled_points"] == ["(2, 3)"] and v["answer_on_drawing"] == "(2, 3)"
+    assert v["plotted_elements"] == ["line (y = 2x - 1)", "line (y = -x + 5)"]
+
+
+async def test_an_observation_is_not_a_plotted_line(monkeypatch: pytest.MonkeyPatch) -> None:
+    """drawing-eval case e: the crop added "the two lines intersect near
+    the y-axis" as a third element and the count mismatch made it win.
+    Notes, points and 'other' marks never count as plotted lines."""
+    async def fake_vision(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {"has_drawing": True,
+                "elements": [{"type": "line", "description": "rising"},
+                             {"type": "line", "description": "falling"},
+                             {"type": "point", "description": "circled dot"},
+                             {"type": "other", "description": "the lines intersect"}],
+                "notes": "The two lines intersect near the y-axis.",
+                "labeled_points": ["(2, 3)"], "unlabeled_dots": 0, "description": "two lines"}
+
+    monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
+    ext = {"steps": [], "final_answers": [], "visual_work": [_entry()], "confidence": 0.9}
+    await integrity_ai.verify_visual_work(
+        ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+    )
+    v = ext["visual_work"][0]
+    assert v["verified"] is True and "unconfirmed" not in v
+    assert v["plotted_elements"] == ["line (y = 2x - 1)", "line (y = -x + 5)"]
+
+
+async def test_the_answer_on_a_number_line_stays_the_first_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """drawing-eval case d: the context-free crop can't know a shaded ray
+    is 'the answer', so the verify call isn't asked — x > 4 survives."""
+    async def fake_vision(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {"has_drawing": True,
+                "elements": [{"type": "point", "description": "open circle at 4"},
+                             {"type": "ray", "description": "bold ray to the right"}],
+                "notes": "", "labeled_points": [], "unlabeled_dots": 0, "description": "number line"}
+
+    monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
+    entry = _entry(kind="number_line", plotted_elements=["open circle at x = 4", "ray to the right"],
+                   labeled_points=[], answer_on_drawing="x > 4", description="Number line, x > 4 shaded.")
+    ext = {"steps": [], "final_answers": [], "visual_work": [entry], "confidence": 0.9}
+    await integrity_ai.verify_visual_work(
+        ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+    )
+    v = ext["visual_work"][0]
+    assert v["verified"] is True and v["answer_on_drawing"] == "x > 4"
+
+
+def test_verify_schema_has_typed_elements_and_no_answer() -> None:
+    from api.core.llm_schemas import VISUAL_WORK_VERIFY_SCHEMA
+
+    props = VISUAL_WORK_VERIFY_SCHEMA["input_schema"]["properties"]
+    assert "answer_on_drawing" not in props and "plotted_elements" not in props
+    assert props["elements"]["items"]["properties"]["type"]["enum"][:2] == ["line", "curve"]
+    assert "notes" in props
 
 
 async def test_verify_keeps_the_first_reads_marks_when_they_match(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def fake_vision(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        return {"has_drawing": True, "plotted_elements": ["a", "b"], "labeled_points": ["(2,3)"],
-                "unlabeled_dots": 0, "answer_on_drawing": "(2,3)", "description": "two lines"}
+        return {"has_drawing": True, "elements": _lines(["a", "b"]), "notes": "", "labeled_points": ["(2,3)"],
+                "unlabeled_dots": 0, "description": "two lines"}
 
     monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
     ext = {"steps": [], "final_answers": [], "visual_work": [_entry()], "confidence": 0.9}

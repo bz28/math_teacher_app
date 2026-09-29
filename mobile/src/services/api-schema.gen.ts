@@ -4790,11 +4790,18 @@ export interface components {
              * @default false
              */
             unconfirmed: boolean;
+            /** Unconfirmed Reason */
+            unconfirmed_reason?: string | null;
             /**
              * Verified
              * @default false
              */
             verified: boolean;
+            /**
+             * Zoomed Labeled Points
+             * @default []
+             */
+            zoomed_labeled_points: string[];
         } & {
             [key: string]: unknown;
         };
@@ -6149,11 +6156,18 @@ export interface components {
              * @default false
              */
             unconfirmed: boolean;
+            /** Unconfirmed Reason */
+            unconfirmed_reason?: string | null;
             /**
              * Verified
              * @default false
              */
             verified: boolean;
+            /**
+             * Zoomed Labeled Points
+             * @default []
+             */
+            zoomed_labeled_points: string[];
         };
         /**
          * TeacherSubmissionStep

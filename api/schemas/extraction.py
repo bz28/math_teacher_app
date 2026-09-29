@@ -84,6 +84,10 @@ class ExtractionVisualWorkOut(BaseModel):
     # True when the crop-and-zoom pass found no drawing where the first
     # pass reported one: inventory emptied, nothing confirmed.
     unconfirmed: bool = False
+    # Why unconfirmed: "not_found" (default for older rows) or
+    # "labeled_points_disagree" (see api/core/integrity_ai._verify_one).
+    unconfirmed_reason: str | None = None
+    zoomed_labeled_points: list[str] = []
 
 
 class ExtractionOut(BaseModel):

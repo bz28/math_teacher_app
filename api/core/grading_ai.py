@@ -269,6 +269,19 @@ def _format_visual_work(v: dict[str, Any]) -> str:
         return f"table (the student's own table; its entries are also in the steps): {desc}" if desc else (
             "table (the student's own table; its entries are also in the steps)"
         )
+    if v.get("unconfirmed") and v.get("unconfirmed_reason") == "labeled_points_disagree":
+        # The drawing is there, but the full page and the zoomed crop read
+        # different coordinates beside its points. Neither reading is
+        # trusted over the other; the teacher decides from the photo.
+        first = ", ".join(v.get("labeled_points") or []) or "none"
+        zoomed = ", ".join(v.get("zoomed_labeled_points") or []) or "none"
+        return (
+            f"{kind}: UNCONFIRMED — a drawing is there, but the labeled points were "
+            f"read two different ways (full page: {first}; zoomed look: {zoomed}). "
+            "Treat the drawing / graphing requirement as MET, credit no point or "
+            "answer read off it, and have the teacher check the photo (see the "
+            "UNCONFIRMED rule)"
+        )
     if v.get("unconfirmed"):
         # The first pass claimed a drawing here but a zoomed look found
         # none. Its description is exactly the primed claim we couldn't
