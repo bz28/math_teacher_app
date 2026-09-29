@@ -451,6 +451,14 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> str:
                 await db.commit()
                 return _SKIPPED
 
+            # The student disputed the reading. The queueing paths refuse
+            # flagged work (`ai_grade_block`), but a job queued before
+            # that rule — or revived by a retry — must not grade it here.
+            if sub.extraction_flagged_at is not None:
+                await _finish(db, job_id, outcome=_SKIPPED, error=None)
+                await db.commit()
+                return _SKIPPED
+
             extraction = apply_extraction_edits(
                 sub.extraction, sub.extraction_edits,
             )

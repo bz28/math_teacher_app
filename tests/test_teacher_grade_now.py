@@ -489,6 +489,30 @@ async def test_grade_now_refuses_work_the_student_flagged(
     assert await _job(sid) is None
 
 
+async def test_drain_skips_a_queued_job_on_flagged_work(
+    client: AsyncClient,
+) -> None:
+    """A job queued before flagged work was locked out (or revived by a
+    retry) must not grade the disputed reading when it drains."""
+    world = await _ungraded_world()
+    sid = world["submission_ids"][0]
+    r = await _grade_now(client, world, sid)
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == sid)
+        )).scalar_one()
+        for k, v in _FLAGGED.items():
+            setattr(sub, k, v)
+        await s.commit()
+
+    grader = AsyncMock(side_effect=_fake_grade)
+    with patch("api.core.grading_ai.run_ai_grading_for_submission", new=grader):
+        await drain()
+    assert sid not in _graded_ids(grader)
+    assert (await _job(sid)).status == STATUS_SKIPPED  # type: ignore[union-attr]
+
+
 async def test_regrade_refuses_work_the_student_flagged(
     client: AsyncClient,
 ) -> None:
