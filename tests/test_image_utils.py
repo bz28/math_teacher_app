@@ -257,6 +257,34 @@ class TestRotateUpload:
         assert _decode_size(out) == (40, 20)
         assert _pixel(out, (36, 16))[0] > 200  # raw top-left → bottom-right
 
+    def test_a_turned_phone_photo_stays_under_the_cap(self) -> None:
+        # Noisy 12 MP photo at phone quality: under the cap as sent, but a
+        # high-quality re-encode used to push it to ~7 MB.
+        photo = Image.effect_noise((2016, 1512), 80).resize((4032, 3024)).convert("RGB")
+        sent = _encode(photo, "JPEG", quality=70)
+        assert len(base64.b64decode(sent)) <= MAX_IMAGE_BYTES
+        out = rotate_upload(sent, "image/jpeg", 90)
+        assert len(base64.b64decode(out)) <= MAX_IMAGE_BYTES
+        assert _decode_size(out)[0] < _decode_size(out)[1]  # still turned
+
+    def test_keeps_the_colour_profile(self) -> None:
+        from PIL import ImageCms
+
+        icc = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+        out = rotate_upload(
+            _encode(_marked((40, 20)), "JPEG", icc_profile=icc), "image/jpeg", 90,
+        )
+        with Image.open(io.BytesIO(base64.b64decode(out))) as img:
+            assert img.info.get("icc_profile") == icc
+
+    def test_refuses_a_decompression_bomb(self) -> None:
+        # Tiny on the wire, 144 megapixels decoded.
+        bomb = _encode(Image.new("1", (12000, 12000)), "PNG")
+        assert len(base64.b64decode(bomb)) < 500_000
+        with pytest.raises(ValueError, match="too large"):
+            rotate_upload(bomb, "image/png", 90)
+        assert page_looks_sideways(bomb) is False
+
     def test_pdf_is_left_alone(self) -> None:
         b64 = _b64(_PDF_HEADER + b"pdf")
         assert rotate_upload(b64, "application/pdf", 90) == b64

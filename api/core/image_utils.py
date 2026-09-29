@@ -92,6 +92,26 @@ _ORIENTATION_EDGE = 800
 # Validated on 341 real student pages (see `page_looks_sideways`).
 SIDEWAYS_LINE_RATIO = 0.4
 
+# Pixel ceiling for any upload we decode. The byte caps bound the
+# compressed size only — a 160 KB PNG can declare 144 megapixels — so
+# this is what bounds memory. Well above a 48 MP phone photo.
+MAX_UPLOAD_PIXELS = 50_000_000
+
+# A turned page is re-encoded; match typical phone JPEG quality so the
+# stored page isn't bigger than the one the student sent.
+_ROTATED_JPEG_QUALITY = 85
+
+
+def _open_bounded(raw: bytes) -> Image.Image:
+    """Open image bytes, refusing anything past `MAX_UPLOAD_PIXELS`
+    before a single pixel is decoded (Image.open only reads the header)."""
+    img = Image.open(io.BytesIO(raw))
+    w, h = img.size
+    if w * h > MAX_UPLOAD_PIXELS:
+        img.close()
+        raise ValueError(f"Image too large: {w}x{h} pixels")
+    return img
+
 
 def rotate_upload(data_base64: str, media_type: str, rotation: int) -> str:
     """Store a page the way the student turned it on the upload screen.
@@ -102,22 +122,31 @@ def rotate_upload(data_base64: str, media_type: str, rotation: int) -> str:
     reads the page (the AI reader, the teacher's photo view, the student's
     confirm screen) gets it upright with no rotation logic of its own.
     Rotation 0 returns the input untouched, byte for byte.
+
+    The result stays under `MAX_IMAGE_BYTES` — re-encoding can grow a
+    file, so an over-cap result is scaled down until it fits — and keeps
+    the photo's colour profile. Raises ValueError for an image it can't
+    or won't decode.
     """
     if rotation == 0 or not media_type.startswith("image/"):
         return data_base64
-    raw = base64.b64decode(data_base64)
-    with Image.open(io.BytesIO(raw)) as opened:
-        img = ImageOps.exif_transpose(opened)
-        # PIL's rotate() is counter-clockwise.
-        img = img.rotate(-rotation, expand=True)
+    with _open_bounded(base64.b64decode(data_base64)) as opened:
+        icc = opened.info.get("icc_profile")
+        # PIL's rotate() is counter-clockwise; quarter turns are exact.
+        img = ImageOps.exif_transpose(opened).rotate(-rotation, expand=True)
+    if media_type != "image/png" and img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    while True:
         buf = io.BytesIO()
         if media_type == "image/png":
-            img.save(buf, format="PNG")
+            img.save(buf, format="PNG", icc_profile=icc)
         else:
-            if img.mode not in ("RGB", "L"):
-                img = img.convert("RGB")
-            img.save(buf, format="JPEG", quality=92)
-    return base64.b64encode(buf.getvalue()).decode("ascii")
+            img.save(buf, format="JPEG", quality=_ROTATED_JPEG_QUALITY, icc_profile=icc)
+        if buf.tell() <= MAX_IMAGE_BYTES or min(img.size) < 600:
+            return base64.b64encode(buf.getvalue()).decode("ascii")
+        img = img.resize(
+            (int(img.width * 0.85), int(img.height * 0.85)), Image.Resampling.LANCZOS,
+        )
 
 
 def _profile_spread(profile: list[float]) -> float:
@@ -157,8 +186,10 @@ def page_looks_sideways(data_base64: str) -> bool:
     from PIL import ImageChops, ImageFilter
 
     try:
-        raw = base64.b64decode(data_base64)
-        with Image.open(io.BytesIO(raw)) as opened:
+        with _open_bounded(base64.b64decode(data_base64)) as opened:
+            # JPEGs decode straight at reduced scale — cheap however large
+            # the upload. Other formats ignore this.
+            opened.draft("L", (_ORIENTATION_EDGE * 2, _ORIENTATION_EDGE * 2))
             gray = ImageOps.grayscale(ImageOps.exif_transpose(opened))
         gray.thumbnail((_ORIENTATION_EDGE, _ORIENTATION_EDGE))
         blurred = gray.filter(ImageFilter.BoxBlur(15))

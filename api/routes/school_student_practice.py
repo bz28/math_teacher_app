@@ -32,7 +32,7 @@ from collections.abc import Coroutine
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import delete as sql_delete
 from sqlalchemy import distinct, func, select, update
@@ -55,6 +55,7 @@ from api.core.integrity_pipeline import (
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
+from api.middleware.rate_limit import limiter
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course, CourseTeacher
 from api.models.practice_activity import (
@@ -1928,7 +1929,11 @@ async def linked_practice_for_homework(
 
 
 @router.post("/homework/page-orientation")
+# Per IP, and a whole class can share a school's IP — generous, since a
+# throttled check only means a missing nudge.
+@limiter.limit("300/minute")
 async def check_page_orientation(
+    request: Request,
     body: PageOrientationRequest,
     user: User = Depends(get_current_user_full),
 ) -> PageOrientationResponse:
@@ -1944,7 +1949,10 @@ async def check_page_orientation(
         validate_and_decode_image(b64)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    return PageOrientationResponse(sideways=page_looks_sideways(b64))
+    # Image decoding is CPU work — keep it off the event loop.
+    return PageOrientationResponse(
+        sideways=await asyncio.to_thread(page_looks_sideways, b64),
+    )
 
 
 @router.post("/homework/{assignment_id}/submit")
@@ -2002,15 +2010,20 @@ async def submit_homework(
                 status_code=400,
                 detail=f"File {i + 1}: {e}",
             ) from e
-        total_bytes += len(decoded)
         rotation = body.rotations[i] if body.rotations else 0
-        try:
-            b64 = rotate_upload(b64, media_type, rotation)
-        except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File {i + 1}: couldn't read this image to rotate it",
-            ) from e
+        if rotation:
+            try:
+                # CPU work — off the event loop.
+                b64 = await asyncio.to_thread(rotate_upload, b64, media_type, rotation)
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File {i + 1}: couldn't read this image to rotate it",
+                ) from e
+            # Count what is stored, not what was sent.
+            total_bytes += len(b64) * 3 // 4
+        else:
+            total_bytes += len(decoded)
         validated_files.append({"data": b64, "media_type": media_type})
     if total_bytes > MAX_SUBMISSION_TOTAL_BYTES:
         raise HTTPException(

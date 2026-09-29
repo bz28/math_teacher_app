@@ -132,6 +132,21 @@ async def test_submit_stores_each_page_the_way_the_student_turned_it(
     assert files[2]["data"] == TINY_PDF
 
 
+async def test_submit_refuses_to_turn_a_decompression_bomb(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    buf = io.BytesIO()
+    Image.new("1", (12000, 12000)).save(buf, format="PNG")
+    bomb = base64.b64encode(buf.getvalue()).decode("ascii")
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"files": [bomb], "rotations": [90]},
+    )
+    assert r.status_code == 400
+    assert "File 1" in r.json()["detail"]
+
+
 async def test_submit_rejects_rotations_that_dont_line_up(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
