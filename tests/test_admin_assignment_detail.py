@@ -571,3 +571,28 @@ async def test_a_structured_bank_id_does_not_500_the_page(
     assert [p["question"] for p in problems] == ["A", "B"]
     # No bank item resolves, so no badge is claimed for either.
     assert [p["provenance"] for p in problems] == [None, None]
+
+
+async def test_a_requires_drawing_toggle_is_not_an_edit(
+    client: AsyncClient,
+) -> None:
+    """Flipping "requires a drawing" is a grading setting, not an edit to
+    the generated problem — the admin provenance must stay "approved"."""
+    from api.models.question_edit import FIELD_REQUIRES_DRAWING
+
+    w = await _world()
+    a_id = await _add_assignment(w, type_="homework", content={"problem_ids": []})
+    item_id = await _add_item(w, a_id, question="Toggled", source="generated")
+    async with get_session_factory()() as s:
+        s.add(QuestionEdit(
+            bank_item_id=item_id, edited_by_id=w["teacher_id"], school_id=w["school_id"],
+            kind=EDIT_MANUAL, field=FIELD_REQUIRES_DRAWING, before="no", after="yes",
+        ))
+        await s.execute(text("UPDATE assignments SET content = :c WHERE id = :i"), {
+            "c": f'{{"problem_ids": ["{item_id}"]}}', "i": str(a_id),
+        })
+        await s.commit()
+
+    r = await client.get(f"/v1/admin/assignments/{a_id}", headers=_auth(w["token"]))
+    assert r.status_code == 200, r.text
+    assert [p["provenance"] for p in r.json()["problems"]] == ["AI · approved"]

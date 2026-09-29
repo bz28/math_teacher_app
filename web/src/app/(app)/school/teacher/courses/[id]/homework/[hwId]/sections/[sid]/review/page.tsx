@@ -1477,6 +1477,24 @@ function HomeworkSectionReview({
   // over a freshly-changed grade until a refetch. Approve/Undo are disabled
   // for this row while `regrading` is set (see SubmissionDetailPanel), which
   // closes the TOCTOU window where a teacher could approve mid-regrade.
+  // Flip a question's "requires a drawing" flag from the review page —
+  // where a teacher sees the drawing and can regrade. Allowed on
+  // published homework: it changes what future grading requires, never
+  // a published grade.
+  const setRequiresDrawing = useCallback(async (bankItemId: string, next: boolean) => {
+    await teacher.updateBankItem(bankItemId, { requires_drawing: next });
+    setDetail((d) =>
+      d
+        ? {
+            ...d,
+            problems: d.problems.map((p) =>
+              p.bank_item_id === bankItemId ? { ...p, requires_drawing: next } : p,
+            ),
+          }
+        : d,
+    );
+  }, []);
+
   const handleRegrade = useCallback(
     async (submissionId: string) => {
       setRegradingSubmissionId(submissionId);
@@ -1797,6 +1815,7 @@ function HomeworkSectionReview({
                     ? regradeError.message
                     : null
                 }
+                onRequiresDrawingChange={setRequiresDrawing}
                 onRegradeRequest={() =>
                   setRegradeConfirmOpenFor(selectedEntry.submission!.id)
                 }
@@ -3060,6 +3079,7 @@ function SubmissionDetailPanel({
   regrading,
   regradeError,
   onRegradeRequest,
+  onRequiresDrawingChange,
   aiGrading,
   aiGradingUnwatched,
   aiGradeError,
@@ -3099,6 +3119,7 @@ function SubmissionDetailPanel({
   regrading: boolean;
   regradeError: string | null;
   onRegradeRequest: () => void;
+  onRequiresDrawingChange: (bankItemId: string, next: boolean) => Promise<void>;
   /** Sent to the AI grader and the grade hasn't landed yet. */
   aiGrading: boolean;
   /** Still running on the server after the page stopped polling. */
@@ -4085,6 +4106,7 @@ function SubmissionDetailPanel({
                   announceGrade(p.position, "confirmed the AI's grade");
                 }}
                 onToggleExpand={() => toggleExpand(p.bank_item_id)}
+                onRequiresDrawingChange={(next) => onRequiresDrawingChange(p.bank_item_id, next)}
                 reportBase={reportBase}
                 rowRef={(el) => {
                   rowRefs.current[i] = el;
@@ -4105,7 +4127,11 @@ function SubmissionDetailPanel({
         </div>
 
         {(detail.other_work.length > 0 || detail.other_drawings.length > 0) && (
-          <OtherWorkDisclosure steps={detail.other_work} drawings={detail.other_drawings} />
+          <OtherWorkDisclosure
+            steps={detail.other_work}
+            drawings={detail.other_drawings}
+            anyRequired={detail.problems.some((p) => p.requires_drawing)}
+          />
         )}
       </div>
 
@@ -4461,6 +4487,137 @@ function UnconfirmedDrawingNote({ description }: { description: string }) {
 }
 
 /**
+ * A problem's drawings, gated by the question's "requires a drawing" flag.
+ *
+ * Flagged: the full inventory, with a quiet "Not required" to unflag.
+ * Unflagged with something drawn: one muted line and "Require it" — the
+ * drawing was recorded anyway, so a missed flag is one click (and a
+ * regrade) away from being fixed. Never a ✓ or "couldn't confirm" there:
+ * nothing was checked, and nothing is used.
+ */
+function DrawingsPanel({
+  problem,
+  onRequiresDrawingChange,
+}: {
+  problem: TeacherSubmissionDetailProblem;
+  onRequiresDrawingChange: (next: boolean) => Promise<void>;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [changed, setChanged] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const drawn = problem.drawings.filter((d) => d.present);
+  if (!problem.requires_drawing && drawn.length === 0 && !changed) return null;
+  if (problem.requires_drawing && problem.drawings.length === 0 && !changed) return null;
+
+  const flip = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await onRequiresDrawingChange(!problem.requires_drawing);
+      setChanged(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn\u2019t save");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const flipButton = (label: string) => (
+    <button
+      type="button"
+      onClick={() => void flip()}
+      disabled={saving}
+      className="font-semibold text-primary underline-offset-2 hover:underline disabled:opacity-50"
+    >
+      {saving ? "Saving\u2026" : label}
+    </button>
+  );
+  const afterNote = (changed || error) && (
+    <p className="mt-1.5 text-[11px] leading-snug text-text-muted" role="status">
+      {error ?? "Saved for this question. It applies to grading from now on \u2014 regrade to apply it to this student."}
+    </p>
+  );
+
+  if (!problem.requires_drawing) {
+    return (
+      <div className="mt-3 text-xs leading-relaxed text-text-muted">
+        {drawn.length > 0 && (
+          <span>
+            <span aria-hidden>✏️ </span>
+            {recordedLabel(drawn)} on page — not required for this question ·{" "}
+          </span>
+        )}
+        {flipButton("Require it")}
+        {afterNote}
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2.5">
+      <p className="flex flex-wrap items-baseline gap-x-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+        Drawings
+        <span className="font-normal normal-case tracking-normal text-text-muted">
+          · this question requires one ·
+        </span>
+        <span className="text-[11px] font-normal normal-case tracking-normal">
+          {flipButton("Not required")}
+        </span>
+      </p>
+      {problem.drawings.length === 0 && (
+        <p className="mt-1.5 text-xs text-text-muted">No drawing recorded for this problem.</p>
+      )}
+      <ul className="mt-1.5 space-y-1.5 text-xs leading-relaxed">
+        {problem.drawings.map((d, i) => (
+          <li key={i} className="flex gap-2">
+            <span aria-hidden className="shrink-0">{d.present ? "✏️" : "⚠️"}</span>
+            {d.present ? (
+              <span className="text-text-primary">
+                <span className="font-semibold capitalize">{d.kind.replace("_", " ")}</span>
+                <span className="text-text-secondary">
+                  <DrawingStatus drawing={d} />
+                </span>
+                {d.labeled_points.length > 0 && (
+                  <span className="text-text-secondary">
+                    {" "}· labeled: <MathText text={d.labeled_points.join(", ")} />
+                  </span>
+                )}
+                {d.answer_on_drawing && (
+                  <span className="text-text-secondary">
+                    {" "}· answer on drawing: <MathText text={d.answer_on_drawing} />
+                  </span>
+                )}
+                {d.plotted_elements.length > 0 && (
+                  <span className="block text-text-secondary">{d.plotted_elements.join("; ")}</span>
+                )}
+                {d.unconfirmed ? (
+                  <UnconfirmedDrawingNote description={d.description} />
+                ) : (
+                  d.description && (
+                    <span className="block text-text-secondary">{d.description}</span>
+                  )
+                )}
+              </span>
+            ) : (
+              <span className="font-semibold text-[color:var(--color-warning-dark)]">
+                No {d.kind.replace("_", " ")} drawn — the problem asked for one.
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {afterNote}
+    </div>
+  );
+}
+
+// "Table" for a proof's Statements/Reasons grid, "Graph" for a graph —
+// naming what was recorded keeps a quiet line from overclaiming.
+function recordedLabel(drawn: TeacherSubmissionDrawing[]): string {
+  const kinds = [...new Set(drawn.map((d) => d.kind.replace("_", " ")))];
+  if (kinds.length !== 1 || kinds[0] === "other") return "Drawing";
+  return kinds[0].charAt(0).toUpperCase() + kinds[0].slice(1);
+}
+
+/**
  * The status after a drawing's kind. A table is text in a grid — nothing
  * is "plotted" and the zoomed check can't read it — so it gets no status
  * at all rather than "0 plotted" or a doubt it never earned.
@@ -4499,9 +4656,14 @@ function DrawingStatus({ drawing: d }: { drawing: TeacherSubmissionDrawing }) {
 function OtherWorkDisclosure({
   steps,
   drawings,
+  anyRequired,
 }: {
   steps: TeacherSubmissionStep[];
   drawings: TeacherSubmissionDrawing[];
+  /** Some question on this homework requires a drawing. Only then is an
+   *  unattributed drawing used (it may be that one) — otherwise it's
+   *  shown as recorded, with no verdict on it. */
+  anyRequired: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const count = steps.length + drawings.length;
@@ -4537,8 +4699,12 @@ function OtherWorkDisclosure({
                   <span className="font-semibold capitalize text-text-primary">
                     {d.kind.replace("_", " ")}
                   </span>
-                  <DrawingStatus drawing={d} />
-                  {d.unconfirmed ? (
+                  {anyRequired ? (
+                    <DrawingStatus drawing={d} />
+                  ) : (
+                    <span className="text-text-muted"> · not used for grading</span>
+                  )}
+                  {anyRequired && d.unconfirmed ? (
                     <UnconfirmedDrawingNote description={d.description} />
                   ) : (
                     d.description && <span className="block">{d.description}</span>
@@ -4586,6 +4752,7 @@ function ProblemGradeRow({
   confirmKey,
   onConfirm,
   onToggleExpand,
+  onRequiresDrawingChange,
   rowRef,
   onChange,
   onFeedbackChange,
@@ -4616,6 +4783,8 @@ function ProblemGradeRow({
   confirmKey: "1" | "2" | "3" | "4" | "5" | null;
   onConfirm: () => void;
   onToggleExpand: () => void;
+  /** Flip the question's "requires a drawing" flag (bank item). */
+  onRequiresDrawingChange: (next: boolean) => Promise<void>;
   /** Registers the row's root element with the parent so keyboard nav
    *  can move actual focus (the model is focus-real, not aria-only). */
   rowRef: (el: HTMLDivElement | null) => void;
@@ -5195,62 +5364,12 @@ function ProblemGradeRow({
         </div>
       )}
 
-      {/* Drawings — what the extractor inventoried on the page, in the
-          same words the grader was given. A required-but-missing
-          drawing is called out in the warning tone: that's the case
-          the AI used to give full credit on, and the teacher should
-          see the fact before the verdict that rests on it. */}
-      {problem.drawings.length > 0 && (
-        <div className="mt-3 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2.5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-            Drawings
-            {problem.requires_drawing && (
-              <span className="font-normal normal-case tracking-normal text-text-muted">
-                {" "}· this question requires one
-              </span>
-            )}
-          </p>
-          <ul className="mt-1.5 space-y-1.5 text-xs leading-relaxed">
-            {problem.drawings.map((d, i) => (
-              <li key={i} className="flex gap-2">
-                <span aria-hidden className="shrink-0">{d.present ? "✏️" : "⚠️"}</span>
-                {d.present ? (
-                  <span className="text-text-primary">
-                    <span className="font-semibold capitalize">{d.kind.replace("_", " ")}</span>
-                    <span className="text-text-secondary">
-                      <DrawingStatus drawing={d} />
-                    </span>
-                    {d.labeled_points.length > 0 && (
-                      <span className="text-text-secondary">
-                        {" "}· labeled: <MathText text={d.labeled_points.join(", ")} />
-                      </span>
-                    )}
-                    {d.answer_on_drawing && (
-                      <span className="text-text-secondary">
-                        {" "}· answer on drawing: <MathText text={d.answer_on_drawing} />
-                      </span>
-                    )}
-                    {d.plotted_elements.length > 0 && (
-                      <span className="block text-text-secondary">{d.plotted_elements.join("; ")}</span>
-                    )}
-                    {d.unconfirmed ? (
-                      <UnconfirmedDrawingNote description={d.description} />
-                    ) : (
-                      d.description && (
-                        <span className="block text-text-secondary">{d.description}</span>
-                      )
-                    )}
-                  </span>
-                ) : (
-                  <span className="font-semibold text-[color:var(--color-warning-dark)]">
-                    No {d.kind.replace("_", " ")} drawn — the problem asked for one.
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* Drawings — recorded on every problem, USED only where the
+          question requires one. There, the full inventory in the words
+          the grader was given (a required-but-missing drawing in the
+          warning tone). Elsewhere, at most a quiet line, so a teacher
+          can spot a question that should have been flagged. */}
+      <DrawingsPanel problem={problem} onRequiresDrawingChange={onRequiresDrawingChange} />
 
       {/* AI grading hero — the AI's call is visible before the grade
           buttons, with reasoning inline instead of buried below. When

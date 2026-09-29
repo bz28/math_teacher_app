@@ -1867,8 +1867,9 @@ export const teacher = {
     /** Move the item to a different unit. Required to be a real id
      *  when set (Uncategorized bucket removed). */
     unit_id?: string;
-    /** Override whether a drawing is part of the answer. Refused (409)
-     *  while the item is in a published homework. */
+    /** Override whether a drawing is part of the answer. Allowed on
+     *  published items: it affects grading from now on (and regrades),
+     *  never a published grade. */
     requires_drawing?: boolean;
   }) {
     return apiFetch<BankItem>(`/teacher/question-bank/${itemId}`, {
@@ -2219,9 +2220,12 @@ export interface BankItem {
   status: string;
   locked: boolean;
   /** The question asks the student to draw (graph, sketch, table of
-   *  values…). Only these problems get drawings read and graded. Set
+   *  values…). Drawings are recorded everywhere but checked and graded
+   *  only on these problems. Set
    *  from the question text; the teacher can override it. */
   requires_drawing: boolean;
+  /** A teacher set the flag; AI rewrites and undo leave it alone. */
+  requires_drawing_teacher_set: boolean;
   source: string;
   parent_question_id: string | null;
   used_in: {

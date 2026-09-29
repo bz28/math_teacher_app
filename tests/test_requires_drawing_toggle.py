@@ -1,12 +1,16 @@
-"""The Workshop's "Requires a drawing" toggle (PATCH requires_drawing).
+"""The "Requires a drawing" flag: the Workshop toggle, AI rewrites, undo.
 
-It decides whether a drawing is part of the answer, so it follows the
-content-edit rules: refused while the item is in a published homework,
-and recorded in question_edits (field "requires_drawing") without
-touching the one-level question undo.
+- The toggle is an answer-requirement fix, not a content edit: allowed on
+  locked (published) items, recorded in question_edits, and it marks the
+  flag teacher-set.
+- AI rewrites (Workshop accept, regenerate) re-derive the flag from the
+  new text only while no teacher has set it.
+- Undo restores the flag that travelled with the prose — never over a
+  teacher's explicit setting.
 """
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -29,28 +33,48 @@ async def _item(item_id: Any) -> QuestionBankItem:
         )).scalar_one()
 
 
+async def _set(item_id: Any, **fields: Any) -> None:
+    async with get_session_factory()() as s:
+        it = (await s.execute(
+            select(QuestionBankItem).where(QuestionBankItem.id == uuid.UUID(str(item_id)))
+        )).scalar_one()
+        for k, v in fields.items():
+            setattr(it, k, v)
+        await s.commit()
+
+
+async def _accept_proposal(client: AsyncClient, token: str, item_id: Any, question: str) -> Any:
+    """Seed a pending Workshop proposal that rewrites the question, then accept it."""
+    await _set(item_id, chat_messages=[
+        {"role": "teacher", "text": "rewrite it", "ts": datetime.now(UTC).isoformat()},
+        {"role": "ai", "text": "Here you go.", "ts": datetime.now(UTC).isoformat(),
+         "proposal": {"question": question}},
+    ])
+    return await client.post(
+        f"/v1/teacher/question-bank/{item_id}/chat/accept",
+        headers=_auth(token), json={"message_index": 1},
+    )
+
+
 async def test_toggle_on_and_off_is_saved_serialized_and_audited(
     world: dict[str, Any], client: AsyncClient,
 ) -> None:
     await _own_course(world)
     item_id = world["primary_id"]
-    before = await _item(item_id)
-    prev_question = before.previous_question
+    prev_question = (await _item(item_id)).previous_question
 
     r = await _patch(client, world["teacher_token"], item_id, requires_drawing=True)
     assert r.status_code == 200, r.text
     assert r.json()["requires_drawing"] is True
-    assert (await _item(item_id)).requires_drawing is True
-
+    assert r.json()["requires_drawing_teacher_set"] is True
     r = await _patch(client, world["teacher_token"], item_id, requires_drawing=False)
     assert r.status_code == 200 and r.json()["requires_drawing"] is False
 
-    edits = [e for e in await _edits(uuid.UUID(str(item_id))) if e.field == FIELD_REQUIRES_DRAWING]
-    assert [(e.kind, e.before, e.after) for e in edits] == [
-        (EDIT_MANUAL, "no", "yes"), (EDIT_MANUAL, "yes", "no"),
+    edits = await _edits(uuid.UUID(str(item_id)))
+    assert [(e.kind, e.field, e.before, e.after) for e in edits] == [
+        (EDIT_MANUAL, FIELD_REQUIRES_DRAWING, "no", "yes"),
+        (EDIT_MANUAL, FIELD_REQUIRES_DRAWING, "yes", "no"),
     ]
-    # Only the flag rows — the snapshot diff must not re-report old edits.
-    assert len(await _edits(uuid.UUID(str(item_id)))) == 2
     # The toggle is its own undo; it leaves the question undo slot alone.
     assert (await _item(item_id)).previous_question == prev_question
 
@@ -63,28 +87,68 @@ async def test_resending_the_same_value_records_nothing(
     r = await _patch(client, world["teacher_token"], item_id, requires_drawing=False)
     assert r.status_code == 200
     assert await _edits(uuid.UUID(str(item_id))) == []
+    assert (await _item(item_id)).requires_drawing_teacher_set is False
 
 
-async def test_locked_item_refuses_the_toggle(
+async def test_toggle_is_allowed_on_a_locked_published_item(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """It fixes what the answer requires — a teacher who spots a missed
+    flag on a published homework has to be able to fix it and regrade."""
+    await _own_course(world)
+    item_id = world["primary_id"]
+    await _set(item_id, locked=True)
+    r = await _patch(client, world["teacher_token"], item_id, requires_drawing=True)
+    assert r.status_code == 200, r.text
+    assert (await _item(item_id)).requires_drawing is True
+    # Content edits stay locked.
+    r = await _patch(client, world["teacher_token"], item_id, question="Changed text.")
+    assert r.status_code == 409
+
+
+async def test_ai_rewrite_rederives_the_flag_only_when_not_teacher_set(
     world: dict[str, Any], client: AsyncClient,
 ) -> None:
     await _own_course(world)
     item_id = world["primary_id"]
-    async with get_session_factory()() as s:
-        it = (await s.execute(
-            select(QuestionBankItem).where(QuestionBankItem.id == uuid.UUID(str(item_id)))
-        )).scalar_one()
-        it.locked = True
-        await s.commit()
-    r = await _patch(client, world["teacher_token"], item_id, requires_drawing=True)
-    assert r.status_code == 409
-    assert (await _item(item_id)).requires_drawing is False
-    # A no-op value on a locked item is not a content change.
+    # Not teacher-set: new AI text that asks for a graph flips it on.
+    r = await _accept_proposal(client, world["teacher_token"], item_id, "Graph $y = 2x + 1$.")
+    assert r.status_code == 200, r.text
+    assert (await _item(item_id)).requires_drawing is True
+
+    # Teacher turns it off; the next AI rewrite (still graph wording) keeps it off.
     r = await _patch(client, world["teacher_token"], item_id, requires_drawing=False)
     assert r.status_code == 200
+    r = await _accept_proposal(client, world["teacher_token"], item_id, "Sketch the graph of $y = x^2$.")
+    assert r.status_code == 200, r.text
+    assert (await _item(item_id)).requires_drawing is False
 
 
-async def test_other_teachers_cannot_toggle(
+async def test_undo_restores_the_derived_flag_but_never_a_teacher_setting(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    await _own_course(world)
+    item_id = world["primary_id"]
+    assert (await _item(item_id)).requires_drawing is False
+    r = await _accept_proposal(client, world["teacher_token"], item_id, "Graph $y = 2x + 1$.")
+    assert r.status_code == 200 and (await _item(item_id)).requires_drawing is True
+    r = await client.post(f"/v1/teacher/question-bank/{item_id}/revert",
+                          headers=_auth(world["teacher_token"]))
+    assert r.status_code == 200, r.text
+    # The flag travelled with the prose it was derived from.
+    assert (await _item(item_id)).requires_drawing is False
+
+    # Now the teacher sets it; an AI rewrite + undo must not move it.
+    r = await _patch(client, world["teacher_token"], item_id, requires_drawing=True)
+    r = await _accept_proposal(client, world["teacher_token"], item_id, "Solve $x + 1 = 2$.")
+    assert (await _item(item_id)).requires_drawing is True
+    r = await client.post(f"/v1/teacher/question-bank/{item_id}/revert",
+                          headers=_auth(world["teacher_token"]))
+    assert r.status_code == 200
+    assert (await _item(item_id)).requires_drawing is True
+
+
+async def test_students_cannot_toggle(
     world: dict[str, Any], client: AsyncClient,
 ) -> None:
     item_id = world["primary_id"]

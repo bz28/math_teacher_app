@@ -136,8 +136,9 @@ class UpdateBankItemRequest(BaseModel):
     solution_steps: list[Any] | None = None
     final_answer: str | None = None
     # Teacher override of the "requires a drawing" flag (Workshop toggle).
-    # It decides whether a drawing is part of the answer, so it's a
-    # content edit: refused while the item is in a published homework.
+    # Allowed on locked / published items: it fixes what the answer
+    # requires, not what students see. It only affects grading that runs
+    # after it (new submissions, regrades) — published grades never move.
     requires_drawing: bool | None = None
     # MCQ wrong-answer choices. None = leave unchanged; must be a
     # 3-element list when set so the renderer always has exactly 4
@@ -227,6 +228,7 @@ def _serialize_item(
         "status": item.status,
         "locked": bool(item.locked),
         "requires_drawing": bool(item.requires_drawing),
+        "requires_drawing_teacher_set": bool(item.requires_drawing_teacher_set),
         "source": item.source,
         "parent_question_id": str(item.parent_question_id) if item.parent_question_id else None,
         "used_in": used_in or [],
@@ -522,12 +524,11 @@ async def update_bank_item(
     if content_changing:
         _ensure_unlocked(item)
         snapshot_history(item)
-    # Not part of the one-level undo: the toggle is its own undo.
+    # Not part of the one-level undo (the toggle is its own undo), and
+    # not lock-gated: see UpdateBankItemRequest.requires_drawing.
     drawing_changed = (
         body.requires_drawing is not None and body.requires_drawing != item.requires_drawing
     )
-    if drawing_changed:
-        _ensure_unlocked(item)
 
     # Captured before the mutations below so the activity row can name the
     # fields that ACTUALLY changed. A PATCH that re-sends identical values
@@ -578,6 +579,8 @@ async def update_bank_item(
     if drawing_changed:
         prev_flag = "yes" if item.requires_drawing else "no"
         item.requires_drawing = bool(body.requires_drawing)
+        # From now on AI rewrites and undo leave the teacher's call alone.
+        item.requires_drawing_teacher_set = True
         await record_question_edit(
             db, item, EDIT_MANUAL, current_user,
             changes=[(FIELD_REQUIRES_DRAWING, prev_flag, "yes" if item.requires_drawing else "no")],
@@ -652,6 +655,10 @@ async def revert_bank_item(
     # Restore the figure alongside the prose so the two stay in sync.
     item.figure_spec = item.previous_figure_spec
     item.figure_svg = item.previous_figure_svg
+    # The flag travels with the prose it was derived from — unless the
+    # teacher set it, in which case undoing a question edit leaves it.
+    if item.previous_requires_drawing is not None and not item.requires_drawing_teacher_set:
+        item.requires_drawing = item.previous_requires_drawing
     restored_status = item.status if item.status != prior_status else None
     item.previous_question = None
     item.previous_solution_steps = None
@@ -659,6 +666,7 @@ async def revert_bank_item(
     item.previous_status = None
     item.previous_figure_spec = None
     item.previous_figure_svg = None
+    item.previous_requires_drawing = None
     # Undo restores the snapshot's status alongside its prose, so it can
     # move an item back to rejected (or approved) with no other trace. That
     # status is what the generation-quality board reads, so an unlogged
@@ -985,8 +993,9 @@ async def accept_chat_proposal(
     if proposal.get("question") is not None:
         item.question = str(proposal["question"]).strip()
         # New AI-written text re-derives the drawing requirement, as
-        # regenerate does; the Workshop toggle overrides it.
-        item.requires_drawing = requires_drawing(item.question)
+        # regenerate does — unless the teacher has set it themselves.
+        if not item.requires_drawing_teacher_set:
+            item.requires_drawing = requires_drawing(item.question)
     if proposal.get("solution_steps") is not None:
         # Belt-and-suspenders: defense against malformed steps lingering
         # in old chat_messages written before question_bank_chat.py

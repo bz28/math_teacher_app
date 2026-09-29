@@ -289,9 +289,16 @@ export function WorkshopModal({
       replaceLiveItem(updated);
     });
 
+  // Not lock-gated: the flag is an answer requirement, not question
+  // content, so a teacher can fix it on a published homework. It applies
+  // to grading from then on (and regrades); published grades never move.
   const saveRequiresDrawing = (next: boolean) =>
     run(async () => {
-      if (!liveItem || blockIfPending()) return;
+      if (!liveItem) return;
+      if (isProposalPending) {
+        setError("Accept or discard the AI proposal before doing anything else.");
+        return;
+      }
       if (next === liveItem.requires_drawing) return;
       const updated = await teacher.updateBankItem(liveItem.id, { requires_drawing: next });
       replaceLiveItem(updated);
@@ -806,14 +813,15 @@ export function WorkshopModal({
               </div>
               <RequiresDrawingToggle
                 value={liveItem.requires_drawing}
-                disabled={busy || isLocked || isProposalPending}
-                lockedReason={
-                  isLocked
-                    ? "In a published homework — unpublish to change"
-                    : isProposalPending
-                      ? "Accept or discard the AI proposal first"
+                disabled={busy || isProposalPending}
+                note={
+                  isProposalPending
+                    ? "Accept or discard the AI proposal first"
+                    : isLocked
+                      ? "In a published homework \u2014 a change applies to future grading and regrades, never to published grades."
                       : null
                 }
+                teacherSet={liveItem.requires_drawing_teacher_set}
                 onChange={saveRequiresDrawing}
               />
             </div>
@@ -1701,12 +1709,15 @@ function CompletionModal({
 function RequiresDrawingToggle({
   value,
   disabled,
-  lockedReason,
+  note,
+  teacherSet,
   onChange,
 }: {
   value: boolean;
   disabled: boolean;
-  lockedReason: string | null;
+  note: string | null;
+  /** The teacher set it (vs derived from the question text). */
+  teacherSet: boolean;
   onChange: (next: boolean) => void;
 }) {
   return (
@@ -1714,10 +1725,10 @@ function RequiresDrawingToggle({
       <div className="min-w-0">
         <div className="text-xs font-semibold text-text-primary">Requires a drawing</div>
         <div className="text-[11px] leading-snug text-text-muted">
-          {lockedReason ??
-            (value
-              ? "The student\u2019s graph, sketch or table is read and graded."
-              : "Drawings on this problem are ignored when grading.")}
+          {note ??
+            `${value
+              ? "The student\u2019s graph, sketch or table is checked and graded."
+              : "Drawings are recorded but not graded."} ${teacherSet ? "Set by you." : "Set from the question text."}`}
         </div>
       </div>
       <button

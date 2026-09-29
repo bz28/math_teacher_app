@@ -529,6 +529,7 @@ def snapshot_history(item: QuestionBankItem) -> None:
     # Figure-side undo so revert restores prose AND diagram together.
     item.previous_figure_spec = item.figure_spec
     item.previous_figure_svg = item.figure_svg
+    item.previous_requires_drawing = item.requires_drawing
 
 
 _REGENERATE_SYSTEM_TEMPLATE = """\
@@ -639,8 +640,9 @@ async def regenerate_one(
         item.title = str(new_title)[:120]
     item.question = str(new_question)
     # A regenerated question is new AI text, so its drawing requirement
-    # is re-derived; a teacher's manual text edit keeps their flag.
-    item.requires_drawing = requires_drawing(item.question)
+    # is re-derived — unless the teacher has set it themselves.
+    if not item.requires_drawing_teacher_set:
+        item.requires_drawing = requires_drawing(item.question)
     item.solution_steps = (
         _render_step_figures(new_steps) if isinstance(new_steps, list) else None
     )
