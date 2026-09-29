@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api, type ExtractionDetail, type TeacherReportData } from "../lib/api";
 import { problemAnchor } from "../lib/anchor";
 import { formatRelativeDate, shortId } from "../lib/format";
-import { KIND_LABEL, fmtGap, gradeGap, gradeLabel, gradeValue, pagePath, whereLabel } from "../lib/reports";
+import { KIND_LABEL, creditLabel, fmtGap, gradeGap, gradeValue, pagePath, whereLabel } from "../lib/reports";
 import { btnGhost, btnPrimary } from "../lib/styles";
 import { useToast } from "../lib/toast";
 import ErrorState from "../components/ErrorState";
@@ -227,14 +227,14 @@ function GradeBand({ r }: { r: TeacherReportData }) {
         <div className="case-decision-label">AI gave</div>
         <div className="case-decision-value">{ai === null ? "—" : `${ai}%`}</div>
         <div className="case-decision-sub">
-          {r.ai_grade ? gradeLabel(r.ai_grade).split(" · ")[0] : "no AI grade"}
+          {r.ai_grade ? creditLabel(r.ai_grade) : "no AI grade"}
           {r.ai_grade?.confidence != null && ` · confidence ${Math.round(r.ai_grade.confidence * 100)}%`}
         </div>
       </div>
       <div className="case-decision">
         <div className="case-decision-label">Teacher gave</div>
         <div className="case-decision-value">{teacher === null ? "—" : `${teacher}%`}</div>
-        <div className="case-decision-sub">when they reported it</div>
+        <div className="case-decision-sub">{creditLabel(r.teacher_grade)} · when they reported</div>
       </div>
       <div className="case-decision">
         <div className="case-decision-label">Gap</div>
@@ -343,7 +343,8 @@ function Evidence({
                 <figure key={i} className="rpt-page">
                   <WorkFile file={work.files[i]} index={i} />
                   <figcaption>
-                    Page {i + 1} of {work.files.length}
+                    {work.files[i].media_type === "application/pdf" ? "File" : "Page"} {i + 1} of{" "}
+                    {work.files.length}
                   </figcaption>
                 </figure>
               ))}

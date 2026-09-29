@@ -21,14 +21,14 @@ export const KIND_TONE: Record<ReportKind, PillTone> = {
   other: "neutral",
 };
 
-/** "Full · 100%" / "Partial · 50%" / "No credit" / "—" */
-export function gradeLabel(
-  g: { score_status: string | null; percent: number | null } | null | undefined,
+/** The grade's kind in words — the number is shown beside it. */
+export function creditLabel(
+  g: { score_status: string | null } | null | undefined,
 ): string {
-  if (!g || !g.score_status) return "—";
-  if (g.score_status === "full") return "Full · 100%";
-  if (g.score_status === "zero") return "No credit · 0%";
-  return g.percent == null ? "Partial" : `Partial · ${Math.round(g.percent)}%`;
+  if (!g || !g.score_status) return "no grade";
+  if (g.score_status === "full") return "Full credit";
+  if (g.score_status === "zero") return "No credit";
+  return "Partial credit";
 }
 
 /** "Solving Systems · Problem 4 · D. Park", or the page for a

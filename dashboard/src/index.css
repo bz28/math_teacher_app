@@ -3587,7 +3587,6 @@ table.dt tr:last-child td { border-bottom: none; }
   margin: 20px 0 34px;
 }
 .rpt-actions a:hover { text-decoration: none; }
-.rpt-actions a[style]:hover { border-color: var(--ink); color: var(--ink); }
 .rpt-teacher-page {
   margin-left: auto;
   font-size: 12.5px;

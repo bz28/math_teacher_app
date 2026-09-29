@@ -3365,15 +3365,18 @@ function SubmissionDetailPanel({
   // rather than 'nearest' — arriving from a link, the reader needs the
   // row in context, not pinned to the viewport edge. Focus follows so the
   // grading keys act on it straight away.
+  // A position this submission doesn't have is consumed all the same, so
+  // a stale ?problem= never lingers in the URL.
+  const [hadFocusRequest] = useState(() => focusProblem !== null);
   useEffect(() => {
-    if (focusIndex < 0) return;
-    const el = rowRefs.current[focusIndex];
+    if (!hadFocusRequest) return;
+    const el = focusIndex >= 0 ? rowRefs.current[focusIndex] : null;
     if (el) {
       el.focus({ preventScroll: true });
       el.scrollIntoView({ block: "center" });
     }
     onProblemFocused();
-  }, [focusIndex, onProblemFocused]);
+  }, [hadFocusRequest, focusIndex, onProblemFocused]);
   const focusedIndex =
     focusState && focusState.sid === detail.submission_id
       ? Math.min(focusState.index, Math.max(0, detail.problems.length - 1))
