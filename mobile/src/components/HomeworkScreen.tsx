@@ -572,9 +572,9 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   lateText: { ...typography.caption, color: colors.warningDark, fontSize: 13, flex: 1, lineHeight: 18 },
   thumbRow: { flexGrow: 0 },
   thumbWrap: { marginRight: spacing.sm },
-  thumb: { width: 72, height: 96, borderRadius: radii.sm, backgroundColor: colors.surfaceAlt },
-  // Square so a quarter-turned page still fits whole.
-  imageThumb: { width: 96, height: 96, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  // Square so a quarter-turned page still fits whole; PDFs match.
+  thumb: { width: 96, height: 96, borderRadius: radii.sm, backgroundColor: colors.surfaceAlt },
+  imageThumb: { alignItems: "center", justifyContent: "center", overflow: "hidden" },
   thumbImage: { width: 96, height: 96 },
   thumbSideways: { borderWidth: 2, borderColor: colors.warning },
   thumbRotate: {

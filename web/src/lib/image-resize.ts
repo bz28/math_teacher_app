@@ -120,6 +120,10 @@ async function drawScaledJpeg(
         "Your browser couldn't prepare the image. Try a different browser.",
       );
     }
+    // JPEG has no alpha: paint white first, or a transparent PNG's
+    // background encodes as black.
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, width, height);
     ctx.drawImage(bitmap, 0, 0, width, height);
     return canvas.convertToBlob({ type: "image/jpeg", quality: attempt.quality });
   }
@@ -134,6 +138,8 @@ async function drawScaledJpeg(
       "Your browser couldn't prepare the image. Try a different browser.",
     );
   }
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, width, height);
   ctx.drawImage(bitmap, 0, 0, width, height);
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
