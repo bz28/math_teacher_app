@@ -12,6 +12,7 @@ import { ListSkeleton } from "./SkeletonLoader";
 import { MathText } from "./MathText";
 import { captureWorkImage, pickWorkImageFromLibrary, pickWorkPdf } from "../hooks/useCameraCapture";
 import {
+  checkPageOrientation,
   getHomework,
   getSubmission,
   submitHomework,
@@ -21,6 +22,7 @@ import {
   type SubmissionFile,
 } from "../services/api";
 import { errorMessage } from "../utils/errorMessage";
+import { orientationCheckCopy } from "../utils/orientationCheckCopy";
 import { scoreColor } from "../utils/scoreColor";
 import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
 
@@ -40,7 +42,17 @@ interface StagedFile {
   base64: string;
   kind: "image" | "pdf";
   name?: string;
+  /** Clockwise quarter turns the student applied (0/90/180/270). The
+   *  server stores the page turned this way. */
+  rotation: number;
+  /** The server's free pixel check thinks the writing runs up and down.
+   *  Advisory — drives the "looks sideways" nudge. */
+  sideways: boolean;
 }
+
+/** Still sideways after the student's turns? A half turn leaves a
+ *  sideways page sideways, so only a quarter turn clears the nudge. */
+const stillSideways = (f: StagedFile) => f.sideways && f.rotation % 180 === 0;
 
 const newId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -95,8 +107,33 @@ export function HomeworkScreen({ assignmentId, onBack, onSubmitted }: Props) {
 
   const stage = (base64: string, kind: StagedFile["kind"], name?: string) => {
     setSubmitError(null);
-    setFiles((f) => [...f, { id: newId(), base64, kind, name }]);
+    const id = newId();
+    setFiles((f) => [...f, { id, base64, kind, name, rotation: 0, sideways: false }]);
+    if (kind === "image") void checkSideways(id, base64);
   };
+
+  /** Ask the server whether a staged photo looks sideways. Advisory and
+   *  best-effort: any failure just means no nudge. */
+  const checkSideways = async (id: string, base64: string) => {
+    try {
+      const { sideways } = await checkPageOrientation(await orientationCheckCopy(base64));
+      if (sideways) {
+        setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, sideways: true } : f)));
+      }
+    } catch {
+      // No nudge. The tip and the rotate button still work.
+    }
+  };
+
+  const rotate = (id: string) => {
+    Haptics.selectionAsync();
+    setFiles((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, rotation: (f.rotation + 90) % 360 } : f)),
+    );
+  };
+
+  // Turn-in page numbers of pages the check still reads as sideways.
+  const sidewaysPages = files.flatMap((f, i) => (stillSideways(f) ? [i + 1] : []));
 
   const addPhoto = async () => {
     const base64 = await captureWorkImage();
@@ -133,6 +170,7 @@ export function HomeworkScreen({ assignmentId, onBack, onSubmitted }: Props) {
       await submitHomework(
         assignmentId,
         files.map((f) => f.base64),
+        files.map((f) => f.rotation),
       );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onSubmitted();
@@ -201,6 +239,13 @@ export function HomeworkScreen({ assignmentId, onBack, onSubmitted }: Props) {
               <Text style={styles.submitHint}>
                 Add clear photos or a PDF of your completed work — up to {MAX_FILES} pages.
               </Text>
+              <View style={styles.tipRow}>
+                <Ionicons name="refresh" size={14} color={colors.primary} />
+                <Text style={styles.tipText}>
+                  Hold your phone so the writing is upright. If a page comes out sideways, turn it
+                  with the rotate button — sideways pages get misread.
+                </Text>
+              </View>
 
               {isLate && (
                 <View style={styles.lateBanner}>
@@ -224,7 +269,30 @@ export function HomeworkScreen({ assignmentId, onBack, onSubmitted }: Props) {
                           </Text>
                         </View>
                       ) : (
-                        <Image source={{ uri: `data:image/jpeg;base64,${f.base64}` }} style={styles.thumb} />
+                        <>
+                          {/* Whole page, turned the way it will be stored. */}
+                          <View
+                            style={[styles.thumb, styles.imageThumb, stillSideways(f) && styles.thumbSideways]}
+                          >
+                            <Image
+                              source={{ uri: `data:image/jpeg;base64,${f.base64}` }}
+                              style={[styles.thumbImage, { transform: [{ rotate: `${f.rotation}deg` }] }]}
+                              resizeMode="contain"
+                            />
+                          </View>
+                          <AnimatedPressable
+                            style={[styles.thumbRotate, stillSideways(f) && styles.thumbRotateAlert]}
+                            onPress={() => rotate(f.id)}
+                            hitSlop={8}
+                            accessibilityLabel="Rotate page a quarter turn clockwise"
+                          >
+                            <Ionicons
+                              name="refresh"
+                              size={14}
+                              color={stillSideways(f) ? colors.textOnPrimary : colors.primary}
+                            />
+                          </AnimatedPressable>
+                        </>
                       )}
                       <AnimatedPressable
                         style={styles.thumbRemove}
@@ -236,6 +304,18 @@ export function HomeworkScreen({ assignmentId, onBack, onSubmitted }: Props) {
                     </View>
                   ))}
                 </ScrollView>
+              )}
+
+              {sidewaysPages.length > 0 && (
+                <View style={styles.sidewaysRow}>
+                  <Ionicons name="warning-outline" size={16} color={colors.warningDark} />
+                  <Text style={styles.sidewaysText}>
+                    {sidewaysPages.length === 1
+                      ? `Page ${sidewaysPages[0]} looks sideways`
+                      : `Pages ${sidewaysPages.join(", ")} look sideways`}{" "}
+                    — tap the rotate button until the writing reads across.
+                  </Text>
+                </View>
               )}
 
               {!atCap && (
@@ -267,6 +347,15 @@ export function HomeworkScreen({ assignmentId, onBack, onSubmitted }: Props) {
                       {files.length === 1 ? "page" : "pages"} — nothing else. Once you turn it
                       in you won't be able to change it, so take one last look if you'd like.
                     </Text>
+                    {sidewaysPages.length > 0 && (
+                      <Text style={styles.sidewaysText}>
+                        {sidewaysPages.length === 1
+                          ? `Page ${sidewaysPages[0]} still looks sideways.`
+                          : `Pages ${sidewaysPages.join(", ")} still look sideways.`}{" "}
+                        Rotate {sidewaysPages.length === 1 ? "it" : "them"} first so your work is
+                        read correctly.
+                      </Text>
+                    )}
                     <Button
                       label={isLate ? "Turn it in (late)" : "Turn it in"}
                       onPress={submit}
@@ -484,6 +573,35 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   thumbRow: { flexGrow: 0 },
   thumbWrap: { marginRight: spacing.sm },
   thumb: { width: 72, height: 96, borderRadius: radii.sm, backgroundColor: colors.surfaceAlt },
+  // Square so a quarter-turned page still fits whole.
+  imageThumb: { width: 96, height: 96, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  thumbImage: { width: 96, height: 96 },
+  thumbSideways: { borderWidth: 2, borderColor: colors.warning },
+  thumbRotate: {
+    position: "absolute",
+    bottom: -6,
+    right: -6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  thumbRotateAlert: { backgroundColor: colors.warning, borderColor: colors.warning },
+  tipRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.xs },
+  tipText: { ...typography.caption, color: colors.textSecondary, fontSize: 12, lineHeight: 17, flex: 1 },
+  sidewaysRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.xs },
+  sidewaysText: {
+    ...typography.caption,
+    color: colors.warningDark,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+    flex: 1,
+  },
   pdfThumb: {
     alignItems: "center",
     justifyContent: "center",

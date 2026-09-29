@@ -1,5 +1,5 @@
-import { StyleSheet } from "react-native";
-import { render, screen } from "@testing-library/react-native";
+import { Alert, StyleSheet } from "react-native";
+import { fireEvent, render, screen } from "@testing-library/react-native";
 import { HomeworkScreen } from "./HomeworkScreen";
 import { waitForText } from "../test-utils";
 import { colors } from "../theme";
@@ -9,6 +9,15 @@ jest.mock("../services/api", () => ({
   getHomework: jest.fn(),
   getSubmission: jest.fn(),
   submitHomework: jest.fn(),
+  checkPageOrientation: jest.fn(),
+}));
+jest.mock("../hooks/useCameraCapture", () => ({
+  captureWorkImage: jest.fn(async () => "PHOTO_B64"),
+  pickWorkImageFromLibrary: jest.fn(),
+  pickWorkPdf: jest.fn(),
+}));
+jest.mock("../utils/orientationCheckCopy", () => ({
+  orientationCheckCopy: jest.fn(async () => "SMALL_B64"),
 }));
 const mockedApi = api as jest.Mocked<typeof api>;
 
@@ -75,5 +84,55 @@ describe("HomeworkScreen graded breakdown", () => {
     expect(colorOf("100%")).toBe(colors.success); // full
     expect(colorOf("55%")).toBe(colors.textSecondary); // partial
     expect(colorOf("0%")).toBe(colors.error); // zero
+  });
+});
+
+describe("HomeworkScreen sideways pages", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedApi.getHomework.mockResolvedValue({
+      ...GRADED,
+      submitted: false,
+      grade_published_at: null,
+      final_score: null,
+      breakdown: null,
+    } as never);
+    mockedApi.submitHomework.mockResolvedValue({} as never);
+    // "Add your work" opens a native action sheet; take the photo option.
+    jest.spyOn(Alert, "alert").mockImplementation((_t, _m, buttons) => {
+      buttons?.find((b) => b.text === "Take a photo")?.onPress?.();
+    });
+  });
+
+  async function addPhoto() {
+    render(<HomeworkScreen assignmentId="hw1" onBack={jest.fn()} onSubmitted={jest.fn()} />);
+    await fireEvent.press(await waitForText("Add your work"));
+  }
+
+  it("nudges a page the check reads as sideways, until it gets a quarter turn", async () => {
+    mockedApi.checkPageOrientation.mockResolvedValue({ sideways: true });
+    await addPhoto();
+
+    expect(await waitForText(/Page 1 looks sideways/)).toBeTruthy();
+    expect(mockedApi.checkPageOrientation).toHaveBeenCalledWith("SMALL_B64");
+
+    const rotateBtn = screen.getByLabelText("Rotate page a quarter turn clockwise");
+    await fireEvent.press(rotateBtn);
+    expect(screen.queryByText(/looks sideways/)).toBeNull();
+    // A half turn leaves the writing running up and down again.
+    await fireEvent.press(rotateBtn);
+    expect(screen.getByText(/Page 1 looks sideways/)).toBeTruthy();
+    await fireEvent.press(rotateBtn);
+
+    await fireEvent.press(screen.getByText("Review & turn in 1 page"));
+    await fireEvent.press(screen.getByText("Turn it in"));
+    expect(mockedApi.submitHomework).toHaveBeenCalledWith("hw1", ["PHOTO_B64"], [270]);
+  });
+
+  it("shows no nudge when the check is unsure or fails", async () => {
+    mockedApi.checkPageOrientation.mockRejectedValue(new Error("offline"));
+    await addPhoto();
+    expect(await screen.findByLabelText("Rotate page a quarter turn clockwise")).toBeTruthy();
+    expect(screen.queryByText(/looks sideways/)).toBeNull();
   });
 });

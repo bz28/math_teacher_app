@@ -443,12 +443,23 @@ export function uploadTimeoutFor(bodyBytes: number): number {
 }
 
 /** Submit photos of handwritten work. Timeout scales with payload size. */
-export const submitHomework = (assignmentId: string, files: string[]) =>
+/** `rotations`: clockwise quarter turns per file, parallel to `files` —
+ *  the server stores each page the way the student turned it. */
+export const submitHomework = (
+  assignmentId: string,
+  files: string[],
+  rotations?: number[],
+) =>
   apiPost<{ submission_id: string; submitted_at: string; is_late: boolean }>(
     `/school/student/homework/${assignmentId}/submit`,
-    { files },
+    { files, rotations },
     uploadTimeoutFor(files.reduce((n, f) => n + f.length, 0)),
   );
+
+/** Free pixel check behind the "looks sideways" nudge. `image` is a
+ *  small copy of one page. */
+export const checkPageOrientation = (image: string) =>
+  apiPost<{ sideways: boolean }>(`/school/student/homework/page-orientation`, { image });
 
 // The Vision extraction wire shape — a flat list of steps and final
 // answers, each tagged with the 1-based HW problem_position it belongs to
