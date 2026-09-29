@@ -11,6 +11,7 @@ import {
 } from "@/components/school/teacher/report-problem";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { parseProblemFocus, withSelectedStudent } from "@/lib/review-deep-link";
 import { MathText, mathPlainText } from "@/components/shared/math-text";
 import { Modal } from "@/components/ui/modal";
 import {
@@ -263,8 +264,21 @@ function HomeworkSectionReview({
   // ?student=<id> so a clicked queue row lands directly on that student
   // instead of the default auto-pick. Falls through to the auto-pick when
   // absent or stale (student not on this roster).
+  //
+  // Read ONCE, on arrival. After that the page owns the URL: selecting a
+  // student writes ?student= back (see the sync effect below), so a
+  // "Report a problem" sent from here carries the exact student, and a
+  // reload or a Back from another page lands on the same one. Reading the
+  // param reactively would turn every click into a roster refetch, since
+  // the write changes the param the roster load depends on.
   const searchParams = useSearchParams();
-  const focusStudentId = searchParams.get("student");
+  const [focusStudentId] = useState(() => searchParams.get("student"));
+  // ?problem=<n> — open that problem on the deep-linked student (a report
+  // link, or a teacher sharing where they are). Consumed on first use and
+  // dropped the moment the teacher moves to another student.
+  const [problemFocus, setProblemFocus] = useState<
+    { studentId: string; position: number } | null
+  >(() => parseProblemFocus(searchParams.get("student"), searchParams.get("problem")));
 
   const [hwTitle, setHwTitle] = useState<string>("");
   const [sectionName, setSectionName] = useState<string>("");
@@ -351,6 +365,29 @@ function HomeworkSectionReview({
     [],
   );
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  // The teacher picking a student (roster click, "Next student", the
+  // keyboard). A pending ?problem= focus belongs to the deep-linked
+  // student only, so any move retires it.
+  const selectStudent = useCallback((studentId: string) => {
+    setProblemFocus(null);
+    setSelectedStudentId(studentId);
+  }, []);
+  const clearProblemFocus = useCallback(() => setProblemFocus(null), []);
+
+  // Mirror the selection into ?student=. `history.replaceState`, not a
+  // router navigation: Next keeps useSearchParams in sync with it without
+  // re-running the route, and replacing (never pushing) means switching
+  // students adds no Back-button entries — Back still leaves the page.
+  // ?problem= is kept only while it still describes what's on screen.
+  useEffect(() => {
+    if (!selectedStudentId) return;
+    const next = withSelectedStudent(
+      window.location.href,
+      selectedStudentId,
+      problemFocus?.studentId === selectedStudentId,
+    );
+    if (next) window.history.replaceState(null, "", next);
+  }, [selectedStudentId, problemFocus]);
   // Last-fetched detail, kept as-is across switches. Staleness for
   // the current selection is detected at render via a submission_id
   // comparison, avoiding a setState-in-effect on every switch. Not a
@@ -1731,7 +1768,7 @@ function HomeworkSectionReview({
                 roster={applyRosterFilter(roster, rosterFilter)}
                 filter={rosterFilter}
                 selectedStudentId={selectedStudentId}
-                onSelect={setSelectedStudentId}
+                onSelect={selectStudent}
                 aiPendingIds={aiPendingIds}
                 aiPollGaveUp={aiPollGaveUp}
               />
@@ -1776,8 +1813,14 @@ function HomeworkSectionReview({
                 saveError={currentSaveError}
                 nextStudent={nextStudent}
                 onSelectNext={() => {
-                  if (nextStudent) setSelectedStudentId(nextStudent.student_id);
+                  if (nextStudent) selectStudent(nextStudent.student_id);
                 }}
+                focusProblem={
+                  problemFocus?.studentId === detail.student_id
+                    ? problemFocus.position
+                    : null
+                }
+                onProblemFocused={clearProblemFocus}
                 toReleaseTotal={toReleaseTotal}
                 onPublish={onPublishClick}
                 onGradeProblem={setProblemGrade}
@@ -3069,8 +3112,15 @@ function SubmissionDetailPanel({
   announceGrade,
   announce,
   reportBase,
+  focusProblem,
+  onProblemFocused,
 }: {
   detail: TeacherSubmissionDetail;
+  /** Position a ?problem= deep link asked for: opened, focused and
+   *  scrolled to once, on mount. */
+  focusProblem: number | null;
+  /** Called once that's done, so a later remount doesn't jump again. */
+  onProblemFocused: () => void;
   integrity: TeacherIntegrityDetail | null;
   /** Ids identifying this submission for "Report a problem" — the panel
    *  and each grade row extend it with what they're pointing at. */
@@ -3168,8 +3218,19 @@ function SubmissionDetailPanel({
   // to a student with the rows collapsed again is arguably the right
   // default — a fresh look. Confirmations represent work done; expansions
   // don't.
+  // A ?problem= deep link lands on its row, so that row starts open even
+  // when the AI was confident enough to collapse it.
+  // Mount-time only: the deep link is consumed once it has been applied.
+  const [focusIndex] = useState(() =>
+    focusProblem === null
+      ? -1
+      : detail.problems.findIndex((p) => p.position === focusProblem),
+  );
   const [expandState, setExpandState] = useState<{ sid: string; ids: Set<string> }>(
-    () => ({ sid: detail.submission_id, ids: new Set() }),
+    () => ({
+      sid: detail.submission_id,
+      ids: new Set(focusIndex >= 0 ? [detail.problems[focusIndex].bank_item_id] : []),
+    }),
   );
   const manuallyExpandedIds =
     expandState.sid === detail.submission_id ? expandState.ids : EMPTY_ID_SET;
@@ -3297,8 +3358,22 @@ function SubmissionDetailPanel({
   // so we fall back to that student's first-ungraded default) — again
   // without an effect.
   const [focusState, setFocusState] = useState<{ sid: string; index: number } | null>(
-    null,
+    () => (focusIndex >= 0 ? { sid: detail.submission_id, index: focusIndex } : null),
   );
+
+  // Bring the deep-linked problem into view once its row exists. Centred
+  // rather than 'nearest' — arriving from a link, the reader needs the
+  // row in context, not pinned to the viewport edge. Focus follows so the
+  // grading keys act on it straight away.
+  useEffect(() => {
+    if (focusIndex < 0) return;
+    const el = rowRefs.current[focusIndex];
+    if (el) {
+      el.focus({ preventScroll: true });
+      el.scrollIntoView({ block: "center" });
+    }
+    onProblemFocused();
+  }, [focusIndex, onProblemFocused]);
   const focusedIndex =
     focusState && focusState.sid === detail.submission_id
       ? Math.min(focusState.index, Math.max(0, detail.problems.length - 1))

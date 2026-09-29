@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { teacher } from "@/lib/api";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
+import { withReportedProblem } from "@/lib/review-deep-link";
 import { reportKey, type ReportProblemContext } from "./context";
 
 /**
@@ -62,7 +63,12 @@ export function ReportProblemDialog({
       await teacher.reportProblem({
         kind,
         note: note.trim() || null,
-        page_url: typeof window === "undefined" ? null : window.location.href,
+        // Exact: the review page keeps ?student= in its URL, and a
+        // per-problem report adds ?problem=<n>.
+        page_url:
+          typeof window === "undefined"
+            ? null
+            : withReportedProblem(window.location.href, context.problem_position),
         submission_id: context.submission_id ?? null,
         assignment_id: context.assignment_id ?? null,
         course_id: context.course_id ?? null,
