@@ -35,6 +35,16 @@ const GENERAL_KINDS: { value: ReportKind; label: string }[] = [
   { value: "other", label: "Something else" },
 ];
 
+// The sidebar report with a submission open: it may be about the grade
+// or just the screen, so both sets, with one "Something else".
+const SIDEBAR_SUBMISSION_KINDS: { value: ReportKind; label: string }[] = [
+  ...SUBMISSION_KINDS.filter((k) => k.value !== "other"),
+  ...GENERAL_KINDS,
+];
+
+/** Everything that ties a report to a submission — what detaching drops. */
+const DETACHED: ReportProblemContext = {};
+
 const NOTE_PLACEHOLDER_SUBMISSION =
   "e.g. The problem says solve by graphing. The student only drew one line and solved with algebra, but still got full credit.";
 const NOTE_PLACEHOLDER_GENERAL = "What were you trying to do, and what happened instead?";
@@ -50,9 +60,34 @@ export function ReportProblemDialog({
 }) {
   const titleId = useId();
   const noteId = useId();
-  const onSubmission = !!context.submission_id;
-  const kinds = onSubmission ? SUBMISSION_KINDS : GENERAL_KINDS;
-  const [kind, setKind] = useState<ReportKind>(kinds[0].value);
+  const pickerId = useId();
+  const options = context.problem_options ?? null;
+  // Sidebar only: she can detach the open submission for a report that
+  // isn't about it, and optionally point the report at one problem.
+  const [attached, setAttached] = useState(true);
+  const [pickedId, setPickedId] = useState("");
+  const picked = options?.find((o) => o.problem_id === pickedId) ?? null;
+  const effective: ReportProblemContext = !attached
+    ? DETACHED
+    : picked
+      ? {
+          ...context,
+          problem_id: picked.problem_id,
+          problem_position: picked.problem_position,
+          ai_grade: picked.ai_grade,
+          teacher_grade: picked.teacher_grade,
+          labels: [...(context.labels ?? []), ...picked.labels],
+        }
+      : context;
+  const onSubmission = !!effective.submission_id;
+  const kinds = !onSubmission
+    ? GENERAL_KINDS
+    : options
+      ? SIDEBAR_SUBMISSION_KINDS
+      : SUBMISSION_KINDS;
+  const [chosenKind, setKind] = useState<ReportKind>(kinds[0].value);
+  // Detaching removes the grading kinds; fall back rather than send one.
+  const kind = kinds.some((k) => k.value === chosenKind) ? chosenKind : kinds[0].value;
   const [note, setNote] = useState("");
   const [sent, setSent] = useState(false);
   const { busy, error, run } = useAsyncAction();
@@ -63,24 +98,26 @@ export function ReportProblemDialog({
         kind,
         note: note.trim() || null,
         page_url: typeof window === "undefined" ? null : window.location.href,
-        submission_id: context.submission_id ?? null,
-        assignment_id: context.assignment_id ?? null,
-        course_id: context.course_id ?? null,
-        section_id: context.section_id ?? null,
-        student_id: context.student_id ?? null,
-        problem_id: context.problem_id ?? null,
-        problem_position: context.problem_position ?? null,
-        ai_grade: context.ai_grade ?? null,
-        teacher_grade: context.teacher_grade ?? null,
+        submission_id: effective.submission_id ?? null,
+        assignment_id: effective.assignment_id ?? null,
+        course_id: effective.course_id ?? null,
+        section_id: effective.section_id ?? null,
+        student_id: effective.student_id ?? null,
+        problem_id: effective.problem_id ?? null,
+        problem_position: effective.problem_position ?? null,
+        ai_grade: effective.ai_grade ?? null,
+        teacher_grade: effective.teacher_grade ?? null,
       });
-      onSent(context);
+      onSent(effective);
       setSent(true);
     }, "Couldn't send your report. Try again in a moment.");
 
   const title = onSubmission
-    ? context.problem_position
+    ? effective.problem_position
       ? "Report a problem with this grade"
-      : "Report a problem with this submission"
+      : options
+        ? "Report a problem"
+        : "Report a problem with this submission"
     : "Report a problem";
 
   return (
@@ -121,17 +158,65 @@ export function ReportProblemDialog({
             </p>
           </div>
 
-          {context.labels && context.labels.length > 0 && (
-            <ul className="flex flex-wrap gap-1.5" aria-label="Attached to this report">
-              {context.labels.map((l) => (
-                <li
-                  key={l}
-                  className="rounded-[--radius-pill] bg-[color:var(--color-surface-alt-2)] px-2.5 py-0.5 text-[11px] font-semibold text-text-secondary"
+          {attached && effective.labels && effective.labels.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <ul className="contents" aria-label="Attached to this report">
+                {effective.labels.map((l) => (
+                  <li
+                    key={l}
+                    className="rounded-[--radius-pill] bg-[color:var(--color-surface-alt-2)] px-2.5 py-0.5 text-[11px] font-semibold text-text-secondary"
+                  >
+                    {l}
+                  </li>
+                ))}
+              </ul>
+              {options && (
+                <button
+                  type="button"
+                  onClick={() => setAttached(false)}
+                  className="inline-flex min-h-[28px] items-center gap-1 rounded-[--radius-pill] px-2 text-[11px] font-semibold text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary"
                 >
-                  {l}
-                </li>
-              ))}
-            </ul>
+                  <span aria-hidden>×</span> Not about this student
+                </button>
+              )}
+            </div>
+          )}
+
+          {!attached && options && (
+            <button
+              type="button"
+              onClick={() => setAttached(true)}
+              className="-mt-2 self-start text-[11px] font-semibold text-primary hover:underline"
+            >
+              Attach {context.labels?.[0] ?? "this student"} again
+            </button>
+          )}
+
+          {attached && options && options.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <label
+                htmlFor={pickerId}
+                className="text-[10px] font-bold uppercase tracking-[0.14em] text-text-secondary"
+              >
+                Which problem?{" "}
+                <span className="font-normal normal-case tracking-normal text-text-muted">
+                  · optional
+                </span>
+              </label>
+              <select
+                id={pickerId}
+                value={pickedId}
+                onChange={(e) => setPickedId(e.target.value)}
+                className="w-full rounded-[--radius-sm] border border-border bg-surface px-2.5 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
+              >
+                <option value="">Not about a specific problem</option>
+                {options.map((o) => (
+                  <option key={o.problem_id} value={o.problem_id}>
+                    {o.title}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
 
           <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
@@ -191,9 +276,11 @@ export function ReportProblemDialog({
 
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-[11px] leading-snug text-text-muted">
-              {onSubmission
-                ? "Attached automatically: the student's page, the AI's full reasoning, your grade."
-                : "Attached automatically: the page you're on and your account."}
+              {!onSubmission
+                ? "Attached automatically: the page you're on and your account."
+                : effective.problem_position || !options
+                  ? "Attached automatically: the student's page, the AI's full reasoning, your grade."
+                  : "Attached automatically: the page you're on, this student's work and grades, your account."}
             </span>
             <div className="ml-auto flex gap-2">
               <Button variant="secondary" size="sm" onClick={onClose} disabled={busy}>

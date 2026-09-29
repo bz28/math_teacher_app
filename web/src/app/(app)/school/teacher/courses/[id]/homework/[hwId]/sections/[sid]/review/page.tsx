@@ -7,6 +7,7 @@ import {
 } from "@/components/school/teacher/reading-trust";
 import {
   ReportProblemTrigger,
+  useReportPageContext,
   type ReportProblemContext,
 } from "@/components/school/teacher/report-problem";
 import Link from "next/link";
@@ -2393,6 +2394,14 @@ function isAwaitingGrade(entry: RosterEntry): boolean {
 /** The server says the AI grader can take this submission: never
  *  graded in any form, readable work the student has confirmed (not
  *  flagged as misread), AI grading on. */
+/** "Full" / "No credit" / "Partial 70%" — how a grade reads on a
+ *  report chip. */
+function chipGradeLabel(status: string, percent: number | null | undefined): string {
+  if (status === "full") return "Full";
+  if (status === "zero") return "No credit";
+  return `Partial ${Math.round(percent ?? 0)}%`;
+}
+
 function canAiGrade(sub: TeacherSubmissionRow): boolean {
   return sub.ai_grade_block === null;
 }
@@ -3134,6 +3143,43 @@ function SubmissionDetailPanel({
   const gradedCount = breakdownByProblem.size;
   const totalProblems = detail.problems.length;
   const published = !!row?.grade_published_at;
+
+  // The sidebar "Report a problem" reports on this student while they're
+  // open, with each problem offered in its picker — so a report sent from
+  // there arrives with the work attached, not just a URL.
+  const sidebarReport = useMemo<ReportProblemContext>(
+    () => ({
+      ...reportBase,
+      labels: [detail.student_name, detail.assignment_title],
+      problem_options: detail.problems.map((p) => {
+        const ai = aiByPosition.get(p.position) ?? null;
+        const entry = breakdownByProblem.get(p.bank_item_id) ?? null;
+        const question = p.question.replace(/\$/g, "").replace(/\s+/g, " ").trim();
+        return {
+          problem_id: p.bank_item_id,
+          problem_position: p.position,
+          title: `Problem ${p.position} · ${question.length > 60 ? `${question.slice(0, 57)}…` : question}`,
+          ai_grade: ai && {
+            score_status: ai.score_status,
+            percent: ai.percent,
+            confidence: ai.confidence,
+            reasoning: ai.reasoning ?? "",
+          },
+          teacher_grade: entry && {
+            score_status: entry.score_status,
+            percent: entry.percent,
+          },
+          labels: [
+            `Problem ${p.position}`,
+            ...(ai ? [`AI: ${chipGradeLabel(ai.score_status, ai.percent)}`] : []),
+            ...(entry ? [`Your grade: ${chipGradeLabel(entry.score_status, entry.percent)}`] : []),
+          ],
+        };
+      }),
+    }),
+    [reportBase, detail, aiByPosition, breakdownByProblem],
+  );
+  useReportPageContext(sidebarReport);
   // Unreadable photo, not yet hand-graded — surface the callout that
   // explains why there's no AI suggestion. Drops away once the teacher
   // has put a grade on it (final_score set).
@@ -3831,8 +3877,7 @@ function SubmissionDetailPanel({
               problem reports sit on each AI verdict below. Icon-only so
               it never competes with Approve / Next student. */}
           <ReportProblemTrigger
-            iconOnly
-            label="Report a problem with this submission"
+            label="Report"
             context={{
               ...reportBase,
               labels: [detail.assignment_title, detail.student_name, "Whole submission"],
