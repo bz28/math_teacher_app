@@ -88,6 +88,16 @@ export function XIcon({ className, strokeWidth = 2.5 }: IconProps) {
   );
 }
 
+/** Clockwise turn arrow — the upload screen's rotate-page button. */
+export function RotateCwIcon({ className, strokeWidth = 2 }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <polyline points="21 3 21 9 15 9" />
+    </svg>
+  );
+}
+
 export function AlertTriangleIcon({ className, strokeWidth = 2.5 }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">

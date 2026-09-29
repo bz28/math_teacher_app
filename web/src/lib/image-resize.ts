@@ -82,6 +82,24 @@ export async function resizeImageForUpload(file: File): Promise<Blob> {
   }
 }
 
+/**
+ * A small copy of a page for the server's "looks sideways?" check —
+ * enough pixels to see which way the writing runs, a fraction of the
+ * upload. `createImageBitmap` applies the photo's EXIF orientation, so
+ * the check sees the page the way the student's preview shows it.
+ * Returns raw base64 (no data: prefix).
+ */
+export async function orientationCheckCopy(blob: Blob): Promise<string> {
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const small = await drawScaledJpeg(bitmap, { maxDim: 1024, quality: 0.8 });
+    const dataUrl = await blobToDataUrl(small);
+    return dataUrl.slice(dataUrl.indexOf(",") + 1);
+  } finally {
+    bitmap.close?.();
+  }
+}
+
 async function drawScaledJpeg(
   bitmap: ImageBitmap,
   attempt: Attempt,
