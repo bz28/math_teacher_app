@@ -547,6 +547,8 @@ export interface ExtractionRow {
   key: string;
   problem_position: number | null;
   step_num: number | null;
+  /** 1-based photo the row was read from, when Vision recorded it. */
+  page_index: number | null;
   kind: "step" | "final_answer";
   /** Vision could not tie this row to a problem, so the student was
    *  never asked to confirm it. */

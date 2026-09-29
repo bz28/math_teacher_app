@@ -1,4 +1,5 @@
 import type { ExtractionDetail } from "../lib/api";
+import { problemAnchor } from "../lib/anchor";
 import MathText from "./MathText";
 import PdfPages from "./PdfPages";
 
@@ -60,13 +61,45 @@ function ReadText({ text, isLatex }: { text: string; isLatex: boolean }) {
   );
 }
 
+/** One uploaded file of the student's work. A submission is photos OR
+ *  scanned PDFs — an <img> cannot show a PDF, so it renders page by page
+ *  instead. `index` is 0-based. */
+export function WorkFile({
+  file,
+  index,
+}: {
+  file: ExtractionDetail["files"][number];
+  index: number;
+}) {
+  return file.media_type === "application/pdf" ? (
+    <PdfPages b64={file.data} label={`Submitted work, file ${index + 1}`} />
+  ) : (
+    <img
+      src={`data:${file.media_type};base64,${file.data}`}
+      alt={`Submitted work, page ${index + 1}`}
+      loading="lazy"
+    />
+  );
+}
+
 /** One row of the read, AI beside student. The diff IS the diagnostic. */
-export function ReadRow({ row }: { row: ExtractionDetail["rows"][number] }) {
+export function ReadRow({
+  row,
+  id,
+  target = false,
+}: {
+  row: ExtractionDetail["rows"][number];
+  /** The problem's `#p{n}` anchor — set on its first row only. */
+  id?: string;
+  /** This row belongs to the problem a deep link pointed at. */
+  target?: boolean;
+}) {
   const changed = row.changed;
   return (
     <li
-      className="xq-row"
-      style={{ borderLeftColor: changed ? "var(--warn)" : "var(--rule)" }}
+      id={id}
+      className={`xq-row${target ? " xq-row-target" : ""}`}
+      style={target ? undefined : { borderLeftColor: changed ? "var(--warn)" : "var(--rule)" }}
     >
       <div className="xq-row-key">
         {row.unattributed
@@ -125,9 +158,21 @@ export function ReadRow({ row }: { row: ExtractionDetail["rows"][number] }) {
 
 export default function ExtractionReadout({
   detail,
+  targetProblem = null,
 }: {
   detail: ExtractionDetail;
+  /** Problem a `#p{n}` link pointed at: its rows are marked, and its
+   *  first row carries the anchor. */
+  targetProblem?: number | null;
 }) {
+  // Steps come before final answers, so a problem's first row is its
+  // first step — the natural place to land.
+  const anchored = new Set<number>();
+  const anchorFor = (pos: number | null) => {
+    if (pos === null || anchored.has(pos)) return undefined;
+    anchored.add(pos);
+    return problemAnchor(pos);
+  };
   return (
     <div className="xq-detail">
       {/* The strokes. You cannot diagnose a misread without seeing what
@@ -140,18 +185,7 @@ export default function ExtractionReadout({
         ) : (
           // A submission is photos OR scanned PDFs — an <img> cannot show
           // a PDF, so it renders page by page instead.
-          detail.files.map((f, i) =>
-            f.media_type === "application/pdf" ? (
-              <PdfPages key={i} b64={f.data} label={`Submitted work, file ${i + 1}`} />
-            ) : (
-              <img
-                key={i}
-                src={`data:${f.media_type};base64,${f.data}`}
-                alt={`Submitted work, page ${i + 1}`}
-                loading="lazy"
-              />
-            ),
-          )
+          detail.files.map((f, i) => <WorkFile key={i} file={f} index={i} />)
         )}
       </div>
       <div>
@@ -173,7 +207,14 @@ export default function ExtractionReadout({
           </p>
         ) : (
           <ol className="xq-rows">
-            {detail.rows.map((r) => <ReadRow key={r.key} row={r} />)}
+            {detail.rows.map((r) => (
+              <ReadRow
+                key={r.key}
+                row={r}
+                id={r.unattributed ? undefined : anchorFor(r.problem_position)}
+                target={targetProblem !== null && r.problem_position === targetProblem}
+              />
+            ))}
           </ol>
         )}
       </div>

@@ -2,15 +2,24 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type ReportStatus, type TeacherReportData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
-import { KIND_LABEL, KIND_TONE, gradePct, whereLabel } from "../lib/reports";
+import {
+  KIND_LABEL,
+  KIND_TONE,
+  byPriority,
+  fmtGap,
+  gradeGap,
+  gradeValue,
+  pagePath,
+  whereLabel,
+} from "../lib/reports";
 import DataTable, { type Column } from "../components/DataTable";
 import StatusPill from "../components/StatusPill";
 
 /**
  * Teacher reports — every "Report a problem" a teacher has filed from
- * the product, open first. This is the inbox behind the alert email:
- * the email says "look", this page is where you look, and the detail
- * page is where you close it out.
+ * the product. This is the inbox behind the alert email: the email says
+ * "look", this page ranks what to look at, and the case view is where
+ * you look and close it out.
  */
 
 type Filter = ReportStatus | "all";
@@ -58,52 +67,97 @@ export default function Reports() {
     setAttempt((n) => n + 1);
   }, []);
 
+  // The inbox order — open, then evidence attached, then newest. The
+  // table keeps it until a header is clicked.
+  const ranked = useMemo(() => [...rows].sort(byPriority), [rows]);
+
   const columns = useMemo<Column<TeacherReportData>[]>(
     () => [
       {
-        key: "when",
-        header: "When",
-        width: "110px",
-        sortValue: (r) => r.created_at,
-        render: (r) => <span className="muted">{formatRelativeDate(r.created_at)}</span>,
-      },
-      {
-        key: "teacher",
-        header: "Teacher",
-        width: "160px",
-        sortValue: (r) => r.teacher_name ?? "",
-        render: (r) => <strong>{r.teacher_name ?? "—"}</strong>,
+        key: "kind",
+        header: "Kind",
+        width: "184px",
+        sortValue: (r) => r.kind,
+        render: (r) => <StatusPill tone={KIND_TONE[r.kind]} label={KIND_LABEL[r.kind]} />,
       },
       {
         key: "where",
         header: "Where",
         sortValue: (r) => whereLabel(r),
-        render: (r) => whereLabel(r),
-      },
-      {
-        key: "kind",
-        header: "Kind",
-        width: "170px",
-        sortValue: (r) => r.kind,
-        render: (r) => <StatusPill tone={KIND_TONE[r.kind]} label={KIND_LABEL[r.kind]} />,
-      },
-      {
-        key: "grades",
-        header: "AI → teacher",
-        width: "130px",
-        render: (r) =>
-          r.submission_id ? (
-            <span className="mono">
-              {gradePct(r.ai_grade)} → {gradePct(r.teacher_grade)}
+        // What it's about, then what the teacher said — the note is what
+        // decides which report to open first, so it rides under the where
+        // instead of hiding a click away.
+        render: (r) => (
+          <div className="rpt-where">
+            <span className="rpt-where-main">
+              {r.submission_id ? (
+                whereLabel(r)
+              ) : (
+                <>
+                  <span className="rpt-where-tag">Sidebar</span>
+                  <span className="mono">{pagePath(r.page_url) ?? "no page recorded"}</span>
+                </>
+              )}
             </span>
-          ) : (
+            {r.note && <span className="rpt-where-note">{r.note}</span>}
+          </div>
+        ),
+      },
+      {
+        key: "teacher",
+        header: "Teacher",
+        width: "130px",
+        sortValue: (r) => r.teacher_name ?? "",
+        render: (r) => r.teacher_name ?? "—",
+      },
+      {
+        key: "ai",
+        header: "AI",
+        width: "56px",
+        numeric: true,
+        sortValue: (r) => gradeValue(r.ai_grade) ?? -1,
+        render: (r) => <GradeCell value={gradeValue(r.ai_grade)} />,
+      },
+      {
+        key: "teacher_grade",
+        header: "Tchr",
+        width: "60px",
+        numeric: true,
+        sortValue: (r) => gradeValue(r.teacher_grade) ?? -1,
+        render: (r) => <GradeCell value={gradeValue(r.teacher_grade)} />,
+      },
+      {
+        key: "gap",
+        header: "Gap",
+        width: "76px",
+        numeric: true,
+        // Sorted by size — a 60-point miss matters whichever way it points.
+        sortValue: (r) => Math.abs(gradeGap(r) ?? -1),
+        render: (r) => {
+          const gap = gradeGap(r);
+          return gap === null ? (
             <span className="muted">—</span>
-          ),
+          ) : (
+            <strong
+              className="rpt-gap"
+              title={gap < 0 ? "The AI gave more credit than the teacher" : "The AI gave less credit than the teacher"}
+            >
+              {fmtGap(gap)}
+            </strong>
+          );
+        },
+      },
+      {
+        key: "when",
+        header: "When",
+        width: "92px",
+        sortValue: (r) => r.created_at,
+        render: (r) => <span className="muted">{formatRelativeDate(r.created_at)}</span>,
       },
       {
         key: "status",
         header: "Status",
-        width: "110px",
+        width: "112px",
         sortValue: (r) => r.status,
         render: (r) => (
           <StatusPill
@@ -123,8 +177,8 @@ export default function Reports() {
         <h1>Reports</h1>
         <p>
           Problems teachers flagged from inside the product — a wrong grade, a misread page, a
-          broken screen. Each one arrives with the submission, the AI's call and the teacher's grade
-          attached. {counts.open} open · {counts.resolved} resolved.
+          broken screen. Open reports with a submission attached come first: those you can
+          diagnose right here. {counts.open} open · {counts.resolved} resolved.
         </p>
       </div>
 
@@ -146,16 +200,17 @@ export default function Reports() {
 
       <DataTable
         columns={columns}
-        rows={rows}
+        rows={ranked}
         rowKey={(r) => r.id}
+        rowStatus={(r) => (r.status === "open" ? "var(--accent)" : undefined)}
         onRowClick={(r) => navigate(`/reports/${r.id}`)}
         drill
         loading={loading}
         error={error}
         onRetry={load}
-        defaultSort={{ key: "when", dir: "desc" }}
         searchKeys={(r) => [r.teacher_name, r.assignment_title, r.student_name, r.note, r.kind]}
         searchLabel="Search reports"
+        minWidth={900}
         empty={
           filter === "open"
             ? "No open reports — nothing's waiting on you."
@@ -164,4 +219,9 @@ export default function Reports() {
       />
     </div>
   );
+}
+
+/** A grade as a bare mono number — the header names the side. */
+function GradeCell({ value }: { value: number | null }) {
+  return value === null ? <span className="muted">—</span> : <>{value}</>;
 }

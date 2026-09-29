@@ -21,6 +21,7 @@ import StatusPill, { type PillTone } from "../components/StatusPill";
 import ExtractionReadout from "../components/ExtractionReadout";
 import { STAGE_META, isStalled, noCallsDiagnosis } from "../lib/stages";
 import { useConfirm } from "../lib/confirm";
+import { useProblemHash, useScrollToProblem } from "../lib/anchor";
 
 // SubmissionTrace — the per-submission case file. Traces ONE student
 // submission end-to-end (extraction → grading → integrity) so an
@@ -144,6 +145,10 @@ export default function SubmissionTrace() {
     return () => { cancelled = true; };
   }, [submissionId]);
 
+  // `#p3` from a report: land on Problem 3's rows once the work is in.
+  const targetProblem = useProblemHash();
+  useScrollToProblem(targetProblem, workLoaded && data !== null, "student-work");
+
   const handleDebug = async (callId: string) => {
     const ok = await confirm({
       title: "Dispatch a debugging agent?",
@@ -200,7 +205,7 @@ export default function SubmissionTrace() {
             <p className="cf-why-body">{why.detail}</p>
           </div>
         )}
-        <StudentWork work={work} />
+        <StudentWork work={work} targetProblem={targetProblem} />
       </div>
     );
   }
@@ -277,7 +282,7 @@ export default function SubmissionTrace() {
         readFailed={readFailed}
       />
 
-      <StudentWork work={work} />
+      <StudentWork work={work} targetProblem={targetProblem} />
 
       {truncated && (
         <p style={{ color: "var(--warn)", fontSize: 12, marginTop: -8, marginBottom: 16 }}>
@@ -809,12 +814,22 @@ function Lifecycle({
 
 // ── The student's own work, beside what the reader made of it ────────
 
-function StudentWork({ work }: { work: ExtractionDetail | null }) {
+function StudentWork({
+  work,
+  targetProblem,
+}: {
+  work: ExtractionDetail | null;
+  targetProblem: number | null;
+}) {
   if (!work) return null;
   const corrected = work.rows.filter((r) => r.changed).length;
   const meta = STAGE_META[work.stage];
+  // A `#p{n}` link with nothing read for that problem still has to say
+  // so — otherwise the page just sits at the section and looks broken.
+  const targetMissing =
+    targetProblem !== null && !work.rows.some((r) => r.problem_position === targetProblem);
   return (
-    <section className="cf-work">
+    <section className="cf-work" id="student-work">
       <h3 className="cf-work-head">
         Student work
         <span className="cf-work-sub">
@@ -827,12 +842,17 @@ function StudentWork({ work }: { work: ExtractionDetail | null }) {
                 : `${corrected} of ${work.rows.length} rows corrected by the student`}
             </>
           )}
+          {targetMissing && (
+            <span className="cf-work-target-missing">
+              {' · '}nothing was read for Problem {targetProblem}
+            </span>
+          )}
         </span>
         <span className="cf-work-stage">
           <StatusPill tone={meta.tone} label={meta.label} title={meta.blurb} />
         </span>
       </h3>
-      <ExtractionReadout detail={work} />
+      <ExtractionReadout detail={work} targetProblem={targetProblem} />
     </section>
   );
 }
