@@ -65,6 +65,11 @@ class TestCropRegion:
         assert crop_region_for_vision("JVBERi0=", "application/pdf", {"x0": 0, "y0": 0, "x1": 1, "y1": 1}) is None
 
 
+# Every test position is on a problem that requires a drawing, unless a
+# test says otherwise — the verify pass only looks at those.
+_FLAGGED = set(range(1, 20))
+
+
 def _entry(**over: Any) -> dict[str, Any]:
     base = {
         "problem_position": 4, "kind": "graph", "present": True,
@@ -91,7 +96,9 @@ class TestVerifyVisualWork:
 
         monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
         ext = {"steps": [], "final_answers": [], "visual_work": [_entry()], "confidence": 0.9}
-        await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
+        await integrity_ai.verify_visual_work(
+            ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+        )
         v = ext["visual_work"][0]
         assert v["verified"] is True
         assert v["plotted_elements"] == ["one line rising left-to-right through the origin"]
@@ -121,7 +128,9 @@ class TestVerifyVisualWork:
         monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
         entry = _entry()
         ext = {"steps": [], "final_answers": [], "visual_work": [entry], "confidence": 0.9}
-        await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
+        await integrity_ai.verify_visual_work(
+            ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+        )
         v = ext["visual_work"][0]
         assert v["verified"] is True and "unconfirmed" not in v
         assert v["plotted_elements"] == ["line (y = 2x - 1)", "line (y = -x + 5)"]
@@ -137,7 +146,9 @@ class TestVerifyVisualWork:
 
         monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
         ext = {"steps": [], "final_answers": [], "visual_work": [_entry()], "confidence": 0.9}
-        await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
+        await integrity_ai.verify_visual_work(
+            ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+        )
         v = ext["visual_work"][0]
         assert margins == [0.35, 0.8]
         # Finding nothing is NOT a confirmation (prod bb8536f1: a proof's
@@ -167,7 +178,9 @@ class TestVerifyVisualWork:
 
         monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
         ext = {"steps": [], "final_answers": [], "visual_work": [_entry()], "confidence": 0.9}
-        await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
+        await integrity_ai.verify_visual_work(
+            ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+        )
         v = ext["visual_work"][0]
         assert n == 2 and v["plotted_elements"] == ["a line"] and v["answer_on_drawing"] == "(3, 0)"
         assert v["verified"] is True and "unconfirmed" not in v
@@ -185,7 +198,9 @@ class TestVerifyVisualWork:
         monkeypatch.setattr(integrity_ai, "call_claude_vision", boom)
         entry = _entry(**over)
         ext = {"steps": [], "final_answers": [], "visual_work": [entry], "confidence": 0.9}
-        await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
+        await integrity_ai.verify_visual_work(
+            ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+        )
         v = ext["visual_work"][0]
         assert v["plotted_elements"] == entry["plotted_elements"]
         assert v.get("verified", False) is False
@@ -197,7 +212,9 @@ class TestVerifyVisualWork:
 
         monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
         ext = {"steps": [], "final_answers": [], "visual_work": [_entry(page_index=None)], "confidence": 0.9}
-        await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
+        await integrity_ai.verify_visual_work(
+            ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+        )
         assert ext["visual_work"][0]["verified"] is True
 
     async def test_no_drawing_with_no_wider_crop_is_not_trusted(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -217,7 +234,9 @@ class TestVerifyVisualWork:
         monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
         monkeypatch.setattr(integrity_ai, "crop_region_for_vision", crop_once)
         ext = {"steps": [], "final_answers": [], "visual_work": [_entry()], "confidence": 0.9}
-        await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
+        await integrity_ai.verify_visual_work(
+            ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+        )
         v = ext["visual_work"][0]
         assert v["verified"] is False and v["plotted_elements"] == ["line (y = 2x - 1)", "line (y = -x + 5)"]
         assert "unconfirmed" not in v
@@ -242,7 +261,9 @@ class TestVerifyVisualWork:
         monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
         entries = [_entry(problem_position=i) for i in range(1, 10)]  # 9 drawings
         ext = {"steps": [], "final_answers": [], "visual_work": entries, "confidence": 0.9}
-        await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
+        await integrity_ai.verify_visual_work(
+            ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+        )
         assert n == integrity_ai._VERIFY_MAX_DRAWINGS
         assert 1 < peak <= integrity_ai._VERIFY_CONCURRENCY
         assert sum(1 for v in ext["visual_work"] if v["verified"]) == integrity_ai._VERIFY_MAX_DRAWINGS
@@ -252,7 +273,9 @@ class TestVerifyVisualWork:
         """A malformed file entry (not a dict) must not strand the
         submission — the extraction lands with the entry unverified."""
         ext = {"steps": [], "final_answers": [], "visual_work": [_entry()], "confidence": 0.9}
-        await integrity_ai.verify_visual_work(ext, ["not-a-file-dict"])  # type: ignore[list-item]
+        await integrity_ai.verify_visual_work(
+            ext, ["not-a-file-dict"], flagged_positions=_FLAGGED,  # type: ignore[list-item]
+        )
         v = ext["visual_work"][0]
         assert v["verified"] is False and v["plotted_elements"] == ["line (y = 2x - 1)", "line (y = -x + 5)"]
         assert "unconfirmed" not in v
@@ -263,7 +286,9 @@ class TestVerifyVisualWork:
 
         monkeypatch.setattr(integrity_ai, "call_claude_vision", fail)
         ext = {"steps": [], "final_answers": [], "visual_work": [_entry()], "confidence": 0.9}
-        await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
+        await integrity_ai.verify_visual_work(
+            ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+        )
         v = ext["visual_work"][0]
         assert v["verified"] is False and v["plotted_elements"] == ["line (y = 2x - 1)", "line (y = -x + 5)"]
         assert "unconfirmed" not in v
@@ -279,7 +304,9 @@ async def test_tables_are_never_sent_to_the_zoomed_check(monkeypatch: pytest.Mon
     monkeypatch.setattr(integrity_ai, "call_claude_vision", boom)
     table = _entry(kind="table", description="x | y table of values", plotted_elements=[])
     ext = {"steps": [], "final_answers": [], "visual_work": [table], "confidence": 0.9}
-    await integrity_ai.verify_visual_work(ext, [{"data": _page(), "media_type": "image/jpeg"}])
+    await integrity_ai.verify_visual_work(
+        ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+    )
     v = ext["visual_work"][0]
     assert v["verified"] is False and "unconfirmed" not in v
     assert v["description"] == "x | y table of values"
@@ -295,43 +322,63 @@ def test_table_is_a_drawing_kind_again() -> None:
     assert "table" in item["properties"]["kind"]["enum"]
 
 
-class TestExtractionPostFilter:
-    """`keep_visual_work_for_flagged_problems`: the deterministic backstop
-    behind the prompt. Prod had 11 visual_work entries, all on problems
-    that asked for no drawing."""
+async def test_unflagged_problems_are_recorded_but_never_verified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Record everywhere, act only where required: a drawing on a problem
+    that doesn't require one stays exactly as the first read recorded it."""
+    async def boom(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("an unflagged problem's drawing must not be verified")
 
-    def _problems(self) -> list[dict[str, Any]]:
-        return [
-            {"position": 1, "question": "Solve by graphing.", "requires_drawing": True},
-            {"position": 3, "question": "Write a two-column proof.", "requires_drawing": False},
-        ]
+    monkeypatch.setattr(integrity_ai, "call_claude_vision", boom)
+    entry = _entry(problem_position=3)
+    ext = {"steps": [], "final_answers": [], "visual_work": [dict(entry)], "confidence": 0.9}
+    await integrity_ai.verify_visual_work(
+        ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions={1},
+    )
+    assert ext["visual_work"] == [entry]
 
-    def test_drops_entries_on_unflagged_problems(self) -> None:
-        ext = {"visual_work": [
-            _entry(problem_position=1),
-            _entry(problem_position=3, kind="table", description="Statements | Reasons"),
-        ]}
-        integrity_ai.keep_visual_work_for_flagged_problems(ext, self._problems())
-        assert [v["problem_position"] for v in ext["visual_work"]] == [1]
 
-    def test_unattributed_kept_only_when_something_is_flagged(self) -> None:
-        stray = _entry(problem_position=None)
-        foreign = _entry(problem_position=9)
-        ext = {"visual_work": [stray, foreign]}
-        integrity_ai.keep_visual_work_for_flagged_problems(ext, self._problems())
-        assert len(ext["visual_work"]) == 2
-        ext = {"visual_work": [stray, foreign]}
-        integrity_ai.keep_visual_work_for_flagged_problems(
-            ext, [{"position": 3, "requires_drawing": False}],
-        )
-        assert ext["visual_work"] == []
+def test_briefing_is_unmarked_and_prompt_records_everywhere() -> None:
+    """The flag gates USE, not recording: the extractor is not told which
+    problems are flagged, and the prompt inventories every drawing."""
+    briefing = integrity_ai._format_problems_briefing(
+        [{"position": 1, "question": "Solve by graphing.", "requires_drawing": True}]
+    )
+    assert "requires a drawing" not in briefing
+    assert "For every graph, number line, diagram, table, or sketch" in integrity_ai._EXTRACT_SYSTEM
 
-    def test_no_problems_means_no_drawings(self) -> None:
-        ext = {"visual_work": [_entry()]}
-        integrity_ai.keep_visual_work_for_flagged_problems(ext, None)
-        assert ext["visual_work"] == []
 
-    def test_briefing_marks_flagged_problems(self) -> None:
-        briefing = integrity_ai._format_problems_briefing(self._problems())
-        assert "Problem 1 [requires a drawing]: Solve by graphing." in briefing
-        assert "Problem 3: Write a two-column proof." in briefing
+async def test_verify_prefers_the_crops_points_and_answer_when_they_differ(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same line count, but the crop reads a different labeled point and no
+    answer on the drawing: the crop checked those, so its reading wins."""
+    async def fake_vision(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {"has_drawing": True, "plotted_elements": ["a", "b"], "labeled_points": ["(1, 3)"],
+                "unlabeled_dots": 0, "answer_on_drawing": None, "description": "two lines"}
+
+    monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
+    ext = {"steps": [], "final_answers": [], "visual_work": [_entry()], "confidence": 0.9}
+    await integrity_ai.verify_visual_work(
+        ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+    )
+    v = ext["visual_work"][0]
+    assert v["plotted_elements"] == ["line (y = 2x - 1)", "line (y = -x + 5)"]  # count agreed
+    assert v["labeled_points"] == ["(1, 3)"] and v["answer_on_drawing"] is None
+
+
+async def test_verify_keeps_the_first_reads_marks_when_they_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_vision(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {"has_drawing": True, "plotted_elements": ["a", "b"], "labeled_points": ["(2,3)"],
+                "unlabeled_dots": 0, "answer_on_drawing": "(2,3)", "description": "two lines"}
+
+    monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
+    ext = {"steps": [], "final_answers": [], "visual_work": [_entry()], "confidence": 0.9}
+    await integrity_ai.verify_visual_work(
+        ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+    )
+    v = ext["visual_work"][0]
+    assert v["labeled_points"] == ["(2, 3)"] and v["answer_on_drawing"] == "(2, 3)"

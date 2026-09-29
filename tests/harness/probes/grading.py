@@ -103,18 +103,19 @@ def _vis(extraction: dict[str, Any], visual_work: list[dict[str, Any]]) -> dict[
     return {**extraction, "visual_work": visual_work}
 
 
-def _prob(question: str, answer: str) -> list[dict[str, Any]]:
-    # `requires_drawing` comes from the same classifier that sets the bank
+def _prob(question: str, answer: str, *, flag: bool | None = None) -> list[dict[str, Any]]:
+    # `requires_drawing` defaults to the same classifier that sets the bank
     # item's flag in production, so a case's flag is what a real item with
-    # that wording would carry ("by graphing" -> yes; "the graph shown" -> no).
+    # that wording would carry ("by graphing" -> yes; "the graph shown" ->
+    # no). `flag` pins it, for a teacher's override.
     return [{
         "position": 1, "question": question, "final_answer": answer,
-        "requires_drawing": requires_drawing(question),
+        "requires_drawing": requires_drawing(question) if flag is None else flag,
     }]
 
 
 # ── The golden set ────────────────────────────────────────────────────────
-# 21 cases, ≥2 per matrix row. Rubric is None throughout, so the grader applies
+# 23 cases, ≥2 per matrix row. Rubric is None throughout, so the grader applies
 # the shipped DEFAULT rubric — i.e. exactly what a teacher who authors no rubric
 # gets. Two cases are physics (a2, b3) per the "a couple physics" ask.
 
@@ -557,6 +558,51 @@ GOLDEN_CASES: list[GradingCase] = [
         rationale="Every value is right and the table is there. Nothing to doubt, nothing to deduct.",
     ),
     GradingCase(
+        # The teacher turned the flag OFF on a "solve graphically" problem.
+        # The flag is the only source of a drawing requirement: wording
+        # alone ("graphically") must not bring the deduction back.
+        name="f10-unflagged-solve-graphically-no-drawing",
+        category="f",
+        extra={"forbids_deduction_mentioning": ["graph", "drawing", "drawn", "method"]},
+        problems=_prob(
+            "Solve the system graphically. y = 2x - 1 and y = -x + 5",
+            "(2, 3)", flag=False,
+        ),
+        extraction=_vis(
+            _ext([(1, "2x - 1 = -x + 5"), (2, "3x = 6"), (3, "x = 2"), (4, "y = 3")], "(2, 3)"),
+            [],
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale="Correct algebra; the teacher says no drawing is required, so none is.",
+    ),
+    GradingCase(
+        # The flag was turned ON after extraction (a missed flag, fixed by
+        # the teacher, then a regrade). The drawing was recorded but never
+        # zoom-checked — the grader must use it, not call it missing.
+        name="f11-flag-flipped-on-after-extraction-drawing-recorded",
+        category="f",
+        extra={"forbids_deduction_mentioning": ["missing", "not drawn", "no graph", "no drawing"]},
+        problems=_prob(
+            "Solve the system. y = 2x - 1 and y = -x + 5", "(2, 3)", flag=True,
+        ),
+        extraction=_vis(
+            {
+                **_ext([(1, "y = 2x - 1 \\\\ y = -x + 5")], "(2, 3)"),
+                "final_answers": [{"problem_position": 1, "answer_latex": "(2, 3)",
+                                   "answer_plain": "(2, 3) — marked on graph"}],
+            },
+            [_draw("graph", present=True,
+                   plotted=["line rising left-to-right, y-intercept at -1",
+                            "line falling left-to-right, y-intercept at 5"],
+                   points=["(2, 3)"], answer="(2, 3)",
+                   description="Both lines plotted on labeled axes; intersection circled and labeled.")],
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale="The drawing is on the page and correct; it was just recorded before the flag.",
+    ),
+    GradingCase(
         name="e2-blank",
         category="e",
         problems=_prob("Solve x^2 - 5x + 6 = 0.", "x = 2 or x = 3"),
@@ -591,7 +637,7 @@ class GradingProbe(Probe):
     name = "grading"
     needs_browser = False
     default_constraint = (
-        "Grading-quality golden set: 21 hand-labeled submissions spanning "
+        "Grading-quality golden set: 23 hand-labeled submissions spanning "
         "clean-correct, valid-alternative-method, broken-work-right-answer, "
         "arithmetic-slip, plainly-wrong, and required-method/drawing. Asserts the AI grader's "
         "score_status matches the label."

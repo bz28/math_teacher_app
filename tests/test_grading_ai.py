@@ -666,7 +666,12 @@ class TestBuildUserMessageDrawings:
             "labeled points: none — answer marked on drawing: none"
         ) in p1
         assert "one line through the origin" in p1
-        assert "Requires a drawing: yes" in p1
+        # The requirement is a property of the question: it lives in the
+        # assignment half of the prompt, never inside <student_work>.
+        assert "Requires a drawing" not in msg
+        system = _build_system_prompt(None, self._problems())
+        assignment = system[system.rindex("THE ASSIGNMENT"):]
+        assert assignment.count("Requires a drawing: yes") == 1
         # Problem 2 doesn't require a drawing → no drawings section at all.
         assert "drawing" not in _sections_by_position(msg)[2].lower()
 
@@ -720,7 +725,11 @@ class TestBuildUserMessageDrawings:
     def test_legacy_extraction_without_channel_says_nothing_about_drawings(self) -> None:
         extraction = {"steps": [], "final_answers": [], "confidence": 0.9}
         msg = _build_user_message(extraction, self._problems())
-        assert "Student's drawings" not in msg and "no drawing" not in msg
+        # Never "no drawing" about a page nobody inventoried.
+        assert "no drawing" not in msg
+        p1 = _sections_by_position(msg)[1]
+        assert "(drawings were not inventoried for this submission)" in p1
+        assert "drawing" not in _sections_by_position(msg)[2].lower()
 
     def test_unattributed_or_foreign_position_drawings_go_to_other_work(self) -> None:
         extraction = {
@@ -766,6 +775,50 @@ class TestBuildUserMessageDrawings:
         p2 = _sections_by_position(_build_user_message(extraction, self._problems()))[2]
         assert "Statements" not in p2 and "drawing" not in p2.lower()
 
+    def test_flag_flipped_on_after_extraction_uses_the_first_read(self) -> None:
+        """The drawing was recorded while the problem was unflagged, so it
+        was never verified. Flipping the flag on and regrading must hand
+        the grader that drawing — never "no drawing"."""
+        extraction = {
+            "steps": [], "final_answers": [], "confidence": 0.9,
+            "visual_work": [
+                {"problem_position": 1, "kind": "graph", "present": True,
+                 "description": "Both lines plotted; intersection circled.",
+                 "plotted_elements": ["line rising", "line falling"],
+                 "labeled_points": ["(2, 3)"], "answer_on_drawing": "(2, 3)"},
+            ],
+        }
+        p1 = _sections_by_position(_build_user_message(extraction, self._problems()))[1]
+        assert "2 plotted: line rising; line falling" in p1
+        assert "(read from the full page; not checked on a zoomed look)" in p1
+        assert "no drawing" not in p1
+
+    def test_unflagged_problem_drawing_is_ignored_even_if_wording_says_graph(self) -> None:
+        problems = [{"position": 1, "question": "Solve the system graphically.",
+                     "final_answer": "(2, 3)", "requires_drawing": False}]
+        extraction = {"steps": [], "final_answers": [], "confidence": 0.9, "visual_work": []}
+        msg = _build_user_message(extraction, problems)
+        assert "drawing" not in msg.lower()
+        system = _build_system_prompt(None, problems)
+        assignment = system[system.rindex("THE ASSIGNMENT"):]
+        # The wording says "graphically" but the teacher's flag says no:
+        # the grader is told so explicitly (grading probe f10 docked a
+        # correct algebraic answer to 50% without this line).
+        assert "Requires a drawing: yes" not in assignment
+        assert "Requires a drawing: no — the teacher set this" in assignment
+
+    def test_unflagged_problem_without_drawing_words_gets_no_drawing_line(self) -> None:
+        problems = [{"position": 1, "question": "Solve using elimination.",
+                     "final_answer": "(3, 4)", "requires_drawing": False}]
+        system = _build_system_prompt(None, problems)
+        assert "Requires a drawing" not in system[system.rindex("THE ASSIGNMENT"):]
+
+    def test_graphing_is_a_flag_not_a_wording_rule(self) -> None:
+        prompt = _build_system_prompt(None, self._problems())
+        assert "require nothing drawn" in prompt
+        assert "named ALGEBRAIC method" in prompt
+        assert '"by graphing", "using elimination"' not in prompt
+
     def test_required_table_is_reported_neutrally(self) -> None:
         extraction = {
             "steps": [], "final_answers": [], "confidence": 0.9,
@@ -796,4 +849,4 @@ class TestBuildUserMessageDrawings:
         assert "Required method or drawing" in prompt
         assert "by graphing" in prompt
         # The default rubric the teacher sees says the same thing.
-        assert "full credit requires that method or drawing" in prompt
+        assert "marked as requiring a drawing, full credit requires the drawing" in prompt
