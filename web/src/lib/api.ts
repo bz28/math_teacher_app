@@ -1747,8 +1747,8 @@ export const teacher = {
     );
   },
   /** "Grade with AI" — first grading of one never-graded submission the
-   *  student has confirmed or flagged. 409 if it has any grade data, is
-   *  still waiting on the student, or has no readable work; 400 if AI
+   *  student has confirmed. 409 if it has any grade data, was flagged as
+   *  misread, is still waiting on the student, or has no readable work; 400 if AI
    *  grading is off. Never a regrade.
    *
    *  Deliberately forfeits the shared cached prefix — a single call has
@@ -2029,6 +2029,7 @@ export interface TeacherSubmissionRow {
 export type AiGradeBlock =
   | "ai_disabled"
   | "graded"
+  | "flagged"
   | "unreadable"
   | "no_extraction"
   | "extracting"
