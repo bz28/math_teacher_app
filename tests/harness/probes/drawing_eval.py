@@ -79,9 +79,24 @@ class EvalCase:
     mark: tuple[int, int] | None = None  # circled + labeled point
     numline_open_at: float | None = None  # open circle, shaded to the right
     truth: dict[str, Any] = field(default_factory=dict)
+    phone_width: int | None = None  # render at a real phone resolution
+    grade: bool = True  # run the with/without-verify grading ablation
 
 
 CASES: list[EvalCase] = [
+    EvalCase(
+        # The #902 prod case, re-recorded under record-everywhere extraction.
+        name="b-one-of-two-lines",
+        question=_SYSTEM, answer="(2, 3)",
+        written=["1.  y = 2x - 1", "    y = -x + 5", "    2x - 1 = -x + 5", "    3x = 6", "    x = 2, y = 3",
+                 "    (2, 3)"],
+        lines=[(2, -1)],
+        truth={"flagged": True, "present": True, "lines": 1, "labeled": [], "answer_on_drawing": None,
+               "grade": "partial (~50: one of two lines, solved algebraically)"},
+    ),
+    # Phone resolution (3024 px wide, JPEG q80): does the "curve" misread
+    # survive when the crop isn't an upscaled 800 px page? Extract + verify
+    # only (no grading), to stay in budget.
     EvalCase(
         name="e-right-count-wrong-line",
         question=_SYSTEM, answer="(2, 3)",
@@ -90,6 +105,21 @@ CASES: list[EvalCase] = [
         truth={"flagged": True, "present": True, "lines": 2, "labeled": [], "answer_on_drawing": None,
                "grade": "partial (one line drawn wrong; the graph doesn't show (2, 3))"},
     ),
+    EvalCase(
+        name="d-shaded-number-line",
+        question=_NUMLINE, answer="x > 4",
+        written=["1.  2x - 3 > 5", "    2x > 8", "    x > 4"],
+        numline_open_at=4,
+        truth={"flagged": True, "present": True, "lines": 1, "labeled": [], "answer_on_drawing": "x > 4",
+               "grade": "full"},
+    ),
+]
+
+# Written and rendered, but NOT recorded under the typed verify schema
+# (the PR's $1.30 live-spend cap ran out after b/e/d). Run one with
+# DRAWING_EVAL_CASES=<name> --mode auto to record it; until then they
+# are excluded from the default (replay) run so it stays $0.
+PENDING_CASES: list[EvalCase] = [
     EvalCase(
         name="i-small-graph-in-corner",
         question=_SYSTEM, answer="(2, 3)",
@@ -107,12 +137,19 @@ CASES: list[EvalCase] = [
                "answer_on_drawing": "(2, 3)", "grade": "full"},
     ),
     EvalCase(
-        name="d-shaded-number-line",
-        question=_NUMLINE, answer="x > 4",
-        written=["1.  2x - 3 > 5", "    2x > 8", "    x > 4"],
-        numline_open_at=4,
-        truth={"flagged": True, "present": True, "lines": 1, "labeled": [], "answer_on_drawing": "x > 4",
-               "grade": "full"},
+        name="a-phone-both-lines",
+        question=_SYSTEM, answer="(2, 3)",
+        written=["1.  y = 2x - 1", "    y = -x + 5", "    (2, 3)"],
+        lines=[(2, -1), (-1, 5)], mark=(2, 3), phone_width=3024, grade=False,
+        truth={"flagged": True, "present": True, "lines": 2, "labeled": ["(2, 3)"],
+               "answer_on_drawing": "(2, 3)"},
+    ),
+    EvalCase(
+        name="e-phone-right-count-wrong-line",
+        question=_SYSTEM, answer="(2, 3)",
+        written=["1.  y = 2x - 1", "    y = -x + 5", "    (2, 3)"],
+        lines=[(2, -1), (-2, 5)], phone_width=3024, grade=False,
+        truth={"flagged": True, "present": True, "lines": 2, "labeled": [], "answer_on_drawing": None},
     ),
 ]
 
@@ -126,35 +163,46 @@ def _font(size: int) -> Any:
     return ImageFont.load_default()
 
 
-def _pen(d: ImageDraw.ImageDraw, pts: list[tuple[float, float]], rng: random.Random, width: int = 4) -> None:
-    jittered = [(x + rng.uniform(-1.5, 1.5), y + rng.uniform(-1.5, 1.5)) for x, y in pts]
-    d.line(jittered, fill=(28, 30, 70), width=width, joint="curve")
-
-
 def render_page(case: EvalCase, seed: int = 11) -> tuple[str, str]:
     """Lined paper, handwriting, a hand-drawn graph or number line, then
-    phone-photo degradation (slight rotation, uneven light, blur, JPEG)."""
+    phone-photo degradation (slight rotation, uneven light, blur, JPEG).
+
+    `case.phone_width` renders the SAME page at a real phone resolution
+    (every coordinate, stroke, font and jitter scaled, so the wobble is the
+    same in physical units), JPEG q80, no downscale. At the default the
+    arithmetic is untouched, so recorded pages stay byte-identical."""
     rng = random.Random(seed)
-    w, h = _PAGE
+    k = case.phone_width / _PAGE[0] if case.phone_width else 1
+
+    def S(v: Any) -> Any:  # noqa: N802 — a unit conversion, reads like one
+        return v if k == 1 else v * k
+
+    w, h = _PAGE if k == 1 else (case.phone_width, round(_PAGE[1] * k))
     img = Image.new("RGB", (w, h), (250, 249, 243))
     d = ImageDraw.Draw(img)
-    for y in range(90, h, 48):
-        d.line([(30, y), (w - 30, y)], fill=(200, 212, 232), width=2)
-    f = _font(34)
+
+    def pen(pts: list[tuple[float, float]], width: int) -> None:
+        jittered = [(S(x) + S(rng.uniform(-1.5, 1.5)), S(y) + S(rng.uniform(-1.5, 1.5))) for x, y in pts]
+        d.line(jittered, fill=(28, 30, 70), width=width if k == 1 else round(width * k), joint="curve")
+
+    for y in range(90, _PAGE[1], 48):
+        d.line([(S(30), S(y)), (S(_PAGE[0] - 30), S(y))], fill=(200, 212, 232),
+               width=2 if k == 1 else round(2 * k))
+    f = _font(34 if k == 1 else round(34 * k))
     y = 110
     for line in case.written:
-        d.text((60 + rng.randint(-3, 3), y + rng.randint(-2, 2)), line, font=f, fill=(30, 32, 64))
+        d.text((S(60 + rng.randint(-3, 3)), S(y + rng.randint(-2, 2))), line, font=f, fill=(30, 32, 64))
         y += 48
 
     x0, y0, x1, y1 = case.box
     if case.lines:
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         unit = (x1 - x0) / 14
-        _pen(d, [(x0, cy), (x1, cy)], rng, 3)
-        _pen(d, [(cx, y0), (cx, y1)], rng, 3)
-        for k in range(-6, 7):
-            _pen(d, [(cx + k * unit, cy - 4), (cx + k * unit, cy + 4)], rng, 2)
-            _pen(d, [(cx - 4, cy - k * unit), (cx + 4, cy - k * unit)], rng, 2)
+        pen([(x0, cy), (x1, cy)], 3)
+        pen([(cx, y0), (cx, y1)], 3)
+        for t in range(-6, 7):
+            pen([(cx + t * unit, cy - 4), (cx + t * unit, cy + 4)], 2)
+            pen([(cx - 4, cy - t * unit), (cx + 4, cy - t * unit)], 2)
         for m, b in case.lines:
             pts = []
             for i in range(0, 41):
@@ -162,25 +210,29 @@ def render_page(case: EvalCase, seed: int = 11) -> tuple[str, str]:
                 gy = m * gx + b
                 if -6.5 <= gy <= 6.5:
                     pts.append((cx + gx * unit, cy - gy * unit))
-            _pen(d, pts, rng, 3 if unit < 20 else 4)
+            pen(pts, 3 if unit < 20 else 4)
         if case.mark:
             mx, my = cx + case.mark[0] * unit, cy - case.mark[1] * unit
             r = max(6, unit * 0.35)
-            d.ellipse([mx - r, my - r, mx + r, my + r], outline=(28, 30, 70), width=3)
-            d.text((mx + r + 2, my - 3 * r), f"({case.mark[0]},{case.mark[1]})",
-                   font=_font(int(max(16, unit))), fill=(30, 32, 64))
+            d.ellipse([S(mx - r), S(my - r), S(mx + r), S(my + r)], outline=(28, 30, 70),
+                      width=3 if k == 1 else round(3 * k))
+            d.text((S(mx + r + 2), S(my - 3 * r)), f"({case.mark[0]},{case.mark[1]})",
+                   font=_font(int(max(16, unit)) if k == 1 else round(max(16, unit) * k)),
+                   fill=(30, 32, 64))
     if case.numline_open_at is not None:
         ly, lx0, lx1 = 420, 80, 900
         unit = (lx1 - lx0) / 12
-        _pen(d, [(lx0, ly), (lx1, ly)], rng, 3)
-        for k in range(0, 13):
-            x = lx0 + k * unit
-            _pen(d, [(x, ly - 8), (x, ly + 8)], rng, 2)
-            d.text((x - 8, ly + 16), str(k - 2), font=_font(24), fill=(30, 32, 64))
+        pen([(lx0, ly), (lx1, ly)], 3)
+        for t in range(0, 13):
+            x = lx0 + t * unit
+            pen([(x, ly - 8), (x, ly + 8)], 2)
+            d.text((S(x - 8), S(ly + 16)), str(t - 2), font=_font(24 if k == 1 else round(24 * k)),
+                   fill=(30, 32, 64))
         ox = lx0 + (case.numline_open_at + 2) * unit
-        d.ellipse([ox - 10, ly - 10, ox + 10, ly + 10], outline=(28, 30, 70), width=3)
-        _pen(d, [(ox + 10, ly - 3), (lx1 + 20, ly - 3)], rng, 7)
-        _pen(d, [(lx1 + 8, ly - 14), (lx1 + 22, ly - 3), (lx1 + 8, ly + 8)], rng, 4)
+        d.ellipse([S(ox - 10), S(ly - 10), S(ox + 10), S(ly + 10)], outline=(28, 30, 70),
+                  width=3 if k == 1 else round(3 * k))
+        pen([(ox + 10, ly - 3), (lx1 + 20, ly - 3)], 7)
+        pen([(lx1 + 8, ly - 14), (lx1 + 22, ly - 3), (lx1 + 8, ly + 8)], 4)
 
     img = img.rotate(1.3, resample=Image.BICUBIC, expand=False, fillcolor=(235, 232, 225))
     shade = Image.new("L", (w, h))
@@ -188,9 +240,13 @@ def render_page(case: EvalCase, seed: int = 11) -> tuple[str, str]:
     for x in range(w):
         sd.line([(x, 0), (x, h)], fill=int(255 - 40 * (x / w)))
     img = Image.composite(img, Image.new("RGB", (w, h), (170, 165, 150)), shade)
-    img = img.filter(ImageFilter.GaussianBlur(0.7)).resize((int(w * 0.8), int(h * 0.8)), Image.LANCZOS)
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=62)
+    if k == 1:
+        img = img.filter(ImageFilter.GaussianBlur(0.7)).resize((int(w * 0.8), int(h * 0.8)), Image.LANCZOS)
+        img.save(buf, format="JPEG", quality=62)
+    else:
+        img = img.filter(ImageFilter.GaussianBlur(0.7 * k))
+        img.save(buf, format="JPEG", quality=80)
     return base64.b64encode(buf.getvalue()).decode("ascii"), "image/jpeg"
 
 
@@ -218,6 +274,8 @@ def _summ(v: dict[str, Any]) -> dict[str, Any]:
         "plotted_elements": v.get("plotted_elements"), "labeled_points": v.get("labeled_points"),
         "answer_on_drawing": v.get("answer_on_drawing"), "bbox": v.get("bbox"),
         "verified": v.get("verified"), "unconfirmed": v.get("unconfirmed"),
+        "unconfirmed_reason": v.get("unconfirmed_reason"),
+        "zoomed_labeled_points": v.get("zoomed_labeled_points"),
         "description": v.get("description"),
     }
 
@@ -277,7 +335,8 @@ class DrawingEvalProbe(Probe):
         prev_dir = os.environ.get("HARNESS_CASSETTE_DIR")
         os.environ["HARNESS_CASSETTE_DIR"] = str(_CASSETTE_DIR)
         try:
-            return [await self._run_case(c) for c in CASES if not only or c.name in only]
+            chosen = [c for c in CASES + PENDING_CASES if c.name in only] if only else CASES
+            return [await self._run_case(c) for c in chosen]
         finally:
             if prev_dir is None:
                 os.environ.pop("HARNESS_CASSETTE_DIR", None)
@@ -312,7 +371,7 @@ class DrawingEvalProbe(Probe):
         total_ms = (time.monotonic() - t0) * 1000
 
         grades: dict[str, Any] = {}
-        for path, ext in (("first_read_only", first_read), ("with_second_look", verified)):
+        for path, ext in (("first_read_only", first_read), ("with_second_look", verified)) if case.grade else ():
             res = await grade_submission_with_ai(ext, problems, None)
             g = (res.get("grades") or [{}])[0]
             grades[path] = {
