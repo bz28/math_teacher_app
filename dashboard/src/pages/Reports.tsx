@@ -213,7 +213,7 @@ export default function Reports() {
         error={error}
         onRetry={load}
         searchKeys={(r) => [r.teacher_name, r.assignment_title, r.student_name, r.note, r.kind]}
-        searchLabel="Search reports"
+        searchLabel="reports"
         minWidth={900}
         empty={
           filter === "open"
