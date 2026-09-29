@@ -1495,9 +1495,20 @@ async def list_submissions(
     # "View as Student" tests; the is_preview flag is surfaced on each
     # row so the UI can distinguish them. Aggregate stats elsewhere
     # still filter preview out.
+    #
+    # The grading-job status rides in the same SELECT as the grade, not a
+    # follow-up query. Each statement reads its own snapshot, so two
+    # queries could straddle the grader's commit and return "no score,
+    # job done" — which the review page's poll reads as "settled without
+    # a grade": it stops watching and re-offers "Grade with AI" on work
+    # that was just graded.
     rows = (await db.execute(
-        select(Submission, SubmissionGrade, User.name, User.email, User.is_preview)
+        select(
+            Submission, SubmissionGrade, User.name, User.email, User.is_preview,
+            GradingJob.status,
+        )
         .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .outerjoin(GradingJob, GradingJob.submission_id == Submission.id)
         .join(User, User.id == Submission.student_id)
         .where(Submission.assignment_id == a.id)
         .order_by(Submission.submitted_at.desc())
@@ -1528,16 +1539,6 @@ async def list_submissions(
     check_by_sub: dict[uuid.UUID, IntegrityCheckSubmission] = {
         c.submission_id: c for c in check_rows
     }
-
-    # Grading-queue state per submission, so the review page can show a
-    # grade in flight instead of offering the button again, and stop
-    # polling once a job has settled without a grade (failed, skipped).
-    job_status_by_sub: dict[uuid.UUID, str] = dict(
-        (await db.execute(
-            select(GradingJob.submission_id, GradingJob.status)
-            .where(GradingJob.submission_id.in_(sub_ids))
-        )).tuples().all()
-    ) if sub_ids else {}
 
     # For in-progress checks, we also want to show progress — how
     # many sampled problems have received a verdict. One grouped
@@ -1570,7 +1571,7 @@ async def list_submissions(
             problem_count_by_check[cid] = (int(total), int(done or 0))
 
     submissions = []
-    for sub, grade, student_name, student_email, is_preview in rows:
+    for sub, grade, student_name, student_email, is_preview, job_status in rows:
         check = check_by_sub.get(sub.id)
         if check is None:
             integrity_overview = None
@@ -1648,7 +1649,10 @@ async def list_submissions(
             # "Grade N ungraded" from this, so both agree with what the
             # grade-now / grade-pending endpoints will actually do.
             "ai_grade_block": ai_grade_block(sub, grade, a),
-            "grading_job_status": job_status_by_sub.get(sub.id),
+            # Grading-queue state, so the review page can show a grade in
+            # flight instead of offering the button again, and stop polling
+            # once a job has settled without a grade (failed, skipped).
+            "grading_job_status": job_status,
         })
 
     return {"submissions": submissions}
@@ -2071,6 +2075,10 @@ _AI_GRADE_BLOCK_DETAIL = {
         "This submission already has a grade — AI grading only runs on "
         "work nobody has graded yet"
     ),
+    "flagged": (
+        "The student said the reader got their work wrong — grade it by "
+        "hand from the photo"
+    ),
     "unreadable": (
         "The AI couldn't read this submission's photo — grade it by hand"
     ),
@@ -2107,9 +2115,9 @@ async def grade_pending_submissions(
     It used to count every score-less submission, including work the
     student hadn't confirmed (which has no grading job, so this moved
     zero jobs for it and the count never went down). Those now read as
-    waiting on the student instead. A confirmed or flagged submission
-    with no job — AI grading was off when it was confirmed, or it was
-    flagged, which never enqueues — gets one created here.
+    waiting on the student instead. A confirmed submission with no job
+    (AI grading was off when it was confirmed) gets one created here.
+    Flagged work is never eligible — see `ai_grade_block`.
 
     `enqueue_submission` does the rest: a queued job is pulled forward,
     a `failed` or `skipped` one revived with its retry budget reset, and
@@ -2174,8 +2182,9 @@ async def grade_submission_now(
 
     First grading only — never a regrade. Refused (409) when the
     submission carries grade data of ANY kind (AI, hand, partial,
-    reviewed, previously published), when the student hasn't confirmed
-    or flagged the reading yet, when there is no transcription to grade,
+    reviewed, previously published), when the student flagged the
+    reading as wrong or hasn't confirmed it yet, when there is no
+    transcription to grade,
     or when the photo was unreadable; 400 when AI grading is off for the
     homework. The rule is `grading_queue.ai_grade_block`, the same one
     the review page uses to decide whether to show the button.
@@ -2300,6 +2309,13 @@ async def regrade_submission(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="AI grading is not enabled for this homework",
+        )
+    # Same rule as first grading: a reading the student disputed is not
+    # something to put an AI grade on.
+    if sub.extraction_flagged_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_AI_GRADE_BLOCK_DETAIL["flagged"],
         )
 
     # Teacher-initiated regrade — attribute LLM cost to the teacher so
