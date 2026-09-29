@@ -131,9 +131,12 @@ export function useReportProblem(): ReportProblemApi {
  * leaving the page (or the student) never leaves a stale attachment.
  */
 export function useReportPageContext(ctx: ReportProblemContext | null): void {
-  const { setPageContext } = useReportProblem();
+  const { pageContext, setPageContext } = useReportProblem();
   useEffect(() => {
     setPageContext(ctx);
-    return () => setPageContext(null);
-  }, [ctx, setPageContext]);
+    // Only clear our own registration — never one a newer page made.
+    return () => {
+      if (pageContext() === ctx) setPageContext(null);
+    };
+  }, [ctx, pageContext, setPageContext]);
 }

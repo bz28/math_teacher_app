@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { teacher } from "@/lib/api";
@@ -85,15 +85,35 @@ export function ReportProblemDialog({
     : options
       ? SIDEBAR_SUBMISSION_KINDS
       : SUBMISSION_KINDS;
-  const [chosenKind, setKind] = useState<ReportKind>(kinds[0].value);
-  // Detaching removes the grading kinds; fall back rather than send one.
-  const kind = kinds.some((k) => k.value === chosenKind) ? chosenKind : kinds[0].value;
+  // The sidebar report can be about anything, so it preselects nothing —
+  // a default there filed general complaints as grading reports.
+  const [chosenKind, setKind] = useState<ReportKind | null>(
+    options ? null : kinds[0].value,
+  );
+  // Detaching removes the grading kinds; a grading kind chosen before
+  // then no longer applies, so she picks again.
+  const kind = chosenKind && kinds.some((k) => k.value === chosenKind) ? chosenKind : null;
+
+  // The detach / undo buttons replace each other; keep keyboard focus
+  // inside the dialog by moving it to whichever one is now showing.
+  const detachRef = useRef<HTMLButtonElement>(null);
+  const reattachRef = useRef<HTMLButtonElement>(null);
+  const toggledRef = useRef(false);
+  useEffect(() => {
+    if (!toggledRef.current) return;
+    (attached ? detachRef : reattachRef).current?.focus();
+  }, [attached]);
+  const toggleAttached = (next: boolean) => {
+    toggledRef.current = true;
+    setAttached(next);
+  };
   const [note, setNote] = useState("");
   const [sent, setSent] = useState(false);
   const { busy, error, run } = useAsyncAction();
 
   const send = () =>
     run(async () => {
+      if (!kind) return;
       await teacher.reportProblem({
         kind,
         note: note.trim() || null,
@@ -105,10 +125,15 @@ export function ReportProblemDialog({
         student_id: effective.student_id ?? null,
         problem_id: effective.problem_id ?? null,
         problem_position: effective.problem_position ?? null,
-        ai_grade: effective.ai_grade ?? null,
+        // The server caps reasoning at 4000 characters.
+        ai_grade: effective.ai_grade
+          ? { ...effective.ai_grade, reasoning: effective.ai_grade.reasoning.slice(0, 4000) }
+          : null,
         teacher_grade: effective.teacher_grade ?? null,
       });
-      onSent(effective);
+      // A sidebar report may be about the screen, not the grade — don't
+      // flip the page's own report buttons to "Reported" for it.
+      if (!options) onSent(effective);
       setSent(true);
     }, "Couldn't send your report. Try again in a moment.");
 
@@ -172,8 +197,9 @@ export function ReportProblemDialog({
               </ul>
               {options && (
                 <button
+                  ref={detachRef}
                   type="button"
-                  onClick={() => setAttached(false)}
+                  onClick={() => toggleAttached(false)}
                   className="inline-flex min-h-[28px] items-center gap-1 rounded-[--radius-pill] px-2 text-[11px] font-semibold text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary"
                 >
                   <span aria-hidden>×</span> Not about this student
@@ -184,8 +210,9 @@ export function ReportProblemDialog({
 
           {!attached && options && (
             <button
+              ref={reattachRef}
               type="button"
-              onClick={() => setAttached(true)}
+              onClick={() => toggleAttached(true)}
               className="-mt-2 self-start text-[11px] font-semibold text-primary hover:underline"
             >
               Attach {context.labels?.[0] ?? "this student"} again
@@ -279,14 +306,20 @@ export function ReportProblemDialog({
               {!onSubmission
                 ? "Attached automatically: the page you're on and your account."
                 : effective.problem_position || !options
-                  ? "Attached automatically: the student's page, the AI's full reasoning, your grade."
+                  ? effective.ai_grade || !options
+                    ? "Attached automatically: the student's page, the AI's full reasoning, your grade."
+                    : "Attached automatically: the student's page and your grade."
                   : "Attached automatically: the page you're on, this student's work and grades, your account."}
             </span>
             <div className="ml-auto flex gap-2">
               <Button variant="secondary" size="sm" onClick={onClose} disabled={busy}>
                 Cancel
               </Button>
-              <Button size="sm" onClick={send} disabled={busy}>
+              <Button
+                size="sm"
+                onClick={send}
+                disabled={busy || !kind}
+              >
                 {busy ? "Sending…" : "Send report"}
               </Button>
             </div>

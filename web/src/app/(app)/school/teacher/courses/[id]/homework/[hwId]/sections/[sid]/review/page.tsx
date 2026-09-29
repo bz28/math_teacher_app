@@ -2391,9 +2391,6 @@ function isAwaitingGrade(entry: RosterEntry): boolean {
   return sub.ai_grading_status !== "skipped_unreadable";
 }
 
-/** The server says the AI grader can take this submission: never
- *  graded in any form, readable work the student has confirmed (not
- *  flagged as misread), AI grading on. */
 /** "Full" / "No credit" / "Partial 70%" — how a grade reads on a
  *  report chip. */
 function chipGradeLabel(status: string, percent: number | null | undefined): string {
@@ -2402,6 +2399,9 @@ function chipGradeLabel(status: string, percent: number | null | undefined): str
   return `Partial ${Math.round(percent ?? 0)}%`;
 }
 
+/** The server says the AI grader can take this submission: never
+ *  graded in any form, readable work the student has confirmed (not
+ *  flagged as misread), AI grading on. */
 function canAiGrade(sub: TeacherSubmissionRow): boolean {
   return sub.ai_grade_block === null;
 }
@@ -3147,9 +3147,14 @@ function SubmissionDetailPanel({
   // The sidebar "Report a problem" reports on this student while they're
   // open, with each problem offered in its picker — so a report sent from
   // there arrives with the work attached, not just a URL.
+  const { submission_id, assignment_id, course_id, section_id, student_id } = reportBase;
   const sidebarReport = useMemo<ReportProblemContext>(
     () => ({
-      ...reportBase,
+      submission_id,
+      assignment_id,
+      course_id,
+      section_id,
+      student_id,
       labels: [detail.student_name, detail.assignment_title],
       problem_options: detail.problems.map((p) => {
         const ai = aiByPosition.get(p.position) ?? null;
@@ -3177,7 +3182,7 @@ function SubmissionDetailPanel({
         };
       }),
     }),
-    [reportBase, detail, aiByPosition, breakdownByProblem],
+    [submission_id, assignment_id, course_id, section_id, student_id, detail, aiByPosition, breakdownByProblem],
   );
   useReportPageContext(sidebarReport);
   // Unreadable photo, not yet hand-graded — surface the callout that
@@ -3874,8 +3879,9 @@ function SubmissionDetailPanel({
           )}
           {/* Whole-submission report — "it misread the page", "wrong
               student's work", anything not tied to one problem. Per-
-              problem reports sit on each AI verdict below. Icon-only so
-              it never competes with Approve / Next student. */}
+              problem reports sit on each AI verdict below. Quiet muted
+              styling so it never competes with Approve / Next student,
+              but labelled — an icon alone wasn't found when needed. */}
           <ReportProblemTrigger
             label="Report"
             context={{
