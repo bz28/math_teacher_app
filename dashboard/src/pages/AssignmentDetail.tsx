@@ -173,9 +173,14 @@ export default function AssignmentDetail() {
           // blob and a legacy snapshot can store two problems at the
           // same position, which would collide as a React key. The list
           // is static per render, so the index is a safe identity.
-          a.problems.map((p, i) => (
-            <ProblemRow key={i} p={p} target={p.position === targetProblem} />
-          ))
+          a.problems.map((p, i) => {
+            // A legacy snapshot can repeat a position; only the first row
+            // carries its anchor, so an id is never duplicated.
+            const first = a.problems.findIndex((q) => q.position === p.position) === i;
+            return (
+              <ProblemRow key={i} p={p} anchor={first} target={first && p.position === targetProblem} />
+            );
+          })
         )}
       </div>
     </div>
@@ -278,10 +283,18 @@ function Big({ children }: { children: ReactNode }) {
   );
 }
 
-function ProblemRow({ p, target }: { p: AssignmentProblem; target: boolean }) {
+function ProblemRow({
+  p,
+  anchor,
+  target,
+}: {
+  p: AssignmentProblem;
+  anchor: boolean;
+  target: boolean;
+}) {
   return (
     <div
-      id={problemAnchor(p.position)}
+      id={anchor ? problemAnchor(p.position) : undefined}
       className={target ? "asg-problem asg-problem-target" : "asg-problem"}
       style={{
         display: "flex",

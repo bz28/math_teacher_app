@@ -211,7 +211,10 @@ export default function ExtractionReadout({
               <ReadRow
                 key={r.key}
                 row={r}
-                id={r.unattributed ? undefined : anchorFor(r.problem_position)}
+                // Keyed on the position alone — the same test the trace uses
+                // for "nothing was read for Problem n" — so a row that has a
+                // problem but no step number still anchors its problem.
+                id={anchorFor(r.problem_position)}
                 target={targetProblem !== null && r.problem_position === targetProblem}
               />
             ))}

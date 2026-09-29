@@ -132,7 +132,11 @@ export default function Reports() {
         width: "76px",
         numeric: true,
         // Sorted by size — a 60-point miss matters whichever way it points.
-        sortValue: (r) => Math.abs(gradeGap(r) ?? -1),
+        // No gap sorts below a real ±0, never alongside a 1-point one.
+        sortValue: (r) => {
+          const gap = gradeGap(r);
+          return gap === null ? -1 : Math.abs(gap);
+        },
         render: (r) => {
           const gap = gradeGap(r);
           return gap === null ? (
