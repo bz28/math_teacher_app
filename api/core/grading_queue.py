@@ -187,6 +187,7 @@ def _earliest(existing: Any, incoming: Any) -> Any:
 # reason in place of a button that would do nothing.
 BLOCK_AI_DISABLED = "ai_disabled"
 BLOCK_GRADED = "graded"
+BLOCK_FLAGGED = "flagged"
 BLOCK_UNREADABLE = "unreadable"
 BLOCK_NO_EXTRACTION = "no_extraction"
 BLOCK_EXTRACTING = "extracting"
@@ -244,12 +245,13 @@ def ai_grade_block(
     One rule, shared by the per-student button, "Grade all" and the
     count on it, so the label and the action can't disagree.
 
-    Requires the student to have answered the confirm screen: either
-    confirmed the reading, or flagged it ("reader got something wrong").
-    Work the student hasn't looked at yet waits for them — grading it
-    would grade a reading they may still correct. A flagged submission
-    is graded on its extraction as-is (a flag stores no edits); the
-    teacher sees the flag beside the grade and approves it either way.
+    Requires the student to have confirmed the reading. Work the
+    student hasn't looked at yet waits for them — grading it would
+    grade a reading they may still correct. Work they flagged ("reader
+    got something wrong") is never AI-graded: the flag stores no edits,
+    so the only transcription is the one the student says is wrong, and
+    grading it turns a misread into a deduction. The teacher grades it
+    from the photo.
 
     Beyond that, a reading worth grading: an extraction exists and
     clears the same unreadable bar the submit pipeline and the drain
@@ -263,6 +265,8 @@ def ai_grade_block(
         return BLOCK_AI_DISABLED
     if has_any_grade(grade):
         return BLOCK_GRADED
+    if sub.extraction_flagged_at is not None:
+        return BLOCK_FLAGGED
     if sub.extraction is None:
         if sub.submitted_at and _now() - sub.submitted_at < EXTRACTION_GRACE:
             return BLOCK_EXTRACTING
@@ -272,7 +276,7 @@ def ai_grade_block(
         and grade.ai_grading_status == GRADING_STATUS_SKIPPED_UNREADABLE
     ) or sub.extraction.get("confidence", 0.0) < UNREADABLE_THRESHOLD:
         return BLOCK_UNREADABLE
-    if sub.extraction_confirmed_at is None and sub.extraction_flagged_at is None:
+    if sub.extraction_confirmed_at is None:
         return BLOCK_AWAITING_CONFIRMATION
     return None
 

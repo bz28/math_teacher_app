@@ -395,14 +395,12 @@ _FLAGGED = {"extraction_confirmed_at": None, "extraction_flagged_at": datetime.n
 _UNCONFIRMED = {"extraction_confirmed_at": None}
 
 
-@pytest.mark.parametrize("flagged", [False, True], ids=["confirmed", "flagged"])
-async def test_grade_now_grades_confirmed_or_flagged_work_with_no_job(
-    client: AsyncClient, flagged: bool,
+async def test_grade_now_grades_confirmed_work_with_no_job(
+    client: AsyncClient,
 ) -> None:
-    """Flagging never enqueues; a confirm while AI grading was off
-    doesn't either. A flagged submission is graded on its reading
-    as-is — the teacher sees the flag beside the grade."""
-    world = await _ungraded_world(**(_FLAGGED if flagged else {}))
+    """A confirm while AI grading was off never enqueues; the button
+    creates the job."""
+    world = await _ungraded_world()
     sid = world["submission_ids"][0]
     assert await _job(sid) is None  # the old dead end: nothing to move
 
@@ -476,11 +474,47 @@ async def test_grade_now_refuses_anything_already_graded(
     assert await _job(sid) is None
 
 
+async def test_grade_now_refuses_work_the_student_flagged(
+    client: AsyncClient,
+) -> None:
+    """The student said the reading is wrong, and a flag stores no
+    corrections — the only transcription is the disputed one. Grading
+    it turns a misread into a deduction, so the teacher grades it from
+    the photo instead."""
+    world = await _ungraded_world(**_FLAGGED)
+    sid = world["submission_ids"][0]
+    r = await _grade_now(client, world, sid)
+    assert r.status_code == 409, r.text
+    assert "grade it by hand" in r.json()["detail"]
+    assert await _job(sid) is None
+
+
+async def test_regrade_refuses_work_the_student_flagged(
+    client: AsyncClient,
+) -> None:
+    """Same rule when an AI grade already exists (graded before flagged
+    work was locked out): a rubric-change regrade would re-grade the
+    disputed reading."""
+    world = await _ungraded_world(**_FLAGGED)
+    sid = world["submission_ids"][0]
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(submission_id=sid, **_GRADED_FORMS["ai_grade"]))
+        await s.commit()
+    grader = AsyncMock(side_effect=_fake_grade)
+    with patch("api.core.grading_ai.run_ai_grading_for_submission", new=grader):
+        r = await client.post(
+            f"/v1/teacher/submissions/{sid}/regrade",
+            headers=_auth(world["teacher_token"]),
+        )
+    assert r.status_code == 409, r.text
+    grader.assert_not_awaited()
+
+
 async def test_grade_now_waits_for_the_student_to_confirm(
     client: AsyncClient,
 ) -> None:
-    """Founder rule: work the student hasn't confirmed (or flagged) is
-    theirs to check first — the reading may still change."""
+    """Founder rule: work the student hasn't confirmed is theirs to
+    check first — the reading may still change."""
     world = await _ungraded_world(**_UNCONFIRMED)
     sid = world["submission_ids"][0]
     r = await _grade_now(client, world, sid)
@@ -655,13 +689,20 @@ async def test_grade_all_grades_only_what_it_can_grade(
     client: AsyncClient,
 ) -> None:
     """The count on the button and the jobs it moves are one rule."""
-    world = await _ungraded_world(n_submissions=5)
-    eligible, graded, unreadable, unread, unconfirmed = world["submission_ids"]
+    world = await _ungraded_world(n_submissions=6)
+    eligible, graded, unreadable, unread, unconfirmed, flagged = (
+        world["submission_ids"]
+    )
     async with get_session_factory()() as s:
         s.add(SubmissionGrade(submission_id=graded, final_score=50.0))
         (await s.execute(
             select(Submission).where(Submission.id == unconfirmed)
         )).scalar_one().extraction_confirmed_at = None
+        flagged_sub = (await s.execute(
+            select(Submission).where(Submission.id == flagged)
+        )).scalar_one()
+        for k, v in _FLAGGED.items():
+            setattr(flagged_sub, k, v)
         for sid, extraction in (
             (unreadable, {**_EXTRACTION, "confidence": 0.1}),
             (unread, None),
@@ -682,7 +723,7 @@ async def test_grade_all_grades_only_what_it_can_grade(
     assert r.status_code == 200, r.text
     assert r.json()["queued"] == 1
     assert (await _job(eligible)) is not None
-    for sid in (graded, unreadable, unread, unconfirmed):
+    for sid in (graded, unreadable, unread, unconfirmed, flagged):
         assert await _job(sid) is None
 
     # And the roster says the same thing, per row.
@@ -698,6 +739,41 @@ async def test_grade_all_grades_only_what_it_can_grade(
     assert rows[str(unread)]["ai_grade_block"] == "no_extraction"
     assert rows[str(unread)]["grading_job_status"] is None
     assert rows[str(unconfirmed)]["ai_grade_block"] == "awaiting_confirmation"
+    assert rows[str(flagged)]["ai_grade_block"] == "flagged"
+
+
+async def test_roster_reads_grade_and_job_status_in_one_statement(
+    client: AsyncClient,
+) -> None:
+    """The review page stops polling a row once it reads as settled. If
+    the grade and the job status came from separate statements, a poll
+    straddling the grader's commit saw "no score, job done" — settled
+    without a grade — so the page stopped watching and re-offered
+    "Grade with AI" on work that had just been graded (prod, 2026-09-29).
+    One statement is one snapshot: that combination can't be read."""
+    from sqlalchemy import event
+
+    from api.database import get_engine
+
+    world = await _ungraded_world()
+    statements: list[str] = []
+
+    def _record(_conn: Any, _cursor: Any, statement: str, *_a: Any) -> None:
+        statements.append(statement)
+
+    engine = get_engine().sync_engine
+    event.listen(engine, "before_cursor_execute", _record)
+    try:
+        r = await client.get(
+            f"/v1/teacher/assignments/{world['assignment_id']}/submissions",
+            headers=_auth(world["teacher_token"]),
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+    assert r.status_code == 200, r.text
+    job_reads = [q for q in statements if "grading_jobs" in q]
+    assert job_reads, "roster no longer reads grading-job status"
+    assert all("submission_grades" in q for q in job_reads), job_reads
 
 
 @pytest.mark.parametrize(
