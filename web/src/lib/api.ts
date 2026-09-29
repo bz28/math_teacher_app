@@ -2029,6 +2029,7 @@ export interface TeacherSubmissionRow {
 export type AiGradeBlock =
   | "ai_disabled"
   | "graded"
+  | "flagged"
   | "unreadable"
   | "no_extraction"
   | "extracting"

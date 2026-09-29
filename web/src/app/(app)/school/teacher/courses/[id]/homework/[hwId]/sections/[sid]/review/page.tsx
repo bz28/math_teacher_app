@@ -1061,10 +1061,16 @@ function HomeworkSectionReview({
   // take is counted separately so it's explained, not hidden: waiting
   // on the student, or no readable work. Work still being read is in
   // neither — it becomes one or the other in a minute.
-  const { ungradedInSection, awaitingStudentInSection, cantAiGradeInSection } =
+  const {
+    ungradedInSection,
+    awaitingStudentInSection,
+    flaggedInSection,
+    cantAiGradeInSection,
+  } =
     useMemo(() => {
       let gradeable = 0;
       let awaiting = 0;
+      let flagged = 0;
       let cant = 0;
       // Action counts — "Grade N ungraded" does grade her rehearsal too.
       for (const e of roster ?? []) {
@@ -1072,6 +1078,7 @@ function HomeworkSectionReview({
         if (!sub) continue;
         if (canAiGrade(sub) && !isAiGrading(sub, aiPendingIds)) gradeable += 1;
         if (sub.ai_grade_block === "awaiting_confirmation") awaiting += 1;
+        if (sub.ai_grade_block === "flagged") flagged += 1;
         if (
           sub.ai_grade_block === "unreadable" ||
           sub.ai_grade_block === "no_extraction"
@@ -1082,6 +1089,7 @@ function HomeworkSectionReview({
       return {
         ungradedInSection: gradeable,
         awaitingStudentInSection: awaiting,
+        flaggedInSection: flagged,
         cantAiGradeInSection: cant,
       };
     }, [roster, aiPendingIds]);
@@ -1229,12 +1237,37 @@ function HomeworkSectionReview({
         next.delete(submissionId);
         return next;
       });
+      // A refusal usually means this page is behind the server — most
+      // often the grade already landed. Reload the row (and the open
+      // pane) so the teacher sees why, instead of an error sitting
+      // next to a button the fresh state wouldn't offer.
+      const fresh = await teacher
+        .submissions(assignmentId)
+        .then((res) => res.submissions.find((r) => r.id === submissionId))
+        .catch(() => undefined);
+      if (fresh) {
+        if (fresh.final_score !== null) {
+          const d = await teacher.submissionDetail(submissionId).catch(() => null);
+          if (d) setDetail((cur) => (cur?.submission_id === d.submission_id ? d : cur));
+        }
+        setRoster((prev) =>
+          prev
+            ? prev.map((entry) =>
+                entry.submission?.id === submissionId
+                  ? { ...entry, submission: fresh }
+                  : entry,
+              )
+            : prev,
+        );
+        // The grade is on screen now — that is the answer.
+        if (fresh.final_score !== null) return;
+      }
       setAiGradeError({
         forSubmissionId: submissionId,
         message: e instanceof Error ? e.message : "Couldn't start AI grading",
       });
     }
-  }, [watchGrades]);
+  }, [assignmentId, watchGrades]);
 
   // Poll until every submission sent to the grader settles. A grade
   // lands in seconds to a minute; the old single refetch right after
@@ -1615,7 +1648,9 @@ function HomeworkSectionReview({
                 {gradeAllError}
               </p>
             )}
-            {(awaitingStudentInSection > 0 || cantAiGradeInSection > 0) && (
+            {(awaitingStudentInSection > 0 ||
+              flaggedInSection > 0 ||
+              cantAiGradeInSection > 0) && (
               // Ungraded work the button won't touch — said once, here,
               // so the count beside it reads as complete rather than
               // quietly short. Each row names its own reason.
@@ -1625,6 +1660,8 @@ function HomeworkSectionReview({
                     `${awaitingStudentInSection} waiting on ${
                       awaitingStudentInSection === 1 ? "the student" : "students"
                     } to confirm`,
+                  flaggedInSection > 0 &&
+                    `${flaggedInSection} flagged as misread — grade from the photo`,
                   cantAiGradeInSection > 0 &&
                     `${cantAiGradeInSection} can’t be AI-graded — no readable work`,
                 ]
@@ -3536,7 +3573,7 @@ function SubmissionDetailPanel({
             {detail.extraction_flagged_at && (
               <span
                 className="ml-1.5 font-semibold text-[color:var(--color-error)] "
-                title="Student flagged: 'Reader got something wrong' — AI grading was skipped at submit"
+                title="Student flagged: 'Reader got something wrong' — the AI doesn't grade a reading the student disputes, so grade from the photo"
               >
                 · student-flagged reading · grade manually
               </span>
@@ -3880,14 +3917,18 @@ function SubmissionDetailPanel({
 
       {/* Rubric drift banner — only renders when the assignment's live
           rubric differs from the one this submission was graded against.
-          Triggers a regrade confirm dialog managed by the page. */}
-      <RubricDriftBanner
-        current={rubric}
-        snapshot={row?.rubric_snapshot ?? null}
-        regrading={regrading}
-        error={regradeError}
-        onRegrade={onRegradeRequest}
-      />
+          Triggers a regrade confirm dialog managed by the page. Not on
+          work the student flagged as misread — the server won't AI-grade
+          a disputed reading. */}
+      {!detail.extraction_flagged_at && (
+        <RubricDriftBanner
+          current={rubric}
+          snapshot={row?.rubric_snapshot ?? null}
+          regrading={regrading}
+          error={regradeError}
+          onRegrade={onRegradeRequest}
+        />
+      )}
 
       {/* Unreadable callout — when the photo was too low-confidence to
           auto-grade, the AI suggestion is silently absent and the
