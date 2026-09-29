@@ -1,0 +1,353 @@
+{
+  "073a8251ec2e13d82fce125b61e9a4b8": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor examining a student's handwritten homework  ||",
+      "recorded_at": 1790704214.194408
+    },
+    "response": {
+      "confidence": 0.92,
+      "final_answers": [
+        {
+          "answer_latex": "(2, 3)",
+          "answer_plain": "(2, 3) \u2014 marked on graph as the intersection point",
+          "page_index": 1,
+          "problem_position": 1
+        }
+      ],
+      "steps": [
+        {
+          "latex": "y = 2x - 1",
+          "page_index": 1,
+          "plain_english": "Student wrote the first equation of the system: y = 2x - 1",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "y = -x + 5",
+          "page_index": 1,
+          "plain_english": "Student wrote the second equation of the system: y = -x + 5",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "(2, 3)",
+          "page_index": 1,
+          "plain_english": "Student labeled the intersection point of the two lines as (2, 3) on the graph, marking it with a small circle.",
+          "problem_position": 1,
+          "step_num": 3
+        }
+      ],
+      "visual_work": [
+        {
+          "answer_on_drawing": "(2, 3)",
+          "bbox": {
+            "x0": 0.42,
+            "x1": 0.95,
+            "y0": 0.08,
+            "y1": 0.55
+          },
+          "description": "A coordinate plane with x- and y-axes drawn. Two lines are plotted: one rising steeply from lower-left to upper-right (representing y = 2x - 1, crossing the y-axis below the origin and rising with a steep positive slope), and one falling from upper-left to lower-right (representing y = -x + 5, crossing the y-axis above the origin with a negative slope). The two lines intersect at a point marked with a small open circle and labeled '(2, 3)' to its right.",
+          "kind": "graph",
+          "labeled_points": [
+            "(2, 3)"
+          ],
+          "page_index": 1,
+          "plotted_elements": [
+            "Line rising steeply left-to-right, crossing the y-axis below the origin (consistent with y = 2x - 1); extends from lower-left quadrant through the intersection into the upper-right area",
+            "Line falling left-to-right, crossing the y-axis above the origin (consistent with y = -x + 5); extends from upper-left area through the intersection into the lower-right quadrant"
+          ],
+          "present": true,
+          "problem_position": 1
+        }
+      ]
+    }
+  },
+  "19bbe066db44129a0762f634e67f5639": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "||",
+      "recorded_at": 1790704264.325116
+    },
+    "response": {
+      "answer_on_drawing": null,
+      "description": "A number line ranging from -2 to 10 with an open circle at 4 and a bold shaded ray extending to the right from 4 toward positive infinity, indicating a solution set of x > 4.",
+      "has_drawing": true,
+      "labeled_points": [],
+      "plotted_elements": [
+        "A horizontal number line with tick marks labeled from -2 to 10, with an arrow pointing right beyond 10.",
+        "A bold/thick shaded ray starting at 4 (marked with an open circle) and extending to the right continuously along the number line past 10, following the arrow direction."
+      ],
+      "unlabeled_dots": 0
+    }
+  },
+  "21e963b76de70113df4272d7a62b694d": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "||",
+      "recorded_at": 1790704129.0251331
+    },
+    "response": {
+      "answer_on_drawing": null,
+      "description": "A coordinate plane with two curves drawn on it, forming an X-shape. One curve rises steeply from the lower-left and curves through the upper region near the y-axis, while the other mirrors it, together resembling a cubic or square-root type pair of functions crossing each other near the origin area.",
+      "has_drawing": true,
+      "labeled_points": [],
+      "plotted_elements": [
+        "Curve 1: Starts at the lower-left below and to the left of the y-axis, rises steeply upward and to the right, crosses the x-axis slightly to the left of the origin, continues upward crossing the y-axis near y=2, then curves and bends back slightly toward the upper-left \u2014 overall a steep S-shaped or cubic-like curve passing through the upper-left and lower-left quadrants.",
+        "Curve 2: Starts at the upper-right area (above and to the right of the y-axis), sweeps downward and to the left, crosses the y-axis near y=2 (intersecting Curve 1), continues downward crossing the x-axis slightly to the right of the origin, then curves outward to the lower-right \u2014 a mirror-image S-shaped or cubic-like curve passing through the upper-right and lower-right quadrants.",
+        "The two curves intersect each other near the y-axis at approximately y=2 (above the x-axis) and again near the origin/x-axis region."
+      ],
+      "unlabeled_dots": 0
+    }
+  },
+  "5649ce708b6e642d1a44f7e3b86378eb": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor examining a student's handwritten homework  ||",
+      "recorded_at": 1790704172.50969
+    },
+    "response": {
+      "confidence": 0.85,
+      "final_answers": [
+        {
+          "answer_latex": "(2, 3)",
+          "answer_plain": "(2, 3) \u2014 marked on graph as the circled intersection point",
+          "page_index": 1,
+          "problem_position": 1
+        }
+      ],
+      "steps": [
+        {
+          "latex": "y = 2x - 1",
+          "page_index": 1,
+          "plain_english": "Student wrote the first equation of the system: y = 2x - 1",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "y = -x + 5",
+          "page_index": 1,
+          "plain_english": "Student wrote the second equation of the system: y = -x + 5",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "\\text{solution at the circled point}",
+          "page_index": 1,
+          "plain_english": "Student wrote 'solution at the circled point', indicating the answer is the circled intersection on the graph",
+          "problem_position": 1,
+          "step_num": 3
+        },
+        {
+          "latex": "(2, 3)",
+          "page_index": 1,
+          "plain_english": "Student labeled the intersection point (2, 3) on the graph, circled it as the solution",
+          "problem_position": 1,
+          "step_num": 4
+        }
+      ],
+      "visual_work": [
+        {
+          "answer_on_drawing": "(2, 3)",
+          "bbox": {
+            "x0": 0.72,
+            "x1": 1.0,
+            "y0": 0.82,
+            "y1": 1.0
+          },
+          "description": "A small coordinate plane drawn in the bottom-right corner of the page. Two lines are plotted intersecting near the center of the graph. The intersection point is labeled '(2,3)' and appears to be circled. Tick marks are visible on both axes. One line rises steeply left-to-right (consistent with y = 2x - 1) and the other falls left-to-right (consistent with y = -x + 5).",
+          "kind": "graph",
+          "labeled_points": [
+            "(2,3)"
+          ],
+          "page_index": 1,
+          "plotted_elements": [
+            "Line rising steeply from lower-left to upper-right, consistent with y = 2x - 1 (positive slope)",
+            "Line falling from upper-left to lower-right, consistent with y = -x + 5 (negative slope)"
+          ],
+          "present": true,
+          "problem_position": 1
+        }
+      ]
+    }
+  },
+  "7e28f110381d747910c25eb59ee9e47d": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor examining a student's handwritten homework  ||",
+      "recorded_at": 1790704119.016124
+    },
+    "response": {
+      "confidence": 0.92,
+      "final_answers": [
+        {
+          "answer_latex": "(2, 3)",
+          "answer_plain": "The solution to the system is the ordered pair (2, 3)",
+          "page_index": 1,
+          "problem_position": 1
+        }
+      ],
+      "steps": [
+        {
+          "latex": "y = 2x - 1",
+          "page_index": 1,
+          "plain_english": "Student wrote the first equation of the system: y = 2x - 1",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "y = -x + 5",
+          "page_index": 1,
+          "plain_english": "Student wrote the second equation of the system: y = -x + 5",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "(2, 3)",
+          "page_index": 1,
+          "plain_english": "Student identified the solution as the ordered pair (2, 3)",
+          "problem_position": 1,
+          "step_num": 3
+        }
+      ],
+      "visual_work": [
+        {
+          "answer_on_drawing": null,
+          "bbox": {
+            "x0": 0.47,
+            "x1": 0.97,
+            "y0": 0.1,
+            "y1": 0.55
+          },
+          "description": "A coordinate plane with x- and y-axes drawn. Two lines are plotted: one rising steeply from lower-left to upper-right (consistent with y = 2x - 1, positive slope of 2, crossing the y-axis below the origin) and one falling from upper-left to lower-right (consistent with y = -x + 5, negative slope, crossing the y-axis above the origin). The two lines intersect near the upper-center of the graph, visually near the point (2, 3).",
+          "kind": "graph",
+          "labeled_points": [],
+          "page_index": 1,
+          "plotted_elements": [
+            "Line rising steeply left-to-right (y = 2x - 1): crosses y-axis below the origin, extends from lower-left to upper-right",
+            "Line falling left-to-right (y = -x + 5): crosses y-axis above the origin, extends from upper-left to lower-right"
+          ],
+          "present": true,
+          "problem_position": 1
+        }
+      ]
+    }
+  },
+  "987a57d5ebd257451f9897e10ea95dbf": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "||",
+      "recorded_at": 1790704182.157269
+    },
+    "response": {
+      "answer_on_drawing": "(2,3)",
+      "description": "A coordinate plane with two straight lines intersecting at a labeled point (2,3). One line has a negative slope and the other has a positive slope, crossing each other in the first quadrant.",
+      "has_drawing": true,
+      "labeled_points": [
+        "(2,3)"
+      ],
+      "plotted_elements": [
+        "Line 1: runs from upper-left (starting above and to the left of the y-axis, near the top of the visible area) diagonally downward to the right, crossing the y-axis near y=4, passing through the labeled intersection point (2,3), and continuing down into the fourth quadrant (lower right), crossing the x-axis to the right of the origin.",
+        "Line 2: runs from the upper-right area (top right of the visible graph) diagonally downward to the left, passing through the labeled intersection point (2,3), continuing down and to the left, crossing the y-axis below the origin and extending into the third quadrant (lower left)."
+      ],
+      "unlabeled_dots": 1
+    }
+  },
+  "bac9ff13e8ac02ee2cebd24347cc8a05": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor examining a student's handwritten homework  ||",
+      "recorded_at": 1790704258.942605
+    },
+    "response": {
+      "confidence": 0.98,
+      "final_answers": [
+        {
+          "answer_latex": "x > 4",
+          "answer_plain": "x is greater than 4",
+          "page_index": 1,
+          "problem_position": 1
+        }
+      ],
+      "steps": [
+        {
+          "latex": "2x - 3 > 5",
+          "page_index": 1,
+          "plain_english": "Student writes the original inequality: 2x - 3 > 5.",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "2x > 8",
+          "page_index": 1,
+          "plain_english": "Student adds 3 to both sides, simplifying to 2x > 8.",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "x > 4",
+          "page_index": 1,
+          "plain_english": "Student divides both sides by 2, arriving at the solution x > 4.",
+          "problem_position": 1,
+          "step_num": 3
+        },
+        {
+          "latex": "x > 4 \\text{ (graphed on number line with open circle at 4, shading to the right)}",
+          "page_index": 1,
+          "plain_english": "Student graphs the solution on a number line: open circle at 4, bold arrow extending to the right toward 10.",
+          "problem_position": 1,
+          "step_num": 4
+        }
+      ],
+      "visual_work": [
+        {
+          "answer_on_drawing": "x > 4",
+          "bbox": {
+            "x0": 0.05,
+            "x1": 0.95,
+            "y0": 0.3,
+            "y1": 0.42
+          },
+          "description": "A horizontal number line ranging from -2 to 10, with tick marks labeled at each integer. An open circle (hollow dot) is drawn at 4, and a bold line with a rightward arrow extends from 4 toward 10 and beyond, indicating all values greater than 4.",
+          "kind": "number_line",
+          "labeled_points": [],
+          "page_index": 1,
+          "plotted_elements": [
+            "Open circle at x = 4",
+            "Bold ray extending rightward from x = 4 to the right end of the number line, with an arrowhead indicating continuation to infinity"
+          ],
+          "present": true,
+          "problem_position": 1
+        }
+      ]
+    }
+  },
+  "c2803b1a521f515065857f7505674146": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "||",
+      "recorded_at": 1790704225.462173
+    },
+    "response": {
+      "answer_on_drawing": "(2,3)",
+      "description": "A coordinate plane with two straight lines intersecting at a labeled point (2,3), drawn on lined notebook paper. One line rises steeply from lower-left to upper-right, and the other falls from upper-right to lower-left, crossing the x-axis to the right.",
+      "has_drawing": true,
+      "labeled_points": [
+        "(2,3)"
+      ],
+      "plotted_elements": [
+        "Line 1: rises steeply with a positive slope, entering from the lower-center (below the x-axis, near the y-axis) and extending toward the upper-left, crossing the y-axis above the origin.",
+        "Line 2: falls with a negative slope, entering from the upper-right and extending toward the lower-right, crossing the x-axis to the right of the origin and continuing below it."
+      ],
+      "unlabeled_dots": 0
+    }
+  }
+}

@@ -1,0 +1,184 @@
+{
+  "1cb9e7fc67478c455b6b65194aa5a3cb": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Student wrote the first equa",
+      "recorded_at": 1790704135.274781
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.85,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student's final answer (2, 3) matches the answer key exactly. The required drawing is present: two lines are plotted on a coordinate plane consistent with y = 2x - 1 and y = -x + 5, intersecting visually near (2, 3). The work shown (writing both equations, graphing them, identifying the intersection) satisfies the 'Full credit' criterion. Note: the drawing was read from the full page and not zoomed-checked, so confidence is slightly reduced, but the description is sufficiently detailed to confirm the drawing exists and is appropriate.",
+          "score_status": "full",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Great work! You correctly graphed both lines and identified their intersection as (2, 3) \u2014 that's exactly right. For extra clarity, consider labeling the intersection point directly on your graph next time."
+        }
+      ]
+    }
+  },
+  "1e28c75813fc677c1da5cd11078edf80": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 2x - 3 > 5 \u2014 Student writes the original ",
+      "recorded_at": 1790704274.8857841
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.99,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student's final answer x > 4 matches the answer key exactly. Full credit criterion is met: the algebraic work is clearly shown step-by-step (adding 3 to both sides, then dividing by 2), and the required number line drawing is present and complete \u2014 open circle at 4 with a rightward bold ray, correctly representing a strict inequality.",
+          "score_status": "full",
+          "student_answer": "$x > 4$",
+          "student_feedback": "Excellent work! Your algebra is clean and correct, and your number line graph perfectly shows the open circle at 4 with the arrow pointing right \u2014 exactly what's needed for a strict inequality."
+        }
+      ]
+    }
+  },
+  "4eabe95db7a4fe0081c3601684478fa7": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Student wrote the first equa",
+      "recorded_at": 1790704191.501811
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.98,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "Full credit criterion met: the student graphed both lines correctly (positive slope for y = 2x \u2212 1, negative slope for y = \u2212x + 5), labeled and circled the intersection at (2, 3), which matches the answer key exactly. The required drawing is present and complete with both lines plotted, axes with tick marks, and the intersection point labeled.",
+          "score_status": "full",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Great work! You graphed both lines accurately, clearly identified the intersection point, and labeled it correctly as $(2, 3)$."
+        }
+      ]
+    }
+  },
+  "5d4e3954a591b3a79b75b26622f684e8": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Student wrote the first equa",
+      "recorded_at": 1790704230.1961138
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.95,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student graphed both lines correctly (consistent with y = 2x - 1 and y = -x + 5), marked the intersection at (2, 3) on the coordinate plane, and stated the correct final answer. The problem requires a drawing, and the drawing is present and complete with both lines plotted and the intersection labeled. Full credit criterion is met.",
+          "score_status": "full",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Great work! You correctly graphed both lines, clearly marked the intersection point, and identified the solution as $(2, 3)$ \u2014 that's exactly right."
+        }
+      ]
+    }
+  },
+  "8b54f5bad87c34e7a3904b6e342f721f": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 2x - 3 > 5 \u2014 Student writes the original ",
+      "recorded_at": 1790704269.357147
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.98,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student's final answer x > 4 matches the answer key exactly. The work shown follows a clear, correct algebraic path (adding 3 to both sides, then dividing by 2), and the required number line drawing is present and complete \u2014 open circle at 4 with a rightward bold ray, correctly representing x > 4. Full credit criterion is fully met.",
+          "score_status": "full",
+          "student_answer": "$x > 4$",
+          "student_feedback": "Excellent work! Your algebra is clean and correct, and your number line graph is spot-on \u2014 the open circle at 4 and the rightward arrow perfectly represent x > 4."
+        }
+      ]
+    }
+  },
+  "9db33cdef9ae483c989db0bd6edfee5b": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Student wrote the first equa",
+      "recorded_at": 1790704187.1801422
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.92,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student meets the Full credit criterion: the correct final answer (2, 3) matches the answer key, both lines are plotted on the graph with correct slopes, the intersection is labeled and circled, and the required drawing is present and complete.",
+          "score_status": "full",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Great work! You graphed both lines correctly, clearly identified the intersection point, and labeled it as (2, 3) \u2014 that's exactly right."
+        }
+      ]
+    }
+  },
+  "a96433799969a22765c4067acc118740": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Student wrote the first equa",
+      "recorded_at": 1790704144.911235
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.7,
+          "deductions": [
+            {
+              "points_off": 50,
+              "reason": "Required drawing present but incorrect \u2014 curves drawn instead of straight lines for linear equations; intersection not correctly shown at (2, 3) on the graph.",
+              "step_ref": null
+            }
+          ],
+          "percent": 50,
+          "problem_position": 1,
+          "reasoning": "The student's final answer (2, 3) matches the answer key, and the problem requires solving by graphing. A drawing is present, but the graph description shows two S-shaped/cubic-like curves rather than two straight lines (y = 2x \u2212 1 is linear with slope 2, y = \u2212x + 5 is linear with slope \u22121). The drawn curves do not represent the given linear equations, and the intersection point is described as near y = 2 on the y-axis rather than at (2, 3). The required drawing is present but does not correctly represent the system \u2014 this falls under 'present but incomplete/incorrect' for the required drawing. Per the rubric, 'right answer, required method missing/incomplete' yields around 50%.",
+          "score_status": "partial",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "You got the correct answer, $(2, 3)$, but your graph shows curved lines instead of straight lines \u2014 both equations in this system are linear, so they should be graphed as straight lines. Make sure to plot at least two points for each equation and connect them with a straight line, then mark the intersection point on your graph."
+        }
+      ]
+    }
+  },
+  "fe9efdffa3420925a026a4b5cea4f6df": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Student wrote the first equa",
+      "recorded_at": 1790704235.670588
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.99,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student graphed both lines correctly (consistent with y = 2x - 1 and y = -x + 5), marked the intersection at (2, 3) with a labeled circle, and stated the correct final answer. The required drawing is present and complete. Full credit criterion is fully met.",
+          "score_status": "full",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Excellent work! You graphed both lines accurately, clearly marked the intersection point, and correctly identified the solution as (2, 3)."
+        }
+      ]
+    }
+  }
+}
