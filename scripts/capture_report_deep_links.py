@@ -322,7 +322,8 @@ async def capture_email(hb: HarnessBrowser, w: dict[str, str]) -> None:
         await asyncio.sleep(0.05)
     async with hb.plain_page() as page:
         await page.set_viewport_size({"width": 760, "height": 900})
-        await page.set_content(f"<body style='font-family:-apple-system,sans-serif;padding:24px;max-width:680px'>{sent[0]}</body>")
+        style = "font-family:-apple-system,sans-serif;padding:24px;max-width:680px"
+        await page.set_content(f"<body style='{style}'>{sent[0]}</body>")
         await _shot(page, "email")
 
 

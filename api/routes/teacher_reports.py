@@ -185,7 +185,10 @@ def _notify(report: TeacherReport) -> None:
         f"<p>{_email_links(report)}</p>"
     )
     if report.page_url:
-        body += f"<p style=\"color:#64748b;font-size:12px\">Teacher's page (teacher login only): {html.escape(report.page_url)}</p>"
+        body += (
+            "<p style=\"color:#64748b;font-size:12px\">Teacher's page (teacher login only): "
+            f"{html.escape(report.page_url)}</p>"
+        )
 
     async def _send() -> None:
         try:
