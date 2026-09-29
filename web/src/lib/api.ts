@@ -2646,9 +2646,19 @@ export const schoolStudent = {
       `/school/student/homework/${assignmentId}/problems/${bankItemId}/flagged`,
     );
   },
+  /** Free pixel check behind the upload screen's "looks sideways —
+   *  rotate it?" nudge. `image` is a small copy of one page. */
+  pageOrientation(image: string) {
+    return apiFetch<{ sideways: boolean }>(`/school/student/homework/page-orientation`, {
+      method: "POST",
+      body: JSON.stringify({ image }),
+    });
+  },
+  /** `rotations`: clockwise quarter turns per file, parallel to `files`
+   *  — the server stores each page the way the student turned it. */
   submitHomework(
     assignmentId: string,
-    body: { files: string[] },
+    body: { files: string[]; rotations?: number[] },
   ) {
     const json = JSON.stringify(body);
     return apiFetch<SubmitHomeworkResponse>(`/school/student/homework/${assignmentId}/submit`, {

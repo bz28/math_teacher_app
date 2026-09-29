@@ -32,7 +32,7 @@ from collections.abc import Coroutine
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import delete as sql_delete
 from sqlalchemy import distinct, func, select, update
@@ -41,7 +41,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import record_student_activity
 from api.core.constants import MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
-from api.core.image_utils import validate_and_decode_upload
+from api.core.image_utils import (
+    PAGE_ROTATIONS,
+    page_looks_sideways,
+    rotate_upload,
+    validate_and_decode_image,
+    validate_and_decode_upload,
+)
 from api.core.integrity_pipeline import (
     spawn_diagnosis_seeding,
     start_integrity_check,
@@ -49,6 +55,7 @@ from api.core.integrity_pipeline import (
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
+from api.middleware.rate_limit import limiter
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course, CourseTeacher
 from api.models.practice_activity import (
@@ -494,6 +501,11 @@ class SubmitHomeworkRequest(BaseModel):
     # validate_and_decode_upload (image_utils). The work is the source
     # of truth for the teacher view and the integrity-checker pipeline.
     files: list[str]
+    # Clockwise quarter turns the student applied to each page on the
+    # upload screen, parallel to `files`. The page is stored the way the
+    # student turned it, so the AI reads it upright. Omitted = no turns
+    # (older app builds don't send it).
+    rotations: list[int] | None = None
 
     @field_validator("files")
     @classmethod
@@ -503,6 +515,29 @@ class SubmitHomeworkRequest(BaseModel):
         if len(v) > MAX_SUBMISSION_FILES:
             raise ValueError(f"Maximum {MAX_SUBMISSION_FILES} files per submission")
         return v
+
+    @field_validator("rotations")
+    @classmethod
+    def _validate_rotations(cls, v: list[int] | None) -> list[int] | None:
+        if v is not None and any(r not in PAGE_ROTATIONS for r in v):
+            raise ValueError("Rotations must be 0, 90, 180 or 270")
+        return v
+
+    @model_validator(mode="after")
+    def _rotations_match_files(self) -> SubmitHomeworkRequest:
+        if self.rotations is not None and len(self.rotations) != len(self.files):
+            raise ValueError("rotations must have one entry per file")
+        return self
+
+
+class PageOrientationRequest(BaseModel):
+    # A downsized copy (~1024px long edge) of one page the student just
+    # added — enough to see which way the writing runs.
+    image: str
+
+
+class PageOrientationResponse(BaseModel):
+    sideways: bool
 
 
 class SubmitHomeworkResponse(BaseModel):
@@ -1893,6 +1928,33 @@ async def linked_practice_for_homework(
     )
 
 
+@router.post("/homework/page-orientation")
+# Per IP, and a whole class can share a school's IP — generous, since a
+# throttled check only means a missing nudge.
+@limiter.limit("300/minute")
+async def check_page_orientation(
+    request: Request,
+    body: PageOrientationRequest,
+    user: User = Depends(get_current_user_full),
+) -> PageOrientationResponse:
+    """Does a page the student just added look sideways?
+
+    Backs the "This page looks sideways — rotate it?" nudge on the
+    upload screen. Free (a pixel check, no model call) and advisory:
+    it never rotates anything — the student does, with the rotate
+    button, and the turn is applied at submit.
+    """
+    b64 = body.image.split(",", 1)[1] if body.image.startswith("data:") else body.image
+    try:
+        validate_and_decode_image(b64)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    # Image decoding is CPU work — keep it off the event loop.
+    return PageOrientationResponse(
+        sideways=await asyncio.to_thread(page_looks_sideways, b64),
+    )
+
+
 @router.post("/homework/{assignment_id}/submit")
 async def submit_homework(
     assignment_id: uuid.UUID,
@@ -1948,7 +2010,20 @@ async def submit_homework(
                 status_code=400,
                 detail=f"File {i + 1}: {e}",
             ) from e
-        total_bytes += len(decoded)
+        rotation = body.rotations[i] if body.rotations else 0
+        if rotation:
+            try:
+                # CPU work — off the event loop.
+                b64 = await asyncio.to_thread(rotate_upload, b64, media_type, rotation)
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File {i + 1}: couldn't read this image to rotate it",
+                ) from e
+            # Count what is stored, not what was sent.
+            total_bytes += len(b64) * 3 // 4
+        else:
+            total_bytes += len(decoded)
         validated_files.append({"data": b64, "media_type": media_type})
     if total_bytes > MAX_SUBMISSION_TOTAL_BYTES:
         raise HTTPException(
