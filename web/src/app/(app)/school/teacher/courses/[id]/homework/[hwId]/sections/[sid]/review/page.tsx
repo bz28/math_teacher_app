@@ -1232,15 +1232,12 @@ function HomeworkSectionReview({
     try {
       await teacher.gradeSubmissionNow(submissionId);
     } catch (e) {
-      setAiPendingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(submissionId);
-        return next;
-      });
       // A refusal usually means this page is behind the server — most
       // often the grade already landed. Reload the row (and the open
       // pane) so the teacher sees why, instead of an error sitting
-      // next to a button the fresh state wouldn't offer.
+      // next to a button the fresh state wouldn't offer. The button
+      // stays in its busy state until then, so a second click can't
+      // fire another refused request.
       const fresh = await teacher
         .submissions(assignmentId)
         .then((res) => res.submissions.find((r) => r.id === submissionId))
@@ -1259,9 +1256,14 @@ function HomeworkSectionReview({
               )
             : prev,
         );
-        // The grade is on screen now — that is the answer.
-        if (fresh.final_score !== null) return;
       }
+      setAiPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(submissionId);
+        return next;
+      });
+      // The grade is on screen now — that is the answer.
+      if (fresh && fresh.final_score !== null) return;
       setAiGradeError({
         forSubmissionId: submissionId,
         message: e instanceof Error ? e.message : "Couldn't start AI grading",
@@ -2389,8 +2391,8 @@ function isAwaitingGrade(entry: RosterEntry): boolean {
 }
 
 /** The server says the AI grader can take this submission: never
- *  graded in any form, readable work the student has confirmed (or
- *  flagged), AI grading on. */
+ *  graded in any form, readable work the student has confirmed (not
+ *  flagged as misread), AI grading on. */
 function canAiGrade(sub: TeacherSubmissionRow): boolean {
   return sub.ai_grade_block === null;
 }
@@ -3575,7 +3577,8 @@ function SubmissionDetailPanel({
                 className="ml-1.5 font-semibold text-[color:var(--color-error)] "
                 title="Student flagged: 'Reader got something wrong' — the AI doesn't grade a reading the student disputes, so grade from the photo"
               >
-                · student-flagged reading · grade manually
+                · student-flagged reading ·{" "}
+                {detail.ai_breakdown ? "check the AI grade against the photo" : "grade manually"}
               </span>
             )}
             <span className="mx-1.5 text-text-muted/60" aria-hidden>·</span>
@@ -3675,7 +3678,8 @@ function SubmissionDetailPanel({
               has graded in any form (no AI grade, no hand score, not
               even one problem), with readable work; the server enforces
               the same rule — which also requires the student to have
-              confirmed (or flagged) the reading. The grade lands as a
+              confirmed the reading (flagged work is graded by hand). The
+              grade lands as a
               suggestion she still approves. Solid because, on an
               ungraded submission, it is the one thing to do here. */}
           {(offerAiGrade || aiGrading) && (
@@ -3896,10 +3900,9 @@ function SubmissionDetailPanel({
                 Student said the reader got their work wrong — review
               </p>
               <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
-                They declined the scanned reading on the confirm screen,
-                so no AI grading or understanding check ran. If the photo
-                really was misread, grade from the original work; if it
-                looks like a dodge, follow up with the student.
+                {detail.ai_breakdown
+                  ? "They declined the scanned reading on the confirm screen, so no understanding check ran — and the AI grade below was made from that disputed reading. Check it against the photo; if it looks like a dodge, follow up with the student."
+                  : "They declined the scanned reading on the confirm screen, so no AI grading or understanding check ran. If the photo really was misread, grade from the original work; if it looks like a dodge, follow up with the student."}
               </p>
             </div>
           </div>
