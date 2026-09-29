@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import katex from "katex";
 
-import { allowMathBreaks, renderBreakableInlineMath } from "./math-break-points.ts";
+import { allowMathBreaks, renderBreakableInlineMath, renderKatex } from "./math-break-points.ts";
 
 const B = "\\allowbreak ";
 
@@ -144,4 +144,21 @@ test("annotation restore is literal — `$` replacement patterns in the source d
 
 test("unchanged input takes the plain lenient path", () => {
   assert.equal(renderBreakableInlineMath("x = 4", lenient), lenient("x = 4"));
+});
+
+test("renderKatex escapes its fallback when KaTeX throws outright", () => {
+  // throwOnError:false only covers parse errors — deep nesting overflows the
+  // stack and throws. The fallback is injected as HTML, and a student's
+  // correction reaches here, so it must never come back as live markup.
+  // The depth that overflows depends on the stack size (~1,900 already did
+  // in Chromium); nest far deeper so the test throws on any runtime.
+  const attack = "{".repeat(100_000) + '<img src=x onerror="alert(1)">';
+  assert.throws(() => katex.renderToString(attack, { throwOnError: false, strict: false }));
+  const html = renderKatex(attack, true);
+  assert.ok(!html.includes("<img"), "fallback must not contain live markup");
+  assert.ok(html.includes("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;"));
+});
+
+test("renderKatex renders ordinary maths", () => {
+  assert.ok(renderKatex(String.raw`\frac{1}{2}`, false).includes('class="katex"'));
 });

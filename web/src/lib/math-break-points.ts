@@ -113,6 +113,24 @@ const ESCAPES: Record<string, string> = {
 const escapeHtml = (s: string) => s.replace(/[&><"']/g, (c) => ESCAPES[c]);
 
 /**
+ * KaTeX to an HTML string, lenient: a parse error renders as KaTeX's own
+ * red error text rather than throwing.
+ *
+ * `throwOnError: false` covers parse errors only — anything else (a stack
+ * overflow on ~1,900 nested braces, say) still throws. The result is
+ * injected as HTML, and `latex` can be text a student typed (a correction
+ * overlaid onto the read a teacher reviews), so the fallback is escaped;
+ * returned raw, a crafted correction ran script in the teacher's browser.
+ */
+export function renderKatex(latex: string, displayMode: boolean): string {
+  try {
+    return katex.renderToString(latex, { displayMode, throwOnError: false, strict: false });
+  } catch {
+    return escapeHtml(latex);
+  }
+}
+
+/**
  * Render inline math with `allowMathBreaks` break points — safely.
  *
  * The rewrite must never change what the teacher sees beyond line
