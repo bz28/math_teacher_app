@@ -3130,11 +3130,20 @@ table.dt tr:last-child td { border-bottom: none; }
   flex-direction: column;
   gap: 10px;
 }
-.xq-shot img {
+.xq-shot img,
+.xq-shot canvas {
+  display: block;
   width: 100%;
   height: auto;
   border: 1px solid var(--rule);
   background: var(--paper-2);
+}
+/* A scanned PDF: every page stacked, spaced like consecutive photos. */
+.xq-pdf,
+.xq-pdf-pages {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 .xq-shot-empty {
   border: 1px dashed var(--rule-strong);
@@ -3196,6 +3205,16 @@ table.dt tr:last-child td { border-bottom: none; }
   color: var(--ink-soft);
   word-break: break-word;
 }
+/* Typeset read, left-aligned under its label. KaTeX never wraps, so maths
+   wider than its column scrolls instead of stretching the column over the
+   student's side. Prose (`.xq-prose`) is set in KaTeX's own text face so
+   it sits beside the maths the way `\text{…}` would — but it wraps. */
+.xq-read { min-width: 0; }
+.xq-math { font-size: 13px; color: var(--ink-soft); }
+.xq-math .katex-display { margin: 0; text-align: left; overflow-x: auto; overflow-y: hidden; }
+.xq-math .katex-display > .katex { text-align: left; }
+.xq-prose { font-family: KaTeX_Main, "Times New Roman", serif; font-size: 15.5px; line-height: 1.45; }
+.xq-read-fixed .xq-math { color: var(--ink); }
 .xq-read-fixed .xq-read-label { color: var(--warn); }
 .xq-read-fixed p { color: var(--ink); }
 .xq-agree { color: var(--muted-2) !important; }

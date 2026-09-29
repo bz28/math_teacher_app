@@ -1,4 +1,6 @@
 import type { ExtractionDetail } from "../lib/api";
+import MathText from "./MathText";
+import PdfPages from "./PdfPages";
 
 /**
  * The strokes beside the transcription — evidence next to interpretation.
@@ -13,6 +15,50 @@ import type { ExtractionDetail } from "../lib/api";
  * homework" — and a divergence between them would mean the same
  * submission read differently depending on which door you came through.
  */
+
+/**
+ * The prose inside a read that is ONE `\text{…}` group and nothing else,
+ * or null. Vision writes a written-out answer that way, and KaTeX sets a
+ * text group as a single unbreakable line — a sentence ran off the side
+ * of its column. Only a whole-read group qualifies: `\text{a} + \text{b}`
+ * matches the outer braces too, but its body is unbalanced, so it stays
+ * maths.
+ */
+function wholeTextGroup(latex: string): string | null {
+  const body = /^\\text\{([\s\S]*)\}$/.exec(latex.trim())?.[1];
+  if (body === undefined) return null;
+  let depth = 0;
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] === "\\") i++;
+    else if (body[i] === "{") depth++;
+    else if (body[i] === "}" && --depth < 0) return null;
+  }
+  if (depth !== 0) return null;
+  // Text-mode escapes. `\$` stays escaped: MathText reads a bare `$` as a
+  // maths delimiter, which is how inline maths inside the prose renders.
+  return body.replace(/\\([{}%&#_])/g, "$1");
+}
+
+/**
+ * One side of a row, typeset the way the student saw it on the confirm
+ * screen: a LaTeX read as display maths, a plain read as text. Printing
+ * the LaTeX source made every row read as code, and made "did the
+ * student really agree with THIS?" harder to judge than it was for the
+ * student.
+ */
+function ReadText({ text, isLatex }: { text: string; isLatex: boolean }) {
+  if (!isLatex) return <p>{text}</p>;
+  const prose = wholeTextGroup(text);
+  return (
+    <div className="xq-math">
+      {prose !== null ? (
+        <div className="xq-prose"><MathText>{prose}</MathText></div>
+      ) : (
+        <MathText>{`$$${text}$$`}</MathText>
+      )}
+    </div>
+  );
+}
 
 /** One row of the read, AI beside student. The diff IS the diagnostic. */
 export function ReadRow({ row }: { row: ExtractionDetail["rows"][number] }) {
@@ -44,7 +90,11 @@ export function ReadRow({ row }: { row: ExtractionDetail["rows"][number] }) {
       <div className="xq-row-pair">
         <div className="xq-read">
           <span className="xq-read-label">AI read</span>
-          <p>{row.ai_read ?? <em>nothing read</em>}</p>
+          {row.ai_read === null ? (
+            <p><em>nothing read</em></p>
+          ) : (
+            <ReadText text={row.ai_read} isLatex={row.is_latex} />
+          )}
         </div>
         {changed ? (
           <div className="xq-read xq-read-fixed">
@@ -55,7 +105,9 @@ export function ReadRow({ row }: { row: ExtractionDetail["rows"][number] }) {
               // screen built to surface misreads.
               <p><em>row deleted — nothing was written here</em></p>
             ) : (
-              <p>{row.student_said}</p>
+              // A correction edits the same source as the read, so it
+              // shares the read's format.
+              <ReadText text={row.student_said ?? ""} isLatex={row.is_latex} />
             )}
           </div>
         ) : (
@@ -86,14 +138,20 @@ export default function ExtractionReadout({
             No image stored for this submission.
           </div>
         ) : (
-          detail.files.map((f, i) => (
-            <img
-              key={i}
-              src={`data:${f.media_type};base64,${f.data}`}
-              alt={`Submitted work, page ${i + 1}`}
-              loading="lazy"
-            />
-          ))
+          // A submission is photos OR scanned PDFs — an <img> cannot show
+          // a PDF, so it renders page by page instead.
+          detail.files.map((f, i) =>
+            f.media_type === "application/pdf" ? (
+              <PdfPages key={i} b64={f.data} label={`Submitted work, file ${i + 1}`} />
+            ) : (
+              <img
+                key={i}
+                src={`data:${f.media_type};base64,${f.data}`}
+                alt={`Submitted work, page ${i + 1}`}
+                loading="lazy"
+              />
+            ),
+          )
         )}
       </div>
       <div>

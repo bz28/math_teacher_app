@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
-import "katex/dist/katex.min.css";
 
 import ErrorState from "../components/ErrorState";
 import MathText from "../components/MathText";

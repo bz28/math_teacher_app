@@ -552,6 +552,9 @@ export interface ExtractionRow {
    *  never asked to confirm it. */
   unattributed: boolean;
   ai_read: string | null;
+  /** The read came from Vision's LaTeX field (typeset it) rather than its
+   *  plain one. A student's correction edits the same source. */
+  is_latex: boolean;
   student_said: string | null;
   /** Student cleared the row — a deletion, not a blank. */
   deleted: boolean;
