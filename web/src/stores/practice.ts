@@ -33,7 +33,6 @@ export interface PracticeBatch {
   firstAttemptCorrect: (boolean | null)[];
   currentFeedback: "correct" | "wrong" | null;
   sessionId: string | null;
-  loadingMore: boolean;
   totalCount: number;
 }
 
@@ -68,7 +67,6 @@ function createPracticeBatch(
     firstAttemptCorrect: new Array(len).fill(null),
     currentFeedback: null,
     sessionId,
-    loadingMore: false,
     totalCount: 0,
     ...overrides,
   };
