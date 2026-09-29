@@ -2053,6 +2053,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/school/student/homework/page-orientation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Page Orientation
+         * @description Does a page the student just added look sideways?
+         *
+         *     Backs the "This page looks sideways — rotate it?" nudge on the
+         *     upload screen. Free (a pixel check, no model call) and advisory:
+         *     it never rotates anything — the student does, with the rotate
+         *     button, and the turn is applied at submit.
+         */
+        post: operations["check_page_orientation_v1_school_student_homework_page_orientation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/school/student/homework/{assignment_id}": {
         parameters: {
             query?: never;
@@ -5216,6 +5241,16 @@ export interface components {
             /** Body */
             body: string;
         };
+        /** PageOrientationRequest */
+        PageOrientationRequest: {
+            /** Image */
+            image: string;
+        };
+        /** PageOrientationResponse */
+        PageOrientationResponse: {
+            /** Sideways */
+            sideways: boolean;
+        };
         /**
          * PasteEvent
          * @description One paste event on the chat textarea. Size only — never content.
@@ -5900,6 +5935,8 @@ export interface components {
         SubmitHomeworkRequest: {
             /** Files */
             files: string[];
+            /** Rotations */
+            rotations?: number[] | null;
         };
         /** SubmitHomeworkResponse */
         SubmitHomeworkResponse: {
@@ -10000,6 +10037,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StudentGradesResponse"];
+                };
+            };
+        };
+    };
+    check_page_orientation_v1_school_student_homework_page_orientation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageOrientationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageOrientationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -9,7 +9,9 @@ from PIL import Image
 from api.core.constants import MAX_IMAGE_BYTES, MAX_PDF_BYTES
 from api.core.image_utils import (
     VISION_MAX_EDGE,
+    page_looks_sideways,
     preprocess_image_for_vision,
+    rotate_upload,
     to_content_block,
     validate_and_decode_image,
     validate_and_decode_upload,
@@ -212,3 +214,97 @@ class TestPreprocessImageForVision:
         # still reaches the model.
         junk = base64.b64encode(b"not really a jpeg").decode("ascii")
         assert preprocess_image_for_vision(junk, "image/jpeg") == junk
+
+
+# ── rotate_upload (the student's rotate button, applied at submit) ────
+
+
+def _pixel(b64: str, xy: tuple[int, int]) -> tuple[int, ...]:
+    with Image.open(io.BytesIO(base64.b64decode(b64))) as img:
+        return img.convert("RGB").getpixel(xy)
+
+
+def _marked(size: tuple[int, int]) -> Image.Image:
+    """White image with a solid red block in the top-left corner, so a
+    turn can be checked by where the block ends up."""
+    img = Image.new("RGB", size, "white")
+    for x in range(8):
+        for y in range(8):
+            img.putpixel((x, y), (255, 0, 0))
+    return img
+
+
+class TestRotateUpload:
+    def test_no_turn_keeps_the_bytes(self) -> None:
+        b64 = _encode(_marked((40, 20)), "JPEG")
+        assert rotate_upload(b64, "image/jpeg", 0) is b64
+
+    def test_quarter_turn_is_clockwise(self) -> None:
+        # Clockwise: the top-left corner lands top-right.
+        out = rotate_upload(_encode(_marked((40, 20)), "PNG"), "image/png", 90)
+        assert _decode_size(out) == (20, 40)
+        assert _pixel(out, (16, 3))[0] > 200  # red, top-right
+        assert _pixel(out, (3, 3)) == (255, 255, 255)
+
+    def test_turns_the_image_the_student_saw(self) -> None:
+        # The preview the student rotated is EXIF-applied. A 40x20 image
+        # tagged "rotate 90 CW" displays 20x40; one more clockwise quarter
+        # makes it 40x20 again, upside down from the raw pixels.
+        img = _marked((40, 20))
+        exif = img.getexif()
+        exif[0x0112] = 6
+        out = rotate_upload(_encode(img, "JPEG", exif=exif), "image/jpeg", 90)
+        assert _decode_size(out) == (40, 20)
+        assert _pixel(out, (36, 16))[0] > 200  # raw top-left → bottom-right
+
+    def test_pdf_is_left_alone(self) -> None:
+        b64 = _b64(_PDF_HEADER + b"pdf")
+        assert rotate_upload(b64, "application/pdf", 90) == b64
+
+
+# ── page_looks_sideways (the free "looks sideways" nudge) ─────────────
+
+
+def _page_of_writing() -> Image.Image:
+    """A notebook-ish page: rows of short dark strokes (words) with
+    blank gaps between lines — the structure the check keys on."""
+    import random
+
+    from PIL import ImageDraw
+
+    rnd = random.Random(7)
+    img = Image.new("L", (900, 1200), 235)
+    draw = ImageDraw.Draw(img)
+    for line_y in range(80, 1150, 55):
+        x = 60
+        while x < 820:
+            word = rnd.randint(25, 90)
+            for _ in range(word // 3):
+                sx = x + rnd.randint(0, word)
+                draw.line(
+                    (sx, line_y + rnd.randint(0, 6), sx + rnd.randint(-4, 4),
+                     line_y + 22 + rnd.randint(-4, 4)),
+                    fill=40, width=3,
+                )
+            x += word + rnd.randint(15, 30)
+    return img.convert("RGB")
+
+
+class TestPageLooksSideways:
+    def test_upright_page_is_not_sideways(self) -> None:
+        assert page_looks_sideways(_encode(_page_of_writing(), "JPEG")) is False
+
+    @pytest.mark.parametrize("turn", [90, 270])
+    def test_page_on_its_side_is_sideways(self, turn: int) -> None:
+        page = _page_of_writing().rotate(turn, expand=True)
+        assert page_looks_sideways(_encode(page, "JPEG")) is True
+
+    def test_upside_down_is_not_sideways(self) -> None:
+        # Lines still run left to right — the check only answers
+        # "sideways", which is what the nudge asks about.
+        page = _page_of_writing().rotate(180)
+        assert page_looks_sideways(_encode(page, "JPEG")) is False
+
+    def test_blank_or_unreadable_is_not_sideways(self) -> None:
+        assert page_looks_sideways(_encode(Image.new("RGB", (400, 600), "white"), "PNG")) is False
+        assert page_looks_sideways(_b64(b"not an image")) is False
