@@ -234,3 +234,53 @@ async def test_email_is_sent_escaped_without_student_name(
     assert "Ms. Okafor" in m["html"] and "D. Park" not in m["html"]
     assert "Full · 100%" in m["html"] and "Partial · 50%" in m["html"]
     assert "/reports/" in m["html"]
+    # The primary link lands on the student's work at the reported
+    # problem; the report page stays beside it. Ids only in the URLs.
+    rid = r.json()["id"]
+    trace = f"https://admin.veradicai.com/submissions/{world['submission_id']}/trace#p4"
+    assert f'href="{trace}"' in m["html"]
+    assert "Open submission at Problem 4" in m["html"]
+    assert f'href="https://admin.veradicai.com/reports/{rid}"' in m["html"]
+    assert m["html"].index(trace) < m["html"].index(f"/reports/{rid}")
+
+
+async def _capture_email(
+    client: AsyncClient, world: dict[str, Any], monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any],
+) -> tuple[str, str]:
+    import asyncio
+
+    from api.routes import teacher_reports as mod
+
+    sent: list[str] = []
+
+    async def fake_send(*, to: list[str], subject: str, html: str) -> None:
+        sent.append(html)
+
+    monkeypatch.setattr(mod, "send_email", fake_send)
+    monkeypatch.setattr(mod.settings, "admin_alert_emails", ["founder@t.com"])
+    r = await client.post("/v1/teacher/reports", headers=auth_headers(world["teacher"]), json=payload)
+    assert r.status_code == 201, r.text
+    await asyncio.sleep(0)
+    assert len(sent) == 1
+    return r.json()["id"], sent[0]
+
+
+async def test_email_whole_submission_links_trace_without_anchor(
+    client: AsyncClient, world: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {**_payload(world), "problem_id": None, "problem_position": None}
+    _, html = await _capture_email(client, world, monkeypatch, payload)
+    assert f'href="https://admin.veradicai.com/submissions/{world["submission_id"]}/trace"' in html
+    assert ">Open submission<" in html
+    assert "#p" not in html
+
+
+async def test_email_context_free_report_links_only_the_report(
+    client: AsyncClient, world: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {"kind": "broken", "note": "Page froze", "page_url": "https://veradicai.com/school/teacher"}
+    rid, html = await _capture_email(client, world, monkeypatch, payload)
+    assert "/submissions/" not in html
+    assert f'href="https://admin.veradicai.com/reports/{rid}"' in html
+    assert "Open in admin console" in html
+    assert "teacher login only" in html
