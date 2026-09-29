@@ -105,14 +105,22 @@ class QuestionBankItem(Base):
     # While locked, content edits / status changes / delete are refused.
     locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Does the question ask the student to draw (graph / sketch / plot /
-    # shade / construct / a table of values)? Set from the question text
-    # at creation (api/core/drawing_requirement.py), teacher-overridable
-    # in the Workshop. Gates the drawings channel: the extractor only
-    # inventories drawings on flagged problems, and the grader's
-    # required-drawing rule reads this instead of the wording.
+    # shade / construct / a table of values)? Defaults from the question
+    # text (api/core/drawing_requirement.py); the teacher overrides it in
+    # the Workshop. It gates where drawings are USED — the zoomed verify
+    # pass, the grader's required-drawing rule, the review page's full
+    # drawings block — never what the extractor records.
     requires_drawing: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false"),
     )
+    # True once a teacher has set the flag. AI rewrites (regenerate,
+    # Workshop accept) re-derive it only while this is false, and undo
+    # never overrides it.
+    requires_drawing_teacher_set: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false"),
+    )
+    # One-level undo for the flag, alongside previous_question.
+    previous_requires_drawing: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     # Provenance: generated (AI), imported (PDF), manual (typed by teacher).
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="generated")
     # Variation tree — set by "generate similar" later.

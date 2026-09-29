@@ -1,49 +1,46 @@
-"""add question_bank_items.requires_drawing; clean visual_work to match
+"""add question_bank_items.requires_drawing (+ teacher_set, undo); repair leaked visual_work
 
 Revision ID: cp1000085
 Revises: cn1000083
-Create Date: 2026-09-27 00:00:00.000000
+Create Date: 2026-09-29 00:00:00.000000
 
-The extractor used to inventory drawings on EVERY problem. Drawings only
-matter for grading on problems that require one, and on prod (Sep 2026)
-all 11 recorded visual_work entries were false positives: two-column
-proof grids logged as "table" drawings, and a "diagram" on an if-then
-problem — 9 of them carrying an internal pipeline sentence under a false
-"checked ✓". Prod has never recorded a real drawing.
+Drawings only matter where a question asks for one. `requires_drawing`
+is that fact, per question; it gates where recorded drawings are USED
+(verify pass, grader, review page) — never what is recorded, so nothing
+here deletes drawing data.
 
-1. `requires_drawing` (bool, NOT NULL, default false) is added and
-   backfilled for every existing item with the same deterministic
-   classifier new items use (api/core/drawing_requirement.py).
+1. Columns: `requires_drawing` (bool, NOT NULL, default false),
+   `requires_drawing_teacher_set` (bool, NOT NULL, default false — no
+   teacher has set any flag yet), `previous_requires_drawing` (nullable,
+   the one-level undo slot).
+2. Backfill `requires_drawing` for every existing item from the question
+   text, with the classifier FROZEN below (a copy of
+   api/core/drawing_requirement.py at this revision), so a fresh database
+   backfills identically however that module evolves.
+3. Repair, non-destructively, every `visual_work` entry whose description
+   is the internal sentence the old verify pass wrote over it (with a
+   false verified=true): verified -> false, description -> "" (the
+   original was overwritten and can't be recovered), and unconfirmed ->
+   true unless the entry is a table (the zoomed check can't read tables,
+   so a table is never "unconfirmed" — only unverified). On any problem.
+   Nothing is deleted. Idempotent: a repaired entry no longer carries
+   the sentence.
 
-2. `submissions.extraction` (a `json` column) is cleaned, per entry of
-   `visual_work`, using the assignment's own position → bank item map
-   (problem_ids_in_content + 1-based order, as load_problems_for_
-   assignment builds it for the extractor and grader):
-     - entry on a problem that is NOT flagged  -> removed;
-     - entry with no/unknown position          -> kept only when the
-       assignment has at least one flagged problem (it could be that
-       drawing, filed under Other work); otherwise removed;
-     - a kept entry carrying the leaked sentence -> repaired: verified
-       false, description "" (the original was overwritten), and
-       unconfirmed true unless it's a table (the zoomed check can't
-       read tables, so a table is never "unconfirmed" — just unverified).
-   Rows without any change are not rewritten. Idempotent.
-
-Downgrade drops the column and leaves extraction data alone (the removed
-entries were false positives; restoring them would restore the bug).
+`submissions.extraction` is a `json` column: rows are matched with a text
+cast and rewritten from Python. Downgrade drops the columns and leaves
+the (repaired) extraction data alone — restoring the sentence would
+restore the bug.
 """
 
 from __future__ import annotations
 
 import json
-import uuid
+import re
 from collections.abc import Sequence
 from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
-
-from api.core.drawing_requirement import requires_drawing
 
 revision: str = "cp1000085"
 down_revision: str | None = "cn1000083"
@@ -55,46 +52,71 @@ LEAKED = (
     "the first-pass description could not be confirmed."
 )
 
+# ── frozen classifier (api/core/drawing_requirement.py @ cp1000085) ──
+_VERB = re.compile(r"\b(graph|sketch|plot|draw|shade|construct)\b", re.IGNORECASE)
+_NOUN_BEFORE = {
+    "the", "a", "an", "this", "that", "these", "those", "its", "their", "his", "her",
+    "given", "following", "bar", "line", "scatter", "dot", "box", "circle", "whose",
+}
+_NOT_A_REQUEST_AFTER = re.compile(
+    r"\s*(?:"
+    r"shown|below|above|provided|given|paper|twist|point"
+    r"|of\b"
+    r"|(?:a|an|the|your|any|valid)?\s*(?:valid\s+)?(?:conclusions?|inferences?)\b"
+    r"|(?:a|an|the)\s+(?:(?:two-column|paragraph|flow(?:chart)?|formal|valid|complete)\s+)?"
+    r"(?:proofs?|arguments?|explanations?|statements?)\b"
+    r")",
+    re.IGNORECASE,
+)
+_AUX_SEGMENT_AFTER = re.compile(r"\s*\$?\\over(?:line|leftrightarrow|rightarrow)", re.IGNORECASE)
+_IS_PROOF = re.compile(r"\bprove\b|\bproof\b", re.IGNORECASE)
+_ALWAYS = [
+    re.compile(p, re.IGNORECASE) for p in (
+        r"\bgraphically\b",
+        r"\bby\s+(?:graphing|sketching|plotting|drawing)\b",
+        r"(?:^|[.;:!?]\s*)graphing\s*[:\-]",
+        r"\b(?:use|using|with)\s+(?:a|your)\s+(?:graph|number\s+line|diagram|sketch)\b",
+        r"\bon\s+your\s+(?:graph|number\s+line|diagram|sketch|coordinate\s+plane|grid)\b",
+        r"\b(?:make|create|draw|construct|build|complete|fill\s+in|include|provide)\s+"
+        r"(?:a|an|the|your)\s+(?:[a-z\-]+\s+){0,2}"
+        r"(?:graph|plot|histogram|chart|diagram|drawing|sketch|number\s+line|table\s+of\s+values)\b",
+        r"\b(?:represent|show|illustrate|model|display|depict|indicate|mark)\b[^.;?!]{0,80}?"
+        r"\b(?:on|with|using|in)\s+(?:a|an|the|your)\s+"
+        r"(?:number\s+line|coordinate\s+(?:plane|grid|axes)|graph|diagram|grid|sketch|table\s+of\s+values)\b",
+    )
+]
 
-def problem_uuids(content: Any) -> list[uuid.UUID]:
-    """Assignment content → bank item ids in position order, mirroring
-    services/bank.problem_ids_in_content + load_problems_for_assignment
-    (invalid ids are skipped BEFORE numbering, exactly as there)."""
-    if not isinstance(content, dict):
-        return []
-    if isinstance(content.get("problem_ids"), list):
-        raw = [str(i) for i in content["problem_ids"]]
-    elif isinstance(content.get("problems"), list):
-        raw = [
-            str(p.get("bank_item_id")) for p in content["problems"]
-            if isinstance(p, dict) and p.get("bank_item_id")
-        ]
-    else:
-        raw = []
-    out: list[uuid.UUID] = []
-    for s in raw:
-        try:
-            out.append(uuid.UUID(s))
-        except (ValueError, TypeError):
-            continue
-    return out
+
+def _verb_is_a_request(text: str, m: re.Match[str]) -> bool:
+    before = text[: m.start()].rstrip()
+    prev = re.findall(r"[A-Za-z\-]+$", before)
+    if prev and prev[0].lower() in _NOUN_BEFORE:
+        return False
+    after = text[m.end():]
+    if _NOT_A_REQUEST_AFTER.match(after):
+        return False
+    if m.group(1).lower() in ("draw", "construct") and _AUX_SEGMENT_AFTER.match(after):
+        return not _IS_PROOF.search(text)
+    return True
 
 
-def clean_visual_work(visual_work: list[Any], flags: dict[int, bool]) -> list[Any]:
-    """Pure per-entry cleanup; see the module docstring. `flags` maps each
-    position on the assignment to its bank item's requires_drawing.
-    Exposed for tests."""
-    any_flagged = any(flags.values())
+def requires_drawing(question: str | None) -> bool:
+    if not question:
+        return False
+    text = " ".join(question.split())
+    if any(p.search(text) for p in _ALWAYS):
+        return True
+    return any(_verb_is_a_request(text, m) for m in _VERB.finditer(text))
+
+
+# ── visual_work repair ──
+
+def repair_visual_work(visual_work: list[Any]) -> list[Any]:
+    """Pure per-entry repair (see the module docstring). Deletes nothing.
+    Exposed for tests and the prod dry run."""
     out: list[Any] = []
     for v in visual_work:
-        if not isinstance(v, dict):
-            continue
-        pos = v.get("problem_position")
-        on_assignment = isinstance(pos, int) and not isinstance(pos, bool) and pos in flags
-        keep = flags.get(pos, False) if on_assignment else any_flagged  # type: ignore[arg-type]
-        if not keep:
-            continue
-        if v.get("description") == LEAKED:
+        if isinstance(v, dict) and v.get("description") == LEAKED:
             v = {**v, "verified": False, "description": ""}
             if v.get("kind") != "table":
                 v["unconfirmed"] = True
@@ -107,32 +129,38 @@ def upgrade() -> None:
         "question_bank_items",
         sa.Column("requires_drawing", sa.Boolean(), nullable=False, server_default=sa.false()),
     )
+    op.add_column(
+        "question_bank_items",
+        sa.Column("requires_drawing_teacher_set", sa.Boolean(), nullable=False,
+                  server_default=sa.false()),
+    )
+    op.add_column(
+        "question_bank_items",
+        sa.Column("previous_requires_drawing", sa.Boolean(), nullable=True),
+    )
     conn = op.get_bind()
 
     items = conn.execute(sa.text("SELECT id, question FROM question_bank_items")).fetchall()
-    flagged_ids = {row_id for row_id, question in items if requires_drawing(question)}
-    if flagged_ids:
+    flagged = [row_id for row_id, question in items if requires_drawing(question)]
+    if flagged:
         conn.execute(
             sa.text("UPDATE question_bank_items SET requires_drawing = true WHERE id = ANY(:ids)"),
-            {"ids": list(flagged_ids)},
+            {"ids": flagged},
         )
 
     rows = conn.execute(sa.text(
-        "SELECT s.id, s.extraction, a.content FROM submissions s "
-        "JOIN assignments a ON a.id = s.assignment_id "
-        "WHERE s.extraction IS NOT NULL AND s.extraction::text LIKE '%\"visual_work\"%'"
-    )).fetchall()
-    for sub_id, extraction, content in rows:
+        "SELECT id, extraction FROM submissions "
+        "WHERE extraction IS NOT NULL AND extraction::text LIKE :needle"
+    ), {"needle": "%A zoomed second look at the reported location found no drawing%"}).fetchall()
+    for sub_id, extraction in rows:
         data = extraction if isinstance(extraction, dict) else json.loads(extraction)
         vw = data.get("visual_work")
-        if not isinstance(vw, list) or not vw:
+        if not isinstance(vw, list):
             continue
-        content = content if isinstance(content, dict) or content is None else json.loads(content)
-        flags = {pos: pid in flagged_ids for pos, pid in enumerate(problem_uuids(content), 1)}
-        cleaned = clean_visual_work(vw, flags)
-        if cleaned == vw:
+        repaired = repair_visual_work(vw)
+        if repaired == vw:
             continue
-        data["visual_work"] = cleaned
+        data["visual_work"] = repaired
         conn.execute(
             sa.text("UPDATE submissions SET extraction = CAST(:ext AS json) WHERE id = :id"),
             {"ext": json.dumps(data), "id": sub_id},
@@ -140,4 +168,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_column("question_bank_items", "previous_requires_drawing")
+    op.drop_column("question_bank_items", "requires_drawing_teacher_set")
     op.drop_column("question_bank_items", "requires_drawing")
