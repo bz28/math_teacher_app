@@ -41,6 +41,10 @@ export const BANK_JOB_POLL_LIMIT_MS = 5 * 60 * 1000;
 export const BANK_JOB_TOAST_AUTO_CLEAR_MS = 4000;
 /** Workshop modal undo grace period after an edit lands. */
 export const WORKSHOP_UNDO_GRACE_MS = 30_000;
+/** Prefix of the placeholder final_answer stored when automatic solving
+ *  fails (api/core/constants.py SOLUTION_FAILED_SENTINEL_PREFIX). The
+ *  approve route refuses it, so the Workshop asks for a real answer. */
+export const SOLUTION_FAILED_PREFIX = "(solution failed";
 /** Materials tab upload size caps (match backend MAX_IMAGE_BYTES / MAX_PDF_BYTES). */
 export const MATERIAL_UPLOAD_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MATERIAL_UPLOAD_MAX_PDF_BYTES = 25 * 1024 * 1024;
