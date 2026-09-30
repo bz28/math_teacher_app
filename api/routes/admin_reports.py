@@ -19,7 +19,7 @@ import re
 import uuid
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import ParseResult, parse_qs, urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -71,12 +71,24 @@ _COURSE_TABS = {
 }
 
 
+def _parse(page_url: str | None) -> ParseResult | None:
+    """urlparse that can't fail: page_url is teacher-supplied (only an
+    http(s) prefix is checked), and one malformed value like
+    "https://[oops" must not 500 the whole inbox."""
+    if not page_url:
+        return None
+    try:
+        return urlparse(page_url)
+    except ValueError:
+        return None
+
+
 def _route_of(page_url: str | None) -> tuple[str, dict[str, uuid.UUID], str | None] | None:
     """(route label, the ids in the path, course tab) — or None when the
     URL isn't a known teacher route."""
-    if not page_url:
+    parsed = _parse(page_url)
+    if parsed is None:
         return None
-    parsed = urlparse(page_url)
     for pattern, label in _ROUTES:
         m = pattern.match(parsed.path)
         if m:
@@ -94,7 +106,10 @@ def _generic_label(page_url: str | None) -> str:
     path segment that isn't an id ("/history" → "History")."""
     if not page_url:
         return "No page recorded"
-    segments = [s for s in urlparse(page_url).path.split("/") if s]
+    parsed = _parse(page_url)
+    if parsed is None:
+        return "Unknown page"
+    segments = [s for s in parsed.path.split("/") if s]
     for seg in reversed(segments):
         if not re.fullmatch(_UUID, seg):
             return seg.replace("-", " ").replace("_", " ").capitalize()

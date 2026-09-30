@@ -3182,9 +3182,9 @@ table.dt tr:last-child td { border-bottom: none; }
   100% { background: var(--target-tint); }
 }
 .xq-row-pair-single { grid-template-columns: 1fr; }
-.asg-problem-target { background: var(--target-tint); }
 .asg-problem { scroll-margin-top: 96px; }
 .asg-problem-target {
+  background: var(--target-tint);
   box-shadow: inset 2px 0 0 var(--accent);
   animation: target-wash 2.4s ease-out 1;
 }

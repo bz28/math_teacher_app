@@ -319,3 +319,19 @@ async def test_sidebar_report_names_the_page_it_came_from(
     assert detail["page_label"] == expected
     listed = (await client.get("/v1/admin/reports?status=all", headers=auth_headers(world["admin"]))).json()
     assert listed["reports"][0]["page_label"] == expected
+
+
+async def test_malformed_page_url_never_breaks_the_inbox(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """page_url is teacher-supplied and only prefix-checked; urlparse raises
+    on e.g. an unclosed IPv6 bracket. One such report must not 500 the list
+    (every row is labelled) or its own detail view."""
+    r = await client.post("/v1/teacher/reports", headers=auth_headers(world["teacher"]),
+                          json={"kind": "broken", "page_url": "https://[oops/school"})
+    assert r.status_code == 201, r.text
+    detail = await client.get(f"/v1/admin/reports/{r.json()['id']}", headers=auth_headers(world["admin"]))
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["page_label"] == "Unknown page"
+    listed = await client.get("/v1/admin/reports?status=all", headers=auth_headers(world["admin"]))
+    assert listed.status_code == 200, listed.text
