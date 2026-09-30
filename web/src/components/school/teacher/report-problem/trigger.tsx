@@ -44,14 +44,16 @@ export function ReportProblemTrigger({
   variant?: "quiet" | "nav";
   className?: string;
 }) {
-  const { openReport, reported } = useReportProblem();
+  const { openReport, reported, pageContext } = useReportProblem();
   const done = reported.has(reportKey(context));
 
   if (variant === "nav") {
     return (
       <button
         type="button"
-        onClick={() => openReport(context)}
+        // The sidebar report is about whatever the page has open, when
+        // it has something (a student on the grading page).
+        onClick={() => openReport(pageContext() ?? context)}
         className={`flex w-full items-center gap-3 px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary ${className}`}
       >
         <FlagIcon size={18} />

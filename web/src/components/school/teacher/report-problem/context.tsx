@@ -4,7 +4,9 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -44,6 +46,23 @@ export interface ReportProblemContext {
   ai_grade?: ReportedAiGrade | null;
   teacher_grade?: ReportedTeacherGrade | null;
   labels?: string[];
+  /** Set only when the sidebar report opens while a page has a
+   *  submission open: the problems the teacher may point it at. The
+   *  dialog then offers an optional problem picker and lets her detach
+   *  the submission for a report that isn't about it. */
+  problem_options?: ReportProblemOption[];
+}
+
+/** One problem the sidebar report can point at — the same fields the
+ *  per-problem report buttons attach. */
+export interface ReportProblemOption {
+  problem_id: string;
+  problem_position: number;
+  /** "Problem 3 · Prove m∠1 = m∠3…" — the picker's text. */
+  title: string;
+  ai_grade: ReportedAiGrade | null;
+  teacher_grade: ReportedTeacherGrade | null;
+  labels: string[];
 }
 
 interface ReportProblemApi {
@@ -53,6 +72,10 @@ interface ReportProblemApi {
    *  their trigger for a "Reported" state so the teacher knows it landed.
    *  Keyed by `reportKey(ctx)`. */
   reported: ReadonlySet<string>;
+  /** What the current page has open, for the sidebar report. Read at
+   *  click time; setting it never re-renders anything. */
+  pageContext: () => ReportProblemContext | null;
+  setPageContext: (ctx: ReportProblemContext | null) => void;
 }
 
 const Ctx = createContext<ReportProblemApi | null>(null);
@@ -66,6 +89,11 @@ export function reportKey(ctx: ReportProblemContext): string {
 export function ReportProblemProvider({ children }: { children: ReactNode }) {
   const [active, setActive] = useState<ReportProblemContext | null>(null);
   const [reported, setReported] = useState<Set<string>>(() => new Set());
+  const pageRef = useRef<ReportProblemContext | null>(null);
+  const pageContext = useCallback(() => pageRef.current, []);
+  const setPageContext = useCallback((ctx: ReportProblemContext | null) => {
+    pageRef.current = ctx;
+  }, []);
 
   const openReport = useCallback((ctx: ReportProblemContext) => setActive(ctx), []);
   const close = useCallback(() => setActive(null), []);
@@ -73,7 +101,10 @@ export function ReportProblemProvider({ children }: { children: ReactNode }) {
     setReported((prev) => new Set(prev).add(reportKey(ctx)));
   }, []);
 
-  const value = useMemo(() => ({ openReport, reported }), [openReport, reported]);
+  const value = useMemo(
+    () => ({ openReport, reported, pageContext, setPageContext }),
+    [openReport, reported, pageContext, setPageContext],
+  );
 
   return (
     <Ctx.Provider value={value}>
@@ -91,4 +122,21 @@ export function useReportProblem(): ReportProblemApi {
     throw new Error("useReportProblem must be used inside <ReportProblemProvider>");
   }
   return api;
+}
+
+/**
+ * Tell the sidebar "Report a problem" what this page has open, so a
+ * report sent from there arrives with the student attached instead of
+ * just a URL. Pass null when nothing is open. Cleared on unmount, so
+ * leaving the page (or the student) never leaves a stale attachment.
+ */
+export function useReportPageContext(ctx: ReportProblemContext | null): void {
+  const { pageContext, setPageContext } = useReportProblem();
+  useEffect(() => {
+    setPageContext(ctx);
+    // Only clear our own registration — never one a newer page made.
+    return () => {
+      if (pageContext() === ctx) setPageContext(null);
+    };
+  }, [ctx, pageContext, setPageContext]);
 }
