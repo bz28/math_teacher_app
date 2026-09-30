@@ -57,10 +57,14 @@ _VERB = re.compile(r"\b(graph|sketch|plot|draw|shade|construct)\b", re.IGNORECAS
 _NOUN_BEFORE = {
     "the", "a", "an", "this", "that", "these", "those", "its", "their", "his", "her",
     "given", "following", "bar", "line", "scatter", "dot", "box", "circle", "whose",
+    "which",  # a multiple-choice "which graph shows …"
 }
 _NOT_A_REQUEST_AFTER = re.compile(
     r"\s*(?:"
     r"shown|below|above|provided|given|paper|twist|point"
+    # probability / games: "draw a card", "draw two marbles"
+    r"|(?:a|an|the|one|two|three|four|five|\d+)?\s*(?:red\s+|blue\s+|green\s+)?"
+    r"(?:cards?|marbles?|balls?|chips?|tiles?|names?|socks?|tickets?|straws?)\b"
     r"|of\b"
     r"|(?:a|an|the|your|any|valid)?\s*(?:valid\s+)?(?:conclusions?|inferences?)\b"
     r"|(?:a|an|the)\s+(?:(?:two-column|paragraph|flow(?:chart)?|formal|valid|complete)\s+)?"
@@ -70,6 +74,15 @@ _NOT_A_REQUEST_AFTER = re.compile(
 )
 _AUX_SEGMENT_AFTER = re.compile(r"\s*\$?\\over(?:line|leftrightarrow|rightarrow)", re.IGNORECASE)
 _IS_PROOF = re.compile(r"\bprove\b|\bproof\b", re.IGNORECASE)
+# "Solve without graphing", "do not use a graph": a negated request is not one.
+# Neither is an optional one: "check by graphing (optional)".
+_OPTIONAL = re.compile(r"[^.;:!?]*\(\s*optional\s*\)", re.IGNORECASE)
+_NEGATED = re.compile(
+    r"\b(?:do\s+not|don'?t|without|no\s+need\s+to|never)\s+"
+    r"(?:(?:use|using|make|making|draw|drawing)\s+(?:a|an|any|the)\s+)?"
+    r"(?:graph\w*|sketch\w*|plot\w*|draw\w*|shad\w*|number\s+line|diagram)\b",
+    re.IGNORECASE,
+)
 _ALWAYS = [
     re.compile(p, re.IGNORECASE) for p in (
         r"\bgraphically\b",
@@ -103,7 +116,7 @@ def _verb_is_a_request(text: str, m: re.Match[str]) -> bool:
 def requires_drawing(question: str | None) -> bool:
     if not question:
         return False
-    text = " ".join(question.split())
+    text = _OPTIONAL.sub(" ", _NEGATED.sub(" ", " ".join(question.split())))
     if any(p.search(text) for p in _ALWAYS):
         return True
     return any(_verb_is_a_request(text, m) for m in _VERB.finditer(text))

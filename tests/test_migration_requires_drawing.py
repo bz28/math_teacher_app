@@ -59,6 +59,7 @@ def test_frozen_classifier_backfills_the_prod_shapes() -> None:
         "Solve the system by graphing. Identify the solution as an ordered pair."
     ) is True
     assert mig.requires_drawing("Represent $x > 3$ on a number line.") is True
+    assert mig.requires_drawing("Solve the system without graphing.") is False
     assert mig.requires_drawing(
         "Complete the two-column proof. Copy and complete the table below."
     ) is False

@@ -214,6 +214,13 @@ def _mock_integrity_ai() -> Any:
             new_callable=AsyncMock,
             return_value=None,
         ),
+        # The requires-drawing classifier call (runs after a question-text
+        # edit). Returning None means "no answer" — the regex value stands.
+        patch(
+            "api.core.drawing_requirement._llm_requires_drawing",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
     ):
         yield
 

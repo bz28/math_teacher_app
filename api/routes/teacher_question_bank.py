@@ -9,14 +9,14 @@ The frontend polls the job row for status.
 import uuid
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import record_activity, record_question_edit
 from api.core.constants import SOLUTION_FAILED_SENTINEL_PREFIX
-from api.core.drawing_requirement import requires_drawing
+from api.core.drawing_requirement import refresh_requires_drawing, requires_drawing
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.image_utils import validate_and_decode_upload
 from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
@@ -547,6 +547,7 @@ async def get_generation_job(
 @router.patch("/question-bank/{item_id}")
 async def update_bank_item(
     body: UpdateBankItemRequest,
+    background_tasks: BackgroundTasks,
     item: QuestionBankItem = Depends(get_bank_item),
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
@@ -597,6 +598,15 @@ async def update_bank_item(
         if not q:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Question cannot be empty")
         item.question = q
+        # New wording re-derives the drawing requirement — unless the
+        # teacher has set it, or is setting it in this same request.
+        if not item.requires_drawing_teacher_set and body.requires_drawing is None:
+            # The regex answers now; the AI answers after the save (never
+            # on the teacher's wait) and overwrites it if it differs.
+            item.requires_drawing = requires_drawing(q)
+            background_tasks.add_task(
+                refresh_requires_drawing, item.id, q, user_id=str(current_user.user_id),
+            )
     if body.solution_steps is not None:
         item.solution_steps = new_steps
     if body.final_answer is not None:
@@ -1018,6 +1028,7 @@ async def post_chat_message(
 @router.post("/question-bank/{item_id}/chat/accept")
 async def accept_chat_proposal(
     body: ChatMessageIndexRequest,
+    background_tasks: BackgroundTasks,
     item: QuestionBankItem = Depends(get_bank_item),
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
@@ -1047,6 +1058,10 @@ async def accept_chat_proposal(
         # regenerate does — unless the teacher has set it themselves.
         if not item.requires_drawing_teacher_set:
             item.requires_drawing = requires_drawing(item.question)
+            background_tasks.add_task(
+                refresh_requires_drawing, item.id, item.question,
+                user_id=str(current_user.user_id),
+            )
     if proposal.get("solution_steps") is not None:
         # Belt-and-suspenders: defense against malformed steps lingering
         # in old chat_messages written before question_bank_chat.py

@@ -1,0 +1,310 @@
+{
+  "22e85a357030394b35bbc72bacae2fa0": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Sketch the graph of $f(x) = x^2 - 4$.",
+      "recorded_at": 1790736023.3953228
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "23ca595738a04fe545700afb036520e0": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || The student should graph the parabola and mark its vertex.",
+      "recorded_at": 1790736022.276992
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "29a949506ad55b789390964607020e97": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || In the right triangle below, the hypotenuse has length 13. Find the missing leg.",
+      "recorded_at": 1790736016.805419
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "36c4b9196792a41a7b32186356816026": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Shade the region that satisfies $y \\le 2x + 1$.",
+      "recorded_at": 1790736025.789042
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "4f4cb523f5c30a60a08511eb2ce3e1d8": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Plot the points $A(1, 2)$ and $B(3, -1)$ on a coordinate plane.",
+      "recorded_at": 1790736024.6228511
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "5469974b1c3fd99338c660093dbd90c2": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Draw $\\overline{AB}$ and $\\overline{CD}$ so that they intersect at $E$.",
+      "recorded_at": 1790736028.2415
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "60d302659a867d920317ae53a2bc9f01": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Using the graph shown, find $f(2)$ and the y-intercept.",
+      "recorded_at": 1790736015.123725
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "62b842c0de9757c78ba962bd6ce1b444": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Write a two-column proof.",
+      "recorded_at": 1790736019.210746
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "66f6387f9f4702dd417a25bd66898e30": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Draw a triangle with sides 3, 4 and 5 and label each vertex.",
+      "recorded_at": 1790736026.98773
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "67ac72c9fc3f6731f8575f975e78a030": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Use the Law of Detachment to draw a conclusion, or explain why none can be drawn.",
+      "recorded_at": 1790736026.359592
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "775008d55a0950c92b4bcb6294b193be": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || On a number line, find the distance between $-3$ and $5$.",
+      "recorded_at": 1790736028.79458
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "7e1eacc378d4c47269e95550ee3eb769": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || If a figure is a square, then it has four congruent sides. Write the converse.",
+      "recorded_at": 1790736025.202419
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "85c3a6369fa6f238e4fb76cfaf46f4cb": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Graph $y = 3x - 2$ and label the y-intercept.",
+      "recorded_at": 1790735998.238184
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "8c38610a2c432b025ad23dcd2c57fc62": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Complete the two-column proof. Copy and complete the table below, supplying the missing statements and reasons. | St",
+      "recorded_at": 1790736017.927003
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "914496daee90a515b1198196700d2eec": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || If $P = -7$ and $Q = 15$ on a number line, find the coordinate of $M$.",
+      "recorded_at": 1790736027.56997
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "99003f3284e3eab65d78b29fffc21b9a": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Given $f(x) = x^2$, graph $f$.",
+      "recorded_at": 1790736017.360798
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "9cf22c438db2f1e8e11f3aa3e67486a0": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Solve $x + 2 > 5$, graph the solution.",
+      "recorded_at": 1790736018.5743968
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "b26285414ac03e0887f2cf7d5fdf81dc": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Sketch a proof that the base angles of an isosceles triangle are congruent.",
+      "recorded_at": 1790736021.732991
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "b7974f4676d85cac9d96c642aa53a8ca": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Solve $2x - 3 > 5$ and graph the solution on a number line.",
+      "recorded_at": 1790736019.796507
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "bd290a5646160b96bc3be2618733b8ec": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Construct a two-column proof that vertical angles are congruent.",
+      "recorded_at": 1790736020.5378392
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "be3d93ff712f1c0509dcfbcf5911e2b6": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || You must graph both equations.",
+      "recorded_at": 1790736021.0715132
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "ce066b3eb6aedf59a7a4a2dcc24e7b21": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Solve the system by graphing. Identify the solution as an ordered pair. $$y = 2x - 1$$",
+      "recorded_at": 1790735997.689127
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "d48d9a52cc75a9a5676b1ca7b71a6cfd": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Use the graph below to estimate the solution of the system.",
+      "recorded_at": 1790736015.6956532
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "d515b32f6cfcb00f683ea06a68eb2755": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Let $D$ be the midpoint of $\\overline{BC}$, and draw $\\overline{AD}$. Prove: $\\angle ABC \\cong \\angle ACB$.",
+      "recorded_at": 1790736022.84514
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "d814c15b16d1c7df12aca4e1e39bc6ba": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || A diagonal is drawn from one corner to the opposite corner. Find its length.",
+      "recorded_at": 1790736023.96035
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "dc3c911b236219397e5b42589238ac13": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || In the figure below, rays $OA$ and $OB$ share endpoint $O$. Find $x$.",
+      "recorded_at": 1790736016.270995
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "dea447a8e046958db0e3a5a437423162": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || On the coordinate plane, graph $y = 2x$.",
+      "recorded_at": 1790735998.858144
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "f0cd3f9d3f2b68cd8888527d02063c8f": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || For each equation, graph the line.",
+      "recorded_at": 1790735999.433056
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  }
+}

@@ -31,6 +31,7 @@ export const LLM_MODES = {
   INTEGRITY_DIAGNOSE_WRONG: "integrity_diagnose_wrong",
   BANK_EXTRACT: "bank_extract",
   AI_GRADING: "ai_grading",
+  CLASSIFY_REQUIRES_DRAWING: "classify_requires_drawing",
 } as const;
 
 export type LLMMode = (typeof LLM_MODES)[keyof typeof LLM_MODES];

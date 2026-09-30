@@ -157,3 +157,20 @@ async def test_students_cannot_toggle(
         headers=_auth(world["student_token"]), json={"requires_drawing": True},
     )
     assert r.status_code in (401, 403)
+
+
+async def test_manual_question_edit_rederives_unless_teacher_set(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    await _own_course(world)
+    item_id = world["primary_id"]
+    r = await _patch(client, world["teacher_token"], item_id, question="Graph $y = 2x + 1$.")
+    assert r.status_code == 200 and r.json()["requires_drawing"] is True
+    # undo brings back the old wording AND its flag
+    r = await client.post(f"/v1/teacher/question-bank/{item_id}/revert",
+                          headers=_auth(world["teacher_token"]))
+    assert r.status_code == 200 and (await _item(item_id)).requires_drawing is False
+    # once the teacher sets it, new wording doesn't move it
+    await _patch(client, world["teacher_token"], item_id, requires_drawing=True)
+    r = await _patch(client, world["teacher_token"], item_id, question="Solve $x + 1 = 2$.")
+    assert r.status_code == 200 and r.json()["requires_drawing"] is True

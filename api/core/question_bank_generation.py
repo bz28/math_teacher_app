@@ -238,11 +238,14 @@ async def _extract_from_files(
     for q in questions:
         if not isinstance(q, dict) or "text" not in q:
             continue
-        normalized.append({
+        entry = {
             "title": str(q.get("title") or "")[:120],
             "text": str(q["text"]),
             "difficulty": str(q.get("difficulty", "medium")),
-        })
+        }
+        if isinstance(q.get("requires_drawing"), bool):
+            entry["requires_drawing"] = q["requires_drawing"]
+        normalized.append(entry)
     return normalized
 
 
@@ -490,7 +493,12 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             originating_assignment_id=job.originating_assignment_id,
             title=q.get("title") or None,
             question=q["text"],
-            requires_drawing=requires_drawing(q["text"]),
+            # From the generation/extraction call itself (it wrote or read
+            # the question — no extra call); the regex only if it's missing.
+            requires_drawing=(
+                q["requires_drawing"] if isinstance(q.get("requires_drawing"), bool)
+                else requires_drawing(q["text"])
+            ),
             solution_steps=s.get("steps") or None,
             final_answer=s.get("final_answer") or "",
             distractors=item_distractors,
@@ -639,10 +647,12 @@ async def regenerate_one(
     if new_title:
         item.title = str(new_title)[:120]
     item.question = str(new_question)
-    # A regenerated question is new AI text, so its drawing requirement
-    # is re-derived — unless the teacher has set it themselves.
+    # A regenerated question is new AI text, so its drawing requirement is
+    # re-derived — by the same call that wrote it (REGENERATE_QA_SCHEMA),
+    # the regex only as a fallback — unless the teacher set it themselves.
     if not item.requires_drawing_teacher_set:
-        item.requires_drawing = requires_drawing(item.question)
+        flag = result.get("requires_drawing")
+        item.requires_drawing = flag if isinstance(flag, bool) else requires_drawing(item.question)
     item.solution_steps = (
         _render_step_figures(new_steps) if isinstance(new_steps, list) else None
     )

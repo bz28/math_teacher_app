@@ -8,6 +8,7 @@ from collections.abc import Callable
 
 from tests.harness.probe import Probe
 from tests.harness.probes.drawing_eval import DrawingEvalProbe
+from tests.harness.probes.drawing_flag import DrawingFlagProbe
 from tests.harness.probes.extraction_fidelity import ExtractionFidelityProbe
 from tests.harness.probes.generation import GenerationProbe
 from tests.harness.probes.geometry import GeometryProbe
@@ -39,4 +40,6 @@ PROBES: dict[str, Callable[[int], Probe]] = {
     # drawings, plus a grading ablation. Replays from its own committed
     # cassette dir (_cassettes/drawing_eval/).
     "drawing-eval": lambda count: DrawingEvalProbe(),
+    # The requires-drawing classification call vs the regex vs the labels.
+    "drawing-flag": lambda count: DrawingFlagProbe(),
 }
