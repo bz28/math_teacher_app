@@ -1895,7 +1895,9 @@ function CompletionModal({
  * "Requires a drawing" — whether a graph / sketch / table of values is
  * part of the answer. Set automatically from the question text; the
  * teacher overrides it here. It decides whether the student's drawing
- * is read and graded, so it's locked like any other content edit.
+ * is checked and graded. Unlike content edits it is NOT locked on a
+ * published homework: it changes grading from then on (and regrades),
+ * never a published grade.
  */
 function RequiresDrawingToggle({
   value,

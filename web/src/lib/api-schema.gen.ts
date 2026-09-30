@@ -6081,6 +6081,11 @@ export interface components {
             breakdown: {
                 [key: string]: unknown;
             }[] | null;
+            /**
+             * Drawings Inventoried
+             * @default false
+             */
+            drawings_inventoried: boolean;
             /** Extraction Confidence */
             extraction_confidence?: number | null;
             /** Extraction Confirmed At */

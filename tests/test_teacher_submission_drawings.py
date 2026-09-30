@@ -65,4 +65,5 @@ async def test_unconfirmed_and_verified_drawings_reach_the_teacher_distinctly(
     assert unconfirmed["unconfirmed_reason"] == "labeled_points_disagree"
     assert unconfirmed["zoomed_labeled_points"] == ["(1, 3)"]
     assert checked["unconfirmed_reason"] is None
+    assert r.json()["drawings_inventoried"] is True
     assert unconfirmed["description"] == "Two-column proof layout."

@@ -309,9 +309,17 @@ def _format_visual_work(v: dict[str, Any]) -> str:
     line = f"{line}. {desc}" if desc else line
     if not v.get("verified"):
         # Recorded before the problem was flagged (the verify pass only
-        # runs on flagged problems), or the zoomed look failed. The
-        # first read is still the inventory — never "no drawing".
+        # runs on flagged problems), not comparable on a zoomed look
+        # (points, shading, number lines, diagrams), or the look failed.
+        # The first read is still the inventory — never "no drawing".
         line += " (read from the full page; not checked on a zoomed look)"
+    else:
+        # A zoomed look checks the number of lines and the labeled points
+        # — not what each line is. Say exactly that.
+        line += (
+            " (a zoomed look confirmed the line count and labeled points only; "
+            "the line descriptions are from the full-page read)"
+        )
     return line
 
 

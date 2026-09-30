@@ -4751,6 +4751,11 @@
             ],
             "title": "Breakdown"
           },
+          "drawings_inventoried": {
+            "default": false,
+            "title": "Drawings Inventoried",
+            "type": "boolean"
+          },
           "extraction_confidence": {
             "anyOf": [
               {

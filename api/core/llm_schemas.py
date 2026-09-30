@@ -581,9 +581,20 @@ GENERATE_QUESTIONS_SCHEMA: ToolSchema = {
                                 "this course's student level."
                             ),
                         },
+                        "requires_drawing": {
+                            "type": "boolean",
+                            "description": (
+                                "True if this question asks the STUDENT to produce a "
+                                "drawing: a graph, plot, sketch, number line, diagram, "
+                                "data display, or construction. False for a printed "
+                                "figure the student only reads, a multiple-choice "
+                                "'which graph', a negated or optional drawing, or 'draw' "
+                                "meaning something else (draw a card)."
+                            ),
+                        },
                         "figure_spec": _FIGURE_SCHEMA,
                     },
-                    "required": ["title", "text", "difficulty"],
+                    "required": ["title", "text", "difficulty", "requires_drawing"],
                     "additionalProperties": False,
                 },
             },
@@ -707,9 +718,20 @@ REGENERATE_QA_SCHEMA: ToolSchema = {
                     "Use single backslashes for LaTeX commands."
                 ),
             },
+            "requires_drawing": {
+                "type": "boolean",
+                "description": (
+                    "True if this question asks the STUDENT to produce a "
+                    "drawing: a graph, plot, sketch, number line, diagram, "
+                    "data display, or construction. False for a printed "
+                    "figure the student only reads, a multiple-choice "
+                    "'which graph', a negated or optional drawing, or 'draw' "
+                    "meaning something else (draw a card)."
+                ),
+            },
             "figure_spec": _FIGURE_SCHEMA,
         },
-        "required": ["title", "question", "solution_steps", "final_answer"],
+        "required": ["title", "question", "solution_steps", "final_answer", "requires_drawing"],
         "additionalProperties": False,
     },
 }
@@ -974,11 +996,11 @@ INTEGRITY_EXTRACT_SCHEMA: ToolSchema = {
                     "additionalProperties": False,
                 },
                 "description": (
-                    "One entry per drawing (graph, number line, diagram, table, "
-                    "sketch) the student made for a problem marked [requires a "
-                    "drawing], plus one present=false entry for each such "
-                    "problem with no drawing. Never for unmarked problems. "
-                    "Empty when no problem is marked."
+                    "One entry per drawing the student made (graph, number line, "
+                    "diagram, table, sketch), plus one present=false entry for "
+                    "each problem that asked the student to draw something and "
+                    "has no drawing. Empty when the submission has no drawings "
+                    "and no problem asked for one."
                 ),
             },
             "confidence": {
@@ -1530,6 +1552,33 @@ INTEGRITY_DIAGNOSE_WRONG_SCHEMA: ToolSchema = {
             },
         },
         "required": ["note", "kind"],
+        "additionalProperties": False,
+    },
+}
+
+
+# One question in, one boolean out: does it ask the student to draw? Used
+# for question text that no generation call wrote (a teacher's edit, an
+# accepted Workshop rewrite). Generation and worksheet upload get the same
+# field from GENERATE_QUESTIONS_SCHEMA; regeneration from REGENERATE_QA_SCHEMA.
+REQUIRES_DRAWING_SCHEMA: ToolSchema = {
+    "name": "return_requires_drawing",
+    "description": "Say whether the question asks the student to produce a drawing.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "requires_drawing": {
+                "type": "boolean",
+                "description": (
+                    "True if the question asks the STUDENT to produce a drawing: a "
+                    "graph, plot, sketch, number line, diagram, data display, or "
+                    "construction. False for a printed figure the student only reads, "
+                    "a multiple-choice 'which graph', a negated or optional drawing, "
+                    "or 'draw' meaning something else (draw a card)."
+                ),
+            },
+        },
+        "required": ["requires_drawing"],
         "additionalProperties": False,
     },
 }

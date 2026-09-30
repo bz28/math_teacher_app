@@ -92,7 +92,8 @@ CASES: list[EvalCase] = [
                  "    (2, 3)"],
         lines=[(2, -1)],
         truth={"flagged": True, "present": True, "lines": 1, "labeled": [], "answer_on_drawing": None,
-               "grade": "partial (~50: one of two lines, solved algebraically)"},
+               "grade": "partial (~50: one of two lines, solved algebraically)",
+               "guard_line_count": True},
     ),
     # Phone resolution (3024 px wide, JPEG q80): does the "curve" misread
     # survive when the crop isn't an upscaled 800 px page? Extract + verify
@@ -410,6 +411,15 @@ class DrawingEvalProbe(Probe):
             "the drawing reaches the grader as present", bool(final),
             "" if final else f"inventory {item.raw['second_look']}",
         )]
+        # The main win, regression-guarded: on a line graph the second look
+        # must land on the true number of lines (b: one drawn, not two).
+        if truth.get("guard_line_count"):
+            counts = [v["plotted"] for v in final]
+            ok = counts == [truth["lines"]]
+            checks.append(CheckResult(
+                f"final inventory has {truth['lines']} line(s) (got {counts})", ok,
+                "" if ok else f"inventory {final}",
+            ))
         if truth.get("answer_on_drawing"):
             finals = json.dumps(item.raw.get("final_answers") or [])
             ok = "".join(truth["answer_on_drawing"].split()) in "".join(finals.split()) or (

@@ -163,7 +163,10 @@ class TestVerifyVisualWork:
         # teacher "checked ✓" beside pipeline prose).
         assert v["verified"] is False
         assert v["unconfirmed"] is True
-        assert v["plotted_elements"] == [] and v["labeled_points"] == [] and v["answer_on_drawing"] is None
+        # Nothing erased: the grader withholds an unconfirmed inventory,
+        # and the teacher sees the first read framed as a claim.
+        assert v["plotted_elements"] == ["line (y = 2x - 1)", "line (y = -x + 5)"]
+        assert v["labeled_points"] == ["(2, 3)"]
         # The teacher-visible description stays the first pass's own
         # words — never internal pipeline status text.
         assert v["description"] == "Two lines plotted intersecting at (2, 3)."
@@ -354,6 +357,14 @@ def test_briefing_is_unmarked_and_prompt_records_everywhere() -> None:
     )
     assert "requires a drawing" not in briefing
     assert "For every graph, number line, diagram, table, or sketch" in integrity_ai._EXTRACT_SYSTEM
+    # The tool schema is part of the prompt too — it must not gate either.
+    from api.core.llm_schemas import INTEGRITY_EXTRACT_SCHEMA
+
+    schema_text = str(INTEGRITY_EXTRACT_SCHEMA)
+    assert "requires a drawing" not in schema_text
+    assert "Never for unmarked problems" not in schema_text
+    vw = INTEGRITY_EXTRACT_SCHEMA["input_schema"]["properties"]["visual_work"]
+    assert vw["description"].startswith("One entry per drawing the student made")
 
 
 async def test_points_disagreement_marks_unconfirmed_not_replaced(
@@ -421,7 +432,12 @@ async def test_the_answer_on_a_number_line_stays_the_first_reads(
         ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
     )
     v = ext["visual_work"][0]
-    assert v["verified"] is True and v["answer_on_drawing"] == "x > 4"
+    # A number line isn't count-comparable (first read: circle + ray as
+    # text; crop: point + ray typed) — the first read stands, unchecked,
+    # and its answer survives.
+    assert v["verified"] is False and "unconfirmed" not in v
+    assert v["answer_on_drawing"] == "x > 4"
+    assert v["plotted_elements"] == ["open circle at x = 4", "ray to the right"]
 
 
 def test_verify_schema_has_typed_elements_and_no_answer() -> None:
@@ -447,3 +463,68 @@ async def test_verify_keeps_the_first_reads_marks_when_they_match(
     )
     v = ext["visual_work"][0]
     assert v["labeled_points"] == ["(2, 3)"] and v["answer_on_drawing"] == "(2, 3)"
+
+
+class TestComparableOnlyOnTheSameBasis:
+    """Cold-review P1: the first read's elements are untyped text, the
+    crop's are typed. Comparing a count of one against the other replaced
+    real inventories with empty ones. Only a graph whose crop shows lines
+    (and at most marked points) is compared; nothing else is rewritten."""
+
+    async def _verify(self, monkeypatch: pytest.MonkeyPatch, entry: dict[str, Any],
+                      elements: list[dict[str, str]], points: list[str]) -> dict[str, Any]:
+        async def fake_vision(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            return {"has_drawing": True, "elements": elements, "notes": "",
+                    "labeled_points": points, "unlabeled_dots": 0, "description": "crop"}
+
+        monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
+        ext = {"steps": [], "final_answers": [], "visual_work": [entry], "confidence": 0.9}
+        await integrity_ai.verify_visual_work(
+            ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+        )
+        return ext["visual_work"][0]
+
+    async def test_plotted_points_are_never_emptied(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        entry = _entry(plotted_elements=["point A(1, 2)", "point B(3, -1)"],
+                       labeled_points=["A(1, 2)", "B(3, -1)"], answer_on_drawing=None)
+        v = await self._verify(monkeypatch, entry, [
+            {"type": "point", "description": "dot"}, {"type": "point", "description": "dot"},
+        ], ["(1,2)", "(3,-1)"])
+        assert v["plotted_elements"] == ["point A(1, 2)", "point B(3, -1)"]
+        assert v["verified"] is False and "unconfirmed" not in v  # labels A(1,2) == (1,2)
+
+    async def test_shading_is_never_dropped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        entry = _entry(plotted_elements=["dashed line y = 2x + 1", "shading below the line"],
+                       labeled_points=[], answer_on_drawing="y < 2x + 1")
+        v = await self._verify(monkeypatch, entry, [
+            {"type": "line", "description": "dashed line"},
+            {"type": "shaded_region", "description": "below"},
+        ], [])
+        assert v["plotted_elements"] == ["dashed line y = 2x + 1", "shading below the line"]
+        assert v["verified"] is False and v["answer_on_drawing"] == "y < 2x + 1"
+
+    async def test_a_triangle_is_not_three_segments_vs_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        entry = _entry(kind="diagram", plotted_elements=["triangle ABC"], labeled_points=[],
+                       answer_on_drawing=None)
+        v = await self._verify(monkeypatch, entry, [
+            {"type": "segment", "description": "AB"}, {"type": "segment", "description": "BC"},
+            {"type": "segment", "description": "CA"},
+        ], [])
+        assert v["plotted_elements"] == ["triangle ABC"] and v["verified"] is False
+
+    async def test_a_marked_intersection_does_not_break_the_line_count(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        entry = _entry(plotted_elements=["line rising", "line falling", "circled dot at the intersection"])
+        v = await self._verify(monkeypatch, entry, [
+            {"type": "line", "description": "rising"}, {"type": "line", "description": "falling"},
+            {"type": "point", "description": "circled"},
+        ], ["(2,3)"])
+        assert v["verified"] is True and v["verified_scope"] == "count"
+        assert v["plotted_elements"] == ["line rising", "line falling", "circled dot at the intersection"]
+
+
+def test_same_marks_ignores_labels_and_spacing() -> None:
+    assert integrity_ai._same_marks(["A(1, 2)", "B (3,-1)"], ["(3,-1)", "(1,2)"])
+    assert not integrity_ai._same_marks(["(2, 3)"], ["(1, 3)"])
+    assert not integrity_ai._same_marks(["(2, 3)"], [])

@@ -2602,6 +2602,10 @@ class TeacherSubmissionDetail(BaseModel):
     # Other work for the same reason the steps are: the grader is told
     # about them, so the teacher must be too.
     other_drawings: list[TeacherSubmissionDrawing] = []
+    # False when this submission was extracted before drawings were
+    # inventoried at all — then "no drawing recorded" means "not read",
+    # not "not drawn".
+    drawings_inventoried: bool = False
     # How sure the reader was it read this page correctly (0-1), and
     # whether the STUDENT ever signed off on that reading. Both are shown
     # to the teacher: a transcript nobody has vouched for, or one the
@@ -3100,6 +3104,7 @@ async def get_submission_detail(
         problems=problems,
         other_work=other_work,
         other_drawings=other_drawings,
+        drawings_inventoried=isinstance(sub.extraction, dict) and "visual_work" in sub.extraction,
         breakdown=grade.breakdown if grade else None,
         ai_breakdown=ai_breakdown_grades,
         final_score=grade.final_score if grade else None,

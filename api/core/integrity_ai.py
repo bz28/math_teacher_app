@@ -446,89 +446,112 @@ async def _verify_one(
         return
     if not seen.get("has_drawing", True):
         # Two crops around the reported spot show no drawing. Don't
-        # flip `present` on a possibly-bad box, but the inventory the
-        # grader reads must not credit lines nobody could find. This is
-        # NOT a confirmation — `unconfirmed` records the failed look so
-        # the grader is told not to credit the drawing and the teacher
-        # sees "couldn't confirm" instead of a checkmark. `description`
-        # stays the first pass's own words (the teacher reads it); the
-        # grader formatter drops it for an unconfirmed entry.
-        v["plotted_elements"] = []
-        v["labeled_points"] = []
-        v["answer_on_drawing"] = None
+        # flip `present` on a possibly-bad box, and don't erase what the
+        # first read recorded (an inventory is never replaced with an
+        # empty one). This is NOT a confirmation — `unconfirmed` records
+        # the failed look: the grader formatter withholds the whole
+        # inventory ("credit nothing from it"), and the teacher sees
+        # "couldn't confirm" with the first read framed as a claim.
         v["verified"] = False
         v["unconfirmed"] = True
         v["unconfirmed_reason"] = UNCONFIRMED_NOT_FOUND
         return
-    # What counts as "plotted" depends on the drawing: on a graph, the
-    # lines and curves (a dot or a note about where lines cross is not a
-    # line); on anything else, every drawn mark. Counting the typed
-    # elements — never a free-text list — is what keeps an observation
-    # ("the two lines intersect near the y-axis") from becoming "line 3"
-    # (drawing-eval, case e).
-    counted_types = _GRAPH_PLOTTED_TYPES if v.get("kind") == "graph" else _DRAWN_TYPES
     raw_elements = seen.get("elements")
-    seen_elements = [
-        str(e.get("description") or e.get("type")).strip()
-        for e in (raw_elements if isinstance(raw_elements, list) else [])
-        if isinstance(e, dict) and e.get("type") in counted_types
+    typed = [
+        e for e in (raw_elements if isinstance(raw_elements, list) else [])
+        if isinstance(e, dict) and e.get("type") not in (None, "axis", "other")
     ]
     raw_points = seen.get("labeled_points")
     seen_points = [
         pt for pt in (raw_points if isinstance(raw_points, list) else [])
         if isinstance(pt, str) and pt.strip()
     ]
-    first_elements = [
-        e for e in (v.get("plotted_elements") or []) if isinstance(e, str) and e.strip()
-    ]
     # The answer on the drawing is NOT checked here: the crop has no
     # problem text, so it can't know a shaded ray is "the answer" — the
     # first read (which has the question) stays its source (case d).
     # Labeled points ARE checkable context-free (a coordinate written
     # beside a point). A disagreement there is a doubt, not a correction:
-    # the entry is marked unconfirmed for the teacher, not silently
-    # rewritten.
+    # the entry is marked unconfirmed for the teacher, never rewritten.
     if not _same_marks(v.get("labeled_points"), seen_points):
         v["verified"] = False
         v["unconfirmed"] = True
         v["unconfirmed_reason"] = UNCONFIRMED_POINTS_DISAGREE
         v["zoomed_labeled_points"] = seen_points
         return
-    if len(seen_elements) == len(first_elements):
-        # The crop agrees on how many lines are drawn, so the count is
-        # confirmed — and the first read's line descriptions stand. It saw
-        # the whole page (labels, the equations the lines belong to); the
-        # context-free crop describes strokes less reliably. Measured
-        # (drawing-eval probe, case a): with both lines correctly read,
-        # the crop called one a "curve" with the wrong intercepts and the
-        # grader marked a correct graph down from full to 50%.
-        v["verified"] = True
+    # The two reads can only be compared on the same basis. The first
+    # read's `plotted_elements` are untyped text; the crop's are typed.
+    # The one comparison that is sound is the one the second look exists
+    # for: a GRAPH whose crop shows only lines/curves (no points, shading,
+    # rays or segments), where "how many lines are drawn" means the same
+    # thing on both sides (#902: one line drawn, both equations written,
+    # first read "2 lines"). Anything else — plotted points, a shaded
+    # inequality, a number line, a triangle's three segments — would
+    # compare different things (2 points vs 0 lines; "triangle ABC" vs 3
+    # segments), so the first read stands, honestly unchecked.
+    lines = [e for e in typed if e.get("type") in _GRAPH_PLOTTED_TYPES]
+    # A marked point (a circled intersection) doesn't change what "lines"
+    # means, so points are allowed alongside lines — they just aren't
+    # counted, on either side. Shading, rays and segments are not.
+    comparable = (
+        v.get("kind") == "graph"
+        and bool(lines)
+        and all(e.get("type") in _GRAPH_PLOTTED_TYPES | {"point"} for e in typed)
+    )
+    if not comparable:
+        return  # verified stays False: shown and graded as the full-page read
+    first_count = len([
+        e for e in (v.get("plotted_elements") or [])
+        if isinstance(e, str) and e.strip() and not _names_only_a_point(e)
+    ])
+    # Only the COUNT (and the labeled points above) is checked. When it
+    # agrees, the first read's descriptions stand — it saw the whole page;
+    # the context-free crop describes wobbly strokes as "curves" (eval a).
+    v["verified"] = True
+    v["verified_scope"] = VERIFIED_COUNT
+    if len(lines) == first_count:
         return
-    # The crop disagrees on the count: that's the priming failure the
-    # second look exists for (#902: one line drawn, both equations
-    # written, first read "2 lines"). The crop's inventory replaces it.
-    v["plotted_elements"] = seen_elements
+    # Counts differ: the crop's lines replace the inventory. Never empty —
+    # `comparable` requires at least one line on the crop.
+    v["plotted_elements"] = [str(e.get("description") or e.get("type")).strip() for e in lines]
     desc = seen.get("description")
     if isinstance(desc, str) and desc.strip():
         v["description"] = desc.strip()
-    v["verified"] = True
 
 
 _GRAPH_PLOTTED_TYPES = frozenset({"line", "curve"})
-_DRAWN_TYPES = frozenset({"line", "curve", "ray", "segment", "point", "shaded_region"})
 # Why an entry is unconfirmed (shown to the teacher, told to the grader).
 # Rows written before the reason existed carry none and mean NOT_FOUND.
 UNCONFIRMED_NOT_FOUND = "not_found"
 UNCONFIRMED_POINTS_DISAGREE = "labeled_points_disagree"
+# What a `verified` entry had checked: the number of lines drawn (and
+# the labeled points) — never the line descriptions themselves.
+VERIFIED_COUNT = "count"
+
+_COORD = re.compile(r"\(([^()]*)\)")
+_POINT_WORD = re.compile(r"\b(?:point|dot)s?\b", re.IGNORECASE)
+_LINE_WORD = re.compile(r"\b(?:line|curve|parabola|ray|graph)s?\b", re.IGNORECASE)
+
+
+def _names_only_a_point(element: str) -> bool:
+    """A first-read element that is a plotted point, not a line ("point
+    A(1, 2)", "circled dot at the intersection") — excluded from the line
+    count so both sides count the same thing."""
+    return bool(_POINT_WORD.search(element)) and not _LINE_WORD.search(element)
 
 
 def _same_marks(first: Any, seen: list[Any]) -> bool:
-    """Do two readings of labeled points / an answer say the same thing,
-    ignoring spacing? `(2, 3)` and `(2,3)` are the same mark."""
+    """Do two readings of labeled points say the same thing? Compares the
+    coordinates only, ignoring spacing and any label in front:
+    `A(1, 2)`, `(1,2)` and `A (1,2)` are the same mark."""
     def norm(xs: Any) -> list[str]:
-        return sorted(
-            "".join(str(x).split()).lower() for x in (xs or []) if isinstance(x, str) and x.strip()
-        )
+        out = []
+        for x in xs or []:
+            if not isinstance(x, str) or not x.strip():
+                continue
+            coords = _COORD.findall(x)
+            text = ",".join(coords) if coords else x
+            out.append("".join(text.split()).lower())
+        return sorted(out)
     return norm(first) == norm(seen)
 
 

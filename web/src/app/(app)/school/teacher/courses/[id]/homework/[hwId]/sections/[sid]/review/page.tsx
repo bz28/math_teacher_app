@@ -4107,6 +4107,7 @@ function SubmissionDetailPanel({
                 }}
                 onToggleExpand={() => toggleExpand(p.bank_item_id)}
                 onRequiresDrawingChange={(next) => onRequiresDrawingChange(p.bank_item_id, next)}
+                drawingsInventoried={detail.drawings_inventoried}
                 reportBase={reportBase}
                 rowRef={(el) => {
                   rowRefs.current[i] = el;
@@ -4510,9 +4511,12 @@ function UnconfirmedDrawingNote({ drawing }: { drawing: TeacherSubmissionDrawing
  */
 function DrawingsPanel({
   problem,
+  inventoried,
   onRequiresDrawingChange,
 }: {
   problem: TeacherSubmissionDetailProblem;
+  /** The submission's drawings were inventoried at all (older ones weren't). */
+  inventoried: boolean;
   onRequiresDrawingChange: (next: boolean) => Promise<void>;
 }) {
   const [saving, setSaving] = useState(false);
@@ -4520,7 +4524,6 @@ function DrawingsPanel({
   const [error, setError] = useState<string | null>(null);
   const drawn = problem.drawings.filter((d) => d.present);
   if (!problem.requires_drawing && drawn.length === 0 && !changed) return null;
-  if (problem.requires_drawing && problem.drawings.length === 0 && !changed) return null;
 
   const flip = async () => {
     setSaving(true);
@@ -4576,7 +4579,12 @@ function DrawingsPanel({
         </span>
       </p>
       {problem.drawings.length === 0 && (
-        <p className="mt-1.5 text-xs text-text-muted">No drawing recorded for this problem.</p>
+        <p className="mt-1.5 flex gap-2 text-xs font-semibold text-[color:var(--color-warning-dark)]">
+          <span aria-hidden className="shrink-0">⚠️</span>
+          {inventoried
+            ? "No drawing recorded — this question requires one."
+            : "Drawings weren’t read for this submission — check the photo."}
+        </p>
       )}
       <ul className="mt-1.5 space-y-1.5 text-xs leading-relaxed">
         {problem.drawings.map((d, i) => (
@@ -4588,18 +4596,25 @@ function DrawingsPanel({
                 <span className="text-text-secondary">
                   <DrawingStatus drawing={d} />
                 </span>
-                {d.labeled_points.length > 0 && (
-                  <span className="text-text-secondary">
-                    {" "}· labeled: <MathText text={d.labeled_points.join(", ")} />
-                  </span>
-                )}
-                {d.answer_on_drawing && (
-                  <span className="text-text-secondary">
-                    {" "}· answer on drawing: <MathText text={d.answer_on_drawing} />
-                  </span>
-                )}
-                {d.plotted_elements.length > 0 && (
-                  <span className="block text-text-secondary">{d.plotted_elements.join("; ")}</span>
+                {/* A drawing the zoomed look couldn't find keeps its first-read
+                    inventory in the data, but it isn't shown as fact — only
+                    as "AI first reported" in the note below. */}
+                {!(d.unconfirmed && d.unconfirmed_reason !== "labeled_points_disagree") && (
+                  <>
+                    {d.labeled_points.length > 0 && (
+                      <span className="text-text-secondary">
+                        {" "}· labeled: <MathText text={d.labeled_points.join(", ")} />
+                      </span>
+                    )}
+                    {d.answer_on_drawing && (
+                      <span className="text-text-secondary">
+                        {" "}· answer on drawing: <MathText text={d.answer_on_drawing} />
+                      </span>
+                    )}
+                    {d.plotted_elements.length > 0 && (
+                      <span className="block text-text-secondary">{d.plotted_elements.join("; ")}</span>
+                    )}
+                  </>
                 )}
                 {d.unconfirmed ? (
                   <UnconfirmedDrawingNote drawing={d} />
@@ -4646,7 +4661,9 @@ function DrawingStatus({ drawing: d }: { drawing: TeacherSubmissionDrawing }) {
     <>
       {" "}· {d.plotted_elements.length} plotted
       {d.verified && (
-        <span title="Confirmed by a zoomed-in second look at the drawing"> · checked ✓</span>
+        <span title="A zoomed-in second look confirmed how many lines are drawn and the labeled points — not what each line is.">
+          {" "}· count checked ✓
+        </span>
       )}
     </>
   );
@@ -4766,6 +4783,7 @@ function ProblemGradeRow({
   onConfirm,
   onToggleExpand,
   onRequiresDrawingChange,
+  drawingsInventoried,
   rowRef,
   onChange,
   onFeedbackChange,
@@ -4798,6 +4816,8 @@ function ProblemGradeRow({
   onToggleExpand: () => void;
   /** Flip the question's "requires a drawing" flag (bank item). */
   onRequiresDrawingChange: (next: boolean) => Promise<void>;
+  /** The submission's drawings were inventoried (older ones weren't). */
+  drawingsInventoried: boolean;
   /** Registers the row's root element with the parent so keyboard nav
    *  can move actual focus (the model is focus-real, not aria-only). */
   rowRef: (el: HTMLDivElement | null) => void;
@@ -5382,7 +5402,11 @@ function ProblemGradeRow({
           the grader was given (a required-but-missing drawing in the
           warning tone). Elsewhere, at most a quiet line, so a teacher
           can spot a question that should have been flagged. */}
-      <DrawingsPanel problem={problem} onRequiresDrawingChange={onRequiresDrawingChange} />
+      <DrawingsPanel
+        problem={problem}
+        inventoried={drawingsInventoried}
+        onRequiresDrawingChange={onRequiresDrawingChange}
+      />
 
       {/* AI grading hero — the AI's call is visible before the grade
           buttons, with reasoning inline instead of buried below. When

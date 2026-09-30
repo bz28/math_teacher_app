@@ -2088,9 +2088,10 @@ export interface TeacherSubmissionDetailProblem {
    *  line, diagram…) — the same facts the grader was given. `present:
    *  false` records a required drawing that's missing. Empty on rows
    *  extracted before the channel existed. */
-  /** The question asks for a drawing; only these problems show one. */
-  requires_drawing: boolean;
   drawings: TeacherSubmissionDrawing[];
+  /** The question requires a drawing: only these problems' drawings are
+   *  checked, graded and shown in full. */
+  requires_drawing: boolean;
   /** 1-based page(s) of `files` this problem's work was written on,
    *  derived from the extraction and range-checked against the real file
    *  count. Empty when the extractor didn't tag it — every row from
@@ -2121,6 +2122,8 @@ export interface TeacherSubmissionDetail {
   /** Drawings the extractor couldn't tie to a problem; the grader sees
    *  them as context under Other work, so the teacher does too. */
   other_drawings: TeacherSubmissionDrawing[];
+  /** False when the submission was read before drawings were inventoried. */
+  drawings_inventoried: boolean;
   /** How sure the reader was it read this page correctly (0-1). Null on
    *  rows extracted before this was surfaced. */
   extraction_confidence: number | null;
@@ -2229,8 +2232,8 @@ export interface BankItem {
   locked: boolean;
   /** The question asks the student to draw (graph, sketch, table of
    *  values…). Drawings are recorded everywhere but checked and graded
-   *  only on these problems. Set
-   *  from the question text; the teacher can override it. */
+   *  only on these problems. Set from the question text; the teacher
+   *  can override it. */
   requires_drawing: boolean;
   /** A teacher set the flag; AI rewrites and undo leave it alone. */
   requires_drawing_teacher_set: boolean;
