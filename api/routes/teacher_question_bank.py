@@ -9,13 +9,14 @@ The frontend polls the job row for status.
 import uuid
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import record_activity, record_question_edit
 from api.core.constants import SOLUTION_FAILED_SENTINEL_PREFIX
+from api.core.drawing_requirement import refresh_requires_drawing, requires_drawing
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.image_utils import validate_and_decode_upload
 from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
@@ -34,6 +35,7 @@ from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
 from api.models.question_edit import (
     EDIT_MANUAL,
     EDIT_WORKSHOP,
+    FIELD_REQUIRES_DRAWING,
     REGEN_FRESH,
     REGEN_GUIDED,
     REJECT,
@@ -172,6 +174,11 @@ class UpdateBankItemRequest(BaseModel):
     question: str | None = None
     solution_steps: list[Any] | None = None
     final_answer: str | None = None
+    # Teacher override of the "requires a drawing" flag (Workshop toggle).
+    # Allowed on locked / published items: it fixes what the answer
+    # requires, not what students see. It only affects grading that runs
+    # after it (new submissions, regrades) — published grades never move.
+    requires_drawing: bool | None = None
     # MCQ wrong-answer choices. None = leave unchanged; must be a
     # 3-element list when set so the renderer always has exactly 4
     # choices (correct + 3 wrong). Used by the workshop modal's
@@ -259,6 +266,8 @@ def _serialize_item(
         "format": item.format,
         "status": item.status,
         "locked": bool(item.locked),
+        "requires_drawing": bool(item.requires_drawing),
+        "requires_drawing_teacher_set": bool(item.requires_drawing_teacher_set),
         "source": item.source,
         "parent_question_id": str(item.parent_question_id) if item.parent_question_id else None,
         "used_in": used_in or [],
@@ -538,6 +547,7 @@ async def get_generation_job(
 @router.patch("/question-bank/{item_id}")
 async def update_bank_item(
     body: UpdateBankItemRequest,
+    background_tasks: BackgroundTasks,
     item: QuestionBankItem = Depends(get_bank_item),
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
@@ -562,6 +572,11 @@ async def update_bank_item(
     )
     if content_changing:
         snapshot_history(item)
+    # Not part of the one-level undo (the toggle is its own undo), and
+    # not lock-gated: see UpdateBankItemRequest.requires_drawing.
+    drawing_changed = (
+        body.requires_drawing is not None and body.requires_drawing != item.requires_drawing
+    )
 
     # Captured before the mutations below so the activity row can name the
     # fields that ACTUALLY changed. A PATCH that re-sends identical values
@@ -583,6 +598,15 @@ async def update_bank_item(
         if not q:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Question cannot be empty")
         item.question = q
+        # New wording re-derives the drawing requirement — unless the
+        # teacher has set it, or is setting it in this same request.
+        if not item.requires_drawing_teacher_set and body.requires_drawing is None:
+            # The regex answers now; the AI answers after the save (never
+            # on the teacher's wait) and overwrites it if it differs.
+            item.requires_drawing = requires_drawing(q)
+            background_tasks.add_task(
+                refresh_requires_drawing, item.id, q, user_id=str(current_user.user_id),
+            )
     if body.solution_steps is not None:
         item.solution_steps = new_steps
     if body.final_answer is not None:
@@ -609,6 +633,15 @@ async def update_bank_item(
         item.difficulty = body.difficulty
     if body.unit_id is not None:
         item.unit_id = body.unit_id
+    if drawing_changed:
+        prev_flag = "yes" if item.requires_drawing else "no"
+        item.requires_drawing = bool(body.requires_drawing)
+        # From now on AI rewrites and undo leave the teacher's call alone.
+        item.requires_drawing_teacher_set = True
+        await record_question_edit(
+            db, item, EDIT_MANUAL, current_user,
+            changes=[(FIELD_REQUIRES_DRAWING, prev_flag, "yes" if item.requires_drawing else "no")],
+        )
 
     # A generated question a teacher had to rewrite is the clearest
     # signal the generation prompt is wrong. No-ops when the question
@@ -631,6 +664,8 @@ async def update_bank_item(
         )
         if before != after
     ]
+    if drawing_changed:
+        changed_content.append("requires_drawing")
     if changed_content:
         await record_activity(
             db, current_user, "bank_item.edit", "bank_item", item.id,
@@ -681,6 +716,10 @@ async def revert_bank_item(
     # Restore the figure alongside the prose so the two stay in sync.
     item.figure_spec = item.previous_figure_spec
     item.figure_svg = item.previous_figure_svg
+    # The flag travels with the prose it was derived from — unless the
+    # teacher set it, in which case undoing a question edit leaves it.
+    if item.previous_requires_drawing is not None and not item.requires_drawing_teacher_set:
+        item.requires_drawing = item.previous_requires_drawing
     restored_status = item.status if item.status != prior_status else None
     item.previous_question = None
     item.previous_solution_steps = None
@@ -688,6 +727,7 @@ async def revert_bank_item(
     item.previous_status = None
     item.previous_figure_spec = None
     item.previous_figure_svg = None
+    item.previous_requires_drawing = None
     # Undo restores the snapshot's status alongside its prose, so it can
     # move an item back to rejected (or approved) with no other trace. That
     # status is what the generation-quality board reads, so an unlogged
@@ -988,6 +1028,7 @@ async def post_chat_message(
 @router.post("/question-bank/{item_id}/chat/accept")
 async def accept_chat_proposal(
     body: ChatMessageIndexRequest,
+    background_tasks: BackgroundTasks,
     item: QuestionBankItem = Depends(get_bank_item),
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
@@ -1013,6 +1054,14 @@ async def accept_chat_proposal(
 
     if proposal.get("question") is not None:
         item.question = str(proposal["question"]).strip()
+        # New AI-written text re-derives the drawing requirement, as
+        # regenerate does — unless the teacher has set it themselves.
+        if not item.requires_drawing_teacher_set:
+            item.requires_drawing = requires_drawing(item.question)
+            background_tasks.add_task(
+                refresh_requires_drawing, item.id, item.question,
+                user_id=str(current_user.user_id),
+            )
     if proposal.get("solution_steps") is not None:
         # Belt-and-suspenders: defense against malformed steps lingering
         # in old chat_messages written before question_bank_chat.py

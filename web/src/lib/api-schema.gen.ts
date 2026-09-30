@@ -4811,10 +4811,22 @@ export interface components {
             /** Problem Position */
             problem_position: number | null;
             /**
+             * Unconfirmed
+             * @default false
+             */
+            unconfirmed: boolean;
+            /** Unconfirmed Reason */
+            unconfirmed_reason?: string | null;
+            /**
              * Verified
              * @default false
              */
             verified: boolean;
+            /**
+             * Zoomed Labeled Points
+             * @default []
+             */
+            zoomed_labeled_points: string[];
         } & {
             [key: string]: unknown;
         };
@@ -6069,6 +6081,11 @@ export interface components {
             breakdown: {
                 [key: string]: unknown;
             }[] | null;
+            /**
+             * Drawings Inventoried
+             * @default false
+             */
+            drawings_inventoried: boolean;
             /** Extraction Confidence */
             extraction_confidence?: number | null;
             /** Extraction Confirmed At */
@@ -6137,6 +6154,11 @@ export interface components {
             position: number;
             /** Question */
             question: string;
+            /**
+             * Requires Drawing
+             * @default false
+             */
+            requires_drawing: boolean;
             /** Student Answer */
             student_answer: string | null;
             /**
@@ -6172,10 +6194,22 @@ export interface components {
             /** Present */
             present: boolean;
             /**
+             * Unconfirmed
+             * @default false
+             */
+            unconfirmed: boolean;
+            /** Unconfirmed Reason */
+            unconfirmed_reason?: string | null;
+            /**
              * Verified
              * @default false
              */
             verified: boolean;
+            /**
+             * Zoomed Labeled Points
+             * @default []
+             */
+            zoomed_labeled_points: string[];
         };
         /**
          * TeacherSubmissionStep
@@ -6368,6 +6402,8 @@ export interface components {
             final_answer?: string | null;
             /** Question */
             question?: string | null;
+            /** Requires Drawing */
+            requires_drawing?: boolean | null;
             /** Solution Steps */
             solution_steps?: unknown[] | null;
             /** Title */

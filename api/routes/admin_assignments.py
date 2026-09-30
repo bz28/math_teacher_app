@@ -34,7 +34,7 @@ from api.models.question_bank import (
     QuestionBankGenerationJob,
     QuestionBankItem,
 )
-from api.models.question_edit import QuestionEdit
+from api.models.question_edit import FIELD_REQUIRES_DRAWING, QuestionEdit
 from api.models.section import Section
 from api.models.user import User
 from api.services.bank import hydrate_assignment_content, problem_ids_in_content
@@ -168,7 +168,12 @@ async def get_assignment(
                 for (bid,) in (
                     await db.execute(
                         select(QuestionEdit.bank_item_id)
-                        .where(QuestionEdit.bank_item_id.in_(parsed))
+                        .where(
+                            QuestionEdit.bank_item_id.in_(parsed),
+                            # Toggling "requires a drawing" is a grading
+                            # setting, not an edit to the generated problem.
+                            QuestionEdit.field != FIELD_REQUIRES_DRAWING,
+                        )
                         .distinct()
                     )
                 ).all()

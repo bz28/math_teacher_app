@@ -359,6 +359,11 @@ async def generate_questions(
             # than dropping the whole question.
             if isinstance(q.get("figure_spec"), dict):
                 entry["figure_spec"] = q["figure_spec"]
+            # The model that wrote the question says whether it asks for a
+            # drawing (see GENERATE_QUESTIONS_SCHEMA); the consumer falls
+            # back to the regex classifier when it's missing.
+            if isinstance(q.get("requires_drawing"), bool):
+                entry["requires_drawing"] = q["requires_drawing"]
             normalized.append(entry)
 
         return normalized[:count]

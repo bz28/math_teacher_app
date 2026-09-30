@@ -1869,6 +1869,10 @@ export const teacher = {
     /** Move the item to a different unit. Required to be a real id
      *  when set (Uncategorized bucket removed). */
     unit_id?: string;
+    /** Override whether a drawing is part of the answer. Allowed on
+     *  published items: it affects grading from now on (and regrades),
+     *  never a published grade. */
+    requires_drawing?: boolean;
   }) {
     return apiFetch<BankItem>(`/teacher/question-bank/${itemId}`, {
       method: "PATCH",
@@ -2063,6 +2067,12 @@ export interface TeacherSubmissionDrawing {
   answer_on_drawing: string | null;
   /** A cropped second look confirmed this inventory. */
   verified: boolean;
+  /** That second look couldn't confirm the first pass. */
+  unconfirmed: boolean;
+  /** "not_found" (also older rows, as null) or "labeled_points_disagree". */
+  unconfirmed_reason: string | null;
+  /** The crop's reading of the labeled points, when it disagreed. */
+  zoomed_labeled_points: string[];
 }
 
 export interface TeacherSubmissionDetailProblem {
@@ -2079,6 +2089,9 @@ export interface TeacherSubmissionDetailProblem {
    *  false` records a required drawing that's missing. Empty on rows
    *  extracted before the channel existed. */
   drawings: TeacherSubmissionDrawing[];
+  /** The question requires a drawing: only these problems' drawings are
+   *  checked, graded and shown in full. */
+  requires_drawing: boolean;
   /** 1-based page(s) of `files` this problem's work was written on,
    *  derived from the extraction and range-checked against the real file
    *  count. Empty when the extractor didn't tag it — every row from
@@ -2109,6 +2122,8 @@ export interface TeacherSubmissionDetail {
   /** Drawings the extractor couldn't tie to a problem; the grader sees
    *  them as context under Other work, so the teacher does too. */
   other_drawings: TeacherSubmissionDrawing[];
+  /** False when the submission was read before drawings were inventoried. */
+  drawings_inventoried: boolean;
   /** How sure the reader was it read this page correctly (0-1). Null on
    *  rows extracted before this was surfaced. */
   extraction_confidence: number | null;
@@ -2215,6 +2230,13 @@ export interface BankItem {
   format: string;
   status: string;
   locked: boolean;
+  /** The question asks the student to draw (graph, sketch, table of
+   *  values…). Drawings are recorded everywhere but checked and graded
+   *  only on these problems. Set from the question text; the teacher
+   *  can override it. */
+  requires_drawing: boolean;
+  /** A teacher set the flag; AI rewrites and undo leave it alone. */
+  requires_drawing_teacher_set: boolean;
   source: string;
   parent_question_id: string | null;
   used_in: {

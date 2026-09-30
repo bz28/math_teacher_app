@@ -2543,6 +2543,14 @@ class TeacherSubmissionDrawing(BaseModel):
     answer_on_drawing: str | None = None
     # True when a cropped second look confirmed the inventory.
     verified: bool = False
+    # True when that second look couldn't confirm the first pass — shown
+    # as "couldn't confirm", never as checked. `unconfirmed_reason` says
+    # why: "not_found" (no drawing where reported; also every row written
+    # before the reason existed) or "labeled_points_disagree" (the crop
+    # read different coordinates, in `zoomed_labeled_points`).
+    unconfirmed: bool = False
+    unconfirmed_reason: str | None = None
+    zoomed_labeled_points: list[str] = []
 
 
 class TeacherSubmissionDetailProblem(BaseModel):
@@ -2557,6 +2565,9 @@ class TeacherSubmissionDetailProblem(BaseModel):
     # extraction lives on Submission.extraction; we slice it here so
     # the frontend doesn't need to filter client-side.
     student_steps: list[TeacherSubmissionStep] = []
+    # The question asks the student to draw (graph, sketch, table of
+    # values…). Only these problems get drawings inventoried and graded.
+    requires_drawing: bool = False
     # Drawings the extractor inventoried for this problem. Empty on rows
     # extracted before the channel existed.
     drawings: list[TeacherSubmissionDrawing] = []
@@ -2591,6 +2602,10 @@ class TeacherSubmissionDetail(BaseModel):
     # Other work for the same reason the steps are: the grader is told
     # about them, so the teacher must be too.
     other_drawings: list[TeacherSubmissionDrawing] = []
+    # False when this submission was extracted before drawings were
+    # inventoried at all — then "no drawing recorded" means "not read",
+    # not "not drawn".
+    drawings_inventoried: bool = False
     # How sure the reader was it read this page correctly (0-1), and
     # whether the STUDENT ever signed off on that reading. Both are shown
     # to the teacher: a transcript nobody has vouched for, or one the
@@ -2924,6 +2939,13 @@ async def get_submission_detail(
                 description=str(v.get("description") or ""),
                 plotted_elements=[str(e) for e in elements if isinstance(e, str)],
                 verified=bool(v.get("verified", False)),
+                unconfirmed=bool(v.get("unconfirmed", False)),
+                unconfirmed_reason=(
+                    str(v["unconfirmed_reason"]) if v.get("unconfirmed_reason") else None
+                ),
+                zoomed_labeled_points=[
+                    str(pt) for pt in (v.get("zoomed_labeled_points") or []) if isinstance(pt, str)
+                ],
                 labeled_points=[str(pt) for pt in points if isinstance(pt, str)],
                 answer_on_drawing=str(v["answer_on_drawing"]) if v.get("answer_on_drawing") else None,
             ))
@@ -3051,6 +3073,7 @@ async def get_submission_detail(
             final_answer=item.final_answer,
             student_answer=student_answer,
             student_steps=steps_by_position.get(pos, []),
+            requires_drawing=bool(item.requires_drawing),
             drawings=drawings_by_position.get(pos, []),
             pages=sorted(pages_by_position.get(pos, [])),
         ))
@@ -3081,6 +3104,7 @@ async def get_submission_detail(
         problems=problems,
         other_work=other_work,
         other_drawings=other_drawings,
+        drawings_inventoried=isinstance(sub.extraction, dict) and "visual_work" in sub.extraction,
         breakdown=grade.breakdown if grade else None,
         ai_breakdown=ai_breakdown_grades,
         final_score=grade.final_score if grade else None,

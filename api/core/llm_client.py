@@ -68,6 +68,7 @@ class LLMMode:
     INTEGRITY_DIAGNOSE_WRONG = "integrity_diagnose_wrong"
     BANK_EXTRACT = "bank_extract"
     AI_GRADING = "ai_grading"
+    CLASSIFY_REQUIRES_DRAWING = "classify_requires_drawing"
 
 _client: anthropic.AsyncAnthropic | None = None
 

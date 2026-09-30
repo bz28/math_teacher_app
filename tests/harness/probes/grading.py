@@ -36,6 +36,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from api.core.drawing_requirement import requires_drawing
 from api.core.grading_ai import (
     _bucket_steps_by_position,
     _build_breakdown,
@@ -102,12 +103,19 @@ def _vis(extraction: dict[str, Any], visual_work: list[dict[str, Any]]) -> dict[
     return {**extraction, "visual_work": visual_work}
 
 
-def _prob(question: str, answer: str) -> list[dict[str, Any]]:
-    return [{"position": 1, "question": question, "final_answer": answer}]
+def _prob(question: str, answer: str, *, flag: bool | None = None) -> list[dict[str, Any]]:
+    # `requires_drawing` defaults to the same classifier that sets the bank
+    # item's flag in production, so a case's flag is what a real item with
+    # that wording would carry ("by graphing" -> yes; "the graph shown" ->
+    # no). `flag` pins it, for a teacher's override.
+    return [{
+        "position": 1, "question": question, "final_answer": answer,
+        "requires_drawing": requires_drawing(question) if flag is None else flag,
+    }]
 
 
 # ── The golden set ────────────────────────────────────────────────────────
-# 18 cases, ≥2 per matrix row. Rubric is None throughout, so the grader applies
+# 23 cases, ≥2 per matrix row. Rubric is None throughout, so the grader applies
 # the shipped DEFAULT rubric — i.e. exactly what a teacher who authors no rubric
 # gets. Two cases are physics (a2, b3) per the "a couple physics" ask.
 
@@ -462,6 +470,139 @@ GOLDEN_CASES: list[GradingCase] = [
         ),
     ),
     GradingCase(
+        # The zoomed second look couldn't find the reported graph (a bad
+        # bbox does this). Unknown is not absent: no "required drawing
+        # missing" deduction, no credit for drawn content, and the
+        # teacher is told to check the photo.
+        name="f7-graph-required-unconfirmed-surfaces-for-teacher",
+        category="f",
+        extra={
+            "forbids_deduction_mentioning": ["graph", "drawing", "drawn", "method"],
+            "requires_reasoning_mentioning": "photo",
+            "max_confidence": 0.5,  # strictly under the review page's CONFIDENCE_LOW (0.6)
+        },
+        problems=_prob(
+            "Solve the system by graphing. Identify the solution as an ordered pair. "
+            "y = 2x - 1 and y = -x + 5",
+            "(2, 3)",
+        ),
+        extraction=_vis(
+            _ext(
+                [(1, "y = 2x - 1 \\\\ y = -x + 5"), (2, "2x - 1 = -x + 5"), (3, "x = 2"), (4, "y = 3")],
+                "(2, 3)",
+            ),
+            [{**_draw("graph", present=True,
+                      description="Axes with two lines crossing near (2, 3)."),
+              "verified": False, "unconfirmed": True}],
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale=(
+            "Correct answer; the graph was reported but couldn't be confirmed. "
+            "Unknown is not missing: no method deduction, low confidence, teacher checks the photo."
+        ),
+    ),
+    GradingCase(
+        # prod bb8536f1: a two-column proof's Statements|Reasons grid was
+        # logged as a "table" drawing and reached the teacher and grader.
+        # The problem doesn't require a drawing, so the grader must see no
+        # drawing at all and must not price one.
+        name="f8-two-column-proof-grid-is-not-a-drawing",
+        category="f",
+        extra={"forbids_deduction_mentioning": ["drawing", "table", "graph", "figure", "diagram"]},
+        problems=_prob(
+            "Given: M is the midpoint of AC and BD. Prove: triangle AMB is congruent to "
+            "triangle CMD. Write a two-column proof.",
+            "Triangle AMB is congruent to triangle CMD by SAS.",
+        ),
+        extraction=_vis(
+            _ext(
+                [(1, "M \\text{ is the midpoint of } AC, BD \\quad \\text{(Given)}"),
+                 (2, "AM = MC,\\ BM = MD \\quad \\text{(Def. of midpoint)}"),
+                 (3, "\\angle AMB \\cong \\angle CMD \\quad \\text{(Vertical angles)}"),
+                 (4, "\\triangle AMB \\cong \\triangle CMD \\quad \\text{(SAS)}")],
+                "\\triangle AMB \\cong \\triangle CMD",
+            ),
+            # What the old extractor produced; the flag keeps it from the grader.
+            [_draw("table", present=True, description="Two columns headed Statements and Reasons.")],
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale="Complete, correct proof. No drawing was asked for, so none is graded.",
+    ),
+    GradingCase(
+        # A required table of values: the zoomed check can't read tables,
+        # so it stays unverified — and the grader must treat it neutrally
+        # (no UNCONFIRMED doubt, no teacher-check prompt, no deduction).
+        name="f9-required-table-of-values-neutral",
+        category="f",
+        extra={
+            "forbids_deduction_mentioning": ["table", "drawing", "verif", "confirm"],
+            "forbids_reasoning_mentioning": "photo",
+        },
+        problems=_prob(
+            "Make a table of values for y = 2x - 1 using x = -1, 0, 1, 2.",
+            "(-1, -3), (0, -1), (1, 1), (2, 3)",
+        ),
+        extraction=_vis(
+            _ext(
+                [(1, "x=-1: y=2(-1)-1=-3"), (2, "x=0: y=-1"), (3, "x=1: y=1"), (4, "x=2: y=3")],
+                "(-1,-3),(0,-1),(1,1),(2,3)",
+            ),
+            [{**_draw("table", present=True,
+                      description="Two-column table: x = -1, 0, 1, 2; y = -3, -1, 1, 3."),
+              "verified": False}],
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale="Every value is right and the table is there. Nothing to doubt, nothing to deduct.",
+    ),
+    GradingCase(
+        # The teacher turned the flag OFF on a "solve graphically" problem.
+        # The flag is the only source of a drawing requirement: wording
+        # alone ("graphically") must not bring the deduction back.
+        name="f10-unflagged-solve-graphically-no-drawing",
+        category="f",
+        extra={"forbids_deduction_mentioning": ["graph", "drawing", "drawn", "method"]},
+        problems=_prob(
+            "Solve the system graphically. y = 2x - 1 and y = -x + 5",
+            "(2, 3)", flag=False,
+        ),
+        extraction=_vis(
+            _ext([(1, "2x - 1 = -x + 5"), (2, "3x = 6"), (3, "x = 2"), (4, "y = 3")], "(2, 3)"),
+            [],
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale="Correct algebra; the teacher says no drawing is required, so none is.",
+    ),
+    GradingCase(
+        # The flag was turned ON after extraction (a missed flag, fixed by
+        # the teacher, then a regrade). The drawing was recorded but never
+        # zoom-checked — the grader must use it, not call it missing.
+        name="f11-flag-flipped-on-after-extraction-drawing-recorded",
+        category="f",
+        extra={"forbids_deduction_mentioning": ["missing", "not drawn", "no graph", "no drawing"]},
+        problems=_prob(
+            "Solve the system. y = 2x - 1 and y = -x + 5", "(2, 3)", flag=True,
+        ),
+        extraction=_vis(
+            {
+                **_ext([(1, "y = 2x - 1 \\\\ y = -x + 5")], "(2, 3)"),
+                "final_answers": [{"problem_position": 1, "answer_latex": "(2, 3)",
+                                   "answer_plain": "(2, 3) — marked on graph"}],
+            },
+            [_draw("graph", present=True,
+                   plotted=["line rising left-to-right, y-intercept at -1",
+                            "line falling left-to-right, y-intercept at 5"],
+                   points=["(2, 3)"], answer="(2, 3)",
+                   description="Both lines plotted on labeled axes; intersection circled and labeled.")],
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale="The drawing is on the page and correct; it was just recorded before the flag.",
+    ),
+    GradingCase(
         name="e2-blank",
         category="e",
         problems=_prob("Solve x^2 - 5x + 6 = 0.", "x = 2 or x = 3"),
@@ -496,7 +637,7 @@ class GradingProbe(Probe):
     name = "grading"
     needs_browser = False
     default_constraint = (
-        "Grading-quality golden set: 18 hand-labeled submissions spanning "
+        "Grading-quality golden set: 23 hand-labeled submissions spanning "
         "clean-correct, valid-alternative-method, broken-work-right-answer, "
         "arithmetic-slip, plainly-wrong, and required-method/drawing. Asserts the AI grader's "
         "score_status matches the label."
@@ -583,6 +724,10 @@ class GradingProbe(Probe):
                         "persisted_deductions": persisted_deductions,
                         "percent_band": case.extra.get("percent_band"),
                         "requires_deduction_mentioning": case.extra.get("requires_deduction_mentioning"),
+                        "forbids_deduction_mentioning": case.extra.get("forbids_deduction_mentioning"),
+                        "requires_reasoning_mentioning": case.extra.get("requires_reasoning_mentioning"),
+                        "forbids_reasoning_mentioning": case.extra.get("forbids_reasoning_mentioning"),
+                        "max_confidence": case.extra.get("max_confidence"),
                     },
                 )
             )
@@ -640,6 +785,59 @@ class GradingProbe(Probe):
                     f"a deduction names the {needle!r} miss",
                     found,
                     "" if found else f"no deduction reason mentions {needle!r}: {ded}",
+                )
+            )
+
+        # Unknown must not be priced as absent: none of these words may
+        # appear in a deduction reason (the unconfirmed-drawing case).
+        forbidden = item.raw.get("forbids_deduction_mentioning") or []
+        if forbidden:
+            ded = (item.raw.get("grade") or {}).get("deductions") or []
+            hits = [
+                str(d.get("reason", "")) for d in ded
+                if isinstance(d, dict)
+                and any(w in str(d.get("reason", "")).lower() for w in forbidden)
+            ]
+            checks.append(
+                CheckResult(
+                    f"no deduction mentions {forbidden}",
+                    not hits,
+                    "" if not hits else f"deductions: {hits}",
+                )
+            )
+
+        # The teacher is told what to check, and the row is surfaced.
+        note = item.raw.get("requires_reasoning_mentioning")
+        if note:
+            reasoning = str((item.raw.get("grade") or {}).get("reasoning", ""))
+            ok_note = note in reasoning.lower()
+            checks.append(
+                CheckResult(
+                    f"reasoning mentions {note!r}",
+                    ok_note,
+                    "" if ok_note else f"reasoning: {reasoning!r}",
+                )
+            )
+        banned = item.raw.get("forbids_reasoning_mentioning")
+        if banned:
+            reasoning = str((item.raw.get("grade") or {}).get("reasoning", ""))
+            clean = banned not in reasoning.lower()
+            checks.append(
+                CheckResult(
+                    f"reasoning does not mention {banned!r}",
+                    clean,
+                    "" if clean else f"reasoning: {reasoning!r}",
+                )
+            )
+        cap = item.raw.get("max_confidence")
+        if cap is not None:
+            conf = (item.raw.get("grade") or {}).get("confidence")
+            ok_conf = isinstance(conf, (int, float)) and float(conf) <= cap
+            checks.append(
+                CheckResult(
+                    f"confidence <= {cap} (got {conf})",
+                    ok_conf,
+                    "" if ok_conf else f"confidence {conf!r} above {cap}",
                 )
             )
 

@@ -320,6 +320,21 @@ export function WorkshopModal({
       replaceLiveItem(updated);
     });
 
+  // Not lock-gated: the flag is an answer requirement, not question
+  // content, so a teacher can fix it on a published homework. It applies
+  // to grading from then on (and regrades); published grades never move.
+  const saveRequiresDrawing = (next: boolean) =>
+    run(async () => {
+      if (!liveItem) return;
+      if (isProposalPending) {
+        setError("Accept or discard the AI proposal before doing anything else.");
+        return;
+      }
+      if (next === liveItem.requires_drawing) return;
+      const updated = await teacher.updateBankItem(liveItem.id, { requires_drawing: next });
+      replaceLiveItem(updated);
+    });
+
   const saveQuestion = (next: string) =>
     run(async () => {
       if (!liveItem || blockIfPending()) return;
@@ -922,6 +937,19 @@ export function WorkshopModal({
                   />
                 )}
               </div>
+              <RequiresDrawingToggle
+                value={liveItem.requires_drawing}
+                disabled={busy || isProposalPending}
+                note={
+                  isProposalPending
+                    ? "Accept or discard the AI proposal first"
+                    : isLocked
+                      ? "In a published homework \u2014 a change applies to future grading and regrades, never to published grades."
+                      : null
+                }
+                teacherSet={liveItem.requires_drawing_teacher_set}
+                onChange={saveRequiresDrawing}
+              />
             </div>
 
             {/* Solution */}
@@ -1862,3 +1890,60 @@ function CompletionModal({
   );
 }
 
+
+/**
+ * "Requires a drawing" — whether a graph / sketch / table of values is
+ * part of the answer. Set automatically from the question text; the
+ * teacher overrides it here. It decides whether the student's drawing
+ * is checked and graded. Unlike content edits it is NOT locked on a
+ * published homework: it changes grading from then on (and regrades),
+ * never a published grade.
+ */
+function RequiresDrawingToggle({
+  value,
+  disabled,
+  note,
+  teacherSet,
+  onChange,
+}: {
+  value: boolean;
+  disabled: boolean;
+  note: string | null;
+  /** The teacher set it (vs derived from the question text). */
+  teacherSet: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <div className="mt-4 flex items-center justify-between gap-3 border-t border-border-light pt-3">
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-text-primary">Requires a drawing</div>
+        <div className="text-[11px] leading-snug text-text-muted">
+          {note ??
+            `${value
+              ? "The student\u2019s graph, sketch or table is checked and graded."
+              : "Drawings are recorded but not graded."} ${teacherSet ? "Set by you." : "Set from the question text."}`}
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={value}
+        aria-label="Requires a drawing"
+        disabled={disabled}
+        onClick={() => onChange(!value)}
+        className={[
+          "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+          value ? "border-primary bg-primary" : "border-border-strong bg-bg-subtle",
+        ].join(" ")}
+      >
+        <span
+          aria-hidden
+          className={[
+            "inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-150 ease-out",
+            value ? "translate-x-[18px]" : "translate-x-[2px]",
+          ].join(" ")}
+        />
+      </button>
+    </div>
+  );
+}
