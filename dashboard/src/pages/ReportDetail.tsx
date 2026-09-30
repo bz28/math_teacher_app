@@ -86,6 +86,9 @@ export default function ReportDetail() {
   const hash = pos ? `#${problemAnchor(pos)}` : "";
   const teacherPage = r.page_url && /^https?:\/\//i.test(r.page_url) ? r.page_url : null;
   const currentWork = work && work.id === r.submission_id ? work : null;
+  const mailto = r.teacher_email
+    ? `mailto:${r.teacher_email}?subject=${encodeURIComponent(`Re: your Veradic report — ${KIND_LABEL[r.kind]}`)}`
+    : null;
 
   return (
     <div className="rpt-case">
@@ -98,8 +101,11 @@ export default function ReportDetail() {
           </div>
           <h1 style={{ marginBottom: 6 }}>{KIND_LABEL[r.kind]}</h1>
           <div className="case-meta">
-            <span className="case-meta-item">
-              {r.submission_id ? whereLabel(r) : `Sidebar · ${pagePath(r.page_url) ?? "no page recorded"}`}
+            <span
+              className="case-meta-item"
+              title={r.submission_id ? undefined : (pagePath(r.page_url) ?? undefined)}
+            >
+              {r.submission_id ? whereLabel(r) : `Sidebar · ${whereLabel(r)}`}
             </span>
             {r.course_name && <span className="case-meta-item case-meta-muted">{r.course_name}</span>}
           </div>
@@ -134,12 +140,20 @@ export default function ReportDetail() {
 
           {r.submission_id && <GradeBand r={r} />}
 
+          {!r.submission_id && (
+            <p className="rpt-sidebar-note">No submission attached — this came from the sidebar.</p>
+          )}
+
           <nav className="rpt-actions" aria-label="Open the context">
             {r.submission_id ? (
               <Link to={`/submissions/${r.submission_id}/trace${hash}`} style={btnPrimary}>
                 {pos ? `Open submission at Problem ${pos}` : "Open submission"}
               </Link>
-            ) : null}
+            ) : (
+              // Nothing to inspect here — the next step is asking the
+              // teacher what they saw.
+              mailto && <a href={mailto} style={btnPrimary}>Email the teacher</a>
+            )}
             {r.assignment_id && (
               <Link to={`/assignments/${r.assignment_id}${hash}`} style={btnGhost}>Homework</Link>
             )}
@@ -199,11 +213,9 @@ export default function ReportDetail() {
               </div>
             </>
           )}
-          {r.teacher_email && (
-            <a
-              href={`mailto:${r.teacher_email}?subject=${encodeURIComponent(`Re: your Veradic report — ${KIND_LABEL[r.kind]}`)}`}
-              style={{ ...btnGhost, textAlign: "center" }}
-            >
+          {/* A sidebar report already leads with this as its primary action. */}
+          {mailto && r.submission_id && (
+            <a href={mailto} style={{ ...btnGhost, textAlign: "center" }}>
               Email the teacher
             </a>
           )}
@@ -323,7 +335,8 @@ function Evidence({
     return (
       <section className="rpt-evidence">
         {head}
-        <ExtractionReadout detail={work} />
+        <StudentVerdict work={work} rows={work.rows} />
+        <ExtractionReadout detail={work} showStudent={work.rows.some((row) => row.changed)} />
       </section>
     );
   }
@@ -358,6 +371,7 @@ function Evidence({
         </div>
         <div>
           <span className="xq-read-label rpt-col-label">What the AI read</span>
+          <StudentVerdict work={work} rows={rows} />
           {rows.length === 0 ? (
             <p className="empty-mini">
               {work.extraction_present
@@ -366,7 +380,9 @@ function Evidence({
             </p>
           ) : (
             <ol className="xq-rows">
-              {rows.map((row) => <ReadRow key={row.key} row={row} />)}
+              {rows.map((row) => (
+                <ReadRow key={row.key} row={row} showStudent={rows.some((x) => x.changed)} />
+              ))}
             </ol>
           )}
           {reasoning && <Reasoning text={reasoning} />}
@@ -374,6 +390,27 @@ function Evidence({
       </div>
     </section>
   );
+}
+
+/**
+ * One quiet line for what the student did with the read, when they
+ * changed nothing — instead of "— same —" down every row. When they did
+ * correct something the rows carry it, side by side, and this is silent.
+ */
+function StudentVerdict({
+  work,
+  rows,
+}: {
+  work: ExtractionDetail;
+  rows: ExtractionDetail["rows"];
+}) {
+  if (rows.length === 0 || rows.some((row) => row.changed)) return null;
+  const text = work.confirmed_at
+    ? "Student confirmed the AI's read."
+    : work.flagged_at
+      ? "Student said the read was wrong, without correcting it."
+      : "Student hasn't confirmed the read yet.";
+  return <p className="rpt-student-verdict">{text}</p>;
 }
 
 function Reasoning({ text }: { text: string }) {

@@ -89,15 +89,11 @@ export default function Reports() {
         // instead of hiding a click away.
         render: (r) => (
           <div className="rpt-where">
-            <span className="rpt-where-main">
-              {r.submission_id ? (
-                whereLabel(r)
-              ) : (
-                <>
-                  <span className="rpt-where-tag">Sidebar</span>
-                  <span className="mono">{pagePath(r.page_url) ?? "no page recorded"}</span>
-                </>
-              )}
+            {/* The sienna rule is the open signal; say it for screen readers. */}
+            {r.status === "open" && <span className="sr-only">Open. </span>}
+            <span className="rpt-where-main" title={r.submission_id ? undefined : (pagePath(r.page_url) ?? undefined)}>
+              {!r.submission_id && <span className="rpt-where-tag">Sidebar</span>}
+              {whereLabel(r)}
             </span>
             {r.note && <span className="rpt-where-note">{r.note}</span>}
           </div>
@@ -111,63 +107,28 @@ export default function Reports() {
         render: (r) => r.teacher_name ?? "—",
       },
       {
-        key: "ai",
-        header: "AI",
-        width: "56px",
+        key: "grades",
+        header: "AI → teacher",
+        width: "150px",
         numeric: true,
-        sortValue: (r) => gradeValue(r.ai_grade) ?? -1,
-        render: (r) => <GradeCell value={gradeValue(r.ai_grade)} />,
-      },
-      {
-        key: "teacher_grade",
-        header: "Tchr",
-        width: "60px",
-        numeric: true,
-        sortValue: (r) => gradeValue(r.teacher_grade) ?? -1,
-        render: (r) => <GradeCell value={gradeValue(r.teacher_grade)} />,
-      },
-      {
-        key: "gap",
-        header: "Gap",
-        width: "76px",
-        numeric: true,
-        // Sorted by size — a 60-point miss matters whichever way it points.
-        // No gap sorts below a real ±0, never alongside a 1-point one.
+        // Sorted by the size of the disagreement — a 60-point miss matters
+        // whichever way it points. No grades sorts last.
         sortValue: (r) => {
           const gap = gradeGap(r);
           return gap === null ? -1 : Math.abs(gap);
         },
-        render: (r) => {
-          const gap = gradeGap(r);
-          return gap === null ? (
-            <span className="muted">—</span>
-          ) : (
-            <strong
-              className="rpt-gap"
-              title={gap < 0 ? "The AI gave more credit than the teacher" : "The AI gave less credit than the teacher"}
-            >
-              {fmtGap(gap)}
-            </strong>
-          );
-        },
+        render: (r) => <GradeCell r={r} />,
       },
       {
         key: "when",
         header: "When",
-        width: "92px",
+        width: "160px",
         sortValue: (r) => r.created_at,
-        render: (r) => <span className="muted">{formatRelativeDate(r.created_at)}</span>,
-      },
-      {
-        key: "status",
-        header: "Status",
-        width: "112px",
-        sortValue: (r) => r.status,
         render: (r) => (
-          <StatusPill
-            tone={r.status === "open" ? "live" : "ok"}
-            label={r.status === "open" ? "Open" : "Resolved"}
-          />
+          <span className="muted">
+            {formatRelativeDate(r.created_at)}
+            {r.status === "resolved" && <span className="rpt-resolved"> · resolved</span>}
+          </span>
         ),
       },
     ],
@@ -225,7 +186,28 @@ export default function Reports() {
   );
 }
 
-/** A grade as a bare mono number — the header names the side. */
-function GradeCell({ value }: { value: number | null }) {
-  return value === null ? <span className="muted">—</span> : <>{value}</>;
+/** "100 → 40 · −60": both grades and the gap, the gap in the alert tone
+ *  when they disagree. Blank when there's no grade to compare — a sidebar
+ *  report, or a whole-submission one. */
+function GradeCell({ r }: { r: TeacherReportData }) {
+  const ai = gradeValue(r.ai_grade);
+  const teacher = gradeValue(r.teacher_grade);
+  if (ai === null && teacher === null) return null;
+  const gap = gradeGap(r);
+  return (
+    <span className="rpt-grades-cell">
+      {ai ?? "—"} → {teacher ?? "—"}
+      {gap !== null && (
+        <>
+          {" · "}
+          <strong
+            className={gap === 0 ? "rpt-gap rpt-gap-zero" : "rpt-gap"}
+            title={gap < 0 ? "The AI gave more credit than the teacher" : gap > 0 ? "The AI gave less credit than the teacher" : "Same grade"}
+          >
+            {fmtGap(gap)}
+          </strong>
+        </>
+      )}
+    </span>
+  );
 }

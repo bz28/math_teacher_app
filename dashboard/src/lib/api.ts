@@ -1092,6 +1092,9 @@ export interface TeacherReportData {
   kind: ReportKind;
   note: string | null;
   page_url: string | null;
+  /** The teacher page it was filed from, named the way the teacher saw
+   *  it ("Class page · Algebra I") — never a path of ids. */
+  page_label: string | null;
   teacher_id: string | null;
   teacher_name: string | null;
   teacher_email: string | null;

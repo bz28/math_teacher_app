@@ -87,19 +87,26 @@ export function ReadRow({
   row,
   id,
   target = false,
+  showStudent = true,
 }: {
   row: ExtractionDetail["rows"][number];
   /** The problem's `#p{n}` anchor — set on its first row only. */
   id?: string;
-  /** This row belongs to the problem a deep link pointed at. */
+  /** This row belongs to the problem a deep link pointed at. Marked by
+   *  its tint and key, so the warn rule of a corrected row still shows. */
   target?: boolean;
+  /** Show the "Student said" side even when the student agreed. A view
+   *  that states agreement once for the whole set turns this off; a row
+   *  the student changed always shows it. */
+  showStudent?: boolean;
 }) {
   const changed = row.changed;
+  const student = showStudent || changed;
   return (
     <li
       id={id}
       className={`xq-row${target ? " xq-row-target" : ""}`}
-      style={target ? undefined : { borderLeftColor: changed ? "var(--warn)" : "var(--rule)" }}
+      style={{ borderLeftColor: changed ? "var(--warn)" : target ? "var(--accent)" : "var(--rule)" }}
     >
       <div className="xq-row-key">
         {row.unattributed
@@ -120,7 +127,7 @@ export function ReadRow({
           </span>
         )}
       </div>
-      <div className="xq-row-pair">
+      <div className={student ? "xq-row-pair" : "xq-row-pair xq-row-pair-single"}>
         <div className="xq-read">
           <span className="xq-read-label">AI read</span>
           {row.ai_read === null ? (
@@ -143,7 +150,7 @@ export function ReadRow({
               <ReadText text={row.student_said ?? ""} isLatex={row.is_latex} />
             )}
           </div>
-        ) : (
+        ) : !student ? null : (
           <div className="xq-read xq-read-agree">
             <span className="xq-read-label">Student said</span>
             <p className="xq-agree">
@@ -159,8 +166,11 @@ export function ReadRow({
 export default function ExtractionReadout({
   detail,
   targetProblem = null,
+  showStudent = true,
 }: {
   detail: ExtractionDetail;
+  /** Passed to each row — see `ReadRow`. */
+  showStudent?: boolean;
   /** Problem a `#p{n}` link pointed at: its rows are marked, and its
    *  first row carries the anchor. */
   targetProblem?: number | null;
@@ -216,6 +226,7 @@ export default function ExtractionReadout({
                 // problem but no step number still anchors its problem.
                 id={anchorFor(r.problem_position)}
                 target={targetProblem !== null && r.problem_position === targetProblem}
+                showStudent={showStudent}
               />
             ))}
           </ol>

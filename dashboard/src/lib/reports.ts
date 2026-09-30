@@ -31,8 +31,8 @@ export function creditLabel(
   return "Partial credit";
 }
 
-/** "Solving Systems · Problem 4 · D. Park", or the page for a
- *  context-free report. */
+/** "Solving Systems · Problem 4 · D. Park", or — for a sidebar report —
+ *  the page it was filed from ("Class page · Algebra I"). */
 export function whereLabel(r: TeacherReportData): string {
   const parts = [
     r.assignment_title,
@@ -40,14 +40,7 @@ export function whereLabel(r: TeacherReportData): string {
     r.student_name,
   ].filter(Boolean);
   if (parts.length) return parts.join(" · ");
-  if (r.page_url) {
-    try {
-      return new URL(r.page_url).pathname;
-    } catch {
-      return r.page_url;
-    }
-  }
-  return "No context";
+  return r.page_label ?? "No page recorded";
 }
 
 type GradeLike = { score_status: string | null; percent: number | null } | null | undefined;

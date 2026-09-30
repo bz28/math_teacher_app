@@ -3166,15 +3166,23 @@ table.dt tr:last-child td { border-bottom: none; }
    fades once, so the page settles back to paper. Anchor rows also clear
    the viewport edge when scrolled to. */
 .xq-row[id] { scroll-margin-top: 96px; }
+/* The rule colour stays the row's own (warn when the student corrected
+   it), so "you were sent here" and "the student changed this" never
+   overwrite each other: the target is the tint and the sienna key. */
 .xq-row-target {
-  border-left: 2px solid var(--accent);
+  background: var(--target-tint);
+  padding-top: 6px;
+  padding-bottom: 6px;
   animation: target-wash 2.4s ease-out 1;
 }
 .xq-row-target .xq-row-key { color: var(--accent); }
+:root { --target-tint: rgba(184, 67, 26, 0.05); }
 @keyframes target-wash {
   0%, 35% { background: var(--accent-soft); }
-  100% { background: transparent; }
+  100% { background: var(--target-tint); }
 }
+.xq-row-pair-single { grid-template-columns: 1fr; }
+.asg-problem-target { background: var(--target-tint); }
 .asg-problem { scroll-margin-top: 96px; }
 .asg-problem-target {
   box-shadow: inset 2px 0 0 var(--accent);
@@ -3541,7 +3549,19 @@ table.dt tr:last-child td { border-bottom: none; }
   color: var(--muted);
   max-width: 62ch;
 }
-.rpt-gap { font-weight: 500; color: var(--ink); }
+.rpt-grades-cell { white-space: nowrap; color: var(--ink-soft); }
+.rpt-gap { font-weight: 500; color: var(--accent); }
+.rpt-gap-zero { color: var(--muted); }
+.rpt-resolved { color: var(--ok); }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 
 .rpt-body {
   display: grid;
@@ -3577,6 +3597,16 @@ table.dt tr:last-child td { border-bottom: none; }
 .rpt-said-by a { color: var(--ink); font-weight: 600; }
 
 .rpt-grades { margin-top: 0; }
+.rpt-sidebar-note {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.rpt-student-verdict {
+  margin: -4px 0 14px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
 .rpt-gap-value { color: var(--accent); }
 
 .rpt-actions {
