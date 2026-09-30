@@ -401,6 +401,64 @@ async def main() -> None:
             await capture_email(hb, w)
         if mode in ("teacher", "all"):
             await capture_teacher(hb, w)
+        if mode in ("sidebar", "all"):
+            await capture_sidebar(hb, w)
+
+
+async def _latest_report() -> TeacherReport:
+    from sqlalchemy import select
+
+    async with get_session_factory()() as s:
+        return (await s.execute(
+            select(TeacherReport).order_by(TeacherReport.created_at.desc()).limit(1)
+        )).scalar_one()
+
+
+async def capture_sidebar(hb: HarnessBrowser, w: dict[str, str]) -> None:
+    """The sidebar "Report a problem" (#914): with a student open it attaches
+    them (and a picked problem); on a page with nothing open it attaches
+    nothing. File one of each through the real dialog, then open each in
+    the admin console."""
+    filed: list[tuple[str, str]] = []
+    async with hb.authed_page(w["teacher"], w["teacher_refresh"]) as page:
+        await page.set_viewport_size({"width": 1440, "height": 1100})
+        # 1. Student open, Problem 3 picked in the sidebar dialog.
+        await page.goto(f"{WEB_BASE}{w['review_path']}?student={w['maya_id']}",
+                        wait_until="networkidle", timeout=60000)
+        await page.wait_for_timeout(2500)
+        await page.get_by_role("button", name="Report a problem").first.click()
+        await page.get_by_label("Which problem?").select_option(label=next(
+            o for o in await page.locator("select option").all_inner_texts() if o.startswith("Problem 3")
+        ))
+        await page.get_by_label("It misread the student's handwriting").check()
+        await page.get_by_role("textbox").last.fill("Sidebar: the (2, 3) is fine but she never graphed it.")
+        await page.get_by_role("button", name="Send report").click()
+        await page.wait_for_timeout(1500)
+        r = await _latest_report()
+        print(f"  sidebar+student: submission={r.submission_id} position={r.problem_position} page_url={r.page_url}")
+        filed.append((str(r.id), "sidebar-attached"))
+        # 2. Nothing open: the teacher home.
+        await page.goto(f"{WEB_BASE}/school/teacher", wait_until="networkidle", timeout=60000)
+        await page.wait_for_timeout(1500)
+        # A first visit to the home page opens the product tour.
+        skip = page.get_by_role("button", name="Skip for now")
+        if await skip.count():
+            await skip.click()
+            await page.wait_for_timeout(500)
+        await page.get_by_role("button", name="Report a problem").first.click()
+        await page.get_by_label("Something's broken").check()
+        await page.get_by_role("textbox").last.fill("The course list flickered on load.")
+        await page.get_by_role("button", name="Send report").click()
+        await page.wait_for_timeout(1500)
+        r = await _latest_report()
+        print(f"  sidebar bare: submission={r.submission_id} page_url={r.page_url}")
+        filed.append((str(r.id), "sidebar-bare"))
+    async with hb.authed_page(w["admin"], w["admin"], **ADMIN_KEYS) as page:
+        await page.set_viewport_size({"width": 1440, "height": 1000})
+        for rid, name in filed:
+            await page.goto(f"{DASH_BASE}/reports/{rid}", wait_until="networkidle")
+            await page.wait_for_timeout(1500)
+            await _shot(page, f"case-view-{name}", full=name == "sidebar-attached")
 
 
 if __name__ == "__main__":
