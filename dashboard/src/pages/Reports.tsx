@@ -2,15 +2,24 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type ReportStatus, type TeacherReportData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
-import { KIND_LABEL, KIND_TONE, gradePct, whereLabel } from "../lib/reports";
+import {
+  KIND_LABEL,
+  KIND_TONE,
+  byPriority,
+  fmtGap,
+  gradeGap,
+  gradeValue,
+  pagePath,
+  whereLabel,
+} from "../lib/reports";
 import DataTable, { type Column } from "../components/DataTable";
 import StatusPill from "../components/StatusPill";
 
 /**
  * Teacher reports — every "Report a problem" a teacher has filed from
- * the product, open first. This is the inbox behind the alert email:
- * the email says "look", this page is where you look, and the detail
- * page is where you close it out.
+ * the product. This is the inbox behind the alert email: the email says
+ * "look", this page ranks what to look at, and the case view is where
+ * you look and close it out.
  */
 
 type Filter = ReportStatus | "all";
@@ -58,58 +67,68 @@ export default function Reports() {
     setAttempt((n) => n + 1);
   }, []);
 
+  // The inbox order — open, then evidence attached, then newest. The
+  // table keeps it until a header is clicked.
+  const ranked = useMemo(() => [...rows].sort(byPriority), [rows]);
+
   const columns = useMemo<Column<TeacherReportData>[]>(
     () => [
       {
-        key: "when",
-        header: "When",
-        width: "110px",
-        sortValue: (r) => r.created_at,
-        render: (r) => <span className="muted">{formatRelativeDate(r.created_at)}</span>,
-      },
-      {
-        key: "teacher",
-        header: "Teacher",
-        width: "160px",
-        sortValue: (r) => r.teacher_name ?? "",
-        render: (r) => <strong>{r.teacher_name ?? "—"}</strong>,
+        key: "kind",
+        header: "Kind",
+        width: "184px",
+        sortValue: (r) => r.kind,
+        render: (r) => <StatusPill tone={KIND_TONE[r.kind]} label={KIND_LABEL[r.kind]} />,
       },
       {
         key: "where",
         header: "Where",
         sortValue: (r) => whereLabel(r),
-        render: (r) => whereLabel(r),
+        // What it's about, then what the teacher said — the note is what
+        // decides which report to open first, so it rides under the where
+        // instead of hiding a click away.
+        render: (r) => (
+          <div className="rpt-where">
+            {/* The sienna rule is the open signal; say it for screen readers. */}
+            {r.status === "open" && <span className="sr-only">Open. </span>}
+            <span className="rpt-where-main" title={r.submission_id ? undefined : (pagePath(r.page_url) ?? undefined)}>
+              {!r.submission_id && <span className="rpt-where-tag">Sidebar</span>}
+              {whereLabel(r)}
+            </span>
+            {r.note && <span className="rpt-where-note">{r.note}</span>}
+          </div>
+        ),
       },
       {
-        key: "kind",
-        header: "Kind",
-        width: "170px",
-        sortValue: (r) => r.kind,
-        render: (r) => <StatusPill tone={KIND_TONE[r.kind]} label={KIND_LABEL[r.kind]} />,
+        key: "teacher",
+        header: "Teacher",
+        width: "130px",
+        sortValue: (r) => r.teacher_name ?? "",
+        render: (r) => r.teacher_name ?? "—",
       },
       {
         key: "grades",
         header: "AI → teacher",
-        width: "130px",
-        render: (r) =>
-          r.submission_id ? (
-            <span className="mono">
-              {gradePct(r.ai_grade)} → {gradePct(r.teacher_grade)}
-            </span>
-          ) : (
-            <span className="muted">—</span>
-          ),
+        width: "150px",
+        numeric: true,
+        // Sorted by the size of the disagreement — a 60-point miss matters
+        // whichever way it points. No grades sorts last.
+        sortValue: (r) => {
+          const gap = gradeGap(r);
+          return gap === null ? -1 : Math.abs(gap);
+        },
+        render: (r) => <GradeCell r={r} />,
       },
       {
-        key: "status",
-        header: "Status",
-        width: "110px",
-        sortValue: (r) => r.status,
+        key: "when",
+        header: "When",
+        width: "160px",
+        sortValue: (r) => r.created_at,
         render: (r) => (
-          <StatusPill
-            tone={r.status === "open" ? "live" : "ok"}
-            label={r.status === "open" ? "Open" : "Resolved"}
-          />
+          <span className="muted">
+            {formatRelativeDate(r.created_at)}
+            {r.status === "resolved" && <span className="rpt-resolved"> · resolved</span>}
+          </span>
         ),
       },
     ],
@@ -123,8 +142,8 @@ export default function Reports() {
         <h1>Reports</h1>
         <p>
           Problems teachers flagged from inside the product — a wrong grade, a misread page, a
-          broken screen. Each one arrives with the submission, the AI's call and the teacher's grade
-          attached. {counts.open} open · {counts.resolved} resolved.
+          broken screen. Open reports with a submission attached come first: those you can
+          diagnose right here. {counts.open} open · {counts.resolved} resolved.
         </p>
       </div>
 
@@ -146,16 +165,17 @@ export default function Reports() {
 
       <DataTable
         columns={columns}
-        rows={rows}
+        rows={ranked}
         rowKey={(r) => r.id}
+        rowStatus={(r) => (r.status === "open" ? "var(--accent)" : undefined)}
         onRowClick={(r) => navigate(`/reports/${r.id}`)}
         drill
         loading={loading}
         error={error}
         onRetry={load}
-        defaultSort={{ key: "when", dir: "desc" }}
         searchKeys={(r) => [r.teacher_name, r.assignment_title, r.student_name, r.note, r.kind]}
-        searchLabel="Search reports"
+        searchLabel="reports"
+        minWidth={900}
         empty={
           filter === "open"
             ? "No open reports — nothing's waiting on you."
@@ -163,5 +183,31 @@ export default function Reports() {
         }
       />
     </div>
+  );
+}
+
+/** "100 → 40 · −60": both grades and the gap, the gap in the alert tone
+ *  when they disagree. Blank when there's no grade to compare — a sidebar
+ *  report, or a whole-submission one. */
+function GradeCell({ r }: { r: TeacherReportData }) {
+  const ai = gradeValue(r.ai_grade);
+  const teacher = gradeValue(r.teacher_grade);
+  if (ai === null && teacher === null) return null;
+  const gap = gradeGap(r);
+  return (
+    <span className="rpt-grades-cell">
+      {ai ?? "—"} → {teacher ?? "—"}
+      {gap !== null && (
+        <>
+          {" · "}
+          <strong
+            className={gap === 0 ? "rpt-gap rpt-gap-zero" : "rpt-gap"}
+            title={gap < 0 ? "The AI gave more credit than the teacher" : gap > 0 ? "The AI gave less credit than the teacher" : "Same grade"}
+          >
+            {fmtGap(gap)}
+          </strong>
+        </>
+      )}
+    </span>
   );
 }

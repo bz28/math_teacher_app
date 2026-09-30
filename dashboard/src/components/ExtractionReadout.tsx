@@ -1,4 +1,5 @@
 import type { ExtractionDetail } from "../lib/api";
+import { problemAnchor } from "../lib/anchor";
 import MathText from "./MathText";
 import PdfPages from "./PdfPages";
 
@@ -60,13 +61,52 @@ function ReadText({ text, isLatex }: { text: string; isLatex: boolean }) {
   );
 }
 
+/** One uploaded file of the student's work. A submission is photos OR
+ *  scanned PDFs — an <img> cannot show a PDF, so it renders page by page
+ *  instead. `index` is 0-based. */
+export function WorkFile({
+  file,
+  index,
+}: {
+  file: ExtractionDetail["files"][number];
+  index: number;
+}) {
+  return file.media_type === "application/pdf" ? (
+    <PdfPages b64={file.data} label={`Submitted work, file ${index + 1}`} />
+  ) : (
+    <img
+      src={`data:${file.media_type};base64,${file.data}`}
+      alt={`Submitted work, page ${index + 1}`}
+      loading="lazy"
+    />
+  );
+}
+
 /** One row of the read, AI beside student. The diff IS the diagnostic. */
-export function ReadRow({ row }: { row: ExtractionDetail["rows"][number] }) {
+export function ReadRow({
+  row,
+  id,
+  target = false,
+  showStudent = true,
+}: {
+  row: ExtractionDetail["rows"][number];
+  /** The problem's `#p{n}` anchor — set on its first row only. */
+  id?: string;
+  /** This row belongs to the problem a deep link pointed at. Marked by
+   *  its tint and key, so the warn rule of a corrected row still shows. */
+  target?: boolean;
+  /** Show the "Student said" side even when the student agreed. A view
+   *  that states agreement once for the whole set turns this off; a row
+   *  the student changed always shows it. */
+  showStudent?: boolean;
+}) {
   const changed = row.changed;
+  const student = showStudent || changed;
   return (
     <li
-      className="xq-row"
-      style={{ borderLeftColor: changed ? "var(--warn)" : "var(--rule)" }}
+      id={id}
+      className={`xq-row${target ? " xq-row-target" : ""}`}
+      style={{ borderLeftColor: changed ? "var(--warn)" : target ? "var(--accent)" : "var(--rule)" }}
     >
       <div className="xq-row-key">
         {row.unattributed
@@ -87,7 +127,7 @@ export function ReadRow({ row }: { row: ExtractionDetail["rows"][number] }) {
           </span>
         )}
       </div>
-      <div className="xq-row-pair">
+      <div className={student ? "xq-row-pair" : "xq-row-pair xq-row-pair-single"}>
         <div className="xq-read">
           <span className="xq-read-label">AI read</span>
           {row.ai_read === null ? (
@@ -110,7 +150,7 @@ export function ReadRow({ row }: { row: ExtractionDetail["rows"][number] }) {
               <ReadText text={row.student_said ?? ""} isLatex={row.is_latex} />
             )}
           </div>
-        ) : (
+        ) : !student ? null : (
           <div className="xq-read xq-read-agree">
             <span className="xq-read-label">Student said</span>
             <p className="xq-agree">
@@ -125,9 +165,24 @@ export function ReadRow({ row }: { row: ExtractionDetail["rows"][number] }) {
 
 export default function ExtractionReadout({
   detail,
+  targetProblem = null,
+  showStudent = true,
 }: {
   detail: ExtractionDetail;
+  /** Passed to each row — see `ReadRow`. */
+  showStudent?: boolean;
+  /** Problem a `#p{n}` link pointed at: its rows are marked, and its
+   *  first row carries the anchor. */
+  targetProblem?: number | null;
 }) {
+  // Steps come before final answers, so a problem's first row is its
+  // first step — the natural place to land.
+  const anchored = new Set<number>();
+  const anchorFor = (pos: number | null) => {
+    if (pos === null || anchored.has(pos)) return undefined;
+    anchored.add(pos);
+    return problemAnchor(pos);
+  };
   return (
     <div className="xq-detail">
       {/* The strokes. You cannot diagnose a misread without seeing what
@@ -140,18 +195,7 @@ export default function ExtractionReadout({
         ) : (
           // A submission is photos OR scanned PDFs — an <img> cannot show
           // a PDF, so it renders page by page instead.
-          detail.files.map((f, i) =>
-            f.media_type === "application/pdf" ? (
-              <PdfPages key={i} b64={f.data} label={`Submitted work, file ${i + 1}`} />
-            ) : (
-              <img
-                key={i}
-                src={`data:${f.media_type};base64,${f.data}`}
-                alt={`Submitted work, page ${i + 1}`}
-                loading="lazy"
-              />
-            ),
-          )
+          detail.files.map((f, i) => <WorkFile key={i} file={f} index={i} />)
         )}
       </div>
       <div>
@@ -173,7 +217,18 @@ export default function ExtractionReadout({
           </p>
         ) : (
           <ol className="xq-rows">
-            {detail.rows.map((r) => <ReadRow key={r.key} row={r} />)}
+            {detail.rows.map((r) => (
+              <ReadRow
+                key={r.key}
+                row={r}
+                // Keyed on the position alone — the same test the trace uses
+                // for "nothing was read for Problem n" — so a row that has a
+                // problem but no step number still anchors its problem.
+                id={anchorFor(r.problem_position)}
+                target={targetProblem !== null && r.problem_position === targetProblem}
+                showStudent={showStudent}
+              />
+            ))}
           </ol>
         )}
       </div>

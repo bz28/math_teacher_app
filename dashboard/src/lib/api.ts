@@ -547,6 +547,8 @@ export interface ExtractionRow {
   key: string;
   problem_position: number | null;
   step_num: number | null;
+  /** 1-based photo the row was read from, when Vision recorded it. */
+  page_index: number | null;
   kind: "step" | "final_answer";
   /** Vision could not tie this row to a problem, so the student was
    *  never asked to confirm it. */
@@ -1090,6 +1092,9 @@ export interface TeacherReportData {
   kind: ReportKind;
   note: string | null;
   page_url: string | null;
+  /** The teacher page it was filed from, named the way the teacher saw
+   *  it ("Class page · Algebra I") — never a path of ids. */
+  page_label: string | null;
   teacher_id: string | null;
   teacher_name: string | null;
   teacher_email: string | null;

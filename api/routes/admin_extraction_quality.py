@@ -358,6 +358,19 @@ def _step_count(extraction: Any) -> int:
     return len(steps) if isinstance(steps, list) else 0
 
 
+def _page_index(value: Any) -> int | None:
+    """The 1-based photo a row was read from, when Vision said so.
+
+    Optional in the extraction schema and model-written, so anything but
+    a positive int (bools included — they are ints in Python) is "don't
+    know" rather than a page to point at. The report case view uses it
+    to show only the photo the reported problem is on.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return None
+    return value
+
+
 def _read_text(latex: Any, plain: Any) -> tuple[str | None, bool]:
     """What the AI actually transcribed for one row, and whether it is LaTeX.
 
@@ -465,6 +478,7 @@ async def extraction_detail(
             "key": key or f"unattributed:{i}",
             "problem_position": step.get("problem_position"),
             "step_num": step.get("step_num"),
+            "page_index": _page_index(step.get("page_index")),
             "kind": "step",
             "unattributed": unattributed,
             "ai_read": ai_read,
@@ -499,6 +513,7 @@ async def extraction_detail(
             "key": key or f"unattributed-final:{i}",
             "problem_position": fa.get("problem_position"),
             "step_num": None,
+            "page_index": _page_index(fa.get("page_index")),
             "kind": "final_answer",
             "unattributed": unattributed,
             # answer_plain, NOT answer_text — the latter exists nowhere in

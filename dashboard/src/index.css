@@ -3161,6 +3161,37 @@ table.dt tr:last-child td { border-bottom: none; }
   margin-bottom: 18px;
 }
 
+/* The problem a `#p{n}` link pointed at (a teacher's report). The sienna
+   rule stays so you can find it again after scrolling away; the wash
+   fades once, so the page settles back to paper. Anchor rows also clear
+   the viewport edge when scrolled to. */
+.xq-row[id] { scroll-margin-top: 96px; }
+/* The rule colour stays the row's own (warn when the student corrected
+   it), so "you were sent here" and "the student changed this" never
+   overwrite each other: the target is the tint and the sienna key. */
+.xq-row-target {
+  background: var(--target-tint);
+  padding-top: 6px;
+  padding-bottom: 6px;
+  animation: target-wash 2.4s ease-out 1;
+}
+.xq-row-target .xq-row-key { color: var(--accent); }
+:root { --target-tint: rgba(184, 67, 26, 0.05); }
+@keyframes target-wash {
+  0%, 35% { background: var(--accent-soft); }
+  100% { background: var(--target-tint); }
+}
+.xq-row-pair-single { grid-template-columns: 1fr; }
+.asg-problem { scroll-margin-top: 96px; }
+.asg-problem-target {
+  background: var(--target-tint);
+  box-shadow: inset 2px 0 0 var(--accent);
+  animation: target-wash 2.4s ease-out 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .xq-row-target, .asg-problem-target { animation: none; }
+}
+
 .xq-row-key {
   display: flex;
   align-items: baseline;
@@ -3484,8 +3515,165 @@ table.dt tr:last-child td { border-bottom: none; }
   color: var(--muted);
 }
 .cf-work-stage { margin-left: auto; }
+.cf-work-target-missing { color: var(--accent); }
 
 @media (max-width: 640px) {
   .cf-life-gap { padding: 0 6px; }
   .cf-work-stage { margin-left: 0; }
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   Teacher reports — inbox rows and the report case view
+   ────────────────────────────────────────────────────────────────── */
+
+/* Where, then the teacher's note under it — one line each. */
+.rpt-where { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rpt-where-main,
+.rpt-where-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rpt-where-main { color: var(--ink); }
+.rpt-where-main .mono { font-size: 12.5px; }
+.rpt-where-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-right: 8px;
+}
+.rpt-where-note {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--muted);
+  max-width: 62ch;
+}
+.rpt-grades-cell { white-space: nowrap; color: var(--ink-soft); }
+.rpt-gap { font-weight: 500; color: var(--accent); }
+.rpt-gap-zero { color: var(--muted); }
+.rpt-resolved { color: var(--ok); }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.rpt-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 48px;
+  margin-top: 22px;
+  padding-top: 26px;
+  border-top: 1px solid var(--rule);
+  align-items: start;
+}
+
+/* The teacher's words are the page's lead — set as a pull quote, not
+   boxed: the one serif moment on an otherwise sans, numeric page. */
+.rpt-said { margin: 0 0 22px; }
+.rpt-quote {
+  margin: 0;
+  padding-left: 18px;
+  border-left: 2px solid var(--warn);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 24px;
+  line-height: 1.35;
+  color: var(--ink);
+  max-width: 44em;
+}
+.rpt-quote-empty { font-size: 18px; color: var(--muted); }
+.rpt-said-by {
+  margin-top: 10px;
+  padding-left: 20px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.rpt-said-by a { color: var(--ink); font-weight: 600; }
+
+.rpt-grades { margin-top: 0; }
+.rpt-sidebar-note {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.rpt-student-verdict {
+  margin: -4px 0 14px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.rpt-gap-value { color: var(--accent); }
+
+.rpt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 20px 0 34px;
+}
+.rpt-actions a:hover { text-decoration: none; }
+.rpt-teacher-page {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.rpt-teacher-page span {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted-2);
+  margin-left: 4px;
+}
+.rpt-teacher-page:hover { color: var(--ink); }
+
+.rpt-evidence { padding-top: 22px; border-top: 1px solid var(--rule); }
+.rpt-evidence-head { margin-bottom: 18px; }
+.rpt-evidence-head h3 { margin-bottom: 8px; }
+.rpt-question { font-size: 15.5px; line-height: 1.5; color: var(--ink); max-width: 70ch; }
+.rpt-page { margin: 0; }
+.rpt-page figcaption,
+.rpt-page-note {
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.rpt-col-label { margin-bottom: 12px; }
+.rpt-reasoning {
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+.rpt-reasoning p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--ink-soft); max-width: 62ch; }
+
+.rpt-rail {
+  position: sticky;
+  top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rpt-rail h3 { margin-bottom: 2px; }
+.rpt-note-input {
+  width: 100%;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@media (max-width: 1100px) {
+  .rpt-body { grid-template-columns: 1fr; gap: 28px; }
+  .rpt-rail { position: static; }
+}
+@media (max-width: 640px) {
+  .rpt-quote { font-size: 20px; }
+  .rpt-teacher-page { margin-left: 0; }
 }

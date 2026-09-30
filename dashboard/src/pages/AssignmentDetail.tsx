@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import ErrorState from "../components/ErrorState";
 import MathText from "../components/MathText";
 import StatusPill, { type PillTone } from "../components/StatusPill";
+import { problemAnchor, useProblemHash, useScrollToProblem } from "../lib/anchor";
 import { api, type AssignmentDetailData, type AssignmentProblem } from "../lib/api";
 
 // ────────────────────────────────────────────────────────────────────
@@ -72,6 +73,9 @@ export default function AssignmentDetail() {
 
   const data = loaded && loaded.id === id ? loaded.data : null;
   const error = failed && failed.id === id ? failed.message : null;
+  // `#p3` from a teacher report: land on the problem they reported.
+  const targetProblem = useProblemHash();
+  useScrollToProblem(targetProblem, data !== null);
 
   if (error) {
     // A deleted assignment is the common way to land here with a live
@@ -169,7 +173,14 @@ export default function AssignmentDetail() {
           // blob and a legacy snapshot can store two problems at the
           // same position, which would collide as a React key. The list
           // is static per render, so the index is a safe identity.
-          a.problems.map((p, i) => <ProblemRow key={i} p={p} />)
+          a.problems.map((p, i) => {
+            // A legacy snapshot can repeat a position; only the first row
+            // carries its anchor, so an id is never duplicated.
+            const first = a.problems.findIndex((q) => q.position === p.position) === i;
+            return (
+              <ProblemRow key={i} p={p} anchor={first} target={first && p.position === targetProblem} />
+            );
+          })
         )}
       </div>
     </div>
@@ -272,13 +283,23 @@ function Big({ children }: { children: ReactNode }) {
   );
 }
 
-function ProblemRow({ p }: { p: AssignmentProblem }) {
+function ProblemRow({
+  p,
+  anchor,
+  target,
+}: {
+  p: AssignmentProblem;
+  anchor: boolean;
+  target: boolean;
+}) {
   return (
     <div
+      id={anchor ? problemAnchor(p.position) : undefined}
+      className={target ? "asg-problem asg-problem-target" : "asg-problem"}
       style={{
         display: "flex",
         gap: 14,
-        padding: "14px 0",
+        padding: target ? "14px 0 14px 12px" : "14px 0",
         borderBottom: "1px solid var(--rule)",
         alignItems: "flex-start",
       }}

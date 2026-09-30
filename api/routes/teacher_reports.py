@@ -99,6 +99,46 @@ def _grade_label(g: dict[str, Any] | None) -> str:
     return f"Partial · {round(pct)}%" if pct is not None else "Partial"
 
 
+ADMIN_CONSOLE_URL = "https://admin.veradicai.com"
+_PRIMARY_LINK_STYLE = (
+    "display:inline-block;padding:10px 16px;background:#0E5238;color:#fff;"
+    "border-radius:6px;text-decoration:none;font-weight:600"
+)
+_SECONDARY_LINK_STYLE = (
+    "display:inline-block;padding:9px 15px;margin-left:8px;color:#0E5238;"
+    "border:1px solid #0E5238;border-radius:6px;text-decoration:none;font-weight:600"
+)
+
+
+def submission_trace_url(report: TeacherReport) -> str | None:
+    """Where the reported evidence lives in the admin console: the
+    submission trace, scrolled to the reported problem's `#p{n}` anchor.
+    None for a report with no submission attached (the sidebar kind)."""
+    if not report.submission_id:
+        return None
+    anchor = f"#p{report.problem_position}" if report.problem_position else ""
+    return f"{ADMIN_CONSOLE_URL}/submissions/{report.submission_id}/trace{anchor}"
+
+
+def _email_links(report: TeacherReport) -> str:
+    """The call to action. With a submission attached, the primary link
+    goes straight to the student's work at the reported problem — the
+    thing the founder opens the email to look at — and the report page
+    stays beside it for resolving. Ids only; no names in the URLs."""
+    report_link = f"{ADMIN_CONSOLE_URL}/reports/{report.id}"
+    trace_link = submission_trace_url(report)
+    if trace_link is None:
+        return f"<a href=\"{report_link}\" style=\"{_PRIMARY_LINK_STYLE}\">Open in admin console</a>"
+    label = (
+        f"Open submission at Problem {report.problem_position}"
+        if report.problem_position else "Open submission"
+    )
+    return (
+        f"<a href=\"{trace_link}\" style=\"{_PRIMARY_LINK_STYLE}\">{label}</a>"
+        f"<a href=\"{report_link}\" style=\"{_SECONDARY_LINK_STYLE}\">Open report</a>"
+    )
+
+
 def _notify(report: TeacherReport) -> None:
     """Email the founders. Everything teacher-controlled is escaped —
     this lands in an inbox as HTML."""
@@ -142,12 +182,13 @@ def _notify(report: TeacherReport) -> None:
         f"<p><strong>{html.escape(report.teacher_name or 'A teacher')}</strong>"
         f" ({html.escape(report.teacher_email or '')}) reported a problem — {where}.</p>"
         f"{note_block}{grades}{question}{reasoning}"
-        f"<p><a href=\"https://admin.veradicai.com/reports/{report.id}\" style=\"display:inline-block;"
-        f"padding:10px 16px;background:#0E5238;color:#fff;border-radius:6px;text-decoration:none;"
-        f"font-weight:600\">Open in admin console</a></p>"
+        f"<p>{_email_links(report)}</p>"
     )
     if report.page_url:
-        body += f"<p style=\"color:#64748b;font-size:12px\">Page: {html.escape(report.page_url)}</p>"
+        body += (
+            "<p style=\"color:#64748b;font-size:12px\">Teacher's page (teacher login only): "
+            f"{html.escape(report.page_url)}</p>"
+        )
 
     async def _send() -> None:
         try:

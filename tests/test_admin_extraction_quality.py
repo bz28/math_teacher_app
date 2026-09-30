@@ -31,7 +31,7 @@ from api.models.course import Course
 from api.models.section import Section
 from api.models.unit import Unit
 from api.models.user import User
-from api.routes.admin_extraction_quality import _read_text
+from api.routes.admin_extraction_quality import _page_index, _read_text
 from tests.conftest import auth_headers
 
 pytestmark = pytest.mark.asyncio
@@ -229,6 +229,20 @@ async def test_drill_in_pairs_the_read_against_the_correction(
     # A latex-sourced row is typeset as maths on the case file, the way
     # the student saw it on the confirm screen.
     assert row["is_latex"] is True
+    # Vision didn't say which photo this came from, so the row carries no
+    # page rather than a guessed one.
+    assert row["page_index"] is None
+
+
+async def test_page_index_is_a_positive_int_or_unknown() -> None:
+    """The report case view picks the photo to show from this; a
+    model-written bool, zero or string must read as "don't know", never
+    as page 1."""
+    assert _page_index(2) == 2
+    assert _page_index(None) is None
+    assert _page_index(0) is None
+    assert _page_index(True) is None
+    assert _page_index("2") is None
 
 
 async def test_read_text_reports_which_field_the_read_came_from() -> None:

@@ -1,19 +1,29 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, type TeacherReportData } from "../lib/api";
-import { formatRelativeDate } from "../lib/format";
-import { KIND_LABEL, KIND_TONE, gradeLabel, whereLabel } from "../lib/reports";
+import { api, type ExtractionDetail, type TeacherReportData } from "../lib/api";
+import { problemAnchor } from "../lib/anchor";
+import { formatRelativeDate, shortId } from "../lib/format";
+import { KIND_LABEL, creditLabel, fmtGap, gradeGap, gradeValue, pagePath, whereLabel } from "../lib/reports";
 import { btnGhost, btnPrimary } from "../lib/styles";
 import { useToast } from "../lib/toast";
 import ErrorState from "../components/ErrorState";
 import StatusPill from "../components/StatusPill";
 import MathText from "../components/MathText";
+import ExtractionReadout, { ReadRow, WorkFile } from "../components/ExtractionReadout";
 
 /**
- * One teacher report, in full — the teacher's note, the AI's call
- * beside the teacher's, the problem text, and links into the case
- * file. Resolving takes an internal note so the next person can see
- * what was done without re-deriving it.
+ * One teacher report, as a case: what the teacher said and how far the
+ * AI was from them, then the evidence for the problem they reported —
+ * the photo, what the AI read, why it graded as it did — without leaving
+ * the page. One click opens the full submission at that problem.
+ *
+ * The teacher's own page is deliberately NOT the primary drill-in: the
+ * teacher review page is membership-gated, and an admin opening it gets a
+ * 404. The console's own trace and assignment pages carry the same facts
+ * and are what every link here points at. The raw URL survives only as a
+ * clearly labelled secondary link — it still says which screen the
+ * teacher was on, which matters most for a sidebar report with nothing
+ * else attached.
  */
 export default function ReportDetail() {
   const { reportId } = useParams<{ reportId: string }>();
@@ -22,6 +32,12 @@ export default function ReportDetail() {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  // The student's work behind the report. Keyed by submission id so a
+  // stale response for another report can never render here; failure is
+  // non-fatal — the report still reads, and the trace link still works.
+  const [work, setWork] = useState<
+    { id: string; data: ExtractionDetail | null; failed: boolean } | null
+  >(null);
 
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -34,6 +50,12 @@ export default function ReportDetail() {
         setR(d);
         setNote(d.resolution_note ?? "");
         setError(null);
+        const sid = d.submission_id;
+        if (!sid) return;
+        api
+          .extractionDetail(sid)
+          .then((w) => !cancelled && setWork({ id: sid, data: w, failed: false }))
+          .catch(() => !cancelled && setWork({ id: sid, data: null, failed: true }));
       })
       .catch((e: Error) => {
         if (!cancelled) setError(e.message);
@@ -60,103 +82,107 @@ export default function ReportDetail() {
     }
   };
 
-  const ai = r.ai_grade;
+  const pos = r.problem_position;
+  const hash = pos ? `#${problemAnchor(pos)}` : "";
+  const teacherPage = r.page_url && /^https?:\/\//i.test(r.page_url) ? r.page_url : null;
+  const currentWork = work && work.id === r.submission_id ? work : null;
+  const mailto = r.teacher_email
+    ? `mailto:${r.teacher_email}?subject=${encodeURIComponent(`Re: your Veradic report — ${KIND_LABEL[r.kind]}`)}`
+    : null;
 
   return (
-    <div className="case-file">
+    <div className="rpt-case">
       <div className="case-head">
         <div>
           <div className="case-meta" style={{ marginBottom: 6 }}>
             <Link to="/reports" className="case-meta-link">← Reports</Link>
-            <span className="case-meta-id">#{r.id.slice(0, 8)}</span>
-            <span>{formatRelativeDate(r.created_at)}</span>
+            <span className="case-meta-id" title={r.id}>#{shortId(r.id)}</span>
+            <span title={r.created_at}>{formatRelativeDate(r.created_at)}</span>
           </div>
           <h1 style={{ marginBottom: 6 }}>{KIND_LABEL[r.kind]}</h1>
           <div className="case-meta">
-            <strong className="case-meta-item">{r.teacher_name ?? "Unknown teacher"}</strong>
-            {r.teacher_email && <span className="case-meta-item">{r.teacher_email}</span>}
-            {r.course_name && <span className="case-meta-item">{r.course_name}</span>}
+            <span
+              className="case-meta-item"
+              title={r.submission_id ? undefined : (pagePath(r.page_url) ?? undefined)}
+            >
+              {r.submission_id ? whereLabel(r) : `Sidebar · ${whereLabel(r)}`}
+            </span>
+            {r.course_name && <span className="case-meta-item case-meta-muted">{r.course_name}</span>}
           </div>
         </div>
         <div className="case-head-pills">
-          <StatusPill tone={KIND_TONE[r.kind]} label={KIND_LABEL[r.kind]} />
-          <StatusPill tone={r.status === "open" ? "live" : "ok"} label={r.status === "open" ? "Open" : "Resolved"} />
+          <StatusPill
+            tone={r.status === "open" ? "live" : "ok"}
+            label={r.status === "open" ? "Open" : "Resolved"}
+            pulse={r.status === "open"}
+          />
         </div>
       </div>
 
-      <div className="stat-grid" style={{ marginTop: 20, gridTemplateColumns: "minmax(0, 1.6fr) minmax(280px, 1fr)", gap: 20, alignItems: "start" }}>
-        <section className="table-card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 18 }}>
-          <div>
-            <span className="eyebrow">What the teacher said</span>
+      <div className="rpt-body">
+        <main className="rpt-main">
+          {/* ── The answer band: what they said, and how far apart ── */}
+          <figure className="rpt-said">
             {r.note ? (
-              <blockquote
-                style={{
-                  margin: "8px 0 0", padding: "10px 14px", borderLeft: "3px solid var(--warn)",
-                  background: "var(--warn-soft)", borderRadius: "0 4px 4px 0",
-                  fontFamily: "var(--font-display)", fontSize: 17, lineHeight: 1.45, fontStyle: "italic",
-                }}
-              >
-                {r.note}
-              </blockquote>
+              <blockquote className="rpt-quote">{r.note}</blockquote>
             ) : (
-              <p className="muted" style={{ margin: "8px 0 0" }}>No note — the kind and the attached context are the whole report.</p>
+              <p className="rpt-quote rpt-quote-empty">No note — the kind and what's attached are the whole report.</p>
             )}
-          </div>
-
-          <div>
-            <span className="eyebrow">Where</span>
-            <p style={{ margin: "6px 0 0", fontSize: 14 }}>{whereLabel(r)}</p>
-            {r.problem_question && (
-              <p className="muted" style={{ margin: "6px 0 0", fontSize: 13, lineHeight: 1.5 }}>
-                <strong style={{ color: "var(--ink)" }}>Problem {r.problem_position ?? ""}:</strong>{" "}
-                <MathText>{r.problem_question}</MathText>
-              </p>
-            )}
-          </div>
-
-          {r.submission_id && (
-            <div>
-              <span className="eyebrow">The grade in question</span>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
-                <div style={{ padding: "10px 12px", background: "var(--paper-2)", borderRadius: 4 }}>
-                  <div className="eyebrow" style={{ fontSize: 10 }}>AI gave</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--ok)" }}>{gradeLabel(ai)}</div>
-                  {ai?.confidence != null && (
-                    <div className="muted" style={{ fontSize: 12 }}>confidence {Math.round(ai.confidence * 100)}%</div>
-                  )}
-                </div>
-                <div style={{ padding: "10px 12px", background: "var(--paper-2)", borderRadius: 4 }}>
-                  <div className="eyebrow" style={{ fontSize: 10 }}>Teacher gave</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--warn)" }}>{gradeLabel(r.teacher_grade)}</div>
-                  <div className="muted" style={{ fontSize: 12 }}>at the time of the report</div>
-                </div>
-              </div>
-              {ai?.reasoning && (
-                <p className="muted" style={{ margin: "10px 0 0", fontSize: 13, lineHeight: 1.5 }}>
-                  <strong style={{ color: "var(--ink)" }}>AI reasoning:</strong> <MathText>{ai.reasoning}</MathText>
-                </p>
+            <figcaption className="rpt-said-by">
+              {r.teacher_id ? (
+                <Link to={`/teachers/${r.teacher_id}`}>{r.teacher_name ?? "Unknown teacher"}</Link>
+              ) : (
+                (r.teacher_name ?? "Unknown teacher")
               )}
-            </div>
+              {r.teacher_email && <span className="muted"> · {r.teacher_email}</span>}
+            </figcaption>
+          </figure>
+
+          {r.submission_id && <GradeBand r={r} />}
+
+          {!r.submission_id && (
+            <p className="rpt-sidebar-note">No submission attached — this came from the sidebar.</p>
           )}
 
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {r.submission_id && (
-              <Link to={`/submissions/${r.submission_id}/trace`} style={btnGhost}>Open submission trace ↗</Link>
+          <nav className="rpt-actions" aria-label="Open the context">
+            {r.submission_id ? (
+              <Link to={`/submissions/${r.submission_id}/trace${hash}`} style={btnPrimary}>
+                {pos ? `Open submission at Problem ${pos}` : "Open submission"}
+              </Link>
+            ) : (
+              // Nothing to inspect here — the next step is asking the
+              // teacher what they saw.
+              mailto && <a href={mailto} style={btnPrimary}>Email the teacher</a>
+            )}
+            {r.assignment_id && (
+              <Link to={`/assignments/${r.assignment_id}${hash}`} style={btnGhost}>Homework</Link>
             )}
             {r.student_id && (
-              <Link to={`/students/${r.student_id}`} style={btnGhost}>Student's case file ↗</Link>
+              <Link to={`/students/${r.student_id}`} style={btnGhost}>Student</Link>
             )}
             {r.teacher_id && (
-              <Link to={`/teachers/${r.teacher_id}`} style={btnGhost}>Teacher ↗</Link>
+              <Link to={`/teachers/${r.teacher_id}`} style={btnGhost}>Teacher</Link>
             )}
-            {r.page_url && /^https?:\/\//i.test(r.page_url) && (
-              <a href={r.page_url} target="_blank" rel="noreferrer" style={btnGhost}>Page they were on ↗</a>
+            {teacherPage && (
+              <a
+                href={teacherPage}
+                target="_blank"
+                rel="noreferrer"
+                className="rpt-teacher-page"
+                title="The page the teacher was on. It only opens for someone signed in as that teacher."
+              >
+                Teacher's view ↗ <span>teacher login only</span>
+              </a>
             )}
-          </div>
-        </section>
+          </nav>
 
-        <aside className="table-card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
-          <span className="eyebrow">Resolution</span>
+          {r.submission_id && (
+            <Evidence r={r} work={currentWork?.data ?? null} failed={!!currentWork?.failed} loading={!currentWork} />
+          )}
+        </main>
+
+        <aside className="rpt-rail">
+          <h3>Resolution</h3>
           <label htmlFor="resolution" className="muted" style={{ fontSize: 12 }}>
             Internal note — what was done, or why nothing needed doing.
           </label>
@@ -166,11 +192,7 @@ export default function ReportDetail() {
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="e.g. Root cause: extractor never described drawings. Fixed in #912."
-            style={{
-              width: "100%", boxSizing: "border-box", resize: "vertical", padding: "8px 10px",
-              border: "1px solid var(--rule-strong)", borderRadius: 4, background: "var(--surface)",
-              font: "inherit", fontSize: 13, lineHeight: 1.5,
-            }}
+            className="rpt-note-input"
           />
           {r.status === "open" ? (
             <button type="button" style={btnPrimary} disabled={saving} onClick={() => setStatus("resolved")}>
@@ -191,16 +213,213 @@ export default function ReportDetail() {
               </div>
             </>
           )}
-          {r.teacher_email && (
-            <a
-              href={`mailto:${r.teacher_email}?subject=${encodeURIComponent(`Re: your Veradic report — ${KIND_LABEL[r.kind]}`)}`}
-              style={{ ...btnGhost, textAlign: "center" }}
-            >
+          {/* A sidebar report already leads with this as its primary action. */}
+          {mailto && r.submission_id && (
+            <a href={mailto} style={{ ...btnGhost, textAlign: "center" }}>
               Email the teacher
             </a>
           )}
         </aside>
       </div>
+    </div>
+  );
+}
+
+/** AI gave · teacher gave · the gap — the disagreement at a glance. The
+ *  grades are the snapshot taken when the teacher reported, so this reads
+ *  the same after a regrade. */
+function GradeBand({ r }: { r: TeacherReportData }) {
+  const ai = gradeValue(r.ai_grade);
+  const teacher = gradeValue(r.teacher_grade);
+  const gap = gradeGap(r);
+  if (ai === null && teacher === null) return null;
+  return (
+    <div className="case-decisions rpt-grades">
+      <div className="case-decision">
+        <div className="case-decision-label">AI gave</div>
+        <div className="case-decision-value">{ai === null ? "—" : `${ai}%`}</div>
+        <div className="case-decision-sub">
+          {r.ai_grade ? creditLabel(r.ai_grade) : "no AI grade"}
+          {r.ai_grade?.confidence != null && ` · confidence ${Math.round(r.ai_grade.confidence * 100)}%`}
+        </div>
+      </div>
+      <div className="case-decision">
+        <div className="case-decision-label">Teacher gave</div>
+        <div className="case-decision-value">{teacher === null ? "—" : `${teacher}%`}</div>
+        <div className="case-decision-sub">{creditLabel(r.teacher_grade)} · when they reported</div>
+      </div>
+      <div className="case-decision">
+        <div className="case-decision-label">Gap</div>
+        <div className={`case-decision-value${gap !== null && gap !== 0 ? " rpt-gap-value" : ""}`}>
+          {gap === null ? "—" : `${fmtGap(gap)} pts`}
+        </div>
+        <div className="case-decision-sub">
+          {gap === null
+            ? "one side has no grade"
+            : gap < 0
+              ? "the AI gave more credit"
+              : gap > 0
+                ? "the AI gave less credit"
+                : "same grade — see the note"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Which photos to show for a problem: the pages Vision said its rows came
+ * from; the only page when there is one; otherwise every page, flagged as
+ * a guess so nobody reads the wrong photo as the evidence.
+ */
+function pagesFor(work: ExtractionDetail, pos: number): { indices: number[]; known: boolean } {
+  const n = work.files.length;
+  const pages = new Set<number>();
+  for (const row of work.rows) {
+    if (row.problem_position === pos && row.page_index !== null && row.page_index <= n) {
+      pages.add(row.page_index - 1);
+    }
+  }
+  if (pages.size) return { indices: [...pages].sort((a, b) => a - b), known: true };
+  if (n === 1) return { indices: [0], known: true };
+  return { indices: work.files.map((_, i) => i), known: false };
+}
+
+function Evidence({
+  r,
+  work,
+  failed,
+  loading,
+}: {
+  r: TeacherReportData;
+  work: ExtractionDetail | null;
+  failed: boolean;
+  loading: boolean;
+}) {
+  const pos = r.problem_position;
+  const reasoning = r.ai_grade?.reasoning?.trim();
+
+  const head = (
+    <div className="rpt-evidence-head">
+      <h3>{pos ? `The evidence · Problem ${pos}` : "The evidence · whole submission"}</h3>
+      {r.problem_question && (
+        <div className="rpt-question">
+          <MathText>{r.problem_question}</MathText>
+        </div>
+      )}
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <section className="rpt-evidence">
+        {head}
+        <p className="muted">Loading the student's work…</p>
+      </section>
+    );
+  }
+  if (failed || !work) {
+    return (
+      <section className="rpt-evidence">
+        {head}
+        <p className="empty-mini">
+          The student's work didn't load here. The submission trace above has it.
+        </p>
+        {reasoning && <Reasoning text={reasoning} />}
+      </section>
+    );
+  }
+
+  // A whole-submission report is about all of it — show the whole read.
+  if (!pos) {
+    return (
+      <section className="rpt-evidence">
+        {head}
+        <StudentVerdict work={work} rows={work.rows} />
+        <ExtractionReadout detail={work} showStudent={work.rows.some((row) => row.changed)} />
+      </section>
+    );
+  }
+
+  const rows = work.rows.filter((row) => row.problem_position === pos);
+  const { indices, known } = pagesFor(work, pos);
+  return (
+    <section className="rpt-evidence">
+      {head}
+      <div className="xq-detail">
+        <div className="xq-shot">
+          {work.files.length === 0 ? (
+            <div className="xq-shot-empty">No image stored for this submission.</div>
+          ) : (
+            <>
+              {indices.map((i) => (
+                <figure key={i} className="rpt-page">
+                  <WorkFile file={work.files[i]} index={i} />
+                  <figcaption>
+                    {work.files[i].media_type === "application/pdf" ? "File" : "Page"} {i + 1} of{" "}
+                    {work.files.length}
+                  </figcaption>
+                </figure>
+              ))}
+              {!known && (
+                <p className="rpt-page-note">
+                  The reader didn't record which page Problem {pos} is on, so every page is shown.
+                </p>
+              )}
+            </>
+          )}
+        </div>
+        <div>
+          <span className="xq-read-label rpt-col-label">What the AI read</span>
+          <StudentVerdict work={work} rows={rows} />
+          {rows.length === 0 ? (
+            <p className="empty-mini">
+              {work.extraction_present
+                ? `The reader found nothing for Problem ${pos}.`
+                : "No read has been stored for this submission."}
+            </p>
+          ) : (
+            <ol className="xq-rows">
+              {rows.map((row) => (
+                <ReadRow key={row.key} row={row} showStudent={rows.some((x) => x.changed)} />
+              ))}
+            </ol>
+          )}
+          {reasoning && <Reasoning text={reasoning} />}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * One quiet line for what the student did with the read, when they
+ * changed nothing — instead of "— same —" down every row. When they did
+ * correct something the rows carry it, side by side, and this is silent.
+ */
+function StudentVerdict({
+  work,
+  rows,
+}: {
+  work: ExtractionDetail;
+  rows: ExtractionDetail["rows"];
+}) {
+  if (rows.length === 0 || rows.some((row) => row.changed)) return null;
+  const text = work.confirmed_at
+    ? "Student confirmed the AI's read."
+    : work.flagged_at
+      ? "Student said the read was wrong, without correcting it."
+      : "Student hasn't confirmed the read yet.";
+  return <p className="rpt-student-verdict">{text}</p>;
+}
+
+function Reasoning({ text }: { text: string }) {
+  return (
+    <div className="rpt-reasoning">
+      <span className="xq-read-label">Why the AI graded it that way</span>
+      <p>
+        <MathText>{text}</MathText>
+      </p>
     </div>
   );
 }

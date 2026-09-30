@@ -79,6 +79,9 @@ async def world() -> dict[str, Any]:
             "admin": create_access_token(str(admin.id), "admin"),
             "submission_id": str(sub.id),
             "problem_id": str(item.id),
+            "course_id": str(course.id),
+            "assignment_id": str(assignment.id),
+            "section_id": str(section.id),
         }
 
 
@@ -234,3 +237,101 @@ async def test_email_is_sent_escaped_without_student_name(
     assert "Ms. Okafor" in m["html"] and "D. Park" not in m["html"]
     assert "Full · 100%" in m["html"] and "Partial · 50%" in m["html"]
     assert "/reports/" in m["html"]
+    # The primary link lands on the student's work at the reported
+    # problem; the report page stays beside it. Ids only in the URLs.
+    rid = r.json()["id"]
+    trace = f"https://admin.veradicai.com/submissions/{world['submission_id']}/trace#p4"
+    assert f'href="{trace}"' in m["html"]
+    assert "Open submission at Problem 4" in m["html"]
+    assert f'href="https://admin.veradicai.com/reports/{rid}"' in m["html"]
+    assert m["html"].index(trace) < m["html"].index(f"/reports/{rid}")
+
+
+async def _capture_email(
+    client: AsyncClient, world: dict[str, Any], monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any],
+) -> tuple[str, str]:
+    import asyncio
+
+    from api.routes import teacher_reports as mod
+
+    sent: list[str] = []
+
+    async def fake_send(*, to: list[str], subject: str, html: str) -> None:
+        sent.append(html)
+
+    monkeypatch.setattr(mod, "send_email", fake_send)
+    monkeypatch.setattr(mod.settings, "admin_alert_emails", ["founder@t.com"])
+    r = await client.post("/v1/teacher/reports", headers=auth_headers(world["teacher"]), json=payload)
+    assert r.status_code == 201, r.text
+    await asyncio.sleep(0)
+    assert len(sent) == 1
+    return r.json()["id"], sent[0]
+
+
+async def test_email_whole_submission_links_trace_without_anchor(
+    client: AsyncClient, world: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {**_payload(world), "problem_id": None, "problem_position": None}
+    _, html = await _capture_email(client, world, monkeypatch, payload)
+    assert f'href="https://admin.veradicai.com/submissions/{world["submission_id"]}/trace"' in html
+    assert ">Open submission<" in html
+    assert "#p" not in html
+
+
+async def test_email_context_free_report_links_only_the_report(
+    client: AsyncClient, world: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {"kind": "broken", "note": "Page froze", "page_url": "https://veradicai.com/school/teacher"}
+    rid, html = await _capture_email(client, world, monkeypatch, payload)
+    assert "/submissions/" not in html
+    assert f'href="https://admin.veradicai.com/reports/{rid}"' in html
+    assert "Open in admin console" in html
+    assert "teacher login only" in html
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("/school/teacher/courses/{c}", "Class page · Algebra 1"),
+        ("/school/teacher/courses/{c}?tab=submissions", "Class page · Algebra 1 · Submissions"),
+        ("/school/teacher/courses/{c}/homework/{h}", "Homework · Solving Systems"),
+        ("/school/teacher/courses/{c}/homework/{h}/sections/{s}/review?student=x",
+         "Homework review · Solving Systems · Period 3"),
+        ("/school/teacher", "Teacher home"),
+        ("/history", "History"),
+        # A route we know, pointing at a deleted class: the label stays,
+        # the name is omitted — never the raw id.
+        ("/school/teacher/courses/00000000-0000-0000-0000-000000000000", "Class page"),
+    ],
+)
+async def test_sidebar_report_names_the_page_it_came_from(
+    client: AsyncClient, world: dict[str, Any], path: str, expected: str,
+) -> None:
+    """A sidebar report carries only its URL; the console names that page
+    the way the teacher saw it instead of printing a path of UUIDs."""
+    url = "https://veradicai.com" + path.format(
+        c=world["course_id"], h=world["assignment_id"], s=world["section_id"],
+    )
+    r = await client.post("/v1/teacher/reports", headers=auth_headers(world["teacher"]),
+                          json={"kind": "broken", "page_url": url})
+    assert r.status_code == 201, r.text
+    detail = (await client.get(f"/v1/admin/reports/{r.json()['id']}", headers=auth_headers(world["admin"]))).json()
+    assert detail["page_label"] == expected
+    listed = (await client.get("/v1/admin/reports?status=all", headers=auth_headers(world["admin"]))).json()
+    assert listed["reports"][0]["page_label"] == expected
+
+
+async def test_malformed_page_url_never_breaks_the_inbox(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """page_url is teacher-supplied and only prefix-checked; urlparse raises
+    on e.g. an unclosed IPv6 bracket. One such report must not 500 the list
+    (every row is labelled) or its own detail view."""
+    r = await client.post("/v1/teacher/reports", headers=auth_headers(world["teacher"]),
+                          json={"kind": "broken", "page_url": "https://[oops/school"})
+    assert r.status_code == 201, r.text
+    detail = await client.get(f"/v1/admin/reports/{r.json()['id']}", headers=auth_headers(world["admin"]))
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["page_label"] == "Unknown page"
+    listed = await client.get("/v1/admin/reports?status=all", headers=auth_headers(world["admin"]))
+    assert listed.status_code == 200, listed.text
