@@ -12,9 +12,11 @@ doesn't exercise the wrapper directly.
 from __future__ import annotations
 
 import base64
+import io
 from typing import Any
 
 from httpx import AsyncClient
+from PIL import Image
 from sqlalchemy import text
 
 from api.database import get_session_factory
@@ -97,6 +99,93 @@ async def test_submit_homework_rejects_oversized_image_with_index(
     )
     assert r.status_code == 400
     assert "File 2" in r.json()["detail"]
+
+
+def _real_jpeg(size: tuple[int, int]) -> str:
+    buf = io.BytesIO()
+    Image.new("RGB", size, "white").save(buf, format="JPEG")
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+async def test_submit_stores_each_page_the_way_the_student_turned_it(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A page rotated on the upload screen is saved upright, so the AI
+    reader and the teacher's photo view both get it that way. Pages
+    with no turn — and PDFs — are stored exactly as sent."""
+    wide = _real_jpeg((40, 20))
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"files": [wide, wide, TINY_PDF], "rotations": [90, 0, 90]},
+    )
+    assert r.status_code == 200, r.text
+
+    async with get_session_factory()() as s:
+        files = (await s.execute(
+            text("SELECT files FROM submissions WHERE id=:id"),
+            {"id": r.json()["submission_id"]},
+        )).scalar_one()
+    turned = Image.open(io.BytesIO(base64.b64decode(files[0]["data"])))
+    assert turned.size == (20, 40)
+    assert files[1]["data"] == wide
+    assert files[2]["data"] == TINY_PDF
+
+
+async def test_submit_refuses_to_turn_a_decompression_bomb(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    buf = io.BytesIO()
+    Image.new("1", (12000, 12000)).save(buf, format="PNG")
+    bomb = base64.b64encode(buf.getvalue()).decode("ascii")
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"files": [bomb], "rotations": [90]},
+    )
+    assert r.status_code == 400
+    assert "File 1" in r.json()["detail"]
+
+
+async def test_submit_rejects_rotations_that_dont_line_up(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    url = f"/v1/school/student/homework/{world['assignment_id']}/submit"
+    for rotations in ([90], [45, 0]):
+        r = await client.post(
+            url, headers=_auth(world["student_token"]),
+            json={"files": [TINY_PNG, TINY_PNG], "rotations": rotations},
+        )
+        assert r.status_code == 422, rotations
+
+
+async def test_page_orientation_check(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The nudge's backend: a free pixel check. Bad input is a 400, not
+    a silent 'upright'; no token is a 401."""
+    from tests.test_image_utils import _page_of_writing
+
+    def enc(img: Image.Image) -> str:
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+
+    url = "/v1/school/student/homework/page-orientation"
+    page = _page_of_writing()
+    for img, expected in ((page, False), (page.rotate(90, expand=True), True)):
+        r = await client.post(
+            url, headers=_auth(world["student_token"]), json={"image": enc(img)},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json() == {"sideways": expected}
+
+    r = await client.post(
+        url, headers=_auth(world["student_token"]), json={"image": TINY_PDF},
+    )
+    assert r.status_code == 400
+    r = await client.post(url, json={"image": enc(page)})
+    assert r.status_code == 401
 
 
 async def test_submit_homework_total_payload_guard_rejects() -> None:

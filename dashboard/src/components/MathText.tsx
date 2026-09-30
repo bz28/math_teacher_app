@@ -1,5 +1,9 @@
 import { Fragment, useMemo } from "react";
 import katex from "katex";
+// Every MathText brings its own stylesheet: without it KaTeX output is
+// unstyled markup, and a page that renders math must not depend on some
+// other page having been visited first to load it.
+import "katex/dist/katex.min.css";
 
 // Renders a string of mixed prose + LaTeX. Math is delimited with $...$
 // (inline) or $$...$$ (display), the same convention the question bank stores.
@@ -36,12 +40,28 @@ function renderMath(latex: string, display: boolean): string {
       // default output (htmlAndMathml) keeps the MathML layer for screen readers
     });
   } catch {
-    return latex;
+    // `throwOnError: false` covers parse errors only; anything else (a
+    // stack overflow on deeply nested braces, say) still throws. The
+    // fallback is injected as HTML, and the source can be text a student
+    // typed, so it must be escaped — returning it raw let a crafted
+    // correction run script in an admin's browser.
+    return escapeHtml(latex);
   }
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function PlainText({ value }: { value: string }) {
-  const clean = value.replace(/\*\*(.+?)\*\*/g, "$1");
+  // `\$` is the escaped dollar the tokenizer refused to split on — outside
+  // maths it is just a dollar sign.
+  const clean = value.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\\\$/g, "$");
   const lines = clean.split("\n");
   return (
     <>

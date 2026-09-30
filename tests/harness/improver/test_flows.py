@@ -50,7 +50,10 @@ async def test_run_flows_drops_infra_errors(monkeypatch: pytest.MonkeyPatch) -> 
 def test_flow_names_cover_all_journeys() -> None:
     """`flow_names()` exposes every registered journey's selector (CLI --only)."""
     names = flows.flow_names()
-    assert {"login", "logout", "join_class", "submit_homework", "grade_publish"} <= set(names)
+    assert {
+        "login", "logout", "join_class", "submit_homework", "grade_publish",
+        "workshop_steps",
+    } <= set(names)
     assert len(names) == len(set(names))  # no dup selectors
 
 

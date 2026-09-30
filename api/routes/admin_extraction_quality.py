@@ -358,19 +358,25 @@ def _step_count(extraction: Any) -> int:
     return len(steps) if isinstance(steps, list) else 0
 
 
-def _read_text(primary: Any, fallback: Any) -> str | None:
-    """What the AI actually transcribed for one row.
+def _read_text(latex: Any, plain: Any) -> tuple[str | None, bool]:
+    """What the AI actually transcribed for one row, and whether it is LaTeX.
 
     Vision routes a transcription to `latex` when the student wrote
     maths and to the prose field when it narrates instead, so a row
     carries one or the other. Reading a single field would blank out
     half the table.
+
+    The flag is what lets the dashboard typeset the row the way the
+    student saw it on the confirm screen: a latex row is KaTeX there
+    (prose arrives wrapped in `\\text{…}`), a plain row is plain text.
+    A student's correction edits the same source, so it carries the
+    same format.
     """
-    for value in (primary, fallback):
+    for value, is_latex in ((latex, True), (plain, False)):
         text = str(value).strip() if value is not None else ""
         if text:
-            return text
-    return None
+            return text, is_latex
+    return None, False
 
 
 @router.get("/extraction-quality/{submission_id}")
@@ -454,13 +460,15 @@ async def extraction_detail(
         # the modal that opened from it.
         unattributed = key is None
         corrected = None if key is None else edits.get(key)
+        ai_read, is_latex = _read_text(step.get("latex"), step.get("plain_english"))
         rows_out.append({
             "key": key or f"unattributed:{i}",
             "problem_position": step.get("problem_position"),
             "step_num": step.get("step_num"),
             "kind": "step",
             "unattributed": unattributed,
-            "ai_read": _read_text(step.get("latex"), step.get("plain_english")),
+            "ai_read": ai_read,
+            "is_latex": is_latex,
             "student_said": corrected,
             # An empty-string edit means the student CLEARED the row — the
             # overlay drops it entirely. That is a deletion, and rendering
@@ -486,6 +494,7 @@ async def extraction_detail(
         # unplaceable.
         unattributed = key is None
         corrected = None if key is None else edits.get(key)
+        ai_read, is_latex = _read_text(fa.get("answer_latex"), fa.get("answer_plain"))
         rows_out.append({
             "key": key or f"unattributed-final:{i}",
             "problem_position": fa.get("problem_position"),
@@ -494,7 +503,8 @@ async def extraction_detail(
             "unattributed": unattributed,
             # answer_plain, NOT answer_text — the latter exists nowhere in
             # the schema, so every prose answer rendered "nothing read".
-            "ai_read": _read_text(fa.get("answer_latex"), fa.get("answer_plain")),
+            "ai_read": ai_read,
+            "is_latex": is_latex,
             "student_said": corrected,
             "deleted": key is not None and key in edits
             and not (corrected or "").strip(),

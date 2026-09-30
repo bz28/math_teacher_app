@@ -31,6 +31,7 @@ from api.models.course import Course
 from api.models.section import Section
 from api.models.unit import Unit
 from api.models.user import User
+from api.routes.admin_extraction_quality import _read_text
 from tests.conftest import auth_headers
 
 pytestmark = pytest.mark.asyncio
@@ -225,6 +226,17 @@ async def test_drill_in_pairs_the_read_against_the_correction(
     # endpoint read a `text` field it would be None here.
     assert row["ai_read"] == "(x + 2)(x + 3)"
     assert row["student_said"] == "(x + z)(x + 3)"
+    # A latex-sourced row is typeset as maths on the case file, the way
+    # the student saw it on the confirm screen.
+    assert row["is_latex"] is True
+
+
+async def test_read_text_reports_which_field_the_read_came_from() -> None:
+    """Prose arrives in the plain field and must NOT be typeset as maths —
+    KaTeX would collapse its spaces into one run of italic letters."""
+    assert _read_text("x^2", "x squared") == ("x^2", True)
+    assert _read_text("  ", "x squared") == ("x squared", False)
+    assert _read_text(None, None) == (None, False)
 
 
 async def test_a_cleared_row_reads_as_a_deletion_not_no_change(

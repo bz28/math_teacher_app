@@ -41,9 +41,11 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from tests.harness.browser import HarnessBrowser
 from tests.harness.seed import (
+    WORKSHOP_FLOW_FIGURE,
     Seed,
     seed_joinable_section,
     seed_submitted_submission,
+    seed_workshop_item,
 )
 
 # Generous, matching the scanner — so slow CI is never mistaken for a failure.
@@ -270,6 +272,71 @@ async def _grade_publish_flow(
     return FlowResult(name, title, not issues, issues)
 
 
+async def _workshop_steps_flow(
+    browser: HarnessBrowser, web_base: str, api_base: str, seed: Seed,
+) -> FlowResult:
+    """Teacher reorders, deletes and adds solution steps in the Workshop, then
+    undoes → the one-level undo restores the previous list. Exercises the
+    exact calls the Workshop makes: `PATCH /teacher/question-bank/{id}` with
+    the whole `solution_steps` array, and `POST .../revert`. Asserts
+    deterministic state only: step order, that a figure stays on its step,
+    and that undo is exactly one level (a second revert is refused 400)."""
+    name, title = "workshop_steps", "Teacher edits solution steps + undo"
+    issues: list[str] = []
+    item_id = await seed_workshop_item(seed)
+    base = api_base.rstrip("/")
+    url = f"{base}/teacher/question-bank/{item_id}"
+    hdr = _auth(seed.teacher_token)
+
+    def order(resp: httpx.Response) -> list[str]:
+        return [s.get("title") for s in (resp.json().get("solution_steps") or [])]
+
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as client:
+        a, b, c = (
+            {"title": "A", "description": "a"},
+            {"title": "B", "description": "b", "figure_spec": {"kind": "flow"},
+             "figure_svg": WORKSHOP_FLOW_FIGURE},
+            {"title": "C", "description": "c"},
+        )
+        moved = await client.patch(url, json={"solution_steps": [b, a, c]}, headers=hdr)
+        if moved.status_code != 200:
+            issues.append(f"reordering steps returned {moved.status_code}, expected 200")
+            return FlowResult(name, title, False, issues)
+        if order(moved) != ["B", "A", "C"]:
+            issues.append(f"reorder saved {order(moved)}, expected ['B', 'A', 'C']")
+        first = (moved.json().get("solution_steps") or [{}])[0]
+        if first.get("figure_svg") != WORKSHOP_FLOW_FIGURE:
+            issues.append("the moved step lost its figure on reorder")
+
+        added = await client.patch(
+            url, json={"solution_steps": [b, c, {"title": "D", "description": "d"}]},
+            headers=hdr,
+        )
+        if added.status_code != 200 or order(added) != ["B", "C", "D"]:
+            issues.append(
+                f"delete+add saved {added.status_code} {order(added)}, "
+                "expected 200 ['B', 'C', 'D']",
+            )
+
+        undone = await client.post(f"{url}/revert", headers=hdr)
+        if undone.status_code != 200:
+            issues.append(f"undo returned {undone.status_code}, expected 200")
+            return FlowResult(name, title, False, issues)
+        if order(undone) != ["B", "A", "C"]:
+            issues.append(
+                f"undo restored {order(undone)}, expected the previous list "
+                "['B', 'A', 'C']",
+            )
+
+        again = await client.post(f"{url}/revert", headers=hdr)
+        if again.status_code != 400:
+            issues.append(
+                f"a second undo returned {again.status_code}, expected 400 — undo "
+                "should be exactly one level",
+            )
+    return FlowResult(name, title, not issues, issues)
+
+
 # Register new journeys here. Each returns a FlowResult; for a real app failure
 # append an issue, but RAISE on unexpected infra errors so run_flows drops them.
 # (Deferred: the practice/learn journeys need LLM generation + a queue-based
@@ -277,6 +344,7 @@ async def _grade_publish_flow(
 _FLOWS = (
     _login_flow, _logout_flow,
     _join_class_flow, _submit_homework_flow, _grade_publish_flow,
+    _workshop_steps_flow,
 )
 
 

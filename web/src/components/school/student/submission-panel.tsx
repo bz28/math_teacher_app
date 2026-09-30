@@ -10,6 +10,7 @@ import {
 import {
   blobToDataUrl,
   ImageResizeError,
+  orientationCheckCopy,
   resizeImageForUpload,
 } from "@/lib/image-resize";
 import {
@@ -30,6 +31,7 @@ import {
   FileTextIcon,
   ImageIcon,
   LockIcon,
+  RotateCwIcon,
   UploadIcon,
   XIcon,
 } from "@/components/ui/icons";
@@ -71,6 +73,19 @@ interface StagedFile {
   previewUrl: string | null;
   /** Per-row error message; valid files stay alongside. */
   error?: string;
+  /** Clockwise quarter turns the student applied (0/90/180/270). The
+   *  server stores the page turned this way, so the preview here is
+   *  exactly what the teacher and the AI reader get. */
+  rotation: number;
+  /** The server's free pixel check thinks the writing runs up and down
+   *  as photographed. Advisory — drives the "looks sideways" nudge. */
+  sideways: boolean;
+}
+
+/** Still sideways after the student's turns? A half turn leaves a
+ *  sideways page sideways, so the nudge only clears on a quarter turn. */
+function stillSideways(f: StagedFile): boolean {
+  return f.sideways && f.rotation % 180 === 0;
 }
 
 /**
@@ -147,9 +162,16 @@ export function SubmissionPanel({
     base64: "",
     previewUrl: null,
     error: message,
+    rotation: 0,
+    sideways: false,
   });
 
-  async function stageOne(file: File): Promise<StagedFile> {
+  /** Stage one file. Returns the row, plus the image blob for the
+   *  sideways check (null for PDFs and error rows). */
+  async function stageOne(
+    file: File,
+  ): Promise<{ row: StagedFile; blob: Blob | null }> {
+    const done = (row: StagedFile, blob: Blob | null = null) => ({ row, blob });
     // What the file IS, not what it is called. `File.type` is the
     // browser's lookup of the FILENAME's extension, so anything renamed
     // `.png` passed this gate and then 400'd at the server — after a
@@ -178,26 +200,28 @@ export function SubmissionPanel({
           : null;
     }
     if (sniffed === null) {
-      return errorRow(file, UNREADABLE_FILE_ERROR);
+      return done(errorRow(file, UNREADABLE_FILE_ERROR));
     }
     const isPdf = sniffed === "application/pdf";
 
     if (isPdf) {
       if (file.size > MAX_PDF_BYTES) {
-        return errorRow(file, "Too large (max 25MB)");
+        return done(errorRow(file, "Too large (max 25MB)"));
       }
       try {
         const base64 = await fileToBase64(file);
-        return {
+        return done({
           id: newRowId(),
           filename: file.name,
           size: file.size,
           mediaType: "application/pdf",
           base64,
           previewUrl: null,
-        };
+          rotation: 0,
+          sideways: false,
+        });
       } catch {
-        return errorRow(file, "Could not read file");
+        return done(errorRow(file, "Could not read file"));
       }
     }
 
@@ -207,7 +231,7 @@ export function SubmissionPanel({
     try {
       const blob = await resizeImageForUpload(file);
       if (blob.size > MAX_IMAGE_BYTES) {
-        return errorRow(file, "Too large (max 5MB)");
+        return done(errorRow(file, "Too large (max 5MB)"));
       }
       const dataUrl = await blobToDataUrl(blob);
       const comma = dataUrl.indexOf(",");
@@ -216,21 +240,42 @@ export function SubmissionPanel({
       // stored by the server as image/jpeg, and the row should agree.
       const mediaType: StagedFile["mediaType"] =
         blob === file ? sniffed : "image/jpeg";
-      return {
-        id: newRowId(),
-        filename: file.name,
-        size: blob.size,
-        mediaType,
-        base64,
-        previewUrl: dataUrl,
-      };
+      return done(
+        {
+          id: newRowId(),
+          filename: file.name,
+          size: blob.size,
+          mediaType,
+          base64,
+          previewUrl: dataUrl,
+          rotation: 0,
+          sideways: false,
+        },
+        blob,
+      );
     } catch (err) {
       if (err instanceof ImageResizeError) {
-        return errorRow(file, err.message);
+        return done(errorRow(file, err.message));
       }
       // FileReader / encoding failure — give the student a friendly
       // message instead of a blank screen.
-      return errorRow(file, "Could not read file");
+      return done(errorRow(file, "Could not read file"));
+    }
+  }
+
+  /** Ask the server whether a staged page looks sideways. Advisory and
+   *  best-effort: any failure just means no nudge. */
+  async function checkSideways(id: string, blob: Blob) {
+    try {
+      const { sideways } = await schoolStudent.pageOrientation(
+        await orientationCheckCopy(blob),
+      );
+      if (!sideways) return;
+      setStagedFiles((prev) =>
+        prev.map((f) => (f.id === id ? { ...f, sideways: true } : f)),
+      );
+    } catch {
+      // No nudge. The tip and the rotate button still work.
     }
   }
 
@@ -246,15 +291,19 @@ export function SubmissionPanel({
       // and slices to the cap. This honors MAX_FILES even when two
       // batches commit out-of-order (drop + picker race), without the
       // earlier read-only updater anti-pattern.
-      const staged: StagedFile[] = [];
+      const staged: { row: StagedFile; blob: Blob | null }[] = [];
       for (const file of list) {
-        const row = await stageOne(file);
-        staged.push(row);
+        staged.push(await stageOne(file));
       }
       setStagedFiles((prev) => {
         const remaining = Math.max(0, MAX_FILES - prev.length);
-        return [...prev, ...staged.slice(0, remaining)];
+        return [...prev, ...staged.slice(0, remaining).map((s) => s.row)];
       });
+      // After the rows exist, so a fast answer has a row to land on.
+      // A row sliced off by the cap just never matches.
+      for (const { row, blob } of staged) {
+        if (blob) void checkSideways(row.id, blob);
+      }
     } finally {
       inFlightRef.current -= 1;
       if (inFlightRef.current === 0) setPreparing(false);
@@ -263,6 +312,14 @@ export function SubmissionPanel({
 
   function removeStagedFile(id: string) {
     setStagedFiles((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  function rotateStaged(id: string) {
+    setStagedFiles((prev) =>
+      prev.map((f) =>
+        f.id === id ? { ...f, rotation: (f.rotation + 90) % 360 } : f,
+      ),
+    );
   }
 
   function moveStaged(id: string, dir: -1 | 1) {
@@ -285,6 +342,7 @@ export function SubmissionPanel({
       const valid = stagedFiles.filter((f) => !f.error && f.base64);
       const resp = await schoolStudent.submitHomework(assignmentId, {
         files: valid.map((f) => f.base64),
+        rotations: valid.map((f) => f.rotation),
       });
       onSubmitted(resp);
     } catch (err) {
@@ -315,6 +373,12 @@ export function SubmissionPanel({
   }
 
   const atCap = stagedFiles.length >= MAX_FILES;
+  // Pages the check still reads as sideways, by their turn-in page
+  // number — named on the confirm step so a student doesn't lock in a
+  // page the reader will misread.
+  const sidewaysPages = stagedFiles
+    .filter((f) => !f.error)
+    .flatMap((f, i) => (stillSideways(f) ? [i + 1] : []));
 
   return (
     <div className="mt-8 overflow-hidden rounded-[--radius-lg] border border-border bg-surface shadow-[0_1px_2px_rgba(20,19,15,0.04)]">
@@ -379,6 +443,15 @@ export function SubmissionPanel({
           }}
         />
 
+        <p className="flex items-start gap-2 text-xs leading-relaxed text-text-secondary">
+          <RotateCwIcon className="mt-px h-3.5 w-3.5 shrink-0 text-primary" />
+          <span>
+            Hold your phone so the writing is upright. If a page comes out
+            sideways, turn it with the rotate button before you turn it in —
+            sideways pages get misread.
+          </span>
+        </p>
+
         {preparing && (
           <p className="text-xs text-text-muted">Preparing your files…</p>
         )}
@@ -407,12 +480,17 @@ export function SubmissionPanel({
                     <AlertTriangleIcon className="h-5 w-5" strokeWidth={2} />
                   </div>
                 ) : f.previewUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={f.previewUrl}
-                    alt={`Preview of ${f.filename}`}
-                    className="h-12 w-12 flex-shrink-0 rounded object-cover"
-                  />
+                  // Whole page, not a crop, so which way the writing runs
+                  // is visible — and turned the way it will be stored.
+                  <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded bg-bg-subtle">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={f.previewUrl}
+                      alt={`Preview of ${f.filename}`}
+                      style={{ transform: `rotate(${f.rotation}deg)` }}
+                      className="h-full w-full object-contain transition-transform duration-200 motion-reduce:transition-none"
+                    />
+                  </div>
                 ) : f.mediaType === "application/pdf" ? (
                   <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded bg-bg-subtle text-text-muted">
                     <FileTextIcon className="h-5 w-5" />
@@ -442,7 +520,30 @@ export function SubmissionPanel({
                       {f.error}
                     </p>
                   )}
+                  {stillSideways(f) && (
+                    <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-warning-dark">
+                      <AlertTriangleIcon className="h-3.5 w-3.5 shrink-0 text-warning" strokeWidth={2} />
+                      Looks sideways — rotate it so the writing reads across
+                    </p>
+                  )}
                 </div>
+                {f.previewUrl && !f.error && (
+                  <button
+                    type="button"
+                    onClick={() => rotateStaged(f.id)}
+                    disabled={submitting}
+                    aria-label={`Rotate ${f.filename} a quarter turn clockwise`}
+                    title="Rotate a quarter turn"
+                    className={cn(
+                      "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[--radius-sm] transition-colors disabled:opacity-50",
+                      stillSideways(f)
+                        ? "bg-warning-bg text-warning-dark ring-1 ring-warning/40 hover:bg-warning/15"
+                        : "text-text-muted hover:bg-bg-subtle hover:text-primary",
+                    )}
+                  >
+                    <RotateCwIcon className="h-[18px] w-[18px]" />
+                  </button>
+                )}
                 {/* Up / down reorder: page order matters because the
                     extraction sees pages as a sequential document. */}
                 <div className="flex flex-col">
@@ -524,6 +625,18 @@ export function SubmissionPanel({
                   able to change it, so take one last look if you&apos;d like.
                   You&apos;ve got this.
                 </p>
+                {sidewaysPages.length > 0 && (
+                  <p className="mt-2 flex items-start gap-1.5 text-sm font-semibold text-warning-dark">
+                    <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={2} />
+                    <span>
+                      {sidewaysPages.length === 1
+                        ? `Page ${sidewaysPages[0]} still looks sideways.`
+                        : `Pages ${sidewaysPages.join(", ")} still look sideways.`}{" "}
+                      Rotate {sidewaysPages.length === 1 ? "it" : "them"} first so
+                      your work is read correctly.
+                    </span>
+                  </p>
+                )}
               </div>
             </div>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">

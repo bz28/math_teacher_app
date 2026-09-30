@@ -2464,6 +2464,32 @@
         "title": "NoteRequest",
         "type": "object"
       },
+      "PageOrientationRequest": {
+        "properties": {
+          "image": {
+            "title": "Image",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "PageOrientationRequest",
+        "type": "object"
+      },
+      "PageOrientationResponse": {
+        "properties": {
+          "sideways": {
+            "title": "Sideways",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sideways"
+        ],
+        "title": "PageOrientationResponse",
+        "type": "object"
+      },
       "PasteEvent": {
         "description": "One paste event on the chat textarea. Size only \u2014 never content.",
         "properties": {
@@ -4267,6 +4293,20 @@
             },
             "title": "Files",
             "type": "array"
+          },
+          "rotations": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rotations"
           }
         },
         "required": [
@@ -12699,6 +12739,53 @@
           }
         ],
         "summary": "Get All Grades",
+        "tags": [
+          "school-student"
+        ]
+      }
+    },
+    "/v1/school/student/homework/page-orientation": {
+      "post": {
+        "description": "Does a page the student just added look sideways?\n\nBacks the \"This page looks sideways \u2014 rotate it?\" nudge on the\nupload screen. Free (a pixel check, no model call) and advisory:\nit never rotates anything \u2014 the student does, with the rotate\nbutton, and the turn is applied at submit.",
+        "operationId": "check_page_orientation_v1_school_student_homework_page_orientation_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageOrientationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOrientationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Check Page Orientation",
         "tags": [
           "school-student"
         ]
