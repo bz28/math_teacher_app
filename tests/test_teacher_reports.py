@@ -79,6 +79,9 @@ async def world() -> dict[str, Any]:
             "admin": create_access_token(str(admin.id), "admin"),
             "submission_id": str(sub.id),
             "problem_id": str(item.id),
+            "course_id": str(course.id),
+            "assignment_id": str(assignment.id),
+            "section_id": str(section.id),
         }
 
 
@@ -284,3 +287,35 @@ async def test_email_context_free_report_links_only_the_report(
     assert f'href="https://admin.veradicai.com/reports/{rid}"' in html
     assert "Open in admin console" in html
     assert "teacher login only" in html
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("/school/teacher/courses/{c}", "Class page · Algebra 1"),
+        ("/school/teacher/courses/{c}?tab=submissions", "Class page · Algebra 1 · Submissions"),
+        ("/school/teacher/courses/{c}/homework/{h}", "Homework · Solving Systems"),
+        ("/school/teacher/courses/{c}/homework/{h}/sections/{s}/review?student=x",
+         "Homework review · Solving Systems · Period 3"),
+        ("/school/teacher", "Teacher home"),
+        ("/history", "History"),
+        # A route we know, pointing at a deleted class: the label stays,
+        # the name is omitted — never the raw id.
+        ("/school/teacher/courses/00000000-0000-0000-0000-000000000000", "Class page"),
+    ],
+)
+async def test_sidebar_report_names_the_page_it_came_from(
+    client: AsyncClient, world: dict[str, Any], path: str, expected: str,
+) -> None:
+    """A sidebar report carries only its URL; the console names that page
+    the way the teacher saw it instead of printing a path of UUIDs."""
+    url = "https://veradicai.com" + path.format(
+        c=world["course_id"], h=world["assignment_id"], s=world["section_id"],
+    )
+    r = await client.post("/v1/teacher/reports", headers=auth_headers(world["teacher"]),
+                          json={"kind": "broken", "page_url": url})
+    assert r.status_code == 201, r.text
+    detail = (await client.get(f"/v1/admin/reports/{r.json()['id']}", headers=auth_headers(world["admin"]))).json()
+    assert detail["page_label"] == expected
+    listed = (await client.get("/v1/admin/reports?status=all", headers=auth_headers(world["admin"]))).json()
+    assert listed["reports"][0]["page_label"] == expected
