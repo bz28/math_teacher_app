@@ -120,6 +120,8 @@ EXTRACTION = {
     "confidence": 0.91,
 }
 
+LIAM_EDITS = {"4:1": "2x = 90", "4:final": "x = 45"}
+
 P3_REASONING = (
     "The student found the intersection (2, 3), which matches the key. "
     "Work is correct and complete."
@@ -187,6 +189,10 @@ async def seed() -> dict[str, str]:
                              submitted_at=NOW - timedelta(days=2, hours=2))
             s.add(sub)
             subs.append(sub)
+        # Liam corrected the read of Problem 4 on the confirm screen — the
+        # case the evidence's "Student said" column exists for.
+        subs[1].extraction_edits = LIAM_EDITS
+        subs[1].extraction_edited_at = NOW - timedelta(days=2, hours=1)
         await s.flush()
 
         def ai(pos: int, pct: float, conf: float, why: str) -> dict[str, Any]:
@@ -231,10 +237,11 @@ async def seed() -> dict[str, str]:
             TeacherReport(**common, **on_sub, kind="misread_work",
                           note="Page 2 was read as someone else's handwriting — the 4.5 is a 45.",
                           page_url=f"{WEB_BASE}{review_path}", submission_id=subs[1].id,
-                          student_id=liam.id, student_name=liam.name,
+                          student_id=liam.id, student_name=liam.name, problem_id=items[3].id,
+                          problem_position=4, problem_question=PROBLEMS[3][0],
                           created_at=NOW - timedelta(days=1)),
             TeacherReport(**common, kind="confusing", note="Where do I change a due date after publishing?",
-                          page_url=f"{WEB_BASE}/school/teacher/courses/{course.id}",
+                          page_url=f"{WEB_BASE}/school/teacher/courses/{course.id}?tab=homework",
                           created_at=NOW - timedelta(minutes=40)),
             TeacherReport(**common, kind="broken", note="The roster spinner never stopped on Period 3.",
                           page_url=f"{WEB_BASE}/school/teacher", created_at=NOW - timedelta(days=2)),
@@ -251,8 +258,9 @@ async def seed() -> dict[str, str]:
             "admin": create_access_token(str(admin.id), "admin"),
             "teacher": create_access_token(str(teacher.id), "teacher"),
             "teacher_refresh": teacher_refresh,
-            "report_id": str(reports[0].id), "whole_report_id": str(reports[1].id),
-            "sidebar_report_id": str(reports[3].id),
+            "report_id": str(reports[0].id), "correction_report_id": str(reports[1].id),
+            "whole_report_id": str(reports[4].id),
+            "sidebar_report_id": str(reports[2].id),
             "submission_id": str(subs[0].id), "assignment_id": str(asg.id),
             "review_path": review_path, "maya_id": str(maya.id), "liam_id": str(liam.id),
         }
@@ -284,6 +292,13 @@ async def capture_admin(hb: HarnessBrowser, w: dict[str, str]) -> None:
             await page.goto(f"{DASH_BASE}/reports/{w['whole_report_id']}", wait_until="networkidle")
             await page.wait_for_timeout(1500)
             await _shot(page, "case-view-whole-submission")
+            await page.goto(f"{DASH_BASE}/reports/{w['correction_report_id']}", wait_until="networkidle")
+            await page.wait_for_timeout(1500)
+            await _shot(page, "case-view-correction", full=True)
+            # A deep-link target the student also corrected keeps both marks.
+            await page.get_by_role("link", name="Open submission at Problem 4").click()
+            await page.wait_for_timeout(2500)
+            await _shot(page, "trace-arrival-corrected")
             # The primary action, clicked: the trace lands on Problem 3.
             await page.goto(f"{DASH_BASE}/reports/{w['report_id']}", wait_until="networkidle")
             await page.wait_for_timeout(800)
