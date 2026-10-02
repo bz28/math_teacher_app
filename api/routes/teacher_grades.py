@@ -212,6 +212,7 @@ CELL_NOT_TURNED_IN = "not_turned_in"   # not due yet, nothing submitted
 async def get_section_gradebook(
     course_id: uuid.UUID,
     section_id: uuid.UUID,
+    request: Request,
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -226,13 +227,26 @@ async def get_section_gradebook(
     original score, and whether she has edited it since publishing.
     Read-only; no model calls.
     """
-    await get_teacher_course(db, course_id, current_user.user_id)
+    course = await get_teacher_course(db, course_id, current_user.user_id)
     section = (await db.execute(
         select(Section.id, Section.name)
         .where(Section.id == section_id, Section.course_id == course_id)
     )).one_or_none()
     if section is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Section not found")
+
+    # FERPA: the grid discloses every student's per-homework record at
+    # once, like the CSV export — log it as one section-wide access.
+    await log_student_record_access(
+        db,
+        accessor_user_id=current_user.user_id,
+        accessor_role=current_user.role,
+        target_student_id=None,
+        record_type="gradebook",
+        record_id=section_id,
+        accessor_school_id=course.school_id,
+        request=request,
+    )
 
     assigned_by_section, past_due_by_section = await _published_and_past_due(db, course_id)
     assigned = assigned_by_section.get(section_id, set())
@@ -251,40 +265,51 @@ async def get_section_gradebook(
         .order_by(User.name)
     )).all()
 
-    work: dict[tuple[uuid.UUID, uuid.UUID], tuple[Submission, SubmissionGrade | None]] = {}
+    # Named columns only. A Submission row carries the student's photos
+    # (base64, in `files`) and a grade row the AI's full read — loading
+    # whole rows here would pull every photo in the section to read five
+    # small fields.
+    work: dict[tuple[uuid.UUID, uuid.UUID], Any] = {}
     if students and assigned:
         rows = (await db.execute(
-            select(Submission, SubmissionGrade)
+            select(
+                Submission.id,
+                Submission.student_id,
+                Submission.assignment_id,
+                Submission.is_late,
+                SubmissionGrade.ai_score,
+                SubmissionGrade.final_score,
+                SubmissionGrade.teacher_notes,
+                SubmissionGrade.breakdown,
+                SubmissionGrade.grade_published_at,
+                SubmissionGrade.published_final_score,
+                SubmissionGrade.published_teacher_notes,
+                SubmissionGrade.published_breakdown,
+            )
             .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
             .where(
                 Submission.student_id.in_([st.id for st in students]),
                 Submission.assignment_id.in_(assigned),
             )
         )).all()
-        for sub, grade in rows:
-            work[(sub.student_id, sub.assignment_id)] = (sub, grade)
+        for r in rows:
+            work[(r.student_id, r.assignment_id)] = r
 
     def cell(student_id: uuid.UUID, assignment_id: uuid.UUID) -> dict[str, Any]:
-        found = work.get((student_id, assignment_id))
-        if found is None:
+        r = work.get((student_id, assignment_id))
+        if r is None:
             return {"state": CELL_MISSING if assignment_id in past_due else CELL_NOT_TURNED_IN}
-        sub, grade = found
-        base: dict[str, Any] = {"submission_id": str(sub.id), "is_late": sub.is_late}
-        if (
-            grade is not None
-            and grade.grade_published_at is not None
-            and grade.published_final_score is not None
-        ):
+        base: dict[str, Any] = {"submission_id": str(r.id), "is_late": r.is_late}
+        if r.grade_published_at is not None and r.published_final_score is not None:
             return {
                 **base,
                 "state": CELL_PUBLISHED,
-                "score": grade.published_final_score,
-                "published_at": grade.grade_published_at.isoformat(),
-                "ai_score": grade.ai_score,
-                "edited_since_publish": _is_grade_dirty(grade),
+                "score": r.published_final_score,
+                "published_at": r.grade_published_at.isoformat(),
+                "ai_score": r.ai_score,
+                "edited_since_publish": _is_grade_dirty(r),
             }
-        graded = grade is not None and grade.final_score is not None
-        return {**base, "state": CELL_NOT_PUBLISHED if graded else CELL_TURNED_IN}
+        return {**base, "state": CELL_NOT_PUBLISHED if r.final_score is not None else CELL_TURNED_IN}
 
     column_scores: dict[uuid.UUID, list[float]] = {a.id: [] for a in assignments}
     students_out = []

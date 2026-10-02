@@ -200,6 +200,22 @@ async def test_section_export_matches_the_grid(client: AsyncClient) -> None:
     assert averages == {"Ava Brooks": "80.0", "Ben Chen": "60.0"}
 
 
+async def test_opening_the_gradebook_is_logged(client: AsyncClient) -> None:
+    """FERPA: the grid discloses every student's record at once, so a
+    view is logged as one section-wide access, like the CSV export."""
+    w = await _world()
+    async with get_session_factory()() as s:
+        before = (await s.execute(text(
+            "SELECT count(*) FROM student_record_access_log WHERE record_type = 'gradebook'"
+        ))).scalar_one()
+    assert (await client.get(_url(w), headers=w["teacher"])).status_code == 200
+    async with get_session_factory()() as s:
+        after = (await s.execute(text(
+            "SELECT count(*) FROM student_record_access_log WHERE record_type = 'gradebook'"
+        ))).scalar_one()
+    assert after == before + 1
+
+
 async def test_gradebook_is_the_teachers_own(client: AsyncClient) -> None:
     w = await _world()
     r = await client.get(_url(w), headers=w["outsider"])
