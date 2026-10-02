@@ -32,10 +32,11 @@ import {
 type SortKey = "name" | "avg" | string; // string = assignment id
 type SortDir = "asc" | "desc";
 
-// Pinned column widths. The Avg column's sticky offset is the Student
-// column's width, so they're one pair of numbers.
-const STUDENT_COL_PX = 184;
-const AVG_COL_PX = 88;
+// Pinned column widths — narrower on phones so homework columns still
+// show beside them. The Avg column's sticky offset IS the Student
+// column's width, so the two classes below must move together.
+const STUDENT_COL = "w-[120px] min-w-[120px] sm:w-[184px] sm:min-w-[184px]";
+const AVG_COL = "left-[120px] sm:left-[184px] w-[72px] min-w-[72px] sm:w-[88px] sm:min-w-[88px]";
 
 export function GradebookGrid({
   courseId,
@@ -97,16 +98,14 @@ export function GradebookGrid({
               <th
                 scope="col"
                 aria-sort={ariaSort(sort, "name")}
-                className="sticky left-0 z-20 border-b border-r border-border-light bg-[color:var(--color-surface-alt-2)] px-4 py-2 text-left align-bottom uppercase tracking-[0.18em]"
-                style={{ width: STUDENT_COL_PX, minWidth: STUDENT_COL_PX }}
+                className={`sticky left-0 z-20 border-b border-r border-border-light bg-[color:var(--color-surface-alt-2)] px-3 py-2 text-left align-bottom uppercase tracking-[0.18em] sm:px-4 ${STUDENT_COL}`}
               >
                 <SortButton label="Student" sort={sort} sortKey="name" onSort={toggleSort} />
               </th>
               <th
                 scope="col"
                 aria-sort={ariaSort(sort, "avg")}
-                className="sticky z-20 border-b border-r border-border-light bg-[color:var(--color-surface-alt-2)] px-2 py-2 text-center align-bottom uppercase tracking-[0.18em]"
-                style={{ left: STUDENT_COL_PX, width: AVG_COL_PX, minWidth: AVG_COL_PX }}
+                className={`sticky z-20 border-b border-r border-border-light bg-[color:var(--color-surface-alt-2)] px-2 py-2 text-center align-bottom uppercase tracking-[0.18em] ${AVG_COL}`}
               >
                 <SortButton label="Avg" sort={sort} sortKey="avg" onSort={toggleSort} />
               </th>
@@ -142,8 +141,7 @@ export function GradebookGrid({
               <tr key={s.student_id} className="group">
                 <th
                   scope="row"
-                  className="sticky left-0 z-10 border-b border-r border-border-light bg-surface px-4 py-2 text-left font-semibold text-text-primary group-hover:bg-[color:var(--color-surface-alt-2)]"
-                  style={{ width: STUDENT_COL_PX, minWidth: STUDENT_COL_PX }}
+                  className={`sticky left-0 z-10 border-b border-r border-border-light bg-surface px-3 py-2 text-left font-semibold text-text-primary group-hover:bg-[color:var(--color-surface-alt-2)] sm:px-4 ${STUDENT_COL}`}
                 >
                   <Link
                     href={`/school/teacher/courses/${courseId}/grades/${data.section.id}/students/${s.student_id}`}
@@ -153,8 +151,7 @@ export function GradebookGrid({
                   </Link>
                 </th>
                 <td
-                  className="sticky z-10 border-b border-r border-border-light bg-surface px-2 py-1.5 text-center group-hover:bg-[color:var(--color-surface-alt-2)]"
-                  style={{ left: STUDENT_COL_PX, width: AVG_COL_PX, minWidth: AVG_COL_PX }}
+                  className={`sticky z-10 border-b border-r border-border-light bg-surface px-2 py-1.5 text-center group-hover:bg-[color:var(--color-surface-alt-2)] ${AVG_COL}`}
                 >
                   <AverageCell student={s} assignments={data.assignments} hoverProps={hoverProps} />
                 </td>
@@ -179,13 +176,12 @@ export function GradebookGrid({
             <tr className="text-xs font-semibold text-text-secondary">
               <th
                 scope="row"
-                className="sticky left-0 z-10 border-r border-border-light bg-[color:var(--color-surface-alt-2)] px-4 py-2 text-left"
+                className={`sticky left-0 z-10 border-r border-border-light bg-[color:var(--color-surface-alt-2)] px-3 py-2 text-left sm:px-4 ${STUDENT_COL}`}
               >
                 Section average
               </th>
               <td
-                className="sticky z-10 border-r border-border-light bg-[color:var(--color-surface-alt-2)] px-2 py-2 text-center tabular-nums"
-                style={{ left: STUDENT_COL_PX }}
+                className={`sticky z-10 border-r border-border-light bg-[color:var(--color-surface-alt-2)] px-2 py-2 text-center tabular-nums ${AVG_COL}`}
               >
                 {pct(sectionAvg)}
               </td>
@@ -272,7 +268,7 @@ function ScoreCell({
     <Link
       href={href}
       aria-label={lines.join(". ")}
-      className={`${linkCls} gap-0.5`}
+      className={`${linkCls} relative`}
       {...hoverProps(lines)}
     >
       <span
@@ -280,9 +276,13 @@ function ScoreCell({
       >
         {Math.round(cell.score)}%
       </span>
-      {cell.is_late && <LateMark />}
-      {changedAi && (
-        <span aria-hidden className="h-1.5 w-1.5 shrink-0 self-start rounded-full bg-primary" />
+      {/* Hung off the chip's corner so every score in a column stays
+          centred on the same axis. */}
+      {(cell.is_late || changedAi) && (
+        <span className="absolute left-full top-0 ml-0.5 flex flex-col items-start gap-0.5">
+          {cell.is_late && <LateMark />}
+          {changedAi && <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />}
+        </span>
       )}
     </Link>
   );
@@ -317,7 +317,7 @@ function AverageCell({
 
 function LateMark() {
   return (
-    <span className="self-start text-[9px] font-bold tracking-wide text-[color:var(--color-warning-dark)]">
+    <span className="text-[9px] font-bold leading-none tracking-wide text-[color:var(--color-warning-dark)]">
       LATE
     </span>
   );
