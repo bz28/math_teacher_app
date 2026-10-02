@@ -6,7 +6,7 @@ NOT an auto-fix proposal, because journeys often live on auth/billing/grading
 surfaces the agent must never edit (see flow_alert_md).
 
 Two layers, picked per journey by which can be made NON-FLAKY:
-  • Browser layer (login, logout) — the journey IS the UI: a form render +
+  • Browser layer (login, logout, student insights) — the journey IS the UI: a form render +
     submit + redirect that no API call captures. Asserts on a definitive
     Playwright signal (a required element/navigation that surfaces as a
     timeout when broken).
@@ -43,6 +43,7 @@ from tests.harness.browser import HarnessBrowser
 from tests.harness.seed import (
     WORKSHOP_FLOW_FIGURE,
     Seed,
+    seed_insights_homework,
     seed_joinable_section,
     seed_submitted_submission,
     seed_workshop_item,
@@ -138,6 +139,37 @@ async def _logout_flow(
             issues.append("Sign Out did not return to /login — logout may be broken")
 
     return FlowResult("logout", "Student logout", not issues, issues)
+
+
+async def _student_insights_flow(
+    browser: HarnessBrowser, web_base: str, api_base: str, seed: Seed,
+) -> FlowResult:
+    """Teacher opens Student Insights → sees the homework's problems and who
+    missed one, with a link to that student's work. Seeds one approved,
+    zero-credit grade so the tab has a missed problem to show. The most-
+    missed problem opens expanded by default; asserts the student is listed
+    and the link deep-links to their work on that problem."""
+    name, title = "student_insights", "Teacher reads Student Insights"
+    issues: list[str] = []
+    student = await seed_insights_homework(seed)
+    async with browser.authed_page(seed.teacher_token, seed.teacher_refresh) as page:
+        await page.goto(
+            f"{web_base.rstrip('/')}/school/teacher/courses/{seed.course_id}",
+            wait_until="domcontentloaded", timeout=_TIMEOUT_MS,
+        )
+        try:
+            await page.get_by_role("button", name="Student Insights").first.click(timeout=_TIMEOUT_MS)
+            await page.get_by_text("Missed it").first.wait_for(timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            issues.append("Student Insights never showed who missed a problem for an approved zero grade")
+            return FlowResult(name, title, False, issues)
+        if not await page.get_by_text(student).count():
+            issues.append(f"the student who missed the problem ({student}) is not listed")
+        link = page.get_by_role("link", name="View work").first
+        href = await link.get_attribute("href") if await link.count() else None
+        if not href or "student=" not in href or "problem=1" not in href:
+            issues.append(f"'View work' does not deep-link to the student's problem (href={href!r})")
+    return FlowResult(name, title, not issues, issues)
 
 
 # ── API-layer journeys (see module docstring for why these aren't browser
@@ -342,7 +374,7 @@ async def _workshop_steps_flow(
 # (Deferred: the practice/learn journeys need LLM generation + a queue-based
 # multi-page entry — a real build + a per-scan cost decision, not a quick add.)
 _FLOWS = (
-    _login_flow, _logout_flow,
+    _login_flow, _logout_flow, _student_insights_flow,
     _join_class_flow, _submit_homework_flow, _grade_publish_flow,
     _workshop_steps_flow,
 )

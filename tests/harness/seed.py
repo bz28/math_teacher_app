@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from api.core.auth import create_access_token, create_refresh_token, hash_password
 from api.database import get_session_factory
-from api.models.assignment import Assignment, AssignmentSection, Submission
+from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course, CourseTeacher
 from api.models.question_bank import FORMAT_MCQ, QuestionBankItem
 from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
@@ -390,3 +390,58 @@ async def seed_submitted_submission(seed: Seed) -> str:
         s.add(submission)
         await s.commit()
         return str(submission.id)
+
+
+async def seed_insights_homework(seed: Seed) -> str:
+    """A published one-problem homework in the seeded section, with one
+    submission the teacher has APPROVED (reviewed_at set) scored zero —
+    the precondition for the Student Insights flow, which only counts
+    approved or published grades. A distinct student so it never collides
+    with the other flows' submissions. Returns the student's name."""
+    course_id = uuid.UUID(seed.course_id)
+    now = datetime.now(UTC)
+    async with get_session_factory()() as s:
+        section_id = (await s.execute(
+            select(SectionEnrollment.section_id).where(
+                SectionEnrollment.student_id == uuid.UUID(seed.student_id),
+                SectionEnrollment.course_id == course_id,
+            ).limit(1)
+        )).scalar_one()
+        hw = Assignment(
+            course_id=course_id, unit_ids=[uuid.UUID(seed.unit_id)],
+            teacher_id=uuid.UUID(seed.teacher_id), title="Insights HW",
+            type="homework", status="published", content={"problem_ids": []},
+            integrity_check_enabled=False,
+        )
+        s.add(hw)
+        await s.flush()
+        item = QuestionBankItem(
+            course_id=course_id, unit_id=uuid.UUID(seed.unit_id),
+            originating_assignment_id=hw.id, title="Factor",
+            question="Solve x^2 - 5x + 6 = 0.", final_answer="x = 2, 3",
+            status="approved", source="generated",
+        )
+        s.add(item)
+        await s.flush()
+        hw.content = {"problem_ids": [str(item.id)]}
+        s.add(AssignmentSection(assignment_id=hw.id, section_id=section_id, published_at=now))
+        name = "Harness Insights Student"
+        student = User(
+            email=f"harness_insights_{uuid.uuid4().hex[:6]}@t.com",
+            password_hash=hash_password("x"), grade_level=8, role="student", name=name,
+        )
+        s.add(student)
+        await s.flush()
+        s.add(SectionEnrollment(section_id=section_id, course_id=course_id, student_id=student.id))
+        submission = Submission(
+            assignment_id=hw.id, student_id=student.id, section_id=section_id,
+            status="submitted", files=[], is_late=False,
+        )
+        s.add(submission)
+        await s.flush()
+        s.add(SubmissionGrade(
+            submission_id=submission.id, final_score=0.0, graded_at=now, reviewed_at=now,
+            breakdown=[{"problem_id": str(item.id), "score_status": "zero", "percent": 0}],
+        ))
+        await s.commit()
+        return name
