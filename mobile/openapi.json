@@ -1984,6 +1984,281 @@
         "title": "ImageExtractResponse",
         "type": "object"
       },
+      "InsightsHomework": {
+        "properties": {
+          "counted": {
+            "title": "Counted",
+            "type": "integer"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "enrolled": {
+            "title": "Enrolled",
+            "type": "integer"
+          },
+          "grading": {
+            "title": "Grading",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "not_submitted": {
+            "title": "Not Submitted",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "to_approve": {
+            "title": "To Approve",
+            "type": "integer"
+          },
+          "to_hand_grade": {
+            "title": "To Hand Grade",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "due_at",
+          "enrolled",
+          "counted",
+          "to_approve",
+          "to_hand_grade",
+          "grading",
+          "not_submitted"
+        ],
+        "title": "InsightsHomework",
+        "type": "object"
+      },
+      "InsightsProblem": {
+        "properties": {
+          "bank_item_id": {
+            "format": "uuid",
+            "title": "Bank Item Id",
+            "type": "string"
+          },
+          "full": {
+            "title": "Full",
+            "type": "integer"
+          },
+          "partial": {
+            "title": "Partial",
+            "type": "integer"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "students": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/InsightsStudentRef"
+              },
+              "type": "array"
+            },
+            "propertyNames": {
+              "enum": [
+                "full",
+                "partial",
+                "zero"
+              ]
+            },
+            "title": "Students",
+            "type": "object"
+          },
+          "to_review": {
+            "title": "To Review",
+            "type": "integer"
+          },
+          "zero": {
+            "title": "Zero",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bank_item_id",
+          "position",
+          "question",
+          "full",
+          "partial",
+          "zero",
+          "students",
+          "to_review"
+        ],
+        "title": "InsightsProblem",
+        "type": "object"
+      },
+      "InsightsSection": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "InsightsSection",
+        "type": "object"
+      },
+      "InsightsStudentRef": {
+        "properties": {
+          "diagnosis_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosis Kind"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "student_id": {
+            "format": "uuid",
+            "title": "Student Id",
+            "type": "string"
+          },
+          "submission_id": {
+            "format": "uuid",
+            "title": "Submission Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "student_id",
+          "name",
+          "submission_id",
+          "diagnosis_kind"
+        ],
+        "title": "InsightsStudentRef",
+        "type": "object"
+      },
+      "InsightsWatchStudent": {
+        "properties": {
+          "latest": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest"
+          },
+          "missed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missed"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous"
+          },
+          "problems": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problems"
+          },
+          "reason": {
+            "enum": [
+              "missing_work",
+              "missing_most",
+              "sharp_drop"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "student_id": {
+            "format": "uuid",
+            "title": "Student Id",
+            "type": "string"
+          },
+          "window": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window"
+          },
+          "zero": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zero"
+          }
+        },
+        "required": [
+          "student_id",
+          "name",
+          "reason"
+        ],
+        "title": "InsightsWatchStudent",
+        "type": "object"
+      },
       "IntegrityActivityNotableTurn": {
         "description": "One student turn flagged as notable, plus the reason codes\nthat flagged it. Ordinal indexes into the transcript so the UI\ncan render an inline marker on the matching student bubble.",
         "properties": {
@@ -3116,6 +3391,60 @@
           }
         },
         "title": "RetirePayload",
+        "type": "object"
+      },
+      "SectionInsightsResponse": {
+        "properties": {
+          "homeworks": {
+            "items": {
+              "$ref": "#/components/schemas/InsightsHomework"
+            },
+            "title": "Homeworks",
+            "type": "array"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/InsightsProblem"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "section": {
+            "$ref": "#/components/schemas/InsightsSection"
+          },
+          "selected_homework_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Homework Id"
+          },
+          "watch": {
+            "items": {
+              "$ref": "#/components/schemas/InsightsWatchStudent"
+            },
+            "title": "Watch",
+            "type": "array"
+          },
+          "watch_total": {
+            "title": "Watch Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "section",
+          "homeworks",
+          "selected_homework_id",
+          "problems",
+          "watch",
+          "watch_total"
+        ],
+        "title": "SectionInsightsResponse",
         "type": "object"
       },
       "SectionStudentInsightsResponse": {
@@ -16262,6 +16591,81 @@
           }
         ],
         "summary": "Get Section Gradebook",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/courses/{course_id}/sections/{section_id}/insights": {
+      "get": {
+        "operationId": "get_section_insights_v1_teacher_courses__course_id__sections__section_id__insights_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "section_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Section Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "assignment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assignment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SectionInsightsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Section Insights",
         "tags": [
           "teacher"
         ]

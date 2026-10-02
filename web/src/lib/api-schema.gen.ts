@@ -3227,6 +3227,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/courses/{course_id}/sections/{section_id}/insights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Section Insights */
+        get: operations["get_section_insights_v1_teacher_courses__course_id__sections__section_id__insights_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/courses/{course_id}/sections/{section_id}/invites": {
         parameters: {
             query?: never;
@@ -5060,6 +5077,108 @@ export interface components {
              */
             problems: string[];
         };
+        /** InsightsHomework */
+        InsightsHomework: {
+            /** Counted */
+            counted: number;
+            /** Due At */
+            due_at: string | null;
+            /** Enrolled */
+            enrolled: number;
+            /** Grading */
+            grading: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Not Submitted */
+            not_submitted: number;
+            /** Title */
+            title: string;
+            /** To Approve */
+            to_approve: number;
+            /** To Hand Grade */
+            to_hand_grade: number;
+        };
+        /** InsightsProblem */
+        InsightsProblem: {
+            /**
+             * Bank Item Id
+             * Format: uuid
+             */
+            bank_item_id: string;
+            /** Full */
+            full: number;
+            /** Partial */
+            partial: number;
+            /** Position */
+            position: number;
+            /** Question */
+            question: string;
+            /** Students */
+            students: {
+                [key: string]: components["schemas"]["InsightsStudentRef"][];
+            };
+            /** To Review */
+            to_review: number;
+            /** Zero */
+            zero: number;
+        };
+        /** InsightsSection */
+        InsightsSection: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** InsightsStudentRef */
+        InsightsStudentRef: {
+            /** Diagnosis Kind */
+            diagnosis_kind: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /**
+             * Submission Id
+             * Format: uuid
+             */
+            submission_id: string;
+        };
+        /** InsightsWatchStudent */
+        InsightsWatchStudent: {
+            /** Latest */
+            latest?: number | null;
+            /** Missed */
+            missed?: number | null;
+            /** Name */
+            name: string;
+            /** Previous */
+            previous?: number | null;
+            /** Problems */
+            problems?: number | null;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "missing_work" | "missing_most" | "sharp_drop";
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Window */
+            window?: number | null;
+            /** Zero */
+            zero?: number | null;
+        };
         /**
          * IntegrityActivityNotableTurn
          * @description One student turn flagged as notable, plus the reason codes
@@ -5559,6 +5678,20 @@ export interface components {
              * @default true
              */
             retired: boolean;
+        };
+        /** SectionInsightsResponse */
+        SectionInsightsResponse: {
+            /** Homeworks */
+            homeworks: components["schemas"]["InsightsHomework"][];
+            /** Problems */
+            problems: components["schemas"]["InsightsProblem"][];
+            section: components["schemas"]["InsightsSection"];
+            /** Selected Homework Id */
+            selected_homework_id: string | null;
+            /** Watch */
+            watch: components["schemas"]["InsightsWatchStudent"][];
+            /** Watch Total */
+            watch_total: number;
         };
         /** SectionStudentInsightsResponse */
         SectionStudentInsightsResponse: {
@@ -12157,6 +12290,40 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_section_insights_v1_teacher_courses__course_id__sections__section_id__insights_get: {
+        parameters: {
+            query?: {
+                assignment_id?: string | null;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionInsightsResponse"];
                 };
             };
             /** @description Validation Error */
