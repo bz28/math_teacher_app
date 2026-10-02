@@ -1,12 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { teacher, type GradesRosterResponse, type GradesRosterRow } from "@/lib/api";
+import {
+  teacher,
+  type GradebookResponse,
+  type GradesRosterResponse,
+  type GradesRosterRow,
+} from "@/lib/api";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { PageErrorState } from "@/components/ui/page-error-state";
+import { GradebookGrid } from "./gradebook-grid";
+import { shown } from "@/lib/gradebook";
 import {
-  PercentBadge,
   percentTone,
   STRONG_THRESHOLD,
   STRUGGLING_THRESHOLD,
@@ -15,7 +20,7 @@ import { SearchIcon } from "@/components/ui/icons";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
- * Grades tab — the read-only final-record view.
+ * Grades tab — the read-only final-record view, as a gradebook.
  *
  * Mental model: audit layer. Teachers open this to answer "how is
  * student X doing?" or "who's failing?" It never shows drafts —
@@ -27,17 +32,13 @@ import { Skeleton } from "@/components/ui/skeleton";
  * surface accumulated gradebook state (struggling, missing-work),
  * never grading-queue state.
  *
- * Default sort: last name. Click a column header to sort by it; click
- * the active header again to flip direction. Section selector is
- * tab-style at the top since the page is fundamentally a per-section
- * gradebook view.
- *
- * Clicking a row opens /grades/[sectionId]/students/[studentId] —
- * the student's full published-HW record.
+ * One grid per section (the tabs pick the class): students down the
+ * side, published homework across the top, newest first. Every score
+ * is auditable in place and links to its submission — see
+ * GradebookGrid. Clicking a name opens
+ * /grades/[sectionId]/students/[studentId], the student's full record.
  */
 
-type SortKey = "name" | "graded" | "avg";
-type SortDir = "asc" | "desc";
 type FilterMode = "all" | "needs_attention" | "missing";
 
 // Buckets align with PercentBadge thresholds — STRONG_THRESHOLD and
@@ -45,27 +46,29 @@ type FilterMode = "all" | "needs_attention" | "missing";
 // as struggling" stays one knob across the codebase.
 
 export function GradesTab({ courseId }: { courseId: string }) {
-  const router = useRouter();
   const [data, setData] = useState<GradesRosterResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sectionFilter, setSectionFilter] = useState<string>("all");
+  // A gradebook is one class: the tabs pick which section's grid shows.
+  // Null until the roster arrives, then the first section.
+  const [sectionId, setSectionId] = useState<string | null>(null);
+  const [grid, setGrid] = useState<GradebookResponse | null>(null);
+  const [gridError, setGridError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({
-    key: "name",
-    dir: "asc",
-  });
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
-  // CSV export state. Tied to the active section filter so the
-  // download matches what the teacher's currently looking at.
-  const [exporting, setExporting] = useState(false);
+  // CSV export state. Downloads the active section's grid, or — for a
+  // teacher importing every period into her school's system at once —
+  // the whole course.
+  const [exporting, setExporting] = useState<"section" | "course" | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
-  // Bump to re-fire the roster fetch (the retry affordance on the
-  // error state). The retry handler clears data/error so the skeleton
-  // shows while the refetch is in flight.
+  // Bump to re-fire the fetches (the retry affordance on the error
+  // state). The retry handler clears data/error so the skeleton shows
+  // while the refetch is in flight.
   const [reloadKey, setReloadKey] = useState(0);
   const retry = () => {
     setData(null);
     setError(null);
+    setGrid(null);
+    setGridError(null);
     setReloadKey((k) => k + 1);
   };
 
@@ -74,7 +77,11 @@ export function GradesTab({ courseId }: { courseId: string }) {
     teacher
       .gradesRoster(courseId)
       .then((res) => {
-        if (!cancelled) setData(res);
+        if (cancelled) return;
+        setData(res);
+        setSectionId((cur) =>
+          cur && res.sections.some((s) => s.id === cur) ? cur : (res.sections[0]?.id ?? null),
+        );
       })
       .catch((e) => {
         if (!cancelled) {
@@ -86,82 +93,64 @@ export function GradesTab({ courseId }: { courseId: string }) {
     };
   }, [courseId, reloadKey]);
 
-  // Section-filtered roster — the canonical "what the teacher's
-  // looking at right now" subset. Drives both the table and every
-  // summary stat (class avg, distribution, attention/missing counts)
-  // so chips and the table stay in agreement.
-  const sectionScoped = useMemo(() => {
-    if (!data) return [];
-    if (sectionFilter === "all") return data.students;
-    return data.students.filter((r) => r.section_id === sectionFilter);
-  }, [data, sectionFilter]);
+  useEffect(() => {
+    if (!sectionId) return;
+    let cancelled = false;
+    teacher
+      .gradebook(courseId, sectionId)
+      .then((res) => {
+        if (!cancelled) setGrid(res);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setGridError(e instanceof Error ? e.message : "Failed to load the gradebook");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId, sectionId, reloadKey]);
 
-  const summary = useMemo(() => computeSummary(sectionScoped), [sectionScoped]);
+  // The grid for the active section only — a stale grid from the
+  // previous tab never renders under the new tab's name.
+  const current = grid && grid.section.id === sectionId ? grid : null;
+  const students = useMemo(() => current?.students ?? [], [current]);
 
-  // Per-section averages, used inline on the section tabs so the
-  // teacher can spot a lagging period at a glance without flipping
-  // the filter. Computed against the FULL roster (not the
-  // section-scoped subset) so each tab always reports its own
-  // section's avg regardless of which tab is currently active.
+  const summary = useMemo(() => computeSummary(students), [students]);
+
+  // Per-section averages on the tabs so the teacher can spot a lagging
+  // period without switching. From the roster (every section at once).
   const sectionAverages = useMemo(() => {
     const m = new Map<string, number | null>();
     if (!data) return m;
     for (const s of data.sections) {
-      const rows = data.students.filter((r) => r.section_id === s.id);
-      m.set(s.id, avgOf(rows));
+      m.set(s.id, avgOf(data.students.filter((r) => r.section_id === s.id)));
     }
     return m;
   }, [data]);
 
   const needsAttentionCount = useMemo(
-    () =>
-      sectionScoped.filter(
-        (r) => r.avg_percent !== null && r.avg_percent < STRUGGLING_THRESHOLD,
-      ).length,
-    [sectionScoped],
+    () => students.filter(isStruggling).length,
+    [students],
   );
   const missingWorkCount = useMemo(
-    () => sectionScoped.filter((r) => r.missing_count > 0).length,
-    [sectionScoped],
+    () => students.filter((r) => r.missing_count > 0).length,
+    [students],
   );
 
   const filtered = useMemo(() => {
-    let out = sectionScoped;
+    let out = students;
     if (filterMode === "needs_attention") {
-      out = out.filter(
-        (r) => r.avg_percent !== null && r.avg_percent < STRUGGLING_THRESHOLD,
-      );
+      out = out.filter(isStruggling);
     } else if (filterMode === "missing") {
       out = out.filter((r) => r.missing_count > 0);
     }
     const q = search.trim().toLowerCase();
     if (q) out = out.filter((r) => r.name.toLowerCase().includes(q));
-    const sorted = out.slice();
-    const dirMul = sort.dir === "asc" ? 1 : -1;
-    if (sort.key === "name") {
-      sorted.sort(
-        (a, b) => lastNameKey(a.name).localeCompare(lastNameKey(b.name)) * dirMul,
-      );
-    } else if (sort.key === "graded") {
-      sorted.sort((a, b) => (a.graded_count - b.graded_count) * dirMul);
-    } else {
-      // Students with no avg yet sink to the bottom regardless of
-      // direction — they're not "doing badly," they just have nothing
-      // to show, and surfacing them in either tail of the avg sort is
-      // misleading.
-      sorted.sort((a, b) => {
-        const av = a.avg_percent;
-        const bv = b.avg_percent;
-        if (av === null && bv === null) return 0;
-        if (av === null) return 1;
-        if (bv === null) return -1;
-        return (av - bv) * dirMul;
-      });
-    }
-    return sorted;
-  }, [sectionScoped, search, sort, filterMode]);
+    return out;
+  }, [students, search, filterMode]);
 
-  if (error) {
+  if (error || gridError) {
     return (
       <PageErrorState
         message="We couldn't load this right now."
@@ -174,7 +163,7 @@ export function GradesTab({ courseId }: { courseId: string }) {
     return <GradesSkeleton />;
   }
 
-  if (data.students.length === 0) {
+  if (data.students.length === 0 || !sectionId) {
     return (
       <div className="mt-6">
         <EmptyState
@@ -187,52 +176,54 @@ export function GradesTab({ courseId }: { courseId: string }) {
 
   const showSectionTabs = data.sections.length > 1;
 
-  function toggleSort(key: SortKey) {
-    setSort((s) =>
-      s.key === key
-        ? { key, dir: s.dir === "asc" ? "desc" : "asc" }
-        : // Picking a new column starts at "asc". For avg this means
-          // low-first (struggling first), which is the more useful
-          // default for teachers clicking avg to find who needs help.
-          // For name and graded, asc is the conventional default too.
-          { key, dir: "asc" },
-    );
+  async function runExport(scope: "section" | "course") {
+    setExportError(null);
+    setExporting(scope);
+    try {
+      await teacher.exportGradesCSV(courseId, scope === "section" ? (sectionId ?? undefined) : undefined);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExporting(null);
+    }
   }
 
   return (
     <div className="mt-2 space-y-4">
-      {/* Class-summary strip — vibe check before the table. Distribution
+      {/* Section summary — vibe check before the grid. Distribution
           bar uses the same thresholds as PercentBadge so what counts
           as struggling is one knob, not two. */}
-      <ClassSummary summary={summary} />
+      {current ? (
+        <ClassSummary summary={summary} />
+      ) : (
+        // A section is loading — a placeholder, not "0 students".
+        <div className="space-y-2.5" aria-busy="true">
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-1.5 w-full rounded-full" />
+        </div>
+      )}
 
-      {/* Section selector as tabs (vs the old dropdown) — the page is
-          fundamentally a per-section gradebook, so the section pivot
-          deserves prominence. Each section tab includes its avg
-          inline so the teacher can compare periods at a glance,
-          collapsing the old separate "Sections: P1 82% · P2 78%"
-          row that listed the same labels twice. Hidden when there's
+      {/* One gradebook per section — a class is a period in K-12, and
+          mixing periods in one grid isn't a gradebook anyone keeps.
+          Each tab carries its section's average. Hidden when there's
           only one section. */}
       {showSectionTabs && (
         <SectionTabs
           sections={data.sections}
           sectionAverages={sectionAverages}
-          value={sectionFilter}
+          value={sectionId}
           onChange={(v) => {
-            setSectionFilter(v);
-            // Filter mode is calibrated against the section-scoped
-            // subset; resetting to "all" on section change avoids
-            // landing in a 0-row state from a non-matching filter.
+            setSectionId(v);
+            // Filter mode is calibrated per section; reset so a switch
+            // never lands on a 0-row filter.
             setFilterMode("all");
           }}
         />
       )}
 
-      {/* Search + filter chips — chips replace the old single sort
-          toggle and turn "find strugglers" into one click. Counts on
-          the chips are scoped to the active section so chip count and
-          table length agree. Export button sits alongside since both
-          act on the currently-visible section scope. */}
+      {/* Search + filter chips. Counts are the active section's, so a
+          chip's count and the grid's rows agree. Export sits alongside
+          and downloads exactly this section's grid. */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px]">
           <SearchIcon
@@ -244,31 +235,28 @@ export function GradesTab({ courseId }: { courseId: string }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search students"
+            aria-label="Search students"
             className="w-full rounded-[--radius-md] border border-border-light bg-surface py-2 pl-9 pr-3 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
         </div>
-        <button
-          type="button"
-          onClick={async () => {
-            setExportError(null);
-            setExporting(true);
-            try {
-              await teacher.exportGradesCSV(
-                courseId,
-                sectionFilter !== "all" ? sectionFilter : undefined,
-              );
-            } catch (e) {
-              setExportError(e instanceof Error ? e.message : "Export failed");
-            } finally {
-              setExporting(false);
-            }
-          }}
-          disabled={exporting || data.students.length === 0}
-          title="Download grades as CSV (imports into Canvas, Schoology, PowerSchool)"
-          className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-semibold text-text-secondary transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {exporting ? "Exporting…" : "Export CSV ↓"}
-        </button>
+        <ExportButton
+          label="Export CSV ↓"
+          busyLabel="Exporting…"
+          title="Download this section's grades as CSV (imports into Canvas, Schoology, PowerSchool)"
+          busy={exporting === "section"}
+          disabled={exporting !== null}
+          onClick={() => runExport("section")}
+        />
+        {showSectionTabs && (
+          <ExportButton
+            label="All sections ↓"
+            busyLabel="Exporting…"
+            title="Download every section's grades in one CSV"
+            busy={exporting === "course"}
+            disabled={exporting !== null}
+            onClick={() => runExport("course")}
+          />
+        )}
       </div>
       {exportError && (
         <p className="text-xs text-[color:var(--color-error)]">{exportError}</p>
@@ -285,60 +273,28 @@ export function GradesTab({ courseId }: { courseId: string }) {
           count={needsAttentionCount}
           active={filterMode === "needs_attention"}
           onClick={() => setFilterMode("needs_attention")}
-          disabled={needsAttentionCount === 0}
+          disabled={!current || needsAttentionCount === 0}
         />
         <FilterChip
           label="Missing work"
           count={missingWorkCount}
           active={filterMode === "missing"}
           onClick={() => setFilterMode("missing")}
-          disabled={missingWorkCount === 0}
+          disabled={!current || missingWorkCount === 0}
         />
       </div>
 
-      {/* Roster table */}
-      {filtered.length === 0 ? (
+      {current === null ? (
+        <GridSkeleton />
+      ) : current.students.length === 0 ? (
+        <EmptyState
+          title={`No students in ${current.section.name} yet`}
+          description="Once students join this section, their grades will show up here."
+        />
+      ) : filtered.length === 0 ? (
         <EmptyState title="No students match those filters" />
       ) : (
-        <div className="overflow-hidden rounded-[--radius-md] border border-border-light bg-surface">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border-light bg-[color:var(--color-surface-alt-2)] text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-                <SortableHeader
-                  label="Name"
-                  active={sort.key === "name"}
-                  dir={sort.dir}
-                  onClick={() => toggleSort("name")}
-                />
-                {sectionFilter === "all" && <th className="px-4 py-2">Section</th>}
-                <SortableHeader
-                  label="Graded"
-                  active={sort.key === "graded"}
-                  dir={sort.dir}
-                  onClick={() => toggleSort("graded")}
-                />
-                <SortableHeader
-                  label="Avg"
-                  align="right"
-                  active={sort.key === "avg"}
-                  dir={sort.dir}
-                  onClick={() => toggleSort("avg")}
-                />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r) => (
-                <RosterRow
-                  key={`${r.student_id}-${r.section_id}`}
-                  row={r}
-                  courseId={courseId}
-                  showSection={sectionFilter === "all"}
-                  router={router}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <GradebookGrid courseId={courseId} data={current} rows={filtered} />
       )}
     </div>
   );
@@ -380,6 +336,50 @@ function GradesSkeleton() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Below the struggling line, judged on the number shown (see `shown`). */
+function isStruggling(r: { avg_percent: number | null }): boolean {
+  return r.avg_percent !== null && shown(r.avg_percent) < STRUGGLING_THRESHOLD;
+}
+
+function ExportButton({
+  label,
+  busyLabel,
+  title,
+  busy,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  busyLabel: string;
+  title: string;
+  busy: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-semibold text-text-secondary transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {busy ? busyLabel : label}
+    </button>
+  );
+}
+
+/** Placeholder for the grid while a section's gradebook loads. */
+function GridSkeleton() {
+  return (
+    <div className="space-y-2 rounded-[--radius-md] border border-border-light bg-surface p-4" aria-busy="true">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Skeleton key={i} className="h-7 w-full" />
+      ))}
     </div>
   );
 }
@@ -478,15 +478,9 @@ function SectionTabs({
   return (
     <div
       role="tablist"
-      aria-label="Filter by section"
+      aria-label="Section"
       className="flex flex-wrap items-center gap-1.5"
     >
-      {/* The "All sections" tab deliberately does NOT show an avg —
-          the class summary at the top already shows it, and putting
-          it on the tab would triplicate the same number. Per-section
-          tabs include their avg since that data isn't exposed
-          anywhere else. */}
-      <SectionTab label="All sections" active={value === "all"} onClick={() => onChange("all")} />
       {sections.map((s) => (
         <SectionTab
           key={s.id}
@@ -507,14 +501,12 @@ function SectionTab({
   onClick,
 }: {
   label: string;
-  /** Per-section avg shown inline. Undefined for the "All" tab
-   *  (where the class summary already reports it); null for sections
-   *  with no graded HWs yet (rendered as em-dash). */
-  avg?: number | null;
+  /** Per-section avg shown inline; null for sections with no graded
+   *  HWs yet (rendered as em-dash). */
+  avg: number | null;
   active: boolean;
   onClick: () => void;
 }) {
-  const showAvg = avg !== undefined;
   return (
     <button
       type="button"
@@ -528,20 +520,18 @@ function SectionTab({
       }`}
     >
       <span>{label}</span>
-      {showAvg && (
-        <span
-          className={`text-[10px] tabular-nums ${
-            active
-              ? "text-white/80"
-              : avg === null
-                ? "text-text-muted"
-                : percentTone(avg)
-          }`}
-          aria-hidden
-        >
-          {avg === null ? "—" : `${Math.round(avg)}%`}
-        </span>
-      )}
+      <span
+        className={`text-[10px] tabular-nums ${
+          active
+            ? "text-white/80"
+            : avg === null
+              ? "text-text-muted"
+              : percentTone(avg)
+        }`}
+        aria-hidden
+      >
+        {avg === null ? "—" : `${Math.round(avg)}%`}
+      </span>
     </button>
   );
 }
@@ -587,104 +577,7 @@ function FilterChip({
   );
 }
 
-function SortableHeader({
-  label,
-  active,
-  dir,
-  align = "left",
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  dir: SortDir;
-  align?: "left" | "right";
-  onClick: () => void;
-}) {
-  const indicator = active ? (dir === "asc" ? "↑" : "↓") : "";
-  return (
-    <th
-      aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
-      className={`px-4 py-2 ${align === "right" ? "text-right" : ""}`}
-    >
-      <button
-        type="button"
-        onClick={onClick}
-        className={`inline-flex items-center gap-1 uppercase tracking-wider transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:text-text-primary ${
-          active ? "text-text-primary" : ""
-        }`}
-      >
-        {label}
-        <span aria-hidden className="text-[9px]">
-          {indicator || "↕"}
-        </span>
-      </button>
-    </th>
-  );
-}
 
-function RosterRow({
-  row,
-  courseId,
-  showSection,
-  router,
-}: {
-  row: GradesRosterRow;
-  courseId: string;
-  showSection: boolean;
-  router: ReturnType<typeof useRouter>;
-}) {
-  const href = `/school/teacher/courses/${courseId}/grades/${row.section_id}/students/${row.student_id}`;
-  return (
-    <tr
-      onClick={() => {
-        // Don't navigate when the user was text-selecting (drag to
-        // copy a name, e.g.). The mouseup at the end of a drag fires
-        // a click event on the tr, which without this guard would
-        // yank the user out of their selection mid-copy. Common
-        // gradebook pattern is "select cell content, copy, paste."
-        if ((window.getSelection()?.toString().length ?? 0) > 0) return;
-        router.push(href);
-      }}
-      onKeyDown={(e) => {
-        // Activate on both Enter and Space — Space is the standard
-        // activation key for elements with link semantics, and we
-        // expose this row as a link via aria-label below.
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          router.push(href);
-        }
-      }}
-      tabIndex={0}
-      // Deliberately NOT setting role="link" on the <tr>. ARIA's link
-      // role isn't a great fit for a table row (a row inside a table
-      // should keep its row semantics for screen readers parsing the
-      // gradebook structure), and several screen readers handle the
-      // override poorly. The `aria-label` + `cursor-pointer` +
-      // focus-visible ring + Enter/Space handlers are enough to
-      // communicate "this row is actionable."
-      aria-label={`View ${row.name}'s grades`}
-      className="cursor-pointer border-t border-border-light transition-colors hover:bg-[color:var(--color-surface-alt-2)]/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
-    >
-      <td className="px-4 py-3 font-semibold text-text-primary">{row.name}</td>
-      {showSection && (
-        <td className="px-4 py-3 text-xs text-text-secondary">{row.section_name}</td>
-      )}
-      <td className="px-4 py-3 text-xs text-text-muted">
-        <span className="font-semibold text-text-primary">{row.graded_count}</span>
-        {" / "}
-        {row.assigned_count}
-        {row.missing_count > 0 && (
-          <span className="ml-2 rounded-[--radius-pill] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[color:var(--color-error)]  dark:bg-[color:var(--color-error-light)] ">
-            {row.missing_count} missing
-          </span>
-        )}
-      </td>
-      <td className="px-4 py-3 text-right">
-        <PercentBadge percent={row.avg_percent} />
-      </td>
-    </tr>
-  );
-}
 
 // ────────────────────────────────────────────────────────────────────
 // Helpers
@@ -700,7 +593,7 @@ interface SummaryStats {
   struggling: number;
 }
 
-function computeSummary(rows: GradesRosterRow[]): SummaryStats {
+function computeSummary(rows: { avg_percent: number | null }[]): SummaryStats {
   let strong = 0;
   let ok = 0;
   let struggling = 0;
@@ -708,8 +601,11 @@ function computeSummary(rows: GradesRosterRow[]): SummaryStats {
   for (const r of rows) {
     if (r.avg_percent === null) continue;
     withAvg += 1;
-    if (r.avg_percent >= STRONG_THRESHOLD) strong += 1;
-    else if (r.avg_percent >= STRUGGLING_THRESHOLD) ok += 1;
+    // Bucket the number the teacher sees, so a student shown at 70%
+    // never lands in the under-70 bucket.
+    const pct = shown(r.avg_percent);
+    if (pct >= STRONG_THRESHOLD) strong += 1;
+    else if (pct >= STRUGGLING_THRESHOLD) ok += 1;
     else struggling += 1;
   }
   return {
@@ -732,10 +628,3 @@ function avgOf(rows: GradesRosterRow[]): number | null {
   return n > 0 ? sum / n : null;
 }
 
-/** "Last, First" or best-effort last-name first for sort. Users have
- *  a single `name` field — split on last space and take the tail. */
-function lastNameKey(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length < 2) return name.toLowerCase();
-  return `${parts[parts.length - 1]} ${parts.slice(0, -1).join(" ")}`.toLowerCase();
-}

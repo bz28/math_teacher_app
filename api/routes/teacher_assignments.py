@@ -3,7 +3,7 @@
 import asyncio
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -1790,7 +1790,19 @@ async def item_analysis(
     return ItemAnalysisResponse(graded_count=graded_count, items=items)
 
 
-def _is_grade_dirty(grade: SubmissionGrade | None) -> bool:
+class _PublishableGrade(Protocol):
+    """The fields `_is_grade_dirty` compares — a SubmissionGrade, or a
+    row selecting just these columns."""
+    grade_published_at: datetime | None
+    final_score: float | None
+    published_final_score: float | None
+    teacher_notes: str | None
+    published_teacher_notes: str | None
+    breakdown: Any
+    published_breakdown: Any
+
+
+def _is_grade_dirty(grade: _PublishableGrade | None) -> bool:
     """True if the current draft differs from the published snapshot.
 
     Compares content, not timestamps — a teacher flipping Full → Zero →
