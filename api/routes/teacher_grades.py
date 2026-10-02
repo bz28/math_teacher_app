@@ -5,8 +5,9 @@ It never shows drafts: a grade appears here only once the teacher has
 clicked "Publish grades" on the HW (i.e. SubmissionGrade.grade_published_at
 is not null).
 
-Three endpoints:
+Four endpoints:
   GET /teacher/courses/{course_id}/grades                                        → roster
+  GET /teacher/courses/{course_id}/sections/{section_id}/gradebook               → grid
   GET /teacher/courses/{course_id}/sections/{section_id}/students/{student_id}/grades → detail
   GET /teacher/courses/{course_id}/grades/export.csv                             → CSV export
 """
@@ -29,6 +30,7 @@ from api.models.assignment import Assignment, AssignmentSection, Submission, Sub
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
+from api.routes.teacher_assignments import _is_grade_dirty
 from api.routes.teacher_courses import get_teacher_course
 
 router = APIRouter()
@@ -195,6 +197,129 @@ async def get_course_grades(
         })
 
     return {"sections": sections_out, "students": students_out}
+
+
+# Gradebook cell states. Only `published` carries a score — the Grades
+# tab is the final record, so a draft number never appears in it.
+CELL_PUBLISHED = "published"
+CELL_NOT_PUBLISHED = "not_published"   # graded, not released yet
+CELL_TURNED_IN = "turned_in"           # submitted, not graded yet
+CELL_MISSING = "missing"               # past due, nothing submitted
+CELL_NOT_TURNED_IN = "not_turned_in"   # not due yet, nothing submitted
+
+
+@router.get("/courses/{course_id}/sections/{section_id}/gradebook")
+async def get_section_gradebook(
+    course_id: uuid.UUID,
+    section_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """One section's gradebook: every enrolled student × every homework
+    published to the section, newest homework first.
+
+    Same rules as the roster, so the two never disagree: averages are
+    the mean of *published* scores over the section's homework, and
+    missing work (past due, nothing submitted) is counted separately,
+    never as a zero. Each cell also carries what the teacher needs to
+    audit it — when it was published, whether it was late, the AI's
+    original score, and whether she has edited it since publishing.
+    Read-only; no model calls.
+    """
+    await get_teacher_course(db, course_id, current_user.user_id)
+    section = (await db.execute(
+        select(Section.id, Section.name)
+        .where(Section.id == section_id, Section.course_id == course_id)
+    )).one_or_none()
+    if section is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Section not found")
+
+    assigned_by_section, past_due_by_section = await _published_and_past_due(db, course_id)
+    assigned = assigned_by_section.get(section_id, set())
+    past_due = past_due_by_section.get(section_id, set())
+
+    assignments = (await db.execute(
+        select(Assignment.id, Assignment.title, Assignment.due_at)
+        .where(Assignment.id.in_(assigned))
+        .order_by(Assignment.due_at.desc().nulls_last(), Assignment.title)
+    )).all() if assigned else []
+
+    students = (await db.execute(
+        select(User.id, User.name)
+        .join(SectionEnrollment, SectionEnrollment.student_id == User.id)
+        .where(SectionEnrollment.section_id == section_id, User.is_preview.is_(False))
+        .order_by(User.name)
+    )).all()
+
+    work: dict[tuple[uuid.UUID, uuid.UUID], tuple[Submission, SubmissionGrade | None]] = {}
+    if students and assigned:
+        rows = (await db.execute(
+            select(Submission, SubmissionGrade)
+            .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+            .where(
+                Submission.student_id.in_([st.id for st in students]),
+                Submission.assignment_id.in_(assigned),
+            )
+        )).all()
+        for sub, grade in rows:
+            work[(sub.student_id, sub.assignment_id)] = (sub, grade)
+
+    def cell(student_id: uuid.UUID, assignment_id: uuid.UUID) -> dict[str, Any]:
+        found = work.get((student_id, assignment_id))
+        if found is None:
+            return {"state": CELL_MISSING if assignment_id in past_due else CELL_NOT_TURNED_IN}
+        sub, grade = found
+        base: dict[str, Any] = {"submission_id": str(sub.id), "is_late": sub.is_late}
+        if (
+            grade is not None
+            and grade.grade_published_at is not None
+            and grade.published_final_score is not None
+        ):
+            return {
+                **base,
+                "state": CELL_PUBLISHED,
+                "score": grade.published_final_score,
+                "published_at": grade.grade_published_at.isoformat(),
+                "ai_score": grade.ai_score,
+                "edited_since_publish": _is_grade_dirty(grade),
+            }
+        graded = grade is not None and grade.final_score is not None
+        return {**base, "state": CELL_NOT_PUBLISHED if graded else CELL_TURNED_IN}
+
+    column_scores: dict[uuid.UUID, list[float]] = {a.id: [] for a in assignments}
+    students_out = []
+    for st in students:
+        cells = {str(a.id): cell(st.id, a.id) for a in assignments}
+        published = []
+        for a in assignments:
+            c = cells[str(a.id)]
+            if c["state"] == CELL_PUBLISHED:
+                published.append(c["score"])
+                column_scores[a.id].append(c["score"])
+        students_out.append({
+            "student_id": str(st.id),
+            "name": st.name,
+            "avg_percent": _avg(published),
+            "counted_count": len(published),
+            "assigned_count": len(assignments),
+            "missing_count": sum(1 for c in cells.values() if c["state"] == CELL_MISSING),
+            "cells": cells,
+        })
+
+    return {
+        "section": {"id": str(section.id), "name": section.name},
+        "assignments": [
+            {
+                "id": str(a.id),
+                "title": a.title,
+                "due_at": a.due_at.isoformat() if a.due_at else None,
+                "avg_percent": _avg(column_scores[a.id]),
+                "counted_count": len(column_scores[a.id]),
+            }
+            for a in assignments
+        ],
+        "students": students_out,
+    }
 
 
 @router.get("/courses/{course_id}/sections/{section_id}/students/{student_id}/grades")
@@ -458,8 +583,14 @@ async def export_course_grades_csv(
     )).all()
 
     assigned_by_section, _ = await _published_and_past_due(db, course_id)
-    all_assigned_aids: set[uuid.UUID] = set().union(*assigned_by_section.values()) \
-        if assigned_by_section else set()
+    # One section's export carries that section's homework only — the
+    # columns its gradebook shows. The whole-course export spans every
+    # section's homework.
+    if section_id is not None:
+        all_assigned_aids = assigned_by_section.get(section_id, set())
+    else:
+        all_assigned_aids = set().union(*assigned_by_section.values()) \
+            if assigned_by_section else set()
 
     # Pull assignment metadata for column headers, ordered by due_at
     # (oldest first). due_at NULLs land last so dateless HWs trail

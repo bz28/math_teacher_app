@@ -3198,6 +3198,35 @@ export interface paths {
         patch: operations["update_section_v1_teacher_courses__course_id__sections__section_id__patch"];
         trace?: never;
     };
+    "/v1/teacher/courses/{course_id}/sections/{section_id}/gradebook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Section Gradebook
+         * @description One section's gradebook: every enrolled student × every homework
+         *     published to the section, newest homework first.
+         *
+         *     Same rules as the roster, so the two never disagree: averages are
+         *     the mean of *published* scores over the section's homework, and
+         *     missing work (past due, nothing submitted) is counted separately,
+         *     never as a zero. Each cell also carries what the teacher needs to
+         *     audit it — when it was published, whether it was late, the AI's
+         *     original score, and whether she has edited it since publishing.
+         *     Read-only; no model calls.
+         */
+        get: operations["get_section_gradebook_v1_teacher_courses__course_id__sections__section_id__gradebook_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/courses/{course_id}/sections/{section_id}/invites": {
         parameters: {
             query?: never;
@@ -12093,6 +12122,40 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_section_gradebook_v1_teacher_courses__course_id__sections__section_id__gradebook_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
                     };
                 };
             };
