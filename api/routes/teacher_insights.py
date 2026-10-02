@@ -56,7 +56,9 @@ _MISSING_MIN = 2             # …and list anyone who skipped 2+ of them
 _MISSING_MOST_WINDOW = 2     # pool problems across the last 2 counted HWs
 _MISSING_MOST_MIN_PROBLEMS = 6  # never judge on a handful of problems
 _MISSING_MOST_RATE = 0.5     # zero credit on at least half of them
-_DROP_POINTS = 20.0          # average fell this much between the last two
+_DROP_POINTS = 20.0          # average fell this much between the last two…
+_DROP_BELOW = 70.0           # …and landed below this. On a 5-problem HW one
+                             # miss is a 20-point swing; 100 → 80 isn't news.
 _WATCH_LIMIT = 5
 
 # A chat-probed problem the teacher still needs to look at: the agent
@@ -197,7 +199,10 @@ def _watch_reason(
     if len(counted_newest_first) >= 2:
         latest = _avg_percent(counted_newest_first[0])
         previous = _avg_percent(counted_newest_first[1])
-        if latest is not None and previous is not None and previous - latest >= _DROP_POINTS:
+        if (
+            latest is not None and previous is not None
+            and previous - latest >= _DROP_POINTS and latest < _DROP_BELOW
+        ):
             return {"reason": "sharp_drop", "previous": round(previous, 1), "latest": round(latest, 1)}
     return None
 

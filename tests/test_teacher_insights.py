@@ -99,6 +99,10 @@ def test_sharp_drop_compares_the_last_two_counted() -> None:
     }
     small = [[_e("partial", 55)], [_e("full", 70)]]  # 15 points: not listed
     assert _watch_reason(missed_recent=0, window=0, counted_newest_first=small) is None
+    # One miss on a short homework (100 → 80) is a 20-point swing but
+    # still a strong score: not listed.
+    one_miss = [[_e("full", 100)] * 4 + [_e("zero")], [_e("full", 100)] * 5]
+    assert _watch_reason(missed_recent=0, window=0, counted_newest_first=one_miss) is None
 
 
 # ── Integration ────────────────────────────────────────────────────
