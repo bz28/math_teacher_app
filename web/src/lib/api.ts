@@ -1185,6 +1185,53 @@ export interface GradesRosterResponse {
   students: GradesRosterRow[];
 }
 
+/** One gradebook cell. Only `published` carries a score — the Grades
+ *  tab is the final record, so a draft number never appears. */
+export type GradebookCell =
+  | {
+      state: "published";
+      submission_id: string;
+      score: number;
+      published_at: string;
+      is_late: boolean;
+      /** The AI's original suggestion; null when graded by hand. */
+      ai_score: number | null;
+      /** Edited since publishing; students still see `score`. */
+      edited_since_publish: boolean;
+    }
+  | { state: "not_published"; submission_id: string; is_late: boolean }
+  | { state: "turned_in"; submission_id: string; is_late: boolean }
+  | { state: "missing" }
+  | { state: "not_turned_in" };
+
+export interface GradebookAssignment {
+  id: string;
+  title: string;
+  due_at: string | null;
+  /** Mean of this column's published scores. */
+  avg_percent: number | null;
+  counted_count: number;
+}
+
+export interface GradebookStudent {
+  student_id: string;
+  name: string;
+  /** Mean of published scores; missing work is not counted. */
+  avg_percent: number | null;
+  counted_count: number;
+  assigned_count: number;
+  missing_count: number;
+  /** Keyed by assignment id; every column has a cell. */
+  cells: Record<string, GradebookCell>;
+}
+
+/** One section's gradebook — newest homework first. */
+export interface GradebookResponse {
+  section: { id: string; name: string };
+  assignments: GradebookAssignment[];
+  students: GradebookStudent[];
+}
+
 /** One HW row on the student detail page. Covers both graded
  *  (final_score set) and still-being-graded (final_score null) HWs —
  *  the detail page shows every published HW assigned to the section
@@ -1597,6 +1644,12 @@ export const teacher = {
     const qs = sectionId ? `?section_id=${sectionId}` : "";
     return apiFetch<GradesRosterResponse>(
       `/teacher/courses/${courseId}/grades${qs}`,
+    );
+  },
+  /** One section's gradebook grid: every student × every homework. */
+  gradebook(courseId: string, sectionId: string) {
+    return apiFetch<GradebookResponse>(
+      `/teacher/courses/${courseId}/sections/${sectionId}/gradebook`,
     );
   },
   /** Trigger a CSV download of the gradebook. Pulls the bytes via
