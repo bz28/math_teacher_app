@@ -16,6 +16,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from httpx import AsyncClient
+from sqlalchemy import select
 
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
@@ -27,7 +28,7 @@ from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
 from api.models.user import User
-from api.routes.teacher_insights import _watch_reason, counted_breakdown
+from api.routes.teacher_insights import _coverage_bucket, _watch_reason, counted_breakdown
 from tests.conftest import auth_headers as _auth
 
 NOW = datetime.now(UTC)
@@ -64,8 +65,33 @@ def test_unapproved_unpublished_draft_never_counts() -> None:
 
 def test_empty_or_malformed_breakdown_counts_as_nothing() -> None:
     assert counted_breakdown(_grade(reviewed_at=NOW, breakdown=[])) is None
+    assert counted_breakdown(_grade(reviewed_at=NOW, breakdown=[{"score_status": "bogus"}])) is None
     g = _grade(reviewed_at=NOW, breakdown=[_e("full", 100), {"score_status": "bogus"}, "junk"])
     assert counted_breakdown(g) == [_e("full", 100)]
+
+
+# ── _coverage_bucket ──
+
+
+def _row(**kw: Any) -> Any:
+    base = {"extraction_flagged_at": None, "ai_grading_status": None}
+    return _grade(**{**base, **kw})
+
+
+def test_coverage_buckets_are_exclusive_and_honest() -> None:
+    draft = _row(breakdown=[_e("full", 100)])
+    assert _coverage_bucket(draft, counted_breakdown(draft)) == "to_approve"
+    approved = _row(reviewed_at=NOW, breakdown=[_e("full", 100)])
+    assert _coverage_bucket(approved, counted_breakdown(approved)) == "counted"
+    unreadable = _row(ai_grading_status="skipped_unreadable")
+    assert _coverage_bucket(unreadable, None) == "to_hand_grade"
+    flagged = _row(extraction_flagged_at=NOW)
+    assert _coverage_bucket(flagged, None) == "to_hand_grade"
+    # A grade the teacher retracted after publishing: nothing is grading it.
+    retracted = _row(grade_published_at=NOW, breakdown=[], published_breakdown=[])
+    assert _coverage_bucket(retracted, counted_breakdown(retracted)) == "to_hand_grade"
+    # No grade row yet (outer join → all None): still with the grader.
+    assert _coverage_bucket(_row(), None) == "grading"
 
 
 # ── _watch_reason ──────────────────────────────────────────────────
@@ -220,7 +246,7 @@ async def test_coverage_counts_only_approved_or_published_in_this_section(client
     hw2 = body["homeworks"][0]
     assert hw2 == {
         **hw2,
-        "enrolled": 4,        # preview shadow excluded
+        "students": 4,        # preview shadow excluded
         "counted": 2,         # Ana (approved) + Ben (published snapshot)
         "to_approve": 1,      # Cal's AI draft
         "to_hand_grade": 1,   # Dee's unreadable work
@@ -251,7 +277,7 @@ async def test_section_scoping(client: AsyncClient) -> None:
     w = await _world()
     body = (await client.get(_url(w, "p3"), headers=_auth(w["token"]))).json()
     hw2 = body["homeworks"][0]
-    assert (hw2["enrolled"], hw2["counted"]) == (1, 1)
+    assert (hw2["students"], hw2["counted"]) == (1, 1)
     assert all(p["zero"] == 1 and p["full"] == 0 for p in body["problems"])
 
 
@@ -285,3 +311,19 @@ async def test_explicit_homework_and_404s(client: AsyncClient) -> None:
     assert (await client.get(_url(w), headers=_auth(other))).status_code == 404
     bad = f"/v1/teacher/courses/{w['course']}/sections/{uuid.uuid4()}/insights"
     assert (await client.get(bad, headers=h)).status_code == 404
+
+
+async def test_a_student_who_left_still_adds_up(client: AsyncClient) -> None:
+    w = await _world()
+    async with get_session_factory()() as s:
+        enrollment = (await s.execute(
+            select(SectionEnrollment).where(SectionEnrollment.student_id == w["ana"])
+        )).scalar_one()
+        await s.delete(enrollment)
+        await s.commit()
+    body = (await client.get(_url(w), headers=_auth(w["token"]))).json()
+    hw2 = body["homeworks"][0]
+    # Ana left but her approved grade still counts, so she stays in the total.
+    assert (hw2["students"], hw2["counted"]) == (4, 2)
+    names = {r["name"] for p in body["problems"] for b in p["students"].values() for r in b}
+    assert "Former student" in names

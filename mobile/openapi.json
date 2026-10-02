@@ -2002,10 +2002,6 @@
             ],
             "title": "Due At"
           },
-          "enrolled": {
-            "title": "Enrolled",
-            "type": "integer"
-          },
           "grading": {
             "title": "Grading",
             "type": "integer"
@@ -2017,6 +2013,10 @@
           },
           "not_submitted": {
             "title": "Not Submitted",
+            "type": "integer"
+          },
+          "students": {
+            "title": "Students",
             "type": "integer"
           },
           "title": {
@@ -2036,7 +2036,7 @@
           "id",
           "title",
           "due_at",
-          "enrolled",
+          "students",
           "counted",
           "to_approve",
           "to_hand_grade",

@@ -79,7 +79,9 @@ class InsightsHomework(BaseModel):
     id: uuid.UUID
     title: str
     due_at: datetime | None
-    enrolled: int
+    # Enrolled students plus anyone who has since left but has a
+    # submission in this section, so the buckets below always sum to it.
+    students: int
     counted: int
     to_approve: int
     to_hand_grade: int
@@ -136,7 +138,7 @@ class SectionInsightsResponse(BaseModel):
 # ── Counting rule ──────────────────────────────────────────────────
 
 
-def counted_breakdown(grade: SubmissionGrade | None) -> list[dict[str, Any]] | None:
+def counted_breakdown(grade: Any) -> list[dict[str, Any]] | None:
     """The per-problem grades that count toward insights, or None.
 
     - Approved (`reviewed_at` set; hand grades self-approve) → the live
@@ -147,8 +149,10 @@ def counted_breakdown(grade: SubmissionGrade | None) -> list[dict[str, Any]] | N
       AI draft in `breakdown`.
     - Otherwise → not counted. An unapproved AI draft never counts.
 
-    An empty list is the "un-graded" signal (a retracted grade), so it
-    counts as nothing.
+    `grade` is anything carrying the SubmissionGrade columns (the model,
+    or a column row from the insights query). An empty list is the
+    "un-graded" signal (a retracted grade), so it counts as nothing —
+    as does a breakdown with no well-formed entries.
     """
     if grade is None:
         return None
@@ -160,15 +164,27 @@ def counted_breakdown(grade: SubmissionGrade | None) -> list[dict[str, Any]] | N
         return None
     if not isinstance(rows, list) or not rows:
         return None
-    return [e for e in rows if isinstance(e, dict) and e.get("score_status") in _SCORE_STATUSES]
+    valid = [e for e in rows if isinstance(e, dict) and e.get("score_status") in _SCORE_STATUSES]
+    return valid or None
 
 
-def _needs_hand_grading(sub: Submission, grade: SubmissionGrade | None) -> bool:
-    """No AI grade is coming: the work was unreadable or the student said
-    the reader got it wrong. Only a teacher's hand grade fills it in."""
-    return sub.extraction_flagged_at is not None or (
-        grade is not None and grade.ai_grading_status == "skipped_unreadable"
-    )
+def _coverage_bucket(r: Any, counted: list[dict[str, Any]] | None) -> str:
+    """Where one submission sits on the coverage line. Buckets are
+    exclusive so they always add up."""
+    if counted is not None:
+        return "counted"
+    if isinstance(r.breakdown, list) and r.breakdown:
+        return "to_approve"  # an AI draft the teacher hasn't approved
+    if (
+        r.extraction_flagged_at is not None
+        or r.ai_grading_status == "skipped_unreadable"
+        or r.reviewed_at is not None
+        or r.grade_published_at is not None
+    ):
+        # No AI grade is coming (unreadable, or the student said the
+        # reader got it wrong), or the teacher retracted the grade.
+        return "to_hand_grade"
+    return "grading"
 
 
 def _avg_percent(entries: list[dict[str, Any]]) -> float | None:
@@ -274,8 +290,16 @@ async def get_section_insights(
     # Every non-preview submission in this section for those homeworks,
     # with its grade. Filtered on Submission.section_id — never the
     # assignment alone — so one period never leaks into another.
+    # Only the columns used: a submission row also carries the photos and
+    # extraction JSON, which would make this read grow all term.
     sub_rows = (await db.execute(
-        select(Submission, SubmissionGrade)
+        select(
+            Submission.id, Submission.assignment_id, Submission.student_id,
+            Submission.extraction_flagged_at,
+            SubmissionGrade.reviewed_at, SubmissionGrade.grade_published_at,
+            SubmissionGrade.breakdown, SubmissionGrade.published_breakdown,
+            SubmissionGrade.ai_grading_status,
+        )
         .join(User, User.id == Submission.student_id)
         .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
         .where(
@@ -285,30 +309,22 @@ async def get_section_insights(
         )
     )).all() if hw_ids else []
 
-    # (assignment_id, student_id) → (submission, counted breakdown | None)
-    by_hw_student: dict[tuple[uuid.UUID, uuid.UUID], tuple[Submission, list[dict[str, Any]] | None]] = {}
+    # (assignment_id, student_id) → (submission_id, counted breakdown | None)
+    by_hw_student: dict[tuple[uuid.UUID, uuid.UUID], tuple[uuid.UUID, list[dict[str, Any]] | None]] = {}
     coverage: dict[uuid.UUID, dict[str, int]] = {
         a: {"counted": 0, "to_approve": 0, "to_hand_grade": 0, "grading": 0} for a in hw_ids
     }
-    for sub, grade in sub_rows:
-        counted = counted_breakdown(grade)
-        by_hw_student[(sub.assignment_id, sub.student_id)] = (sub, counted)
-        bucket = coverage[sub.assignment_id]
-        if counted is not None:
-            bucket["counted"] += 1
-        elif grade is not None and isinstance(grade.breakdown, list) and grade.breakdown:
-            bucket["to_approve"] += 1
-        elif _needs_hand_grading(sub, grade):
-            bucket["to_hand_grade"] += 1
-        else:
-            bucket["grading"] += 1
+    for r in sub_rows:
+        counted = counted_breakdown(r)
+        by_hw_student[(r.assignment_id, r.student_id)] = (r.id, counted)
+        coverage[r.assignment_id][_coverage_bucket(r, counted)] += 1
 
     hw_out = [
         InsightsHomework(
             id=a.id,
             title=a.title,
             due_at=a.due_at,
-            enrolled=len(roster),
+            students=len(names.keys() | {sid for (a_id, sid) in by_hw_student if a_id == a.id}),
             not_submitted=sum(1 for sid in names if (a.id, sid) not in by_hw_student),
             **coverage[a.id],
         )
@@ -369,7 +385,7 @@ async def _problems_for(
     db: AsyncSession,
     hw: Assignment,
     section_id: uuid.UUID,
-    by_hw_student: dict[tuple[uuid.UUID, uuid.UUID], tuple[Submission, list[dict[str, Any]] | None]],
+    by_hw_student: dict[tuple[uuid.UUID, uuid.UUID], tuple[uuid.UUID, list[dict[str, Any]] | None]],
     names: dict[uuid.UUID, str],
 ) -> list[InsightsProblem]:
     """Per-problem buckets for one homework, most-missed first."""
@@ -383,7 +399,7 @@ async def _problems_for(
         for p in problem_list if isinstance(p, dict) and p.get("bank_item_id")
     }
     diagnosis, to_review = await _integrity_for(db, hw.id, section_id)
-    for (a_id, sid), (sub, counted) in by_hw_student.items():
+    for (a_id, sid), (submission_id, counted) in by_hw_student.items():
         if a_id != hw.id or counted is None:
             continue
         for e in counted:
@@ -395,12 +411,12 @@ async def _problems_for(
                 student_id=sid,
                 # A student who left the section keeps their submission.
                 name=names.get(sid) or "Former student",
-                submission_id=sub.id,
-                diagnosis_kind=diagnosis.get((sub.id, pid)) if st != "full" else None,
+                submission_id=submission_id,
+                diagnosis_kind=diagnosis.get((submission_id, pid)) if st != "full" else None,
             ))
 
     out: list[InsightsProblem] = []
-    for p in problem_list:
+    for idx, p in enumerate(problem_list, start=1):
         key = str(p.get("bank_item_id")) if isinstance(p, dict) else None
         if key is None or key not in buckets:
             continue
@@ -409,7 +425,7 @@ async def _problems_for(
             refs.sort(key=lambda r: r.name.lower())
         out.append(InsightsProblem(
             bank_item_id=uuid.UUID(key),
-            position=p.get("position") or 0,
+            position=p.get("position") or idx,
             question=p.get("question") or "",
             full=len(b["full"]),
             partial=len(b["partial"]),

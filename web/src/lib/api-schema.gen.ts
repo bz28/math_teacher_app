@@ -5083,8 +5083,6 @@ export interface components {
             counted: number;
             /** Due At */
             due_at: string | null;
-            /** Enrolled */
-            enrolled: number;
             /** Grading */
             grading: number;
             /**
@@ -5094,6 +5092,8 @@ export interface components {
             id: string;
             /** Not Submitted */
             not_submitted: number;
+            /** Students */
+            students: number;
             /** Title */
             title: string;
             /** To Approve */
