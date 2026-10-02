@@ -1,7 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type FocusEvent, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FocusEvent,
+  type MouseEvent,
+  type RefObject,
+} from "react";
 import type {
   GradebookAssignment,
   GradebookCell,
@@ -13,6 +22,15 @@ import {
   STRONG_THRESHOLD,
   STRUGGLING_THRESHOLD,
 } from "@/components/school/shared/percent-badge";
+import {
+  averageBreakdown,
+  changedFromAi,
+  sectionAverage,
+  shown,
+  sortRows,
+  type SortDir,
+  type SortKey,
+} from "@/lib/gradebook";
 
 /**
  * The section gradebook: students down the side, homework across the
@@ -28,9 +46,6 @@ import {
  * everything else is a word. Missing work is shown, never averaged
  * as a zero — the same rule as the roster and the CSV export.
  */
-
-type SortKey = "name" | "avg" | string; // string = assignment id
-type SortDir = "asc" | "desc";
 
 // Pinned column widths — narrower on phones so homework columns still
 // show beside them. The Avg column's sticky offset IS the Student
@@ -52,13 +67,10 @@ export function GradebookGrid({
     key: "name",
     dir: "asc",
   });
-  const [card, setCard] = useState<{ rect: DOMRect; lines: string[] } | null>(null);
-
   const sorted = useMemo(() => sortRows(rows, sort), [rows, sort]);
-  const sectionAvg = useMemo(() => {
-    const avgs = rows.flatMap((r) => (r.avg_percent === null ? [] : [r.avg_percent]));
-    return avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : null;
-  }, [rows]);
+  // The whole section, never the filtered rows — the footer is labelled
+  // "Section average" and must match the section tab.
+  const sectionAvg = useMemo(() => sectionAverage(data.students), [data.students]);
 
   const toggleSort = (key: SortKey) =>
     setSort((s) =>
@@ -66,16 +78,15 @@ export function GradebookGrid({
     );
 
   // One shared hover card, positioned against the viewport so the
-  // grid's horizontal scroll container can't clip it.
-  const show = (lines: string[]) => (e: MouseEvent | FocusEvent) =>
-    setCard({ rect: (e.currentTarget as HTMLElement).getBoundingClientRect(), lines });
-  const hide = () => setCard(null);
-  const hoverProps = (lines: string[]) => ({
-    onMouseEnter: show(lines),
-    onMouseLeave: hide,
-    onFocus: show(lines),
-    onBlur: hide,
-  });
+  // grid's scroll container can't clip it. It owns its own state, so a
+  // hover re-renders the card, not every cell in the grid.
+  const cardApi = useRef<HoverCardApi | null>(null);
+  const hide = useCallback(() => cardApi.current?.hide(), []);
+  const hoverProps: HoverProps = useCallback((lines: string[]) => {
+    const show = (e: MouseEvent | FocusEvent) =>
+      cardApi.current?.show((e.currentTarget as HTMLElement).getBoundingClientRect(), lines);
+    return { onMouseEnter: show, onMouseLeave: hide, onFocus: show, onBlur: hide };
+  }, [hide]);
 
   const reviewHref = (assignmentId: string, studentId: string) =>
     `/school/teacher/courses/${courseId}/homework/${assignmentId}/sections/${data.section.id}/review?student=${studentId}`;
@@ -91,21 +102,23 @@ export function GradebookGrid({
 
   return (
     <div className="overflow-hidden rounded-[--radius-md] border border-border-light bg-surface">
-      <div className="overflow-x-auto" onScroll={hide}>
+      {/* Scrolls both ways inside its own frame so the header row and
+          the name/average columns stay pinned on a long class. */}
+      <div className="max-h-[75vh] overflow-auto" onScroll={hide}>
         <table className="w-full border-separate border-spacing-0 text-sm">
           <thead>
             <tr className="text-[11px] font-semibold text-[color:var(--color-text-secondary)]">
               <th
                 scope="col"
                 aria-sort={ariaSort(sort, "name")}
-                className={`sticky left-0 z-20 border-b border-r border-border-light bg-[color:var(--color-surface-alt-2)] px-3 py-2 text-left align-bottom uppercase tracking-[0.18em] sm:px-4 ${STUDENT_COL}`}
+                className={`sticky left-0 top-0 z-30 border-b border-r border-border-light bg-[color:var(--color-surface-alt-2)] px-3 py-2 text-left align-bottom uppercase tracking-[0.18em] sm:px-4 ${STUDENT_COL}`}
               >
                 <SortButton label="Student" sort={sort} sortKey="name" onSort={toggleSort} />
               </th>
               <th
                 scope="col"
                 aria-sort={ariaSort(sort, "avg")}
-                className={`sticky z-20 border-b border-r border-border-light bg-[color:var(--color-surface-alt-2)] px-2 py-2 text-center align-bottom uppercase tracking-[0.18em] ${AVG_COL}`}
+                className={`sticky top-0 z-30 border-b border-r border-border-light bg-[color:var(--color-surface-alt-2)] px-2 py-2 text-center align-bottom uppercase tracking-[0.18em] ${AVG_COL}`}
               >
                 <SortButton label="Avg" sort={sort} sortKey="avg" onSort={toggleSort} />
               </th>
@@ -114,7 +127,7 @@ export function GradebookGrid({
                   key={a.id}
                   scope="col"
                   aria-sort={ariaSort(sort, a.id)}
-                  className="min-w-[112px] max-w-[148px] border-b border-border-light bg-[color:var(--color-surface-alt-2)] px-2 py-2 text-center align-bottom normal-case tracking-normal"
+                  className="sticky top-0 z-20 min-w-[112px] max-w-[148px] border-b border-border-light bg-[color:var(--color-surface-alt-2)] px-2 py-2 text-center align-bottom normal-case tracking-normal"
                 >
                   <button
                     type="button"
@@ -199,7 +212,7 @@ export function GradebookGrid({
         </table>
       </div>
       <Legend />
-      {card && <HoverCard rect={card.rect} lines={card.lines} />}
+      <HoverCard apiRef={cardApi} />
     </div>
   );
 }
@@ -212,6 +225,11 @@ type HoverProps = (lines: string[]) => {
   onFocus: (e: FocusEvent) => void;
   onBlur: () => void;
 };
+
+interface HoverCardApi {
+  show: (rect: DOMRect, lines: string[]) => void;
+  hide: () => void;
+}
 
 const STATE_WORDS: Record<Exclude<GradebookCell["state"], "published">, string> = {
   not_published: "Not published",
@@ -263,7 +281,7 @@ function ScoreCell({
     );
   }
 
-  const changedAi = cell.ai_score !== null && Math.abs(cell.ai_score - cell.score) >= 0.5;
+  const changedAi = changedFromAi(cell);
   return (
     <Link
       href={href}
@@ -272,9 +290,9 @@ function ScoreCell({
       {...hoverProps(lines)}
     >
       <span
-        className={`min-w-[44px] rounded-[--radius-sm] px-1.5 py-0.5 text-[13px] font-bold tabular-nums ${chipTone(cell.score)}`}
+        className={`min-w-[44px] rounded-[--radius-sm] px-1.5 py-0.5 text-[13px] font-bold tabular-nums ${chipTone(shown(cell.score))}`}
       >
-        {Math.round(cell.score)}%
+        {shown(cell.score)}%
       </span>
       {/* Hung off the chip's corner so every score in a column stays
           centred on the same axis. */}
@@ -298,20 +316,22 @@ function AverageCell({
   hoverProps: HoverProps;
 }) {
   const lines = averageLines(student, assignments);
+  // Focusable so keyboard users get the breakdown too, but not a
+  // button — there is nothing to press.
   return (
-    <button
-      type="button"
+    <span
+      tabIndex={0}
       aria-label={lines.join(". ")}
       className="inline-flex flex-col items-center rounded-[--radius-sm] px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       {...hoverProps(lines)}
     >
-      <span className={`text-[13px] font-bold tabular-nums ${student.avg_percent === null ? "text-text-muted" : percentTone(student.avg_percent)}`}>
+      <span className={`text-[13px] font-bold tabular-nums ${student.avg_percent === null ? "text-text-muted" : percentTone(shown(student.avg_percent))}`}>
         {pct(student.avg_percent)}
       </span>
       <span className="text-[10px] font-semibold leading-none text-text-muted tabular-nums">
         {student.counted_count} of {student.assigned_count}
       </span>
-    </button>
+    </span>
   );
 }
 
@@ -323,7 +343,30 @@ function LateMark() {
   );
 }
 
-function HoverCard({ rect, lines }: { rect: DOMRect; lines: string[] }) {
+function HoverCard({ apiRef }: { apiRef: RefObject<HoverCardApi | null> }) {
+  const [card, setCard] = useState<{ rect: DOMRect; lines: string[] } | null>(null);
+  useEffect(() => {
+    apiRef.current = {
+      show: (rect, lines) => setCard({ rect, lines }),
+      hide: () => setCard(null),
+    };
+    return () => {
+      apiRef.current = null;
+    };
+  }, [apiRef]);
+  // A fixed card tracks the cell only until the page moves.
+  useEffect(() => {
+    if (!card) return;
+    const hide = () => setCard(null);
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("resize", hide);
+    return () => {
+      window.removeEventListener("scroll", hide, true);
+      window.removeEventListener("resize", hide);
+    };
+  }, [card]);
+  if (!card) return null;
+  const { rect, lines } = card;
   // Below the cell, nudged left to stay on screen; flips above when
   // there's no room underneath.
   const width = 248;
@@ -369,7 +412,7 @@ function chipTone(score: number): string {
 }
 
 function pct(v: number | null): string {
-  return v === null ? "—" : `${Math.round(v)}%`;
+  return v === null ? "—" : `${shown(v)}%`;
 }
 
 function shortDate(iso: string): string {
@@ -394,8 +437,8 @@ function cellLines(
     head,
     `Published ${shortDate(cell.published_at)} · ${cell.is_late ? "turned in late" : "turned in on time"}`,
     cell.ai_score === null
-      ? `Graded by hand: ${Math.round(cell.score)}%`
-      : `AI suggested ${Math.round(cell.ai_score)}% · you gave ${Math.round(cell.score)}%`,
+      ? `Graded by hand: ${shown(cell.score)}%`
+      : `AI suggested ${shown(cell.ai_score)}% · you gave ${shown(cell.score)}%`,
   ];
   if (cell.edited_since_publish) lines.push("Edited since publishing; students still see this score");
   lines.push("Open to see the work");
@@ -403,47 +446,20 @@ function cellLines(
 }
 
 function averageLines(student: GradebookStudent, assignments: GradebookAssignment[]): string[] {
-  const scores: number[] = [];
-  const left: Record<string, number> = {};
-  for (const a of assignments) {
-    const c = student.cells[a.id];
-    if (c.state === "published") scores.push(Math.round(c.score));
-    else left[c.state] = (left[c.state] ?? 0) + 1;
-  }
+  const { scores, leftOut } = averageBreakdown(student, assignments);
   if (scores.length === 0) {
-    return [`${student.name}`, "No published grades yet"];
+    return [student.name, "No published grades yet"];
   }
-  const notCounted = Object.entries(left).map(
-    ([state, n]) => `${n} ${STATE_WORDS[state as keyof typeof STATE_WORDS].toLowerCase()}`,
+  const notCounted = (Object.keys(leftOut) as (keyof typeof STATE_WORDS)[]).map(
+    (state) => `${leftOut[state]} ${STATE_WORDS[state].toLowerCase()}`,
   );
   return [
     `Average of ${scores.length} published grade${scores.length === 1 ? "" : "s"}`,
-    `${scores.join(" · ")} → ${pct(student.avg_percent)}`,
+    `${scores.map(shown).join(" · ")} → ${pct(student.avg_percent)}`,
     ...(notCounted.length ? [`Not counted: ${notCounted.join(", ")}`] : []),
   ];
 }
 
-function sortRows(rows: GradebookStudent[], sort: { key: SortKey; dir: SortDir }) {
-  const mul = sort.dir === "asc" ? 1 : -1;
-  const out = rows.slice();
-  if (sort.key === "name") {
-    return out.sort((a, b) => lastNameKey(a.name).localeCompare(lastNameKey(b.name)) * mul);
-  }
-  const value = (r: GradebookStudent): number | null => {
-    if (sort.key === "avg") return r.avg_percent;
-    const c = r.cells[sort.key];
-    return c?.state === "published" ? c.score : null;
-  };
-  // No score sinks to the bottom either way — it isn't "low", it's absent.
-  return out.sort((a, b) => {
-    const av = value(a);
-    const bv = value(b);
-    if (av === null && bv === null) return 0;
-    if (av === null) return 1;
-    if (bv === null) return -1;
-    return (av - bv) * mul;
-  });
-}
 
 function ariaSort(sort: { key: SortKey; dir: SortDir }, key: SortKey) {
   if (sort.key !== key) return "none" as const;
@@ -474,9 +490,3 @@ function SortButton({
   );
 }
 
-/** Last-name-first sort key, matching the roster's. */
-function lastNameKey(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length < 2) return name.toLowerCase();
-  return `${parts[parts.length - 1]} ${parts.slice(0, -1).join(" ")}`.toLowerCase();
-}

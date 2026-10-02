@@ -10,6 +10,7 @@ import {
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { PageErrorState } from "@/components/ui/page-error-state";
 import { GradebookGrid } from "./gradebook-grid";
+import { shown } from "@/lib/gradebook";
 import {
   percentTone,
   STRONG_THRESHOLD,
@@ -54,8 +55,10 @@ export function GradesTab({ courseId }: { courseId: string }) {
   const [gridError, setGridError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
-  // CSV export state. The download is the active section's grid.
-  const [exporting, setExporting] = useState(false);
+  // CSV export state. Downloads the active section's grid, or — for a
+  // teacher importing every period into her school's system at once —
+  // the whole course.
+  const [exporting, setExporting] = useState<"section" | "course" | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   // Bump to re-fire the fetches (the retry affordance on the error
   // state). The retry handler clears data/error so the skeleton shows
@@ -127,10 +130,7 @@ export function GradesTab({ courseId }: { courseId: string }) {
   }, [data]);
 
   const needsAttentionCount = useMemo(
-    () =>
-      students.filter(
-        (r) => r.avg_percent !== null && r.avg_percent < STRUGGLING_THRESHOLD,
-      ).length,
+    () => students.filter(isStruggling).length,
     [students],
   );
   const missingWorkCount = useMemo(
@@ -141,9 +141,7 @@ export function GradesTab({ courseId }: { courseId: string }) {
   const filtered = useMemo(() => {
     let out = students;
     if (filterMode === "needs_attention") {
-      out = out.filter(
-        (r) => r.avg_percent !== null && r.avg_percent < STRUGGLING_THRESHOLD,
-      );
+      out = out.filter(isStruggling);
     } else if (filterMode === "missing") {
       out = out.filter((r) => r.missing_count > 0);
     }
@@ -178,12 +176,32 @@ export function GradesTab({ courseId }: { courseId: string }) {
 
   const showSectionTabs = data.sections.length > 1;
 
+  async function runExport(scope: "section" | "course") {
+    setExportError(null);
+    setExporting(scope);
+    try {
+      await teacher.exportGradesCSV(courseId, scope === "section" ? (sectionId ?? undefined) : undefined);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExporting(null);
+    }
+  }
+
   return (
     <div className="mt-2 space-y-4">
       {/* Section summary — vibe check before the grid. Distribution
           bar uses the same thresholds as PercentBadge so what counts
           as struggling is one knob, not two. */}
-      <ClassSummary summary={summary} />
+      {current ? (
+        <ClassSummary summary={summary} />
+      ) : (
+        // A section is loading — a placeholder, not "0 students".
+        <div className="space-y-2.5" aria-busy="true">
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-1.5 w-full rounded-full" />
+        </div>
+      )}
 
       {/* One gradebook per section — a class is a period in K-12, and
           mixing periods in one grid isn't a gradebook anyone keeps.
@@ -221,25 +239,24 @@ export function GradesTab({ courseId }: { courseId: string }) {
             className="w-full rounded-[--radius-md] border border-border-light bg-surface py-2 pl-9 pr-3 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
         </div>
-        <button
-          type="button"
-          onClick={async () => {
-            setExportError(null);
-            setExporting(true);
-            try {
-              await teacher.exportGradesCSV(courseId, sectionId);
-            } catch (e) {
-              setExportError(e instanceof Error ? e.message : "Export failed");
-            } finally {
-              setExporting(false);
-            }
-          }}
-          disabled={exporting}
+        <ExportButton
+          label="Export CSV ↓"
+          busyLabel="Exporting…"
           title="Download this section's grades as CSV (imports into Canvas, Schoology, PowerSchool)"
-          className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-semibold text-text-secondary transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {exporting ? "Exporting…" : "Export CSV ↓"}
-        </button>
+          busy={exporting === "section"}
+          disabled={exporting !== null}
+          onClick={() => runExport("section")}
+        />
+        {showSectionTabs && (
+          <ExportButton
+            label="All sections ↓"
+            busyLabel="Exporting…"
+            title="Download every section's grades in one CSV"
+            busy={exporting === "course"}
+            disabled={exporting !== null}
+            onClick={() => runExport("course")}
+          />
+        )}
       </div>
       {exportError && (
         <p className="text-xs text-[color:var(--color-error)]">{exportError}</p>
@@ -256,19 +273,24 @@ export function GradesTab({ courseId }: { courseId: string }) {
           count={needsAttentionCount}
           active={filterMode === "needs_attention"}
           onClick={() => setFilterMode("needs_attention")}
-          disabled={needsAttentionCount === 0}
+          disabled={!current || needsAttentionCount === 0}
         />
         <FilterChip
           label="Missing work"
           count={missingWorkCount}
           active={filterMode === "missing"}
           onClick={() => setFilterMode("missing")}
-          disabled={missingWorkCount === 0}
+          disabled={!current || missingWorkCount === 0}
         />
       </div>
 
       {current === null ? (
         <GridSkeleton />
+      ) : current.students.length === 0 ? (
+        <EmptyState
+          title={`No students in ${current.section.name} yet`}
+          description="Once students join this section, their grades will show up here."
+        />
       ) : filtered.length === 0 ? (
         <EmptyState title="No students match those filters" />
       ) : (
@@ -315,6 +337,39 @@ function GradesSkeleton() {
         ))}
       </div>
     </div>
+  );
+}
+
+/** Below the struggling line, judged on the number shown (see `shown`). */
+function isStruggling(r: { avg_percent: number | null }): boolean {
+  return r.avg_percent !== null && shown(r.avg_percent) < STRUGGLING_THRESHOLD;
+}
+
+function ExportButton({
+  label,
+  busyLabel,
+  title,
+  busy,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  busyLabel: string;
+  title: string;
+  busy: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-semibold text-text-secondary transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {busy ? busyLabel : label}
+    </button>
   );
 }
 
@@ -546,8 +601,11 @@ function computeSummary(rows: { avg_percent: number | null }[]): SummaryStats {
   for (const r of rows) {
     if (r.avg_percent === null) continue;
     withAvg += 1;
-    if (r.avg_percent >= STRONG_THRESHOLD) strong += 1;
-    else if (r.avg_percent >= STRUGGLING_THRESHOLD) ok += 1;
+    // Bucket the number the teacher sees, so a student shown at 70%
+    // never lands in the under-70 bucket.
+    const pct = shown(r.avg_percent);
+    if (pct >= STRONG_THRESHOLD) strong += 1;
+    else if (pct >= STRUGGLING_THRESHOLD) ok += 1;
     else struggling += 1;
   }
   return {
