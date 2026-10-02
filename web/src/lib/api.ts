@@ -1256,27 +1256,6 @@ export interface StudentGradeMissingHw {
   due_at: string | null;
 }
 
-/** One problem's score distribution across all graded submissions on an
- *  assignment (every section). `full`/`partial`/`zero` are counts of how
- *  many graded submissions earned that score_status on this problem.
- *  `avg_percent` is the mean per-problem percent (0–100). */
-export interface ItemAnalysisItem {
-  problem_index: number;
-  problem_text: string;
-  full: number;
-  partial: number;
-  zero: number;
-  avg_percent: number;
-}
-
-/** Assignment-wide item analysis. `items` is sorted worst-first
- *  (ascending avg_percent). When `graded_count` is 0, items come back
- *  with all-zero counts. */
-export interface ItemAnalysisResponse {
-  graded_count: number;
-  items: ItemAnalysisItem[];
-}
-
 /** Full published-grade record for one student in one section. */
 export interface StudentGradesResponse {
   student: {
@@ -1327,59 +1306,14 @@ export interface StudentStruggleItem {
   struggle_count: number;
 }
 
-/**
- * Class-level struggle aggregate for one section — a re-teach priority
- * list. Anonymous: names the concept to revisit, not the student.
- * Mirrors GET /teacher/.../practice-insights.
- */
-export interface PracticeInsightsResponse {
-  section_id: string;
-  /** Distinct students who have any practice/learn activity. */
-  students_active: number;
-  /** Per bank item, sorted most-struggled first. */
-  items: PracticeInsightItem[];
-}
-
-export interface PracticeInsightItem {
-  bank_item_id: string;
-  concept: string;
-  students_practiced: number;
-  students_struggled: number;
-  struggle_events: number;
-}
-
-export type StudentInsightStatus =
-  | "no_activity"
-  | "needs_nudge"
-  | "struggling"
-  | "thriving"
-  | "on_track";
-
-export type StudentInsightTrend = "improving" | "slipping" | "steady";
-
-/** One roster card for the Student Insights tab — coarse engagement +
- *  struggle signals only, no scores or grades. Mirrors the backend
- *  StudentInsight model in api/routes/teacher_practice_activity.py. */
-export interface StudentInsight {
-  student_id: string;
-  name: string;
-  practiced_count: number;
-  learn_walkthroughs: number;
-  last_active: string | null;
-  first_try_rate: number | null;
-  retry_count: number;
-  revealed_count: number;
-  trend: StudentInsightTrend | null;
-  status: StudentInsightStatus;
-  /** The 1-2 concepts this student wrestled with most. Empty when there
-   *  isn't enough practice signal to judge or they had no struggles. */
-  top_struggles: string[];
-}
-
-export interface SectionStudentInsightsResponse {
-  section_id: string;
-  students: StudentInsight[];
-}
+/** Student Insights tab — one section's graded-homework read. Mirrors
+ *  GET /teacher/courses/{c}/sections/{s}/insights
+ *  (api/routes/teacher_insights.py). */
+export type SectionInsightsResponse = Schemas["SectionInsightsResponse"];
+export type InsightsHomework = Schemas["InsightsHomework"];
+export type InsightsProblem = Schemas["InsightsProblem"];
+export type InsightsStudentRef = Schemas["InsightsStudentRef"];
+export type InsightsWatchStudent = Schemas["InsightsWatchStudent"];
 
 /** A teacher's "Report a problem" — the context is a snapshot of what
  *  they were looking at, so every field is nullable. */
@@ -1617,11 +1551,6 @@ export const teacher = {
   submissions(assignmentId: string) {
     return apiFetch<{ submissions: TeacherSubmissionRow[] }>(`/teacher/assignments/${assignmentId}/submissions`);
   },
-  /** Assignment-wide per-problem score distribution, worst-first.
-   *  Spans every section of the HW; null/zero-safe when nothing graded. */
-  itemAnalysis(assignmentId: string) {
-    return apiFetch<ItemAnalysisResponse>(`/teacher/assignments/${assignmentId}/item-analysis`);
-  },
   /** Inbox feed for the Submissions tab — one row per (published
    *  HW × section) pair with aggregate counts. See backend comment
    *  for the shape. */
@@ -1700,19 +1629,13 @@ export const teacher = {
       `/teacher/courses/${courseId}/sections/${sectionId}/students/${studentId}/practice-activity`,
     );
   },
-  /** Class-level struggle aggregate for one section — the re-teach
-   *  priority list drawn from ungraded practice. */
-  practiceInsights(courseId: string, sectionId: string) {
-    return apiFetch<PracticeInsightsResponse>(
-      `/teacher/courses/${courseId}/sections/${sectionId}/practice-insights`,
-    );
-  },
-  /** Per-student practice/learn rollup for every enrolled student in a
-   *  section — the Student Insights tab roster. One card per student
-   *  (including zero-activity), each with a derived status + trend. */
-  sectionStudentInsights(courseId: string, sectionId: string) {
-    return apiFetch<SectionStudentInsightsResponse>(
-      `/teacher/courses/${courseId}/sections/${sectionId}/student-insights`,
+  /** Student Insights for one section: homework coverage, the selected
+   *  homework's problems most-missed first, and students to watch.
+   *  Omit `assignmentId` to get the newest homework with counted grades. */
+  sectionInsights(courseId: string, sectionId: string, assignmentId?: string) {
+    const q = assignmentId ? `?assignment_id=${encodeURIComponent(assignmentId)}` : "";
+    return apiFetch<SectionInsightsResponse>(
+      `/teacher/courses/${courseId}/sections/${sectionId}/insights${q}`,
     );
   },
   /** Replace the per-problem breakdown (and/or teacher notes) for a
