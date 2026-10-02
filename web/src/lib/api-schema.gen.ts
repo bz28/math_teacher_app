@@ -2771,39 +2771,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/teacher/assignments/{assignment_id}/item-analysis": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Item Analysis
-         * @description Per-problem performance across a homework's graded submissions.
-         *
-         *     Aggregates every graded breakdown, joining each entry to its problem
-         *     by `problem_id` (= bank_item_id) rather than list position, so the
-         *     teacher sees which problems the class struggled with most even when
-         *     grading/hydration reordered or dropped entries. Items are sorted
-         *     worst-first (ascending avg_percent) but each carries its original
-         *     `problem_index` so the UI can restore assignment order if it wants.
-         *
-         *     Defensive throughout: an entry for a problem no longer in the
-         *     assignment, a missing `score_status`/`problem_id`, or a null percent
-         *     is skipped rather than raising — the endpoint never 500s on a
-         *     malformed grade row. An empty breakdown (`[]`, a retracted grade) is
-         *     not counted as graded.
-         */
-        get: operations["item_analysis_v1_teacher_assignments__assignment_id__item_analysis_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/teacher/assignments/{assignment_id}/publish": {
         parameters: {
             query?: never;
@@ -3315,59 +3282,6 @@ export interface paths {
         put?: never;
         /** Generate Join Code */
         post: operations["generate_join_code_v1_teacher_courses__course_id__sections__section_id__join_code_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/teacher/courses/{course_id}/sections/{section_id}/practice-insights": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Section Practice Insights
-         * @description Class-level struggle aggregate for one section: per bank item, how
-         *     many distinct students struggled (retried/revealed) vs how many
-         *     practiced it. Aggregate/anonymous — names the concept to re-teach,
-         *     not the student.
-         */
-        get: operations["get_section_practice_insights_v1_teacher_courses__course_id__sections__section_id__practice_insights_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/teacher/courses/{course_id}/sections/{section_id}/student-insights": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Section Student Insights
-         * @description Per-student practice/learn rollup for every enrolled student in a
-         *     section — the Student Insights tab. One card per student (including
-         *     students with zero activity, so the teacher sees the whole roster),
-         *     each carrying coarse engagement counts plus a derived status + trend.
-         *
-         *     Read-only INSIGHT, same contract as the other practice reads: no
-         *     scores, no raw answers, no grades — just who's thriving and who's
-         *     falling behind, and why, in terms a teacher can explain.
-         *
-         *     Two queries, no N+1: the enrollment roster, and one grouped pull of
-         *     the section's PracticeActivity rows merged with the roster in Python.
-         */
-        get: operations["get_section_student_insights_v1_teacher_courses__course_id__sections__section_id__student_insights_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5261,28 +5175,6 @@ export interface components {
              */
             email: string;
         };
-        /** ItemAnalysisItem */
-        ItemAnalysisItem: {
-            /** Avg Percent */
-            avg_percent: number;
-            /** Full */
-            full: number;
-            /** Partial */
-            partial: number;
-            /** Problem Index */
-            problem_index: number;
-            /** Problem Text */
-            problem_text: string;
-            /** Zero */
-            zero: number;
-        };
-        /** ItemAnalysisResponse */
-        ItemAnalysisResponse: {
-            /** Graded Count */
-            graded_count: number;
-            /** Items */
-            items: components["schemas"]["ItemAnalysisItem"][];
-        };
         /** JoinSectionRequest */
         JoinSectionRequest: {
             /** Join Code */
@@ -5695,13 +5587,6 @@ export interface components {
             /** Watch Total */
             watch_total: number;
         };
-        /** SectionStudentInsightsResponse */
-        SectionStudentInsightsResponse: {
-            /** Section Id */
-            section_id: string;
-            /** Students */
-            students: components["schemas"]["StudentInsight"][];
-        };
         /** SessionHistoryItem */
         SessionHistoryItem: {
             /**
@@ -5910,38 +5795,6 @@ export interface components {
             title: string;
             /** Type */
             type: string;
-        };
-        /**
-         * StudentInsight
-         * @description One roster card for the Student Insights tab. Coarse engagement +
-         *     struggle signals only — no scores, no raw answers, no grades.
-         */
-        StudentInsight: {
-            /** First Try Rate */
-            first_try_rate: number | null;
-            /** Last Active */
-            last_active: string | null;
-            /** Learn Walkthroughs */
-            learn_walkthroughs: number;
-            /** Name */
-            name: string;
-            /** Practiced Count */
-            practiced_count: number;
-            /** Retry Count */
-            retry_count: number;
-            /** Revealed Count */
-            revealed_count: number;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "thriving" | "on_track" | "needs_nudge" | "struggling" | "no_activity";
-            /** Student Id */
-            student_id: string;
-            /** Top Struggles */
-            top_struggles: string[];
-            /** Trend */
-            trend: ("improving" | "slipping" | "steady") | null;
         };
         /**
          * StudentLinkedPracticeResponse
@@ -11236,37 +11089,6 @@ export interface operations {
             };
         };
     };
-    item_analysis_v1_teacher_assignments__assignment_id__item_analysis_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                assignment_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ItemAnalysisResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     publish_assignment_v1_teacher_assignments__assignment_id__publish_post: {
         parameters: {
             query?: never;
@@ -12502,72 +12324,6 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_section_practice_insights_v1_teacher_courses__course_id__sections__section_id__practice_insights_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                course_id: string;
-                section_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_section_student_insights_v1_teacher_courses__course_id__sections__section_id__student_insights_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                course_id: string;
-                section_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SectionStudentInsightsResponse"];
                 };
             };
             /** @description Validation Error */
