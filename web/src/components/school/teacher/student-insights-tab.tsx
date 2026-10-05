@@ -90,14 +90,18 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
   }, [courseId, sectionId, homeworkId, insightsReload]);
 
   // Resets live in the handlers (not the fetch effect) so the skeleton
-  // shows from the click that triggers the reload.
+  // shows from the click that triggers the reload. Re-picking the current
+  // one is a no-op: nothing would change, so the fetch effect wouldn't
+  // re-run and the cleared data would leave the skeleton up for good.
   const pickSection = (id: string) => {
+    if (id === sectionId) return;
     setError(false);
     setData(null);
     setHomeworkId(undefined);
     setSectionId(id);
   };
   const pickHomework = (id: string) => {
+    if (id === (homeworkId ?? data?.selected_homework_id)) return;
     setError(false);
     setData(null);
     setHomeworkId(id);
