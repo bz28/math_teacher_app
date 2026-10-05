@@ -16206,6 +16206,67 @@
         ]
       }
     },
+    "/v1/teacher/courses/{course_id}/sections/{section_id}/gradebook": {
+      "get": {
+        "description": "One section's gradebook: every enrolled student \u00d7 every homework\npublished to the section, newest homework first.\n\nSame rules as the roster, so the two never disagree: averages are\nthe mean of *published* scores over the section's homework, and\nmissing work (past due, nothing submitted) is counted separately,\nnever as a zero. Each cell also carries what the teacher needs to\naudit it \u2014 when it was published, whether it was late, the AI's\noriginal score, and whether she has edited it since publishing.\nRead-only; no model calls.",
+        "operationId": "get_section_gradebook_v1_teacher_courses__course_id__sections__section_id__gradebook_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "section_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Section Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Section Gradebook V1 Teacher Courses  Course Id  Sections  Section Id  Gradebook Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Section Gradebook",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
     "/v1/teacher/courses/{course_id}/sections/{section_id}/invites": {
       "get": {
         "operationId": "list_invites_v1_teacher_courses__course_id__sections__section_id__invites_get",
