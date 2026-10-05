@@ -77,7 +77,8 @@ def test_empty_or_malformed_breakdown_counts_as_nothing() -> None:
 def _row(**kw: Any) -> Any:
     base = {"extraction_flagged_at": None, "ai_grading_status": None,
             "extraction_confirmed_at": NOW, "job_status": None, "job_scheduled_for": None,
-            "has_reading": True, "submitted_at": NOW - timedelta(days=1)}
+            "has_reading": True, "reading_confidence": "0.9",
+            "submitted_at": NOW - timedelta(days=1)}
     return _grade(**{**base, **kw})
 
 
@@ -123,6 +124,20 @@ def test_a_reading_that_never_came_is_the_teachers() -> None:
     assert bucket(_row(**unread, submitted_at=NOW - timedelta(minutes=2))) == "grading"
     # Past the grace window the read failed; the student has nothing to confirm.
     assert bucket(_row(**unread, submitted_at=NOW - timedelta(hours=2))) == "to_grade"
+
+
+def test_a_low_confidence_reading_is_unreadable_like_ai_grade_block() -> None:
+    def bucket(r: Any) -> str:
+        return _coverage_bucket(r, None, ai_grading_enabled=True, now=NOW)
+
+    for raw in ("0.1", None, "junk"):  # low, missing and malformed all read as 0
+        assert bucket(_row(extraction_confirmed_at=None, reading_confidence=raw)) == "to_grade"
+    assert bucket(_row(extraction_confirmed_at=None, reading_confidence="0.9")) == "awaiting_student"
+
+
+def test_a_running_job_is_grading_even_with_ai_switched_off() -> None:
+    r = _row(job_status="running")
+    assert _coverage_bucket(r, None, ai_grading_enabled=False, now=NOW) == "grading"
 
 
 # ── _watch_reason ──────────────────────────────────────────────────

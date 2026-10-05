@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
 from api.core.grading_queue import EXTRACTION_GRACE
+from api.core.integrity_ai import UNREADABLE_THRESHOLD
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
@@ -171,6 +172,15 @@ def counted_breakdown(grade: Any) -> list[dict[str, Any]] | None:
     return valid or None
 
 
+def _confidence(raw: str | None) -> float:
+    """The reader's confidence; missing or malformed counts as 0, as in
+    `ai_grade_block` (`extraction.get("confidence", 0.0)`)."""
+    try:
+        return float(raw) if raw is not None else 0.0
+    except ValueError:
+        return 0.0
+
+
 def _coverage_bucket(
     r: Any, counted: list[dict[str, Any]] | None, *, ai_grading_enabled: bool, now: datetime,
 ) -> str:
@@ -186,18 +196,21 @@ def _coverage_bucket(
         return "counted"
     if isinstance(r.breakdown, list) and r.breakdown:
         return "to_approve"  # an AI draft the teacher hasn't approved
+    if r.job_status == STATUS_RUNNING:
+        return "grading"  # a claimed job finishes even if AI is switched off
+    unreadable = r.ai_grading_status == "skipped_unreadable" or (
+        r.has_reading and _confidence(r.reading_confidence) < UNREADABLE_THRESHOLD
+    )
     open_to_ai = (
         ai_grading_enabled
         and r.extraction_flagged_at is None
-        and r.ai_grading_status != "skipped_unreadable"
+        and not unreadable
         and r.reviewed_at is None
         and r.grade_published_at is None
     )
     if open_to_ai:
         # A queued job with no time waits for the teacher's Grade press.
-        if r.job_status == STATUS_RUNNING or (
-            r.job_status == STATUS_QUEUED and r.job_scheduled_for is not None
-        ):
+        if r.job_status == STATUS_QUEUED and r.job_scheduled_for is not None:
             return "grading"
         if not r.has_reading:
             # The reader is still on it; past the grace window it failed,
@@ -332,6 +345,9 @@ async def get_section_insights(
             # Whether a reading exists, without loading the JSON. A JSON
             # column can hold SQL NULL or a JSON null; both mean none.
             (func.coalesce(func.json_typeof(Submission.extraction), "null") != "null").label("has_reading"),
+            # The reader's confidence as text, so unreadable work is judged
+            # the way `ai_grade_block` does without loading the JSON.
+            func.json_extract_path_text(Submission.extraction, "confidence").label("reading_confidence"),
             GradingJob.status.label("job_status"),
             GradingJob.scheduled_for.label("job_scheduled_for"),
         )
