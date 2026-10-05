@@ -32,6 +32,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
+from api.core.grading_queue import EXTRACTION_GRACE
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
@@ -171,39 +172,45 @@ def counted_breakdown(grade: Any) -> list[dict[str, Any]] | None:
 
 
 def _coverage_bucket(
-    r: Any, counted: list[dict[str, Any]] | None, *, ai_grading_enabled: bool,
+    r: Any, counted: list[dict[str, Any]] | None, *, ai_grading_enabled: bool, now: datetime,
 ) -> str:
     """Where one submission sits on the coverage line. Buckets are
     exclusive so they always add up.
 
     "Still grading" means the grader will get to it on its own: a job
     running, or queued with a time (`GradingJob` — the row the review
-    page reads). Never "no grade yet", so work nothing will AI-grade
-    can't sit there all term. A queued job with no time waits for the
-    teacher to press Grade, so it is theirs to grade."""
+    page reads), or a photo still inside the reader's grace window.
+    Never "no grade yet", so work nothing will AI-grade can't sit there
+    all term. The rules mirror `ai_grade_block`."""
     if counted is not None:
         return "counted"
     if isinstance(r.breakdown, list) and r.breakdown:
         return "to_approve"  # an AI draft the teacher hasn't approved
-    if r.job_status == STATUS_RUNNING or (
-        r.job_status == STATUS_QUEUED and r.job_scheduled_for is not None
-    ):
-        return "grading"
-    if (
+    open_to_ai = (
         ai_grading_enabled
-        and r.extraction_confirmed_at is None
         and r.extraction_flagged_at is None
         and r.ai_grading_status != "skipped_unreadable"
         and r.reviewed_at is None
         and r.grade_published_at is None
-    ):
-        # AI grading waits for the student to confirm the reading of
-        # their work (`ai_grade_block`); nothing confirms it for them.
-        return "awaiting_student"
+    )
+    if open_to_ai:
+        # A queued job with no time waits for the teacher's Grade press.
+        if r.job_status == STATUS_RUNNING or (
+            r.job_status == STATUS_QUEUED and r.job_scheduled_for is not None
+        ):
+            return "grading"
+        if not r.has_reading:
+            # The reader is still on it; past the grace window it failed,
+            # and with nothing to confirm the student can't unblock it.
+            if r.submitted_at is not None and now - r.submitted_at < EXTRACTION_GRACE:
+                return "grading"
+        elif r.extraction_confirmed_at is None:
+            # AI grading waits for the student to confirm the reading.
+            return "awaiting_student"
     # Nothing will grade it unless the teacher acts: AI grading is off,
-    # the student flagged the reading, it was unreadable, the job was
-    # skipped, failed or waits for a Grade press, or the teacher
-    # retracted the grade.
+    # the student flagged the reading, it was unreadable or never read,
+    # the job was skipped, failed or waits for a Grade press, or the
+    # teacher retracted the grade.
     return "to_grade"
 
 
@@ -321,6 +328,10 @@ async def get_section_insights(
             SubmissionGrade.breakdown, SubmissionGrade.published_breakdown,
             SubmissionGrade.ai_grading_status,
             Submission.extraction_confirmed_at,
+            Submission.submitted_at,
+            # Whether a reading exists, without loading the JSON. A JSON
+            # column can hold SQL NULL or a JSON null; both mean none.
+            (func.coalesce(func.json_typeof(Submission.extraction), "null") != "null").label("has_reading"),
             GradingJob.status.label("job_status"),
             GradingJob.scheduled_for.label("job_scheduled_for"),
         )
@@ -334,6 +345,7 @@ async def get_section_insights(
         )
     )).all() if hw_ids else []
 
+    now = datetime.now(UTC)
     # (assignment_id, student_id) → (submission_id, counted breakdown | None)
     by_hw_student: dict[tuple[uuid.UUID, uuid.UUID], tuple[uuid.UUID, list[dict[str, Any]] | None]] = {}
     coverage: dict[uuid.UUID, dict[str, int]] = {
@@ -344,7 +356,7 @@ async def get_section_insights(
     for r in sub_rows:
         counted = counted_breakdown(r)
         by_hw_student[(r.assignment_id, r.student_id)] = (r.id, counted)
-        bucket = _coverage_bucket(r, counted, ai_grading_enabled=ai_enabled[r.assignment_id])
+        bucket = _coverage_bucket(r, counted, ai_grading_enabled=ai_enabled[r.assignment_id], now=now)
         coverage[r.assignment_id][bucket] += 1
 
     hw_out = [
@@ -363,7 +375,6 @@ async def get_section_insights(
     problems = await _problems_for(db, selected, section_id, by_hw_student, names) if selected else []
 
     # Watch list — computed per student over the homeworks already loaded.
-    now = datetime.now(UTC)
     watch: list[InsightsWatchStudent] = []
     for sid, name in names.items():
         joined = enrolled_at[sid]

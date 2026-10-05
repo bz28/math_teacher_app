@@ -76,13 +76,14 @@ def test_empty_or_malformed_breakdown_counts_as_nothing() -> None:
 
 def _row(**kw: Any) -> Any:
     base = {"extraction_flagged_at": None, "ai_grading_status": None,
-            "extraction_confirmed_at": NOW, "job_status": None, "job_scheduled_for": None}
+            "extraction_confirmed_at": NOW, "job_status": None, "job_scheduled_for": None,
+            "has_reading": True, "submitted_at": NOW - timedelta(days=1)}
     return _grade(**{**base, **kw})
 
 
 def test_coverage_buckets_are_exclusive_and_honest() -> None:
     def bucket(r: Any, ai: bool = True) -> str:
-        return _coverage_bucket(r, counted_breakdown(r), ai_grading_enabled=ai)
+        return _coverage_bucket(r, counted_breakdown(r), ai_grading_enabled=ai, now=NOW)
 
     assert bucket(_row(breakdown=[_e("full", 100)])) == "to_approve"
     assert bucket(_row(reviewed_at=NOW, breakdown=[_e("full", 100)])) == "counted"
@@ -94,7 +95,7 @@ def test_coverage_buckets_are_exclusive_and_honest() -> None:
 
 def test_still_grading_means_a_live_job() -> None:
     def bucket(r: Any, ai: bool = True) -> str:
-        return _coverage_bucket(r, counted_breakdown(r), ai_grading_enabled=ai)
+        return _coverage_bucket(r, counted_breakdown(r), ai_grading_enabled=ai, now=NOW)
 
     assert bucket(_row(job_status="queued", job_scheduled_for=NOW)) == "grading"
     # Queued with no time (no due date): it waits for the teacher's Grade press.
@@ -109,6 +110,19 @@ def test_still_grading_means_a_live_job() -> None:
     assert bucket(_row(extraction_confirmed_at=None)) == "awaiting_student"
     assert bucket(_row(extraction_confirmed_at=None), ai=False) == "to_grade"
     assert bucket(_row(extraction_confirmed_at=None, ai_grading_status="skipped_unreadable")) == "to_grade"
+    # AI grading switched off after a job was queued: the drain will skip it.
+    assert bucket(_row(job_status="queued", job_scheduled_for=NOW), ai=False) == "to_grade"
+
+
+def test_a_reading_that_never_came_is_the_teachers() -> None:
+    def bucket(r: Any) -> str:
+        return _coverage_bucket(r, None, ai_grading_enabled=True, now=NOW)
+
+    unread = {"has_reading": False, "extraction_confirmed_at": None}
+    # Fresh photo: the reader is still on it.
+    assert bucket(_row(**unread, submitted_at=NOW - timedelta(minutes=2))) == "grading"
+    # Past the grace window the read failed; the student has nothing to confirm.
+    assert bucket(_row(**unread, submitted_at=NOW - timedelta(hours=2))) == "to_grade"
 
 
 # ── _watch_reason ──────────────────────────────────────────────────
@@ -351,29 +365,34 @@ async def test_a_student_who_left_still_adds_up(client: AsyncClient) -> None:
 
 
 async def test_coverage_reads_the_grading_job_and_the_ai_switch(client: AsyncClient) -> None:
-    """"Still grading" only while a job is queued or running; a homework
+    """"Still grading" only while the grader will get to it; a homework
     with AI grading off never claims the grader is working on it."""
     w = await _world()
     async with get_session_factory()() as s:
         p1 = await s.get(Section, w["p1"])
         assert p1 is not None
-        frank, gia, hal = [
+        frank, gia, hal, ivy = [
             User(email=f"s_{uuid.uuid4().hex[:8]}@t.com", password_hash=hash_password("x"),
                  grade_level=9, role="student", name=n)
-            for n in ("Frank", "Gia", "Hal")
+            for n in ("Frank", "Gia", "Hal", "Ivy")
         ]
-        s.add_all([frank, gia, hal])
+        s.add_all([frank, gia, hal, ivy])
         await s.flush()
-        for u in (frank, gia, hal):
+        for u in (frank, gia, hal, ivy):
             s.add(SectionEnrollment(section_id=p1.id, course_id=w["course"], student_id=u.id,
                                     enrolled_at=NOW - timedelta(days=30)))
         queued = Submission(assignment_id=w["hw2"], student_id=frank.id, section_id=p1.id,
-                            status="submitted", extraction_confirmed_at=NOW)
+                            status="submitted", extraction_confirmed_at=NOW,
+                            extraction={"steps": [], "confidence": 0.9})
         failed = Submission(assignment_id=w["hw2"], student_id=gia.id, section_id=p1.id,
-                            status="submitted", extraction_confirmed_at=NOW)
+                            status="submitted", extraction_confirmed_at=NOW,
+                            extraction={"steps": [], "confidence": 0.9})
         unconfirmed = Submission(assignment_id=w["hw2"], student_id=hal.id, section_id=p1.id,
-                                 status="submitted")
-        s.add_all([queued, failed, unconfirmed])
+                                 status="submitted", extraction={"steps": [], "confidence": 0.9})
+        # The reader never came back, hours ago: nothing for Ivy to confirm.
+        never_read = Submission(assignment_id=w["hw2"], student_id=ivy.id, section_id=p1.id,
+                                status="submitted", submitted_at=NOW - timedelta(hours=2))
+        s.add_all([queued, failed, unconfirmed, never_read])
         await s.flush()
         s.add_all([
             GradingJob(submission_id=queued.id, assignment_id=w["hw2"], status="queued", scheduled_for=NOW),
@@ -382,7 +401,8 @@ async def test_coverage_reads_the_grading_job_and_the_ai_switch(client: AsyncCli
         await s.commit()
 
     hw2 = (await client.get(_url(w), headers=_auth(w["token"]))).json()["homeworks"][0]
-    assert (hw2["grading"], hw2["to_grade"], hw2["awaiting_student"]) == (1, 2, 1)
+    # Dee (unreadable), Gia (failed job) and Ivy (never read) are the teacher's.
+    assert (hw2["grading"], hw2["to_grade"], hw2["awaiting_student"]) == (1, 3, 1)
     assert hw2["students"] == sum(hw2[k] for k in (
         "counted", "to_approve", "to_grade", "grading", "awaiting_student", "not_submitted",
     ))
@@ -393,7 +413,6 @@ async def test_coverage_reads_the_grading_job_and_the_ai_switch(client: AsyncCli
         a.ai_grading_enabled = False
         await s.commit()
     hw2 = (await client.get(_url(w), headers=_auth(w["token"]))).json()["homeworks"][0]
-    # The queued job will be skipped by the drain, but it is still the
-    # live row, so it reads as grading until it settles; the student
-    # who never confirmed is now the teacher's to grade by hand.
-    assert (hw2["grading"], hw2["to_grade"], hw2["awaiting_student"]) == (1, 3, 0)
+    # The drain will skip the queued job and nothing waits on Hal's
+    # confirmation any more: everything ungraded is the teacher's.
+    assert (hw2["grading"], hw2["to_grade"], hw2["awaiting_student"]) == (0, 5, 0)
