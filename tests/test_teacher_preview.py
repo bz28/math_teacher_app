@@ -617,7 +617,7 @@ async def test_a_rehearsal_stays_out_of_every_teacher_facing_number(
         )
         assert r.status_code == 200, r.text
         hw = next(h for h in r.json()["homeworks"] if h["id"] == world["assignment_id"])
-        assert (hw["enrolled"], hw["counted"], hw["to_approve"]) == (0, 0, 0)
+        assert (hw["students"], hw["counted"], hw["to_approve"]) == (0, 0, 0)
 
     # Setup milestones: she has neither students nor a published grade.
     r = await client.get(

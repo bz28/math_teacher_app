@@ -42,7 +42,10 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
   const [homeworkId, setHomeworkId] = useState<string | undefined>(undefined);
   const [data, setData] = useState<SectionInsightsResponse | null>(null);
   const [error, setError] = useState(false);
-  const [reload, setReload] = useState(0);
+  // One retry counter per fetch, so Retry re-fires only the read that
+  // failed and never resets the section the teacher is on.
+  const [sectionsReload, setSectionsReload] = useState(0);
+  const [insightsReload, setInsightsReload] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,13 +54,17 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
       .then((res) => {
         if (cancelled) return;
         setSections(res.sections);
-        setSectionId(res.sections[0]?.id ?? null);
+        setSectionId((current) =>
+          current && res.sections.some((s) => s.id === current)
+            ? current
+            : (res.sections[0]?.id ?? null),
+        );
       })
       .catch(() => !cancelled && setError(true));
     return () => {
       cancelled = true;
     };
-  }, [courseId, reload]);
+  }, [courseId, sectionsReload]);
 
   useEffect(() => {
     if (!sectionId) return;
@@ -69,23 +76,26 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [courseId, sectionId, homeworkId, reload]);
+  }, [courseId, sectionId, homeworkId, insightsReload]);
 
   // Resets live in the handlers (not the fetch effect) so the skeleton
   // shows from the click that triggers the reload.
   const pickSection = (id: string) => {
+    setError(false);
     setData(null);
     setHomeworkId(undefined);
     setSectionId(id);
   };
   const pickHomework = (id: string) => {
+    setError(false);
     setData(null);
     setHomeworkId(id);
   };
   const retry = () => {
     setError(false);
     setData(null);
-    setReload((k) => k + 1);
+    if (sections === null) setSectionsReload((k) => k + 1);
+    else setInsightsReload((k) => k + 1);
   };
 
   return (
@@ -237,7 +247,7 @@ function Lead({
 }
 
 function coverageSentence(h: InsightsHomework): string {
-  const parts = [`${h.counted} of ${h.enrolled} counted`];
+  const parts = [`${h.counted} of ${h.students} counted`];
   if (h.to_approve) parts.push(`${h.to_approve} to approve`);
   if (h.to_hand_grade) parts.push(`${h.to_hand_grade} to grade by hand`);
   if (h.grading) parts.push(`${h.grading} still grading`);
