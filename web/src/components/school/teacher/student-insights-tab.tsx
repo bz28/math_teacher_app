@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { TOUR_IDS } from "@/components/tour";
 import {
+  ApiError,
   teacher,
   type InsightsHomework,
   type InsightsProblem,
@@ -72,7 +73,17 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
     teacher
       .sectionInsights(courseId, sectionId, homeworkId)
       .then((res) => !cancelled && setData(res))
-      .catch(() => !cancelled && setError(true));
+      .catch((e) => {
+        if (cancelled) return;
+        // The picked homework is gone (unpublished since the list
+        // loaded): fall back to the default pick instead of a Retry
+        // that would ask for the same missing homework forever.
+        if (homeworkId && e instanceof ApiError && e.status === 404) {
+          setHomeworkId(undefined);
+          return;
+        }
+        setError(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -249,8 +260,14 @@ function Lead({
 function coverageSentence(h: InsightsHomework): string {
   const parts = [`${h.counted} of ${h.students} counted`];
   if (h.to_approve) parts.push(`${h.to_approve} to approve`);
-  if (h.to_hand_grade) parts.push(`${h.to_hand_grade} to grade by hand`);
+  if (h.to_grade) parts.push(`${h.to_grade} for you to grade`);
   if (h.grading) parts.push(`${h.grading} still grading`);
+  if (h.awaiting_student)
+    parts.push(
+      h.awaiting_student === 1
+        ? "1 waiting on the student"
+        : `${h.awaiting_student} waiting on students`,
+    );
   if (h.not_submitted) parts.push(`${h.not_submitted} not turned in`);
   return parts.join(", ") + ".";
 }
