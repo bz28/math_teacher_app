@@ -398,13 +398,10 @@ function ClassSummary({ summary }: { summary: SummaryStats }) {
   // both populated and empty states.
   return (
     <div>
-      {/* No headline avg here. The active section's avg is already
-          inline on its tab below, and pooling across sections in
-          "All sections" mode produces a "course avg" — not the
-          "class avg" teachers actually mean (one class = one
-          period in K-12 lingo), so a single labeled number would be
-          misleading. Distribution bar carries the visual gestalt;
-          per-section comparisons live on the tabs. Also deliberately
+      {/* No headline avg here. The section's avg is already on its
+          tab and in the grid's "Section average" row. Distribution
+          bar carries the visual gestalt; per-section comparisons
+          live on the tabs. Also deliberately
           NOT showing an "X not yet graded" callout here — that's
           grading-queue framing and lives on the Submissions tab. */}
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -526,11 +523,11 @@ function SectionTab({
             ? "text-white/80"
             : avg === null
               ? "text-text-muted"
-              : percentTone(avg)
+              : percentTone(shown(avg))
         }`}
         aria-hidden
       >
-        {avg === null ? "—" : `${Math.round(avg)}%`}
+        {avg === null ? "—" : `${shown(avg)}%`}
       </span>
     </button>
   );

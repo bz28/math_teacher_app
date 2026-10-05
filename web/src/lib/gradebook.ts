@@ -38,10 +38,11 @@ export function averageBreakdown(
 }
 
 /** Did the teacher publish something other than the AI's suggestion?
- *  Both are means of per-problem percents, so a grade approved as-is is
- *  equal; half a point absorbs float noise. */
+ *  Judged on the numbers shown, so the dot agrees with the hover card's
+ *  "AI suggested X% · you gave Y%". Both are means of per-problem
+ *  percents, so a grade approved as-is is equal. */
 export function changedFromAi(cell: Extract<GradebookCell, { state: "published" }>): boolean {
-  return cell.ai_score !== null && Math.abs(cell.ai_score - cell.score) >= 0.5;
+  return cell.ai_score !== null && shown(cell.ai_score) !== shown(cell.score);
 }
 
 export type SortKey = "name" | "avg" | string; // string = assignment id

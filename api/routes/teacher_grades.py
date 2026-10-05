@@ -37,7 +37,9 @@ router = APIRouter()
 
 
 def _avg(vals: list[float]) -> float | None:
-    return round(sum(vals) / len(vals), 1) if vals else None
+    # Unrounded: the page rounds once, to the whole percent it shows.
+    # Rounding here too would double-round — 69.45 → 69.5 → "70%".
+    return sum(vals) / len(vals) if vals else None
 
 
 async def _published_and_past_due(

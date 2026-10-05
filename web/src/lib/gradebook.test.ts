@@ -62,6 +62,14 @@ test("a grade approved as the AI suggested isn't marked as changed", () => {
   assert.equal(changedFromAi(byHand), false);
 });
 
+test("the changed-from-AI dot agrees with the rounded numbers on the hover card", () => {
+  type P = Extract<GradebookCell, { state: "published" }>;
+  // Card reads "AI suggested 85% · you gave 85%" — no dot.
+  assert.equal(changedFromAi(published(85, 84.5) as P), false);
+  // Card reads "AI suggested 85% · you gave 84%" — dot.
+  assert.equal(changedFromAi(published(84.4, 84.6) as P), true);
+});
+
 test("sorting by a homework puts students without a score last, both directions", () => {
   const rows = [
     student("Ava Brooks", 90, { h1: published(90) }),

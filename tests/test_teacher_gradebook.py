@@ -223,3 +223,12 @@ async def test_gradebook_is_the_teachers_own(client: AsyncClient) -> None:
     # A section from another course can't be read through this course.
     r = await client.get(_url(w, w["foreign_section"]), headers=w["teacher"])
     assert r.status_code == 404
+
+
+def test_averages_are_not_rounded_before_the_page_rounds_them() -> None:
+    """70 and 68.9 average 69.45, which shows as 69%. Rounding to one
+    decimal on the server first would send 69.5 and show 70%."""
+    from api.routes.teacher_grades import _avg
+
+    assert _avg([70.0, 68.9]) == (70.0 + 68.9) / 2
+    assert _avg([]) is None
