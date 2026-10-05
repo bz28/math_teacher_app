@@ -7,9 +7,9 @@ One section-scoped read powers the whole Insights tab:
 Pure counting over stored rows — no LLM at read time. Three parts:
 
   homeworks[]  every published homework in the section, newest first,
-               with a coverage line (counted / to approve / to hand-grade /
-               still grading / not submitted) so a bar is never presented
-               as the whole class when it isn't.
+               with a coverage line (counted / to approve / to grade /
+               still grading / waiting on the student / not submitted) so
+               a bar is never presented as the whole class when it isn't.
   problems[]   the selected homework's problems, most-missed first, with
                full / partial / zero counts, who is in each bucket (plus
                the understanding check's reason for a miss, when one was
@@ -35,6 +35,7 @@ from api.core.audit_log import log_student_record_access
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
+from api.models.grading_job import STATUS_QUEUED, STATUS_RUNNING, GradingJob
 from api.models.integrity_check import IntegrityCheckProblem, IntegrityCheckSubmission
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
@@ -84,8 +85,9 @@ class InsightsHomework(BaseModel):
     students: int
     counted: int
     to_approve: int
-    to_hand_grade: int
+    to_grade: int
     grading: int
+    awaiting_student: int
     not_submitted: int
 
 
@@ -168,23 +170,41 @@ def counted_breakdown(grade: Any) -> list[dict[str, Any]] | None:
     return valid or None
 
 
-def _coverage_bucket(r: Any, counted: list[dict[str, Any]] | None) -> str:
+def _coverage_bucket(
+    r: Any, counted: list[dict[str, Any]] | None, *, ai_grading_enabled: bool,
+) -> str:
     """Where one submission sits on the coverage line. Buckets are
-    exclusive so they always add up."""
+    exclusive so they always add up.
+
+    "Still grading" means the grader will get to it on its own: a job
+    running, or queued with a time (`GradingJob` — the row the review
+    page reads). Never "no grade yet", so work nothing will AI-grade
+    can't sit there all term. A queued job with no time waits for the
+    teacher to press Grade, so it is theirs to grade."""
     if counted is not None:
         return "counted"
     if isinstance(r.breakdown, list) and r.breakdown:
         return "to_approve"  # an AI draft the teacher hasn't approved
-    if (
-        r.extraction_flagged_at is not None
-        or r.ai_grading_status == "skipped_unreadable"
-        or r.reviewed_at is not None
-        or r.grade_published_at is not None
+    if r.job_status == STATUS_RUNNING or (
+        r.job_status == STATUS_QUEUED and r.job_scheduled_for is not None
     ):
-        # No AI grade is coming (unreadable, or the student said the
-        # reader got it wrong), or the teacher retracted the grade.
-        return "to_hand_grade"
-    return "grading"
+        return "grading"
+    if (
+        ai_grading_enabled
+        and r.extraction_confirmed_at is None
+        and r.extraction_flagged_at is None
+        and r.ai_grading_status != "skipped_unreadable"
+        and r.reviewed_at is None
+        and r.grade_published_at is None
+    ):
+        # AI grading waits for the student to confirm the reading of
+        # their work (`ai_grade_block`); nothing confirms it for them.
+        return "awaiting_student"
+    # Nothing will grade it unless the teacher acts: AI grading is off,
+    # the student flagged the reading, it was unreadable, the job was
+    # skipped, failed or waits for a Grade press, or the teacher
+    # retracted the grade.
+    return "to_grade"
 
 
 def _avg_percent(entries: list[dict[str, Any]]) -> float | None:
@@ -286,6 +306,7 @@ async def get_section_insights(
     )).all()
     homeworks = [r.Assignment for r in hw_rows]
     hw_ids = [a.id for a in homeworks]
+    ai_enabled = {a.id: a.ai_grading_enabled for a in homeworks}
 
     # Every non-preview submission in this section for those homeworks,
     # with its grade. Filtered on Submission.section_id — never the
@@ -299,9 +320,13 @@ async def get_section_insights(
             SubmissionGrade.reviewed_at, SubmissionGrade.grade_published_at,
             SubmissionGrade.breakdown, SubmissionGrade.published_breakdown,
             SubmissionGrade.ai_grading_status,
+            Submission.extraction_confirmed_at,
+            GradingJob.status.label("job_status"),
+            GradingJob.scheduled_for.label("job_scheduled_for"),
         )
         .join(User, User.id == Submission.student_id)
         .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .outerjoin(GradingJob, GradingJob.submission_id == Submission.id)
         .where(
             Submission.section_id == section_id,
             Submission.assignment_id.in_(hw_ids),
@@ -312,12 +337,15 @@ async def get_section_insights(
     # (assignment_id, student_id) → (submission_id, counted breakdown | None)
     by_hw_student: dict[tuple[uuid.UUID, uuid.UUID], tuple[uuid.UUID, list[dict[str, Any]] | None]] = {}
     coverage: dict[uuid.UUID, dict[str, int]] = {
-        a: {"counted": 0, "to_approve": 0, "to_hand_grade": 0, "grading": 0} for a in hw_ids
+        a: {
+            "counted": 0, "to_approve": 0, "to_grade": 0, "grading": 0, "awaiting_student": 0,
+        } for a in hw_ids
     }
     for r in sub_rows:
         counted = counted_breakdown(r)
         by_hw_student[(r.assignment_id, r.student_id)] = (r.id, counted)
-        coverage[r.assignment_id][_coverage_bucket(r, counted)] += 1
+        bucket = _coverage_bucket(r, counted, ai_grading_enabled=ai_enabled[r.assignment_id])
+        coverage[r.assignment_id][bucket] += 1
 
     hw_out = [
         InsightsHomework(

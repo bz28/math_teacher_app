@@ -5079,6 +5079,8 @@ export interface components {
         };
         /** InsightsHomework */
         InsightsHomework: {
+            /** Awaiting Student */
+            awaiting_student: number;
             /** Counted */
             counted: number;
             /** Due At */
@@ -5098,8 +5100,8 @@ export interface components {
             title: string;
             /** To Approve */
             to_approve: number;
-            /** To Hand Grade */
-            to_hand_grade: number;
+            /** To Grade */
+            to_grade: number;
         };
         /** InsightsProblem */
         InsightsProblem: {

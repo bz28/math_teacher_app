@@ -22,6 +22,7 @@ from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course, CourseTeacher
+from api.models.grading_job import GradingJob
 from api.models.integrity_check import IntegrityCheckProblem, IntegrityCheckSubmission
 from api.models.question_bank import QuestionBankItem
 from api.models.section import Section
@@ -74,24 +75,40 @@ def test_empty_or_malformed_breakdown_counts_as_nothing() -> None:
 
 
 def _row(**kw: Any) -> Any:
-    base = {"extraction_flagged_at": None, "ai_grading_status": None}
+    base = {"extraction_flagged_at": None, "ai_grading_status": None,
+            "extraction_confirmed_at": NOW, "job_status": None, "job_scheduled_for": None}
     return _grade(**{**base, **kw})
 
 
 def test_coverage_buckets_are_exclusive_and_honest() -> None:
-    draft = _row(breakdown=[_e("full", 100)])
-    assert _coverage_bucket(draft, counted_breakdown(draft)) == "to_approve"
-    approved = _row(reviewed_at=NOW, breakdown=[_e("full", 100)])
-    assert _coverage_bucket(approved, counted_breakdown(approved)) == "counted"
-    unreadable = _row(ai_grading_status="skipped_unreadable")
-    assert _coverage_bucket(unreadable, None) == "to_hand_grade"
-    flagged = _row(extraction_flagged_at=NOW)
-    assert _coverage_bucket(flagged, None) == "to_hand_grade"
+    def bucket(r: Any, ai: bool = True) -> str:
+        return _coverage_bucket(r, counted_breakdown(r), ai_grading_enabled=ai)
+
+    assert bucket(_row(breakdown=[_e("full", 100)])) == "to_approve"
+    assert bucket(_row(reviewed_at=NOW, breakdown=[_e("full", 100)])) == "counted"
+    assert bucket(_row(ai_grading_status="skipped_unreadable")) == "to_grade"
+    assert bucket(_row(extraction_flagged_at=NOW, extraction_confirmed_at=None)) == "to_grade"
     # A grade the teacher retracted after publishing: nothing is grading it.
-    retracted = _row(grade_published_at=NOW, breakdown=[], published_breakdown=[])
-    assert _coverage_bucket(retracted, counted_breakdown(retracted)) == "to_hand_grade"
-    # No grade row yet (outer join → all None): still with the grader.
-    assert _coverage_bucket(_row(), None) == "grading"
+    assert bucket(_row(grade_published_at=NOW, breakdown=[], published_breakdown=[])) == "to_grade"
+
+
+def test_still_grading_means_a_live_job() -> None:
+    def bucket(r: Any, ai: bool = True) -> str:
+        return _coverage_bucket(r, counted_breakdown(r), ai_grading_enabled=ai)
+
+    assert bucket(_row(job_status="queued", job_scheduled_for=NOW)) == "grading"
+    # Queued with no time (no due date): it waits for the teacher's Grade press.
+    assert bucket(_row(job_status="queued")) == "to_grade"
+    assert bucket(_row(job_status="running")) == "grading"
+    # Nothing will AI-grade these, so they're the teacher's to grade.
+    assert bucket(_row(job_status="failed")) == "to_grade"
+    assert bucket(_row(job_status="skipped")) == "to_grade"
+    assert bucket(_row()) == "to_grade"            # confirmed, no job
+    assert bucket(_row(), ai=False) == "to_grade"  # AI grading off
+    # AI grading waits on the student confirming the reading.
+    assert bucket(_row(extraction_confirmed_at=None)) == "awaiting_student"
+    assert bucket(_row(extraction_confirmed_at=None), ai=False) == "to_grade"
+    assert bucket(_row(extraction_confirmed_at=None, ai_grading_status="skipped_unreadable")) == "to_grade"
 
 
 # ── _watch_reason ──────────────────────────────────────────────────
@@ -185,8 +202,10 @@ async def _world() -> dict[str, Any]:
         eve = await student("Eve", p3)
 
         async def submit(a: Assignment, u: User, sec: Section, **grade: Any) -> Submission:
+            flagged = grade.pop("flagged", None)
             sub = Submission(assignment_id=a.id, student_id=u.id, section_id=sec.id, status="submitted",
-                             extraction_flagged_at=grade.pop("flagged", None))
+                             extraction_flagged_at=flagged,
+                             extraction_confirmed_at=grade.pop("confirmed", None if flagged else NOW))
             s.add(sub)
             await s.flush()
             if grade:
@@ -203,7 +222,7 @@ async def _world() -> dict[str, Any]:
                      breakdown=bd(ids2, "full", "full", "full"),          # unseen regrade draft
                      published_breakdown=bd(ids2, "zero", "zero", "partial"))
         await submit(hw2, cal, p1, breakdown=bd(ids2, "zero", "zero", "zero"))  # AI draft: to approve
-        await submit(hw2, dee, p1, ai_grading_status="skipped_unreadable")      # to hand-grade
+        await submit(hw2, dee, p1, ai_grading_status="skipped_unreadable")      # to grade
         await submit(hw2, ghost, p1, reviewed_at=NOW, breakdown=bd(ids2, "zero", "zero", "zero"))
         await submit(hw2, eve, p3, reviewed_at=NOW, breakdown=bd(ids2, "zero", "zero", "zero"))
         # HW 1 in Period 1: Ana and Ben did well; Cal and Dee skipped it.
@@ -229,6 +248,7 @@ async def _world() -> dict[str, Any]:
             "course": course.id, "p1": p1.id, "p3": p3.id,
             "hw1": hw1.id, "hw2": hw2.id, "quiz": quiz.id, "ids2": ids2,
             "ana": ana.id, "ben": ben.id, "cal": cal.id, "dee": dee.id,
+            "unit": unit.id, "teacher": teacher.id,
         }
 
 
@@ -249,8 +269,9 @@ async def test_coverage_counts_only_approved_or_published_in_this_section(client
         "students": 4,        # preview shadow excluded
         "counted": 2,         # Ana (approved) + Ben (published snapshot)
         "to_approve": 1,      # Cal's AI draft
-        "to_hand_grade": 1,   # Dee's unreadable work
+        "to_grade": 1,   # Dee's unreadable work
         "grading": 0,
+        "awaiting_student": 0,
         "not_submitted": 0,
     }
     assert body["homeworks"][1]["not_submitted"] == 2
@@ -327,3 +348,52 @@ async def test_a_student_who_left_still_adds_up(client: AsyncClient) -> None:
     assert (hw2["students"], hw2["counted"]) == (4, 2)
     names = {r["name"] for p in body["problems"] for b in p["students"].values() for r in b}
     assert "Former student" in names
+
+
+async def test_coverage_reads_the_grading_job_and_the_ai_switch(client: AsyncClient) -> None:
+    """"Still grading" only while a job is queued or running; a homework
+    with AI grading off never claims the grader is working on it."""
+    w = await _world()
+    async with get_session_factory()() as s:
+        p1 = await s.get(Section, w["p1"])
+        assert p1 is not None
+        frank, gia, hal = [
+            User(email=f"s_{uuid.uuid4().hex[:8]}@t.com", password_hash=hash_password("x"),
+                 grade_level=9, role="student", name=n)
+            for n in ("Frank", "Gia", "Hal")
+        ]
+        s.add_all([frank, gia, hal])
+        await s.flush()
+        for u in (frank, gia, hal):
+            s.add(SectionEnrollment(section_id=p1.id, course_id=w["course"], student_id=u.id,
+                                    enrolled_at=NOW - timedelta(days=30)))
+        queued = Submission(assignment_id=w["hw2"], student_id=frank.id, section_id=p1.id,
+                            status="submitted", extraction_confirmed_at=NOW)
+        failed = Submission(assignment_id=w["hw2"], student_id=gia.id, section_id=p1.id,
+                            status="submitted", extraction_confirmed_at=NOW)
+        unconfirmed = Submission(assignment_id=w["hw2"], student_id=hal.id, section_id=p1.id,
+                                 status="submitted")
+        s.add_all([queued, failed, unconfirmed])
+        await s.flush()
+        s.add_all([
+            GradingJob(submission_id=queued.id, assignment_id=w["hw2"], status="queued", scheduled_for=NOW),
+            GradingJob(submission_id=failed.id, assignment_id=w["hw2"], status="failed"),
+        ])
+        await s.commit()
+
+    hw2 = (await client.get(_url(w), headers=_auth(w["token"]))).json()["homeworks"][0]
+    assert (hw2["grading"], hw2["to_grade"], hw2["awaiting_student"]) == (1, 2, 1)
+    assert hw2["students"] == sum(hw2[k] for k in (
+        "counted", "to_approve", "to_grade", "grading", "awaiting_student", "not_submitted",
+    ))
+
+    async with get_session_factory()() as s:
+        a = await s.get(Assignment, w["hw2"])
+        assert a is not None
+        a.ai_grading_enabled = False
+        await s.commit()
+    hw2 = (await client.get(_url(w), headers=_auth(w["token"]))).json()["homeworks"][0]
+    # The queued job will be skipped by the drain, but it is still the
+    # live row, so it reads as grading until it settles; the student
+    # who never confirmed is now the teacher's to grade by hand.
+    assert (hw2["grading"], hw2["to_grade"], hw2["awaiting_student"]) == (1, 3, 0)

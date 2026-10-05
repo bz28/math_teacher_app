@@ -1986,6 +1986,10 @@
       },
       "InsightsHomework": {
         "properties": {
+          "awaiting_student": {
+            "title": "Awaiting Student",
+            "type": "integer"
+          },
           "counted": {
             "title": "Counted",
             "type": "integer"
@@ -2027,8 +2031,8 @@
             "title": "To Approve",
             "type": "integer"
           },
-          "to_hand_grade": {
-            "title": "To Hand Grade",
+          "to_grade": {
+            "title": "To Grade",
             "type": "integer"
           }
         },
@@ -2039,8 +2043,9 @@
           "students",
           "counted",
           "to_approve",
-          "to_hand_grade",
+          "to_grade",
           "grading",
+          "awaiting_student",
           "not_submitted"
         ],
         "title": "InsightsHomework",
