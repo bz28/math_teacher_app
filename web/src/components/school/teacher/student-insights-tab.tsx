@@ -2,116 +2,52 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { TOUR_IDS } from "@/components/tour";
 import {
+  ApiError,
   teacher,
-  type SectionStudentInsightsResponse,
-  type StudentInsight,
-  type StudentInsightStatus,
-  type StudentInsightTrend,
+  type InsightsHomework,
+  type InsightsProblem,
+  type InsightsStudentRef,
+  type InsightsWatchStudent,
+  type SectionInsightsResponse,
   type TeacherSection,
 } from "@/lib/api";
-import { formatRelativeDate } from "@/lib/utils";
+import { MathText } from "@/components/shared/math-text";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageErrorState } from "@/components/ui/page-error-state";
-import { MeasuredKey } from "./_pieces/measured-key";
-import { PracticeStrugglePanel } from "./practice-struggle-panel";
 
 /**
- * Student Insights — the single "how's my class doing" surface. Two
- * editorial bands under one header:
+ * Student Insights — "what do I reteach tomorrow, and who needs me?"
  *
- *   1. "Where the class is struggling" — a course-wide, aggregate
- *      re-teach list drawn from ungraded practice (PracticeStrugglePanel).
- *      The class-level read first, before the per-student drilldown.
- *   2. "Each student" — a roster of formative engagement signal, one row
- *      per enrolled student. Coarse practice/learn rollups (problems
- *      practiced, walkthroughs, last-active, first-try rate) plus a
- *      derived status + trend. Insight, NOT a grade: no scores, no raw
- *      answers.
- *
- * The roster read is per-section (GET /teacher/.../student-insights), so
- * a course with multiple sections gets a quiet section pivot; a single
- * section skips it. Clicking a row opens that student's per-student
- * practice-engagement detail under /grades/[sectionId]/students/[id].
- * The "How this is measured" key lives once on the page header (with
- * status defs) and defines every formative term both bands use.
+ * Reads GET /teacher/.../sections/{sid}/insights: graded homework only,
+ * counted from grades the teacher approved or published (an AI draft
+ * never counts). Organised by homework, then by problem, most-missed
+ * first. A serif lead sentence answers the question up top; the
+ * students-to-watch strip names the few people who need the teacher;
+ * each problem expands to who missed it, why (when the understanding
+ * check recorded a reason), and a link to their work.
  */
 
-type SortKey = "attention" | "last_active" | "name";
-type StatusFilter = "all" | "attention";
-
-// Sort weight for "needs attention first": worst-first, then the calm
-// middle, then thriving last. Used only by the default sort.
-const ATTENTION_RANK: Record<StudentInsightStatus, number> = {
-  struggling: 0,
-  needs_nudge: 1,
-  no_activity: 2,
-  on_track: 3,
-  thriving: 4,
+const DIAGNOSIS_LABEL: Record<string, string> = {
+  conceptual_gap: "Conceptual gap",
+  procedural_slip: "Slip",
+  blank: "Left blank",
+  unreadable: "Couldn't read",
 };
-
-// Restrained, editorial status palette — tokens only, calm not stoplight.
-// thriving = deep green · on_track = neutral · needs_nudge = warm amber ·
-// struggling = soft terracotta · no_activity = faint grey.
-const STATUS_META: Record<
-  StudentInsightStatus,
-  { label: string; className: string }
-> = {
-  thriving: {
-    label: "Thriving",
-    className:
-      "border-[color:var(--color-primary)]/25 bg-[color:var(--color-primary-bg)] text-[color:var(--color-primary)]",
-  },
-  on_track: {
-    label: "On track",
-    className:
-      "border-border-light bg-[color:var(--color-surface-alt-2)] text-text-secondary",
-  },
-  needs_nudge: {
-    label: "Needs a nudge",
-    className:
-      "border-[color:var(--color-warning)]/25 bg-[color:var(--color-warning-bg)] text-[color:var(--color-warning-dark)]",
-  },
-  struggling: {
-    label: "Struggling",
-    className:
-      "border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] text-[color:var(--color-error)]",
-  },
-  no_activity: {
-    label: "No activity",
-    className:
-      "border-border-light bg-[color:var(--color-surface-alt)] text-text-muted",
-  },
-};
-
-const ATTENTION_STATUSES: ReadonlySet<StudentInsightStatus> = new Set([
-  "struggling",
-  "needs_nudge",
-]);
 
 export function StudentInsightsTab({ courseId }: { courseId: string }) {
   const [sections, setSections] = useState<TeacherSection[] | null>(null);
-  const [activeSection, setActiveSection] = useState<string | null>(null);
-  const [data, setData] = useState<SectionStudentInsightsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [sort, setSort] = useState<SortKey>("attention");
-  const [filter, setFilter] = useState<StatusFilter>("all");
-  // Retry counters — one per fetch. The retry affordance re-fires
-  // whichever load failed: the section list (if we never got a section)
-  // or the per-section insights read.
-  const [sectionsReloadKey, setSectionsReloadKey] = useState(0);
-  const [insightsReloadKey, setInsightsReloadKey] = useState(0);
+  const [sectionId, setSectionId] = useState<string | null>(null);
+  const [homeworkId, setHomeworkId] = useState<string | undefined>(undefined);
+  const [data, setData] = useState<SectionInsightsResponse | null>(null);
+  const [error, setError] = useState(false);
+  // One retry counter per fetch, so Retry re-fires only the read that
+  // failed and never resets the section the teacher is on.
+  const [sectionsReload, setSectionsReload] = useState(0);
+  const [insightsReload, setInsightsReload] = useState(0);
 
-  const retry = () => {
-    setError(null);
-    if (activeSection) setInsightsReloadKey((k) => k + 1);
-    else setSectionsReloadKey((k) => k + 1);
-  };
-
-  // Load the section list once — drives the pivot and scopes the read.
   useEffect(() => {
     let cancelled = false;
     teacher
@@ -119,313 +55,404 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
       .then((res) => {
         if (cancelled) return;
         setSections(res.sections);
-        setActiveSection(res.sections[0]?.id ?? null);
-        if (res.sections.length === 0) setLoading(false);
+        setSectionId((current) =>
+          current && res.sections.some((s) => s.id === current)
+            ? current
+            : (res.sections[0]?.id ?? null),
+        );
       })
+      .catch(() => !cancelled && setError(true));
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId, sectionsReload]);
+
+  useEffect(() => {
+    if (!sectionId) return;
+    let cancelled = false;
+    teacher
+      .sectionInsights(courseId, sectionId, homeworkId)
+      .then((res) => !cancelled && setData(res))
       .catch((e) => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Failed to load sections");
-        setLoading(false);
+        // The picked homework is gone (unpublished since the list
+        // loaded): fall back to the default pick instead of a Retry
+        // that would ask for the same missing homework forever.
+        if (homeworkId && e instanceof ApiError && e.status === 404) {
+          setHomeworkId(undefined);
+          return;
+        }
+        setError(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [courseId, sectionsReloadKey]);
+  }, [courseId, sectionId, homeworkId, insightsReload]);
 
-  // (Re)load the roster whenever the active section changes.
-  useEffect(() => {
-    if (!activeSection) return;
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await teacher.sectionStudentInsights(
-          courseId,
-          activeSection,
-        );
-        if (!cancelled) setData(res);
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load insights");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [courseId, activeSection, insightsReloadKey]);
-
-  const students = data?.students ?? null;
-
-  const needAttention = useMemo(
-    () =>
-      (students ?? []).filter((s) => ATTENTION_STATUSES.has(s.status)).length,
-    [students],
-  );
-
-  const allQuiet = useMemo(
-    () =>
-      students !== null &&
-      students.length > 0 &&
-      students.every((s) => s.status === "no_activity"),
-    [students],
-  );
-
-  const visible = useMemo(() => {
-    let out = students ?? [];
-    if (filter === "attention") {
-      out = out.filter((s) => ATTENTION_STATUSES.has(s.status));
-    }
-    return [...out].sort((a, b) => {
-      if (sort === "name") return a.name.localeCompare(b.name);
-      if (sort === "last_active") {
-        // Most-recent first; never-active sinks to the bottom.
-        const at = a.last_active ? Date.parse(a.last_active) : -Infinity;
-        const bt = b.last_active ? Date.parse(b.last_active) : -Infinity;
-        if (at !== bt) return bt - at;
-        return a.name.localeCompare(b.name);
-      }
-      // "attention": worst-first, ties broken by name.
-      const ar = ATTENTION_RANK[a.status];
-      const br = ATTENTION_RANK[b.status];
-      if (ar !== br) return ar - br;
-      return a.name.localeCompare(b.name);
-    });
-  }, [students, filter, sort]);
-
-  // A course with no sections at all — nothing to scope.
-  const noSections = sections !== null && sections.length === 0;
-  const showSectionPivot = (sections?.length ?? 0) > 1;
+  // Resets live in the handlers (not the fetch effect) so the skeleton
+  // shows from the click that triggers the reload. Re-picking the current
+  // one is a no-op: nothing would change, so the fetch effect wouldn't
+  // re-run and the cleared data would leave the skeleton up for good.
+  const pickSection = (id: string) => {
+    if (id === sectionId) return;
+    setError(false);
+    setData(null);
+    setHomeworkId(undefined);
+    setSectionId(id);
+  };
+  const pickHomework = (id: string) => {
+    if (id === (homeworkId ?? data?.selected_homework_id)) return;
+    setError(false);
+    setData(null);
+    setHomeworkId(id);
+  };
+  const retry = () => {
+    setError(false);
+    setData(null);
+    if (sections === null) setSectionsReload((k) => k + 1);
+    else setInsightsReload((k) => k + 1);
+  };
 
   return (
     <section>
-      {/* Page header — frames the whole insights surface (class + student). */}
       <header className="max-w-2xl">
-        <h2 className="font-serif text-[26px] leading-tight tracking-[-0.015em] text-text-primary">
+        <h2
+          data-tour-id={TOUR_IDS.teacherInsights}
+          className="font-serif text-[26px] leading-tight tracking-[-0.015em] text-text-primary"
+        >
           Student Insights
         </h2>
-        <p
-          data-tour-id={TOUR_IDS.teacherInsights}
-          className="mt-1 font-serif italic text-[15px] leading-snug text-text-muted"
-        >
-          How your class is doing — where to re-teach, and how each student is
-          engaging. Signal, not a grade.
+        <p className="mt-1 text-sm text-text-muted">
+          What the class missed on each homework, and who needs you. Counts
+          only grades you&rsquo;ve approved or published.
         </p>
-        <MeasuredKey className="mt-3" showStatus />
       </header>
 
-      {/* Class-level band — course-wide aggregate "where to re-teach".
-          Renders once, above the per-student roster, and manages its own
-          section scoping; it self-hides when the course has no sections. */}
-      <PracticeStrugglePanel courseId={courseId} />
+      {sections && sections.length > 1 && (
+        <div role="group" aria-label="Choose a section" className="mt-5 flex flex-wrap gap-1.5">
+          {sections.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              aria-pressed={sectionId === s.id}
+              onClick={() => pickSection(s.id)}
+              className={`rounded-[--radius-pill] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                sectionId === s.id
+                  ? "border-primary bg-primary text-white"
+                  : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary"
+              }`}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Per-student roster band — section-scoped drilldown. */}
-      <div className="mt-14 border-t border-border-light pt-8">
-        <header className="max-w-2xl">
-          <h3 className="font-serif text-[20px] leading-tight tracking-[-0.01em] text-text-primary">
-            Each student
-          </h3>
-          <p className="mt-1 font-serif italic text-[14px] leading-snug text-text-muted">
-            A per-student read on practice — who&rsquo;s thriving, who needs a
-            nudge.
-          </p>
-        </header>
-
-        {showSectionPivot && sections && (
-          <div
-            role="group"
-            aria-label="Choose a section"
-            className="mt-5 flex flex-wrap items-center gap-1.5"
-          >
-            {sections.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                aria-pressed={activeSection === s.id}
-                onClick={() => setActiveSection(s.id)}
-                className={`rounded-[--radius-pill] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-                  activeSection === s.id
-                    ? "border-primary bg-primary text-white"
-                    : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary"
-                }`}
-              >
-                {s.name}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {error ? (
-          <PageErrorState
-            message="We couldn't load this right now."
-            onRetry={retry}
-          />
-        ) : noSections ? (
-          <RosterEmpty
-            title="No sections yet"
-            body="Create a section and enroll students to see their practice insights here."
-          />
-        ) : loading || students === null ? (
-          <RosterSkeleton />
-        ) : students.length === 0 ? (
-          <RosterEmpty
-            title="No students enrolled"
-            body="Once students join this section, each will appear here with their practice signal."
-          />
-        ) : allQuiet ? (
-          <RosterEmpty
-            title="No practice yet"
-            body="Insights appear once students start practicing. Every enrolled student will show up here with their engagement and trend."
-          />
-        ) : (
-          <>
-            <Controls
-              sort={sort}
-              onSort={setSort}
-              filter={filter}
-              onFilter={setFilter}
-              total={students.length}
-              needAttention={needAttention}
-            />
-            {visible.length === 0 ? (
-              <div className="mt-5 rounded-[--radius-lg] border border-border-light bg-surface px-6 py-8 text-center">
-                <p className="text-sm text-text-secondary">
-                  No one needs attention right now.
-                </p>
-                <p className="mt-1 text-xs text-text-muted">
-                  Nobody is struggling or going quiet.{" "}
-                  <button
-                    type="button"
-                    onClick={() => setFilter("all")}
-                    className="font-medium text-primary hover:underline"
-                  >
-                    Show everyone
-                  </button>
-                </p>
-              </div>
-            ) : (
-              <Roster
-                courseId={courseId}
-                sectionId={activeSection!}
-                students={visible}
-              />
-            )}
-          </>
-        )}
-      </div>
+      {error ? (
+        <PageErrorState message="Student Insights didn't load." onRetry={retry} />
+      ) : sections && sections.length === 0 ? (
+        <Empty title="No sections yet" body="Create a section and enroll students. Their homework results show up here once you grade." />
+      ) : !data ? (
+        <InsightsSkeleton />
+      ) : data.homeworks.length === 0 ? (
+        <Empty title="No homework yet" body={`Publish homework to ${data.section.name}. Results show up here once you approve or publish grades.`} />
+      ) : (
+        <Body
+          key={`${data.section.id}:${data.selected_homework_id}`}
+          courseId={courseId}
+          data={data}
+          onPickHomework={pickHomework}
+        />
+      )}
     </section>
   );
 }
 
 // ────────────────────────────────────────────────────────────────────
 
-function Controls({
-  sort,
-  onSort,
-  filter,
-  onFilter,
-  total,
-  needAttention,
+function Body({
+  courseId,
+  data,
+  onPickHomework,
 }: {
-  sort: SortKey;
-  onSort: (s: SortKey) => void;
-  filter: StatusFilter;
-  onFilter: (f: StatusFilter) => void;
-  total: number;
-  needAttention: number;
+  courseId: string;
+  data: SectionInsightsResponse;
+  onPickHomework: (id: string) => void;
 }) {
+  const hw = data.homeworks.find((h) => h.id === data.selected_homework_id) ?? data.homeworks[0];
+  const worst = data.problems[0];
+  const [open, setOpen] = useState<string | null>(worst && worst.zero > 0 ? worst.bank_item_id : null);
+  const reviewHref = (studentId: string, position: number) =>
+    `/school/teacher/courses/${courseId}/homework/${hw.id}/sections/${data.section.id}/review?student=${studentId}&problem=${position}`;
+
   return (
-    <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-b border-border-light pb-3">
-      <div className="flex items-center gap-1.5">
-        <SegChip
-          active={filter === "attention"}
-          onClick={() => onFilter("attention")}
+    <>
+      <Lead problems={data.problems} homework={hw} sectionName={data.section.name} />
+
+      {data.watch.length > 0 && (
+        <WatchStrip courseId={courseId} sectionId={data.section.id} watch={data.watch} total={data.watch_total} />
+      )}
+
+      <div className="mt-10 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-border-light pb-3">
+        <label className="sr-only" htmlFor="insights-homework">
+          Homework
+        </label>
+        <select
+          id="insights-homework"
+          value={hw.id}
+          onChange={(e) => onPickHomework(e.target.value)}
+          className="max-w-full rounded-[--radius-sm] border border-border-light bg-surface px-2.5 py-1.5 text-sm font-semibold text-text-primary focus:border-primary focus:outline-none"
         >
-          Needs attention
-          {needAttention > 0 && (
-            <span className="ml-1.5 tabular-nums opacity-70">
-              {needAttention}
-            </span>
-          )}
-        </SegChip>
-        <SegChip active={filter === "all"} onClick={() => onFilter("all")}>
-          Everyone
-          <span className="ml-1.5 tabular-nums opacity-70">{total}</span>
-        </SegChip>
+          {data.homeworks.map((h) => (
+            <option key={h.id} value={h.id}>
+              {h.title}
+            </option>
+          ))}
+        </select>
+        <p className="text-[12px] text-text-muted">{coverageSentence(hw)}</p>
       </div>
 
-      <label className="flex items-center gap-2 text-[11px] text-text-muted">
-        Sort
-        <select
-          value={sort}
-          onChange={(e) => onSort(e.target.value as SortKey)}
-          className="rounded-[--radius-sm] border border-border-light bg-surface px-2 py-1 text-[12px] font-medium text-text-secondary focus:border-primary focus:outline-none"
-        >
-          <option value="attention">Needs attention first</option>
-          <option value="last_active">Last active</option>
-          <option value="name">Name</option>
-        </select>
-      </label>
+      {hw.counted === 0 ? (
+        <Empty
+          title="No grades counted yet"
+          body="Approve or publish this homework's grades in Submissions and the class results appear here."
+        />
+      ) : (
+        <ul className="divide-y divide-border-light">
+          {data.problems.map((p) => (
+            <ProblemRow
+              key={p.bank_item_id}
+              problem={p}
+              open={open === p.bank_item_id}
+              onToggle={() => setOpen(open === p.bank_item_id ? null : p.bank_item_id)}
+              reviewHref={reviewHref}
+            />
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
+/** The one bold element: a sentence that answers "what do I reteach?" */
+function Lead({
+  problems,
+  homework,
+  sectionName,
+}: {
+  problems: InsightsProblem[];
+  homework: InsightsHomework;
+  sectionName: string;
+}) {
+  if (homework.counted === 0) return null;
+  const worst = problems[0];
+  const graded = worst ? worst.full + worst.partial + worst.zero : 0;
+  return (
+    <p className="mt-8 max-w-2xl font-serif text-[22px] leading-snug text-text-primary">
+      {worst && worst.zero > 0 ? (
+        <>
+          Problem {worst.position} is where {sectionName} lost the most: {worst.zero} of {graded}{" "}
+          missed it.
+        </>
+      ) : (
+        <>Nobody in {sectionName} missed a problem outright on {homework.title}.</>
+      )}
+    </p>
+  );
+}
+
+function coverageSentence(h: InsightsHomework): string {
+  const parts = [`${h.counted} of ${h.students} counted`];
+  if (h.to_approve) parts.push(`${h.to_approve} to approve`);
+  if (h.to_grade) parts.push(`${h.to_grade} for you to grade`);
+  if (h.grading) parts.push(`${h.grading} still grading`);
+  if (h.awaiting_student)
+    parts.push(
+      h.awaiting_student === 1
+        ? "1 waiting on the student"
+        : `${h.awaiting_student} waiting on students`,
+    );
+  if (h.not_submitted) parts.push(`${h.not_submitted} not turned in`);
+  return parts.join(", ") + ".";
+}
+
+function watchReason(w: InsightsWatchStudent): string {
+  if (w.reason === "missing_work") return `Didn't turn in ${w.missed} of the last ${w.window} homeworks`;
+  if (w.reason === "missing_most") return `Missed ${w.zero} of ${w.problems} problems on the last two homeworks`;
+  return `Average fell from ${Math.round(w.previous ?? 0)}% to ${Math.round(w.latest ?? 0)}%`;
+}
+
+function WatchStrip({
+  courseId,
+  sectionId,
+  watch,
+  total,
+}: {
+  courseId: string;
+  sectionId: string;
+  watch: InsightsWatchStudent[];
+  total: number;
+}) {
+  return (
+    <div className="mt-6 rounded-[--radius-lg] border border-border-light bg-[color:var(--color-surface-alt)] px-5 py-4">
+      <h3 className="text-sm font-semibold text-text-primary">Students to watch</h3>
+      <ul className="mt-2 grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
+        {watch.map((w) => (
+          <li key={w.student_id} className="min-w-0 text-[13px] leading-snug">
+            <Link
+              href={`/school/teacher/courses/${courseId}/grades/${sectionId}/students/${w.student_id}`}
+              className="font-semibold text-text-primary hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              {w.name}
+            </Link>
+            <span className="text-text-muted"> {watchReason(w).toLowerCase()}</span>
+          </li>
+        ))}
+      </ul>
+      {total > watch.length && (
+        <p className="mt-2 text-[12px] text-text-muted">And {total - watch.length} more.</p>
+      )}
     </div>
   );
 }
 
-function SegChip({
-  active,
-  onClick,
-  children,
+function ProblemRow({
+  problem: p,
+  open,
+  onToggle,
+  reviewHref,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  problem: InsightsProblem;
+  open: boolean;
+  onToggle: () => void;
+  reviewHref: (studentId: string, position: number) => string;
 }) {
+  const reduce = useReducedMotion();
+  const graded = p.full + p.partial + p.zero;
+  const expandable = p.zero + p.partial > 0;
+  const panelId = `insights-problem-${p.bank_item_id}`;
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`rounded-[--radius-pill] border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-        active
-          ? "border-primary bg-primary text-white"
-          : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary"
-      }`}
-    >
-      {children}
-    </button>
+    <li className="py-4">
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={!expandable}
+        aria-expanded={expandable ? open : undefined}
+        aria-controls={expandable ? panelId : undefined}
+        className="grid w-full grid-cols-[2.25rem_1fr] items-start gap-x-3 gap-y-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 enabled:cursor-pointer sm:grid-cols-[2.25rem_1fr_15rem_9rem]"
+      >
+        <span className="font-serif text-[20px] leading-none text-text-primary">{p.position}</span>
+        <span className="min-w-0 text-sm leading-relaxed text-text-primary">
+          <MathText text={p.question} />
+        </span>
+        <span className="col-start-2 sm:col-start-auto">
+          <ResultBar full={p.full} partial={p.partial} zero={p.zero} />
+          <span className="mt-1.5 block text-[12px] tabular-nums text-text-muted">
+            {graded === 0
+              ? "No grades counted"
+              : `${p.zero} missed, ${p.partial} partial, ${p.full} got it`}
+          </span>
+        </span>
+        <span className="col-start-2 flex items-center justify-between gap-2 text-[12px] text-text-muted sm:col-start-auto sm:justify-end">
+          {p.to_review > 0 && (
+            <span
+              className="text-text-secondary"
+              title="Understanding checks on this problem the AI didn't clear and you haven't reviewed yet"
+            >
+              {p.to_review} {p.to_review === 1 ? "check" : "checks"} to review
+            </span>
+          )}
+          {expandable && (
+            <svg
+              aria-hidden
+              className={`shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M5 3l4 4-4 4" />
+            </svg>
+          )}
+        </span>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && expandable && (
+          <motion.div
+            id={panelId}
+            initial={reduce ? false : { height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
+            transition={{ duration: reduce ? 0 : 0.22, ease: "easeOut" }}
+            className="overflow-hidden"
+          >
+            <div className="ml-[3rem] mt-4 grid gap-6 sm:grid-cols-2">
+              <WhoList title="Missed it" refs={p.students.zero} position={p.position} reviewHref={reviewHref} />
+              <WhoList title="Partial credit" refs={p.students.partial} position={p.position} reviewHref={reviewHref} />
+            </div>
+            <ReasonsLine missed={p.students.zero} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </li>
   );
 }
 
-/**
- * Initial-load placeholder for the per-student roster. Mirrors the real
- * silhouette — a filter/sort bar above a divided list of student rows
- * (name + status pill on the left, a trailing signal on the right) — so
- * the roster settles in place rather than blanking to "Loading…".
- */
-function RosterSkeleton() {
+function ResultBar({ full, partial, zero }: { full: number; partial: number; zero: number }) {
+  const total = full + partial + zero;
+  if (total === 0) return <span className="block h-1.5 rounded-full bg-[color:var(--color-surface-alt-2)]" />;
+  const pct = (n: number) => `${(n / total) * 100}%`;
   return (
-    <div className="mt-6" aria-busy="true" aria-live="polite">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-light pb-3">
-        <div className="flex items-center gap-1.5">
-          <Skeleton className="h-7 w-24 rounded-[--radius-pill]" />
-          <Skeleton className="h-7 w-20 rounded-[--radius-pill]" />
-        </div>
-        <Skeleton className="h-7 w-28 rounded-[--radius-pill]" />
-      </div>
-      <ul className="mt-1 divide-y divide-border-light">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <li key={i} className="flex items-center gap-4 py-3.5 sm:gap-5">
-            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-              <div className="flex items-center gap-2.5">
-                <Skeleton className="h-4 w-40" />
-                <Skeleton className="h-4 w-16 rounded-[--radius-pill]" />
-              </div>
-              <Skeleton className="h-3 w-1/3" />
-            </div>
-            <Skeleton className="h-4 w-12" />
+    <span
+      role="img"
+      aria-label={`${zero} missed, ${partial} partial, ${full} got it`}
+      className="flex h-1.5 overflow-hidden rounded-full bg-[color:var(--color-surface-alt-2)]"
+    >
+      <span style={{ width: pct(zero) }} className="bg-[color:var(--color-error)]" />
+      <span style={{ width: pct(partial) }} className="bg-[color:var(--color-warning)]" />
+      <span style={{ width: pct(full) }} className="bg-[color:var(--color-primary)]" />
+    </span>
+  );
+}
+
+function WhoList({
+  title,
+  refs,
+  position,
+  reviewHref,
+}: {
+  title: string;
+  refs: InsightsStudentRef[];
+  position: number;
+  reviewHref: (studentId: string, position: number) => string;
+}) {
+  if (refs.length === 0) return null;
+  return (
+    <div>
+      <h4 className="text-[12px] font-semibold text-text-secondary">
+        {title} <span className="font-normal tabular-nums text-text-muted">({refs.length})</span>
+      </h4>
+      <ul className="mt-1.5 space-y-1">
+        {refs.map((r) => (
+          <li key={r.student_id} className="flex items-baseline justify-between gap-3 text-[13px]">
+            <span className="min-w-0 truncate text-text-primary">
+              {r.name}
+              {r.diagnosis_kind && DIAGNOSIS_LABEL[r.diagnosis_kind] && (
+                <span className="ml-2 text-[12px] text-text-muted">{DIAGNOSIS_LABEL[r.diagnosis_kind]}</span>
+              )}
+            </span>
+            <Link
+              href={reviewHref(r.student_id, position)}
+              className="shrink-0 text-[12px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              View work
+            </Link>
           </li>
         ))}
       </ul>
@@ -433,176 +460,51 @@ function RosterSkeleton() {
   );
 }
 
-function Roster({
-  courseId,
-  sectionId,
-  students,
-}: {
-  courseId: string;
-  sectionId: string;
-  students: StudentInsight[];
-}) {
-  const reduce = useReducedMotion();
+/** Reasons come from the understanding check and cover only some misses
+ *  (never partial credit), so the line always says how many it covers. */
+function ReasonsLine({ missed }: { missed: InsightsStudentRef[] }) {
+  const counts = useMemo(() => {
+    const c = new Map<string, number>();
+    for (const r of missed) {
+      const label = r.diagnosis_kind ? DIAGNOSIS_LABEL[r.diagnosis_kind] : undefined;
+      if (label) c.set(label, (c.get(label) ?? 0) + 1);
+    }
+    return [...c.entries()].sort((a, b) => b[1] - a[1]);
+  }, [missed]);
+  const covered = counts.reduce((n, [, k]) => n + k, 0);
+  if (covered === 0) return null;
   return (
-    <ul className="mt-1 divide-y divide-border-light">
-      {students.map((s, i) => (
-        <motion.li
-          key={s.student_id}
-          initial={reduce ? false : { opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            duration: reduce ? 0 : 0.3,
-            delay: reduce ? 0 : Math.min(i * 0.03, 0.3),
-            ease: "easeOut",
-          }}
-        >
-          <StudentRow courseId={courseId} sectionId={sectionId} student={s} />
-        </motion.li>
-      ))}
-    </ul>
+    <p className="ml-[3rem] mt-4 text-[12px] text-text-muted">
+      Reasons from the understanding check, for {covered} of the {missed.length} who missed it:{" "}
+      {counts.map(([label, n]) => `${label.toLowerCase()} ${n}`).join(", ")}.
+    </p>
   );
 }
 
-function StudentRow({
-  courseId,
-  sectionId,
-  student,
-}: {
-  courseId: string;
-  sectionId: string;
-  student: StudentInsight;
-}) {
-  const href = `/school/teacher/courses/${courseId}/grades/${sectionId}/students/${student.student_id}`;
-  const meta = STATUS_META[student.status];
-  const inactive = student.status === "no_activity";
-  // Surface the concept(s) only where it's actionable — for students the
-  // teacher is being pointed at (struggling / needs a nudge). Thriving /
-  // on-track / no-activity rows stay clean.
-  const struggles =
-    ATTENTION_STATUSES.has(student.status) && student.top_struggles.length > 0
-      ? student.top_struggles
-      : null;
-
-  return (
-    <Link
-      href={href}
-      className="group flex items-center gap-4 py-3.5 transition-colors hover:bg-[color:var(--color-surface-alt)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:gap-5"
-    >
-      {/* Name + status */}
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <div className="flex items-center gap-2.5">
-          <span className="truncate text-sm font-semibold text-text-primary group-hover:text-primary">
-            {student.name}
-          </span>
-          <span
-            className={`shrink-0 rounded-[--radius-pill] border px-2 py-[2px] text-[10px] font-semibold uppercase tracking-[0.05em] ${meta.className}`}
-          >
-            {meta.label}
-          </span>
-        </div>
-        <p className="truncate text-[11px] text-text-muted">
-          {inactive ? (
-            "Hasn't practiced yet"
-          ) : (
-            <>
-              <span className="tabular-nums text-text-secondary">
-                {student.practiced_count}
-              </span>{" "}
-              {student.practiced_count === 1 ? "problem" : "problems"}
-              {student.learn_walkthroughs > 0 && (
-                <>
-                  {" · "}
-                  <span className="tabular-nums text-text-secondary">
-                    {student.learn_walkthroughs}
-                  </span>{" "}
-                  {student.learn_walkthroughs === 1
-                    ? "walkthrough"
-                    : "walkthroughs"}
-                </>
-              )}
-              {student.last_active && (
-                <>
-                  {" · "}
-                  {formatRelativeDate(student.last_active)}
-                </>
-              )}
-            </>
-          )}
-        </p>
-        {struggles && (
-          <p className="truncate text-[11px] leading-snug">
-            <span className="text-text-muted">Stuck on </span>
-            <span className="font-medium text-text-secondary">
-              {struggles.join(", ")}
-            </span>
-          </p>
-        )}
-      </div>
-
-      {/* First-try rate */}
-      <div className="hidden w-20 shrink-0 text-right sm:block">
-        <div className="text-sm font-semibold tabular-nums text-text-primary">
-          {student.first_try_rate === null
-            ? "—"
-            : `${Math.round(student.first_try_rate * 100)}%`}
-        </div>
-        <div className="text-[10px] uppercase tracking-[0.05em] text-text-muted">
-          first try
-        </div>
-      </div>
-
-      {/* Trend */}
-      <div className="w-10 shrink-0 text-center">
-        <TrendArrow trend={student.trend} />
-      </div>
-
-      <svg
-        aria-hidden
-        className="shrink-0 text-text-muted transition-transform group-hover:translate-x-0.5"
-        width="14"
-        height="14"
-        viewBox="0 0 14 14"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M5 3l4 4-4 4" />
-      </svg>
-    </Link>
-  );
-}
-
-function TrendArrow({ trend }: { trend: StudentInsightTrend | null }) {
-  if (trend === null) {
-    return (
-      <span className="text-text-muted/50" title="Not enough data yet">
-        ·
-      </span>
-    );
-  }
-  const meta = {
-    improving: { glyph: "↑", cls: "text-[color:var(--color-primary)]", label: "Improving" },
-    slipping: { glyph: "↓", cls: "text-[color:var(--color-error)]", label: "Slipping" },
-    steady: { glyph: "→", cls: "text-text-muted", label: "Steady" },
-  }[trend];
-  return (
-    <span
-      className={`text-[15px] font-semibold ${meta.cls}`}
-      title={meta.label}
-      aria-label={`Trend: ${meta.label}`}
-    >
-      {meta.glyph}
-    </span>
-  );
-}
-
-function RosterEmpty({ title, body }: { title: string; body: string }) {
+function Empty({ title, body }: { title: string; body: string }) {
   return (
     <div className="mt-6 rounded-[--radius-lg] border border-dashed border-border-light bg-bg-subtle px-6 py-10 text-center">
       <p className="font-serif text-[18px] text-text-primary">{title}</p>
       <p className="mx-auto mt-1.5 max-w-md text-sm text-text-muted">{body}</p>
+    </div>
+  );
+}
+
+function InsightsSkeleton() {
+  return (
+    <div className="mt-8" aria-busy="true" aria-live="polite">
+      <Skeleton className="h-6 w-3/4 max-w-xl" />
+      <Skeleton className="mt-6 h-20 w-full rounded-[--radius-lg]" />
+      <Skeleton className="mt-10 h-8 w-64" />
+      <ul className="mt-2 divide-y divide-border-light">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <li key={i} className="flex items-center gap-4 py-4">
+            <Skeleton className="h-5 w-6" />
+            <Skeleton className="h-4 flex-1" />
+            <Skeleton className="hidden h-2 w-60 sm:block" />
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -581,7 +581,7 @@ async def test_a_rehearsal_stays_out_of_every_teacher_facing_number(
     submission_id = uuid.UUID(r.json()["submission_id"])
 
     # Stand in for the grading pipeline (needs an LLM). A breakdown is
-    # what item analysis counts; final_score is what publishing needs.
+    # what insights would count; final_score is what publishing needs.
     # ai_breakdown and graded_at matter: the admin quality queries gate
     # on them, so without them the rehearsal never reaches those queries
     # and an assertion about the preview filter would pass for the wrong
@@ -608,14 +608,16 @@ async def test_a_rehearsal_stays_out_of_every_teacher_facing_number(
     # Reports grades that went to students — she is not one.
     assert r.json()["published_count"] == 0
 
-    # The only average on the review page. "Class item analysis" must
-    # not be a distribution of her own work.
-    r = await client.get(
-        f"/v1/teacher/assignments/{world['assignment_id']}/item-analysis",
-        headers=world["headers"],
-    )
-    assert r.status_code == 200, r.text
-    assert r.json()["graded_count"] == 0
+    # Student Insights: her drafted grade must not surface as one to
+    # approve, and she is not enrolled in the class she teaches.
+    for section_id in world["section_ids"]:
+        r = await client.get(
+            f"/v1/teacher/courses/{world['course_id']}/sections/{section_id}/insights",
+            headers=world["headers"],
+        )
+        assert r.status_code == 200, r.text
+        hw = next(h for h in r.json()["homeworks"] if h["id"] == world["assignment_id"])
+        assert (hw["students"], hw["counted"], hw["to_approve"]) == (0, 0, 0)
 
     # Setup milestones: she has neither students nor a published grade.
     r = await client.get(
