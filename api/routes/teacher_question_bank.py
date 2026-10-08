@@ -544,6 +544,23 @@ async def get_generation_job(
 # ── per-item actions ──
 
 
+async def _rederive_requires_drawing(
+    db: AsyncSession, item: QuestionBankItem, *, user_id: str,
+) -> None:
+    """Re-derive `requires_drawing` for the item's new question text, inside
+    the save so the response carries the final flag. Never over a teacher's
+    setting: the AI call takes ~0.6 s (up to its 3 s time box), and a toggle
+    from another page can commit meanwhile — so after the call the row is
+    re-read under a row lock (held only to this request's commit) and the
+    flag written only if the teacher still hasn't set it."""
+    if item.requires_drawing_teacher_set:
+        return
+    flag = await classify_requires_drawing(item.question, user_id=user_id)
+    await db.refresh(item, attribute_names=["requires_drawing_teacher_set"], with_for_update=True)
+    if not item.requires_drawing_teacher_set:
+        item.requires_drawing = flag
+
+
 @router.patch("/question-bank/{item_id}")
 async def update_bank_item(
     body: UpdateBankItemRequest,
@@ -596,15 +613,12 @@ async def update_bank_item(
         q = body.question.strip()
         if not q:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Question cannot be empty")
+        text_changed = q != item.question
         item.question = q
         # New wording re-derives the drawing requirement — unless the
         # teacher has set it, or is setting it in this same request.
-        if not item.requires_drawing_teacher_set and body.requires_drawing is None:
-            # Decided inside the save (~0.6 s, time-boxed), so the response
-            # carries the final flag — no later write the open page can't see.
-            item.requires_drawing = await classify_requires_drawing(
-                q, user_id=str(current_user.user_id),
-            )
+        if text_changed and body.requires_drawing is None:
+            await _rederive_requires_drawing(db, item, user_id=str(current_user.user_id))
     if body.solution_steps is not None:
         item.solution_steps = new_steps
     if body.final_answer is not None:
@@ -1053,10 +1067,7 @@ async def accept_chat_proposal(
         item.question = str(proposal["question"]).strip()
         # New AI-written text re-derives the drawing requirement, as
         # regenerate does — unless the teacher has set it themselves.
-        if not item.requires_drawing_teacher_set:
-            item.requires_drawing = await classify_requires_drawing(
-                item.question, user_id=str(current_user.user_id),
-            )
+        await _rederive_requires_drawing(db, item, user_id=str(current_user.user_id))
     if proposal.get("solution_steps") is not None:
         # Belt-and-suspenders: defense against malformed steps lingering
         # in old chat_messages written before question_bank_chat.py

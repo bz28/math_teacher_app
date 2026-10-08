@@ -124,6 +124,27 @@ async def test_ai_rewrite_rederives_the_flag_only_when_not_teacher_set(
     assert (await _item(item_id)).requires_drawing is False
 
 
+async def test_ai_rewrite_takes_the_ai_answer_in_the_response(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """Accepting a rewrite the regex misses: the AI's yes is decided inside
+    the accept, so the response already carries it."""
+    from unittest.mock import AsyncMock, patch
+
+    from api.core import drawing_requirement
+
+    await _own_course(world)
+    item_id = world["primary_id"]
+    with patch.object(drawing_requirement, "_llm_requires_drawing",
+                      new=AsyncMock(return_value=True)) as llm:
+        r = await _accept_proposal(client, world["teacher_token"], item_id,
+                                   "Represent the data however you like, then explain.")
+    assert r.status_code == 200, r.text
+    llm.assert_awaited_once()
+    assert r.json()["requires_drawing"] is True
+    assert (await _item(item_id)).requires_drawing is True
+
+
 async def test_undo_restores_the_derived_flag_but_never_a_teacher_setting(
     world: dict[str, Any], client: AsyncClient,
 ) -> None:

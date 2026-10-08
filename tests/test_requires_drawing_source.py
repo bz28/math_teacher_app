@@ -10,6 +10,7 @@
 - Never at grading/extraction time: those only read the column.
 """
 
+import asyncio
 import uuid
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -26,6 +27,10 @@ from tests.test_question_bank_upload import TINY_PNG
 from tests.test_question_edits import _own_course, _patch
 
 pytestmark = pytest.mark.asyncio
+
+# conftest stubs `_llm_requires_drawing` for every test (autouse); tests of
+# the call itself restore this real one, captured at import.
+_REAL_LLM_REQUIRES_DRAWING = drawing_requirement._llm_requires_drawing
 
 
 async def _item(item_id: Any) -> QuestionBankItem:
@@ -99,22 +104,28 @@ async def test_a_slow_call_is_time_boxed_and_the_regex_stands(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The call sits on a teacher's save: past the time box it gives up."""
-    import asyncio
-
     async def hang(*_: Any, **__: Any) -> dict[str, Any]:
         await asyncio.sleep(5)
         return {"requires_drawing": True}
 
     monkeypatch.setattr(drawing_requirement, "_CLASSIFY_TIMEOUT_S", 0.05)
-    with patch("api.core.llm_client.call_claude_json", new=AsyncMock(side_effect=hang)):
+    monkeypatch.setattr(drawing_requirement, "_llm_requires_drawing", _REAL_LLM_REQUIRES_DRAWING)
+    call = AsyncMock(side_effect=hang)
+    with patch("api.core.llm_client.call_claude_json", new=call):
+        started = asyncio.get_running_loop().time()
         assert await drawing_requirement._llm_requires_drawing("Graph y = x.") is None
+        assert asyncio.get_running_loop().time() - started < 1  # cut off, not 5 s
         assert await drawing_requirement.classify_requires_drawing("Solve x + 1 = 2.") is False
         assert await drawing_requirement.classify_requires_drawing("Graph y = x.") is True
+    assert call.await_count == 3  # the real call path ran each time
 
 
-async def test_a_failed_call_falls_back_to_the_regex() -> None:
-    with patch("api.core.llm_client.call_claude_json", new=AsyncMock(side_effect=RuntimeError("down"))):
+async def test_a_failed_call_falls_back_to_the_regex(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(drawing_requirement, "_llm_requires_drawing", _REAL_LLM_REQUIRES_DRAWING)
+    call = AsyncMock(side_effect=RuntimeError("down"))
+    with patch("api.core.llm_client.call_claude_json", new=call):
         assert await drawing_requirement._llm_requires_drawing("Graph y = x.") is None
+    call.assert_awaited_once()
     assert drawing_requirement.combine_requires_drawing("Graph y = x.", None) is True
 
 
@@ -155,3 +166,48 @@ def test_grading_and_extraction_never_call_the_classifier() -> None:
         src = inspect.getsource(mod)
         assert "requires_drawing(" not in src.replace('get("requires_drawing")', "")
         assert "classify_requires_drawing" not in src and "_llm_requires_drawing" not in src
+
+
+async def test_a_toggle_committed_during_the_call_is_never_overwritten(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """The text save awaits the AI call (~0.6 s). A teacher's toggle from
+    another page that commits meanwhile must win: the save re-reads the
+    row under lock after the call and leaves a teacher-set flag alone."""
+    await _own_course(world)
+    item_id = world["primary_id"]
+
+    assert (await _item(item_id)).requires_drawing is False
+
+    # The teacher sets an explicit "no" (on, then back off) on another page
+    # while the AI is deciding the new text is a drawing question. A single
+    # toggle can't show the race: the save would write back the value it
+    # loaded, which the ORM skips as unchanged.
+    async def explicit_no_meanwhile(*_: Any, **__: Any) -> bool:
+        for v in (True, False):
+            r = await _patch(client, world["teacher_token"], item_id, requires_drawing=v)
+            assert r.status_code == 200
+        return True
+
+    with patch.object(drawing_requirement, "_llm_requires_drawing",
+                      new=AsyncMock(side_effect=explicit_no_meanwhile)):
+        r = await _patch(client, world["teacher_token"], item_id,
+                         question="Represent the data however you like, then explain.")
+    assert r.status_code == 200
+    assert r.json()["requires_drawing"] is False
+    stored = await _item(item_id)
+    assert stored.question == "Represent the data however you like, then explain."
+    assert stored.requires_drawing is False and stored.requires_drawing_teacher_set is True
+
+
+async def test_resaving_the_same_text_makes_no_call(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    await _own_course(world)
+    item_id = world["primary_id"]
+    same = (await _item(item_id)).question
+    with patch.object(drawing_requirement, "_llm_requires_drawing",
+                      new=AsyncMock(return_value=True)) as llm:
+        r = await _patch(client, world["teacher_token"], item_id, question=same)
+    assert r.status_code == 200
+    llm.assert_not_awaited()
