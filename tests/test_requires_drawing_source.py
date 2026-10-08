@@ -211,3 +211,41 @@ async def test_resaving_the_same_text_makes_no_call(
         r = await _patch(client, world["teacher_token"], item_id, question=same)
     assert r.status_code == 200
     llm.assert_not_awaited()
+
+
+async def test_the_response_carries_the_teachers_flag_when_their_toggle_wins(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    """A single toggle committed during the call: the database keeps the
+    teacher's value and the save's response must show it too."""
+    await _own_course(world)
+    item_id = world["primary_id"]
+    assert (await _item(item_id)).requires_drawing is False
+
+    async def toggle_on_meanwhile(*_: Any, **__: Any) -> bool:
+        r = await _patch(client, world["teacher_token"], item_id, requires_drawing=True)
+        assert r.status_code == 200
+        return False
+
+    with patch.object(drawing_requirement, "_llm_requires_drawing",
+                      new=AsyncMock(side_effect=toggle_on_meanwhile)):
+        r = await _patch(client, world["teacher_token"], item_id, question="Solve 3x = 12.")
+    assert r.status_code == 200
+    assert r.json()["requires_drawing"] is True
+    assert r.json()["requires_drawing_teacher_set"] is True
+    assert (await _item(item_id)).requires_drawing is True
+
+
+async def test_an_invalid_request_is_rejected_before_any_model_call(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    await _own_course(world)
+    item_id = world["primary_id"]
+    before = (await _item(item_id)).question
+    with patch.object(drawing_requirement, "_llm_requires_drawing",
+                      new=AsyncMock(return_value=True)) as llm:
+        r = await _patch(client, world["teacher_token"], item_id,
+                         question="Graph y = x.", distractors=["1"])
+    assert r.status_code == 400
+    llm.assert_not_awaited()
+    assert (await _item(item_id)).question == before

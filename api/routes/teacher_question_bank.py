@@ -556,7 +556,12 @@ async def _rederive_requires_drawing(
     if item.requires_drawing_teacher_set:
         return
     flag = await classify_requires_drawing(item.question, user_id=user_id)
-    await db.refresh(item, attribute_names=["requires_drawing_teacher_set"], with_for_update=True)
+    # Both columns: when the teacher's toggle wins, the response must carry
+    # their value, not the one loaded at the start of this request.
+    await db.refresh(
+        item, attribute_names=["requires_drawing", "requires_drawing_teacher_set"],
+        with_for_update=True,
+    )
     if not item.requires_drawing_teacher_set:
         item.requires_drawing = flag
 
@@ -586,6 +591,20 @@ async def update_bank_item(
         if body.solution_steps is not None
         else None
     )
+    # Validated before any mutation (and before the question branch's AI
+    # call) so a rejected request neither mutates nor pays for a model call.
+    if body.distractors is not None and len(body.distractors) != 3:
+        # MCQ rendering relies on exactly 3 distractors so the
+        # composed [correct, ...wrong] gives 4 choices. Reject
+        # anything else loudly — silently truncating would surprise
+        # the teacher later when the modal renders fewer choices than
+        # they typed.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="distractors must contain exactly 3 wrong-answer choices",
+        )
+    if body.difficulty is not None and body.difficulty not in ("easy", "medium", "hard"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid difficulty")
     if content_changing:
         snapshot_history(item)
     # Not part of the one-level undo (the toggle is its own undo), and
@@ -628,20 +647,8 @@ async def update_bank_item(
         # nothing, so this was an inconsistency waiting to mislead.
         item.final_answer = body.final_answer.strip()
     if body.distractors is not None:
-        # MCQ rendering relies on exactly 3 distractors so the
-        # composed [correct, ...wrong] gives 4 choices. Reject
-        # anything else loudly — silently truncating would surprise
-        # the teacher later when the modal renders fewer choices than
-        # they typed.
-        if len(body.distractors) != 3:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="distractors must contain exactly 3 wrong-answer choices",
-            )
         item.distractors = [str(d) for d in body.distractors]
     if body.difficulty is not None:
-        if body.difficulty not in ("easy", "medium", "hard"):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid difficulty")
         item.difficulty = body.difficulty
     if body.unit_id is not None:
         item.unit_id = body.unit_id
@@ -1064,10 +1071,13 @@ async def accept_chat_proposal(
     snapshot_history(item)
 
     if proposal.get("question") is not None:
-        item.question = str(proposal["question"]).strip()
+        new_question = str(proposal["question"]).strip()
+        text_changed = new_question != item.question
+        item.question = new_question
         # New AI-written text re-derives the drawing requirement, as
         # regenerate does — unless the teacher has set it themselves.
-        await _rederive_requires_drawing(db, item, user_id=str(current_user.user_id))
+        if text_changed:
+            await _rederive_requires_drawing(db, item, user_id=str(current_user.user_id))
     if proposal.get("solution_steps") is not None:
         # Belt-and-suspenders: defense against malformed steps lingering
         # in old chat_messages written before question_bank_chat.py
