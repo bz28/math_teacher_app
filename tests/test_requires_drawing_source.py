@@ -3,9 +3,9 @@
 - Generated / uploaded items: the call that wrote or read the question
   returns it (GENERATE_QUESTIONS_SCHEMA) — no extra call; regex fallback.
 - Text changes nobody's AI produced (a teacher's edit, an accepted
-  Workshop rewrite): the regex answers at save time, then one small
-  classification call runs AFTER the save and can add a yes — unless the
-  text changed again or a teacher set the flag meanwhile.
+  Workshop rewrite): one small, time-boxed classification call runs
+  INSIDE the save, so the response carries the final flag — unless a
+  teacher has set the flag.
 - Either source saying yes flags it (combine_requires_drawing).
 - Never at grading/extraction time: those only read the column.
 """
@@ -61,36 +61,55 @@ async def test_uploaded_worksheet_keeps_the_extractors_flag() -> None:
     assert [q.get("requires_drawing") for q in out] == [False, True, None]
 
 
-async def test_a_text_edit_takes_the_ai_answer_after_the_save(
+async def test_a_text_edit_returns_the_ai_answer_in_the_response(
     world: dict[str, Any], client: AsyncClient,
 ) -> None:
+    """The AI decides inside the save, so the open Workshop is handed the
+    final flag — nothing changes in the database after the response."""
     await _own_course(world)
     item_id = world["primary_id"]
-    # The regex says no drawing; the AI (run after the save) says yes.
+    # The regex says no drawing; the AI says yes.
     with patch.object(drawing_requirement, "_llm_requires_drawing",
                       new=AsyncMock(return_value=True)) as llm:
         r = await _patch(client, world["teacher_token"], item_id,
                          question="Represent the data however you like, then explain.")
         assert r.status_code == 200
         llm.assert_awaited_once()
+    assert r.json()["requires_drawing"] is True
     assert (await _item(item_id)).requires_drawing is True
 
 
-async def test_the_ai_answer_never_overrides_a_teacher_or_a_newer_text(
+async def test_a_teacher_set_flag_survives_a_text_edit(
     world: dict[str, Any], client: AsyncClient,
 ) -> None:
     await _own_course(world)
     item_id = world["primary_id"]
-    item = await _item(item_id)
-    with patch.object(drawing_requirement, "_llm_requires_drawing", new=AsyncMock(return_value=True)):
-        # the text moved on since the call was scheduled
-        await drawing_requirement.refresh_requires_drawing(item.id, "an older wording")
-        assert (await _item(item_id)).requires_drawing is False
-        # the teacher set it (on, then back off — an explicit "no")
-        await _patch(client, world["teacher_token"], item_id, requires_drawing=True)
-        await _patch(client, world["teacher_token"], item_id, requires_drawing=False)
-        await drawing_requirement.refresh_requires_drawing(item.id, (await _item(item_id)).question)
-        assert (await _item(item_id)).requires_drawing is False
+    # the teacher set it (on, then back off — an explicit "no")
+    await _patch(client, world["teacher_token"], item_id, requires_drawing=True)
+    await _patch(client, world["teacher_token"], item_id, requires_drawing=False)
+    with patch.object(drawing_requirement, "_llm_requires_drawing",
+                      new=AsyncMock(return_value=True)) as llm:
+        r = await _patch(client, world["teacher_token"], item_id, question="Graph y = 2x + 1.")
+        assert r.status_code == 200
+        llm.assert_not_awaited()
+    assert r.json()["requires_drawing"] is False
+
+
+async def test_a_slow_call_is_time_boxed_and_the_regex_stands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The call sits on a teacher's save: past the time box it gives up."""
+    import asyncio
+
+    async def hang(*_: Any, **__: Any) -> dict[str, Any]:
+        await asyncio.sleep(5)
+        return {"requires_drawing": True}
+
+    monkeypatch.setattr(drawing_requirement, "_CLASSIFY_TIMEOUT_S", 0.05)
+    with patch("api.core.llm_client.call_claude_json", new=AsyncMock(side_effect=hang)):
+        assert await drawing_requirement._llm_requires_drawing("Graph y = x.") is None
+        assert await drawing_requirement.classify_requires_drawing("Solve x + 1 = 2.") is False
+        assert await drawing_requirement.classify_requires_drawing("Graph y = x.") is True
 
 
 async def test_a_failed_call_falls_back_to_the_regex() -> None:

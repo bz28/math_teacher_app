@@ -30,9 +30,9 @@ logic (cp1000085) so a fresh database backfills identically forever.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
-import uuid
 
 _VERB = re.compile(r"\b(graph|sketch|plot|draw|shade|construct)\b", re.IGNORECASE)
 
@@ -118,12 +118,18 @@ def requires_drawing(question: str | None) -> bool:
 # that wrote/read the question (GENERATE_QUESTIONS_SCHEMA); regeneration
 # from REGENERATE_QA_SCHEMA. Text nobody's AI call produced — a teacher's
 # edit, an accepted Workshop rewrite — goes through this one small call,
-# run AFTER the save so the teacher never waits on it (the regex value is
-# stored immediately; the AI can only add a yes — combine_requires_drawing).
+# awaited inside the save and time-boxed, OR'd with the regex
+# (combine_requires_drawing). Inside the save, not after it: a background
+# write would land after the response, leaving the open Workshop showing
+# a flag the database no longer holds, and could race a teacher's toggle.
 # Never called while grading or extracting: those only read the stored
 # column.
 
 logger = logging.getLogger(__name__)
+
+# Measured on 160 real calls (PR #907 eval): p50 0.58 s, p95 0.66 s, max
+# 0.93 s. Past this, the save goes ahead on the regex alone.
+_CLASSIFY_TIMEOUT_S = 3.0
 
 _CLASSIFY_SYSTEM = (
     "Decide whether this homework question asks the STUDENT to produce a drawing: "
@@ -137,12 +143,13 @@ _CLASSIFY_SYSTEM = (
 
 
 async def _llm_requires_drawing(question: str, *, user_id: str | None = None) -> bool | None:
-    """One cheap classification call; None when it fails or answers oddly."""
+    """One cheap classification call; None when it fails, answers oddly, or
+    runs past the time box (it sits on a teacher's save)."""
     from api.core.llm_client import MODEL_CLASSIFY, LLMMode, call_claude_json
     from api.core.llm_schemas import REQUIRES_DRAWING_SCHEMA
 
     try:
-        result = await call_claude_json(
+        result = await asyncio.wait_for(call_claude_json(
             _CLASSIFY_SYSTEM,
             question,
             LLMMode.CLASSIFY_REQUIRES_DRAWING,
@@ -150,8 +157,9 @@ async def _llm_requires_drawing(question: str, *, user_id: str | None = None) ->
             model=MODEL_CLASSIFY,
             max_tokens=64,
             temperature=0.0,
+            max_retries=1,
             user_id=user_id,
-        )
+        ), timeout=_CLASSIFY_TIMEOUT_S)
     except Exception:  # noqa: BLE001 — the regex is the fallback
         logger.warning("requires-drawing classification failed; using the regex", exc_info=True)
         return None
@@ -172,27 +180,9 @@ def combine_requires_drawing(question: str | None, ai_flag: object) -> bool:
     return ai_flag is True or requires_drawing(question)
 
 
-async def refresh_requires_drawing(
-    item_id: uuid.UUID, question: str, *, user_id: str | None = None,
-) -> None:
-    """After a question-text change: ask the AI, and when it says yes
-    where the regex said no, store the yes (see combine_requires_drawing)
-    — only if the text is still the one it judged and no teacher has set
-    the flag since. Runs as a background task, off the teacher's save."""
-    from sqlalchemy import select
-
-    from api.database import get_session_factory
-    from api.models.question_bank import QuestionBankItem
-
-    ai_flag = await _llm_requires_drawing(question, user_id=user_id)
-    if ai_flag is not True:
-        return  # the regex value stored at save time stands: the AI only adds a yes
-    async with get_session_factory()() as s:
-        item = (await s.execute(
-            select(QuestionBankItem).where(QuestionBankItem.id == item_id)
-        )).scalar_one_or_none()
-        if item is None or item.question != question or item.requires_drawing_teacher_set:
-            return
-        if not item.requires_drawing:
-            item.requires_drawing = True
-            await s.commit()
+async def classify_requires_drawing(question: str, *, user_id: str | None = None) -> bool:
+    """The flag for question text no generation call wrote (a teacher's
+    edit, an accepted Workshop rewrite): one time-boxed AI call OR'd with
+    the regex, awaited inside the save so the response carries the final
+    value."""
+    return combine_requires_drawing(question, await _llm_requires_drawing(question, user_id=user_id))

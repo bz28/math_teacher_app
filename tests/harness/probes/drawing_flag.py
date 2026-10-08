@@ -27,6 +27,13 @@ from api.core.drawing_requirement import (
 from tests.harness.probe import Probe
 from tests.harness.types import CheckResult, GeneratedItem, HarnessContext
 
+# The AI alone's recorded misses (Oct 2026 run: 60/62); the regex catches
+# both, so the stored flag is right. Fix the prompt or the label → delete
+# the entry; a re-record that adds a miss fails until it's understood.
+AI_KNOWN_MISSES = {
+    "Label the vertex on your graph.",  # presumes a drawn graph
+    "Complete a table of values for $x = -2, \\dots, 2$.",  # is a table a drawing? labeled yes
+}
 _CASSETTE_DIR = Path(__file__).resolve().parent.parent / "_cassettes" / "drawing_flag"
 
 # Asks the student to produce a drawing.
@@ -161,14 +168,23 @@ class DrawingFlagProbe(Probe):
                 os.environ["HARNESS_CASSETTE_DIR"] = prev_dir
 
     def deterministic_checks(self, item: GeneratedItem) -> list[CheckResult]:
-        # What ships is the stored flag (AI OR regex). The AI alone is
-        # reported in the detail, not gated: it isn't what grading reads.
+        # What ships is the stored flag (AI OR regex) — gated. The AI is
+        # gated on its own too: the regex was tuned on this same corpus, so
+        # the OR alone would pass even if the call broke (None) or went
+        # blind. Its known misses are listed, so a NEW one fails a
+        # re-record instead of hiding behind the regex.
         r = item.raw
-        ok = r["stored"] == r["truth"]
+        q = r["question"]
+        ai_expected = (not r["truth"]) if q in AI_KNOWN_MISSES else r["truth"]
         return [
             CheckResult(
                 f"stored flag agrees with the label ({r['stored']} vs {r['truth']})",
-                ok,
+                r["stored"] == r["truth"],
                 f"AI {r['llm']}, regex {r['regex']}",
+            ),
+            CheckResult(
+                "AI alone agrees with the label" + (" (listed known miss)" if q in AI_KNOWN_MISSES else ""),
+                r["llm"] is ai_expected,
+                f"AI {r['llm']}, label {r['truth']}",
             ),
         ]
