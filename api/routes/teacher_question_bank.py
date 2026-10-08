@@ -602,7 +602,8 @@ async def update_bank_item(
         # teacher has set it, or is setting it in this same request.
         if not item.requires_drawing_teacher_set and body.requires_drawing is None:
             # The regex answers now; the AI answers after the save (never
-            # on the teacher's wait) and overwrites it if it differs.
+            # on the teacher's wait) and can only add a yes
+            # (combine_requires_drawing).
             item.requires_drawing = requires_drawing(q)
             background_tasks.add_task(
                 refresh_requires_drawing, item.id, q, user_id=str(current_user.user_id),

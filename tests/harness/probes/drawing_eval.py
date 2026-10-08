@@ -24,12 +24,13 @@ grade-changing description, a lost drawing, a false "unconfirmed").
 Otherwise say so plainly and propose a change.
 
 Cases (ground truth is exact — we drew the page):
+  b  one of two lines drawn, both equations written (the #902 prod case)
   d  a shaded number line (open circle at 4, ray to the right)
   e  two lines drawn, one with the WRONG slope, both equations written
      beside them — right count, wrong line (the priming the count check
      cannot see)
-  f  both lines drawn, the answer marked ONLY on the graph
-  i  a small graph in the bottom-right corner (bbox stress)
+Pending (not recorded yet — see PENDING_CASES): f (both lines drawn,
+the answer marked ONLY on the graph), i (a small graph in a corner).
 
 Replays at $0 from its own committed cassette dir (the shared vision
 cassette is a gitignored local cache).
