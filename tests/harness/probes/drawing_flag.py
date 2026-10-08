@@ -23,7 +23,6 @@ from tests.harness.probe import Probe
 from tests.harness.types import CheckResult, GeneratedItem, HarnessContext
 
 _CASSETTE_DIR = Path(__file__).resolve().parent.parent / "_cassettes" / "drawing_flag"
-_RECORDED = 28
 
 # Asks the student to produce a drawing.
 REQUIRES_DRAWING: list[str] = [
@@ -135,16 +134,8 @@ class DrawingFlagProbe(Probe):
         )
 
     async def generate(self, ctx: HarnessContext, constraint: str | None = None) -> list[GeneratedItem]:
-        # Interleaved, so a budget-limited run (DRAWING_FLAG_LIMIT) is balanced.
-        pos = [(q, True) for q in REQUIRES_DRAWING]
-        neg = [(q, False) for q in NOT_A_DRAWING if q]
-        cases = [c for pair in zip(pos, neg) for c in pair] + pos[len(neg):] + neg[len(pos):]
-        # Only the first 28 (14 yes / 14 no, interleaved) are recorded: the
-        # PR's live-spend cap ran out there. DRAWING_FLAG_LIMIT=0 runs all
-        # (records the rest in --mode auto).
-        limit = int(os.environ.get("DRAWING_FLAG_LIMIT", str(_RECORDED)) or 0)
-        if limit:
-            cases = cases[:limit]
+        # Every labeled phrasing is recorded, so the replay covers the corpus.
+        cases = [(q, True) for q in REQUIRES_DRAWING] + [(q, False) for q in NOT_A_DRAWING if q]
         prev_dir = os.environ.get("HARNESS_CASSETTE_DIR")
         os.environ["HARNESS_CASSETTE_DIR"] = str(_CASSETTE_DIR)
         try:

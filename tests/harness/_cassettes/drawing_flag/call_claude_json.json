@@ -1,4 +1,26 @@
 {
+  "0be44c9356e616d6b8e206fe9757a2f1": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Do not graph; solve algebraically.",
+      "recorded_at": 1791484198.987871
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "228d584e7788bef283b296122f76b75d": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Label the vertex on your graph.",
+      "recorded_at": 1791484190.228117
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
   "22e85a357030394b35bbc72bacae2fa0": {
     "meta": {
       "mode": "classify_requires_drawing",
@@ -32,6 +54,28 @@
       "requires_drawing": false
     }
   },
+  "2cc98b447263c53e067c47d8e69e6a01": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Represent $x > 3$ on a number line.",
+      "recorded_at": 1791484187.0067189
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "32e6d48f93a6ebbca688c1a376b6eab0": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Solve by substitution. Do not use a graph.",
+      "recorded_at": 1791484200.098388
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
   "36c4b9196792a41a7b32186356816026": {
     "meta": {
       "mode": "classify_requires_drawing",
@@ -41,6 +85,61 @@
     },
     "response": {
       "requires_drawing": true
+    }
+  },
+  "393cd23263d094966f8a89c030e73ad6": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Model the problem with a graph.",
+      "recorded_at": 1791484186.449145
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "39ce446e91e2b75dae9708fb718a4476": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Solve using a graph.",
+      "recorded_at": 1791484185.897387
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "3e10693749557d9052743ffbe9a379ff": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || a) Solve for $x$. b) Plot your answer on the number line.",
+      "recorded_at": 1791484182.9538171
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "467b773db929be4fd3f7096d105eefe0": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Show your answer on a number line.",
+      "recorded_at": 1791484187.599978
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "4a01244e47b35c127cd89b61dfadb47f": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Plot twist: solve $2x = 4$.",
+      "recorded_at": 1791484195.56075
+    },
+    "response": {
+      "requires_drawing": false
     }
   },
   "4f4cb523f5c30a60a08511eb2ce3e1d8": {
@@ -109,6 +208,28 @@
       "requires_drawing": false
     }
   },
+  "6dffb8170551d6233d885f383df1514b": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Construct the perpendicular bisector of $\\overline{AB}$.",
+      "recorded_at": 1791484181.7366989
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "7560366b9aea14bcfac4c88519c18855": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || (a) Find the slope. (b) Graph the line.",
+      "recorded_at": 1791484182.292701
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
   "775008d55a0950c92b4bcb6294b193be": {
     "meta": {
       "mode": "classify_requires_drawing",
@@ -118,6 +239,17 @@
     },
     "response": {
       "requires_drawing": false
+    }
+  },
+  "7825fa99d4ad14d3ae73d1e9f7e32b3b": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Solve algebraically, then graph both lines to check (required).",
+      "recorded_at": 1791484194.993351
+    },
+    "response": {
+      "requires_drawing": true
     }
   },
   "7e1eacc378d4c47269e95550ee3eb769": {
@@ -137,6 +269,28 @@
       "model": "claude-haiku-4-5-20251001",
       "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Graph $y = 3x - 2$ and label the y-intercept.",
       "recorded_at": 1790735998.238184
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "880784786e1f63952bd02da65bcbd33a": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Which graph shows the line $y = 2x + 1$? (A) \u2026 (B) \u2026 (C) \u2026 (D) \u2026",
+      "recorded_at": 1791484196.080232
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "88bbb0031e8440594e1bdac0a5a3d94e": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Include a sketch of the situation.",
+      "recorded_at": 1791484193.8695428
     },
     "response": {
       "requires_drawing": true
@@ -164,6 +318,28 @@
       "requires_drawing": false
     }
   },
+  "95f5af3ce89ca0b8fc86f8b9cffab6b4": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || You draw two cards from a standard deck without replacement. Find P(both aces).",
+      "recorded_at": 1791484197.308932
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "96a5337b4c6e00ca585c14967374175e": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Make a table of values for $y = 2x + 1$, then graph it.",
+      "recorded_at": 1791484192.637525
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
   "99003f3284e3eab65d78b29fffc21b9a": {
     "meta": {
       "mode": "classify_requires_drawing",
@@ -181,6 +357,50 @@
       "model": "claude-haiku-4-5-20251001",
       "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Solve $x + 2 > 5$, graph the solution.",
       "recorded_at": 1790736018.5743968
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "a246391d9a26b4c848835574cbbce4db": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Complete a table of values for $x = -2, \\dots, 2$.",
+      "recorded_at": 1791484193.243275
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "abede8fb2b6aff6437b8ca1a01753bea": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Make a bar graph of the survey results.",
+      "recorded_at": 1791484190.7874188
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "aded5ab3906838ff3c7dc1c0f932edda": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Solve the system graphically.",
+      "recorded_at": 1791484184.8048398
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "af27d6d54b322bb731ea04de16124e11": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Draw a number line and shade the solution of $x > 2$.",
+      "recorded_at": 1791484194.416144
     },
     "response": {
       "requires_drawing": true
@@ -208,6 +428,17 @@
       "requires_drawing": true
     }
   },
+  "b7fa5f2791cd6afca505aedd6aa321f8": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || A bag holds 3 red and 2 blue marbles. Draw a marble at random. What is P(red)?",
+      "recorded_at": 1791484196.725329
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
   "bd290a5646160b96bc3be2618733b8ec": {
     "meta": {
       "mode": "classify_requires_drawing",
@@ -225,6 +456,50 @@
       "model": "claude-haiku-4-5-20251001",
       "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || You must graph both equations.",
       "recorded_at": 1790736021.0715132
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "bebfece8d0c6de0f2974a2278dcf22f0": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Show the solution on the coordinate plane.",
+      "recorded_at": 1791484188.474493
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "c57162e477795b1951975fd582dafec5": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Use a graph to solve $x^2 - 4 = 0$.",
+      "recorded_at": 1791484185.3444722
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "c63cd9a1d9a7da0f06af09cc185c8348": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Solve $x^2 = 9$. Then sketch the parabola.",
+      "recorded_at": 1791484183.6250591
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "cdf0e707bc07ba2f8c8c307e84bb90fc": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Graphing: $y = 2x + 1$",
+      "recorded_at": 1791484184.253813
     },
     "response": {
       "requires_drawing": true
@@ -263,6 +538,28 @@
       "requires_drawing": false
     }
   },
+  "d72657fdf2002b70b25526285513e477": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Create a scatter plot of the data.",
+      "recorded_at": 1791484191.513651
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "d734e3ed4df00f0ce0afd30400831c14": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Solve the system without graphing.",
+      "recorded_at": 1791484198.374374
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
   "d814c15b16d1c7df12aca4e1e39bc6ba": {
     "meta": {
       "mode": "classify_requires_drawing",
@@ -285,6 +582,28 @@
       "requires_drawing": false
     }
   },
+  "dca67608b86ae43d7836dd45b014bc5f": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Solve the system using the elimination method.",
+      "recorded_at": 1791484201.3091981
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
+  "ddf97e639473ca511033a4f3a58aaeac": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Solve $3x + 1 = 7$. Check your answer by graphing (optional).",
+      "recorded_at": 1791484197.893632
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
   "dea447a8e046958db0e3a5a437423162": {
     "meta": {
       "mode": "classify_requires_drawing",
@@ -296,6 +615,28 @@
       "requires_drawing": true
     }
   },
+  "ec0a9c015d755c9e840077b577a20365": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Create a histogram of the scores.",
+      "recorded_at": 1791484192.060637
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "ef5e858cd4c8184d96ace88c240c8022": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Label your answer with units.",
+      "recorded_at": 1791484200.703264
+    },
+    "response": {
+      "requires_drawing": false
+    }
+  },
   "f0cd3f9d3f2b68cd8888527d02063c8f": {
     "meta": {
       "mode": "classify_requires_drawing",
@@ -305,6 +646,39 @@
     },
     "response": {
       "requires_drawing": true
+    }
+  },
+  "f1fdaff8f46189bcba53a7bcdc68fd7a": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Illustrate the solution on a number line.",
+      "recorded_at": 1791484189.0347571
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "f6b594f1c04f2659ad256e59099ace09": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Illustrate the relationship with a diagram.",
+      "recorded_at": 1791484189.6673
+    },
+    "response": {
+      "requires_drawing": true
+    }
+  },
+  "fedb0a3727578ce35117f9f5f9a32331": {
+    "meta": {
+      "mode": "classify_requires_drawing",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "Decide whether this homework question asks the STUDENT to produce a drawing: a g || Don't use a graph \u2014 use substitution.",
+      "recorded_at": 1791484199.535578
+    },
+    "response": {
+      "requires_drawing": false
     }
   }
 }
