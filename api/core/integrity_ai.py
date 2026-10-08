@@ -469,10 +469,14 @@ async def _verify_one(
     # The answer on the drawing is NOT checked here: the crop has no
     # problem text, so it can't know a shaded ray is "the answer" — the
     # first read (which has the question) stays its source (case d).
-    # Labeled points ARE checkable context-free (a coordinate written
-    # beside a point). A disagreement there is a doubt, not a correction:
-    # the entry is marked unconfirmed for the teacher, never rewritten.
-    if not _same_marks(v.get("labeled_points"), seen_points):
+    # Labeled points ARE checkable context-free on a coordinate graph (a
+    # coordinate written beside a point). A disagreement there is a doubt,
+    # not a correction: the entry is marked unconfirmed for the teacher,
+    # never rewritten. Only on a graph: a number line's tick labels or a
+    # diagram's vertex names read as "labels" on one side and not the
+    # other (eval case d: first read ["4"], crop []), which would raise a
+    # false doubt on a drawing this pass never checks.
+    if v.get("kind") == "graph" and not _same_marks(v.get("labeled_points"), seen_points):
         v["verified"] = False
         v["unconfirmed"] = True
         v["unconfirmed_reason"] = UNCONFIRMED_POINTS_DISAGREE

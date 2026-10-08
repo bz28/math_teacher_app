@@ -440,6 +440,31 @@ async def test_the_answer_on_a_number_line_stays_the_first_reads(
     assert v["plotted_elements"] == ["open circle at x = 4", "ray to the right"]
 
 
+@pytest.mark.parametrize("kind", ["number_line", "diagram"])
+async def test_tick_or_vertex_labels_never_raise_a_points_doubt(
+    monkeypatch: pytest.MonkeyPatch, kind: str,
+) -> None:
+    """drawing-eval case d (recorded): the first read listed the tick "4"
+    as a labeled point, the crop listed none. Points are only compared on
+    a coordinate graph — elsewhere the first read stands, unchecked."""
+    async def fake_vision(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {"has_drawing": True,
+                "elements": [{"type": "point", "description": "open circle at 4"},
+                             {"type": "ray", "description": "bold ray to the right"}],
+                "notes": "", "labeled_points": [], "unlabeled_dots": 0, "description": "number line"}
+
+    monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
+    entry = _entry(kind=kind, plotted_elements=["open circle at x = 4", "ray to the right"],
+                   labeled_points=["4"], answer_on_drawing="x > 4")
+    ext = {"steps": [], "final_answers": [], "visual_work": [entry], "confidence": 0.9}
+    await integrity_ai.verify_visual_work(
+        ext, [{"data": _page(), "media_type": "image/jpeg"}], flagged_positions=_FLAGGED,
+    )
+    v = ext["visual_work"][0]
+    assert v["verified"] is False and "unconfirmed" not in v
+    assert v["labeled_points"] == ["4"] and v["answer_on_drawing"] == "x > 4"
+
+
 def test_verify_schema_has_typed_elements_and_no_answer() -> None:
     from api.core.llm_schemas import VISUAL_WORK_VERIFY_SCHEMA
 

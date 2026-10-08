@@ -411,6 +411,14 @@ class DrawingEvalProbe(Probe):
             "the drawing reaches the grader as present", bool(final),
             "" if final else f"inventory {item.raw['second_look']}",
         )]
+        # Every eval page has a real drawing, so "couldn't confirm" is
+        # always a false doubt (case d: a number line's tick label read as
+        # a point on one side only dropped grader confidence 0.97 → 0.5).
+        doubted = [v for v in final if v.get("unconfirmed")]
+        checks.append(CheckResult(
+            "no false \"couldn't confirm\" on a real drawing", not doubted,
+            "" if not doubted else f"unconfirmed {doubted}",
+        ))
         # The main win, regression-guarded: on a line graph the second look
         # must land on the true number of lines (b: one drawn, not two).
         if truth.get("guard_line_count"):
