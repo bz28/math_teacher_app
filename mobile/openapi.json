@@ -1510,10 +1510,34 @@
             ],
             "title": "Problem Position"
           },
+          "unconfirmed": {
+            "default": false,
+            "title": "Unconfirmed",
+            "type": "boolean"
+          },
+          "unconfirmed_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unconfirmed Reason"
+          },
           "verified": {
             "default": false,
             "title": "Verified",
             "type": "boolean"
+          },
+          "zoomed_labeled_points": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Zoomed Labeled Points",
+            "type": "array"
           }
         },
         "required": [
@@ -4880,6 +4904,11 @@
             ],
             "title": "Breakdown"
           },
+          "drawings_inventoried": {
+            "default": false,
+            "title": "Drawings Inventoried",
+            "type": "boolean"
+          },
           "extraction_confidence": {
             "anyOf": [
               {
@@ -5093,6 +5122,11 @@
             "title": "Question",
             "type": "string"
           },
+          "requires_drawing": {
+            "default": false,
+            "title": "Requires Drawing",
+            "type": "boolean"
+          },
           "student_answer": {
             "anyOf": [
               {
@@ -5165,10 +5199,34 @@
             "title": "Present",
             "type": "boolean"
           },
+          "unconfirmed": {
+            "default": false,
+            "title": "Unconfirmed",
+            "type": "boolean"
+          },
+          "unconfirmed_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unconfirmed Reason"
+          },
           "verified": {
             "default": false,
             "title": "Verified",
             "type": "boolean"
+          },
+          "zoomed_labeled_points": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Zoomed Labeled Points",
+            "type": "array"
           }
         },
         "required": [
@@ -5672,6 +5730,17 @@
               }
             ],
             "title": "Question"
+          },
+          "requires_drawing": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requires Drawing"
           },
           "solution_steps": {
             "anyOf": [

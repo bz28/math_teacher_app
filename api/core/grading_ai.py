@@ -13,6 +13,7 @@ and separable from the extraction step.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -84,18 +85,23 @@ ASSIGNMENT".
 - Grade ONLY based on the student's extracted work — do not solve the problem yourself.
 - If the student's answer matches the answer key exactly (or is mathematically equivalent) \
 AND the problem's required method or drawing (below) is satisfied, give full credit.
-- Required method or drawing. When the problem statement names a method ("by \
-graphing", "using elimination", "by substitution", "by factoring", "using the \
-quadratic formula", "by completing the square") or asks for something drawn \
-("graph", "sketch", "draw", "plot", "shade"), that method or drawing is part of \
-the answer, not a suggestion. A printed figure the problem refers to ("using the \
-graph shown") is not a request to draw, and "label your answer" is not either. A \
+- Required method or drawing. A drawing is required ONLY on a problem marked \
+"Requires a drawing: yes" under THE ASSIGNMENT — the teacher's flag on the \
+question is the source of truth. Never infer a drawing requirement from the \
+wording: "by graphing", "graphically", "graph", "sketch", "plot" on an UNMARKED \
+problem require nothing drawn, and there you never require, credit, or deduct for \
+a drawing. A named ALGEBRAIC method ("using elimination", "by substitution", \
+"by factoring", "using the quadratic formula", "by completing the square") is \
+still read from the problem statement. A required method or drawing is part of \
+the answer, not a suggestion. A \
 correct final answer reached by a different method, or without the required \
 drawing, is NOT full credit — grade it \
 as "right answer, required method missing" partial credit (the rubric's Partial \
 credit anchors say how much). A required drawing that is present but incomplete \
 (one of two lines plotted, the intersection not marked, an unlabeled axis) is a \
-smaller deduction than a missing one. A named algebraic method that wasn't used \
+smaller deduction than a missing one. A required drawing listed as UNCONFIRMED \
+(see below) is the exception: it is neither missing nor incomplete, so it is \
+never a "required method missing" deduction. A named algebraic method that wasn't used \
 (substitution when elimination was required) is also "required method missing": \
 never full credit, and itemize it as its own deduction so the teacher can size \
 it — the problem was testing that method. Name the requirement in `reasoning` \
@@ -108,6 +114,20 @@ because the answer is right. "(no drawing for this problem)" means none exists. 
 "(no drawing attributed to this problem …)" means a drawing exists somewhere on the \
 page that couldn't be tied to a problem — check "Other work" before deducting for a \
 missing drawing, and give the benefit of the doubt when it plausibly belongs here.
+- "(read from the full page; not checked on a zoomed look)" after a drawing means \
+only the whole-page reading exists for it: use it as the inventory, and never \
+treat the lack of a zoomed check as "no drawing".
+- "(drawings were not inventoried for this submission)" means nothing is known \
+about what was drawn: don't deduct for a missing drawing; say in `reasoning` \
+that the teacher should check the photo, and set `confidence` no higher than 0.6.
+- "<kind>: UNCONFIRMED" means a drawing was reported on the page but a zoomed-in \
+second look couldn't find it — usually a misplaced location. What was drawn is \
+UNKNOWN, not absent. Don't credit anything as coming from the drawing (no answer \
+or points read off it), and do NOT deduct for a required drawing or graphing method \
+because of it: treat that requirement as met and grade the rest of the work. The \
+teacher decides from the photo: say in `reasoning` that the drawing couldn't be \
+verified and the teacher should check the photo, and set `confidence` no higher \
+than 0.6.
 - An answer that exists only on a drawing — an intersection the student marked, a \
 shaded region, a circled value on a number line — counts as a stated final answer.
 - If the student's approach is correct but they made an arithmetic or sign error, give \
@@ -181,9 +201,9 @@ _DEFAULT_FULL_CREDIT = (
     "followable — students can skip routine or mental steps as long "
     "as the path from set-up to answer is unambiguous to the grader, "
     "with no non-obvious leaps. A bare final answer with no set-up "
-    "doesn't qualify. If the problem names a method (\"by graphing\", "
-    "\"using elimination\") or asks for a graph or drawing, full credit "
-    "requires that method or drawing."
+    "doesn't qualify. If the problem names an algebraic method (\"using "
+    "elimination\") full credit requires that method, and if the question "
+    "is marked as requiring a drawing, full credit requires the drawing."
 )
 _DEFAULT_PARTIAL_CREDIT = (
     "Anchor partial credit on how much of the correct reasoning is "
@@ -241,6 +261,39 @@ def _format_visual_work(v: dict[str, Any]) -> str:
     kind = (v.get("kind") or "drawing").replace("_", " ")
     if not v.get("present", True):
         return f"{kind}: NOT PRESENT — the problem asked for one and nothing is drawn"
+    if v.get("kind") == "table":
+        # A table is text in a grid: nothing is "plotted", and the zoomed
+        # check can't read it, so it is reported as written — neither
+        # confirmed nor doubted.
+        desc = (v.get("description") or "").strip()
+        return f"table (the student's own table; its entries are also in the steps): {desc}" if desc else (
+            "table (the student's own table; its entries are also in the steps)"
+        )
+    if v.get("unconfirmed") and v.get("unconfirmed_reason") == "labeled_points_disagree":
+        # The drawing is there, but the full page and the zoomed crop read
+        # different coordinates beside its points. Neither reading is
+        # trusted over the other; the teacher decides from the photo.
+        first = ", ".join(v.get("labeled_points") or []) or "none"
+        zoomed = ", ".join(v.get("zoomed_labeled_points") or []) or "none"
+        return (
+            f"{kind}: UNCONFIRMED — a drawing is there, but the labeled points were "
+            f"read two different ways (full page: {first}; zoomed look: {zoomed}). "
+            "Treat the drawing / graphing requirement as MET, credit no point or "
+            "answer read off it, and have the teacher check the photo (see the "
+            "UNCONFIRMED rule)"
+        )
+    if v.get("unconfirmed"):
+        # The first pass claimed a drawing here but a zoomed look found
+        # none. Its description is exactly the primed claim we couldn't
+        # back up, so it is withheld — the grader gets the fact, not it.
+        return (
+            f"{kind}: UNCONFIRMED — reported on the page, but a zoomed second "
+            "look couldn't find it; what was drawn is unknown. Treat the "
+            "drawing / graphing requirement as MET: no deduction for the "
+            "drawing and none for solving algebraically instead of by "
+            "graphing. Credit nothing read off it, and have the teacher "
+            "check the photo (see the UNCONFIRMED rule)"
+        )
     parts = [kind]
     elements = [e for e in (v.get("plotted_elements") or []) if isinstance(e, str) and e.strip()]
     if elements:
@@ -253,7 +306,21 @@ def _format_visual_work(v: dict[str, Any]) -> str:
     parts.append(f"answer marked on drawing: {ans}" if ans else "answer marked on drawing: none")
     desc = (v.get("description") or "").strip()
     line = " — ".join(parts)
-    return f"{line}. {desc}" if desc else line
+    line = f"{line}. {desc}" if desc else line
+    if not v.get("verified"):
+        # Recorded before the problem was flagged (the verify pass only
+        # runs on flagged problems), not comparable on a zoomed look
+        # (points, shading, number lines, diagrams), or the look failed.
+        # The first read is still the inventory — never "no drawing".
+        line += " (read from the full page; not checked on a zoomed look)"
+    else:
+        # A zoomed look checks the number of lines and the labeled points
+        # — not what each line is. Say exactly that.
+        line += (
+            " (a zoomed look confirmed the line count and labeled points only; "
+            "the line descriptions are from the full-page read)"
+        )
+    return line
 
 
 def _bucket_visual_work_by_position(
@@ -341,8 +408,24 @@ def _build_problem_set_block(problems: list[dict[str, Any]]) -> str:
         lines.append(
             f"Answer key: {p.get('final_answer') or '(no answer key)'}"
         )
+        if p.get("requires_drawing"):
+            lines.append("Requires a drawing: yes")
+        elif _MENTIONS_DRAWING.search(p.get("question") or ""):
+            # The wording says "graph" but the teacher's flag says no
+            # drawing is required. Measured: without this line the grader
+            # read "solve graphically" as a required method and docked a
+            # correct algebraic solution to 50% (grading probe f10).
+            lines.append(
+                "Requires a drawing: no — the teacher set this; don't require, "
+                "credit, or deduct for a graph or any drawing, whatever the wording says"
+            )
         lines.append("")
     return "\n".join(lines)
+
+
+_MENTIONS_DRAWING = re.compile(
+    r"\b(?:graph\w*|sketch\w*|plot\w*|draw\w*|shade\w*|number\s+line|diagram)\b", re.IGNORECASE,
+)
 
 
 def _build_system_prompt(
@@ -401,6 +484,11 @@ def _build_user_message(
     visual_by_pos, unattributed_visuals = _bucket_visual_work_by_position(
         visual_work, valid_positions
     )
+    # Drawings are recorded on every problem but USED only where the
+    # question requires one. An unattributed drawing may be that one, so
+    # it's context only when some problem on the homework requires one.
+    if not any(p.get("requires_drawing") for p in problems):
+        unattributed_visuals = []
 
     # Bucket steps + final answers by problem_position. Integer keys
     # matching a problem on this assignment go per-problem; everything
@@ -437,10 +525,15 @@ def _build_user_message(
         else:
             lines.append("  (no work shown for this problem)")
 
-        # Drawings, when the extractor had the channel. Rows extracted
-        # before it existed carry no key at all — say nothing rather than
-        # assert "no drawing" about a page we didn't inventory.
-        if "visual_work" in extraction:
+        # Drawings, only where the question requires one — the flag on
+        # the bank item is the source of truth; drawings recorded on other
+        # problems are neither required nor shown. A row extracted before
+        # the channel existed carries no key at all: on a flagged problem
+        # the grader is told nothing was inventoried, never "no drawing".
+        if p.get("requires_drawing") and "visual_work" not in extraction:
+            lines.append("Student's drawings:")
+            lines.append("  (drawings were not inventoried for this submission)")
+        if p.get("requires_drawing") and "visual_work" in extraction:
             problem_visuals = visual_by_pos.get(position, [])
             lines.append("Student's drawings:")
             if problem_visuals:
@@ -561,7 +654,43 @@ async def grade_submission_with_ai(
         submission_id=submission_id,
         call_metadata={"phase": "ai_grading"},
     )
+    _cap_confidence_for_unconfirmed_drawings(result, extraction, problems)
     return result
+
+
+# A grade that rests on an UNCONFIRMED drawing must land in the review
+# page's "Low confidence" filter, which is `confidence < CONFIDENCE_LOW`
+# (0.6, strict) in web/.../review/page.tsx. The prompt asks for ≤ 0.6, but
+# 0.6 itself misses the filter and a prompt is a request, not a guarantee —
+# so the cap is enforced here, safely under the web threshold. There is no
+# shared constants module between api/ and web/; keep the two in step.
+_UNCONFIRMED_DRAWING_MAX_CONFIDENCE = 0.5
+
+
+def _cap_confidence_for_unconfirmed_drawings(
+    result: dict[str, Any], extraction: dict[str, Any], problems: list[dict[str, Any]],
+) -> None:
+    """Lower (never raise), in place, the confidence of every grade on a
+    problem that requires a drawing where what was drawn is unknown: an
+    unconfirmed drawing, or a submission extracted before drawings were
+    inventoried. Deterministic, so the teacher is always pointed at the
+    photo whatever the model returned. Unflagged problems are untouched —
+    their drawings aren't used."""
+    flagged = {p.get("position") for p in problems if p.get("requires_drawing")}
+    if "visual_work" not in extraction:
+        positions = flagged
+    else:
+        positions = flagged & {
+            v.get("problem_position")
+            for v in extraction.get("visual_work") or []
+            if isinstance(v, dict) and v.get("unconfirmed")
+        }
+    for g in result.get("grades") or []:
+        if not isinstance(g, dict) or g.get("problem_position") not in positions:
+            continue
+        conf = g.get("confidence")
+        if not isinstance(conf, (int, float)) or conf > _UNCONFIRMED_DRAWING_MAX_CONFIDENCE:
+            g["confidence"] = _UNCONFIRMED_DRAWING_MAX_CONFIDENCE
 
 
 # ── Pipeline integration ───────────────────────────────────────────

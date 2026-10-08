@@ -1,0 +1,312 @@
+{
+  "2c0b24c5daae4e5d4d1d76f0a72805e3": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor examining a student's handwritten homework  ||",
+      "recorded_at": 1791484123.860477
+    },
+    "response": {
+      "confidence": 0.98,
+      "final_answers": [
+        {
+          "answer_latex": "x > 4",
+          "answer_plain": "x is greater than 4",
+          "page_index": 1,
+          "problem_position": 1
+        }
+      ],
+      "steps": [
+        {
+          "latex": "2x - 3 > 5",
+          "page_index": 1,
+          "plain_english": "Student writes the original inequality: 2x - 3 > 5",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "2x > 8",
+          "page_index": 1,
+          "plain_english": "Student adds 3 to both sides, simplifying to 2x > 8",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "x > 4",
+          "page_index": 1,
+          "plain_english": "Student divides both sides by 2, arriving at the solution x > 4",
+          "problem_position": 1,
+          "step_num": 3
+        },
+        {
+          "latex": "x > 4 \\text{ (graphed on number line with open circle at 4, shading to the right)}",
+          "page_index": 1,
+          "plain_english": "Student graphs the solution on a number line: open circle at 4, bold arrow shading extending to the right toward 10",
+          "problem_position": 1,
+          "step_num": 4
+        }
+      ],
+      "visual_work": [
+        {
+          "answer_on_drawing": "x > 4",
+          "bbox": {
+            "x0": 0.05,
+            "x1": 0.97,
+            "y0": 0.3,
+            "y1": 0.42
+          },
+          "description": "A horizontal number line ranging from -2 to 10, with tick marks labeled at each integer. An open circle (hollow dot) is drawn at 4, indicating that 4 is not included in the solution. A bold, thick line with a rightward arrow extends from 4 toward 10 and beyond, representing all values greater than 4.",
+          "kind": "number_line",
+          "labeled_points": [
+            "4"
+          ],
+          "page_index": 1,
+          "plotted_elements": [
+            "Open circle at x = 4 (exclusive boundary)",
+            "Bold shaded ray extending rightward from 4 to the arrow at the right end of the number line (x > 4)"
+          ],
+          "present": true,
+          "problem_position": 1
+        }
+      ]
+    }
+  },
+  "3abe24fe5bbf812092addb568279ae68": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "||",
+      "recorded_at": 1791484028.135496
+    },
+    "response": {
+      "description": "A coordinate plane with tick marks on both axes, featuring a single S-shaped curve (resembling a cubic function) that passes through the origin area, rising steeply from the lower left to the upper right.",
+      "elements": [
+        {
+          "description": "Horizontal x-axis running from left to right across the middle of the image, with evenly spaced tick marks on both sides of the origin.",
+          "type": "axis"
+        },
+        {
+          "description": "Vertical y-axis running from top to bottom through the center of the image, with evenly spaced tick marks above and below the origin.",
+          "type": "axis"
+        },
+        {
+          "description": "An S-shaped curve consistent with a cubic function (e.g., y = x³). It starts at the lower left of the image, passes through approximately the origin (crossing both axes near the center), and rises steeply toward the upper right. The lower portion curves gently to the left and the upper portion curves gently to the right, forming the characteristic inflection-point shape.",
+          "type": "curve"
+        }
+      ],
+      "has_drawing": true,
+      "labeled_points": [],
+      "notes": "The curve passes through or very near the origin. Its overall shape — shallow slope at the bottom, steepening through the middle, then steep again at the top — is characteristic of a cubic (odd-power) function. No labeled coordinate points are written beside any point on the curve.",
+      "unlabeled_dots": 0
+    }
+  },
+  "609c67847c0db6e894314b84a93b8b1d": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor examining a student's handwritten homework  ||",
+      "recorded_at": 1791484082.2388139
+    },
+    "response": {
+      "confidence": 0.95,
+      "final_answers": [
+        {
+          "answer_latex": "(2, 3)",
+          "answer_plain": "The solution to the system is the ordered pair (2, 3)",
+          "page_index": 1,
+          "problem_position": 1
+        }
+      ],
+      "steps": [
+        {
+          "latex": "y = 2x - 1",
+          "page_index": 1,
+          "plain_english": "Student wrote the first equation of the system: y = 2x - 1",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "y = -x + 5",
+          "page_index": 1,
+          "plain_english": "Student wrote the second equation of the system: y = -x + 5",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "(2, 3)",
+          "page_index": 1,
+          "plain_english": "Student identified the solution as the ordered pair (2, 3)",
+          "problem_position": 1,
+          "step_num": 3
+        }
+      ],
+      "visual_work": [
+        {
+          "answer_on_drawing": null,
+          "bbox": {
+            "x0": 0.52,
+            "x1": 0.95,
+            "y0": 0.08,
+            "y1": 0.55
+          },
+          "description": "A coordinate plane with x- and y-axes drawn. Two lines are plotted: one rising steeply from lower-left to upper-right (representing y = 2x - 1, positive slope) and one falling from upper-left to lower-right (representing y = -x + 5, negative slope). The two lines cross near the center-right area of the graph. Tick marks are visible on both axes. No explicit scale labels are written.",
+          "kind": "graph",
+          "labeled_points": [],
+          "page_index": 1,
+          "plotted_elements": [
+            "Line rising steeply from lower-left to upper-right, crossing the y-axis below the origin (consistent with y = 2x - 1, y-intercept at -1, positive slope of 2)",
+            "Line falling from upper-left to lower-right, crossing the y-axis above the origin (consistent with y = -x + 5, y-intercept at 5, negative slope of -1)"
+          ],
+          "present": true,
+          "problem_position": 1
+        }
+      ]
+    }
+  },
+  "7099d49122b6ef4887f9360fc26f7d1e": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "||",
+      "recorded_at": 1791484091.2152908
+    },
+    "response": {
+      "description": "A coordinate plane with two curves drawn on it, both passing through or near the origin area, crossing each other in the first/second quadrant region, forming an X-like shape.",
+      "elements": [
+        {
+          "description": "Horizontal x-axis extending from the far left to the far right of the drawing, with evenly spaced tick marks.",
+          "type": "axis"
+        },
+        {
+          "description": "Vertical y-axis extending from the bottom to the top of the drawing, with evenly spaced tick marks.",
+          "type": "axis"
+        },
+        {
+          "description": "A curve that starts at the upper-left area (above and to the left of the y-axis), crosses the y-axis near the top, curves down through the origin region, and continues to the lower-left, ending at the bottom-left. It has a slight S-shape or inflection near the x-axis.",
+          "type": "curve"
+        },
+        {
+          "description": "A curve that starts at the upper-right area (above and to the right of the y-axis), sweeps down and to the left crossing the first curve in the upper-center region, continues down through the origin area crossing the x-axis slightly to the right of center, and ends at the lower-right. It also has a slight S-shape or inflection near the x-axis.",
+          "type": "curve"
+        }
+      ],
+      "has_drawing": true,
+      "labeled_points": [],
+      "notes": "The two curves cross each other once in the upper-center region (above the x-axis, near the y-axis). Both curves pass through or very near the origin area and extend to opposite lower corners, creating a large X shape overall. No coordinate labels are written beside any points.",
+      "unlabeled_dots": 0
+    }
+  },
+  "a9207cd2de73c5f891312c433bc9b2b3": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor examining a student's handwritten homework  ||",
+      "recorded_at": 1791484019.617184
+    },
+    "response": {
+      "confidence": 0.97,
+      "final_answers": [
+        {
+          "answer_latex": "(2, 3)",
+          "answer_plain": "The solution to the system is the ordered pair (2, 3).",
+          "page_index": 1,
+          "problem_position": 1
+        }
+      ],
+      "steps": [
+        {
+          "latex": "y = 2x - 1",
+          "page_index": 1,
+          "plain_english": "Student writes the first equation of the system: y = 2x - 1.",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "y = -x + 5",
+          "page_index": 1,
+          "plain_english": "Student writes the second equation of the system: y = -x + 5.",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "2x - 1 = -x + 5",
+          "page_index": 1,
+          "plain_english": "Student sets the two expressions for y equal to each other to solve algebraically.",
+          "problem_position": 1,
+          "step_num": 3
+        },
+        {
+          "latex": "3x = 6",
+          "page_index": 1,
+          "plain_english": "Student adds x to both sides and adds 1 to both sides, combining like terms to get 3x = 6.",
+          "problem_position": 1,
+          "step_num": 4
+        },
+        {
+          "latex": "x = 2, \\quad y = 3",
+          "page_index": 1,
+          "plain_english": "Student divides both sides by 3 to find x = 2, then substitutes back to find y = 3.",
+          "problem_position": 1,
+          "step_num": 5
+        },
+        {
+          "latex": "(2, 3)",
+          "page_index": 1,
+          "plain_english": "Student writes the solution as the ordered pair (2, 3).",
+          "problem_position": 1,
+          "step_num": 6
+        }
+      ],
+      "visual_work": [
+        {
+          "answer_on_drawing": null,
+          "bbox": {
+            "x0": 0.47,
+            "x1": 0.95,
+            "y0": 0.1,
+            "y1": 0.42
+          },
+          "description": "A coordinate plane with x- and y-axes drawn with tick marks. Two lines are plotted: one steeply rising line (y = 2x - 1) going from the lower-left to the upper-right, and one falling line (y = -x + 5) going from the upper-left to the lower-right. The two lines intersect near the center of the graph, consistent with the point (2, 3).",
+          "kind": "graph",
+          "labeled_points": [],
+          "page_index": 1,
+          "plotted_elements": [
+            "Steeply rising line (y = 2x - 1): rises sharply from lower-left to upper-right, crossing the y-axis below the origin (at y = -1) and passing through the intersection point near the center.",
+            "Falling line (y = -x + 5): descends from upper-left to lower-right, crossing the y-axis above the origin (at y = 5) and passing through the intersection point near the center."
+          ],
+          "present": true,
+          "problem_position": 1
+        }
+      ]
+    }
+  },
+  "c055bbcea1371bfa662127e6d8262a83": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "||",
+      "recorded_at": 1790712269.0635772
+    },
+    "response": {
+      "description": "A number line from -2 to 10 with an open circle at 4 and a bold ray extending to the right toward 10 and beyond, indicating an inequality solution set.",
+      "elements": [
+        {
+          "description": "A horizontal number line with tick marks labeled from -2 to 10, with an arrow pointing to the right.",
+          "type": "axis"
+        },
+        {
+          "description": "An open circle (hollow dot) drawn at the position of 4 on the number line.",
+          "type": "point"
+        },
+        {
+          "description": "A bold/thick ray starting at 4 (open circle) and extending to the right past 10, following the number line arrow direction.",
+          "type": "ray"
+        }
+      ],
+      "has_drawing": true,
+      "labeled_points": [],
+      "notes": "The open circle at 4 indicates that 4 is NOT included in the solution set. The bold ray extending right from 4 represents all values greater than 4. This is consistent with a strict inequality such as x > 4.",
+      "unlabeled_dots": 0
+    }
+  }
+}

@@ -300,9 +300,16 @@ async def extract_student_work_from_pages(
         submission_id=str(submission_id) if submission_id else None,
         call_metadata={"phase": "vision_extract"},
     )
+    # Every drawing is RECORDED (a missed requires_drawing flag must be
+    # recoverable by flipping it and regrading); only the ones the grader
+    # will use get the zoomed second look.
     await verify_visual_work(
         result, files, user_id=user_id,
         submission_id=str(submission_id) if submission_id else None,
+        flagged_positions={
+            p.get("position") for p in problems or []
+            if isinstance(p, dict) and p.get("requires_drawing")
+        },
     )
     return result
 
@@ -314,8 +321,7 @@ _VERIFY_PROMPT = (
     "what is DRAWN: for each line, curve, or shape in addition to the axes, describe "
     "it by what you can see (direction, where it starts and ends, which axis it "
     "crosses). Count by tracing strokes. Then list any point on that drawing with a "
-    "coordinate written right beside it, count unlabeled dots, and say whether "
-    "anything on the drawing itself reads as an answer."
+    "coordinate written right beside it, and count unlabeled dots."
 )
 
 
@@ -325,8 +331,10 @@ async def verify_visual_work(
     *,
     user_id: str | None = None,
     submission_id: str | None = None,
+    flagged_positions: set[Any] | None = None,
 ) -> None:
-    """Second look at every drawing the full-page pass reported present.
+    """Second look at each drawing the grader will use: present, on a
+    problem that requires a drawing (`flagged_positions`), not a table.
 
     The full-page pass is primed: it reads "y = 2x - 1, y = -x + 5" next to
     a sketch and reports two lines plotted when one is — even under a
@@ -336,22 +344,35 @@ async def verify_visual_work(
     that started this: full page → "2 lines", crop → "1 line, 2 dots").
 
     So each present drawing with a usable bbox gets one small, context-
-    free vision call on its crop, and what the crop says REPLACES the
-    inventory the grader will read (`plotted_elements`, `labeled_points`,
-    `answer_on_drawing`). `verified` records which happened, so the
-    teacher UI and the admin quality views can tell a checked inventory
-    from a claimed one. Failures keep the unverified entry — a report is
-    better than none — and never fail the extraction.
+    free vision call on its crop. When the crop counts a different number
+    of drawn lines, what it says REPLACES the inventory the grader will
+    read (`plotted_elements`, `labeled_points`, `answer_on_drawing`); when
+    it agrees, the count is confirmed and the first read's richer
+    descriptions stand (see `_verify_one`). `verified` records which happened, so the
+    teacher UI can tell a checked inventory from a claimed one. When
+    both crops find no drawing at all, the inventory is emptied and the
+    entry is marked `unconfirmed` (never `verified`). Failures keep the
+    unverified entry — a report is better than none — and never fail
+    the extraction.
     """
-    entries = [v for v in (extraction.get("visual_work") or []) if isinstance(v, dict)]
+    flagged = flagged_positions or set()
+    entries = [
+        v for v in (extraction.get("visual_work") or [])
+        if isinstance(v, dict) and v.get("problem_position") in flagged
+    ]
     for v in entries:
         if v.get("present"):
             v.setdefault("verified", False)
+    # A table is text in a grid, and the zoomed look is told to ignore
+    # text — it can only ever answer "no drawing". So tables are never
+    # sent: they stay unverified (shown neutrally), never "unconfirmed".
     # Bounded and concurrent: this runs on the student's path to the
     # confirm screen, so a page with many sketches must not turn into a
     # long serial chain of vision calls. Past the cap, entries stay as
     # the first pass reported them (verified=False says so).
-    candidates = [v for v in entries if v.get("present")][:_VERIFY_MAX_DRAWINGS]
+    candidates = [
+        v for v in entries if v.get("present") and v.get("kind") != "table"
+    ][:_VERIFY_MAX_DRAWINGS]
     sem = asyncio.Semaphore(_VERIFY_CONCURRENCY)
 
     async def _one(v: dict[str, Any]) -> None:
@@ -425,35 +446,117 @@ async def _verify_one(
         return
     if not seen.get("has_drawing", True):
         # Two crops around the reported spot show no drawing. Don't
-        # flip `present` on a possibly-bad box, but the inventory the
-        # grader reads must not credit lines nobody could find — and
-        # the description must say so, or the grader would be handed
-        # "two lines plotted" beside "nothing plotted".
-        v["plotted_elements"] = []
-        v["labeled_points"] = []
-        v["answer_on_drawing"] = None
-        v["description"] = (
-            "A zoomed second look at the reported location found no drawing; "
-            "the first-pass description could not be confirmed."
-        )
-        v["verified"] = True
+        # flip `present` on a possibly-bad box, and don't erase what the
+        # first read recorded (an inventory is never replaced with an
+        # empty one). This is NOT a confirmation — `unconfirmed` records
+        # the failed look: the grader formatter withholds the whole
+        # inventory ("credit nothing from it"), and the teacher sees
+        # "couldn't confirm" with the first read framed as a claim.
+        v["verified"] = False
+        v["unconfirmed"] = True
+        v["unconfirmed_reason"] = UNCONFIRMED_NOT_FOUND
         return
-    raw_elements = seen.get("plotted_elements")
-    raw_points = seen.get("labeled_points")
-    v["plotted_elements"] = [
+    raw_elements = seen.get("elements")
+    typed = [
         e for e in (raw_elements if isinstance(raw_elements, list) else [])
-        if isinstance(e, str) and e.strip()
+        if isinstance(e, dict) and e.get("type") not in (None, "axis", "other")
     ]
-    v["labeled_points"] = [
+    raw_points = seen.get("labeled_points")
+    seen_points = [
         pt for pt in (raw_points if isinstance(raw_points, list) else [])
         if isinstance(pt, str) and pt.strip()
     ]
-    ans = seen.get("answer_on_drawing")
-    v["answer_on_drawing"] = ans if isinstance(ans, str) and ans.strip() else None
+    # The answer on the drawing is NOT checked here: the crop has no
+    # problem text, so it can't know a shaded ray is "the answer" — the
+    # first read (which has the question) stays its source (case d).
+    # Labeled points ARE checkable context-free on a coordinate graph (a
+    # coordinate written beside a point). A disagreement there is a doubt,
+    # not a correction: the entry is marked unconfirmed for the teacher,
+    # never rewritten. Only on a graph: a number line's tick labels or a
+    # diagram's vertex names read as "labels" on one side and not the
+    # other (eval case d: first read ["4"], crop []), which would raise a
+    # false doubt on a drawing this pass never checks.
+    if v.get("kind") == "graph" and not _same_marks(v.get("labeled_points"), seen_points):
+        v["verified"] = False
+        v["unconfirmed"] = True
+        v["unconfirmed_reason"] = UNCONFIRMED_POINTS_DISAGREE
+        v["zoomed_labeled_points"] = seen_points
+        return
+    # The two reads can only be compared on the same basis. The first
+    # read's `plotted_elements` are untyped text; the crop's are typed.
+    # The one comparison that is sound is the one the second look exists
+    # for: a GRAPH whose crop shows only lines/curves (no points, shading,
+    # rays or segments), where "how many lines are drawn" means the same
+    # thing on both sides (#902: one line drawn, both equations written,
+    # first read "2 lines"). Anything else — plotted points, a shaded
+    # inequality, a number line, a triangle's three segments — would
+    # compare different things (2 points vs 0 lines; "triangle ABC" vs 3
+    # segments), so the first read stands, honestly unchecked.
+    lines = [e for e in typed if e.get("type") in _GRAPH_PLOTTED_TYPES]
+    # A marked point (a circled intersection) doesn't change what "lines"
+    # means, so points are allowed alongside lines — they just aren't
+    # counted, on either side. Shading, rays and segments are not.
+    comparable = (
+        v.get("kind") == "graph"
+        and bool(lines)
+        and all(e.get("type") in _GRAPH_PLOTTED_TYPES | {"point"} for e in typed)
+    )
+    if not comparable:
+        return  # verified stays False: shown and graded as the full-page read
+    first_count = len([
+        e for e in (v.get("plotted_elements") or [])
+        if isinstance(e, str) and e.strip() and not _names_only_a_point(e)
+    ])
+    # Only the COUNT (and the labeled points above) is checked. When it
+    # agrees, the first read's descriptions stand — it saw the whole page;
+    # the context-free crop describes wobbly strokes as "curves" (eval a).
+    v["verified"] = True
+    v["verified_scope"] = VERIFIED_COUNT
+    if len(lines) == first_count:
+        return
+    # Counts differ: the crop's lines replace the inventory. Never empty —
+    # `comparable` requires at least one line on the crop.
+    v["plotted_elements"] = [str(e.get("description") or e.get("type")).strip() for e in lines]
     desc = seen.get("description")
     if isinstance(desc, str) and desc.strip():
         v["description"] = desc.strip()
-    v["verified"] = True
+
+
+_GRAPH_PLOTTED_TYPES = frozenset({"line", "curve"})
+# Why an entry is unconfirmed (shown to the teacher, told to the grader).
+# Rows written before the reason existed carry none and mean NOT_FOUND.
+UNCONFIRMED_NOT_FOUND = "not_found"
+UNCONFIRMED_POINTS_DISAGREE = "labeled_points_disagree"
+# What a `verified` entry had checked: the number of lines drawn (and
+# the labeled points) — never the line descriptions themselves.
+VERIFIED_COUNT = "count"
+
+_COORD = re.compile(r"\(([^()]*)\)")
+_POINT_WORD = re.compile(r"\b(?:point|dot)s?\b", re.IGNORECASE)
+_LINE_WORD = re.compile(r"\b(?:line|curve|parabola|ray|graph)s?\b", re.IGNORECASE)
+
+
+def _names_only_a_point(element: str) -> bool:
+    """A first-read element that is a plotted point, not a line ("point
+    A(1, 2)", "circled dot at the intersection") — excluded from the line
+    count so both sides count the same thing."""
+    return bool(_POINT_WORD.search(element)) and not _LINE_WORD.search(element)
+
+
+def _same_marks(first: Any, seen: list[Any]) -> bool:
+    """Do two readings of labeled points say the same thing? Compares the
+    coordinates only, ignoring spacing and any label in front:
+    `A(1, 2)`, `(1,2)` and `A (1,2)` are the same mark."""
+    def norm(xs: Any) -> list[str]:
+        out = []
+        for x in xs or []:
+            if not isinstance(x, str) or not x.strip():
+                continue
+            coords = _COORD.findall(x)
+            text = ",".join(coords) if coords else x
+            out.append("".join(text.split()).lower())
+        return sorted(out)
+    return norm(first) == norm(seen)
 
 
 # ── Conversational agent ────────────────────────────────────────────

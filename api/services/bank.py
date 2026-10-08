@@ -213,6 +213,7 @@ async def load_problems_for_assignment(
             "bank_item_id": str(pid),
             "question": item.question,
             "final_answer": item.final_answer,
+            "requires_drawing": bool(item.requires_drawing),
         })
     return out
 

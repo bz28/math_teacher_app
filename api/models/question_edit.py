@@ -100,6 +100,10 @@ EDIT_KINDS = (EDIT_MANUAL, EDIT_WORKSHOP)
 FIELD_QUESTION = "question"
 FIELD_SOLUTION = "solution"
 FIELD_FINAL_ANSWER = "final_answer"
+# The teacher overrode whether the question requires a drawing. Indicts
+# the drawing-requirement classifier (api/core/drawing_requirement.py),
+# not an LLM call; before/after are "yes"/"no".
+FIELD_REQUIRES_DRAWING = "requires_drawing"
 
 # When recording began. Deliberately a constant rather than a stored
 # row: it is a fact about the deploy, not about any question, and the

@@ -27,6 +27,7 @@ from api.core.document_vision import (
     build_vision_content,
     fetch_source_documents,
 )
+from api.core.drawing_requirement import combine_requires_drawing
 from api.core.geometry import render_figure_or_none
 from api.core.image_utils import to_content_block
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
@@ -237,11 +238,14 @@ async def _extract_from_files(
     for q in questions:
         if not isinstance(q, dict) or "text" not in q:
             continue
-        normalized.append({
+        entry = {
             "title": str(q.get("title") or "")[:120],
             "text": str(q["text"]),
             "difficulty": str(q.get("difficulty", "medium")),
-        })
+        }
+        if isinstance(q.get("requires_drawing"), bool):
+            entry["requires_drawing"] = q["requires_drawing"]
+        normalized.append(entry)
     return normalized
 
 
@@ -489,6 +493,9 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             originating_assignment_id=job.originating_assignment_id,
             title=q.get("title") or None,
             question=q["text"],
+            # The generation/extraction call's own answer (it wrote or read
+            # the question — no extra call), OR'd with the regex.
+            requires_drawing=combine_requires_drawing(q["text"], q.get("requires_drawing")),
             solution_steps=s.get("steps") or None,
             final_answer=s.get("final_answer") or "",
             distractors=item_distractors,
@@ -527,6 +534,7 @@ def snapshot_history(item: QuestionBankItem) -> None:
     # Figure-side undo so revert restores prose AND diagram together.
     item.previous_figure_spec = item.figure_spec
     item.previous_figure_svg = item.figure_svg
+    item.previous_requires_drawing = item.requires_drawing
 
 
 _REGENERATE_SYSTEM_TEMPLATE = """\
@@ -636,6 +644,11 @@ async def regenerate_one(
     if new_title:
         item.title = str(new_title)[:120]
     item.question = str(new_question)
+    # A regenerated question is new AI text, so its drawing requirement is
+    # re-derived — the same call's answer (REGENERATE_QA_SCHEMA) OR'd with
+    # the regex — unless the teacher set it themselves.
+    if not item.requires_drawing_teacher_set:
+        item.requires_drawing = combine_requires_drawing(item.question, result.get("requires_drawing"))
     item.solution_steps = (
         _render_step_figures(new_steps) if isinstance(new_steps, list) else None
     )
