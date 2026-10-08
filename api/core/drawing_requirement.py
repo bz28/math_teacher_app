@@ -110,7 +110,7 @@ def requires_drawing(question: str | None) -> bool:
     return any(_verb_is_a_request(text, m) for m in _VERB.finditer(text))
 
 
-# ── The AI call (the primary source; the regex above is its fallback) ──
+# ── The AI call (combined with the regex: either saying yes flags it) ──
 #
 # Founder decision (PR #907): the flag is derived by AI when a problem is
 # created and only again when its question TEXT changes (and no teacher
@@ -119,8 +119,9 @@ def requires_drawing(question: str | None) -> bool:
 # from REGENERATE_QA_SCHEMA. Text nobody's AI call produced — a teacher's
 # edit, an accepted Workshop rewrite — goes through this one small call,
 # run AFTER the save so the teacher never waits on it (the regex value is
-# stored immediately). Never called while grading or extracting: those
-# only read the stored column.
+# stored immediately; the AI can only add a yes — combine_requires_drawing).
+# Never called while grading or extracting: those only read the stored
+# column.
 
 logger = logging.getLogger(__name__)
 
@@ -158,32 +159,40 @@ async def _llm_requires_drawing(question: str, *, user_id: str | None = None) ->
     return flag if isinstance(flag, bool) else None
 
 
-async def classify_requires_drawing(question: str, *, user_id: str | None = None) -> bool:
-    """The AI's answer, or the regex classifier when the call fails."""
-    flag = await _llm_requires_drawing(question, user_id=user_id)
-    return requires_drawing(question) if flag is None else flag
+def combine_requires_drawing(question: str | None, ai_flag: object) -> bool:
+    """The stored flag: yes when EITHER the AI or the regex says yes.
+
+    The errors aren't symmetric. A missed flag is invisible — the drawing
+    is never checked and a graph-less answer can earn full credit. A
+    wrong flag is visible — an itemized "required drawing missing"
+    deduction the teacher undoes in one click. Measured (PR #907): on 62
+    labeled phrasings the AI missed 2 the regex caught and the regex
+    missed none; the AI's value is the phrasings no regex has seen yet.
+    """
+    return ai_flag is True or requires_drawing(question)
 
 
 async def refresh_requires_drawing(
     item_id: uuid.UUID, question: str, *, user_id: str | None = None,
 ) -> None:
-    """After a question-text change: ask the AI, then store its answer —
-    only if the text is still the one it judged and no teacher has set
+    """After a question-text change: ask the AI, and when it says yes
+    where the regex said no, store the yes (see combine_requires_drawing)
+    — only if the text is still the one it judged and no teacher has set
     the flag since. Runs as a background task, off the teacher's save."""
     from sqlalchemy import select
 
     from api.database import get_session_factory
     from api.models.question_bank import QuestionBankItem
 
-    flag = await _llm_requires_drawing(question, user_id=user_id)
-    if flag is None:
-        return  # the regex value stored at save time stands
+    ai_flag = await _llm_requires_drawing(question, user_id=user_id)
+    if ai_flag is not True:
+        return  # the regex value stored at save time stands: the AI only adds a yes
     async with get_session_factory()() as s:
         item = (await s.execute(
             select(QuestionBankItem).where(QuestionBankItem.id == item_id)
         )).scalar_one_or_none()
         if item is None or item.question != question or item.requires_drawing_teacher_set:
             return
-        if item.requires_drawing != flag:
-            item.requires_drawing = flag
+        if not item.requires_drawing:
+            item.requires_drawing = True
             await s.commit()

@@ -4,8 +4,9 @@
   returns it (GENERATE_QUESTIONS_SCHEMA) — no extra call; regex fallback.
 - Text changes nobody's AI produced (a teacher's edit, an accepted
   Workshop rewrite): the regex answers at save time, then one small
-  classification call runs AFTER the save and overwrites it — unless the
+  classification call runs AFTER the save and can add a yes — unless the
   text changed again or a teacher set the flag meanwhile.
+- Either source saying yes flags it (combine_requires_drawing).
 - Never at grading/extraction time: those only read the column.
 """
 
@@ -95,8 +96,35 @@ async def test_the_ai_answer_never_overrides_a_teacher_or_a_newer_text(
 async def test_a_failed_call_falls_back_to_the_regex() -> None:
     with patch("api.core.llm_client.call_claude_json", new=AsyncMock(side_effect=RuntimeError("down"))):
         assert await drawing_requirement._llm_requires_drawing("Graph y = x.") is None
-    with patch.object(drawing_requirement, "_llm_requires_drawing", new=AsyncMock(return_value=None)):
-        assert await drawing_requirement.classify_requires_drawing("Graph y = x.") is True
+    assert drawing_requirement.combine_requires_drawing("Graph y = x.", None) is True
+
+
+@pytest.mark.parametrize(("question", "ai_flag", "expected"), [
+    # drawing-flag eval: the AI said no, the regex caught it
+    ("Label the vertex on your graph.", False, True),
+    # the AI catches a phrasing the regex has never seen
+    ("Represent the data however you like, then explain.", True, True),
+    ("Solve x + 1 = 2.", False, False),
+    ("Solve x + 1 = 2.", None, False),
+])
+def test_either_the_ai_or_the_regex_saying_yes_flags_it(
+    question: str, ai_flag: Any, expected: bool,
+) -> None:
+    assert drawing_requirement.combine_requires_drawing(question, ai_flag) is expected
+
+
+async def test_an_ai_no_never_clears_a_regex_yes(
+    world: dict[str, Any], client: AsyncClient,
+) -> None:
+    await _own_course(world)
+    item_id = world["primary_id"]
+    with patch.object(drawing_requirement, "_llm_requires_drawing",
+                      new=AsyncMock(return_value=False)) as llm:
+        r = await _patch(client, world["teacher_token"], item_id,
+                         question="Label the vertex on your graph.")
+        assert r.status_code == 200
+        llm.assert_awaited_once()
+    assert (await _item(item_id)).requires_drawing is True
 
 
 def test_grading_and_extraction_never_call_the_classifier() -> None:

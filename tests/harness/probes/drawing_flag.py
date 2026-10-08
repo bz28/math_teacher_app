@@ -2,10 +2,11 @@
 
 Founder decision (PR #907): a question's `requires_drawing` is set by AI
 when the problem is created (and only again when its text changes and no
-teacher has set it); the regex classifier is the fallback and the frozen
-migration backfill. This probe runs the real classification call
+teacher has set it), OR'd with the regex classifier (also the frozen
+migration backfill). This probe runs the real classification call
 (`api.core.drawing_requirement._llm_requires_drawing`) on every labeled
-phrasing collected across the reviews and reports LLM vs regex vs truth.
+phrasing collected across the reviews, gates the stored (combined) flag
+against truth, and reports AI vs regex in each check's detail.
 
 The labels are the same lists the regex unit tests use
 (tests/test_drawing_requirement.py imports them from here), so the two
@@ -18,7 +19,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from api.core.drawing_requirement import _llm_requires_drawing, requires_drawing
+from api.core.drawing_requirement import (
+    _llm_requires_drawing,
+    combine_requires_drawing,
+    requires_drawing,
+)
 from tests.harness.probe import Probe
 from tests.harness.types import CheckResult, GeneratedItem, HarnessContext
 
@@ -145,7 +150,8 @@ class DrawingFlagProbe(Probe):
                 out.append(GeneratedItem(
                     id=f"flag-{i:03d}", label=f"[{'yes' if truth else 'no'}] {q[:60]}",
                     problem_text=q, figure_svg=None, figure_spec=None,
-                    raw={"question": q, "truth": truth, "llm": llm, "regex": requires_drawing(q)},
+                    raw={"question": q, "truth": truth, "llm": llm, "regex": requires_drawing(q),
+                         "stored": combine_requires_drawing(q, llm)},
                 ))
             return out
         finally:
@@ -155,11 +161,14 @@ class DrawingFlagProbe(Probe):
                 os.environ["HARNESS_CASSETTE_DIR"] = prev_dir
 
     def deterministic_checks(self, item: GeneratedItem) -> list[CheckResult]:
+        # What ships is the stored flag (AI OR regex). The AI alone is
+        # reported in the detail, not gated: it isn't what grading reads.
         r = item.raw
+        ok = r["stored"] == r["truth"]
         return [
             CheckResult(
-                f"classifier call agrees with the label ({r['llm']} vs {r['truth']})",
-                r["llm"] == r["truth"],
-                "" if r["llm"] == r["truth"] else f"regex says {r['regex']}",
+                f"stored flag agrees with the label ({r['stored']} vs {r['truth']})",
+                ok,
+                f"AI {r['llm']}, regex {r['regex']}",
             ),
         ]

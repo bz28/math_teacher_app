@@ -27,7 +27,7 @@ from api.core.document_vision import (
     build_vision_content,
     fetch_source_documents,
 )
-from api.core.drawing_requirement import requires_drawing
+from api.core.drawing_requirement import combine_requires_drawing
 from api.core.geometry import render_figure_or_none
 from api.core.image_utils import to_content_block
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
@@ -493,12 +493,9 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             originating_assignment_id=job.originating_assignment_id,
             title=q.get("title") or None,
             question=q["text"],
-            # From the generation/extraction call itself (it wrote or read
-            # the question — no extra call); the regex only if it's missing.
-            requires_drawing=(
-                q["requires_drawing"] if isinstance(q.get("requires_drawing"), bool)
-                else requires_drawing(q["text"])
-            ),
+            # The generation/extraction call's own answer (it wrote or read
+            # the question — no extra call), OR'd with the regex.
+            requires_drawing=combine_requires_drawing(q["text"], q.get("requires_drawing")),
             solution_steps=s.get("steps") or None,
             final_answer=s.get("final_answer") or "",
             distractors=item_distractors,
@@ -648,11 +645,10 @@ async def regenerate_one(
         item.title = str(new_title)[:120]
     item.question = str(new_question)
     # A regenerated question is new AI text, so its drawing requirement is
-    # re-derived — by the same call that wrote it (REGENERATE_QA_SCHEMA),
-    # the regex only as a fallback — unless the teacher set it themselves.
+    # re-derived — the same call's answer (REGENERATE_QA_SCHEMA) OR'd with
+    # the regex — unless the teacher set it themselves.
     if not item.requires_drawing_teacher_set:
-        flag = result.get("requires_drawing")
-        item.requires_drawing = flag if isinstance(flag, bool) else requires_drawing(item.question)
+        item.requires_drawing = combine_requires_drawing(item.question, result.get("requires_drawing"))
     item.solution_steps = (
         _render_step_figures(new_steps) if isinstance(new_steps, list) else None
     )
