@@ -43,24 +43,30 @@
       ]
     }
   },
-  "05861d46a7cd73e18b4bf2d0ebcef304": {
+  "03a1b1e1256a94c3433605f35d88b8b0": {
     "meta": {
       "mode": "ai_grading",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \\\\ y = -x + 5\nStudent's drawin",
-      "recorded_at": 1790703932.583266
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: x^2 - 5x + 6 = 0\n  Step 2: (x - 2)(x - 3)",
+      "recorded_at": 1791554688.373117
     },
     "response": {
       "grades": [
         {
-          "confidence": 0.92,
-          "deductions": [],
-          "percent": 100,
+          "confidence": 0.97,
+          "deductions": [
+            {
+              "points_off": 5,
+              "reason": "Partial credit: small execution error \u2014 sign flip when reading roots from correct factors (x = \u22122, \u22123 instead of x = 2, 3).",
+              "step_ref": 3
+            }
+          ],
+          "percent": 95,
           "problem_position": 1,
-          "reasoning": "The student's final answer (2, 3) matches the answer key exactly. The required drawing is present: both lines are plotted with correct y-intercepts, the intersection is circled and labeled at (2, 3), and axes are labeled \u2014 satisfying the 'Full credit' criterion including the required drawing.",
-          "score_status": "full",
-          "student_answer": "$(2, 3)$",
-          "student_feedback": "Great work! You correctly graphed both lines, identified the intersection point at (2, 3), and clearly labeled it \u2014 that's exactly what was needed."
+          "reasoning": "The student correctly factored x\u00b2 \u2212 5x + 6 into (x \u2212 2)(x \u2212 3) = 0 (Step 2), showing the right approach and method. However, in Step 3 they made a sign error when reading the roots from the factors \u2014 writing x = \u22122 and x = \u22123 instead of x = 2 and x = 3. This is a 'right approach with a small execution error' per the Partial credit rubric, warranting ~95%.",
+          "score_status": "partial",
+          "student_answer": "$x = -2$ or $x = -3$",
+          "student_feedback": "Your factoring in Step 2 is perfect \u2014 (x \u2212 2)(x \u2212 3) = 0 is exactly right. Just watch the sign when you solve each factor: (x \u2212 2) = 0 gives x = +2, and (x \u2212 3) = 0 gives x = +3, not negative values."
         }
       ]
     }
@@ -83,34 +89,6 @@
           "score_status": "full",
           "student_answer": "$(2, 3)$",
           "student_feedback": "Great work! You graphed both lines accurately, clearly labeled the intersection, and correctly identified the solution as (2, 3)."
-        }
-      ]
-    }
-  },
-  "08e2d3ba1e32a2faf23bb2aa78716385": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 2 \\times 3 = 6\n  Step 2: 6 + 11 = 17\n  St",
-      "recorded_at": 1790703862.656564
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.95,
-          "deductions": [
-            {
-              "points_off": 100,
-              "reason": "Final answer wrong and method is incoherent \u2014 no valid algebraic approach to isolating x shown.",
-              "step_ref": null
-            }
-          ],
-          "percent": 0,
-          "problem_position": 1,
-          "reasoning": "The student's final answer is x = 17, which is incorrect (correct answer is x = 4). The student's method is also fundamentally wrong \u2014 they multiplied 2 \u00d7 3 = 6 and then added 11, showing no understanding of how to isolate x by subtracting 3 from both sides and then dividing by 2. This is an incoherent attempt with no sign of the correct concept, so per the rubric this is zero, not partial.",
-          "score_status": "zero",
-          "student_answer": "$x = 17$",
-          "student_feedback": "Your approach isn't quite right here \u2014 to solve 2x + 3 = 11, start by subtracting 3 from both sides to get 2x = 8, then divide both sides by 2 to find x = 4. Try to think about what operation 'undoes' each part of the equation."
         }
       ]
     }
@@ -159,6 +137,34 @@
       ]
     }
   },
+  "0ae0db9f28fd91bf412bec478217dda6": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 3x + 5 = 20\n  Step 2: 3x = 15\n  Step 3: x",
+      "recorded_at": 1791554688.36875
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.97,
+          "deductions": [
+            {
+              "points_off": 5,
+              "reason": "Partial credit: small execution error \u2014 arithmetic slip dividing 15 \u00f7 3, wrote x = 4 instead of x = 5.",
+              "step_ref": 3
+            }
+          ],
+          "percent": 95,
+          "problem_position": 1,
+          "reasoning": "The student correctly applied the right approach \u2014 subtracting 5 from both sides (Step 2: 3x = 15) \u2014 but made an arithmetic slip in the final division step, writing x = 4 instead of x = 5. This is a 'right approach with a small execution error' per the Partial credit rubric, warranting ~95%.",
+          "score_status": "partial",
+          "student_answer": "$x = 4$",
+          "student_feedback": "Your setup is perfect \u2014 subtracting 5 from both sides to get 3x = 15 is exactly right. Just double-check the last step: 15 \u00f7 3 = 5, not 4."
+        }
+      ]
+    }
+  },
   "0e02c42d3f36f333d6463c4fa9aa81ca": {
     "meta": {
       "mode": "ai_grading",
@@ -181,30 +187,52 @@
       ]
     }
   },
-  "0e8d39b77af7100104719bdc457f6d9e": {
+  "0e1914cfe2e13986c9910b326cb3788b": {
     "meta": {
       "mode": "ai_grading",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: x^2 - 5x + 6 = 0\nStudent's final answer: ",
-      "recorded_at": 1790703830.345484
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: M \\text{ is the midpoint of } AC, BD \\qua",
+      "recorded_at": 1791554688.412184
     },
     "response": {
       "grades": [
         {
-          "confidence": 0.85,
+          "confidence": 0.95,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student presents a complete two-column proof with all necessary steps: Given (midpoint of AC and BD), Definition of Midpoint (AM = MC, BM = MD), Vertical Angles (\u2220AMB \u2245 \u2220CMD), and SAS congruence. This satisfies the Full credit criterion \u2014 correct final answer with a clear, followable two-column proof using the correct method (SAS), matching the answer key.",
+          "score_status": "full",
+          "student_answer": "$\\triangle AMB \\cong \\triangle CMD$",
+          "student_feedback": "Excellent work! Your two-column proof is logically complete \u2014 you correctly identified the two pairs of congruent sides from the midpoint definition and the vertical angles, then applied SAS to conclude the triangles are congruent."
+        }
+      ]
+    }
+  },
+  "0eeed99bc7f8baa2697774b2ba12f072": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 2 \\times 3 = 6\n  Step 2: 6 + 11 = 17\n  St",
+      "recorded_at": 1791554688.377259
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.95,
           "deductions": [
             {
-              "points_off": 50,
-              "reason": "Correct final answer but no method or work shown \u2014 'Full credit' requires the reasoning path to be followable, not just a restatement of the problem.",
-              "step_ref": 1
+              "points_off": 100,
+              "reason": "Final answer wrong and method is incoherent \u2014 no valid algebraic approach to isolating x shown.",
+              "step_ref": null
             }
           ],
-          "percent": 50,
+          "percent": 0,
           "problem_position": 1,
-          "reasoning": "The student's final answer matches the answer key exactly (x = 2 or x = 3), but the only work shown is restating the original equation. No factoring, quadratic formula, or other method is visible \u2014 the path from set-up to answer is not followable. Per the 'Full credit' rubric criterion, a bare final answer with no set-up doesn't qualify. Since the correct answer is present but the required method/reasoning is missing, the 'right answer, required method missing' partial credit anchor (~50%) applies.",
-          "score_status": "partial",
-          "student_answer": "$x = 2$ or $x = 3$",
-          "student_feedback": "Your final answers are correct \u2014 great job identifying $x = 2$ and $x = 3$! To earn full credit, show your work (e.g., factor the quadratic as $(x-2)(x-3)=0$) so the reasoning from the equation to the solution is clear."
+          "reasoning": "The student's final answer is x = 17, which is incorrect (correct answer is x = 4). The student's method is also fundamentally wrong \u2014 they multiplied 2 \u00d7 3 = 6 and then added 11, showing no understanding of how to isolate x by subtracting 3 from both sides and then dividing by 2. This is an incoherent attempt with no sign of the correct concept, so per the rubric this is zero, not partial.",
+          "score_status": "zero",
+          "student_answer": "$x = 17$",
+          "student_feedback": "Your approach isn't quite right here \u2014 to solve 2x + 3 = 11, start by subtracting 3 from both sides to get 2x = 8, then divide both sides by 2 to find x = 4. Try to think about what operation 'undoes' each part of the equation."
         }
       ]
     }
@@ -421,6 +449,34 @@
           "score_status": "zero",
           "student_answer": null,
           "student_feedback": "You didn't attempt this problem \u2014 even a partial set-up like factoring or using the quadratic formula can earn partial credit, so give it a try next time!"
+        }
+      ]
+    }
+  },
+  "25c06ad0ca1f0486a50c954c77d9d598": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: x^2 - 5x + 6 = 0\nStudent's final answer: ",
+      "recorded_at": 1791554688.3379579
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.85,
+          "deductions": [
+            {
+              "points_off": 50,
+              "reason": "Correct final answer but no method or work shown \u2014 'Full credit' requires the reasoning path to be followable, not just a restatement of the problem.",
+              "step_ref": 1
+            }
+          ],
+          "percent": 50,
+          "problem_position": 1,
+          "reasoning": "The student's final answer matches the answer key exactly (x = 2 or x = 3), but the only work shown is restating the original equation. No factoring, quadratic formula, or other method is visible \u2014 the path from set-up to answer is not followable. Per the 'Full credit' rubric criterion, a bare final answer with no set-up doesn't qualify. Since the correct answer is present but the required method/reasoning is missing, the 'right answer, required method missing' partial credit anchor (~50%) applies.",
+          "score_status": "partial",
+          "student_answer": "$x = 2$ or $x = 3$",
+          "student_feedback": "Your final answers are correct \u2014 great job identifying $x = 2$ and $x = 3$! To earn full credit, show your work (e.g., factor the quadratic as $(x-2)(x-3)=0$) so the reasoning from the equation to the solution is clear."
         }
       ]
     }
@@ -652,34 +708,6 @@
       ]
     }
   },
-  "2bfdca8eb0911834962d7f336d30961e": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 11 - 3x\n  Step 2: 3x - (11 - 3x) = 5\n",
-      "recorded_at": 1790703894.467257
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.85,
-          "deductions": [
-            {
-              "points_off": 50,
-              "reason": "Required method missing \u2014 problem specifies elimination, student used substitution instead (Partial credit: right answer, wrong method)",
-              "step_ref": 1
-            }
-          ],
-          "percent": 50,
-          "problem_position": 1,
-          "reasoning": "The student's final answer (8/3, 3) matches the answer key exactly. However, the problem explicitly requires the elimination method, and the student used substitution instead (Step 1 isolates y, Step 2 substitutes). Per the rubric's 'right answer, required method missing' partial credit anchor, this earns ~50%.",
-          "score_status": "partial",
-          "student_answer": "$(8/3, 3)$",
-          "student_feedback": "Your answer is correct, but the problem asked you to use the elimination method \u2014 you solved it using substitution instead. To use elimination, add or subtract the two equations directly to cancel a variable (e.g., adding the equations eliminates y right away), then solve for the remaining variable."
-        }
-      ]
-    }
-  },
   "2c546e380d0d71362eb9dc13e242d375": {
     "meta": {
       "mode": "ai_grading",
@@ -752,6 +780,28 @@
       ]
     }
   },
+  "3b2a5366c48e6b7cf2849a6190badb8e": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \\\\ y = -x + 5\n  Step 2: 2x - 1",
+      "recorded_at": 1791554688.407913
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.6,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student's final answer (2, 3) matches the answer key exactly. The graph is marked UNCONFIRMED, so per the rubric the drawing requirement is treated as met and no deduction is applied. The teacher should verify the photo to confirm the graph exists. Full credit criterion is satisfied.",
+          "score_status": "full",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Great work \u2014 your answer of (2, 3) is correct! Please make sure your graph is clearly drawn and visible on your paper so it can be verified."
+        }
+      ]
+    }
+  },
   "3f515f04bdd8de0108e963a9558229e7": {
     "meta": {
       "mode": "ai_grading",
@@ -776,34 +826,6 @@
           "score_status": "partial",
           "student_answer": "$x = 2$ or $x = 3$",
           "student_feedback": "Your final answers are correct! However, you need to show the steps that lead you there \u2014 for example, factoring the quadratic as $(x-2)(x-3)=0$ and then setting each factor equal to zero. Showing your work is required to earn full credit."
-        }
-      ]
-    }
-  },
-  "414cd402059b8f3574ce0f0bbda3ef72": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 3x + 4 \\\\ y = 3x - 2\n  Step 2: \\text{",
-      "recorded_at": 1790703880.3155231
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.85,
-          "deductions": [
-            {
-              "points_off": 50,
-              "reason": "Required drawing (graphing method) is completely missing \u2014 'right answer, required method missing' partial credit anchor",
-              "step_ref": null
-            }
-          ],
-          "percent": 50,
-          "problem_position": 1,
-          "reasoning": "The student correctly identified the lines as parallel and stated 'no solution,' which matches the answer key. However, the problem explicitly requires a drawing (graphing method), and the extraction confirms 'NOT PRESENT \u2014 the problem asked for one and nothing is drawn.' Per the rubric's 'right answer, required method missing' partial credit anchor, this earns ~50%.",
-          "score_status": "partial",
-          "student_answer": "No solution (parallel lines)",
-          "student_feedback": "You correctly recognized that the two lines are parallel and have no solution \u2014 great reasoning! However, this problem requires you to solve by graphing, so you need to draw both lines on a coordinate plane and show that they never intersect to receive full credit."
         }
       ]
     }
@@ -858,34 +880,6 @@
       ]
     }
   },
-  "44957990ea9a9becb8e1a3e95d3de8b3": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 3x + 5 = 20\n  Step 2: 3x = 15\n  Step 3: x",
-      "recorded_at": 1790703847.731083
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.97,
-          "deductions": [
-            {
-              "points_off": 5,
-              "reason": "Partial credit: small execution error \u2014 arithmetic slip dividing 15 \u00f7 3, wrote x = 4 instead of x = 5.",
-              "step_ref": 3
-            }
-          ],
-          "percent": 95,
-          "problem_position": 1,
-          "reasoning": "The student correctly applied the right approach \u2014 subtracting 5 from both sides (Step 2: 3x = 15) \u2014 but made an arithmetic slip in the final division step, writing x = 4 instead of x = 5. This is a 'right approach with a small execution error' per the Partial credit rubric, warranting ~95%.",
-          "score_status": "partial",
-          "student_answer": "$x = 4$",
-          "student_feedback": "Your setup is perfect \u2014 subtracting 5 from both sides to get 3x = 15 is exactly right. Just double-check the last step: 15 \u00f7 3 = 5, not 4."
-        }
-      ]
-    }
-  },
   "4619710236b8353353e71ae9fbbff392": {
     "meta": {
       "mode": "ai_grading",
@@ -908,24 +902,24 @@
       ]
     }
   },
-  "49994ca0e699fde8cf0fa631549f3ee9": {
+  "4ab3a565f619e40ffdcf984fab4f857f": {
     "meta": {
       "mode": "ai_grading",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: d = vt\n  Step 2: d = 20 \\times 5\n  Step 3",
-      "recorded_at": 1790703795.124285
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \\\\ y = -x + 5\nStudent's drawin",
+      "recorded_at": 1791554688.390091
     },
     "response": {
       "grades": [
         {
-          "confidence": 1.0,
+          "confidence": 0.95,
           "deductions": [],
           "percent": 100,
           "problem_position": 1,
-          "reasoning": "The student correctly applied the kinematic formula d = vt, substituted the values (20 m/s \u00d7 5 s), and arrived at the correct answer of 100 m. Full credit criterion is met: correct final answer with clear, followable work.",
+          "reasoning": "The student graphed both lines correctly (correct y-intercepts and slopes visible), identified the intersection point (2, 3), and circled/labeled it on the graph. The final answer matches the key exactly. Full credit criterion is met: correct answer, required drawing present with both lines plotted and intersection marked.",
           "score_status": "full",
-          "student_answer": "100 m",
-          "student_feedback": "Great work! You correctly used d = vt, substituted the values, and arrived at the right answer of 100 m."
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Great work! You graphed both lines accurately, clearly labeled the intersection, and identified the correct solution $(2, 3)$."
         }
       ]
     }
@@ -954,6 +948,56 @@
           "score_status": "partial",
           "student_answer": "$\\frac{5}{6}$",
           "student_feedback": "Your final answer of 5/6 is correct, but your shown work uses an incorrect method \u2014 you can't add fractions by adding the numerators and denominators separately (that gives 2/5, not 5/6). Make sure your answer follows logically from your steps: find a common denominator (6), rewrite as 3/6 + 2/6, then add to get 5/6."
+        }
+      ]
+    }
+  },
+  "4cb3fdfc46629413052586d3f979652b": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 3x + 4 \\\\ y = 3x - 2\n  Step 2: \\text{",
+      "recorded_at": 1791554688.385686
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.85,
+          "deductions": [
+            {
+              "points_off": 50,
+              "reason": "Required drawing (graphing method) is completely missing \u2014 'right answer, required method missing' partial credit anchor",
+              "step_ref": null
+            }
+          ],
+          "percent": 50,
+          "problem_position": 1,
+          "reasoning": "The student correctly identified the lines as parallel and stated 'no solution,' which matches the answer key. However, the problem explicitly requires a drawing (graphing method), and the extraction confirms 'NOT PRESENT \u2014 the problem asked for one and nothing is drawn.' Per the rubric's 'right answer, required method missing' partial credit anchor, this earns ~50%.",
+          "score_status": "partial",
+          "student_answer": "No solution (parallel lines)",
+          "student_feedback": "You correctly recognized that the two lines are parallel and have no solution \u2014 great reasoning! However, this problem requires you to solve by graphing, so you need to draw both lines on a coordinate plane and show that they never intersect to receive full credit."
+        }
+      ]
+    }
+  },
+  "4d94d37b98e32582b0393640e55b79c9": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \\\\ y = -x + 5\nStudent's drawin",
+      "recorded_at": 1791554688.425022
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.92,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student's final answer (2, 3) matches the answer key exactly. The required drawing is present: both lines are plotted with correct y-intercepts, the intersection is circled and labeled at (2, 3), and axes are labeled \u2014 satisfying the 'Full credit' criterion including the required drawing.",
+          "score_status": "full",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Great work! You correctly graphed both lines, identified the intersection point at (2, 3), and clearly labeled it \u2014 that's exactly what was needed."
         }
       ]
     }
@@ -1087,6 +1131,34 @@
           },
           "text": "A regular hexagon has a side length of $12$ cm. (a) Find the perimeter of the hexagon. (b) Find the measure of each interior angle. (c) The hexagon is divided into congruent equilateral triangles from its center. Find the area of one such triangle, and use it to find the total area of the hexagon. Leave your answer in simplest radical form.",
           "title": "Regular hexagon \u2014 find perimeter and interior angles"
+        }
+      ]
+    }
+  },
+  "50000668edd233d2070e2f0178d26e6e": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \\\\ y = -x + 5\n  Step 2: 2x - 1",
+      "recorded_at": 1791554688.381441
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.82,
+          "deductions": [
+            {
+              "points_off": 25,
+              "reason": "Required drawing incomplete \u2014 only one of two lines plotted and intersection point not marked on the graph (rubric: required drawing present but incomplete).",
+              "step_ref": null
+            }
+          ],
+          "percent": 75,
+          "problem_position": 1,
+          "reasoning": "The student's final answer (2, 3) matches the answer key, and the algebraic work is correct. However, this problem requires solving by graphing (Requires a drawing: yes). The drawing is incomplete: only one of the two required lines is plotted, and the intersection point (2, 3) is not marked on the graph. Per the rubric, a required drawing that is present but incomplete warrants a smaller deduction than a missing one \u2014 'present but incomplete' anchors around 75%.",
+          "score_status": "partial",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Your algebra is correct and you found the right answer, (2, 3)! However, this problem asks you to solve by graphing, so you need to plot both lines on the coordinate plane and mark the intersection point \u2014 only one line appears on your graph. Make sure to draw both y = 2x \u2212 1 and y = \u2212x + 5, then clearly label where they cross."
         }
       ]
     }
@@ -1368,30 +1440,24 @@
       ]
     }
   },
-  "63c2e8099596eede4941d5bf200910e8": {
+  "62c4082fc5154838c6174f9de8cd78b2": {
     "meta": {
       "mode": "ai_grading",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \\\\ y = -x + 5\n  Step 2: 2x - 1",
-      "recorded_at": 1790703870.4849632
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: f(2) = 5\n  Step 2: \\text{y-intercept} = 1",
+      "recorded_at": 1791554688.403611
     },
     "response": {
       "grades": [
         {
-          "confidence": 0.82,
-          "deductions": [
-            {
-              "points_off": 25,
-              "reason": "Required drawing incomplete \u2014 only one of two lines plotted and intersection point not marked on the graph (rubric: required drawing present but incomplete).",
-              "step_ref": null
-            }
-          ],
-          "percent": 75,
+          "confidence": 0.95,
+          "deductions": [],
+          "percent": 100,
           "problem_position": 1,
-          "reasoning": "The student's final answer (2, 3) matches the answer key, and the algebraic work is correct. However, this problem requires solving by graphing (Requires a drawing: yes). The drawing is incomplete: only one of the two required lines is plotted, and the intersection point (2, 3) is not marked on the graph. Per the rubric, a required drawing that is present but incomplete warrants a smaller deduction than a missing one \u2014 'present but incomplete' anchors around 75%.",
-          "score_status": "partial",
-          "student_answer": "$(2, 3)$",
-          "student_feedback": "Your algebra is correct and you found the right answer, (2, 3)! However, this problem asks you to solve by graphing, so you need to plot both lines on the coordinate plane and mark the intersection point \u2014 only one line appears on your graph. Make sure to draw both y = 2x \u2212 1 and y = \u2212x + 5, then clearly label where they cross."
+          "reasoning": "The student's final answers \u2014 f(2) = 5 and y-intercept = 1 \u2014 match the answer key exactly. Both values are clearly stated with labeled steps, satisfying the 'Full credit' criterion of a correct final answer with followable reasoning.",
+          "score_status": "full",
+          "student_answer": "$f(2) = 5$, $y$-intercept $= 1$",
+          "student_feedback": "Great job! You correctly read f(2) = 5 and identified the y-intercept as 1 from the graph \u2014 both answers are spot on."
         }
       ]
     }
@@ -1414,28 +1480,6 @@
           "score_status": "full",
           "student_answer": "100 m",
           "student_feedback": "Great work! You correctly used d = vt, substituted the values cleanly, and arrived at the right answer of 100 m."
-        }
-      ]
-    }
-  },
-  "67eb8ab08653d0ba232d1d064ed69fbb": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: x + y = 10 \\Rightarrow x = 10 - y\n  Step ",
-      "recorded_at": 1790703805.970718
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 1.0,
-          "deductions": [],
-          "percent": 100,
-          "problem_position": 1,
-          "reasoning": "The student's final answer matches the answer key exactly. They used substitution correctly: isolating x in the first equation, substituting into the second, solving for y = 3, then back-substituting to get x = 7. The reasoning is fully followable with no non-obvious leaps, satisfying the 'Full credit' criterion.",
-          "score_status": "full",
-          "student_answer": "$x = 7, y = 3$",
-          "student_feedback": "Great work! You correctly used substitution to isolate x, substituted into the second equation, and solved step-by-step to find both values accurately."
         }
       ]
     }
@@ -1557,28 +1601,6 @@
       ]
     }
   },
-  "6ed29c0118b1360b66476f9ce970ee0d": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: x^2 - 6x + 8 = 0\n  Step 2: x^2 - 6x = -8\n",
-      "recorded_at": 1790703799.533246
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.99,
-          "deductions": [],
-          "percent": 100,
-          "problem_position": 1,
-          "reasoning": "The student's final answer matches the answer key exactly. The method used is completing the square, which is a valid algebraic method. The work is fully shown and followable from setup to answer, satisfying the 'Full credit' criterion.",
-          "score_status": "full",
-          "student_answer": "$x = 2$ or $x = 4$",
-          "student_feedback": "Excellent work! You correctly completed the square, isolated the squared term, and solved for both roots \u2014 every step is clear and your final answer is right."
-        }
-      ]
-    }
-  },
   "6f51fb823c66f2faab539866d6af3690": {
     "meta": {
       "mode": "ai_grading",
@@ -1603,6 +1625,28 @@
           "score_status": "zero",
           "student_answer": "$x = 17$",
           "student_feedback": "To solve 2x + 3 = 11, start by subtracting 3 from both sides to get 2x = 8, then divide both sides by 2 to find x = 4. Remember, the goal is to isolate x by doing the same operation to both sides of the equation."
+        }
+      ]
+    }
+  },
+  "702b62e4fe629eee8eb091df44b0e259": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: x + y = 10 \\Rightarrow x = 10 - y\n  Step ",
+      "recorded_at": 1791554688.32612
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 1.0,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student's final answer matches the answer key exactly. They used substitution correctly: isolating x in the first equation, substituting into the second, solving for y = 3, then back-substituting to get x = 7. The reasoning is fully followable with no non-obvious leaps, satisfying the 'Full credit' criterion.",
+          "score_status": "full",
+          "student_answer": "$x = 7, y = 3$",
+          "student_feedback": "Great work! You correctly used substitution to isolate x, substituted into the second equation, and solved step-by-step to find both values accurately."
         }
       ]
     }
@@ -1657,24 +1701,30 @@
       ]
     }
   },
-  "75006d1cb3d7f61be5bd421dd9c87978": {
+  "74224d69ebe9226fb2feb067172fbfad": {
     "meta": {
       "mode": "ai_grading",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 2x - 1 = -x + 5\n  Step 2: 3x = 6\n  Step 3",
-      "recorded_at": 1790704019.9691148
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: \\frac{1}{2} + \\frac{1}{3} = \\frac{1+1}{2+",
+      "recorded_at": 1791554688.3419452
     },
     "response": {
       "grades": [
         {
-          "confidence": 0.95,
-          "deductions": [],
-          "percent": 100,
+          "confidence": 0.85,
+          "deductions": [
+            {
+              "points_off": 50,
+              "reason": "Partial credit: correct final answer but work shows a fundamental fraction-addition error (adding numerators and denominators directly), with no valid path from setup to answer \u2014 'Full credit' reasoning requirement not met.",
+              "step_ref": 1
+            }
+          ],
+          "percent": 50,
           "problem_position": 1,
-          "reasoning": "The student's final answer (2, 3) matches the answer key exactly. The work shown \u2014 setting the two expressions equal, solving for x, then back-substituting for y \u2014 provides a clear, followable path to the solution. No required method or drawing is specified, so any valid approach earns full credit.",
-          "score_status": "full",
-          "student_answer": "$(2, 3)$",
-          "student_feedback": "Great work! You correctly set the two equations equal to solve for x, then substituted back to find y, arriving at the right answer of (2, 3)."
+          "reasoning": "The student's final answer of 5/6 matches the answer key, but the method shown is critically flawed: in Steps 1\u20132 they added numerators and denominators directly (1+1)/(2+3) = 2/5, which is a fundamental fraction addition error. Step 3 then jumps from 2/5 to 5/6 with no valid justification \u2014 the correct answer appears to be stated without correct supporting work. Per the 'Full credit' rubric, a bare or unjustified final answer where the reasoning path is not followable (and contains a non-trivial conceptual error) does not qualify for full credit. The 'right answer, method missing/broken' partial credit anchor (~50%) applies.",
+          "score_status": "partial",
+          "student_answer": "$\\frac{5}{6}$",
+          "student_feedback": "You got the right answer, but your work shows adding numerators and denominators directly (getting 2/5), which is not the correct method for adding fractions. Make sure to find a common denominator first: $\\frac{1}{2} + \\frac{1}{3} = \\frac{3}{6} + \\frac{2}{6} = \\frac{5}{6}$."
         }
       ]
     }
@@ -1785,6 +1835,28 @@
       ]
     }
   },
+  "7dd36abcd91c3e21a40fa3e6f3c544d1": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 2x + 3 = 11\n  Step 2: 2x = 8\n  Step 3: x ",
+      "recorded_at": 1791554688.313586
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 1.0,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student's final answer matches the answer key exactly (x = 4). The work shown clearly follows the correct steps: subtracting 3 from both sides, then dividing by 2 \u2014 satisfying the 'Full credit' criterion of a correct answer with followable reasoning.",
+          "score_status": "full",
+          "student_answer": "$x = 4$",
+          "student_feedback": "Great work! You correctly isolated x by subtracting 3 from both sides and then dividing by 2, arriving at the right answer."
+        }
+      ]
+    }
+  },
   "7e39e0f494d6702f4abe6f962d67acb5": {
     "meta": {
       "mode": "ai_grading",
@@ -1865,28 +1937,6 @@
           "score_status": "zero",
           "student_answer": null,
           "student_feedback": "You didn't attempt this one \u2014 even writing out the factored form (x \u2212 2)(x \u2212 3) = 0 as a starting point would earn partial credit. Give it a try next time!"
-        }
-      ]
-    }
-  },
-  "852b9f198063924f003c0737e1987bb0": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \\\\ y = -x + 5\nStudent's drawin",
-      "recorded_at": 1790703884.856117
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.95,
-          "deductions": [],
-          "percent": 100,
-          "problem_position": 1,
-          "reasoning": "The student graphed both lines correctly (correct y-intercepts and slopes visible), identified the intersection point (2, 3), and circled/labeled it on the graph. The final answer matches the key exactly. Full credit criterion is met: correct answer, required drawing present with both lines plotted and intersection marked.",
-          "score_status": "full",
-          "student_answer": "$(2, 3)$",
-          "student_feedback": "Great work! You graphed both lines accurately, clearly labeled the intersection, and identified the correct solution $(2, 3)$."
         }
       ]
     }
@@ -2002,40 +2052,12 @@
       ]
     }
   },
-  "9af3d28ce9851708c7f18c7a778e45ec": {
+  "9a6c8bab35826ba9f95ed49259c94ea0": {
     "meta": {
       "mode": "ai_grading",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 4x = 20\n  Step 2: x = 20 - 4\n  Step 3: x ",
-      "recorded_at": 1790703822.7929049
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.82,
-          "deductions": [
-            {
-              "points_off": 50,
-              "reason": "Correct final answer not supported by valid work \u2014 Steps 2\u20133 use subtraction instead of division, producing x = 16; x = 5 appears in Step 4 without justification (Full credit criterion: path from set-up to answer must be followable).",
-              "step_ref": 2
-            }
-          ],
-          "percent": 50,
-          "problem_position": 1,
-          "reasoning": "The student's final answer of x = 5 is correct and matches the answer key. However, Steps 2 and 3 show a fundamentally wrong method \u2014 subtracting 4 instead of dividing by 4 \u2014 which yields x = 16. The correct answer then appears in Step 4 without any valid justification, suggesting the student either guessed or copied the answer rather than arriving at it through correct reasoning. Per the 'Full credit' rubric criterion, a bare correct answer without a followable path from set-up to answer does not qualify for full credit. The 'right answer, required method missing / incoherent path' partial-credit anchor applies; the correct reasoning is not intact, so ~50% is appropriate.",
-          "score_status": "partial",
-          "student_answer": "$x = 5$",
-          "student_feedback": "You got the right answer, $x = 5$, but your work in Steps 2\u20133 shows subtracting 4 instead of dividing both sides by 4, which gives $x = 16$ \u2014 not 5. The correct step is $x = 20 \u00f7 4 = 5$. Make sure your written steps lead to your final answer so your reasoning is clear."
-        }
-      ]
-    }
-  },
-  "9e83754558262ed9b878169b75b6bf2f": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 2x + 3 = 11\n  Step 2: 2x = 8\n  Step 3: x ",
-      "recorded_at": 1790703788.6932302
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: mgh = \\tfrac{1}{2}mv^2\n  Step 2: v = \\sqr",
+      "recorded_at": 1791554688.3300428
     },
     "response": {
       "grades": [
@@ -2044,10 +2066,60 @@
           "deductions": [],
           "percent": 100,
           "problem_position": 1,
-          "reasoning": "The student's final answer matches the answer key exactly (x = 4). The work shown clearly follows the correct steps: subtracting 3 from both sides, then dividing by 2 \u2014 satisfying the 'Full credit' criterion of a correct answer with followable reasoning.",
+          "reasoning": "The student correctly applied conservation of energy (mgh = \u00bdmv\u00b2), derived v = \u221a(2gh), substituted the correct values (g = 10, h = 5), and arrived at the correct final answer of 10 m/s. Full credit criterion is met: correct answer with clear, followable reasoning.",
           "score_status": "full",
-          "student_answer": "$x = 4$",
-          "student_feedback": "Great work! You correctly isolated x by subtracting 3 from both sides and then dividing by 2, arriving at the right answer."
+          "student_answer": "$10 \\text{ m/s}$",
+          "student_feedback": "Excellent work! You correctly used conservation of energy to set up the equation, solved for v, and substituted the values cleanly to get the right answer of 10 m/s."
+        }
+      ]
+    }
+  },
+  "9d0e8155d3bda056011d1432f85e93a4": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 11 - 3x\n  Step 2: 3x - (11 - 3x) = 5\n",
+      "recorded_at": 1791554688.394778
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.85,
+          "deductions": [
+            {
+              "points_off": 50,
+              "reason": "Required method missing \u2014 problem specifies elimination, student used substitution instead (Partial credit: right answer, wrong method)",
+              "step_ref": 1
+            }
+          ],
+          "percent": 50,
+          "problem_position": 1,
+          "reasoning": "The student's final answer (8/3, 3) matches the answer key exactly. However, the problem explicitly requires the elimination method, and the student used substitution instead (Step 1 isolates y, Step 2 substitutes). Per the rubric's 'right answer, required method missing' partial credit anchor, this earns ~50%.",
+          "score_status": "partial",
+          "student_answer": "$(8/3, 3)$",
+          "student_feedback": "Your answer is correct, but the problem asked you to use the elimination method \u2014 you solved it using substitution instead. To use elimination, add or subtract the two equations directly to cancel a variable (e.g., adding the equations eliminates y right away), then solve for the remaining variable."
+        }
+      ]
+    }
+  },
+  "9f7d173d498a608d5f5b2cf3ab365da0": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 10 - 2x\n  Step 2: 5x - 3(10 - 2x) = 3",
+      "recorded_at": 1791554688.399248
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.99,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student's final answer (3, 4) matches the answer key exactly. The work shown uses substitution \u2014 a valid algebraic method \u2014 with a clear, followable path: isolating y, substituting into the second equation, solving for x, then back-substituting for y. Full credit criterion is met.",
+          "score_status": "full",
+          "student_answer": "$(3, 4)$",
+          "student_feedback": "Great work! You correctly isolated y, substituted into the second equation, and solved step by step to arrive at the right answer (3, 4)."
         }
       ]
     }
@@ -2124,12 +2196,12 @@
       ]
     }
   },
-  "a626b6a39a08b7d55e7bf8c21313cb97": {
+  "a5e35aef6b2e35e385c72d4a764c6394": {
     "meta": {
       "mode": "ai_grading",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 10 - 2x\n  Step 2: 5x - 3(10 - 2x) = 3",
-      "recorded_at": 1790703898.834186
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: x^2 - 6x + 8 = 0\n  Step 2: x^2 - 6x = -8\n",
+      "recorded_at": 1791554688.322142
     },
     "response": {
       "grades": [
@@ -2138,10 +2210,10 @@
           "deductions": [],
           "percent": 100,
           "problem_position": 1,
-          "reasoning": "The student's final answer (3, 4) matches the answer key exactly. The work shown uses substitution \u2014 a valid algebraic method \u2014 with a clear, followable path: isolating y, substituting into the second equation, solving for x, then back-substituting for y. Full credit criterion is met.",
+          "reasoning": "The student's final answer matches the answer key exactly. The method used is completing the square, which is a valid algebraic method. The work is fully shown and followable from setup to answer, satisfying the 'Full credit' criterion.",
           "score_status": "full",
-          "student_answer": "$(3, 4)$",
-          "student_feedback": "Great work! You correctly isolated y, substituted into the second equation, and solved step by step to arrive at the right answer (3, 4)."
+          "student_answer": "$x = 2$ or $x = 4$",
+          "student_feedback": "Excellent work! You correctly completed the square, isolated the squared term, and solved for both roots \u2014 every step is clear and your final answer is right."
         }
       ]
     }
@@ -2252,34 +2324,12 @@
       ]
     }
   },
-  "b15ebb6f776b5870b76b760fe9cd9936": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: mgh = \\tfrac{1}{2}mv^2\n  Step 2: v = \\sqr",
-      "recorded_at": 1789742504.4221709
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 1.0,
-          "deductions": [],
-          "percent": 100,
-          "problem_position": 1,
-          "reasoning": "The student correctly applied conservation of energy (mgh = \u00bdmv\u00b2), derived v = \u221a(2gh), substituted the correct values, and arrived at the correct answer of 10 m/s. Full credit criterion is met: correct final answer with clear, followable reasoning.",
-          "score_status": "full",
-          "student_answer": "$10 \\text{ m/s}$",
-          "student_feedback": "Excellent work! You correctly used energy conservation to set up the equation, solved for v, and substituted the values cleanly to get the right answer of 10 m/s."
-        }
-      ]
-    }
-  },
-  "b202395f93cbc7a193205a8bce324922": {
+  "b0b7469499bb105c4aa8e99ad2de7299": {
     "meta": {
       "mode": "ai_grading",
       "model": "claude-sonnet-4-6",
       "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  (no work shown for this problem)\nStudent's final ",
-      "recorded_at": 1790703937.254434
+      "recorded_at": 1791554688.429329
     },
     "response": {
       "grades": [
@@ -2298,6 +2348,28 @@
           "score_status": "zero",
           "student_answer": null,
           "student_feedback": "You didn't attempt this problem \u2014 even writing out the factored form (x \u2212 2)(x \u2212 3) = 0 as a starting point would earn partial credit. Give it a try next time!"
+        }
+      ]
+    }
+  },
+  "b15ebb6f776b5870b76b760fe9cd9936": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: mgh = \\tfrac{1}{2}mv^2\n  Step 2: v = \\sqr",
+      "recorded_at": 1789742504.4221709
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 1.0,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student correctly applied conservation of energy (mgh = \u00bdmv\u00b2), derived v = \u221a(2gh), substituted the correct values, and arrived at the correct answer of 10 m/s. Full credit criterion is met: correct final answer with clear, followable reasoning.",
+          "score_status": "full",
+          "student_answer": "$10 \\text{ m/s}$",
+          "student_feedback": "Excellent work! You correctly used energy conservation to set up the equation, solved for v, and substituted the values cleanly to get the right answer of 10 m/s."
         }
       ]
     }
@@ -2330,6 +2402,34 @@
       ]
     }
   },
+  "b91560bed26702e0ddcc4a26ca665349": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 4x = 20\n  Step 2: x = 20 - 4\n  Step 3: x ",
+      "recorded_at": 1791554688.333983
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.82,
+          "deductions": [
+            {
+              "points_off": 50,
+              "reason": "Correct final answer not supported by valid work \u2014 Steps 2\u20133 use subtraction instead of division, producing x = 16; x = 5 appears in Step 4 without justification (Full credit criterion: path from set-up to answer must be followable).",
+              "step_ref": 2
+            }
+          ],
+          "percent": 50,
+          "problem_position": 1,
+          "reasoning": "The student's final answer of x = 5 is correct and matches the answer key. However, Steps 2 and 3 show a fundamentally wrong method \u2014 subtracting 4 instead of dividing by 4 \u2014 which yields x = 16. The correct answer then appears in Step 4 without any valid justification, suggesting the student either guessed or copied the answer rather than arriving at it through correct reasoning. Per the 'Full credit' rubric criterion, a bare correct answer without a followable path from set-up to answer does not qualify for full credit. The 'right answer, required method missing / incoherent path' partial-credit anchor applies; the correct reasoning is not intact, so ~50% is appropriate.",
+          "score_status": "partial",
+          "student_answer": "$x = 5$",
+          "student_feedback": "You got the right answer, $x = 5$, but your work in Steps 2\u20133 shows subtracting 4 instead of dividing both sides by 4, which gives $x = 16$ \u2014 not 5. The correct step is $x = 20 \u00f7 4 = 5$. Make sure your written steps lead to your final answer so your reasoning is clear."
+        }
+      ]
+    }
+  },
   "b949548e3351ffe64a360d2748197548": {
     "meta": {
       "mode": "ai_grading",
@@ -2358,30 +2458,24 @@
       ]
     }
   },
-  "bbd612d35a6497fb56828f7d5e56b52b": {
+  "bad7fc15e1a7289ec76203fe29df0026": {
     "meta": {
       "mode": "ai_grading",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: \\frac{1}{2} + \\frac{1}{3} = \\frac{1+1}{2+",
-      "recorded_at": 1790703839.811074
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: x=-1: y=2(-1)-1=-3\n  Step 2: x=0: y=-1\n  ",
+      "recorded_at": 1791554688.416449
     },
     "response": {
       "grades": [
         {
-          "confidence": 0.85,
-          "deductions": [
-            {
-              "points_off": 50,
-              "reason": "Partial credit: correct final answer but work shows a fundamental fraction-addition error (adding numerators and denominators directly), with no valid path from setup to answer \u2014 'Full credit' reasoning requirement not met.",
-              "step_ref": 1
-            }
-          ],
-          "percent": 50,
+          "confidence": 0.98,
+          "deductions": [],
+          "percent": 100,
           "problem_position": 1,
-          "reasoning": "The student's final answer of 5/6 matches the answer key, but the method shown is critically flawed: in Steps 1\u20132 they added numerators and denominators directly (1+1)/(2+3) = 2/5, which is a fundamental fraction addition error. Step 3 then jumps from 2/5 to 5/6 with no valid justification \u2014 the correct answer appears to be stated without correct supporting work. Per the 'Full credit' rubric, a bare or unjustified final answer where the reasoning path is not followable (and contains a non-trivial conceptual error) does not qualify for full credit. The 'right answer, method missing/broken' partial credit anchor (~50%) applies.",
-          "score_status": "partial",
-          "student_answer": "$\\frac{5}{6}$",
-          "student_feedback": "You got the right answer, but your work shows adding numerators and denominators directly (getting 2/5), which is not the correct method for adding fractions. Make sure to find a common denominator first: $\\frac{1}{2} + \\frac{1}{3} = \\frac{3}{6} + \\frac{2}{6} = \\frac{5}{6}$."
+          "reasoning": "The student's computed values match the answer key exactly for all four x-values, and a table (the required drawing) is present and complete with all entries correctly filled in. Full credit criterion is met.",
+          "score_status": "full",
+          "student_answer": "$(-1,-3), (0,-1), (1,1), (2,3)$",
+          "student_feedback": "Great work! You correctly substituted each x-value into y = 2x \u2212 1 and organized your results in a complete, accurate table."
         }
       ]
     }
@@ -2454,28 +2548,6 @@
           "score_status": "full",
           "student_answer": "$(3, 4)$",
           "student_feedback": "Great work! Your substitution method is clean and well-organized \u2014 you correctly isolated y, substituted, and solved to get the right answer (3, 4)."
-        }
-      ]
-    }
-  },
-  "c24cbff6e34e0a93302bee216d3a8779": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: M \\text{ is the midpoint of } AC, BD \\qua",
-      "recorded_at": 1790703917.76117
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.95,
-          "deductions": [],
-          "percent": 100,
-          "problem_position": 1,
-          "reasoning": "The student presents a complete two-column proof with all necessary steps: Given (midpoint of AC and BD), Definition of Midpoint (AM = MC, BM = MD), Vertical Angles (\u2220AMB \u2245 \u2220CMD), and SAS congruence. This satisfies the Full credit criterion \u2014 correct final answer with a clear, followable two-column proof using the correct method (SAS), matching the answer key.",
-          "score_status": "full",
-          "student_answer": "$\\triangle AMB \\cong \\triangle CMD$",
-          "student_feedback": "Excellent work! Your two-column proof is logically complete \u2014 you correctly identified the two pairs of congruent sides from the midpoint definition and the vertical angles, then applied SAS to conclude the triangles are congruent."
         }
       ]
     }
@@ -2588,28 +2660,6 @@
           "score_status": "partial",
           "student_answer": "$(8/3, 3)$",
           "student_feedback": "Your answer is correct, but the problem asked you to use the elimination method \u2014 you used substitution instead. Next time, try adding or subtracting the two equations directly to eliminate a variable, which is what elimination requires."
-        }
-      ]
-    }
-  },
-  "cd207b576bd893a1c34a33358e142671": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: x=-1: y=2(-1)-1=-3\n  Step 2: x=0: y=-1\n  ",
-      "recorded_at": 1790703921.887182
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.98,
-          "deductions": [],
-          "percent": 100,
-          "problem_position": 1,
-          "reasoning": "The student's computed values match the answer key exactly for all four x-values, and a table (the required drawing) is present and complete with all entries correctly filled in. Full credit criterion is met.",
-          "score_status": "full",
-          "student_answer": "$(-1,-3), (0,-1), (1,1), (2,3)$",
-          "student_feedback": "Great work! You correctly substituted each x-value into y = 2x \u2212 1 and organized your results in a complete, accurate table."
         }
       ]
     }
@@ -2974,78 +3024,6 @@
       ]
     }
   },
-  "dfb8053e1a2e524222c4c994cc1f36d7": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: x^2 - 5x + 6 = 0\n  Step 2: (x - 2)(x - 3)",
-      "recorded_at": 1790703855.546921
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.97,
-          "deductions": [
-            {
-              "points_off": 5,
-              "reason": "Partial credit: small execution error \u2014 sign flip when reading roots from correct factors (x = \u22122, \u22123 instead of x = 2, 3).",
-              "step_ref": 3
-            }
-          ],
-          "percent": 95,
-          "problem_position": 1,
-          "reasoning": "The student correctly factored x\u00b2 \u2212 5x + 6 into (x \u2212 2)(x \u2212 3) = 0 (Step 2), showing the right approach and method. However, in Step 3 they made a sign error when reading the roots from the factors \u2014 writing x = \u22122 and x = \u22123 instead of x = 2 and x = 3. This is a 'right approach with a small execution error' per the Partial credit rubric, warranting ~95%.",
-          "score_status": "partial",
-          "student_answer": "$x = -2$ or $x = -3$",
-          "student_feedback": "Your factoring in Step 2 is perfect \u2014 (x \u2212 2)(x \u2212 3) = 0 is exactly right. Just watch the sign when you solve each factor: (x \u2212 2) = 0 gives x = +2, and (x \u2212 3) = 0 gives x = +3, not negative values."
-        }
-      ]
-    }
-  },
-  "e2b7edeb7203b583586cb124ae1804ce": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \\\\ y = -x + 5\n  Step 2: 2x - 1",
-      "recorded_at": 1790704015.433548
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.6,
-          "deductions": [],
-          "percent": 100,
-          "problem_position": 1,
-          "reasoning": "The student's final answer (2, 3) matches the answer key exactly. The graph is marked UNCONFIRMED, so per the rubric the drawing requirement is treated as met and no deduction is applied. The teacher should verify the photo to confirm the graph exists. Full credit criterion is satisfied.",
-          "score_status": "full",
-          "student_answer": "$(2, 3)$",
-          "student_feedback": "Great work \u2014 your answer of (2, 3) is correct! Please make sure your graph is clearly drawn and visible on your paper so it can be verified."
-        }
-      ]
-    }
-  },
-  "e2d2fb32121d1f0259d0ddd23c075a27": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: f(2) = 5\n  Step 2: \\text{y-intercept} = 1",
-      "recorded_at": 1790704009.619554
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.95,
-          "deductions": [],
-          "percent": 100,
-          "problem_position": 1,
-          "reasoning": "The student's final answers \u2014 f(2) = 5 and y-intercept = 1 \u2014 match the answer key exactly. Both values are clearly stated with labeled steps, satisfying the 'Full credit' criterion of a correct final answer with followable reasoning.",
-          "score_status": "full",
-          "student_answer": "$f(2) = 5$, $y$-intercept $= 1$",
-          "student_feedback": "Great job! You correctly read f(2) = 5 and identified the y-intercept as 1 from the graph \u2014 both answers are spot on."
-        }
-      ]
-    }
-  },
   "e30162b6a45ae6aa2a2179a0c0e59b8c": {
     "meta": {
       "mode": "ai_grading",
@@ -3165,6 +3143,28 @@
       ]
     }
   },
+  "ec10ae879881426a74cd57b803c15b73": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: d = vt\n  Step 2: d = 20 \\times 5\n  Step 3",
+      "recorded_at": 1791554688.31777
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 1.0,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student correctly applied the kinematic formula d = vt, substituted the values (20 m/s \u00d7 5 s), and arrived at the correct answer of 100 m. Full credit criterion is met: correct final answer with clear, followable work.",
+          "score_status": "full",
+          "student_answer": "100 m",
+          "student_feedback": "Great work! You correctly used d = vt, substituted the values, and arrived at the right answer of 100 m."
+        }
+      ]
+    }
+  },
   "eda648766aafc1224d2463e2bb2a7a0b": {
     "meta": {
       "mode": "ai_grading",
@@ -3189,28 +3189,6 @@
           "score_status": "partial",
           "student_answer": "$\\frac{5}{6}$",
           "student_feedback": "Your final answer of 5/6 is correct, but your work shows an incorrect method \u2014 you can't add fractions by adding the numerators and denominators separately (that gives 2/5, not 5/6). To add fractions, find a common denominator first: $\\frac{1}{2} + \\frac{1}{3} = \\frac{3}{6} + \\frac{2}{6} = \\frac{5}{6}$."
-        }
-      ]
-    }
-  },
-  "eeb011dcce16f24fb5c763fc69122f03": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: mgh = \\tfrac{1}{2}mv^2\n  Step 2: v = \\sqr",
-      "recorded_at": 1790703810.425092
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 1.0,
-          "deductions": [],
-          "percent": 100,
-          "problem_position": 1,
-          "reasoning": "The student correctly applied conservation of energy (mgh = \u00bdmv\u00b2), derived v = \u221a(2gh), substituted the correct values (g = 10, h = 5), and arrived at the correct final answer of 10 m/s. Full credit criterion is met: correct answer with clear, followable reasoning.",
-          "score_status": "full",
-          "student_answer": "$10 \\text{ m/s}$",
-          "student_feedback": "Excellent work! You correctly used conservation of energy to set up the equation, solved for v, and substituted the values cleanly to get the right answer of 10 m/s."
         }
       ]
     }
@@ -3501,6 +3479,28 @@
           "score_status": "partial",
           "student_answer": "$x = 4$",
           "student_feedback": "Your setup is perfect \u2014 subtracting 5 from both sides to get 3x = 15 is exactly right. Just double-check the last step: 15 \u00f7 3 = 5, not 4, so the answer should be x = 5."
+        }
+      ]
+    }
+  },
+  "fc37d6cb17b48959ea4ad6b057e44897": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 2x - 1 = -x + 5\n  Step 2: 3x = 6\n  Step 3",
+      "recorded_at": 1791554688.420724
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.95,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student's final answer (2, 3) matches the answer key exactly. The work shown \u2014 setting the two expressions equal, solving for x, then back-substituting for y \u2014 provides a clear, followable path to the solution. No required method or drawing is specified, so any valid approach earns full credit.",
+          "score_status": "full",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Great work! You correctly set the two equations equal to solve for x, then substituted back to find y, arriving at the right answer of (2, 3)."
         }
       ]
     }
