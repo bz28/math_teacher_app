@@ -81,6 +81,9 @@ _IDENTITY_EXCLUDE = {
     "generation_job_id",
     "call_metadata",
     "max_retries",
+    # Operational, not response-determining: changing a call's timeout must
+    # not invalidate its recordings.
+    "timeout",
 }
 
 

@@ -189,6 +189,7 @@ BLOCK_AI_DISABLED = "ai_disabled"
 BLOCK_GRADED = "graded"
 BLOCK_FLAGGED = "flagged"
 BLOCK_UNREADABLE = "unreadable"
+BLOCK_TOO_LONG = "too_long"
 BLOCK_NO_EXTRACTION = "no_extraction"
 BLOCK_EXTRACTING = "extracting"
 BLOCK_AWAITING_CONFIRMATION = "awaiting_confirmation"
@@ -258,7 +259,10 @@ def ai_grade_block(
     apply. A hand grade the teacher cleared (and never published)
     leaves no grade data, so that submission is eligible again.
     """
-    from api.core.grading_ai import GRADING_STATUS_SKIPPED_UNREADABLE
+    from api.core.grading_ai import (
+        GRADING_STATUS_SKIPPED_TOO_LONG,
+        GRADING_STATUS_SKIPPED_UNREADABLE,
+    )
     from api.core.integrity_ai import UNREADABLE_THRESHOLD
 
     if not assignment.ai_grading_enabled:
@@ -276,6 +280,13 @@ def ai_grade_block(
         and grade.ai_grading_status == GRADING_STATUS_SKIPPED_UNREADABLE
     ) or sub.extraction.get("confidence", 0.0) < UNREADABLE_THRESHOLD:
         return BLOCK_UNREADABLE
+    # The grader already ran out of output room on this homework; the
+    # same work would truncate the same way, so don't offer it again.
+    if (
+        grade is not None
+        and grade.ai_grading_status == GRADING_STATUS_SKIPPED_TOO_LONG
+    ):
+        return BLOCK_TOO_LONG
     if sub.extraction_confirmed_at is None:
         return BLOCK_AWAITING_CONFIRMATION
     return None
@@ -418,7 +429,9 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> str:
     """
     from api.core.extraction_edits import apply_extraction_edits
     from api.core.grading_ai import (
-        record_unreadable_grading_skip,
+        GRADING_STATUS_SKIPPED_TOO_LONG,
+        GRADING_STATUS_SKIPPED_UNREADABLE,
+        record_grading_skip,
         run_ai_grading_for_submission,
     )
     from api.core.integrity_ai import UNREADABLE_THRESHOLD
@@ -473,7 +486,9 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> str:
             # queueing and draining — a student edit, a re-extraction.
             # Grade what's true now rather than what was true on Monday.
             if extraction.get("confidence", 0.0) < UNREADABLE_THRESHOLD:
-                await record_unreadable_grading_skip(submission_id, db)
+                await record_grading_skip(
+                    submission_id, db, GRADING_STATUS_SKIPPED_UNREADABLE,
+                )
                 await _finish(db, job_id, outcome=_SKIPPED, error=None)
                 await db.commit()
                 return _SKIPPED
@@ -498,9 +513,16 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> str:
                 await db.commit()
                 return outcome
 
-            await run_ai_grading_for_submission(
+            skip = await run_ai_grading_for_submission(
                 submission_id, extraction, db, user_id=str(sub.student_id),
             )
+            # Too long to grade in one call. Terminal: a retry sends the
+            # same work and truncates the same way, paying each time. The
+            # row carries the disposition, so the teacher sees why.
+            if skip == GRADING_STATUS_SKIPPED_TOO_LONG:
+                await _finish(db, job_id, outcome=_SKIPPED, error=None)
+                await db.commit()
+                return _SKIPPED
             # Did a grade actually land? `run_ai_grading_for_submission`
             # returns silently when the model hands back an empty
             # `grades` array — a call was paid for and nothing was
@@ -580,7 +602,7 @@ async def _finish(
 
     - `_GRADED` — a grade landed. Terminal.
     - `_SKIPPED` — there was nothing to grade and nothing is coming (no
-      extraction, AI grading switched off, unreadable). Terminal, but
+      extraction, AI grading switched off, unreadable, too long to grade). Terminal, but
       NOT `done`: `done` asserts a grade exists, and something reading
       this table to answer "is this class graded?" would be misled.
     - `_FAILED` — it should have worked and didn't. Back to `queued` for

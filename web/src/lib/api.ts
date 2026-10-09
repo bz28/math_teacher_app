@@ -17,6 +17,9 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/v1";
 const DEFAULT_TIMEOUT = 15_000;
 const LLM_TIMEOUT = 30_000;
 const SESSION_CREATE_TIMEOUT = 90_000;
+// An inline AI grade: the server allows the grader 300s (a long homework's
+// reasoning streams at ~70 tokens/s), plus margin for the round trip.
+const AI_GRADE_TIMEOUT = 330_000;
 
 // A homework submit carries every page inline as base64, so its wall-
 // clock is the student's upload speed, not our server. A fixed timeout
@@ -1699,7 +1702,10 @@ export const teacher = {
       graded_at: string | null;
       grade_published_at: string | null;
       grade_dirty: boolean;
-    }>(`/teacher/submissions/${submissionId}/regrade`, { method: "POST" });
+    }>(`/teacher/submissions/${submissionId}/regrade`, {
+      method: "POST",
+      timeout: AI_GRADE_TIMEOUT,
+    });
   },
   /** AI-grade every never-graded submission in this section, now —
    *  exactly the rows whose `ai_grade_block` is null.
@@ -1989,8 +1995,10 @@ export interface TeacherSubmissionRow {
    *  Drives the roster review marker + the publish trust disclosure. */
   reviewed_at: string | null;
   /** Non-score grading disposition. "skipped_unreadable" = the photo
-   *  was too low-confidence to auto-grade, so nothing was pre-filled —
-   *  the teacher grades it manually. Null on the normal path. */
+   *  was too low-confidence to auto-grade; "skipped_too_long" = the
+   *  homework was too long for the AI to grade in one pass. Either way
+   *  nothing was pre-filled — the teacher grades it manually. Null on
+   *  the normal path. */
   ai_grading_status: string | null;
   integrity_overview: IntegrityOverview | null;
   /** Student explicitly said "Reader got something wrong" on the
@@ -2013,6 +2021,7 @@ export type AiGradeBlock =
   | "graded"
   | "flagged"
   | "unreadable"
+  | "too_long"
   | "no_extraction"
   | "extracting"
   | "awaiting_confirmation";
@@ -2117,8 +2126,9 @@ export interface TeacherSubmissionDetail {
    *  still see the published snapshot — teacher must republish. */
   grade_dirty: boolean;
   /** Non-score grading disposition. "skipped_unreadable" = the photo
-   *  was too low-confidence to auto-grade; the teacher grades it
-   *  manually. Null on the normal path. */
+   *  was too low-confidence to auto-grade; "skipped_too_long" = the
+   *  homework was too long for the AI to grade in one pass. Either way
+   *  the teacher grades it manually. Null on the normal path. */
   ai_grading_status: string | null;
   /** When the teacher vetted this grade (edit or explicit "Mark
    *  reviewed"). Null = AI-suggested, still unopened. */

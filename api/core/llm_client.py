@@ -34,6 +34,17 @@ from api.core.llm_schemas import ToolSchema
 logger = logging.getLogger(__name__)
 
 
+class OutputTruncatedError(RuntimeError):
+    """The model hit `max_tokens` before finishing its tool call.
+
+    A RuntimeError so every caller that already handles a failed call keeps
+    working. Not retried at temperature 0 — the same request truncates the
+    same way, so a retry only pays for an identical failure; a sampled call
+    keeps its retries and raises this once they're spent. Callers that can do
+    better (the grader) catch it to tell the teacher why there's no result.
+    """
+
+
 class LLMMode:
     """Labels for LLM call modes used in logging and persistence."""
 
@@ -532,6 +543,7 @@ async def call_claude_json(
     submission_id: str | None = None,
     generation_job_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
+    timeout: float = 90.0,
 ) -> dict[str, object]:
     """Call Claude and return a structured JSON dict via tool use.
 
@@ -561,6 +573,12 @@ async def call_claude_json(
             reproducible). Extended thinking forces temperature 1.0, so a
             custom temperature requires thinking_budget=None — passing both
             with temperature != 1.0 raises ValueError.
+        timeout: Per-request timeout in seconds. Raise it alongside a large
+            max_tokens — output streams at roughly 70 tokens/s.
+
+    Raises:
+        OutputTruncatedError: the response stopped at max_tokens. Not
+            retried — the same request truncates the same way.
     """
     if not _circuit.allow_request():
         raise PlatformStopError("Circuit breaker is open — Claude API temporarily unavailable")
@@ -594,7 +612,7 @@ async def call_claude_json(
                 messages=[{"role": "user", "content": user_message}],
                 tools=tools,
                 tool_choice=effective_tool_choice,
-                timeout=90.0,
+                timeout=timeout,
                 **thinking_kwargs,
             )
             latency_ms = round((time.monotonic() - start) * 1000, 2)
@@ -602,9 +620,14 @@ async def call_claude_json(
             # When forcing tool use, the expected stop_reason is "tool_use".
             # "end_turn" can also occur if the model naturally finishes after
             # invoking the tool. "max_tokens" means truncation — the tool
-            # input is incomplete and we should retry.
+            # input is incomplete, and handled below without a retry.
             if response.stop_reason in ("tool_use", "end_turn"):
                 result, resp_text = _extract_tool_result(response, tool_schema)
+            elif response.stop_reason == "max_tokens":
+                raise OutputTruncatedError(
+                    f"Response truncated at max_tokens={max_tokens} "
+                    f"({response.usage.output_tokens} output tokens)"
+                )
             else:
                 raise ValueError(
                     f"Unexpected stop_reason '{response.stop_reason}' "
@@ -641,12 +664,13 @@ async def call_claude_json(
                 system_prompt=_with_safety(system_prompt),
                 tool_schema_text=_tool_schema_text(tools),
             )
-        except ValueError as e:
+        except (ValueError, OutputTruncatedError) as e:
             latency_ms = round((time.monotonic() - start) * 1000, 2)
             last_error = e
-            logger.warning("Tool use extraction error (attempt %d): %s", attempt + 1, e)
-            # The API call succeeded and billed us; only the parse failed —
-            # so log its real usage, cache traffic included.
+            logger.warning("Unusable Claude response (attempt %d): %s", attempt + 1, e)
+            # The API call succeeded and billed us; only the response was
+            # unusable (truncated, or no parseable tool call) — so log its
+            # real usage, cache traffic included.
             cache_read, cache_write = _usage_cache_tokens(response.usage)
             await _log_and_persist(
                 use_model, mode,
@@ -660,10 +684,19 @@ async def call_claude_json(
                 system_prompt=_with_safety(system_prompt),
                 tool_schema_text=_tool_schema_text(tools),
             )
+            # Billed and logged above; a truncation isn't an API outage, so
+            # the circuit breaker is left alone. At temperature 0 the same
+            # request truncates the same way, so a retry only pays for an
+            # identical failure. A sampled call can come back shorter, so it
+            # keeps its retries.
+            if isinstance(e, OutputTruncatedError) and temperature == 0:
+                raise
 
         if attempt < max_retries - 1:
             await asyncio.sleep(2**attempt)
 
+    if isinstance(last_error, OutputTruncatedError):
+        raise last_error  # callers (the grader) act on the type
     raise RuntimeError(f"Claude JSON call failed after {max_retries} retries: {last_error}")
 
 

@@ -580,10 +580,14 @@ function DecisionStrip({ summary }: { summary: SubmissionSummary }) {
 
   const aiValue = summary.ai_grading_status === "skipped_unreadable"
     ? "Unreadable"
-    : pct(summary.ai_score);
+    : summary.ai_grading_status === "skipped_too_long"
+      ? "Too long"
+      : pct(summary.ai_score);
   const aiSub = summary.ai_grading_status === "skipped_unreadable"
     ? "extraction below readable threshold"
-    : summary.final_score != null
+    : summary.ai_grading_status === "skipped_too_long"
+      ? "grader output hit max_tokens — teacher grades by hand"
+      : summary.final_score != null
       && summary.ai_score != null
       && Math.round(summary.final_score) !== Math.round(summary.ai_score)
       ? `final ${pct(summary.final_score)} after review`
