@@ -67,6 +67,7 @@ _SLOTS = asyncio.Semaphore(_MAX_CONCURRENT_GRADES)
 _GRADED = "graded"    # a grade landed
 _SKIPPED = "skipped"  # nothing to grade, and nothing coming
 _FAILED = "failed"    # should have worked; retry or park
+_HANDED_OFF = "handed_off"  # reclaimed by another drain before its turn
 
 
 def _now() -> datetime:
@@ -415,7 +416,9 @@ async def _claim_due(db: AsyncSession, limit: int) -> list[GradingJob]:
     return list(rows)
 
 
-async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> str:
+async def _grade_one(
+    job_id: uuid.UUID, submission_id: uuid.UUID, claimed_at: datetime | None,
+) -> str:
     """Grade one submission in its own session. Never raises.
 
     Returns which of the three outcomes happened (`_GRADED` / `_SKIPPED`
@@ -441,6 +444,27 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> str:
         # The connection is held across the Anthropic call below, so it
         # is only taken once we're ready to make it — see `_SLOTS`.
         async with get_session_factory()() as db:
+            # Start the stale clock NOW, and only if this drain still owns
+            # the job. `_claim_due` stamps a whole batch at once, but a big
+            # class waits its turn behind `_SLOTS` — long-homework grades
+            # run minutes each — so by claim time the back of the batch
+            # could pass the stale window before it ever started, get
+            # reclaimed by another drain, and be graded (and billed) twice.
+            # The claim timestamp is the ownership token: if another drain
+            # has reclaimed and re-claimed it, this one steps aside.
+            owned = cast("CursorResult[Any]", await db.execute(
+                update(GradingJob)
+                .where(
+                    GradingJob.id == job_id,
+                    GradingJob.status == STATUS_RUNNING,
+                    GradingJob.started_at == claimed_at,
+                )
+                .values(started_at=_now(), updated_at=_now())
+            ))
+            if not owned.rowcount:
+                return _HANDED_OFF
+            await db.commit()
+
             sub = (await db.execute(
                 select(Submission).where(Submission.id == submission_id)
             )).scalar_one_or_none()
@@ -661,7 +685,7 @@ async def _run_group(jobs: list[GradingJob]) -> Counter[str]:
         return tally
 
     first, rest = jobs[0], jobs[1:]
-    tally[await _grade_one(first.id, first.submission_id)] += 1
+    tally[await _grade_one(first.id, first.submission_id, first.started_at)] += 1
 
     async def _bounded(job: GradingJob) -> str:
         # Every in-flight grade holds a DB connection for the whole
@@ -671,7 +695,7 @@ async def _run_group(jobs: list[GradingJob]) -> Counter[str]:
         # gets pool timeouts while a drain runs. Same guard the
         # generation and diagnosis pipelines already use.
         async with _SLOTS:
-            return await _grade_one(job.id, job.submission_id)
+            return await _grade_one(job.id, job.submission_id, job.started_at)
 
     if rest:
         results = await asyncio.gather(
@@ -712,4 +736,5 @@ async def drain(limit: int = DEFAULT_DRAIN_LIMIT) -> dict[str, int]:
         "succeeded": tally[_GRADED],
         "skipped": tally[_SKIPPED],
         "failed": tally[_FAILED],
+        "handed_off": tally[_HANDED_OFF],
     }

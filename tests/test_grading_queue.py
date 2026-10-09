@@ -32,6 +32,7 @@ from sqlalchemy import select
 
 from api.core.grading_queue import (
     _claim_due,
+    _grade_one,
     _reclaim_stale,
     drain,
     enqueue_submission,
@@ -373,6 +374,70 @@ async def test_a_fresh_running_job_is_not_stolen() -> None:
     job = await _job(sid)
     assert job is not None
     assert job.status == STATUS_RUNNING
+
+
+async def test_a_job_reclaimed_before_its_turn_is_never_graded_twice() -> None:
+    """A big class waits its turn inside one drain. If the back of that
+    batch is reclaimed and re-claimed by another drain meanwhile, the
+    first drain must step aside when it gets there — not grade (and bill)
+    the same submission a second time."""
+    world = await _seed_hw()
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) - timedelta(minutes=5),
+    )
+    sid = world["submission_ids"][0]
+    await _enqueue(world["assignment_id"], sid)
+
+    async with get_session_factory()() as s:
+        mine = next(j for j in await _claim_due(s, 100) if j.submission_id == sid)
+
+    # Another drain reclaims the waiting job as stale and claims it anew.
+    async with get_session_factory()() as s:
+        job = (await s.execute(
+            select(GradingJob).where(GradingJob.submission_id == sid)
+        )).scalar_one()
+        job.started_at = datetime.now(UTC) - timedelta(minutes=STALE_RUNNING_MINUTES + 1)
+        await s.commit()
+    async with get_session_factory()() as s:
+        await _reclaim_stale(s)
+        await s.commit()
+        theirs = next(j for j in await _claim_due(s, 100) if j.submission_id == sid)
+
+    grade = AsyncMock(side_effect=_fake_grade)
+    with patch("api.core.grading_ai.run_ai_grading_for_submission", new=grade):
+        assert await _grade_one(mine.id, sid, mine.started_at) == "handed_off"
+        grade.assert_not_awaited()
+        # The owner grades it, exactly once.
+        assert await _grade_one(theirs.id, sid, theirs.started_at) == "graded"
+    assert grade.await_count == 1
+
+
+async def test_the_stale_clock_starts_when_the_grade_starts() -> None:
+    """Measured from claim time, a job waiting behind its classmates could
+    look abandoned before it began. Its own start re-stamps the clock."""
+    world = await _seed_hw()
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) - timedelta(minutes=5),
+    )
+    sid = world["submission_ids"][0]
+    await _enqueue(world["assignment_id"], sid)
+    async with get_session_factory()() as s:
+        mine = next(j for j in await _claim_due(s, 100) if j.submission_id == sid)
+
+    seen: list[datetime | None] = []
+
+    async def grade_and_look(*args: Any, **kwargs: Any) -> None:
+        job = await _job(sid)
+        seen.append(job.started_at if job else None)
+        await _fake_grade(*args, **kwargs)
+
+    with patch("api.core.grading_ai.run_ai_grading_for_submission",
+               new=AsyncMock(side_effect=grade_and_look)):
+        assert await _grade_one(mine.id, sid, mine.started_at) == "graded"
+    assert mine.started_at is not None and seen[0] is not None
+    assert seen[0] > mine.started_at
 
 
 async def test_repeated_failure_parks_the_job_instead_of_cycling() -> None:
