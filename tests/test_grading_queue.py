@@ -349,9 +349,10 @@ async def test_a_job_whose_worker_died_is_reclaimed() -> None:
     assert job is not None
     assert job.status == STATUS_QUEUED
     assert job.started_at is None
-    # Attempts NOT incremented — the job never got its chance, and
-    # charging it for a deploy would eventually park healthy work.
-    assert job.attempts == 1
+    # Attempts NOT charged — it was claimed but its grade never started
+    # (attempts are charged at grade start), and charging it for a deploy
+    # would eventually park healthy work.
+    assert job.attempts == 0
 
 
 async def test_a_fresh_running_job_is_not_stolen() -> None:
@@ -411,6 +412,37 @@ async def test_a_job_reclaimed_before_its_turn_is_never_graded_twice() -> None:
         # The owner grades it, exactly once.
         assert await _grade_one(theirs.id, sid, theirs.started_at) == "graded"
     assert grade.await_count == 1
+
+
+async def test_a_backlog_tail_reclaimed_while_waiting_is_never_parked() -> None:
+    """A job claimed and reclaimed more than MAX_ATTEMPTS times without
+    its grade ever starting must stay queued, not be parked `failed`:
+    it never got its chance."""
+    world = await _seed_hw()
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) - timedelta(minutes=5),
+    )
+    sid = world["submission_ids"][0]
+    await _enqueue(world["assignment_id"], sid)
+
+    for _ in range(MAX_ATTEMPTS + 1):
+        async with get_session_factory()() as s:
+            assert sid in {j.submission_id for j in await _claim_due(s, 100)}
+        async with get_session_factory()() as s:
+            job = (await s.execute(
+                select(GradingJob).where(GradingJob.submission_id == sid)
+            )).scalar_one()
+            job.started_at = datetime.now(UTC) - timedelta(minutes=STALE_RUNNING_MINUTES + 1)
+            await s.commit()
+        async with get_session_factory()() as s:
+            await _reclaim_stale(s)
+            await s.commit()
+
+    job = await _job(sid)
+    assert job is not None
+    assert job.status == STATUS_QUEUED
+    assert job.attempts == 0
 
 
 async def test_the_stale_clock_starts_when_the_grade_starts() -> None:

@@ -411,7 +411,9 @@ async def _claim_due(db: AsyncSession, limit: int) -> list[GradingJob]:
     for job in rows:
         job.status = STATUS_RUNNING
         job.started_at = _now()
-        job.attempts += 1
+        # No attempt charged here: a claimed job may wait its turn behind
+        # `_SLOTS` and be reclaimed before it starts. `_grade_one` charges
+        # the attempt when the grade actually begins.
     await db.commit()
     return list(rows)
 
@@ -452,6 +454,11 @@ async def _grade_one(
             # reclaimed by another drain, and be graded (and billed) twice.
             # The claim timestamp is the ownership token: if another drain
             # has reclaimed and re-claimed it, this one steps aside.
+            #
+            # The attempt is charged HERE, when the grade begins — not at
+            # claim. Charging at claim let a backlog's tail, reclaimed and
+            # re-claimed while it waited, burn its whole retry budget and
+            # be parked `failed` without ever being graded.
             owned = cast("CursorResult[Any]", await db.execute(
                 update(GradingJob)
                 .where(
@@ -459,7 +466,11 @@ async def _grade_one(
                     GradingJob.status == STATUS_RUNNING,
                     GradingJob.started_at == claimed_at,
                 )
-                .values(started_at=_now(), updated_at=_now())
+                .values(
+                    started_at=_now(),
+                    attempts=GradingJob.attempts + 1,
+                    updated_at=_now(),
+                )
             ))
             if not owned.rowcount:
                 return _HANDED_OFF

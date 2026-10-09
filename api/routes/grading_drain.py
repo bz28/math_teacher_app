@@ -44,10 +44,10 @@ async def drain_grading_queue(
     """Run one drain pass; report what it did.
 
     Returns per-pass counters (`reclaimed` / `claimed` / `assignments` /
-    `succeeded` / `skipped` / `failed`) so the caller's logs answer "did
-    anything happen, and did it work?" without a database session. A cron
-    that silently 200s while grading nothing is indistinguishable from a
-    healthy one otherwise.
+    `succeeded` / `skipped` / `failed` / `handed_off`) so the caller's logs
+    answer "did anything happen, and did it work?" without a database
+    session. A cron that silently 200s while grading nothing is
+    indistinguishable from a healthy one otherwise.
 
     `skipped` and `failed` are separate on purpose: a skip (unreadable
     photo, AI grading switched off after the student confirmed) is a
