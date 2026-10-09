@@ -423,10 +423,12 @@ async def _grade_one(
 ) -> str:
     """Grade one submission in its own session. Never raises.
 
-    Returns which of the three outcomes happened (`_GRADED` / `_SKIPPED`
-    / `_FAILED`), NOT a bool. `_finish` treats the three as deliberately
-    distinct, and a bool collapses skipped into failed for every caller
-    above — which is what the drain's counters report to a cron.
+    Returns which outcome happened (`_GRADED` / `_SKIPPED` / `_FAILED`,
+    or `_HANDED_OFF` when another drain reclaimed the job before its turn
+    and this one stepped aside), NOT a bool. `_finish` treats the first
+    three as deliberately distinct, and a bool collapses skipped into
+    failed for every caller above — which is what the drain's counters
+    report to a cron.
 
     Own session per job so one failure can't poison a sibling's
     transaction — the previous in-process implementation shared a
@@ -645,8 +647,9 @@ async def _finish(
 
     `charge_attempt=False` is for platform-level stops (the daily spend
     cap, the LLM circuit breaker) that hit every job in the batch at
-    once. Charging those would park entire classes in `failed` after one
-    bad afternoon, and nothing revives a failed job.
+    once: it refunds the attempt `_grade_one` charged when the grade
+    began. Keeping those charges would park entire classes in `failed`
+    after one bad afternoon, and nothing revives a failed job.
     """
     job = (await db.execute(
         select(GradingJob).where(GradingJob.id == job_id)
@@ -688,8 +691,8 @@ async def _run_group(jobs: list[GradingJob]) -> Counter[str]:
     writes the shared prefix, and the rest then read it. Fanning all of
     them out at once would make every call miss.
 
-    Returns a tally keyed by outcome (`_GRADED` / `_SKIPPED` / `_FAILED`)
-    rather than a succeeded/failed pair — see `_grade_one`.
+    Returns a tally keyed by outcome (`_GRADED` / `_SKIPPED` / `_FAILED` /
+    `_HANDED_OFF`) rather than a succeeded/failed pair — see `_grade_one`.
     """
     tally: Counter[str] = Counter()
     if not jobs:
