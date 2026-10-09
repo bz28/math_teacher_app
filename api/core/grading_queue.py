@@ -667,8 +667,8 @@ async def _finish(
 
     job.last_error = error
     if not charge_attempt:
-        # Refund the attempt `_claim_due` took on the way in, so a
-        # platform stop costs nothing but time.
+        # Refund the attempt `_grade_one` charged when the grade began,
+        # so a platform stop costs nothing but time.
         job.attempts = max(0, job.attempts - 1)
         job.status = STATUS_QUEUED
         job.started_at = None

@@ -355,6 +355,46 @@ async def test_a_job_whose_worker_died_is_reclaimed() -> None:
     assert job.attempts == 0
 
 
+async def test_a_worker_that_dies_mid_grade_every_time_is_parked() -> None:
+    """Attempts are charged when a grade starts. A job whose worker keeps
+    dying mid-grade (after the paid call, before `_finish`) is charged
+    each time and parked after MAX_ATTEMPTS — it can't cycle forever."""
+    world = await _seed_hw()
+    await _prepare(
+        world["assignment_id"], world["submission_ids"],
+        due_at=datetime.now(UTC) - timedelta(minutes=5),
+    )
+    sid = world["submission_ids"][0]
+    await _enqueue(world["assignment_id"], sid)
+
+    class WorkerDied(BaseException):
+        """Not an Exception: `_grade_one` must not get to record it."""
+
+    for _ in range(MAX_ATTEMPTS):
+        async with get_session_factory()() as s:
+            mine = next(j for j in await _claim_due(s, 100) if j.submission_id == sid)
+        with (
+            patch("api.core.grading_ai.run_ai_grading_for_submission",
+                  new=AsyncMock(side_effect=WorkerDied())),
+            pytest.raises(WorkerDied),
+        ):
+            await _grade_one(mine.id, sid, mine.started_at)
+        async with get_session_factory()() as s:
+            job = (await s.execute(
+                select(GradingJob).where(GradingJob.submission_id == sid)
+            )).scalar_one()
+            job.started_at = datetime.now(UTC) - timedelta(minutes=STALE_RUNNING_MINUTES + 1)
+            await s.commit()
+        async with get_session_factory()() as s:
+            await _reclaim_stale(s)
+            await s.commit()
+
+    job = await _job(sid)
+    assert job is not None
+    assert job.status == STATUS_FAILED
+    assert job.attempts == MAX_ATTEMPTS
+
+
 async def test_a_fresh_running_job_is_not_stolen() -> None:
     world = await _seed_hw()
     await _prepare(
