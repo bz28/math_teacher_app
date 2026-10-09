@@ -106,6 +106,7 @@ async def test_truncation_raises_after_one_call_without_tripping_the_breaker() -
             await call_claude_json(
                 "system", "user", LLMMode.AI_GRADING,
                 tool_schema=AI_GRADING_SCHEMA, max_tokens=4096, max_retries=3,
+                temperature=0.0,
             )
 
     # Callers that catch RuntimeError from these calls keep working.
@@ -118,6 +119,25 @@ async def test_truncation_raises_after_one_call_without_tripping_the_breaker() -
     assert logged[0]["args"][2:4] == (3000, 4096)
     # Not an API outage.
     assert _circuit._failure_count == 0
+
+
+async def test_a_sampled_call_keeps_its_retries_on_truncation() -> None:
+    """Only temperature 0 truncates identically. A sampled call (tutor chat,
+    generation) can come back shorter on a retry, so it keeps them — and
+    still raises the typed error once they're spent."""
+    create = AsyncMock(return_value=_truncated_response())
+    client = SimpleNamespace(messages=SimpleNamespace(create=create))
+    with (
+        patch("api.core.llm_client.get_client", return_value=client),
+        patch("api.core.llm_client._log_and_persist", new=AsyncMock()),
+        patch("api.core.llm_client.asyncio.sleep", new=AsyncMock()),
+        pytest.raises(OutputTruncatedError),
+    ):
+        await call_claude_json(
+            "system", "user", LLMMode.AI_GRADING,
+            tool_schema=AI_GRADING_SCHEMA, max_tokens=4096, max_retries=3,
+        )
+    assert create.await_count == 3
 
 
 async def test_timeout_is_passed_through_to_the_api() -> None:
@@ -157,6 +177,8 @@ async def test_grading_call_has_room_for_a_long_homework() -> None:
         await grade_submission_with_ai(_EXTRACTION, problems, None)
     assert call.call_args.kwargs["max_tokens"] == 16384
     assert call.call_args.kwargs["timeout"] == 300.0
+    # No outer retry layer: worst case stays inside the queue's stale window.
+    assert call.call_args.kwargs["max_retries"] == 1
 
 
 # ── run_ai_grading_for_submission ─────────────────────────────────────

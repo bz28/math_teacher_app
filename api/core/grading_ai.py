@@ -662,6 +662,11 @@ async def grade_submission_with_ai(
         model=MODEL_REASON,
         max_tokens=_GRADING_MAX_TOKENS,
         timeout=_GRADING_TIMEOUT_S,
+        # One attempt here: the SDK already retries transient API errors
+        # (twice), and the grading queue retries the whole job. A third
+        # layer multiplied a stalled API into 3 × 3 × 300 s ≈ 45 min — past
+        # the queue's stale window, which then started a duplicate grader.
+        max_retries=1,
         thinking_budget=thinking_budget,
         temperature=temperature,
         user_id=user_id,

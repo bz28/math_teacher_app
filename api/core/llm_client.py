@@ -38,10 +38,10 @@ class OutputTruncatedError(RuntimeError):
     """The model hit `max_tokens` before finishing its tool call.
 
     A RuntimeError so every caller that already handles a failed call keeps
-    working. Raised on the first truncation, never retried: the same prompt at
-    the same `max_tokens` truncates the same way, so a retry only pays for an
-    identical failure. Callers that can do better (the grader) catch it to
-    tell the teacher why there's no result.
+    working. Not retried at temperature 0 — the same request truncates the
+    same way, so a retry only pays for an identical failure; a sampled call
+    keeps its retries and raises this once they're spent. Callers that can do
+    better (the grader) catch it to tell the teacher why there's no result.
     """
 
 
@@ -685,13 +685,18 @@ async def call_claude_json(
                 tool_schema_text=_tool_schema_text(tools),
             )
             # Billed and logged above; a truncation isn't an API outage, so
-            # the circuit breaker is left alone.
-            if isinstance(e, OutputTruncatedError):
+            # the circuit breaker is left alone. At temperature 0 the same
+            # request truncates the same way, so a retry only pays for an
+            # identical failure. A sampled call can come back shorter, so it
+            # keeps its retries.
+            if isinstance(e, OutputTruncatedError) and temperature == 0:
                 raise
 
         if attempt < max_retries - 1:
             await asyncio.sleep(2**attempt)
 
+    if isinstance(last_error, OutputTruncatedError):
+        raise last_error  # callers (the grader) act on the type
     raise RuntimeError(f"Claude JSON call failed after {max_retries} retries: {last_error}")
 
 

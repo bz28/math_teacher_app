@@ -76,10 +76,12 @@ STATUS_FAILED = "failed"
 MAX_ATTEMPTS = 3
 
 # A `running` job older than this is presumed abandoned — its worker was
-# deployed over or crashed — and is reclaimed by the next drain. Grading
-# a class takes seconds to low minutes, so 15 is comfortably clear of a
-# slow-but-alive run while still recovering quickly after a restart.
-STALE_RUNNING_MINUTES = 15
+# deployed over or crashed — and is reclaimed by the next drain. It must
+# exceed one job's worst case, or a slow-but-alive grader gets a duplicate:
+# a stalled API costs the grading call 3 SDK attempts × its 300 s timeout
+# = 15 min (grading_ai._GRADING_TIMEOUT_S). 20 clears that and still
+# recovers quickly after a restart.
+STALE_RUNNING_MINUTES = 20
 
 
 class GradingJob(Base):
