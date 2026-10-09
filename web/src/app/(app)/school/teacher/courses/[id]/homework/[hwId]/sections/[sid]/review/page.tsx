@@ -29,6 +29,7 @@ import { PdfView } from "@/components/ui/pdf-view";
 import { WorkGalleryModal } from "@/components/school/teacher/_pieces/work-gallery";
 import {
   teacher,
+  type AiGradeBlock,
   type AiGradeEntry,
   type GradeBreakdownEntry,
   type GradeDeduction,
@@ -1065,19 +1066,22 @@ function HomeworkSectionReview({
   // hadn't confirmed (no grading job existed, so the click moved zero
   // jobs and the count never went down). Ungraded work the AI won't
   // take is counted separately so it's explained, not hidden: waiting
-  // on the student, or no readable work. Work still being read is in
-  // neither — it becomes one or the other in a minute.
+  // on the student, no readable work, or too long to grade in one pass.
+  // Work still being read is in neither — it becomes one or the other in
+  // a minute.
   const {
     ungradedInSection,
     awaitingStudentInSection,
     flaggedInSection,
     cantAiGradeInSection,
+    tooLongInSection,
   } =
     useMemo(() => {
       let gradeable = 0;
       let awaiting = 0;
       let flagged = 0;
       let cant = 0;
+      let tooLong = 0;
       // Action counts — "Grade N ungraded" does grade her rehearsal too.
       for (const e of roster ?? []) {
         const sub = e.submission;
@@ -1091,12 +1095,14 @@ function HomeworkSectionReview({
         ) {
           cant += 1;
         }
+        if (sub.ai_grade_block === "too_long") tooLong += 1;
       }
       return {
         ungradedInSection: gradeable,
         awaitingStudentInSection: awaiting,
         flaggedInSection: flagged,
         cantAiGradeInSection: cant,
+        tooLongInSection: tooLong,
       };
     }, [roster, aiPendingIds]);
   // Reviewed vs unopened split of the full to-release set (HW-wide).
@@ -1676,7 +1682,8 @@ function HomeworkSectionReview({
             )}
             {(awaitingStudentInSection > 0 ||
               flaggedInSection > 0 ||
-              cantAiGradeInSection > 0) && (
+              cantAiGradeInSection > 0 ||
+              tooLongInSection > 0) && (
               // Ungraded work the button won't touch — said once, here,
               // so the count beside it reads as complete rather than
               // quietly short. Each row names its own reason.
@@ -1690,6 +1697,8 @@ function HomeworkSectionReview({
                     `${flaggedInSection} flagged as misread — grade from the photo`,
                   cantAiGradeInSection > 0 &&
                     `${cantAiGradeInSection} can’t be AI-graded — no readable work`,
+                  tooLongInSection > 0 &&
+                    `${tooLongInSection} too long for AI — grade by hand`,
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -2409,8 +2418,51 @@ function isAwaitingGrade(entry: RosterEntry): boolean {
   const sub = entry.submission;
   if (!sub) return false;
   if (sub.final_score !== null) return false;
-  return sub.ai_grading_status !== "skipped_unreadable";
+  return (
+    sub.ai_grading_status !== "skipped_unreadable" &&
+    sub.ai_grading_status !== "skipped_too_long"
+  );
 }
+
+/** Why the AI left a submission for the teacher to grade by hand: the
+ *  photo couldn't be read, or the homework was too long to grade in one
+ *  pass. Null once a grade exists. Reads the stamped disposition AND the
+ *  row's `ai_grade_block`, since the grading poll refreshes the row but
+ *  not the open detail pane. */
+type AiSkip = "unreadable" | "too_long";
+function aiSkipReason(
+  aiGradingStatus: string | null,
+  block: AiGradeBlock | null | undefined,
+  finalScore: number | null,
+): AiSkip | null {
+  if (finalScore !== null) return null;
+  if (aiGradingStatus === "skipped_unreadable" || block === "unreadable") {
+    return "unreadable";
+  }
+  if (aiGradingStatus === "skipped_too_long" || block === "too_long") {
+    return "too_long";
+  }
+  return null;
+}
+
+const AI_SKIP_COPY: Record<AiSkip, { status: string; title: string; body: string }> = {
+  unreadable: {
+    status: "Couldn't read · grade manually",
+    title: "Couldn’t read this submission",
+    body:
+      "The work was too unclear to read, so nothing was auto-graded. Open " +
+      "the pages and grade it by hand — the grading controls work the " +
+      "same, there’s just no AI suggestion to start from.",
+  },
+  too_long: {
+    status: "Too long for AI · grade by hand",
+    title: "Too long for the AI to grade",
+    body:
+      "This submission is too long for the AI to grade in one pass, so " +
+      "nothing was auto-graded. Please grade it by hand — the grading " +
+      "controls work the same, there’s just no AI suggestion to start from.",
+  },
+};
 
 /** "Full" / "No credit" / "Partial 70%" — how a grade reads on a
  *  report chip. */
@@ -3003,19 +3055,16 @@ function rowStatusLabel(
       dotClass: "bg-[color:var(--color-error)]",
     };
   }
-  // Unreadable photo never got an AI grade — call it out distinctly so
-  // the teacher knows this row needs a manual pass (or a resubmit),
-  // not just an unopened suggestion. Warning dot, reusing the same
-  // amber token the dirty/ungraded states use. Surfaces even after a
-  // manual grade exists isn't a concern: once graded, the published /
-  // graded branches above take over.
-  if (
-    (sub.ai_grading_status === "skipped_unreadable" ||
-      sub.ai_grade_block === "unreadable") &&
-    sub.final_score === null
-  ) {
+  // The AI skipped it (unreadable photo, or too long to grade in one
+  // pass) and never produced a grade — call it out distinctly so the
+  // teacher knows this row needs a manual pass, not just an unopened
+  // suggestion. Warning dot, reusing the same amber token the dirty/
+  // ungraded states use. Once a grade exists the skip reads null and the
+  // published / graded branches below take over.
+  const skip = aiSkipReason(sub.ai_grading_status, sub.ai_grade_block, sub.final_score);
+  if (skip) {
     return {
-      text: "Couldn't read · grade manually",
+      text: AI_SKIP_COPY[skip].status,
       dotClass: "bg-[color:var(--color-warning)]",
     };
   }
@@ -3214,13 +3263,15 @@ function SubmissionDetailPanel({
     [submission_id, assignment_id, course_id, section_id, student_id, detail, aiByPosition, breakdownByProblem],
   );
   useReportPageContext(sidebarReport);
-  // Unreadable photo, not yet hand-graded — surface the callout that
-  // explains why there's no AI suggestion. Drops away once the teacher
-  // has put a grade on it (final_score set).
-  const skippedUnreadable =
-    (detail.ai_grading_status === "skipped_unreadable" ||
-      row?.ai_grade_block === "unreadable") &&
-    detail.final_score === null;
+  // The AI skipped it (unreadable photo, or too long), not yet hand-
+  // graded — surface the callout that explains why there's no AI
+  // suggestion. Drops away once the teacher has put a grade on it
+  // (final_score set).
+  const aiSkip = aiSkipReason(
+    detail.ai_grading_status,
+    row?.ai_grade_block,
+    detail.final_score,
+  );
   const offerAiGrade = !!row && canAiGrade(row) && !aiGrading;
 
   // ── Triage: collapse the confident grades, keep the uncertain open ──
@@ -4041,19 +4092,20 @@ function SubmissionDetailPanel({
         />
       )}
 
-      {/* Unreadable callout — when the photo was too low-confidence to
-          auto-grade, the AI suggestion is silently absent and the
-          per-problem pickers below sit empty. Explain why, and put the
-          student's work one click away, so the empty state reads as
-          "grade this by hand" not "something's broken". Manual grading
-          stays fully enabled below. */}
-      {skippedUnreadable && (
+      {/* AI-skip callout — when the photo was too low-confidence to
+          auto-grade, or the homework too long to grade in one pass, the
+          AI suggestion is silently absent and the per-problem pickers
+          below sit empty. Explain why, and put the student's work one
+          click away, so the empty state reads as "grade this by hand"
+          not "something's broken". Manual grading stays fully enabled
+          below. */}
+      {aiSkip && (
         <div className="rounded-[--radius-xl] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] p-4  dark:bg-[color:var(--color-warning)]/10">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <p className="flex items-center gap-1.5 text-sm font-bold text-[color:var(--color-warning-dark)] ">
                 <span aria-hidden>⚠</span>
-                Couldn&rsquo;t read this submission
+                {AI_SKIP_COPY[aiSkip].title}
               </p>
               {/* Names only what the teacher can actually do from here.
                   The previous copy offered "ask them to resubmit a clearer
@@ -4061,15 +4113,12 @@ function SubmissionDetailPanel({
                   one-shot (a second attempt gets 409 Already submitted)
                   and no endpoint reopens one. It also has to say what
                   "by hand" means, because there is no button for it —
-                  `record_unreadable_grading_skip` leaves breakdown and
+                  `record_grading_skip` leaves breakdown and
                   final_score null precisely so the grading controls
                   below this callout work normally, just with nothing
                   pre-filled. */}
               <p className="mt-1 text-xs leading-relaxed text-[color:var(--color-warning-dark)]/80">
-                The work was too unclear to read, so nothing was
-                auto-graded. Open the pages and grade it by hand — the
-                grading controls work the same, there&rsquo;s just no AI
-                suggestion to start from.
+                {AI_SKIP_COPY[aiSkip].body}
               </p>
             </div>
             {detail.files && detail.files.length > 0 && (
