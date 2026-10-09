@@ -1395,15 +1395,17 @@ async def submissions_inbox(
                 ),
                 1,
             ),
-            # AI grading was on but the photo was unreadable: a grade row
-            # exists with ai_grading_status='skipped_unreadable' and no
-            # final_score, and (integrity off ⇒) no integrity row to catch
-            # it above. Without this branch it sits ungraded indefinitely,
-            # invisible to the needs-attention count. LEFT JOIN already
-            # supplies SubmissionGrade.
+            # AI grading was on but skipped it (unreadable photo, or too
+            # long to grade in one pass): a grade row exists with that
+            # ai_grading_status and no final_score, and (integrity off ⇒)
+            # no integrity row to catch it above. Without this branch it
+            # sits ungraded indefinitely, invisible to the needs-attention
+            # count. LEFT JOIN already supplies SubmissionGrade.
             (
                 and_(
-                    SubmissionGrade.ai_grading_status == "skipped_unreadable",
+                    SubmissionGrade.ai_grading_status.in_(
+                        ("skipped_unreadable", "skipped_too_long"),
+                    ),
                     SubmissionGrade.final_score.is_(None),
                 ),
                 1,
@@ -1962,6 +1964,10 @@ _AI_GRADE_BLOCK_DETAIL = {
     "unreadable": (
         "The AI couldn't read this submission's photo — grade it by hand"
     ),
+    "too_long": (
+        "This submission is too long for the AI to grade in one pass — "
+        "please grade it by hand."
+    ),
     "no_extraction": (
         "This submission's work was never read — nothing for the AI to "
         "grade. Grade it by hand."
@@ -2170,7 +2176,10 @@ async def regrade_submission(
     stored extraction against the current problem list); not worth paying
     for a full Vision read on every regrade to paper over.
     """
-    from api.core.grading_ai import run_ai_grading_for_submission
+    from api.core.grading_ai import (
+        GRADING_STATUS_SKIPPED_TOO_LONG,
+        run_ai_grading_for_submission,
+    )
     from api.core.integrity_ai import extract_student_work
     from api.services.bank import load_problems_for_assignment
 
@@ -2235,10 +2244,17 @@ async def regrade_submission(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Could not regrade — no gradeable content",
         )
-    await run_ai_grading_for_submission(
+    skip = await run_ai_grading_for_submission(
         sub.id, extraction, db, user_id=actor_id, force=True,
     )
     await db.commit()
+    if skip == GRADING_STATUS_SKIPPED_TOO_LONG:
+        # The grader ran out of output room; any prior grade is untouched.
+        # Say so rather than return that grade as if it were the regrade.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_AI_GRADE_BLOCK_DETAIL["too_long"],
+        )
 
     grade = (await db.execute(
         select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)

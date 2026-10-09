@@ -196,7 +196,10 @@ async def _run_integrity_and_grading_background(
     lose integrity results. Never re-raises.
     """
     from api.core.extraction_edits import apply_extraction_edits
-    from api.core.grading_ai import record_unreadable_grading_skip
+    from api.core.grading_ai import (
+        GRADING_STATUS_SKIPPED_UNREADABLE,
+        record_grading_skip,
+    )
     from api.core.grading_queue import enqueue_submission
     from api.core.integrity_ai import UNREADABLE_THRESHOLD
 
@@ -265,8 +268,9 @@ async def _run_integrity_and_grading_background(
                             "submission %s; skipping auto-grade",
                             confidence, submission_id,
                         )
-                        await record_unreadable_grading_skip(
+                        await record_grading_skip(
                             submission_id, db,
+                            GRADING_STATUS_SKIPPED_UNREADABLE,
                         )
                     else:
                         # Queue it; don't grade it. `enqueue_submission`

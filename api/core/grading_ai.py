@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.llm_client import (
     MODEL_REASON,
     LLMMode,
+    OutputTruncatedError,
     call_claude_json,
 )
 from api.core.llm_schemas import AI_GRADING_SCHEMA
@@ -37,6 +38,18 @@ logger = logging.getLogger(__name__)
 # when the extraction was too low-confidence to grade. Parallel to the
 # integrity pipeline's STATUS_SKIPPED_UNREADABLE.
 GRADING_STATUS_SKIPPED_UNREADABLE = "skipped_unreadable"
+# ...and when the homework was too long for the grader to finish in one call
+# (its output hit max_tokens). Same "grade it by hand" outcome; never retried,
+# since the same work truncates the same way.
+GRADING_STATUS_SKIPPED_TOO_LONG = "skipped_too_long"
+
+# The grader writes reasoning for every problem in ONE tool call. Measured in
+# prod: ≈270 output tokens per problem, so a 12–15 problem homework needs
+# 3.2k–4.1k tokens and overran the old 4096 cap. 16384 fits ~55 problems.
+# Output streams at ≈69 tokens/s, so a full 16k response takes ~4 min —
+# the timeout has to cover that, not the 90 s default.
+_GRADING_MAX_TOKENS = 16384
+_GRADING_TIMEOUT_S = 300.0
 
 _GRADING_SYSTEM = """\
 You are a world-class math professor grading a student's homework submission. \
@@ -647,7 +660,8 @@ async def grade_submission_with_ai(
         LLMMode.AI_GRADING,
         tool_schema=AI_GRADING_SCHEMA,
         model=MODEL_REASON,
-        max_tokens=4096,
+        max_tokens=_GRADING_MAX_TOKENS,
+        timeout=_GRADING_TIMEOUT_S,
         thinking_budget=thinking_budget,
         temperature=temperature,
         user_id=user_id,
@@ -936,8 +950,14 @@ async def run_ai_grading_for_submission(
     *,
     user_id: str | None = None,
     force: bool = False,
-) -> None:
+) -> str | None:
     """Load the HW context, call the AI grader, and persist results.
+
+    Returns `GRADING_STATUS_SKIPPED_TOO_LONG` when the grader ran out of
+    output room before finishing — no grade was written, and retrying
+    would fail the same way — else None. That disposition is also stamped
+    on the row (unless a grade is already there), but callers act on the
+    return value: a teacher hand-grading mid-call leaves no stamp.
 
     Writes to SubmissionGrade:
     - ai_breakdown: raw AI output (reasoning preserved for teacher)
@@ -960,7 +980,7 @@ async def run_ai_grading_for_submission(
         select(Submission).where(Submission.id == submission_id)
     )).scalar_one_or_none()
     if not sub:
-        return
+        return None
 
     # Idempotency: unless this is a teacher-initiated regrade, skip the
     # LLM call when the submission carries grade data of ANY kind — the
@@ -977,25 +997,34 @@ async def run_ai_grading_for_submission(
             )
         )).scalar_one_or_none()
         if has_any_grade(existing):
-            return
+            return None
 
     assignment = (await db.execute(
         select(Assignment).where(Assignment.id == sub.assignment_id)
     )).scalar_one_or_none()
     if not assignment:
-        return
+        return None
 
     problems = await load_problems_for_assignment(db, assignment)
     if not problems:
-        return
+        return None
 
-    result = await grade_submission_with_ai(
-        extraction, problems, assignment.rubric,
-        user_id=user_id, submission_id=str(submission_id),
-    )
+    try:
+        result = await grade_submission_with_ai(
+            extraction, problems, assignment.rubric,
+            user_id=user_id, submission_id=str(submission_id),
+        )
+    except OutputTruncatedError:
+        logger.warning(
+            "AI grading truncated for submission %s (%d problems); "
+            "leaving it for the teacher to grade by hand",
+            submission_id, len(problems),
+        )
+        await record_grading_skip(submission_id, db, GRADING_STATUS_SKIPPED_TOO_LONG)
+        return GRADING_STATUS_SKIPPED_TOO_LONG
     grades = result.get("grades", [])
     if not grades:
-        return
+        return None
 
     # Map position → bank_item_id so breakdown uses the same IDs as
     # the teacher's manual grading flow. _build_breakdown clamps the
@@ -1055,9 +1084,9 @@ async def run_ai_grading_for_submission(
         grade.breakdown = breakdown
         grade.final_score = ai_score
         grade.graded_at = datetime.now(UTC)
-        # A real grade now exists — clear any stale "couldn't read it"
-        # marker (e.g. a teacher-forced regrade of a previously
-        # skipped-unreadable submission).
+        # A real grade now exists — clear any stale skip marker (e.g. a
+        # teacher-forced regrade of a previously skipped-unreadable or
+        # skipped-too-long submission).
         grade.ai_grading_status = None
         if force:
             # Regrade wipes the manual-review marker so the row once
@@ -1067,21 +1096,25 @@ async def run_ai_grading_for_submission(
             # republishes when ready.
             grade.reviewed_by = None
             grade.reviewed_at = None
+    return None
 
 
-async def record_unreadable_grading_skip(
+async def record_grading_skip(
     submission_id: uuid.UUID,
     db: AsyncSession,
+    status: str,
 ) -> None:
-    """Stamp 'couldn't read the photo' instead of auto-grading.
+    """Stamp why there's no AI grade instead of fabricating one.
 
-    Called from the shared background path when the extraction confidence
-    is below the unreadable threshold. There's no trustworthy work to grade,
-    so we DON'T fabricate a score — we record the reason on
-    `ai_grading_status` so the teacher review surfaces "couldn't read this —
-    needs manual grading", leaving breakdown/final_score null so the teacher
-    can still grade by hand. Mirrors the integrity pipeline's
-    skipped_unreadable disposition.
+    `status` is a `GRADING_STATUS_SKIPPED_*` disposition:
+    - unreadable — the extraction confidence is below the unreadable
+      threshold, so there's no trustworthy work to grade;
+    - too long — the grader ran out of output room mid-homework.
+
+    Either way we record the reason on `ai_grading_status` so the teacher
+    review surfaces it as "grade this by hand", leaving breakdown/
+    final_score null so the teacher can still grade by hand. Mirrors the
+    integrity pipeline's skipped_unreadable disposition.
 
     Idempotent + non-clobbering: upserts the grade row, but only sets the
     status when the submission isn't already graded (final_score set) or
@@ -1089,10 +1122,7 @@ async def record_unreadable_grading_skip(
     """
     await db.execute(
         pg_insert(SubmissionGrade)
-        .values(
-            submission_id=submission_id,
-            ai_grading_status=GRADING_STATUS_SKIPPED_UNREADABLE,
-        )
+        .values(submission_id=submission_id, ai_grading_status=status)
         .on_conflict_do_nothing(index_elements=["submission_id"])
     )
     grade = (await db.execute(
@@ -1101,4 +1131,4 @@ async def record_unreadable_grading_skip(
         )
     )).scalar_one()
     if grade.final_score is None and grade.reviewed_by is None:
-        grade.ai_grading_status = GRADING_STATUS_SKIPPED_UNREADABLE
+        grade.ai_grading_status = status
