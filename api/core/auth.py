@@ -147,6 +147,11 @@ def check_lockout(user: User) -> bool:
 
 
 async def record_failed_login(db: AsyncSession, user: User) -> None:
+    # A lockout that has run out starts a fresh count — otherwise the
+    # count stays at the threshold and every later typo re-locks.
+    if user.locked_until and user.locked_until <= datetime.now(UTC):
+        user.failed_login_attempts = 0
+        user.locked_until = None
     user.failed_login_attempts += 1
     if user.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
         user.locked_until = datetime.now(UTC) + LOCKOUT_DURATION

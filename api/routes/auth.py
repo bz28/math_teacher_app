@@ -1004,6 +1004,10 @@ async def set_password(
     user.password_hash = hash_password(body.password)
     user.password_reset_token_hash = None
     user.password_reset_expires = None
+    # Proving inbox ownership clears any brute-force lockout, so the
+    # student can sign in with the new password right away.
+    user.failed_login_attempts = 0
+    user.locked_until = None
     await db.commit()
 
     logger.info("Password set via token for user=%s", user.id)
