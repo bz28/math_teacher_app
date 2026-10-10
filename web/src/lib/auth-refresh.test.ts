@@ -262,3 +262,33 @@ test("a transient refresh failure leaves tokens intact", async () => {
   assert.equal(accessToken(), "access_1");
   assert.equal(refreshToken(), "refresh_1");
 });
+
+// ── A tokenless refresh must not poison later ones ────────────────
+
+test("a refresh attempted with no stored token does not block the next session's refresh", async () => {
+  // With no refresh token the refresh body completes synchronously, so
+  // its inner finally cleared refreshPromise before the assignment
+  // landed, pinning "auth_rejected" for the life of the tab. Signing in again navigates
+  // client-side (no reload), so every later 401 skipped /auth/refresh
+  // and wiped the new session — teachers were dropped ~15 minutes into
+  // each login with "Not authenticated" on Approve / Publish.
+  script = { "/auth/me": [{ status: 401 }] };
+  await assert.rejects(() => auth.me());
+
+  saveTokens(TOKENS);
+  calls = [];
+  script = {
+    "/auth/me": [{ status: 401 }, { status: 200, body: { id: "u1" } }],
+    "/auth/refresh": [
+      {
+        status: 200,
+        body: { access_token: "access_2", refresh_token: "refresh_2", token_type: "bearer" },
+      },
+    ],
+  };
+
+  await auth.me();
+
+  assert.deepEqual(calls, ["GET /auth/me", "POST /auth/refresh", "GET /auth/me"]);
+  assert.equal(accessToken(), "access_2");
+});
