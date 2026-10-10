@@ -1,0 +1,211 @@
+[
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.quality,admin.harness_runs,admin.llm_calls",
+      "title": "Add the admin dashboard's dev origin to the API's CORS allowlist",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "All 5 admin surfaces fail to load any data: every screenshot shows the full-page 'Couldn't load this view' / 'API UNREACHABLE' error state, and console_errors on each surface show the browser blocking the preflight with 'Access to fetch at ... from origin http://localhost:5173 has been blocked by CORS policy: ... No Access-Control-Allow-Origin header'. api/config.py:47 (cors_origins) lists localhost:8081, localhost:3000, and production domains, but not the admin dashboard's Vite dev origin http://localhost:5173, so CORSMiddleware (api/middleware/setup.py:30) never stamps the header back and every admin fetch is rejected before it reaches a route.",
+      "change": "Add 'http://localhost:5173' to the default cors_origins list in api/config.py:47, matching the pattern already used for the web app's localhost:3000/8081 entries. This unblocks Leads, Schools, Quality, Harness runs, and LLM calls for anyone running the admin dashboard locally.",
+      "est_size": "S",
+      "confidence": 0.85,
+      "defect_key": "bug/admin-dashboard-cors-blocked",
+      "evidence": [],
+      "id": "0bacd2ea5dc1",
+      "score": 2.55
+    },
+    "status": "proposed",
+    "created": "2026-10-09T13:18:25.573488+00:00",
+    "updated": "2026-10-09T13:18:25.573488+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Let a student ask a guided follow-up about their own graded submission",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "The product's integrity check already runs a one-on-one conversational agent before a grade clears (api/core/integrity_ai.py), and Learn mode already has a step-by-step tutor chat (tutor.py) \u2014 but per PRODUCT_CONTEXT.md's feature map, once a grade is released the student only sees the grade + feedback and can generate more practice; there's no guided conversation scoped to 'why did I lose points on problem 3' for an already-graded submission.",
+      "change": "Add a short, guided (never answer-giving, per the tutoring principle) AI chat scoped to one graded problem, reachable from the grade-review screen, reusing the existing tutor/step-decomposition conversational pattern instead of building a new engine.",
+      "est_size": "M",
+      "confidence": 0.45,
+      "defect_key": "feature/post-grade-ask-why-chat",
+      "evidence": [],
+      "id": "bdf7d14fbd10",
+      "score": 0.45
+    },
+    "status": "proposed",
+    "created": "2026-10-09T13:18:25.573488+00:00",
+    "updated": "2026-10-09T13:18:25.573488+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Auto-generate a class-wide reteach mini-lesson when a concept, not just a student, is slipping",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "Teacher-day analytics already surface 'which concepts the class is missing' and per-student practice generation already exists (api/core/practice.py), but PRODUCT_CONTEXT.md describes the path today as student-level practice, not a class-level reteach artifact \u2014 there's no one-click 'most of the class missed X, here's a short reteach + fresh practice set to assign to everyone' action.",
+      "change": "When teacher-day analytics flags a concept missed by a threshold share of the section (not just one student), surface a one-click 'Generate reteach pack' action that produces a short worked-example mini-lesson plus a fresh practice set for the whole section, reusing the existing generation + verification pipeline (assignment_generation.py).",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/class-wide-reteach-pack",
+      "evidence": [],
+      "id": "c0a0e71d45fc",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-09T13:18:25.573488+00:00",
+    "updated": "2026-10-09T13:18:25.573488+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "llm:ai_grading",
+      "title": "Investigate failing `ai_grading` LLM calls",
+      "category": "bug",
+      "severity": "medium",
+      "rationale": "24 production `ai_grading` call(s) failed (success=false). Sample call fc163585-49f0-419b-bda2-c217ae7b23d6.",
+      "change": "Inspect the `ai_grading` call path and its error handling; reproduce with the sample call and address the failure.",
+      "est_size": "M",
+      "confidence": 0.6,
+      "defect_key": "llm-failed/ai_grading",
+      "evidence": [],
+      "id": "60e42b12c8fa",
+      "score": 0.6
+    },
+    "status": "proposed",
+    "created": "2026-10-09T18:29:54.713359+00:00",
+    "updated": "2026-10-09T18:29:54.713359+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "web.public.register,web.public.privacy,web.public.terms,web.public.support",
+      "title": "Underline inline body-copy links instead of relying on color alone",
+      "category": "a11y",
+      "severity": "high",
+      "rationale": "axe's high-severity 'link-in-text-block' rule fires on register (2 elements), privacy (3), terms (4), and support (1) per findings.json. Confirmed in shots/web.public.register.png: the 'Terms of Service' / 'Privacy Policy' links in the signup consent line are only distinguishable by their green color against the surrounding black paragraph, no underline at rest. Grounded in code: web/src/app/register/page.tsx:474,478 use className=\"text-primary hover:underline\" (underline only on :hover), and the identical class=\"text-primary hover:underline\" pattern repeats on ~10 inline links inside the legal body copy \u2014 web/src/app/(legal)/terms/page.tsx:155,157,165,194,203,204 and web/src/app/(legal)/privacy/page.tsx:71,109,118,143,144 and support/page.tsx:96 \u2014 exactly the policy/contact links a reader relies on, on precisely the pages where legibility matters most.",
+      "change": "Change the shared inline-link styling from hover:underline to a persistent underline (e.g. 'text-primary underline underline-offset-2') across register's consent line and the legal-page body-copy links, so links read as links at rest, not only on hover.",
+      "est_size": "S",
+      "confidence": 0.85,
+      "defect_key": "a11y/link-in-text-block",
+      "evidence": [],
+      "id": "44a933d6e982",
+      "score": 2.55
+    },
+    "status": "proposed",
+    "created": "2026-10-09T22:44:51.737929+00:00",
+    "updated": "2026-10-09T22:44:51.737929+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Surface a per-student integrity-confidence trend across assignments, not just per-submission badges",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "api/models/integrity_check.py emits per-problem badges/confidence/reasoning for a single submission, and PRODUCT_CONTEXT.md is explicit that integrity 'raises scrutiny, never auto-flags' \u2014 but the feature map only describes per-submission verdicts, with no aggregation across a student's history. A one-off low-confidence badge is easy to miss in a single review pass; a repeating pattern across several assignments is exactly the kind of scrutiny-raising (not auto-punishing) signal the product's own principle calls for, and isn't surfaced today.",
+      "change": "On the teacher's per-student view, show a lightweight trend indicator (e.g. 'low-confidence on 3 of last 5 submissions') built from existing integrity_check records \u2014 a teacher-reviewed signal, not a flag or score.",
+      "est_size": "M",
+      "confidence": 0.35,
+      "defect_key": "feature/integrity-trend-across-assignments",
+      "evidence": [],
+      "id": "1f81f30f22e3",
+      "score": 0.175
+    },
+    "status": "proposed",
+    "created": "2026-10-09T22:44:51.737929+00:00",
+    "updated": "2026-10-09T22:44:51.737929+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.quality,admin.harness_runs,admin.llm_calls",
+      "title": "Fix CORS so the admin dashboard can reach the API",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "Every admin surface logs console errors: \"Access to fetch at 'http://localhost:8000/v1/admin/...' from origin 'http://localhost:5173' has been blocked by CORS policy: ... No 'Access-Control-Allow-Origin' header\". The admin.leads screenshot confirms the visible effect: a full-page \"Couldn't load this view. Can't reach our servers right now\" error with an API UNREACHABLE badge in the sidebar, instead of any leads data. Every admin list page (leads, schools, quality, harness runs, LLM calls) hits the same /v1/admin/schools preflight failure plus its own endpoint, so the entire ops/quality dashboard is unusable.",
+      "change": "Add the admin dashboard's origin (http://localhost:5173 in dev, and its deployed origin) to the API's CORS allow-list (likely a FastAPI CORSMiddleware config in api/) so admin endpoints return Access-Control-Allow-Origin and preflight OPTIONS succeeds.",
+      "est_size": "S",
+      "confidence": 0.9,
+      "defect_key": "bug/admin-api-cors-blocked",
+      "evidence": [],
+      "id": "041d10cd54a3",
+      "score": 2.7
+    },
+    "status": "proposed",
+    "created": "2026-10-10T05:54:29.811923+00:00",
+    "updated": "2026-10-10T05:54:29.811923+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "demo.hub,demo.present,demo.present_integrity,demo.present_grading,demo.present_generation,demo.present_teacher_day",
+      "title": "Add semantic landmarks to the sales demo app layout",
+      "category": "a11y",
+      "severity": "medium",
+      "rationale": "All six demo app pages report the identical three structural hits: no top-level <main> landmark, an <aside> nested inside another landmark instead of top-level, and 38 elements of page content not contained by any landmark. Since every demo route shares one shell layout, this is a single fix in that shared component. The sales demo is what reps show prospects live, so screen-reader/keyboard navigation of it reflects directly on the product.",
+      "change": "In the demo app's shared shell/layout component, wrap the primary content in a single <main> landmark and move the sidebar <aside> to be a top-level landmark sibling (not nested inside <main> or another section), so axe's landmark-one-main, landmark-complementary-is-top-level, and region checks pass.",
+      "est_size": "S",
+      "confidence": 0.65,
+      "defect_key": "a11y/demo-app-missing-landmarks",
+      "evidence": [],
+      "id": "223a8da1fcaf",
+      "score": 1.3
+    },
+    "status": "proposed",
+    "created": "2026-10-10T05:54:29.811923+00:00",
+    "updated": "2026-10-10T05:54:29.811923+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "One-click reteach set generation from a detected class-wide gap",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md describes teacher-day analytics as already surfacing \"which concepts the class is missing\" and generation as already able to turn a worksheet/topic into a checked problem set, but the two are described as separate flows \u2014 there's no stated bridge where a detected class-wide miss becomes a pre-scoped generation job in one click.",
+      "change": "On the teacher-day analytics view, when a concept is flagged as a class-wide miss, add a button that pre-fills the question-bank generation flow with that concept/topic so the teacher can review and assign a reteach set in one click instead of starting generation from scratch.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/reteach-one-click-from-class-gap",
+      "evidence": [],
+      "id": "d0e7f6fc0a2b",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-10T05:54:29.811923+00:00",
+    "updated": "2026-10-10T05:54:29.811923+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.quality,admin.harness_runs,admin.llm_calls",
+      "title": "Add the admin dashboard's dev origin to the API's CORS allowlist",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "All 5 admin surfaces log identical console errors: 'Access to fetch ... from origin http://localhost:5173 has been blocked by CORS policy: ... No Access-Control-Allow-Origin header'. admin.leads.png shows the resulting full-page failure state ('API UNREACHABLE', 'Couldn't load this view'). Root cause confirmed in code: api/config.py:47-53 defines the default `cors_origins` as only `localhost:8081` (mobile) and `localhost:3000` (web) \u2014 the admin dashboard's Vite dev port `localhost:5173` is absent, so every admin API call fails preflight in local dev.",
+      "change": "Add `http://localhost:5173` to the default `cors_origins` list in api/config.py:47-53 (and the CORS_ORIGINS example in .env.example) so the admin dashboard can reach the API out of the box in local dev.",
+      "est_size": "S",
+      "confidence": 0.9,
+      "defect_key": "bug/admin-cors-missing-origin",
+      "evidence": [],
+      "id": "e0c7da4ee61e",
+      "score": 2.7
+    },
+    "status": "proposed",
+    "created": "2026-10-10T12:34:20.150871+00:00",
+    "updated": "2026-10-10T12:34:20.150871+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Resurface resolved weak spots on a spaced-repetition schedule",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "The feature map documents Weak Spots/Review (api/routes/weak_spots.py) for surfacing recurring errors and Practice for unlimited repetition, but nothing re-schedules a concept after a student gets it right once \u2014 there's no mechanism to confirm the fix actually held, so a 'fixed' weak spot can silently relapse and never resurface.",
+      "change": "Add a lightweight spaced-repetition scheduler that re-queues a resolved weak-spot concept back into the student's Practice feed at increasing intervals (e.g. 2/7/21 days) until it's answered correctly unprompted each time, shown as a 'due for review' queue on the existing Review screen.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/weak-spot-spaced-repetition",
+      "evidence": [],
+      "id": "393cb2b94fa4",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-10T12:34:20.150871+00:00",
+    "updated": "2026-10-10T12:34:20.150871+00:00"
+  }
+]
