@@ -67,6 +67,7 @@ _SLOTS = asyncio.Semaphore(_MAX_CONCURRENT_GRADES)
 _GRADED = "graded"    # a grade landed
 _SKIPPED = "skipped"  # nothing to grade, and nothing coming
 _FAILED = "failed"    # should have worked; retry or park
+_HANDED_OFF = "handed_off"  # reclaimed by another drain before its turn
 
 
 def _now() -> datetime:
@@ -410,18 +411,24 @@ async def _claim_due(db: AsyncSession, limit: int) -> list[GradingJob]:
     for job in rows:
         job.status = STATUS_RUNNING
         job.started_at = _now()
-        job.attempts += 1
+        # No attempt charged here: a claimed job may wait its turn behind
+        # `_SLOTS` and be reclaimed before it starts. `_grade_one` charges
+        # the attempt when the grade actually begins.
     await db.commit()
     return list(rows)
 
 
-async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> str:
+async def _grade_one(
+    job_id: uuid.UUID, submission_id: uuid.UUID, claimed_at: datetime | None,
+) -> str:
     """Grade one submission in its own session. Never raises.
 
-    Returns which of the three outcomes happened (`_GRADED` / `_SKIPPED`
-    / `_FAILED`), NOT a bool. `_finish` treats the three as deliberately
-    distinct, and a bool collapses skipped into failed for every caller
-    above — which is what the drain's counters report to a cron.
+    Returns which outcome happened (`_GRADED` / `_SKIPPED` / `_FAILED`,
+    or `_HANDED_OFF` when another drain reclaimed the job before its turn
+    and this one stepped aside), NOT a bool. `_finish` treats the first
+    three as deliberately distinct, and a bool collapses skipped into
+    failed for every caller above — which is what the drain's counters
+    report to a cron.
 
     Own session per job so one failure can't poison a sibling's
     transaction — the previous in-process implementation shared a
@@ -441,6 +448,36 @@ async def _grade_one(job_id: uuid.UUID, submission_id: uuid.UUID) -> str:
         # The connection is held across the Anthropic call below, so it
         # is only taken once we're ready to make it — see `_SLOTS`.
         async with get_session_factory()() as db:
+            # Start the stale clock NOW, and only if this drain still owns
+            # the job. `_claim_due` stamps a whole batch at once, but a big
+            # class waits its turn behind `_SLOTS` — long-homework grades
+            # run minutes each — so by claim time the back of the batch
+            # could pass the stale window before it ever started, get
+            # reclaimed by another drain, and be graded (and billed) twice.
+            # The claim timestamp is the ownership token: if another drain
+            # has reclaimed and re-claimed it, this one steps aside.
+            #
+            # The attempt is charged HERE, when the grade begins — not at
+            # claim. Charging at claim let a backlog's tail, reclaimed and
+            # re-claimed while it waited, burn its whole retry budget and
+            # be parked `failed` without ever being graded.
+            owned = cast("CursorResult[Any]", await db.execute(
+                update(GradingJob)
+                .where(
+                    GradingJob.id == job_id,
+                    GradingJob.status == STATUS_RUNNING,
+                    GradingJob.started_at == claimed_at,
+                )
+                .values(
+                    started_at=_now(),
+                    attempts=GradingJob.attempts + 1,
+                    updated_at=_now(),
+                )
+            ))
+            if not owned.rowcount:
+                return _HANDED_OFF
+            await db.commit()
+
             sub = (await db.execute(
                 select(Submission).where(Submission.id == submission_id)
             )).scalar_one_or_none()
@@ -610,8 +647,9 @@ async def _finish(
 
     `charge_attempt=False` is for platform-level stops (the daily spend
     cap, the LLM circuit breaker) that hit every job in the batch at
-    once. Charging those would park entire classes in `failed` after one
-    bad afternoon, and nothing revives a failed job.
+    once: it refunds the attempt `_grade_one` charged when the grade
+    began. Keeping those charges would park entire classes in `failed`
+    after one bad afternoon, and nothing revives a failed job.
     """
     job = (await db.execute(
         select(GradingJob).where(GradingJob.id == job_id)
@@ -632,8 +670,8 @@ async def _finish(
 
     job.last_error = error
     if not charge_attempt:
-        # Refund the attempt `_claim_due` took on the way in, so a
-        # platform stop costs nothing but time.
+        # Refund the attempt `_grade_one` charged when the grade began,
+        # so a platform stop costs nothing but time.
         job.attempts = max(0, job.attempts - 1)
         job.status = STATUS_QUEUED
         job.started_at = None
@@ -653,15 +691,15 @@ async def _run_group(jobs: list[GradingJob]) -> Counter[str]:
     writes the shared prefix, and the rest then read it. Fanning all of
     them out at once would make every call miss.
 
-    Returns a tally keyed by outcome (`_GRADED` / `_SKIPPED` / `_FAILED`)
-    rather than a succeeded/failed pair — see `_grade_one`.
+    Returns a tally keyed by outcome (`_GRADED` / `_SKIPPED` / `_FAILED` /
+    `_HANDED_OFF`) rather than a succeeded/failed pair — see `_grade_one`.
     """
     tally: Counter[str] = Counter()
     if not jobs:
         return tally
 
     first, rest = jobs[0], jobs[1:]
-    tally[await _grade_one(first.id, first.submission_id)] += 1
+    tally[await _grade_one(first.id, first.submission_id, first.started_at)] += 1
 
     async def _bounded(job: GradingJob) -> str:
         # Every in-flight grade holds a DB connection for the whole
@@ -671,7 +709,7 @@ async def _run_group(jobs: list[GradingJob]) -> Counter[str]:
         # gets pool timeouts while a drain runs. Same guard the
         # generation and diagnosis pipelines already use.
         async with _SLOTS:
-            return await _grade_one(job.id, job.submission_id)
+            return await _grade_one(job.id, job.submission_id, job.started_at)
 
     if rest:
         results = await asyncio.gather(
@@ -712,4 +750,5 @@ async def drain(limit: int = DEFAULT_DRAIN_LIMIT) -> dict[str, int]:
         "succeeded": tally[_GRADED],
         "skipped": tally[_SKIPPED],
         "failed": tally[_FAILED],
+        "handed_off": tally[_HANDED_OFF],
     }
