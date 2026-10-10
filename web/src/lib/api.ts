@@ -476,6 +476,13 @@ let refreshPromise: Promise<RefreshResult> | null = null;
 async function refreshAccessToken(): Promise<RefreshResult> {
   if (refreshPromise) return refreshPromise;
 
+  // The reset hangs off the promise rather than a finally inside the
+  // async body: when there is no refresh token that body completes
+  // synchronously, so an inner finally would null refreshPromise BEFORE
+  // this assignment lands — pinning "auth_rejected" for the life of the
+  // tab. A later sign-in (client-side navigation, no reload) then never
+  // refreshed again and was wiped ~15 minutes in. `.finally` callbacks
+  // always run after the assignment.
   refreshPromise = (async () => {
     const rt = getRefreshToken();
     if (!rt) return "auth_rejected" as const;
@@ -492,10 +499,10 @@ async function refreshAccessToken(): Promise<RefreshResult> {
       return "success" as const;
     } catch {
       return "transient_error" as const;
-    } finally {
-      refreshPromise = null;
     }
-  })();
+  })().finally(() => {
+    refreshPromise = null;
+  });
 
   return refreshPromise;
 }
