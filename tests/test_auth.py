@@ -456,3 +456,56 @@ async def test_mark_tour_seen_rejects_unknown_persona(client: AsyncClient) -> No
 async def test_mark_tour_seen_requires_auth(client: AsyncClient) -> None:
     resp = await client.post(TOUR_SEEN_URL, json={"persona": "teacher"})
     assert resp.status_code == 401
+
+
+# ── Brute-force lockout ───────────────────────────────────────────────────
+
+SET_PASSWORD_URL = "/v1/auth/set-password"
+
+
+async def _lock_out(client: AsyncClient, email: str) -> None:
+    await client.post(REGISTER_URL, json=_user(email))
+    for _ in range(5):
+        await client.post(LOGIN_URL, json={"email": email, "password": "WrongPass1"})
+    resp = await client.post(LOGIN_URL, json={"email": email, "password": "StrongPass1"})
+    assert resp.status_code == 429
+
+
+async def _set_user(email: str, **fields: object) -> None:
+    from sqlalchemy import update
+
+    from api.database import get_session_factory
+    from api.models.user import User
+
+    async with get_session_factory()() as s:
+        await s.execute(update(User).where(User.email == email).values(**fields))
+        await s.commit()
+
+
+@pytest.mark.asyncio
+async def test_password_reset_clears_lockout(client: AsyncClient) -> None:
+    import hashlib
+
+    email = "lockreset@test.com"
+    await _lock_out(client, email)
+    await _set_user(email, password_reset_token_hash=hashlib.sha256(b"reset-tok").hexdigest())
+
+    resp = await client.post(SET_PASSWORD_URL, json={"token": "reset-tok", "password": "NewStrong1"})
+    assert resp.status_code == 200
+    resp = await client.post(LOGIN_URL, json={"email": email, "password": "NewStrong1"})
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_expired_lockout_restarts_failure_count(client: AsyncClient) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    email = "lockexpire@test.com"
+    await _lock_out(client, email)
+    await _set_user(email, locked_until=datetime.now(UTC) - timedelta(seconds=1))
+
+    # One typo after the lock runs out must not re-lock the account.
+    resp = await client.post(LOGIN_URL, json={"email": email, "password": "WrongPass1"})
+    assert resp.status_code == 401
+    resp = await client.post(LOGIN_URL, json={"email": email, "password": "StrongPass1"})
+    assert resp.status_code == 200
