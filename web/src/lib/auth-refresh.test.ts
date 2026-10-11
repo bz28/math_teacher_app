@@ -50,6 +50,8 @@ function reply(status: number, body: unknown = {}): Response {
     status,
     ok: status >= 200 && status < 300,
     json: async () => body,
+    blob: async () => new Blob([String(body)]),
+    headers: new Headers(),
   } as Response;
 }
 
@@ -65,7 +67,7 @@ function reply(status: number, body: unknown = {}): Response {
   return reply(next.status, next.body);
 };
 
-const { auth, schoolStudent, saveTokens, isCredentialPath, ApiError } =
+const { auth, schoolStudent, teacher, saveTokens, isCredentialPath, ApiError } =
   await import("./api.ts");
 
 const TOKENS = {
@@ -266,9 +268,8 @@ test("a transient refresh failure leaves tokens intact", async () => {
 // ── A tokenless refresh must not poison later ones ────────────────
 
 test("a refresh attempted with no stored token does not block the next session's refresh", async () => {
-  // With no refresh token the refresh body completes synchronously, so
-  // its inner finally cleared refreshPromise before the assignment
-  // landed, pinning "auth_rejected" for the life of the tab. Signing in again navigates
+  // The tokenless return skipped the reset of refreshPromise, pinning
+  // "auth_rejected" for the life of the tab. Signing in again navigates
   // client-side (no reload), so every later 401 skipped /auth/refresh
   // and wiped the new session — teachers were dropped ~15 minutes into
   // each login with "Not authenticated" on Approve / Publish.
@@ -291,4 +292,39 @@ test("a refresh attempted with no stored token does not block the next session's
 
   assert.deepEqual(calls, ["GET /auth/me", "POST /auth/refresh", "GET /auth/me"]);
   assert.equal(accessToken(), "access_2");
+});
+
+test("the grades CSV export refreshes a lapsed token instead of failing", async () => {
+  // exportGradesCSV reads a blob, so it bypasses apiFetch; before this it
+  // had no 401 handling and failed until some other request refreshed.
+  const clicked: string[] = [];
+  (globalThis as unknown as { document: unknown }).document = {
+    createElement: () => {
+      const a = { download: "", click: () => clicked.push(a.download), remove: () => {} };
+      return a;
+    },
+    body: { appendChild() {} },
+  };
+  URL.createObjectURL = () => "blob:x";
+  URL.revokeObjectURL = () => {};
+
+  saveTokens(TOKENS);
+  script = {
+    "/teacher/courses/c1/grades/export.csv": [{ status: 401 }, { status: 200, body: "a,b" }],
+    "/auth/refresh": [
+      {
+        status: 200,
+        body: { access_token: "access_2", refresh_token: "refresh_2", token_type: "bearer" },
+      },
+    ],
+  };
+
+  await teacher.exportGradesCSV("c1");
+
+  assert.deepEqual(calls, [
+    "GET /teacher/courses/c1/grades/export.csv",
+    "POST /auth/refresh",
+    "GET /teacher/courses/c1/grades/export.csv",
+  ]);
+  assert.deepEqual(clicked, ["grades.csv"]);
 });

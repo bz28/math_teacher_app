@@ -154,10 +154,9 @@ let refreshPromise: Promise<RefreshResult> | null = null;
 
 async function refreshAccessToken(): Promise<RefreshResult> {
   if (refreshPromise) return refreshPromise;
-  // Reset via .finally on the promise, not an inner finally: with no
-  // refresh token the body completes synchronously, so an inner finally
-  // would null refreshPromise before this assignment lands and pin
-  // "auth_rejected" for the life of the tab (see web/src/lib/api.ts).
+  // Reset via .finally on the promise so every exit clears it — the
+  // tokenless return used to skip the reset and pin "auth_rejected" for
+  // the life of the tab (see web/src/lib/api.ts).
   refreshPromise = (async () => {
     const rt = getRefreshToken();
     if (!rt) return "auth_rejected" as const;
