@@ -476,6 +476,13 @@ let refreshPromise: Promise<RefreshResult> | null = null;
 async function refreshAccessToken(): Promise<RefreshResult> {
   if (refreshPromise) return refreshPromise;
 
+  // The reset hangs off the promise, not a finally inside the body, so
+  // EVERY exit clears it. The tokenless return used to sit before the
+  // try and skip the reset, pinning "auth_rejected" for the life of the
+  // tab: a later sign-in (client-side navigation, no reload) never
+  // refreshed again and was wiped ~15 minutes in. An inner finally isn't
+  // enough either — a return before the first await completes the body
+  // synchronously, running that finally before this assignment lands.
   refreshPromise = (async () => {
     const rt = getRefreshToken();
     if (!rt) return "auth_rejected" as const;
@@ -492,10 +499,10 @@ async function refreshAccessToken(): Promise<RefreshResult> {
       return "success" as const;
     } catch {
       return "transient_error" as const;
-    } finally {
-      refreshPromise = null;
     }
-  })();
+  })().finally(() => {
+    refreshPromise = null;
+  });
 
   return refreshPromise;
 }
@@ -1595,10 +1602,21 @@ export const teacher = {
   async exportGradesCSV(courseId: string, sectionId?: string): Promise<void> {
     const qs = sectionId ? `?section_id=${sectionId}` : "";
     const path = `/teacher/courses/${courseId}/grades/export.csv${qs}`;
-    const token = getAccessToken();
-    const res = await fetch(`${BASE_URL}${path}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    const send = () => {
+      const token = getAccessToken();
+      return fetch(`${BASE_URL}${path}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+    };
+    let res = await send();
+    // Same lapse handling as apiFetch — this bypasses it to read a blob,
+    // so without this a teacher idle >15 min on Grades got "Invalid or
+    // expired token" on every Export click until something else refreshed.
+    if (res.status === 401) {
+      const result = await refreshAccessToken();
+      if (result === "success") res = await send();
+      else if (result === "auth_rejected") clearTokens();
+    }
     if (!res.ok) {
       throw new ApiError(res.status, await res.json().catch(() => ({})));
     }
