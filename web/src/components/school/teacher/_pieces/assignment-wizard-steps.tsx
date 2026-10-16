@@ -35,10 +35,7 @@ export function AssignmentDetailsStep({
   courseId,
   unitIds,
   onUnitIdsChange,
-  dueAt,
-  onDueAtChange,
-  latePolicy,
-  onLatePolicyChange,
+  schedule,
   sectionIds,
   onSectionIdsChange,
   disabled,
@@ -50,10 +47,13 @@ export function AssignmentDetailsStep({
   courseId: string;
   unitIds: string[];
   onUnitIdsChange: (v: string[]) => void;
-  dueAt: string;
-  onDueAtChange: (v: string) => void;
-  latePolicy: string;
-  onLatePolicyChange: (v: string) => void;
+  /** Due date + late policy. Graded work only — practice has no due date. */
+  schedule?: {
+    dueAt: string;
+    onDueAtChange: (v: string) => void;
+    latePolicy: string;
+    onLatePolicyChange: (v: string) => void;
+  };
   sectionIds: string[];
   onSectionIdsChange: (v: string[]) => void;
   disabled: boolean;
@@ -93,35 +93,37 @@ export function AssignmentDetailsStep({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div>
-          <label className="block text-sm font-bold text-text-primary">
-            Due date <span className="font-normal text-text-muted">· optional</span>
-          </label>
-          <input
-            type="datetime-local"
-            value={dueAt}
-            onChange={(e) => onDueAtChange(e.target.value)}
-            disabled={disabled}
-            className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
-          />
+      {schedule && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div>
+            <label className="block text-sm font-bold text-text-primary">
+              Due date <span className="font-normal text-text-muted">· optional</span>
+            </label>
+            <input
+              type="datetime-local"
+              value={schedule.dueAt}
+              onChange={(e) => schedule.onDueAtChange(e.target.value)}
+              disabled={disabled}
+              className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-text-primary">Late policy</label>
+            <Select
+              value={schedule.latePolicy}
+              onChange={(e) => schedule.onLatePolicyChange(e.target.value)}
+              disabled={disabled}
+              className="mt-2 w-full"
+            >
+              {LATE_POLICY_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
-        <div>
-          <label className="block text-sm font-bold text-text-primary">Late policy</label>
-          <Select
-            value={latePolicy}
-            onChange={(e) => onLatePolicyChange(e.target.value)}
-            disabled={disabled}
-            className="mt-2 w-full"
-          >
-            {LATE_POLICY_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-      </div>
+      )}
 
       <div>
         <label className="block text-sm font-bold text-text-primary">

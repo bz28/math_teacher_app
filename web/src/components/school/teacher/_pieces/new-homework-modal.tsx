@@ -580,10 +580,12 @@ export function NewHomeworkModal({
                     courseId={courseId}
                     unitIds={unitIds}
                     onUnitIdsChange={setUnitIds}
-                    dueAt={dueAt}
-                    onDueAtChange={setDueAt}
-                    latePolicy={latePolicy}
-                    onLatePolicyChange={setLatePolicy}
+                    schedule={{
+                      dueAt,
+                      onDueAtChange: setDueAt,
+                      latePolicy,
+                      onLatePolicyChange: setLatePolicy,
+                    }}
                     sectionIds={sectionIds}
                     onSectionIdsChange={setSectionIds}
                     disabled={busy}
