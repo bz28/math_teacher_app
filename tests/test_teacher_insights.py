@@ -1,12 +1,12 @@
 """Tests for GET /v1/teacher/courses/{c}/sections/{s}/insights.
 
 Two layers:
-  - pure unit tests of the counting rule (`counted_breakdown`) and the
-    watch rules (`_watch_reason`) — the load-bearing logic;
+  - pure unit tests of the counting rule (`counted_breakdown`), the
+    coverage buckets and the reteach rule (`_is_wrong` / `_is_flagged`)
+    — the load-bearing logic;
   - integration tests that seed a small world and check what the
-    endpoint returns: section scoping, coverage buckets, problem order,
-    per-bucket students + diagnosis reasons, understanding checks to
-    review, the watch list, and auth.
+    endpoint returns: section scoping, coverage buckets, per-problem
+    whole-class counts and flags, the homework's practice set, and auth.
 """
 from __future__ import annotations
 
@@ -23,13 +23,12 @@ from api.database import get_session_factory
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course, CourseTeacher
 from api.models.grading_job import GradingJob
-from api.models.integrity_check import IntegrityCheckProblem, IntegrityCheckSubmission
-from api.models.question_bank import QuestionBankItem
+from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
 from api.models.user import User
-from api.routes.teacher_insights import _coverage_bucket, _watch_reason, counted_breakdown
+from api.routes.teacher_insights import _coverage_bucket, _is_flagged, _is_wrong, counted_breakdown
 from tests.conftest import auth_headers as _auth
 
 NOW = datetime.now(UTC)
@@ -140,41 +139,24 @@ def test_a_running_job_is_grading_even_with_ai_switched_off() -> None:
     assert _coverage_bucket(r, None, ai_grading_enabled=False, now=NOW) == "grading"
 
 
-# ── _watch_reason ──────────────────────────────────────────────────
+# ── reteach rule ───────────────────────────────────────────────────
 
 
-def test_missing_work_wins_first() -> None:
-    hit = _watch_reason(missed_recent=2, window=3, counted_newest_first=[[_e("zero")] * 6])
-    assert hit == {"reason": "missing_work", "missed": 2, "window": 3}
+def test_wrong_means_under_half_credit() -> None:
+    assert _is_wrong(_e("zero", 0))
+    assert _is_wrong(_e("partial", 49.9))
+    assert not _is_wrong(_e("partial", 50))   # exactly half is not wrong
+    assert not _is_wrong(_e("full", 100))
+    # No percent: fall back on the status.
+    assert _is_wrong({"score_status": "zero"})
+    assert not _is_wrong({"score_status": "partial"})
 
 
-def test_missing_most_needs_six_problems_pooled_over_last_two() -> None:
-    five = [[_e("zero")] * 3, [_e("zero")] * 2]
-    assert _watch_reason(missed_recent=0, window=3, counted_newest_first=five) is None
-    six = [[_e("zero")] * 3, [_e("zero"), _e("full", 100), _e("full", 100)], [_e("zero")] * 9]
-    # Only the last two homeworks pool: 4 zero of 6.
-    assert _watch_reason(missed_recent=0, window=3, counted_newest_first=six) == {
-        "reason": "missing_most", "zero": 4, "problems": 6,
-    }
-
-
-def test_missing_most_below_half_is_not_listed() -> None:
-    # 2 zero of 6, flat averages — no rule fires.
-    hws = [[_e("zero"), _e("full", 100), _e("full", 100)]] * 2
-    assert _watch_reason(missed_recent=1, window=3, counted_newest_first=hws) is None
-
-
-def test_sharp_drop_compares_the_last_two_counted() -> None:
-    hws = [[_e("partial", 50)], [_e("full", 100), _e("partial", 40)]]  # 50 vs 70
-    assert _watch_reason(missed_recent=0, window=0, counted_newest_first=hws) == {
-        "reason": "sharp_drop", "previous": 70.0, "latest": 50.0,
-    }
-    small = [[_e("partial", 55)], [_e("full", 70)]]  # 15 points: not listed
-    assert _watch_reason(missed_recent=0, window=0, counted_newest_first=small) is None
-    # One miss on a short homework (100 → 80) is a 20-point swing but
-    # still a strong score: not listed.
-    one_miss = [[_e("full", 100)] * 4 + [_e("zero")], [_e("full", 100)] * 5]
-    assert _watch_reason(missed_recent=0, window=0, counted_newest_first=one_miss) is None
+def test_flagged_needs_more_than_half_of_at_least_five() -> None:
+    assert _is_flagged(5, 3)
+    assert not _is_flagged(6, 3)    # exactly half is not "more than half"
+    assert not _is_flagged(4, 4)    # too few counted to mean anything
+    assert _is_flagged(20, 11)
 
 
 # ── Integration ────────────────────────────────────────────────────
@@ -246,7 +228,7 @@ async def _world() -> dict[str, Any]:
             return [{"problem_id": pid, "score_status": st, "percent": pct[st]} for pid, st in zip(ids, statuses)]
 
         # HW 2 (newest) in Period 1:
-        ana_sub = await submit(hw2, ana, p1, reviewed_at=NOW, breakdown=bd(ids2, "full", "zero", "full"))
+        await submit(hw2, ana, p1, reviewed_at=NOW, breakdown=bd(ids2, "full", "zero", "full"))
         await submit(hw2, ben, p1, grade_published_at=NOW,
                      breakdown=bd(ids2, "full", "full", "full"),          # unseen regrade draft
                      published_breakdown=bd(ids2, "zero", "zero", "partial"))
@@ -260,17 +242,6 @@ async def _world() -> dict[str, Any]:
         # A quiz grade must never surface.
         await submit(quiz, ana, p1, reviewed_at=NOW, breakdown=bd(ids1, "zero", "zero", "zero"))
 
-        # Understanding check on Ana's HW 2: a silent reason for her miss
-        # on Q2, and an un-cleared chat probe on Q1.
-        chk = IntegrityCheckSubmission(submission_id=ana_sub.id, status="complete", disposition="needs_practice")
-        s.add(chk)
-        await s.flush()
-        s.add_all([
-            IntegrityCheckProblem(integrity_check_submission_id=chk.id, bank_item_id=uuid.UUID(ids2[1]),
-                                  sample_position=1, status="diagnosis_only", diagnosis_kind="conceptual_gap"),
-            IntegrityCheckProblem(integrity_check_submission_id=chk.id, bank_item_id=uuid.UUID(ids2[0]),
-                                  sample_position=0, status="verdict_submitted"),
-        ])
         await s.commit()
         return {
             "token": create_access_token(str(teacher.id), "teacher"),
@@ -306,21 +277,20 @@ async def test_coverage_counts_only_approved_or_published_in_this_section(client
     assert body["homeworks"][1]["not_submitted"] == 2
 
 
-async def test_problems_most_missed_first_with_students_and_reasons(client: AsyncClient) -> None:
+async def test_problems_are_whole_class_counts_in_homework_order(client: AsyncClient) -> None:
     w = await _world()
     body = (await client.get(_url(w), headers=_auth(w["token"]))).json()
     assert body["selected_homework_id"] == str(w["hw2"])
     ids2 = w["ids2"]
-    by_id = {p["bank_item_id"]: p for p in body["problems"]}
-    # Q2: Ana zero + Ben zero (his published snapshot, not the regrade).
-    assert (by_id[ids2[1]]["zero"], by_id[ids2[1]]["full"]) == (2, 0)
-    assert [p["bank_item_id"] for p in body["problems"]] == [ids2[1], ids2[0], ids2[2]]
-    q2_zero = by_id[ids2[1]]["students"]["zero"]
-    assert [(r["name"], r["diagnosis_kind"]) for r in q2_zero] == [("Ana", "conceptual_gap"), ("Ben", None)]
-    # Q1: one un-cleared understanding check to review; Q2 none.
-    assert (by_id[ids2[0]]["to_review"], by_id[ids2[1]]["to_review"]) == (1, 0)
-    # Period 3's all-zero grade and the preview shadow never leak in.
-    assert by_id[ids2[2]]["full"] + by_id[ids2[2]]["partial"] + by_id[ids2[2]]["zero"] == 2
+    assert [p["bank_item_id"] for p in body["problems"]] == ids2
+    # Ana: full, zero, full. Ben's published snapshot (not his regrade):
+    # zero, zero, partial at exactly 50% — which is not wrong.
+    assert [(p["counted"], p["wrong"]) for p in body["problems"]] == [(2, 1), (2, 2), (2, 0)]
+    # Two counted grades is too few to flag anything.
+    assert not any(p["flagged"] for p in body["problems"])
+    assert body["practice"] is None
+    # No per-student data leaves the endpoint.
+    assert "watch" not in body and "students" not in body["problems"][0]
 
 
 async def test_section_scoping(client: AsyncClient) -> None:
@@ -328,22 +298,74 @@ async def test_section_scoping(client: AsyncClient) -> None:
     body = (await client.get(_url(w, "p3"), headers=_auth(w["token"]))).json()
     hw2 = body["homeworks"][0]
     assert (hw2["students"], hw2["counted"]) == (1, 1)
-    assert all(p["zero"] == 1 and p["full"] == 0 for p in body["problems"])
+    assert all((p["counted"], p["wrong"]) == (1, 1) for p in body["problems"])
 
 
-async def test_watch_list(client: AsyncClient) -> None:
+async def _enroll_and_grade(w: dict[str, Any], n: int, statuses: list[str]) -> None:
+    """Add `n` Period 1 students with an approved HW 2 grade, one status per problem."""
+    pct = {"full": 100, "partial": 25, "zero": 0}
+    async with get_session_factory()() as s:
+        for i in range(n):
+            u = User(email=f"s_{uuid.uuid4().hex[:8]}@t.com", password_hash=hash_password("x"),
+                     grade_level=9, role="student", name=f"Extra {i}")
+            s.add(u)
+            await s.flush()
+            s.add(SectionEnrollment(section_id=w["p1"], course_id=w["course"], student_id=u.id,
+                                    enrolled_at=NOW - timedelta(days=30)))
+            sub = Submission(assignment_id=w["hw2"], student_id=u.id, section_id=w["p1"],
+                             status="submitted", extraction_confirmed_at=NOW)
+            s.add(sub)
+            await s.flush()
+            s.add(SubmissionGrade(submission_id=sub.id, graded_at=NOW, reviewed_at=NOW, breakdown=[
+                {"problem_id": pid, "score_status": st, "percent": pct[st]}
+                for pid, st in zip(w["ids2"], statuses)
+            ]))
+        await s.commit()
+
+
+async def test_a_problem_most_of_the_class_got_wrong_is_flagged(client: AsyncClient) -> None:
     w = await _world()
-    body = (await client.get(_url(w), headers=_auth(w["token"]))).json()
-    watch = {x["name"]: x for x in body["watch"]}
-    # Cal and Dee each skipped HW 1 but turned in HW 2 → 1 of 2 missed: not listed.
-    # Ben: 100 → 16.7 between his last two counted homeworks.
-    assert watch["Ben"]["reason"] == "sharp_drop"
-    assert (watch["Ben"]["previous"], watch["Ben"]["latest"]) == (100.0, 16.7)
-    assert watch["Ana"]["reason"] == "sharp_drop"  # 100 → 66.7
-    assert {"Cal", "Dee"}.isdisjoint(watch)
-    # Ana before Ben: same reason, sorted by name.
-    assert [x["name"] for x in body["watch"]] == ["Ana", "Ben"]
-    assert body["watch_total"] == 2
+    # Three more students: Q1 full, Q2 partial at 25% (wrong), Q3 full.
+    await _enroll_and_grade(w, 3, ["full", "partial", "full"])
+    problems = (await client.get(_url(w), headers=_auth(w["token"]))).json()["problems"]
+    # Q2: 5 of 5 wrong → flagged. Q1: 1 of 5. Q3: 0 of 5.
+    assert [(p["counted"], p["wrong"], p["flagged"]) for p in problems] == [
+        (5, 1, False), (5, 5, True), (5, 0, False),
+    ]
+
+
+async def test_the_homeworks_practice_set_for_this_section(client: AsyncClient) -> None:
+    w = await _world()
+    ids2 = [uuid.UUID(i) for i in w["ids2"]]
+    async with get_session_factory()() as s:
+        def practice(title: str) -> Assignment:
+            return Assignment(course_id=w["course"], unit_ids=[w["unit"]], teacher_id=w["teacher"],
+                              title=title, type="practice", status="draft", source_homework_id=w["hw2"])
+        p3_set, p1_set = practice("P3 set"), practice("P1 set")
+        s.add_all([p3_set, p1_set])
+        await s.flush()
+        s.add_all([
+            AssignmentSection(assignment_id=p3_set.id, section_id=w["p3"]),
+            AssignmentSection(assignment_id=p1_set.id, section_id=w["p1"]),
+        ])
+
+        def version(parent: uuid.UUID, status: str) -> QuestionBankItem:
+            return QuestionBankItem(course_id=w["course"], unit_id=w["unit"], originating_assignment_id=p1_set.id,
+                                    parent_question_id=parent, title="v", question="v", final_answer="1",
+                                    status=status, source="practice")
+        s.add_all([
+            version(ids2[0], "approved"), version(ids2[0], "pending"),
+            version(ids2[2], "rejected"),  # a rejected version covers nothing
+            QuestionBankGenerationJob(course_id=w["course"], unit_id=w["unit"], originating_assignment_id=p1_set.id,
+                                      created_by_id=w["teacher"], status="running", requested_count=3,
+                                      parent_question_id=ids2[1]),
+        ])
+        await s.commit()
+
+    practice_out = (await client.get(_url(w), headers=_auth(w["token"]))).json()["practice"]
+    assert practice_out["title"] == "P1 set"  # Period 3's set never shows in Period 1
+    assert (practice_out["approved"], practice_out["to_review"], practice_out["writing"]) == (1, 1, 1)
+    assert set(practice_out["covered_item_ids"]) == {str(ids2[0]), str(ids2[1])}
 
 
 async def test_explicit_homework_and_404s(client: AsyncClient) -> None:
@@ -375,8 +397,7 @@ async def test_a_student_who_left_still_adds_up(client: AsyncClient) -> None:
     hw2 = body["homeworks"][0]
     # Ana left but her approved grade still counts, so she stays in the total.
     assert (hw2["students"], hw2["counted"]) == (4, 2)
-    names = {r["name"] for p in body["problems"] for b in p["students"].values() for r in b}
-    assert "Former student" in names
+    assert body["problems"][0]["counted"] == 2
 
 
 async def test_coverage_reads_the_grading_job_and_the_ai_switch(client: AsyncClient) -> None:

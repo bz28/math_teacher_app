@@ -1,4 +1,4 @@
-"""Teacher Student Insights — "what do I reteach, and who needs me?"
+"""Teacher Student Insights — "which problems should I reteach?"
 
 One section-scoped read powers the whole Insights tab:
 
@@ -9,14 +9,14 @@ Pure counting over stored rows — no LLM at read time. Three parts:
   homeworks[]  every published homework in the section, newest first,
                with a coverage line (counted / to approve / to grade /
                still grading / waiting on the student / not submitted) so
-               a bar is never presented as the whole class when it isn't.
-  problems[]   the selected homework's problems, most-missed first, with
-               full / partial / zero counts, who is in each bucket (plus
-               the understanding check's reason for a miss, when one was
-               recorded) and how many understanding checks are waiting on
-               the teacher for that problem.
-  watch[]      at most five students who need the teacher, each with one
-               plain reason (see `_watch_reason`).
+               the numbers are never presented as the whole class when
+               they aren't.
+  problems[]   the selected homework's problems in homework order: how
+               many counted grades, how many scored under half, and
+               whether the problem is flagged for reteaching (see
+               `_is_flagged`). Whole class only — no per-student lists.
+  practice     the practice set made from that homework for this
+               section, if any, and which problems it already covers.
 
 Which grades count is the load-bearing rule (`counted_breakdown`): the
 teacher sees and approves every AI grade, so an AI draft never counts.
@@ -24,7 +24,7 @@ teacher sees and approves every AI grade, so an AI draft never counts.
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -38,7 +38,7 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.grading_job import STATUS_QUEUED, STATUS_RUNNING, GradingJob
-from api.models.integrity_check import IntegrityCheckProblem, IntegrityCheckSubmission
+from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
@@ -47,27 +47,13 @@ from api.services.bank import hydrate_assignment_content
 
 router = APIRouter()
 
-ScoreStatus = Literal["full", "partial", "zero"]
-_SCORE_STATUSES: tuple[ScoreStatus, ...] = ("full", "partial", "zero")
+_SCORE_STATUSES = ("full", "partial", "zero")
 
-WatchReason = Literal["missing_work", "missing_most", "sharp_drop"]
-
-# Watch rules. A student is listed once, under the first reason that
-# matches, in this order.
-_MISSING_WINDOW = 3          # look at the last 3 past-due homeworks…
-_MISSING_MIN = 2             # …and list anyone who skipped 2+ of them
-_MISSING_MOST_WINDOW = 2     # pool problems across the last 2 counted HWs
-_MISSING_MOST_MIN_PROBLEMS = 6  # never judge on a handful of problems
-_MISSING_MOST_RATE = 0.5     # zero credit on at least half of them
-_DROP_POINTS = 20.0          # average fell this much between the last two…
-_DROP_BELOW = 70.0           # …and landed below this. On a 5-problem HW one
-                             # miss is a 20-point swing; 100 → 80 isn't news.
-_WATCH_LIMIT = 5
-
-# A chat-probed problem the teacher still needs to look at: the agent
-# didn't clear it and nobody has resolved or dismissed it. Worded on the
-# page as "to review" — a pointer to the case file, never a flag.
-_UNCLEARED_DISPOSITIONS = ("needs_practice", "tutor_pivot", "flag_for_review")
+# Reteach rule. A student got a problem wrong when they scored under
+# half of it; a problem is flagged when more than half the counted
+# grades are wrong, once enough are counted to mean something.
+_WRONG_BELOW_PERCENT = 50.0
+_FLAG_MIN_COUNTED = 5
 
 
 # ── Response models ────────────────────────────────────────────────
@@ -93,41 +79,25 @@ class InsightsHomework(BaseModel):
     not_submitted: int
 
 
-class InsightsStudentRef(BaseModel):
-    student_id: uuid.UUID
-    name: str
-    submission_id: uuid.UUID
-    # The understanding check's silent reason for a miss
-    # (procedural_slip / conceptual_gap / blank / unreadable / error).
-    # Null when none was recorded — coverage is partial by design.
-    diagnosis_kind: str | None
-
-
 class InsightsProblem(BaseModel):
     bank_item_id: uuid.UUID
     position: int
     question: str
-    full: int
-    partial: int
-    zero: int
-    students: dict[ScoreStatus, list[InsightsStudentRef]]
-    to_review: int
+    counted: int  # students with a counted grade on this problem
+    wrong: int    # of those, how many scored under half
+    flagged: bool
 
 
-class InsightsWatchStudent(BaseModel):
-    student_id: uuid.UUID
-    name: str
-    reason: WatchReason
-    # Reason-specific numbers the UI turns into one plain sentence:
-    #   missing_work  → missed / window
-    #   missing_most  → zero / problems
-    #   sharp_drop    → previous / latest (average percent)
-    missed: int | None = None
-    window: int | None = None
-    zero: int | None = None
-    problems: int | None = None
-    previous: float | None = None
-    latest: float | None = None
+class InsightsPractice(BaseModel):
+    """The practice set made from the selected homework for this section."""
+    id: uuid.UUID
+    title: str
+    status: str
+    approved: int    # versions students see once it's published
+    to_review: int   # versions waiting on the teacher's approval
+    writing: int     # problems the AI is still writing versions of
+    # Homework problems the set already has versions of (or is writing).
+    covered_item_ids: list[uuid.UUID]
 
 
 class SectionInsightsResponse(BaseModel):
@@ -135,8 +105,7 @@ class SectionInsightsResponse(BaseModel):
     homeworks: list[InsightsHomework]
     selected_homework_id: uuid.UUID | None
     problems: list[InsightsProblem]
-    watch: list[InsightsWatchStudent]
-    watch_total: int
+    practice: InsightsPractice | None
 
 
 # ── Counting rule ──────────────────────────────────────────────────
@@ -227,43 +196,17 @@ def _coverage_bucket(
     return "to_grade"
 
 
-def _avg_percent(entries: list[dict[str, Any]]) -> float | None:
-    vals = [float(e["percent"]) for e in entries if isinstance(e.get("percent"), int | float)]
-    return sum(vals) / len(vals) if vals else None
+def _is_wrong(entry: dict[str, Any]) -> bool:
+    """Under half credit. Every grade writes `percent` (auto for full and
+    zero, required for partial); fall back on the status if it's missing."""
+    pct = entry.get("percent")
+    if isinstance(pct, int | float) and not isinstance(pct, bool):
+        return pct < _WRONG_BELOW_PERCENT
+    return bool(entry["score_status"] == "zero")
 
 
-def _watch_reason(
-    *,
-    missed_recent: int,
-    window: int,
-    counted_newest_first: list[list[dict[str, Any]]],
-) -> dict[str, Any] | None:
-    """First matching watch rule for one student, or None.
-
-    `missed_recent` / `window` are over the student's last past-due
-    homeworks (due after they enrolled). `counted_newest_first` is their
-    counted breakdowns, newest homework first.
-    """
-    if window and missed_recent >= _MISSING_MIN:
-        return {"reason": "missing_work", "missed": missed_recent, "window": window}
-
-    pooled = [e for b in counted_newest_first[:_MISSING_MOST_WINDOW] for e in b]
-    zero = sum(1 for e in pooled if e["score_status"] == "zero")
-    if len(pooled) >= _MISSING_MOST_MIN_PROBLEMS and zero / len(pooled) >= _MISSING_MOST_RATE:
-        return {"reason": "missing_most", "zero": zero, "problems": len(pooled)}
-
-    if len(counted_newest_first) >= 2:
-        latest = _avg_percent(counted_newest_first[0])
-        previous = _avg_percent(counted_newest_first[1])
-        if (
-            latest is not None and previous is not None
-            and previous - latest >= _DROP_POINTS and latest < _DROP_BELOW
-        ):
-            return {"reason": "sharp_drop", "previous": round(previous, 1), "latest": round(latest, 1)}
-    return None
-
-
-_REASON_RANK: dict[str, int] = {"missing_work": 0, "missing_most": 1, "sharp_drop": 2}
+def _is_flagged(counted: int, wrong: int) -> bool:
+    return counted >= _FLAG_MIN_COUNTED and wrong * 2 > counted
 
 
 # ── Endpoint ───────────────────────────────────────────────────────
@@ -300,12 +243,11 @@ async def get_section_insights(
 
     # Roster: enrolled, non-preview students.
     roster = (await db.execute(
-        select(User.id, User.name, SectionEnrollment.enrolled_at)
+        select(User.id)
         .join(SectionEnrollment, SectionEnrollment.student_id == User.id)
         .where(SectionEnrollment.section_id == section_id, User.is_preview.is_(False))
     )).all()
-    names = {r.id: r.name for r in roster}
-    enrolled_at = {r.id: r.enrolled_at for r in roster}
+    roster_ids = {r.id for r in roster}
 
     # Published homework pushed to this section, newest first. Quizzes and
     # tests have no student submit path yet, and practice is ungraded.
@@ -362,8 +304,8 @@ async def get_section_insights(
     )).all() if hw_ids else []
 
     now = datetime.now(UTC)
-    # (assignment_id, student_id) → (submission_id, counted breakdown | None)
-    by_hw_student: dict[tuple[uuid.UUID, uuid.UUID], tuple[uuid.UUID, list[dict[str, Any]] | None]] = {}
+    # (assignment_id, student_id) → counted breakdown | None
+    by_hw_student: dict[tuple[uuid.UUID, uuid.UUID], list[dict[str, Any]] | None] = {}
     coverage: dict[uuid.UUID, dict[str, int]] = {
         a: {
             "counted": 0, "to_approve": 0, "to_grade": 0, "grading": 0, "awaiting_student": 0,
@@ -371,7 +313,7 @@ async def get_section_insights(
     }
     for r in sub_rows:
         counted = counted_breakdown(r)
-        by_hw_student[(r.assignment_id, r.student_id)] = (r.id, counted)
+        by_hw_student[(r.assignment_id, r.student_id)] = counted
         bucket = _coverage_bucket(r, counted, ai_grading_enabled=ai_enabled[r.assignment_id], now=now)
         coverage[r.assignment_id][bucket] += 1
 
@@ -380,44 +322,20 @@ async def get_section_insights(
             id=a.id,
             title=a.title,
             due_at=a.due_at,
-            students=len(names.keys() | {sid for (a_id, sid) in by_hw_student if a_id == a.id}),
-            not_submitted=sum(1 for sid in names if (a.id, sid) not in by_hw_student),
+            students=len(roster_ids | {sid for (a_id, sid) in by_hw_student if a_id == a.id}),
+            not_submitted=sum(1 for sid in roster_ids if (a.id, sid) not in by_hw_student),
             **coverage[a.id],
         )
         for a in homeworks
     ]
 
     selected = _pick_homework(homeworks, coverage, assignment_id)
-    problems = await _problems_for(db, selected, section_id, by_hw_student, names) if selected else []
-
-    # Watch list — computed per student over the homeworks already loaded.
-    watch: list[InsightsWatchStudent] = []
-    for sid, name in names.items():
-        joined = enrolled_at[sid]
-        due_since_joined = [
-            a for a in homeworks if a.due_at is not None and joined <= a.due_at <= now
-        ][:_MISSING_WINDOW]
-        missed = sum(1 for a in due_since_joined if (a.id, sid) not in by_hw_student)
-        counted_newest_first = [
-            c for a in homeworks
-            if (c := by_hw_student.get((a.id, sid), (None, None))[1]) is not None
-        ]
-        hit = _watch_reason(
-            missed_recent=missed,
-            window=len(due_since_joined),
-            counted_newest_first=counted_newest_first,
-        )
-        if hit:
-            watch.append(InsightsWatchStudent(student_id=sid, name=name, **hit))
-    watch.sort(key=lambda w: (_REASON_RANK[w.reason], w.name.lower()))
-
     return SectionInsightsResponse(
         section=InsightsSection(id=section.id, name=section.name),
         homeworks=hw_out,
         selected_homework_id=selected.id if selected else None,
-        problems=problems,
-        watch=watch[:_WATCH_LIMIT],
-        watch_total=len(watch),
+        problems=await _problems_for(db, selected, by_hw_student) if selected else [],
+        practice=await _practice_for(db, selected, section_id) if selected else None,
     )
 
 
@@ -439,107 +357,80 @@ def _pick_homework(
 async def _problems_for(
     db: AsyncSession,
     hw: Assignment,
-    section_id: uuid.UUID,
-    by_hw_student: dict[tuple[uuid.UUID, uuid.UUID], tuple[uuid.UUID, list[dict[str, Any]] | None]],
-    names: dict[uuid.UUID, str],
+    by_hw_student: dict[tuple[uuid.UUID, uuid.UUID], list[dict[str, Any]] | None],
 ) -> list[InsightsProblem]:
-    """Per-problem buckets for one homework, most-missed first."""
+    """Whole-class counts per problem for one homework, in homework order."""
     hydrated = await hydrate_assignment_content(db, hw)
-    problem_list = (hydrated or {}).get("problems") or []
+    problem_list = [p for p in (hydrated or {}).get("problems") or [] if isinstance(p, dict)]
 
     # Breakdown entries join to problems on problem_id (= bank_item_id),
     # never list position — grading and hydration can drop or reorder.
-    buckets: dict[str, dict[ScoreStatus, list[InsightsStudentRef]]] = {
-        str(p["bank_item_id"]): {s: [] for s in _SCORE_STATUSES}
-        for p in problem_list if isinstance(p, dict) and p.get("bank_item_id")
-    }
-    diagnosis, to_review = await _integrity_for(db, hw.id, section_id)
-    for (a_id, sid), (submission_id, counted) in by_hw_student.items():
+    tally: dict[str, list[int]] = {str(p["bank_item_id"]): [0, 0] for p in problem_list if p.get("bank_item_id")}
+    for (a_id, _sid), counted in by_hw_student.items():
         if a_id != hw.id or counted is None:
             continue
         for e in counted:
-            pid = str(e.get("problem_id"))
-            if pid not in buckets:
+            t = tally.get(str(e.get("problem_id")))
+            if t is None:
                 continue  # entry for a problem no longer on the homework
-            st: ScoreStatus = e["score_status"]
-            buckets[pid][st].append(InsightsStudentRef(
-                student_id=sid,
-                # A student who left the section keeps their submission.
-                name=names.get(sid) or "Former student",
-                submission_id=submission_id,
-                diagnosis_kind=diagnosis.get((submission_id, pid)) if st != "full" else None,
-            ))
+            t[0] += 1
+            t[1] += _is_wrong(e)
 
-    out: list[InsightsProblem] = []
-    for idx, p in enumerate(problem_list, start=1):
-        key = str(p.get("bank_item_id")) if isinstance(p, dict) else None
-        if key is None or key not in buckets:
-            continue
-        b = buckets[key]
-        for refs in b.values():
-            refs.sort(key=lambda r: r.name.lower())
-        out.append(InsightsProblem(
+    return [
+        InsightsProblem(
             bank_item_id=uuid.UUID(key),
             position=p.get("position") or idx,
             question=p.get("question") or "",
-            full=len(b["full"]),
-            partial=len(b["partial"]),
-            zero=len(b["zero"]),
-            students=b,
-            to_review=to_review.get(key, 0),
-        ))
-
-    def miss_rank(p: InsightsProblem) -> tuple[int, float, float, int]:
-        graded = p.full + p.partial + p.zero
-        if not graded:
-            return (1, 0.0, 0.0, p.position)  # nothing counted yet → last
-        return (0, -p.zero / graded, -p.partial / graded, p.position)
-
-    out.sort(key=miss_rank)
-    return out
-
-
-async def _integrity_for(
-    db: AsyncSession, assignment_id: uuid.UUID, section_id: uuid.UUID,
-) -> tuple[dict[tuple[uuid.UUID, str], str], dict[str, int]]:
-    """Understanding-check data for one homework in one section.
-
-    Returns ({(submission_id, bank_item_id): diagnosis_kind},
-             {bank_item_id: checks still to review}).
-    """
-    rows = (await db.execute(
-        select(
-            Submission.id.label("submission_id"),
-            IntegrityCheckProblem.bank_item_id,
-            IntegrityCheckProblem.status,
-            IntegrityCheckProblem.diagnosis_kind,
-            IntegrityCheckProblem.teacher_dismissed,
-            IntegrityCheckSubmission.disposition,
-            IntegrityCheckSubmission.resolution,
+            counted=t[0],
+            wrong=t[1],
+            flagged=_is_flagged(t[0], t[1]),
         )
-        .join(IntegrityCheckSubmission, IntegrityCheckSubmission.submission_id == Submission.id)
-        .join(
-            IntegrityCheckProblem,
-            IntegrityCheckProblem.integrity_check_submission_id == IntegrityCheckSubmission.id,
-        )
-        .join(User, User.id == Submission.student_id)
+        for idx, p in enumerate(problem_list, start=1)
+        if (key := str(p.get("bank_item_id"))) in tally and (t := tally[key])
+    ]
+
+
+async def _practice_for(
+    db: AsyncSession, hw: Assignment, section_id: uuid.UUID,
+) -> InsightsPractice | None:
+    """The newest practice set made from `hw` that reaches this section —
+    one set per homework per section, so adding problems later appends
+    to it instead of starting another."""
+    practice = (await db.execute(
+        select(Assignment)
+        .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
         .where(
-            Submission.assignment_id == assignment_id,
-            Submission.section_id == section_id,
-            User.is_preview.is_(False),
+            Assignment.source_homework_id == hw.id,
+            Assignment.type == "practice",
+            AssignmentSection.section_id == section_id,
+        )
+        .order_by(Assignment.created_at.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if practice is None:
+        return None
+
+    items = (await db.execute(
+        select(QuestionBankItem.status, QuestionBankItem.parent_question_id)
+        .where(
+            QuestionBankItem.originating_assignment_id == practice.id,
+            QuestionBankItem.status.in_(("approved", "pending")),
         )
     )).all()
-    diagnosis: dict[tuple[uuid.UUID, str], str] = {}
-    to_review: dict[str, int] = {}
-    for r in rows:
-        pid = str(r.bank_item_id)
-        if r.status == "diagnosis_only" and r.diagnosis_kind:
-            diagnosis[(r.submission_id, pid)] = r.diagnosis_kind
-        elif (
-            r.status == "verdict_submitted"
-            and not r.teacher_dismissed
-            and r.resolution == "unresolved"
-            and r.disposition in _UNCLEARED_DISPOSITIONS
-        ):
-            to_review[pid] = to_review.get(pid, 0) + 1
-    return diagnosis, to_review
+    writing = (await db.execute(
+        select(QuestionBankGenerationJob.parent_question_id)
+        .where(
+            QuestionBankGenerationJob.originating_assignment_id == practice.id,
+            QuestionBankGenerationJob.status.in_(("queued", "running")),
+        )
+    )).scalars().all()
+    covered = {r.parent_question_id for r in items} | set(writing)
+    return InsightsPractice(
+        id=practice.id,
+        title=practice.title,
+        status=practice.status,
+        approved=sum(1 for r in items if r.status == "approved"),
+        to_review=sum(1 for r in items if r.status == "pending"),
+        writing=len(writing),
+        covered_item_ids=sorted(c for c in covered if c is not None),
+    )

@@ -71,7 +71,7 @@ from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
 from api.schemas.extraction import ExtractionOut, SubmissionFileOut
-from api.services.bank import problem_ids_in_content
+from api.services.bank import approved_practice_items, problem_ids_in_content
 
 logger = logging.getLogger(__name__)
 
@@ -1826,11 +1826,9 @@ async def practice_detail(
 ) -> StudentPracticeDetail:
     """Return the full detail for a published practice assignment.
     Problems are the approved bank items whose originating_assignment_id
-    points at this practice — the current clone + approve flow attaches
-    items via originating_assignment_id rather than content. Ordered by
-    created_at; clone jobs run concurrently so positions reflect the
-    order each job's AI output persisted, NOT strictly the source HW's
-    problem order. Close enough for v1; revisit when clustering lands."""
+    points at this practice — the clone + approve flow attaches items
+    via originating_assignment_id rather than content — in the source
+    homework's problem order."""
     assignment = await _load_assignment_for_student(
         db, assignment_id, user, expected_type="practice",
     )
@@ -1838,14 +1836,7 @@ async def practice_detail(
         select(Course).where(Course.id == assignment.course_id)
     )).scalar_one()
 
-    items = (await db.execute(
-        select(QuestionBankItem)
-        .where(
-            QuestionBankItem.originating_assignment_id == assignment.id,
-            QuestionBankItem.status == "approved",
-        )
-        .order_by(QuestionBankItem.created_at.asc())
-    )).scalars().all()
+    items = await approved_practice_items(db, assignment)
 
     problems: list[StudentPracticeProblem] = [
         StudentPracticeProblem(

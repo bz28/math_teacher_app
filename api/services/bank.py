@@ -104,18 +104,10 @@ async def hydrate_assignment_content(
     Practice assignments don't use content.problem_ids — the approve
     path gates on `parent_question_id IS NULL` and rejects variations
     from being snapshotted, but practice items are variations by
-    design (each one parented to a source HW primary). For those we
-    derive `problems` directly from approved items whose
-    originating_assignment_id matches, ordered by created_at."""
+    design (each one parented to a source HW primary). For those
+    `problems` are the approved items `approved_practice_items` returns."""
     if assignment.type == "practice":
-        items = (await db.execute(
-            select(QuestionBankItem)
-            .where(
-                QuestionBankItem.originating_assignment_id == assignment.id,
-                QuestionBankItem.status == "approved",
-            )
-            .order_by(QuestionBankItem.created_at.asc())
-        )).scalars().all()
+        items = await approved_practice_items(db, assignment)
         return {
             "problems": [
                 {
@@ -216,6 +208,30 @@ async def load_problems_for_assignment(
             "requires_drawing": bool(item.requires_drawing),
         })
     return out
+
+
+async def approved_practice_items(
+    db: AsyncSession, practice: Assignment,
+) -> list[QuestionBankItem]:
+    """A practice set's approved items, in its homework's problem order.
+
+    Versions of one problem stay together, oldest first. Generation jobs
+    run concurrently, so creation order alone scrambles the homework's
+    order. Items whose parent left the homework go last."""
+    items = (await db.execute(
+        select(QuestionBankItem)
+        .where(
+            QuestionBankItem.originating_assignment_id == practice.id,
+            QuestionBankItem.status == "approved",
+        )
+        .order_by(QuestionBankItem.created_at.asc())
+    )).scalars().all()
+    source_content = (await db.execute(
+        select(Assignment.content).where(Assignment.id == practice.source_homework_id)
+    )).scalar_one_or_none() if practice.source_homework_id else None
+    order = {pid: i for i, pid in enumerate(problem_ids_in_content(source_content))}
+    # sorted() is stable, so ties keep the created_at order.
+    return sorted(items, key=lambda it: order.get(str(it.parent_question_id), len(order)))
 
 
 def problem_ids_in_content(content: Any) -> list[str]:

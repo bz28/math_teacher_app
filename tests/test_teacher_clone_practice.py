@@ -194,3 +194,156 @@ async def test_clone_returns_404_for_nonexistent_homework(
         headers=_auth(world["teacher_token"]),
     )
     assert r.status_code == 404
+
+
+# ── Chosen problems, count, periods, and adding to a set ──────────
+
+
+async def _hw_world() -> dict[str, Any]:
+    """A homework with three problems assigned to two periods."""
+    from api.models.assignment import AssignmentSection
+    from api.models.course import Course, CourseTeacher
+    from api.models.question_bank import QuestionBankItem
+    from api.models.section import Section
+    from api.models.unit import Unit
+
+    async with get_session_factory()() as s:
+        teacher = User(email=f"t_{uuid.uuid4().hex[:8]}@t.com", password_hash=hash_password("x"),
+                       grade_level=12, role="teacher", name="T")
+        course = Course(name="Algebra 1", subject="math")
+        s.add_all([teacher, course])
+        await s.flush()
+        s.add(CourseTeacher(course_id=course.id, teacher_id=teacher.id))
+        unit = Unit(course_id=course.id, name="U", position=0)
+        p1, p3 = Section(course_id=course.id, name="Period 1"), Section(course_id=course.id, name="Period 3")
+        s.add_all([unit, p1, p3])
+        await s.flush()
+        hw = Assignment(course_id=course.id, unit_ids=[unit.id], teacher_id=teacher.id, title="HW 6",
+                        type="homework", status="published", content={"problem_ids": []})
+        s.add(hw)
+        await s.flush()
+        items = [QuestionBankItem(course_id=course.id, unit_id=unit.id, originating_assignment_id=hw.id,
+                                  title=f"Q{i}", question=f"Q{i}", final_answer="1",
+                                  status="approved", source="generated") for i in (1, 2, 3)]
+        s.add_all(items)
+        await s.flush()
+        hw.content = {"problem_ids": [str(i.id) for i in items]}
+        s.add_all([AssignmentSection(assignment_id=hw.id, section_id=p.id) for p in (p1, p3)])
+        await s.commit()
+        return {
+            "token": create_access_token(str(teacher.id), "teacher"),
+            "course": course.id, "hw": hw.id, "unit": unit.id,
+            "items": [i.id for i in items], "p1": p1.id, "p3": p3.id,
+        }
+
+
+async def _jobs_for(practice_id: Any) -> list[QuestionBankGenerationJob]:
+    async with get_session_factory()() as s:
+        return list((await s.execute(
+            select(QuestionBankGenerationJob).where(
+                QuestionBankGenerationJob.originating_assignment_id == uuid.UUID(str(practice_id)),
+            )
+        )).scalars().all())
+
+
+async def test_clone_chosen_problems_for_one_period(client: AsyncClient) -> None:
+    from api.models.assignment import AssignmentSection
+
+    w = await _hw_world()
+    q1, _q2, q3 = w["items"]
+    with patch("api.routes.teacher_assignments.schedule_generation_job") as sched:
+        r = await client.post(
+            f"/v1/teacher/courses/{w['course']}/assignments/{w['hw']}/clone-as-practice",
+            json={"item_ids": [str(q3), str(q1)], "count": 3, "section_ids": [str(w["p3"])]},
+            headers=_auth(w["token"]),
+        )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    # A set for some of the homework's periods names them.
+    assert body["title"] == "[Practice] HW 6 · Period 3"
+    assert sched.call_count == 2
+    jobs = await _jobs_for(body["id"])
+    assert {(j.parent_question_id, j.requested_count) for j in jobs} == {(q1, 3), (q3, 3)}
+    async with get_session_factory()() as s:
+        sections = (await s.execute(
+            select(AssignmentSection.section_id).where(AssignmentSection.assignment_id == uuid.UUID(body["id"]))
+        )).scalars().all()
+    assert sections == [w["p3"]]
+
+
+async def test_clone_rejects_problems_or_periods_off_the_homework(client: AsyncClient) -> None:
+    w = await _hw_world()
+    url = f"/v1/teacher/courses/{w['course']}/assignments/{w['hw']}/clone-as-practice"
+    h = _auth(w["token"])
+    with patch("api.routes.teacher_assignments.schedule_generation_job"):
+        for payload in (
+            {"item_ids": [str(uuid.uuid4())]},
+            {"item_ids": []},
+            {"section_ids": [str(uuid.uuid4())]},
+            {"count": 6},
+        ):
+            r = await client.post(url, json=payload, headers=h)
+            assert r.status_code in (400, 422), (payload, r.text)
+
+
+async def test_add_problems_to_an_existing_set(client: AsyncClient) -> None:
+    w = await _hw_world()
+    q1, q2, _q3 = w["items"]
+    h = _auth(w["token"])
+    with patch("api.routes.teacher_assignments.schedule_generation_job") as sched:
+        created = (await client.post(
+            f"/v1/teacher/courses/{w['course']}/assignments/{w['hw']}/clone-as-practice",
+            json={"item_ids": [str(q1)], "count": 3}, headers=h,
+        )).json()
+        r = await client.post(
+            f"/v1/teacher/courses/{w['course']}/assignments/{created['id']}/practice-problems",
+            json={"item_ids": [str(q2)], "count": 5}, headers=h,
+        )
+        assert r.status_code == 201, r.text
+        assert sched.call_count == 2
+        # A homework can't take problems this way, and neither can a
+        # practice set with problems from another homework.
+        bad = await client.post(
+            f"/v1/teacher/courses/{w['course']}/assignments/{w['hw']}/practice-problems",
+            json={"item_ids": [str(q2)]}, headers=h,
+        )
+        assert bad.status_code == 400
+        off_hw = await client.post(
+            f"/v1/teacher/courses/{w['course']}/assignments/{created['id']}/practice-problems",
+            json={"item_ids": [str(uuid.uuid4())]}, headers=h,
+        )
+        assert off_hw.status_code == 400
+    jobs = await _jobs_for(created["id"])
+    assert {(j.parent_question_id, j.requested_count) for j in jobs} == {(q1, 3), (q2, 5)}
+    # Full title: the set covers every period of the homework.
+    assert created["title"] == "[Practice] HW 6"
+
+
+async def test_practice_problems_follow_homework_order(client: AsyncClient) -> None:
+    """Versions come back in the homework's problem order, not the
+    order concurrent generation jobs happened to finish."""
+    from datetime import UTC, datetime, timedelta
+
+    from api.models.question_bank import QuestionBankItem
+    from api.services.bank import approved_practice_items
+
+    w = await _hw_world()
+    q1, q2, q3 = w["items"]
+    async with get_session_factory()() as s:
+        hw = await s.get(Assignment, w["hw"])
+        assert hw is not None
+        practice = Assignment(course_id=w["course"], unit_ids=[w["unit"]], teacher_id=hw.teacher_id,
+                              title="P", type="practice", status="draft", source_homework_id=w["hw"])
+        s.add(practice)
+        await s.flush()
+        t0 = datetime.now(UTC)
+        # Finished out of order: Q3's version first, then Q1's two, then Q2's.
+        for n, parent in enumerate((q3, q1, q2, q1)):
+            s.add(QuestionBankItem(course_id=w["course"], unit_id=w["unit"], originating_assignment_id=practice.id,
+                                   parent_question_id=parent, title=f"v{n}", question=f"v{n}", final_answer="1",
+                                   status="approved", source="practice", created_at=t0 + timedelta(seconds=n)))
+        await s.commit()
+        ordered = await approved_practice_items(s, practice)
+    assert [(i.parent_question_id, i.title) for i in ordered] == [
+        (q1, "v1"), (q1, "v3"), (q2, "v2"), (q3, "v0"),
+    ]

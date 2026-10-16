@@ -2318,11 +2318,9 @@ export interface paths {
          * Practice Detail
          * @description Return the full detail for a published practice assignment.
          *     Problems are the approved bank items whose originating_assignment_id
-         *     points at this practice — the current clone + approve flow attaches
-         *     items via originating_assignment_id rather than content. Ordered by
-         *     created_at; clone jobs run concurrently so positions reflect the
-         *     order each job's AI output persisted, NOT strictly the source HW's
-         *     problem order. Close enough for v1; revisit when clustering lands.
+         *     points at this practice — the clone + approve flow attaches items
+         *     via originating_assignment_id rather than content — in the source
+         *     homework's problem order.
          */
         get: operations["practice_detail_v1_school_student_practice__assignment_id__get"];
         put?: never;
@@ -2948,14 +2946,33 @@ export interface paths {
         put?: never;
         /**
          * Clone Homework As Practice
-         * @description Clone a homework's problem list into a new Practice assignment.
-         *     Each source problem spawns a single 1:1 variation job via the
-         *     existing `parent_question_id` path in question_bank_generation —
-         *     items land in the teacher's review queue as each job completes.
-         *     The practice set starts as a draft with no content; the teacher
-         *     publishes it explicitly after reviewing.
+         * @description Make a draft practice set from a homework: `count` new versions of
+         *     each chosen problem, for the chosen periods. The teacher approves
+         *     each version in the review queue, then publishes.
          */
         post: operations["clone_homework_as_practice_v1_teacher_courses__course_id__assignments__hw_id__clone_as_practice_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teacher/courses/{course_id}/assignments/{practice_id}/practice-problems": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Practice Problems
+         * @description Write versions of more homework problems into an existing practice
+         *     set made from that homework. Drafts and published sets alike: each
+         *     new version still waits for the teacher's approval.
+         */
+        post: operations["add_practice_problems_v1_teacher_courses__course_id__assignments__practice_id__practice_problems_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4335,6 +4352,18 @@ export interface components {
             /** Token */
             token: string;
         };
+        /** ClonePracticeRequest */
+        ClonePracticeRequest: {
+            /**
+             * Count
+             * @default 1
+             */
+            count: number;
+            /** Item Ids */
+            item_ids?: string[] | null;
+            /** Section Ids */
+            section_ids?: string[] | null;
+        };
         /** CompleteMockTestRequest */
         CompleteMockTestRequest: {
             /** Correct Count */
@@ -5029,6 +5058,29 @@ export interface components {
             /** To Grade */
             to_grade: number;
         };
+        /**
+         * InsightsPractice
+         * @description The practice set made from the selected homework for this section.
+         */
+        InsightsPractice: {
+            /** Approved */
+            approved: number;
+            /** Covered Item Ids */
+            covered_item_ids: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+            /** To Review */
+            to_review: number;
+            /** Writing */
+            writing: number;
+        };
         /** InsightsProblem */
         InsightsProblem: {
             /**
@@ -5036,22 +5088,16 @@ export interface components {
              * Format: uuid
              */
             bank_item_id: string;
-            /** Full */
-            full: number;
-            /** Partial */
-            partial: number;
+            /** Counted */
+            counted: number;
+            /** Flagged */
+            flagged: boolean;
             /** Position */
             position: number;
             /** Question */
             question: string;
-            /** Students */
-            students: {
-                [key: string]: components["schemas"]["InsightsStudentRef"][];
-            };
-            /** To Review */
-            to_review: number;
-            /** Zero */
-            zero: number;
+            /** Wrong */
+            wrong: number;
         };
         /** InsightsSection */
         InsightsSection: {
@@ -5062,50 +5108,6 @@ export interface components {
             id: string;
             /** Name */
             name: string;
-        };
-        /** InsightsStudentRef */
-        InsightsStudentRef: {
-            /** Diagnosis Kind */
-            diagnosis_kind: string | null;
-            /** Name */
-            name: string;
-            /**
-             * Student Id
-             * Format: uuid
-             */
-            student_id: string;
-            /**
-             * Submission Id
-             * Format: uuid
-             */
-            submission_id: string;
-        };
-        /** InsightsWatchStudent */
-        InsightsWatchStudent: {
-            /** Latest */
-            latest?: number | null;
-            /** Missed */
-            missed?: number | null;
-            /** Name */
-            name: string;
-            /** Previous */
-            previous?: number | null;
-            /** Problems */
-            problems?: number | null;
-            /**
-             * Reason
-             * @enum {string}
-             */
-            reason: "missing_work" | "missing_most" | "sharp_drop";
-            /**
-             * Student Id
-             * Format: uuid
-             */
-            student_id: string;
-            /** Window */
-            window?: number | null;
-            /** Zero */
-            zero?: number | null;
         };
         /**
          * IntegrityActivityNotableTurn
@@ -5402,6 +5404,20 @@ export interface components {
             /** Question */
             question: string;
         };
+        /**
+         * PracticeProblemsRequest
+         * @description Which homework problems a practice set covers, and how many new
+         *     versions of each to write. `item_ids` = None means every problem.
+         */
+        PracticeProblemsRequest: {
+            /**
+             * Count
+             * @default 1
+             */
+            count: number;
+            /** Item Ids */
+            item_ids?: string[] | null;
+        };
         /** PreviewSeat */
         PreviewSeat: {
             /** Current */
@@ -5589,15 +5605,12 @@ export interface components {
         SectionInsightsResponse: {
             /** Homeworks */
             homeworks: components["schemas"]["InsightsHomework"][];
+            practice: components["schemas"]["InsightsPractice"] | null;
             /** Problems */
             problems: components["schemas"]["InsightsProblem"][];
             section: components["schemas"]["InsightsSection"];
             /** Selected Homework Id */
             selected_homework_id: string | null;
-            /** Watch */
-            watch: components["schemas"]["InsightsWatchStudent"][];
-            /** Watch Total */
-            watch_total: number;
         };
         /** SessionHistoryItem */
         SessionHistoryItem: {
@@ -11538,7 +11551,49 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ClonePracticeRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_practice_problems_v1_teacher_courses__course_id__assignments__practice_id__practice_problems_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                practice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PracticeProblemsRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             201: {

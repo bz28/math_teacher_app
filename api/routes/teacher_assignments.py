@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -644,6 +644,83 @@ async def create_assignment(
     return {"id": str(assignment.id), "title": assignment.title, "status": assignment.status}
 
 
+class PracticeProblemsRequest(BaseModel):
+    """Which homework problems a practice set covers, and how many new
+    versions of each to write. `item_ids` = None means every problem."""
+    item_ids: list[uuid.UUID] | None = None
+    count: int = Field(default=1, ge=1, le=5)
+
+
+class ClonePracticeRequest(PracticeProblemsRequest):
+    # None → every period the homework is assigned to.
+    section_ids: list[uuid.UUID] | None = None
+
+
+async def _practice_parents(
+    db: AsyncSession, course_id: uuid.UUID, source: Assignment, item_ids: list[uuid.UUID] | None,
+) -> list[QuestionBankItem]:
+    """The homework's bank items to write versions of, in homework order.
+    A requested id that isn't on the homework is a 400, never a silent skip."""
+    on_hw: list[uuid.UUID] = []
+    for raw in problem_ids_in_content(source.content):
+        try:
+            on_hw.append(uuid.UUID(raw))
+        except (ValueError, TypeError):
+            continue  # corrupted content: skip rather than 500
+    if item_ids is not None:
+        unknown = set(item_ids) - set(on_hw)
+        if unknown or not item_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Pick problems from this homework",
+            )
+        on_hw = [i for i in on_hw if i in set(item_ids)]
+    if not on_hw:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Source homework has no problems to clone",
+        )
+    # The course filter is defense in depth against rows that escaped
+    # snapshot_bank_items' approved+primary+course invariant.
+    items = (await db.execute(
+        select(QuestionBankItem).where(
+            QuestionBankItem.id.in_(on_hw),
+            QuestionBankItem.course_id == course_id,
+        )
+    )).scalars().all()
+    by_id = {i.id: i for i in items}
+    # An item deleted since the content snapshot is skipped; the teacher
+    # can add it again later.
+    return [by_id[i] for i in on_hw if i in by_id]
+
+
+def _queue_variation_jobs(
+    db: AsyncSession, practice: Assignment, parents: list[QuestionBankItem], count: int, teacher_id: uuid.UUID,
+) -> list[uuid.UUID]:
+    """One generation job per parent writing `count` versions of it into
+    `practice` via the `parent_question_id` path. Items land pending in
+    the teacher's review queue. The id is set at construction: the
+    model default only fires on flush, and `schedule_generation_job(None)`
+    once silently ran nothing."""
+    job_ids: list[uuid.UUID] = []
+    for parent in parents:
+        job_id = uuid.uuid4()
+        db.add(QuestionBankGenerationJob(
+            id=job_id,
+            course_id=practice.course_id,
+            unit_id=parent.unit_id,
+            originating_assignment_id=practice.id,
+            created_by_id=teacher_id,
+            status="queued",
+            requested_count=count,
+            difficulty=parent.difficulty,
+            source_doc_ids=parent.source_doc_ids,
+            parent_question_id=parent.id,
+        ))
+        job_ids.append(job_id)
+    return job_ids
+
+
 @router.post(
     "/courses/{course_id}/assignments/{hw_id}/clone-as-practice",
     status_code=status.HTTP_201_CREATED,
@@ -652,17 +729,15 @@ async def create_assignment(
 async def clone_homework_as_practice(
     request: Request,
     course_id: uuid.UUID, hw_id: uuid.UUID,
+    body: ClonePracticeRequest | None = None,
     current_user: CurrentUser = Depends(require_teacher),
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Clone a homework's problem list into a new Practice assignment.
-    Each source problem spawns a single 1:1 variation job via the
-    existing `parent_question_id` path in question_bank_generation —
-    items land in the teacher's review queue as each job completes.
-    The practice set starts as a draft with no content; the teacher
-    publishes it explicitly after reviewing.
-    """
+    """Make a draft practice set from a homework: `count` new versions of
+    each chosen problem, for the chosen periods. The teacher approves
+    each version in the review queue, then publishes."""
+    body = body or ClonePracticeRequest()
     # Ownership/existence checks first so a teacher poking at someone
     # else's homework gets 404, not a misleading 'limit reached' that
     # would confirm the resource exists.
@@ -679,107 +754,53 @@ async def clone_homework_as_practice(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only homeworks can be cloned as practice",
         )
-    source_item_ids: list[uuid.UUID] = []
-    for raw in problem_ids_in_content(source.content):
-        try:
-            source_item_ids.append(uuid.UUID(raw))
-        except (ValueError, TypeError):
-            # Corrupted content should never reach here, but skip
-            # rather than 500 if it does.
-            continue
-    if not source_item_ids:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Source homework has no problems to clone",
-        )
+    parents = await _practice_parents(db, course_id, source, body.item_ids)
 
-    # Each cloned problem fires its own generate_questions LLM call, so
-    # gate behind the same cap as direct generation — without this an
-    # independent free teacher can queue an entire HW's worth of jobs in
-    # one click and trivially exceed the 10/day quota. Runs AFTER
-    # ownership + content checks so a 'limit reached' message doesn't
-    # leak the existence of resources the teacher couldn't have touched.
+    hw_sections = (await db.execute(
+        select(Section.id, Section.name)
+        .join(AssignmentSection, AssignmentSection.section_id == Section.id)
+        .where(AssignmentSection.assignment_id == source.id)
+        .order_by(Section.name)
+    )).all()
+    sections = hw_sections
+    if body.section_ids is not None:
+        sections = [s for s in hw_sections if s.id in set(body.section_ids)]
+        if not body.section_ids or len(sections) != len(set(body.section_ids)):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Pick periods this homework is assigned to",
+            )
+
+    # Each problem fires its own generation call, so gate behind the
+    # same cap as direct generation. Runs AFTER the ownership and content
+    # checks so 'limit reached' never leaks resources the teacher
+    # couldn't have touched.
     await check_entitlement(db, user, Entitlement.GENERATE_PROBLEM)
 
-    # Pull the source items to copy unit_id + source_doc_ids per job.
-    # snapshot_bank_items already enforces approved+primary+course_id
-    # at write time; the course_id filter here is defense in depth
-    # against any historical rows that escaped that invariant.
-    items = (await db.execute(
-        select(QuestionBankItem).where(
-            QuestionBankItem.id.in_(source_item_ids),
-            QuestionBankItem.course_id == course_id,
-        )
-    )).scalars().all()
-    item_by_id: dict[uuid.UUID, QuestionBankItem] = {i.id: i for i in items}
-
+    # "[Practice]" keeps cross-type surfaces (search, activity log) from
+    # confusing the set with its homework; a set for some of the
+    # homework's periods names them so two periods' sets read apart.
+    # Just part of the title — the teacher can edit it freely.
+    title = f"[Practice] {source.title}"
+    if len(sections) < len(hw_sections):
+        title += " · " + ", ".join(s.name for s in sections)
     practice = Assignment(
         course_id=course_id,
         teacher_id=current_user.user_id,
-        # Prepend "[Practice]" so cross-type surfaces (global search,
-        # allAssignments, activity log) can't confuse the clone with
-        # its source HW. The prefix is just part of the title — the
-        # teacher can edit or remove it freely once the practice is
-        # created; we never strip/re-add it on later updates.
-        title=f"[Practice] {source.title}",
+        title=title,
         type="practice",
         unit_ids=list(source.unit_ids or []),
         source_homework_id=source.id,
-        # Teacher publishes explicitly after reviewing — same lifecycle
-        # as HW. Content fills in as generation jobs complete and the
-        # teacher approves their output.
+        # Teacher publishes explicitly after reviewing.
         status="draft",
     )
     db.add(practice)
     await db.flush()
+    for s in sections:
+        db.add(AssignmentSection(assignment_id=practice.id, section_id=s.id))
 
-    # Copy the source HW's section assignments so the practice is
-    # visible to the same students once it publishes. The teacher
-    # can still edit the section picker on the practice detail page
-    # if they want to narrow or widen the audience.
-    source_section_ids = (await db.execute(
-        select(AssignmentSection.section_id).where(
-            AssignmentSection.assignment_id == source.id,
-        )
-    )).scalars().all()
-    for sid in source_section_ids:
-        db.add(AssignmentSection(
-            assignment_id=practice.id,
-            section_id=sid,
-        ))
-
-    # Assign the id explicitly at construction so we can collect it
-    # without an intermediate flush. The model's `default=uuid.uuid4`
-    # is a SQLAlchemy column default that only fires during flush —
-    # reading `job.id` right after `db.add()` without assigning would
-    # return None, which is how an earlier version silently queued
-    # jobs that `schedule_generation_job(None)` then failed to run.
-    job_ids: list[uuid.UUID] = []
-    for item_id in source_item_ids:
-        parent = item_by_id.get(item_id)
-        if parent is None:
-            # Source item was deleted between content snapshot and this
-            # query. Skip — teacher ends with a partial practice set
-            # and can retry missing slots via "Generate more".
-            continue
-        job_id = uuid.uuid4()
-        job = QuestionBankGenerationJob(
-            id=job_id,
-            course_id=course_id,
-            unit_id=parent.unit_id,
-            originating_assignment_id=practice.id,
-            created_by_id=current_user.user_id,
-            status="queued",
-            requested_count=1,
-            difficulty=parent.difficulty,
-            source_doc_ids=parent.source_doc_ids,
-            parent_question_id=parent.id,
-        )
-        db.add(job)
-        job_ids.append(job_id)
-
+    job_ids = _queue_variation_jobs(db, practice, parents, body.count, current_user.user_id)
     await db.commit()
-
     # Fire after commit so rows are durable before any background task
     # attempts to read them.
     for jid in job_ids:
@@ -792,6 +813,48 @@ async def clone_homework_as_practice(
         "source_homework_id": str(practice.source_homework_id) if practice.source_homework_id else None,
         "job_ids": [str(j) for j in job_ids],
     }
+
+
+@router.post(
+    "/courses/{course_id}/assignments/{practice_id}/practice-problems",
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.limit("3/minute")
+async def add_practice_problems(
+    request: Request,
+    course_id: uuid.UUID, practice_id: uuid.UUID,
+    body: PracticeProblemsRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Write versions of more homework problems into an existing practice
+    set made from that homework. Drafts and published sets alike: each
+    new version still waits for the teacher's approval."""
+    await get_teacher_course(db, course_id, current_user.user_id)
+    practice = await get_teacher_assignment(db, practice_id, current_user.user_id)
+    if practice.course_id != course_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignment not found in this course",
+        )
+    source = (
+        await db.get(Assignment, practice.source_homework_id)
+        if practice.type == "practice" and practice.source_homework_id else None
+    )
+    if source is None or source.course_id != course_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only practice made from a homework can take its problems",
+        )
+    parents = await _practice_parents(db, course_id, source, body.item_ids)
+    await check_entitlement(db, user, Entitlement.GENERATE_PROBLEM)
+
+    job_ids = _queue_variation_jobs(db, practice, parents, body.count, current_user.user_id)
+    await db.commit()
+    for jid in job_ids:
+        schedule_generation_job(jid)
+    return {"id": str(practice.id), "job_ids": [str(j) for j in job_ids]}
 
 
 async def _serialize_assignment_list(
