@@ -347,3 +347,31 @@ async def test_practice_problems_follow_homework_order(client: AsyncClient) -> N
     assert [(i.parent_question_id, i.title) for i in ordered] == [
         (q1, "v1"), (q1, "v3"), (q2, "v2"), (q3, "v0"),
     ]
+
+
+async def test_add_problems_is_owner_and_course_scoped(client: AsyncClient) -> None:
+    w = await _hw_world()
+    other = await _hw_world()
+    q1 = w["items"][0]
+    with patch("api.routes.teacher_assignments.schedule_generation_job"):
+        created = (await client.post(
+            f"/v1/teacher/courses/{w['course']}/assignments/{w['hw']}/clone-as-practice",
+            json={"item_ids": [str(q1)]}, headers=_auth(w["token"]),
+        )).json()
+        body = {"item_ids": [str(q1)]}
+        # Another teacher can't reach the set: not through its course
+        # (not theirs, 404), nor through their own (not their set, 403 —
+        # get_teacher_assignment's convention, as for clone).
+        for course, code in ((w["course"], 404), (other["course"], 403)):
+            r = await client.post(
+                f"/v1/teacher/courses/{course}/assignments/{created['id']}/practice-problems",
+                json=body, headers=_auth(other["token"]),
+            )
+            assert r.status_code == code, r.text
+        # The owner can't reach it through a course it isn't in.
+        r = await client.post(
+            f"/v1/teacher/courses/{other['course']}/assignments/{created['id']}/practice-problems",
+            json=body, headers=_auth(w["token"]),
+        )
+        assert r.status_code == 404, r.text
+    assert len(await _jobs_for(created["id"])) == 1
