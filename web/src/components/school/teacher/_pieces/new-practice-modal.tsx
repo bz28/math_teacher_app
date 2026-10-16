@@ -139,12 +139,14 @@ export function NewPracticeModal({
         setPickedIds(new Set(problems.map((p) => p.bank_item_id)));
       })
       .catch(() => {
-        if (!cancelled) setHwProblems([]);
+        if (cancelled) return;
+        setHwProblems([]);
+        setError("Couldn't load this homework's problems. Close and try again.");
       });
     return () => {
       cancelled = true;
     };
-  }, [selectedHwId]);
+  }, [selectedHwId, setError]);
 
   // Load docs only when the teacher enters the scratch-problems step.
   useEffect(() => {
@@ -354,6 +356,7 @@ export function NewPracticeModal({
               onSelectedHwIdChange={(id) => {
                 // Skeleton until the new homework's problems load.
                 setHwProblems(null);
+                setError(null);
                 setSelectedHwId(id);
               }}
               hwProblems={hwProblems}
