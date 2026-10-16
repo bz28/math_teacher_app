@@ -145,12 +145,12 @@ async def _student_insights_flow(
     browser: HarnessBrowser, web_base: str, api_base: str, seed: Seed,
 ) -> FlowResult:
     """Teacher opens Student Insights → the problem most of the class got
-    wrong is flagged and already in the practice basket → "Create practice
-    set" opens the new set's page. Seeds a homework three of five students
-    got wrong (approved grades) and picks it, since the tab opens on the
-    newest homework with counted grades. Asserts only on the flag, the
-    tray and where the click lands — never on what the AI writes."""
-    name, title = "student_insights", "Teacher turns a flagged problem into practice"
+    wrong is flagged, already in the practice basket, and the tray offers
+    "Create practice set". Seeds a homework three of five students got
+    wrong (approved grades) and picks it, since the tab opens on the
+    newest homework with counted grades. Stops short of clicking Create:
+    that queues real AI generation, and these flows stay $0."""
+    name, title = "student_insights", "Teacher sees a flagged problem ready for practice"
     issues: list[str] = []
     hw_title = await seed_insights_homework(seed)
     async with browser.authed_page(seed.teacher_token, seed.teacher_refresh) as page:
@@ -170,14 +170,8 @@ async def _student_insights_flow(
         if not await page.get_by_role("button", name="Added to practice").count():
             issues.append("the flagged problem did not start in the practice basket")
         create = page.get_by_role("button", name="Create practice set")
-        if not await create.count():
-            issues.append("the practice tray offered no 'Create practice set'")
-            return FlowResult(name, title, False, issues)
-        await create.click()
-        try:
-            await page.wait_for_url("**/homework/**", timeout=_TIMEOUT_MS)
-        except PlaywrightTimeoutError:
-            issues.append("'Create practice set' did not open the new set's page")
+        if not await create.count() or not await create.is_enabled():
+            issues.append("the practice tray offered no usable 'Create practice set'")
     return FlowResult(name, title, not issues, issues)
 
 
