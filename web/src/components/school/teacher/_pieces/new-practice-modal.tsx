@@ -133,8 +133,12 @@ export function NewPracticeModal({
       .assignment(selectedHwId)
       .then((a) => {
         if (cancelled) return;
-        const content = a.content as { problems?: HwProblem[] } | null;
-        const problems = content?.problems ?? [];
+        const content = a.content as { problems?: Partial<HwProblem>[] } | null;
+        // Legacy snapshot content can carry problems with no bank item —
+        // nothing to write versions of, so they aren't offered.
+        const problems = (content?.problems ?? []).filter(
+          (p): p is HwProblem => typeof p.bank_item_id === "string",
+        );
         setHwProblems(problems);
         setPickedIds(new Set(problems.map((p) => p.bank_item_id)));
       })
