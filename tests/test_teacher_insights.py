@@ -360,6 +360,10 @@ async def test_the_homeworks_practice_set_for_this_section(client: AsyncClient) 
             QuestionBankGenerationJob(course_id=w["course"], unit_id=w["unit"], originating_assignment_id=p1_set.id,
                                       created_by_id=w["teacher"], status="running", requested_count=3,
                                       parent_question_id=ids2[1]),
+            # A second live job on Q2 still counts Q2 once.
+            QuestionBankGenerationJob(course_id=w["course"], unit_id=w["unit"], originating_assignment_id=p1_set.id,
+                                      created_by_id=w["teacher"], status="queued", requested_count=3,
+                                      parent_question_id=ids2[1]),
             # Failed: Q1's is covered by its versions anyway; Q3's isn't.
             *[QuestionBankGenerationJob(course_id=w["course"], unit_id=w["unit"], originating_assignment_id=p1_set.id,
                                         created_by_id=w["teacher"], status="failed", requested_count=3,
@@ -371,7 +375,20 @@ async def test_the_homeworks_practice_set_for_this_section(client: AsyncClient) 
     assert practice_out["title"] == "P1 set"  # Period 3's set never shows in Period 1
     assert (practice_out["approved"], practice_out["to_review"], practice_out["writing"]) == (1, 1, 1)
     assert practice_out["failed"] == 1
+
     assert set(practice_out["covered_item_ids"]) == {str(ids2[0]), str(ids2[1])}
+
+    # A job a restart lost sits "running" for good: past the stale window
+    # it reads as failed, so its problem can be added again.
+    async with get_session_factory()() as s:
+        for job in (await s.execute(
+            select(QuestionBankGenerationJob).where(QuestionBankGenerationJob.status.in_(("running", "queued")))
+        )).scalars():
+            job.updated_at = NOW - timedelta(hours=1)
+        await s.commit()
+    practice_out = (await client.get(_url(w), headers=_auth(w["token"]))).json()["practice"]
+    assert (practice_out["writing"], practice_out["failed"]) == (0, 2)
+    assert set(practice_out["covered_item_ids"]) == {str(ids2[0])}
 
 
 async def test_explicit_homework_and_404s(client: AsyncClient) -> None:

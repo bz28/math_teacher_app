@@ -23,7 +23,7 @@ teacher sees and approves every AI grade, so an AI draft never counts.
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -54,6 +54,13 @@ _SCORE_STATUSES = ("full", "partial", "zero")
 # grades are wrong, once enough are counted to mean something.
 _WRONG_BELOW_PERCENT = 50.0
 _FLAG_MIN_COUNTED = 5
+
+# Generation jobs run as in-process tasks that a restart loses, leaving
+# the row queued or running for good. Writing a few versions takes a
+# minute or two, so a job untouched this long is treated as failed —
+# otherwise its problem would read "writing" forever and never be
+# offered again.
+_WRITING_STALE_AFTER = timedelta(minutes=15)
 
 
 # ── Response models ────────────────────────────────────────────────
@@ -423,24 +430,29 @@ async def _practice_for(
         )
     )).all()
     jobs = (await db.execute(
-        select(QuestionBankGenerationJob.parent_question_id, QuestionBankGenerationJob.status)
+        select(
+            QuestionBankGenerationJob.parent_question_id,
+            QuestionBankGenerationJob.status,
+            QuestionBankGenerationJob.updated_at,
+        )
         .where(
             QuestionBankGenerationJob.originating_assignment_id == practice.id,
             QuestionBankGenerationJob.status.in_(("queued", "running", "failed")),
         )
     )).all()
-    writing = [j.parent_question_id for j in jobs if j.status != "failed"]
-    covered = {r.parent_question_id for r in items} | set(writing)
-    # A failed job's problem counts until something else covers it — a
-    # retry that wrote versions, or one still writing.
-    failed = {j.parent_question_id for j in jobs if j.status == "failed"} - covered
+    stale_before = datetime.now(UTC) - _WRITING_STALE_AFTER
+    live = {j.parent_question_id for j in jobs if j.status != "failed" and j.updated_at >= stale_before}
+    covered = {r.parent_question_id for r in items} | live
+    # A failed (or lost) job's problem counts until something else covers
+    # it — a retry that wrote versions, or one still writing.
+    failed = {j.parent_question_id for j in jobs if j.parent_question_id not in live} - covered
     return InsightsPractice(
         id=practice.id,
         title=practice.title,
         status=practice.status,
         approved=sum(1 for r in items if r.status == "approved"),
         to_review=sum(1 for r in items if r.status == "pending"),
-        writing=len(writing),
+        writing=len(live),
         failed=len(failed),
         covered_item_ids=sorted(c for c in covered if c is not None),
     )
