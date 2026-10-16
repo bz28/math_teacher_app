@@ -382,7 +382,10 @@ async def test_the_homeworks_practice_set_for_this_section(client: AsyncClient) 
     # it reads as failed, so its problem can be added again.
     async with get_session_factory()() as s:
         for job in (await s.execute(
-            select(QuestionBankGenerationJob).where(QuestionBankGenerationJob.status.in_(("running", "queued")))
+            select(QuestionBankGenerationJob).where(
+                QuestionBankGenerationJob.originating_assignment_id == p1_set.id,
+                QuestionBankGenerationJob.status.in_(("running", "queued")),
+            )
         )).scalars():
             job.updated_at = NOW - timedelta(hours=1)
         await s.commit()

@@ -56,11 +56,12 @@ _WRONG_BELOW_PERCENT = 50.0
 _FLAG_MIN_COUNTED = 5
 
 # Generation jobs run as in-process tasks that a restart loses, leaving
-# the row queued or running for good. Writing a few versions takes a
-# minute or two, so a job untouched this long is treated as failed —
-# otherwise its problem would read "writing" forever and never be
-# offered again.
-_WRITING_STALE_AFTER = timedelta(minutes=15)
+# the row queued or running for good. A job only touches its row when it
+# starts, saves and finishes, and its three LLM stages can each retry for
+# ~4.6 minutes, so a healthy job can sit untouched ~14 minutes. Past 30
+# it's treated as failed — otherwise its problem would read "writing"
+# forever and never be offered again.
+_WRITING_STALE_AFTER = timedelta(minutes=30)
 
 
 # ── Response models ────────────────────────────────────────────────
