@@ -96,6 +96,7 @@ class InsightsPractice(BaseModel):
     approved: int    # versions students see once it's published
     to_review: int   # versions waiting on the teacher's approval
     writing: int     # problems the AI is still writing versions of
+    failed: int      # problems whose writing failed and that nothing else covers
     # Homework problems the set already has versions of (or is writing).
     covered_item_ids: list[uuid.UUID]
 
@@ -105,6 +106,9 @@ class SectionInsightsResponse(BaseModel):
     homeworks: list[InsightsHomework]
     selected_homework_id: uuid.UUID | None
     problems: list[InsightsProblem]
+    # Counted grades a problem needs before it can be flagged, so the
+    # page can say "too early to tell" instead of "nothing was missed".
+    flag_min_counted: int
     practice: InsightsPractice | None
 
 
@@ -335,6 +339,7 @@ async def get_section_insights(
         homeworks=hw_out,
         selected_homework_id=selected.id if selected else None,
         problems=await _problems_for(db, selected, by_hw_student) if selected else [],
+        flag_min_counted=_FLAG_MIN_COUNTED,
         practice=await _practice_for(db, selected, section_id) if selected else None,
     )
 
@@ -417,14 +422,18 @@ async def _practice_for(
             QuestionBankItem.status.in_(("approved", "pending")),
         )
     )).all()
-    writing = (await db.execute(
-        select(QuestionBankGenerationJob.parent_question_id)
+    jobs = (await db.execute(
+        select(QuestionBankGenerationJob.parent_question_id, QuestionBankGenerationJob.status)
         .where(
             QuestionBankGenerationJob.originating_assignment_id == practice.id,
-            QuestionBankGenerationJob.status.in_(("queued", "running")),
+            QuestionBankGenerationJob.status.in_(("queued", "running", "failed")),
         )
-    )).scalars().all()
+    )).all()
+    writing = [j.parent_question_id for j in jobs if j.status != "failed"]
     covered = {r.parent_question_id for r in items} | set(writing)
+    # A failed job's problem counts until something else covers it — a
+    # retry that wrote versions, or one still writing.
+    failed = {j.parent_question_id for j in jobs if j.status == "failed"} - covered
     return InsightsPractice(
         id=practice.id,
         title=practice.title,
@@ -432,5 +441,6 @@ async def _practice_for(
         approved=sum(1 for r in items if r.status == "approved"),
         to_review=sum(1 for r in items if r.status == "pending"),
         writing=len(writing),
+        failed=len(failed),
         covered_item_ids=sorted(c for c in covered if c is not None),
     )

@@ -2133,6 +2133,10 @@
             "title": "Covered Item Ids",
             "type": "array"
           },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -2162,6 +2166,7 @@
           "approved",
           "to_review",
           "writing",
+          "failed",
           "covered_item_ids"
         ],
         "title": "InsightsPractice",
@@ -3331,6 +3336,10 @@
       },
       "SectionInsightsResponse": {
         "properties": {
+          "flag_min_counted": {
+            "title": "Flag Min Counted",
+            "type": "integer"
+          },
           "homeworks": {
             "items": {
               "$ref": "#/components/schemas/InsightsHomework"
@@ -3376,6 +3385,7 @@
           "homeworks",
           "selected_homework_id",
           "problems",
+          "flag_min_counted",
           "practice"
         ],
         "title": "SectionInsightsResponse",

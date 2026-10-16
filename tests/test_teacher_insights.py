@@ -288,6 +288,7 @@ async def test_problems_are_whole_class_counts_in_homework_order(client: AsyncCl
     assert [(p["counted"], p["wrong"]) for p in body["problems"]] == [(2, 1), (2, 2), (2, 0)]
     # Two counted grades is too few to flag anything.
     assert not any(p["flagged"] for p in body["problems"])
+    assert body["flag_min_counted"] == 5
     assert body["practice"] is None
     # No per-student data leaves the endpoint.
     assert "watch" not in body and "students" not in body["problems"][0]
@@ -359,12 +360,17 @@ async def test_the_homeworks_practice_set_for_this_section(client: AsyncClient) 
             QuestionBankGenerationJob(course_id=w["course"], unit_id=w["unit"], originating_assignment_id=p1_set.id,
                                       created_by_id=w["teacher"], status="running", requested_count=3,
                                       parent_question_id=ids2[1]),
+            # Failed: Q1's is covered by its versions anyway; Q3's isn't.
+            *[QuestionBankGenerationJob(course_id=w["course"], unit_id=w["unit"], originating_assignment_id=p1_set.id,
+                                        created_by_id=w["teacher"], status="failed", requested_count=3,
+                                        parent_question_id=pid) for pid in (ids2[0], ids2[2])],
         ])
         await s.commit()
 
     practice_out = (await client.get(_url(w), headers=_auth(w["token"]))).json()["practice"]
     assert practice_out["title"] == "P1 set"  # Period 3's set never shows in Period 1
     assert (practice_out["approved"], practice_out["to_review"], practice_out["writing"]) == (1, 1, 1)
+    assert practice_out["failed"] == 1
     assert set(practice_out["covered_item_ids"]) == {str(ids2[0]), str(ids2[1])}
 
 

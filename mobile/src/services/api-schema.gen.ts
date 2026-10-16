@@ -5067,6 +5067,8 @@ export interface components {
             approved: number;
             /** Covered Item Ids */
             covered_item_ids: string[];
+            /** Failed */
+            failed: number;
             /**
              * Id
              * Format: uuid
@@ -5603,6 +5605,8 @@ export interface components {
         };
         /** SectionInsightsResponse */
         SectionInsightsResponse: {
+            /** Flag Min Counted */
+            flag_min_counted: number;
             /** Homeworks */
             homeworks: components["schemas"]["InsightsHomework"][];
             practice: components["schemas"]["InsightsPractice"] | null;
