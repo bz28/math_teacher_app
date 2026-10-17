@@ -273,7 +273,7 @@ export function LearnRunner({
             </p>
             <FigureDisplay
               svg={problem.figure_svg}
-              ariaLabel={`Figure for problem ${qIndex + 1}`}
+              ariaLabel={onFinish ? "Figure for this problem" : `Figure for problem ${qIndex + 1}`}
             />
             <div className="mt-1 text-base font-medium text-text-primary">
               <MathText text={problem.question} />
@@ -330,7 +330,7 @@ export function LearnRunner({
                 <Button onClick={nextProblem}>
                   {isLastProblem
                     ? onFinish
-                      ? "Back to practice"
+                      ? "Continue practice"
                       : "Finish"
                     : "Next problem"}
                 </Button>

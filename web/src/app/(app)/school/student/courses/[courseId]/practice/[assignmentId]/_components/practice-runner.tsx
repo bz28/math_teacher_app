@@ -92,6 +92,21 @@ export function PracticeRunner({
   // its position. The outcome stays "revealed" — learning it afterwards
   // doesn't make it solved.
   const [walkingThrough, setWalkingThrough] = useState(false);
+  // Both views swap out the button that opened them, so move focus (and,
+  // opening, the scroll) to where the student lands instead of <body>.
+  const walkBackRef = useRef<HTMLButtonElement>(null);
+  const advanceRef = useRef<HTMLButtonElement>(null);
+  const walkOpenedRef = useRef(false);
+  useEffect(() => {
+    if (walkingThrough) {
+      walkOpenedRef.current = true;
+      window.scrollTo({ top: 0 });
+      walkBackRef.current?.focus();
+    } else if (walkOpenedRef.current) {
+      walkOpenedRef.current = false;
+      advanceRef.current?.focus();
+    }
+  }, [walkingThrough]);
 
   const problem = problems[index];
   const choices = useMemo(() => buildChoices(problem), [problem]);
@@ -153,6 +168,7 @@ export function PracticeRunner({
     return (
       <div className="space-y-4">
         <button
+          ref={walkBackRef}
           type="button"
           onClick={() => setWalkingThrough(false)}
           className="text-sm text-text-muted transition-colors hover:text-primary"
@@ -242,7 +258,7 @@ export function PracticeRunner({
                 Walk me through it
               </Button>
             )}
-            <Button onClick={advance}>
+            <Button ref={advanceRef} onClick={advance}>
               {isLast ? "See results" : "Next problem"}
             </Button>
           </motion.div>
