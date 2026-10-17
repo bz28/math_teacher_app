@@ -268,6 +268,49 @@
         "title": "ClaimSectionInviteRequest",
         "type": "object"
       },
+      "ClonePracticeRequest": {
+        "properties": {
+          "count": {
+            "default": 1,
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "item_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Ids"
+          },
+          "section_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Ids"
+          }
+        },
+        "title": "ClonePracticeRequest",
+        "type": "object"
+      },
       "CompleteMockTestRequest": {
         "properties": {
           "correct_count": {
@@ -2075,6 +2118,60 @@
         "title": "InsightsHomework",
         "type": "object"
       },
+      "InsightsPractice": {
+        "description": "The practice set made from the selected homework for this section.",
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "integer"
+          },
+          "covered_item_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Covered Item Ids",
+            "type": "array"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "to_review": {
+            "title": "To Review",
+            "type": "integer"
+          },
+          "writing": {
+            "title": "Writing",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "status",
+          "approved",
+          "to_review",
+          "writing",
+          "failed",
+          "covered_item_ids"
+        ],
+        "title": "InsightsPractice",
+        "type": "object"
+      },
       "InsightsProblem": {
         "properties": {
           "bank_item_id": {
@@ -2082,13 +2179,13 @@
             "title": "Bank Item Id",
             "type": "string"
           },
-          "full": {
-            "title": "Full",
+          "counted": {
+            "title": "Counted",
             "type": "integer"
           },
-          "partial": {
-            "title": "Partial",
-            "type": "integer"
+          "flagged": {
+            "title": "Flagged",
+            "type": "boolean"
           },
           "position": {
             "title": "Position",
@@ -2098,29 +2195,8 @@
             "title": "Question",
             "type": "string"
           },
-          "students": {
-            "additionalProperties": {
-              "items": {
-                "$ref": "#/components/schemas/InsightsStudentRef"
-              },
-              "type": "array"
-            },
-            "propertyNames": {
-              "enum": [
-                "full",
-                "partial",
-                "zero"
-              ]
-            },
-            "title": "Students",
-            "type": "object"
-          },
-          "to_review": {
-            "title": "To Review",
-            "type": "integer"
-          },
-          "zero": {
-            "title": "Zero",
+          "wrong": {
+            "title": "Wrong",
             "type": "integer"
           }
         },
@@ -2128,11 +2204,9 @@
           "bank_item_id",
           "position",
           "question",
-          "full",
-          "partial",
-          "zero",
-          "students",
-          "to_review"
+          "counted",
+          "wrong",
+          "flagged"
         ],
         "title": "InsightsProblem",
         "type": "object"
@@ -2154,138 +2228,6 @@
           "name"
         ],
         "title": "InsightsSection",
-        "type": "object"
-      },
-      "InsightsStudentRef": {
-        "properties": {
-          "diagnosis_kind": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Diagnosis Kind"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "student_id": {
-            "format": "uuid",
-            "title": "Student Id",
-            "type": "string"
-          },
-          "submission_id": {
-            "format": "uuid",
-            "title": "Submission Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "student_id",
-          "name",
-          "submission_id",
-          "diagnosis_kind"
-        ],
-        "title": "InsightsStudentRef",
-        "type": "object"
-      },
-      "InsightsWatchStudent": {
-        "properties": {
-          "latest": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latest"
-          },
-          "missed": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Missed"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "previous": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Previous"
-          },
-          "problems": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Problems"
-          },
-          "reason": {
-            "enum": [
-              "missing_work",
-              "missing_most",
-              "sharp_drop"
-            ],
-            "title": "Reason",
-            "type": "string"
-          },
-          "student_id": {
-            "format": "uuid",
-            "title": "Student Id",
-            "type": "string"
-          },
-          "window": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Window"
-          },
-          "zero": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Zero"
-          }
-        },
-        "required": [
-          "student_id",
-          "name",
-          "reason"
-        ],
-        "title": "InsightsWatchStudent",
         "type": "object"
       },
       "IntegrityActivityNotableTurn": {
@@ -2945,6 +2887,35 @@
         "title": "PracticeProblem",
         "type": "object"
       },
+      "PracticeProblemsRequest": {
+        "description": "Which homework problems a practice set covers, and how many new\nversions of each to write. `item_ids` = None means every problem.",
+        "properties": {
+          "count": {
+            "default": 1,
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "item_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Ids"
+          }
+        },
+        "title": "PracticeProblemsRequest",
+        "type": "object"
+      },
       "PreviewSeat": {
         "properties": {
           "current": {
@@ -3365,12 +3336,26 @@
       },
       "SectionInsightsResponse": {
         "properties": {
+          "flag_min_counted": {
+            "title": "Flag Min Counted",
+            "type": "integer"
+          },
           "homeworks": {
             "items": {
               "$ref": "#/components/schemas/InsightsHomework"
             },
             "title": "Homeworks",
             "type": "array"
+          },
+          "practice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InsightsPractice"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "problems": {
             "items": {
@@ -3393,17 +3378,6 @@
               }
             ],
             "title": "Selected Homework Id"
-          },
-          "watch": {
-            "items": {
-              "$ref": "#/components/schemas/InsightsWatchStudent"
-            },
-            "title": "Watch",
-            "type": "array"
-          },
-          "watch_total": {
-            "title": "Watch Total",
-            "type": "integer"
           }
         },
         "required": [
@@ -3411,8 +3385,8 @@
           "homeworks",
           "selected_homework_id",
           "problems",
-          "watch",
-          "watch_total"
+          "flag_min_counted",
+          "practice"
         ],
         "title": "SectionInsightsResponse",
         "type": "object"
@@ -13468,7 +13442,7 @@
     },
     "/v1/school/student/practice/{assignment_id}": {
       "get": {
-        "description": "Return the full detail for a published practice assignment.\nProblems are the approved bank items whose originating_assignment_id\npoints at this practice \u2014 the current clone + approve flow attaches\nitems via originating_assignment_id rather than content. Ordered by\ncreated_at; clone jobs run concurrently so positions reflect the\norder each job's AI output persisted, NOT strictly the source HW's\nproblem order. Close enough for v1; revisit when clustering lands.",
+        "description": "Return the full detail for a published practice assignment.\nProblems are the approved bank items whose originating_assignment_id\npoints at this practice \u2014 the clone + approve flow attaches items\nvia originating_assignment_id rather than content \u2014 in the source\nhomework's problem order.",
         "operationId": "practice_detail_v1_school_student_practice__assignment_id__get",
         "parameters": [
           {
@@ -15278,7 +15252,7 @@
     },
     "/v1/teacher/courses/{course_id}/assignments/{hw_id}/clone-as-practice": {
       "post": {
-        "description": "Clone a homework's problem list into a new Practice assignment.\nEach source problem spawns a single 1:1 variation job via the\nexisting `parent_question_id` path in question_bank_generation \u2014\nitems land in the teacher's review queue as each job completes.\nThe practice set starts as a draft with no content; the teacher\npublishes it explicitly after reviewing.",
+        "description": "Make a draft practice set from a homework: `count` new versions of\neach chosen problem, for the chosen periods. The teacher approves\neach version in the review queue, then publishes.",
         "operationId": "clone_homework_as_practice_v1_teacher_courses__course_id__assignments__hw_id__clone_as_practice_post",
         "parameters": [
           {
@@ -15302,6 +15276,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ClonePracticeRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "content": {
@@ -15332,6 +15323,77 @@
           }
         ],
         "summary": "Clone Homework As Practice",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/courses/{course_id}/assignments/{practice_id}/practice-problems": {
+      "post": {
+        "description": "Write versions of more homework problems into an existing practice\nset made from that homework. Drafts and published sets alike: each\nnew version still waits for the teacher's approval.",
+        "operationId": "add_practice_problems_v1_teacher_courses__course_id__assignments__practice_id__practice_problems_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "practice_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Practice Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PracticeProblemsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Add Practice Problems V1 Teacher Courses  Course Id  Assignments  Practice Id  Practice Problems Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add Practice Problems",
         "tags": [
           "teacher"
         ]

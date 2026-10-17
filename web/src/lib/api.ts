@@ -1315,8 +1315,7 @@ export interface StudentStruggleItem {
 export type SectionInsightsResponse = Schemas["SectionInsightsResponse"];
 export type InsightsHomework = Schemas["InsightsHomework"];
 export type InsightsProblem = Schemas["InsightsProblem"];
-export type InsightsStudentRef = Schemas["InsightsStudentRef"];
-export type InsightsWatchStudent = Schemas["InsightsWatchStudent"];
+export type InsightsPractice = Schemas["InsightsPractice"];
 
 /** A teacher's "Report a problem" — the context is a snapshot of what
  *  they were looking at, so every field is nullable. */
@@ -1512,13 +1511,15 @@ export const teacher = {
       body: JSON.stringify(data),
     });
   },
-  /** Clone a homework into a new draft practice assignment. Each
-   *  problem on the source HW spawns a 1:1 variation generation job;
-   *  items land in the teacher's review queue as jobs complete. The
-   *  practice set inherits the source HW's title and units and is
-   *  started in `draft` status so the teacher can review/edit before
-   *  publishing, same as the HW flow. */
-  cloneHomeworkAsPractice(courseId: string, hwId: string) {
+  /** Make a draft practice set from a homework: `count` new versions of
+   *  each chosen problem (all by default) for the chosen periods (the
+   *  homework's by default). Versions land in the teacher's review queue
+   *  as jobs complete; the teacher publishes after approving. */
+  cloneHomeworkAsPractice(
+    courseId: string,
+    hwId: string,
+    body: Partial<Schemas["ClonePracticeRequest"]> = {},
+  ) {
     return apiFetch<{
       id: string;
       title: string;
@@ -1527,7 +1528,19 @@ export const teacher = {
       job_ids: string[];
     }>(
       `/teacher/courses/${courseId}/assignments/${hwId}/clone-as-practice`,
-      { method: "POST" },
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+  /** Write versions of more homework problems into a practice set made
+   *  from that homework. Each version waits for the teacher's approval. */
+  addPracticeProblems(
+    courseId: string,
+    practiceId: string,
+    body: Partial<Schemas["PracticeProblemsRequest"]>,
+  ) {
+    return apiFetch<{ id: string; job_ids: string[] }>(
+      `/teacher/courses/${courseId}/assignments/${practiceId}/practice-problems`,
+      { method: "POST", body: JSON.stringify(body) },
     );
   },
   updateAssignment(assignmentId: string, data: Record<string, unknown>) {
@@ -1633,7 +1646,8 @@ export const teacher = {
     );
   },
   /** Student Insights for one section: homework coverage, the selected
-   *  homework's problems most-missed first, and students to watch.
+   *  homework's whole-class counts per problem (flagged when most of the
+   *  class got it wrong), and the practice set made from it.
    *  Omit `assignmentId` to get the newest homework with counted grades. */
   sectionInsights(courseId: string, sectionId: string, assignmentId?: string) {
     const q = assignmentId ? `?assignment_id=${encodeURIComponent(assignmentId)}` : "";
