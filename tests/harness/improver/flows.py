@@ -144,14 +144,15 @@ async def _logout_flow(
 async def _student_insights_flow(
     browser: HarnessBrowser, web_base: str, api_base: str, seed: Seed,
 ) -> FlowResult:
-    """Teacher opens Student Insights → sees the homework's problems and who
-    missed one, with a link to that student's work. Seeds one approved,
-    zero-credit grade so the tab has a missed problem to show. The most-
-    missed problem opens expanded by default; asserts the student is listed
-    and the link deep-links to their work on that problem."""
-    name, title = "student_insights", "Teacher reads Student Insights"
+    """Teacher opens Student Insights → the problem most of the class got
+    wrong is flagged, already in the practice basket, and the tray offers
+    "Create practice set". Seeds a homework three of five students got
+    wrong (approved grades) and picks it, since the tab opens on the
+    newest homework with counted grades. Stops short of clicking Create:
+    that queues real AI generation, and these flows stay $0."""
+    name, title = "student_insights", "Teacher sees a flagged problem ready for practice"
     issues: list[str] = []
-    student = await seed_insights_homework(seed)
+    hw_title = await seed_insights_homework(seed)
     async with browser.authed_page(seed.teacher_token, seed.teacher_refresh) as page:
         await page.goto(
             f"{web_base.rstrip('/')}/school/teacher/courses/{seed.course_id}",
@@ -159,16 +160,18 @@ async def _student_insights_flow(
         )
         try:
             await page.get_by_role("button", name="Student Insights").first.click(timeout=_TIMEOUT_MS)
-            await page.get_by_text("Missed it").first.wait_for(timeout=_TIMEOUT_MS)
+            picker = page.get_by_label("Homework")
+            await picker.wait_for(timeout=_TIMEOUT_MS)
+            await picker.select_option(label=hw_title)
+            await page.get_by_text("3 of 5 got it wrong").first.wait_for(timeout=_TIMEOUT_MS)
         except PlaywrightTimeoutError:
-            issues.append("Student Insights never showed who missed a problem for an approved zero grade")
+            issues.append("Student Insights never showed the problem 3 of 5 students got wrong")
             return FlowResult(name, title, False, issues)
-        if not await page.get_by_text(student).count():
-            issues.append(f"the student who missed the problem ({student}) is not listed")
-        link = page.get_by_role("link", name="View work").first
-        href = await link.get_attribute("href") if await link.count() else None
-        if not href or "student=" not in href or "problem=1" not in href:
-            issues.append(f"'View work' does not deep-link to the student's problem (href={href!r})")
+        if not await page.get_by_role("button", name="Added to practice").count():
+            issues.append("the flagged problem did not start in the practice basket")
+        create = page.get_by_role("button", name="Create practice set")
+        if not await create.count() or not await create.is_enabled():
+            issues.append("the practice tray offered no usable 'Create practice set'")
     return FlowResult(name, title, not issues, issues)
 
 
