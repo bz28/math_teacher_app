@@ -28,6 +28,9 @@ interface Props {
   onPractice: () => void;
   /** Return to the course practice list. */
   onExit: () => void;
+  /** Set when this walkthrough was opened from inside a practice run:
+   *  the last problem hands back here instead of showing the finale. */
+  onFinish?: () => void;
 }
 
 /**
@@ -43,6 +46,7 @@ export function LearnRunner({
   canPractice,
   onPractice,
   onExit,
+  onFinish,
 }: Props) {
   const [qIndex, setQIndex] = useState(0);
   const [done, setDone] = useState(false);
@@ -177,7 +181,8 @@ export function LearnRunner({
   function nextProblem() {
     recordCompletion();
     if (isLastProblem) {
-      setDone(true);
+      if (onFinish) onFinish();
+      else setDone(true);
       return;
     }
     setQIndex((i) => i + 1);
@@ -232,8 +237,16 @@ export function LearnRunner({
       <div>
         <div className="flex items-end justify-between">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-text-muted">
-            Problem {qIndex + 1}{" "}
-            <span className="text-text-muted/60">of {problems.length}</span>
+            {/* Opened from a practice run it's one problem mid-set, so
+                "1 of 1" would mislead. */}
+            {onFinish ? (
+              "Walkthrough"
+            ) : (
+              <>
+                Problem {qIndex + 1}{" "}
+                <span className="text-text-muted/60">of {problems.length}</span>
+              </>
+            )}
           </p>
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-text-muted">
             {completed ? "Worked" : `Step ${Math.min(stepIdx + 1, steps.length)} of ${steps.length}`}
@@ -315,7 +328,11 @@ export function LearnRunner({
 
               <div className="flex justify-end">
                 <Button onClick={nextProblem}>
-                  {isLastProblem ? "Finish" : "Next problem"}
+                  {isLastProblem
+                    ? onFinish
+                      ? "Back to practice"
+                      : "Finish"
+                    : "Next problem"}
                 </Button>
               </div>
             </motion.div>

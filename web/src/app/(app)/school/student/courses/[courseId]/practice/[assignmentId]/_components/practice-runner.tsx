@@ -11,9 +11,11 @@ import { Button, Card, AnimatedCounter } from "@/components/ui";
 import { CheckIcon } from "@/components/ui/icons";
 import { useConfetti } from "@/components/ui/confetti";
 import { cn } from "@/lib/utils";
+import { LearnRunner } from "./learn-runner";
 import {
   buildChoices,
   encouragementFor,
+  isLearnable,
   isSolved,
   toActivityOutcome,
   type Outcome,
@@ -39,7 +41,9 @@ interface Props {
  * retry / revealed) recorded to the activity log on completion — never
  * the student's actual picks. Answer mode is retry-once-then-reveal:
  * a wrong first pick lets the student try once more; a second miss
- * reveals the answer and advances. Ends in a celebration summary.
+ * reveals the answer, and the student can walk through that problem's
+ * worked steps with the tutor before moving on. Ends in a celebration
+ * summary.
  */
 export function PracticeRunner({
   assignmentId,
@@ -84,6 +88,10 @@ export function PracticeRunner({
   const [picked, setPicked] = useState<string | null>(null);
   const [triedWrong, setTriedWrong] = useState(false);
   const [result, setResult] = useState<Outcome | null>(null);
+  // The revealed problem's walkthrough, opened in place so the run keeps
+  // its position. The outcome stays "revealed" — learning it afterwards
+  // doesn't make it solved.
+  const [walkingThrough, setWalkingThrough] = useState(false);
 
   const problem = problems[index];
   const choices = useMemo(() => buildChoices(problem), [problem]);
@@ -138,6 +146,28 @@ export function PracticeRunner({
           postedRef.current = false; // a fresh run records its own session
         }}
       />
+    );
+  }
+
+  if (walkingThrough) {
+    return (
+      <div className="space-y-4">
+        <button
+          type="button"
+          onClick={() => setWalkingThrough(false)}
+          className="text-sm text-text-muted transition-colors hover:text-primary"
+        >
+          &larr; Back to problem {index + 1}
+        </button>
+        <LearnRunner
+          assignmentId={assignmentId}
+          problems={[problem]}
+          canPractice={false}
+          onPractice={() => setWalkingThrough(false)}
+          onExit={() => setWalkingThrough(false)}
+          onFinish={() => setWalkingThrough(false)}
+        />
+      </div>
     );
   }
 
@@ -205,8 +235,13 @@ export function PracticeRunner({
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex justify-end"
+            className="flex flex-wrap justify-end gap-2"
           >
+            {result === "revealed" && isLearnable(problem) && (
+              <Button variant="secondary" onClick={() => setWalkingThrough(true)}>
+                Walk me through it
+              </Button>
+            )}
             <Button onClick={advance}>
               {isLast ? "See results" : "Next problem"}
             </Button>
