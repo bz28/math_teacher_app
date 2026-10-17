@@ -406,16 +406,23 @@ async def _problems_for(
 async def _practice_for(
     db: AsyncSession, hw: Assignment, section_id: uuid.UUID,
 ) -> InsightsPractice | None:
-    """The newest practice set made from `hw` that reaches this section —
+    """The newest practice set made from `hw` for this section ALONE —
     one set per homework per section, so adding problems later appends
-    to it instead of starting another."""
+    to it instead of starting another. A set that also reaches other
+    sections (the Practice tab clones for every section) never shows
+    here: adding to it from one section's Insights would hand those
+    problems to the other sections too."""
     practice = (await db.execute(
         select(Assignment)
         .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
         .where(
             Assignment.source_homework_id == hw.id,
             Assignment.type == "practice",
-            AssignmentSection.section_id == section_id,
+        )
+        .group_by(Assignment.id)
+        .having(
+            func.count(AssignmentSection.section_id) == 1,
+            func.bool_and(AssignmentSection.section_id == section_id),
         )
         .order_by(Assignment.created_at.desc())
         .limit(1)

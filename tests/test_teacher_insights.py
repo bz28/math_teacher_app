@@ -342,12 +342,16 @@ async def test_the_homeworks_practice_set_for_this_section(client: AsyncClient) 
         def practice(title: str) -> Assignment:
             return Assignment(course_id=w["course"], unit_ids=[w["unit"]], teacher_id=w["teacher"],
                               title=title, type="practice", status="draft", source_homework_id=w["hw2"])
-        p3_set, p1_set = practice("P3 set"), practice("P1 set")
+        p3_set, p1_set, both = practice("P3 set"), practice("P1 set"), practice("Every section")
         s.add_all([p3_set, p1_set])
+        await s.flush()
+        s.add(both)  # newest, but shared by both sections
         await s.flush()
         s.add_all([
             AssignmentSection(assignment_id=p3_set.id, section_id=w["p3"]),
             AssignmentSection(assignment_id=p1_set.id, section_id=w["p1"]),
+            AssignmentSection(assignment_id=both.id, section_id=w["p1"]),
+            AssignmentSection(assignment_id=both.id, section_id=w["p3"]),
         ])
 
         def version(parent: uuid.UUID, status: str) -> QuestionBankItem:
@@ -372,7 +376,8 @@ async def test_the_homeworks_practice_set_for_this_section(client: AsyncClient) 
         await s.commit()
 
     practice_out = (await client.get(_url(w), headers=_auth(w["token"]))).json()["practice"]
-    assert practice_out["title"] == "P1 set"  # Period 3's set never shows in Period 1
+    # Period 3's set never shows in Period 1, nor does a set shared by both.
+    assert practice_out["title"] == "P1 set"
     assert (practice_out["approved"], practice_out["to_review"], practice_out["writing"]) == (1, 1, 1)
     assert practice_out["failed"] == 1
 
