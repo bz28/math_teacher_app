@@ -8,6 +8,7 @@ import {
   type TeacherDocument,
 } from "@/lib/api";
 import { Select } from "@/components/ui";
+import { MathText } from "@/components/shared/math-text";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useDocumentUploads } from "@/hooks/use-document-uploads";
@@ -22,13 +23,15 @@ import {
  * Wizard for creating a new Practice assignment.
  *
  * Step 1 — Source:
- *   - "Clone from a homework" (default) → pick an existing HW in the
- *     course, submit, go straight to the review queue. The clone
- *     endpoint fans out one 1:1 variation job per source problem.
+ *   - "Clone from a homework" (default) → pick an existing HW, the
+ *     problems to practice and how many versions of each, submit, go
+ *     straight to the set's page. The clone endpoint fans out one
+ *     generation job per picked problem.
  *   - "Start from scratch" → fall through to the standard Details +
  *     Problems flow (reusing AssignmentDetailsStep/ProblemsStep).
  *
- * Step 2 (scratch only) — Details:  title, units, due, late policy, sections
+ * Step 2 (scratch only) — Details:  title, units, sections (practice
+ *   has no due date or late policy)
  * Step 3 (scratch only) — Problems: count, focus hint, source docs
  *
  * Creating either way calls the existing create-assignment + generate
@@ -37,21 +40,19 @@ import {
 
 type SourceMode = "clone" | "scratch";
 type Step = 1 | 2 | 3;
+type HwProblem = { bank_item_id: string; position: number; question: string };
+
+/** Versions written per cloned problem; each waits on the teacher's approval. */
+const VERSION_CHOICES = [1, 3, 5] as const;
 
 export function NewPracticeModal({
   courseId,
   defaultUnitIds = [],
-  seed,
   onClose,
   onCreated,
 }: {
   courseId: string;
   defaultUnitIds?: string[];
-  /** Pre-seed the scratch flow with a concept to re-teach. When present
-   *  the modal skips the clone/source step and opens on Details with the
-   *  title and generation focus pre-filled — the entry point used by the
-   *  "Re-teach" action on the class struggle list. */
-  seed?: { title?: string; focus?: string };
   onClose: () => void;
   /** Fired after a successful create. `startedGeneration=true` routes
    *  the teacher into the review queue (skeleton state covers the
@@ -61,13 +62,8 @@ export function NewPracticeModal({
     opts: { startedGeneration: boolean },
   ) => void;
 }) {
-  // A seeded open (Re-teach) jumps straight into the scratch Details step
-  // with the concept pre-filled — there's nothing to clone for a re-teach.
-  const seeded = Boolean(seed);
-  const [step, setStep] = useState<Step>(seeded ? 2 : 1);
-  const [sourceMode, setSourceMode] = useState<SourceMode>(
-    seeded ? "scratch" : "clone",
-  );
+  const [step, setStep] = useState<Step>(1);
+  const [sourceMode, setSourceMode] = useState<SourceMode>("clone");
   const { busy, error, setError, run } = useAsyncAction();
   const { showUpgrade, UpgradeModal, isUpgradeOpen } = useUpgradePrompt();
 
@@ -75,17 +71,20 @@ export function NewPracticeModal({
   const [hws, setHws] = useState<TeacherAssignment[]>([]);
   const [hwsLoaded, setHwsLoaded] = useState(false);
   const [selectedHwId, setSelectedHwId] = useState<string>("");
+  // The picked homework's problems (null while loading) and which of
+  // them to practice — every one by default.
+  const [hwProblems, setHwProblems] = useState<HwProblem[] | null>(null);
+  const [pickedIds, setPickedIds] = useState<Set<string>>(new Set());
+  const [versions, setVersions] = useState<number>(VERSION_CHOICES[0]);
 
   // ── Step 2 state (scratch mode) ──
-  const [title, setTitle] = useState(seed?.title ?? "");
+  const [title, setTitle] = useState("");
   const [unitIds, setUnitIds] = useState<string[]>(defaultUnitIds);
-  const [dueAt, setDueAt] = useState<string>("");
-  const [latePolicy, setLatePolicy] = useState<string>("none");
   const [sectionIds, setSectionIds] = useState<string[]>([]);
 
   // ── Step 3 state (scratch mode) ──
   const [count, setCount] = useState<number>(10);
-  const [topicHint, setTopicHint] = useState(seed?.focus ?? "");
+  const [topicHint, setTopicHint] = useState("");
   const [docs, setDocs] = useState<TeacherDocument[]>([]);
   const [docsLoaded, setDocsLoaded] = useState(false);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
@@ -125,6 +124,33 @@ export function NewPracticeModal({
       })
       .finally(() => setHwsLoaded(true));
   }, [courseId, hwsLoaded]);
+
+  // Load the picked homework's problems for the checklist.
+  useEffect(() => {
+    if (!selectedHwId) return;
+    let cancelled = false;
+    teacher
+      .assignment(selectedHwId)
+      .then((a) => {
+        if (cancelled) return;
+        const content = a.content as { problems?: Partial<HwProblem>[] } | null;
+        // Legacy snapshot content can carry problems with no bank item —
+        // nothing to write versions of, so they aren't offered.
+        const problems = (content?.problems ?? []).filter(
+          (p): p is HwProblem => typeof p.bank_item_id === "string",
+        );
+        setHwProblems(problems);
+        setPickedIds(new Set(problems.map((p) => p.bank_item_id)));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setHwProblems([]);
+        setError("Couldn't load this homework's problems. Close and try again.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedHwId, setError]);
 
   // Load docs only when the teacher enters the scratch-problems step.
   useEffect(() => {
@@ -181,6 +207,7 @@ export function NewPracticeModal({
       const resp = await teacher.cloneHomeworkAsPractice(
         courseId,
         selectedHwId,
+        { item_ids: [...pickedIds], count: versions },
       );
       // Stash every job id so the editor's hero count reflects the
       // full clone fan-out (one job per source problem) rather than
@@ -200,8 +227,6 @@ export function NewPracticeModal({
       title: title.trim(),
       type: "practice",
       unit_ids: unitIds,
-      late_policy: latePolicy,
-      ...(dueAt ? { due_at: new Date(dueAt).toISOString() } : {}),
     });
     if (sectionIds.length > 0) {
       try {
@@ -273,9 +298,13 @@ export function NewPracticeModal({
   // Steps 2–3 validate on click (so their buttons aren't pre-disabled),
   // and a still-loading list isn't worth a line.
   const blockReason =
-    !busy && step === 1 && sourceMode === "clone" && hwsLoaded && !selectedHwId
-      ? "Pick a homework to clone"
-      : null;
+    busy || step !== 1 || sourceMode !== "clone" || !hwsLoaded
+      ? null
+      : !selectedHwId
+        ? "Pick a homework to clone"
+        : hwProblems && pickedIds.size === 0
+          ? "Pick at least one problem"
+          : null;
 
   return (
     <>
@@ -328,7 +357,24 @@ export function NewPracticeModal({
               hws={cloneable}
               hwsLoaded={hwsLoaded}
               selectedHwId={selectedHwId}
-              onSelectedHwIdChange={setSelectedHwId}
+              onSelectedHwIdChange={(id) => {
+                // Skeleton until the new homework's problems load.
+                setHwProblems(null);
+                setError(null);
+                setSelectedHwId(id);
+              }}
+              hwProblems={hwProblems}
+              pickedIds={pickedIds}
+              onTogglePicked={(id) =>
+                setPickedIds((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(id)) next.delete(id);
+                  else next.add(id);
+                  return next;
+                })
+              }
+              versions={versions}
+              onVersionsChange={setVersions}
               disabled={busy}
             />
           )}
@@ -339,15 +385,11 @@ export function NewPracticeModal({
               courseId={courseId}
               unitIds={unitIds}
               onUnitIdsChange={setUnitIds}
-              dueAt={dueAt}
-              onDueAtChange={setDueAt}
-              latePolicy={latePolicy}
-              onLatePolicyChange={setLatePolicy}
               sectionIds={sectionIds}
               onSectionIdsChange={setSectionIds}
               disabled={busy}
               titlePlaceholder="e.g. Quadratics Practice"
-              sectionsHint="You can add these later. Publishing requires at least one section."
+              sectionsHint="Leave empty to share with every section when you publish."
             />
           )}
           {step === 3 && (
@@ -422,7 +464,11 @@ export function NewPracticeModal({
                 onClick={onStep1Continue}
                 disabled={
                   busy ||
-                  (sourceMode === "clone" && (!hwsLoaded || !selectedHwId))
+                  (sourceMode === "clone" &&
+                    (!hwsLoaded ||
+                      !selectedHwId ||
+                      hwProblems === null ||
+                      pickedIds.size === 0))
                 }
                 aria-describedby={blockReason ? "practice-wizard-msg" : undefined}
                 className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted disabled:opacity-100"
@@ -436,23 +482,17 @@ export function NewPracticeModal({
             </>
           ) : step === 2 ? (
             <>
-              {/* For a seeded (Re-teach) open, Details IS the first step —
-                  there's no clone/source step to go back to. */}
-              {!seeded ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError(null);
-                    setStep(1);
-                  }}
-                  disabled={busy}
-                  className="text-xs font-semibold text-text-muted hover:text-text-primary disabled:opacity-50"
-                >
-                  ← Back
-                </button>
-              ) : (
-                <span />
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setStep(1);
+                }}
+                disabled={busy}
+                className="text-xs font-semibold text-text-muted hover:text-text-primary disabled:opacity-50"
+              >
+                ← Back
+              </button>
               <button
                 type="button"
                 onClick={onStep2Continue}
@@ -514,6 +554,11 @@ function SourceStep({
   hwsLoaded,
   selectedHwId,
   onSelectedHwIdChange,
+  hwProblems,
+  pickedIds,
+  onTogglePicked,
+  versions,
+  onVersionsChange,
   disabled,
 }: {
   sourceMode: SourceMode;
@@ -522,6 +567,11 @@ function SourceStep({
   hwsLoaded: boolean;
   selectedHwId: string;
   onSelectedHwIdChange: (v: string) => void;
+  hwProblems: HwProblem[] | null;
+  pickedIds: Set<string>;
+  onTogglePicked: (id: string) => void;
+  versions: number;
+  onVersionsChange: (n: number) => void;
   disabled: boolean;
 }) {
   const noClonableHw = hwsLoaded && hws.length === 0;
@@ -529,8 +579,8 @@ function SourceStep({
     <div className="space-y-5">
       <p className="text-xs text-text-muted">
         Practice sets are ungraded — students use them to study. You can
-        clone from an existing homework (one variation per problem) or
-        start from a blank set.
+        write new versions of a homework&rsquo;s problems or start from a
+        blank set.
       </p>
 
       <SourceOption
@@ -538,7 +588,7 @@ function SourceStep({
         disabled={disabled || noClonableHw}
         onSelect={() => onSourceModeChange("clone")}
         label="Clone from a homework"
-        description="Inherit the title and generate one similar problem for each HW question."
+        description="Pick the problems to practice; the AI writes new versions of each for you to approve."
       >
         {sourceMode === "clone" && (
           <>
@@ -550,21 +600,31 @@ function SourceStep({
                 this practice from scratch.
               </p>
             ) : (
-              <Select
-                value={selectedHwId}
-                onChange={(e) => onSelectedHwIdChange(e.target.value)}
-                disabled={disabled}
-                aria-label="Source homework"
-                className="mt-3 w-full"
-              >
-                {hws.map((h) => (
-                  <option key={h.id} value={h.id}>
-                    {h.title} · {h.problem_count}{" "}
-                    {h.problem_count === 1 ? "problem" : "problems"}
-                    {h.status !== "published" ? " (draft)" : ""}
-                  </option>
-                ))}
-              </Select>
+              <>
+                <Select
+                  value={selectedHwId}
+                  onChange={(e) => onSelectedHwIdChange(e.target.value)}
+                  disabled={disabled}
+                  aria-label="Source homework"
+                  className="mt-3 w-full"
+                >
+                  {hws.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.title} · {h.problem_count}{" "}
+                      {h.problem_count === 1 ? "problem" : "problems"}
+                      {h.status !== "published" ? " (draft)" : ""}
+                    </option>
+                  ))}
+                </Select>
+                <ProblemPicker
+                  problems={hwProblems}
+                  pickedIds={pickedIds}
+                  onToggle={onTogglePicked}
+                  versions={versions}
+                  onVersionsChange={onVersionsChange}
+                  disabled={disabled}
+                />
+              </>
             )}
           </>
         )}
@@ -577,6 +637,75 @@ function SourceStep({
         label="Start from scratch"
         description="Author a new practice set with your own title, units, and generated problems."
       />
+    </div>
+  );
+}
+
+/** Which of the homework's problems to practice, and versions of each. */
+function ProblemPicker({
+  problems,
+  pickedIds,
+  onToggle,
+  versions,
+  onVersionsChange,
+  disabled,
+}: {
+  problems: HwProblem[] | null;
+  pickedIds: Set<string>;
+  onToggle: (id: string) => void;
+  versions: number;
+  onVersionsChange: (n: number) => void;
+  disabled: boolean;
+}) {
+  if (problems === null) {
+    return <Skeleton className="mt-3 h-24 w-full rounded-[--radius-md]" />;
+  }
+  return (
+    <div className="mt-3">
+      <ul className="max-h-56 divide-y divide-border-light overflow-y-auto rounded-[--radius-md] border border-border-light bg-bg-base">
+        {problems.map((p) => (
+          <li key={p.bank_item_id}>
+            <label className="flex cursor-pointer items-start gap-3 px-3 py-2 text-xs text-text-primary">
+              <input
+                type="checkbox"
+                checked={pickedIds.has(p.bank_item_id)}
+                onChange={() => onToggle(p.bank_item_id)}
+                disabled={disabled}
+                className="mt-0.5"
+              />
+              <span className="w-5 shrink-0 font-semibold tabular-nums text-text-muted">
+                {p.position}
+              </span>
+              <span className="min-w-0 flex-1 leading-relaxed">
+                <MathText text={p.question} />
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <div
+        role="group"
+        aria-label="Versions of each problem"
+        className="mt-3 flex items-center gap-1.5"
+      >
+        <span className="mr-1 text-xs text-text-muted">Versions of each</span>
+        {VERSION_CHOICES.map((n) => (
+          <button
+            key={n}
+            type="button"
+            aria-pressed={versions === n}
+            onClick={() => onVersionsChange(n)}
+            disabled={disabled}
+            className={`h-7 w-7 rounded-[--radius-pill] border text-xs font-semibold tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+              versions === n
+                ? "border-primary bg-primary text-white"
+                : "border-border-light text-text-secondary hover:border-primary/40"
+            }`}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -596,15 +725,19 @@ function SourceOption({
   description: string;
   children?: React.ReactNode;
 }) {
+  // Only the radio row is a <label>: the picker below holds its own
+  // checkboxes, and labels can't nest.
   return (
-    <label
-      className={`block cursor-pointer rounded-[--radius-md] border p-4 transition-colors ${
+    <div
+      className={`rounded-[--radius-md] border p-4 transition-colors ${
         active
           ? "border-primary bg-primary/5"
           : "border-border-light hover:border-border"
-      } ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
+      } ${disabled ? "opacity-50" : ""}`}
     >
-      <div className="flex items-start gap-3">
+      <label
+        className={`flex items-start gap-3 ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+      >
         <input
           type="radio"
           checked={active}
@@ -615,9 +748,9 @@ function SourceOption({
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold text-text-primary">{label}</div>
           <p className="mt-0.5 text-xs text-text-muted">{description}</p>
-          {children}
         </div>
-      </div>
-    </label>
+      </label>
+      {children && <div className="pl-7">{children}</div>}
+    </div>
   );
 }
