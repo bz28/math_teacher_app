@@ -34,9 +34,9 @@ import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
  * period, or adds to the set that already exists.
  */
 
-/** Versions written per basketed problem. Each one waits on the
- *  teacher's approval, so the choices stay small. */
-const VERSION_CHOICES = [3, 5] as const;
+/** Versions written per basketed problem — one by default, as in the
+ *  Practice tab. Each one waits on the teacher's approval. */
+const VERSION_CHOICES = [1, 3, 5] as const;
 
 export function StudentInsightsTab({ courseId }: { courseId: string }) {
   const [sections, setSections] = useState<TeacherSection[] | null>(null);
