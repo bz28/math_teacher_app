@@ -14,6 +14,7 @@ the renderer can re-center via the viewBox.
 from __future__ import annotations
 
 import math
+import re
 
 from api.core.geometry.dsl import (
     CircleFigure,
@@ -54,12 +55,43 @@ def _canonical_edge(a: str, b: str) -> str:
     return a + b if a < b else b + a
 
 
-def _lookup_side(spec: TriangleFigure, a: str, b: str) -> float | None:
-    """Return the length of edge ab if present, normalizing key order."""
-    for key in (a + b, b + a):
-        if key in spec.side_lengths:
-            return spec.side_lengths[key]
-    return None
+# A side label that is a plain measurement: "9", "6.5", "6√2", "√34",
+# "2\\sqrt{13}", optionally followed by a unit ("9 cm"). Anything else
+# ("x", "?", "2x + 1") names an unknown and is not a length.
+_LABEL_LENGTH_RE = re.compile(
+    r"^\s*(?P<coef>\d+(?:\.\d+)?)?\s*"
+    r"(?:(?:√|\\sqrt)\s*\{?\s*(?P<root>\d+(?:\.\d+)?)\s*\}?)?"
+    r"\s*(?:cm|mm|m|km|in|ft|yd|mi|units?)?\.?\s*$",
+)
+
+
+def _label_length(text: str) -> float | None:
+    """The length a side label states, or None when it names an unknown."""
+    m = _LABEL_LENGTH_RE.match(text.replace("$", ""))
+    if m is None or (m["coef"] is None and m["root"] is None):
+        return None
+    coef = float(m["coef"]) if m["coef"] else 1.0
+    return coef * math.sqrt(float(m["root"])) if m["root"] else coef
+
+
+def _effective_side_lengths(spec: TriangleFigure) -> dict[str, float]:
+    """Known side lengths by canonical edge: `side_lengths`, then any side
+    whose label states a measurement.
+
+    The model often writes a length only into the display label
+    ({"AC": "9"}) and not into `side_lengths`. The label is what the
+    student sees, so it is the triangle's true measurement — solving
+    without it rejected fully-determined triangles as underdetermined.
+    A label never overrides an explicit length.
+    """
+    known: dict[str, float] = {}
+    for edge, text in spec.side_labels.items():
+        length = _label_length(text)
+        if length is not None and length > 0:
+            known[_canonical_edge(edge[0], edge[1])] = length
+    for edge, length in spec.side_lengths.items():
+        known[_canonical_edge(edge[0], edge[1])] = length
+    return known
 
 
 def solve_triangle(spec: TriangleFigure) -> dict[str, Point]:
@@ -81,15 +113,24 @@ def solve_triangle(spec: TriangleFigure) -> dict[str, Point]:
             )
         angles[v] = 90.0
 
+    effective = _effective_side_lengths(spec)
     sides = {
-        _canonical_edge(a, b): _lookup_side(spec, a, b),
-        _canonical_edge(b, c): _lookup_side(spec, b, c),
-        _canonical_edge(c, a): _lookup_side(spec, c, a),
+        edge: effective.get(edge)
+        for edge in (_canonical_edge(a, b), _canonical_edge(b, c), _canonical_edge(c, a))
     }
     known_sides = {k: v for k, v in sides.items() if v is not None}
 
     n_sides = len(known_sides)
     n_angles = len(angles)
+
+    # Two or more angles and no length fix the SHAPE (a 45-45-90, a
+    # 30-60-90); only the size is free, and the renderer scales every
+    # figure to a canonical size anyway. Anchor one side at 1.
+    if n_sides == 0 and n_angles >= 2:
+        sides[_canonical_edge(a, b)] = 1.0
+        coords = _orient_right_triangle(_solve_asa(spec, sides, angles), spec.vertices, angles)
+        _verify_constraints(spec, coords, angles, {})
+        return coords
 
     # Route by what determines the triangle:
     # - 3 sides → SSS. Three sides fully fix the triangle, so they take
@@ -130,7 +171,7 @@ def solve_triangle(spec: TriangleFigure) -> dict[str, Point]:
     # orientation pass is a pure rotation, so verification runs on the
     # exact coordinates that will be rendered.
     coords = _orient_right_triangle(coords, spec.vertices, angles)
-    _verify_constraints(spec, coords, angles)
+    _verify_constraints(spec, coords, angles, effective)
     return coords
 
 
@@ -228,12 +269,15 @@ def _angle_at_vertex(
 
 def _verify_constraints(
     spec: TriangleFigure, coords: dict[str, Point], angles: dict[str, float],
+    sides: dict[str, float],
 ) -> None:
     """Reject specs whose stated constraints disagree with the solved
     geometry. `angles` is the folded dict (right_angle_at already merged
     in as 90°), so this also enforces that a marked right angle is real.
+    `sides` are the effective lengths, labels included — a label that
+    contradicts the drawing must not be drawn.
     """
-    for edge, length in spec.side_lengths.items():
+    for edge, length in sides.items():
         p1 = coords[edge[0]]
         p2 = coords[edge[1]]
         actual = math.hypot(p1[0] - p2[0], p1[1] - p2[1])
