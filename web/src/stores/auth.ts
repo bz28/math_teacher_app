@@ -7,6 +7,7 @@ import {
   clearTokens,
   hasStoredTokens,
   isMfaChallenge,
+  onSessionEnded,
   ApiError,
   type User,
 } from "@/lib/api";
@@ -20,6 +21,11 @@ interface AuthState {
   user: User | null;
   loading: boolean;
   error: string | null;
+
+  /** The session ended while the user was signed in, without them
+   *  signing out here (see onSessionEnded). AuthGuard uses it to send
+   *  them to sign in and back to the page they were on. */
+  sessionEnded: boolean;
 
   /** Pending MFA challenge — set after a login() call that returned an
    *  MFA-required response. Cleared by verifyMfa() success, cancelMfa(),
@@ -72,6 +78,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   loading: true,
   error: null,
+  sessionEnded: false,
   pendingMfa: null,
 
   async loadUser() {
@@ -81,7 +88,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     try {
       const user = await authApi.me();
-      set({ user, loading: false });
+      set({ user, loading: false, sessionEnded: false });
     } catch (err) {
       // Only clear tokens on definitive auth rejection (401).
       // Network errors and server errors leave tokens intact so the
@@ -107,7 +114,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       startSession(result);
       const user = await authApi.me();
-      set({ user, loading: false });
+      set({ user, loading: false, sessionEnded: false });
       return { mfa_required: false };
     } catch (err) {
       const message =
@@ -127,7 +134,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const tokens = await authApi.loginVerifyMfa(pending.mfaPendingToken, code);
       startSession(tokens);
       const user = await authApi.me();
-      set({ user, loading: false, pendingMfa: null });
+      set({ user, loading: false, sessionEnded: false, pendingMfa: null });
     } catch (err) {
       const message =
         (err as ApiError)?.message ?? "Code verification failed.";
@@ -158,7 +165,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const tokens = await authApi.register(data);
       startSession(tokens);
       const user = await authApi.me();
-      set({ user, loading: false });
+      set({ user, loading: false, sessionEnded: false });
     } catch (err) {
       const message =
         (err as ApiError)?.message ?? "Registration failed. Please try again.";
@@ -169,7 +176,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout() {
     clearTokens();
-    set({ user: null, loading: false, error: null, pendingMfa: null });
+    set({ user: null, loading: false, error: null, sessionEnded: false, pendingMfa: null });
   },
 
   async deleteAccount(password: string) {
@@ -195,3 +202,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ error: null });
   },
 }));
+
+onSessionEnded(() => {
+  // Only a session someone was using can be "ended" — a stale token
+  // rejected on the sign-in page is just a fresh visit.
+  if (useAuthStore.getState().user) {
+    useAuthStore.setState({ user: null, loading: false, sessionEnded: true });
+  }
+});

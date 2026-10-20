@@ -409,6 +409,40 @@ export function hasStoredTokens(): boolean {
   return !!getAccessToken() && !!getRefreshToken();
 }
 
+// ── Session ended ──
+
+/** Called when this tab's session ends without the user asking: the
+ *  server rejected the refresh token, or another tab signed out. The
+ *  page is still open and still looks signed in, so without this every
+ *  click after it fails with "Not authenticated" — in prod a teacher
+ *  lost 6 grade saves, 6 reports and an approve that way before
+ *  realising (2026-10-18). A deliberate sign-out in THIS tab does not
+ *  call it; that tab already knows. */
+const sessionEndedListeners = new Set<() => void>();
+let watchingOtherTabs = false;
+
+export function onSessionEnded(listener: () => void): () => void {
+  sessionEndedListeners.add(listener);
+  if (!watchingOtherTabs && typeof window !== "undefined") {
+    watchingOtherTabs = true;
+    // Tabs share one localStorage, so a sign-out anywhere signs out
+    // everywhere. `storage` fires only in the OTHER tabs; key is null
+    // when the whole store was cleared.
+    window.addEventListener("storage", (e) => {
+      if ((e.key === TOKEN_KEY || e.key === null) && !getAccessToken()) {
+        notifySessionEnded();
+      }
+    });
+  }
+  return () => {
+    sessionEndedListeners.delete(listener);
+  };
+}
+
+function notifySessionEnded() {
+  for (const listener of sessionEndedListeners) listener();
+}
+
 // ── Preview mode token stash ──
 
 const TEACHER_TOKEN_KEY = "veradic_teacher_access_token";
@@ -492,7 +526,15 @@ async function refreshAccessToken(): Promise<RefreshResult> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: rt }),
       });
-      if (res.status === 401) return "auth_rejected" as const;
+      if (res.status === 401) {
+        // Another tab may have signed in, or rotated the token, while
+        // this request was in flight. The session in storage is then
+        // newer than the one the server just rejected — use it rather
+        // than wipe it.
+        const current = getRefreshToken();
+        if (current && current !== rt) return "success" as const;
+        return "auth_rejected" as const;
+      }
       if (!res.ok) return "transient_error" as const;
       const data: TokenPair = await res.json();
       saveTokens(data);
@@ -604,6 +646,7 @@ async function apiFetch<T>(
         // retry can succeed without forcing a re-login.
         if (result === "auth_rejected") {
           clearTokens();
+          notifySessionEnded();
         }
       }
       const body = await res.json().catch(() => ({}));

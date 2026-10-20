@@ -1,11 +1,11 @@
 "use client";
 
-import { Suspense, useState, useEffect, type FormEvent } from "react";
+import { Suspense, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
-import { clearTokens, auth as authApi } from "@/lib/api";
+import { auth as authApi } from "@/lib/api";
 import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
 import { LogoMark } from "@/components/shared/logo-mark";
@@ -40,10 +40,16 @@ function LoginPageContent() {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
-  const { login, verifyMfa, cancelMfa, pendingMfa, loading, error, clearError } = useAuthStore();
+  const { user, login, verifyMfa, cancelMfa, logout, pendingMfa, loading, error, clearError } =
+    useAuthStore();
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect");
+  const signedOut = searchParams.get("reason") === "signed_out";
+  // Set while this page is signing someone in, so the "already signed
+  // in" view doesn't flash between a successful sign-in and the redirect.
+  const [signingIn, setSigningIn] = useState(false);
+  const alreadySignedIn = !!user && !signingIn && !pendingMfa;
   const toast = useToast();
 
   function redirectAfterLogin() {
@@ -71,16 +77,19 @@ function LoginPageContent() {
     }
   }
 
-  // Clear stale tokens so loadUser() doesn't fire "Session expired"
-  useEffect(() => {
-    clearTokens();
-  }, []);
+  // No clearing of stored tokens on arrival. Tabs share them, so this
+  // page wiping them signed out every other open tab without a word — a
+  // teacher opening Veradic in a second tab lost a grading session that
+  // way (prod, 2026-10-18). A stale session is cleared by AuthProvider's
+  // own failed refresh; a live one is offered below.
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    setSigningIn(true);
     try {
       const result = await login(email, password);
       if (result.mfa_required) {
+        setSigningIn(false);
         // pendingMfa is now set in the store; the form below switches
         // to the code-entry view. Don't redirect — login is incomplete
         // until verifyMfa succeeds.
@@ -89,6 +98,7 @@ function LoginPageContent() {
       }
       redirectAfterLogin();
     } catch {
+      setSigningIn(false);
       const msg = useAuthStore.getState().error;
       if (msg) toast.error(msg);
     }
@@ -96,10 +106,12 @@ function LoginPageContent() {
 
   async function handleVerifyMfa(e: FormEvent) {
     e.preventDefault();
+    setSigningIn(true);
     try {
       await verifyMfa(mfaCode);
       redirectAfterLogin();
     } catch {
+      setSigningIn(false);
       const msg = useAuthStore.getState().error;
       if (msg) toast.error(msg);
       // If pendingMfa got cleared by the store (fatal verify error
@@ -149,7 +161,27 @@ function LoginPageContent() {
         transition={{ duration: 0.18, ease: "easeOut" }}
         className="relative w-full max-w-sm rounded-[--radius-md] border border-border bg-surface p-8"
       >
-        {pendingMfa ? (
+        {alreadySignedIn ? (
+          <>
+            <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
+              You&apos;re signed in.
+            </h1>
+            <p className="mt-2 text-sm text-text-secondary">
+              As <strong className="text-text-primary">{user.name || user.email}</strong>
+              {user.name && <> ({user.email})</>}.
+            </p>
+            <Button className="mt-6 w-full" onClick={redirectAfterLogin}>
+              Continue
+            </Button>
+            <button
+              type="button"
+              onClick={logout}
+              className="mt-4 block w-full text-center text-xs font-medium text-text-muted transition-colors hover:text-primary"
+            >
+              Use a different account
+            </button>
+          </>
+        ) : pendingMfa ? (
           <>
             <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
               Check your email.
@@ -202,9 +234,19 @@ function LoginPageContent() {
             <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
               Welcome back.
             </h1>
-            <p className="mt-2 font-serif italic text-[15px] text-text-secondary">
-              Sign in to continue.
-            </p>
+            {signedOut ? (
+              <p
+                role="status"
+                className="mt-3 rounded-[--radius-sm] bg-warning-bg px-3 py-2 text-sm text-warning-dark"
+              >
+                You were signed out. Sign in to go back to where you were, and
+                check that your last change saved.
+              </p>
+            ) : (
+              <p className="mt-2 font-serif italic text-[15px] text-text-secondary">
+                Sign in to continue.
+              </p>
+            )}
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               <Input
