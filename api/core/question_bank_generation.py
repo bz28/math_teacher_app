@@ -102,13 +102,15 @@ def _resolve_figure(
 
 
 # A problem that points at a figure: "in the figure below", "the right
-# triangle below", "as shown". Deliberately not bare "above"/"below" — a
-# word problem's "300 feet above the ground" points at nothing.
+# triangle below". Deliberately not bare "above"/"below" — a word
+# problem's "300 feet above the ground" points at nothing — nor "the
+# graph" or bare "as shown": "use the graph paper to plot y = 2x" and
+# "as shown in the table" are complete without a drawing.
 _FIGURE_REFERENCE = re.compile(
-    r"\b(?:in|from|use|using|see|on) the (?:figure|diagram|drawing|picture|graph)\b"
+    r"\b(?:in|from|use|using|see|on) the (?:figure|diagram|drawing|picture)\b"
     r"|\b(?:figure|diagram|drawing|picture|triangle|circle|graph|quadrilateral|polygon"
     r"|rectangle|trapezoid|parallelogram)\s+(?:below|above|shown)\b"
-    r"|\b(?:shown|pictured|drawn) (?:below|above|here)\b|\bas shown\b",
+    r"|\b(?:shown|pictured|drawn) (?:below|above|here)\b",
     re.IGNORECASE,
 )
 
@@ -453,24 +455,30 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
         missing = sum(map(_missing_figure, question_dicts))
         if missing:
             logger.warning("Job %s: replacing %d problem(s) that cite a missing figure", job.id, missing)
-            replacements = await generate_questions(
-                unit_name=unit_name,
-                count=missing,
-                course_name=course.name,
-                subject=course.subject,
-                user_id=str(job.created_by_id),
-                images=images or None,
-                extra_instructions=(
-                    (constraint_text + "\n\n" if constraint_text else "")
-                    + "Every problem must be complete on its own. A problem that refers "
-                    "to a figure must include that figure's figure_spec, with every "
-                    "length it labels also given in side_lengths."
-                ),
-                assignment_title=assignment_title,
-                params=job.params,
-                call_metadata=doc_metadata,
-                generation_job_id=str(job.id),
-            )
+            try:
+                replacements = await generate_questions(
+                    unit_name=unit_name,
+                    count=missing,
+                    course_name=course.name,
+                    subject=course.subject,
+                    user_id=str(job.created_by_id),
+                    images=images or None,
+                    extra_instructions=(
+                        (constraint_text + "\n\n" if constraint_text else "")
+                        + "Every problem must be complete on its own. A problem that refers "
+                        "to a figure must include that figure's figure_spec, with every "
+                        "length it labels also given in side_lengths."
+                    ),
+                    assignment_title=assignment_title,
+                    params=job.params,
+                    call_metadata=doc_metadata,
+                    generation_job_id=str(job.id),
+                )
+            except Exception:
+                # The first batch's complete problems still ship; a failed
+                # cleanup call must not cost the teacher the whole job.
+                logger.exception("Job %s: replacement call failed; keeping the rest", job.id)
+                replacements = []
             _draw_figures(replacements)
             question_dicts = [q for q in question_dicts if not _missing_figure(q)] + [
                 q for q in replacements if not _missing_figure(q)

@@ -42,6 +42,10 @@ def _q(text: str, spec: dict[str, Any] | None = None) -> dict[str, Any]:
     ("Using the diagram, find x.", True),
     ("A balloon is 300 feet above the ground.", False),
     ("The line above has slope 2; find a parallel line.", False),
+    ("Use the graph paper to plot y = 2x.", False),
+    ("Using the graph of y = x^2, describe the vertex.", False),
+    ("As shown in the table, sales rose 4% a year.", False),
+    ("Find the slope of the line on the graph shown.", True),
     ("Solve 2x + 3 = 11.", False),
 ])
 def test_what_counts_as_pointing_at_a_figure(text: str, missing: bool) -> None:
@@ -67,7 +71,7 @@ async def test_the_solver_is_shown_the_figure() -> None:
     assert out[0]["question_text"] == "Find the hypotenuse c in the right triangle below."
 
 
-async def _run(batches: list[list[dict[str, Any]]]) -> tuple[list[QuestionBankItem], AsyncMock]:
+async def _run(batches: list[Any]) -> tuple[list[QuestionBankItem], AsyncMock]:
     """Run a 2-problem job whose generate calls return `batches` in turn."""
     tag = uuid.uuid4().hex[:6]
     async with get_session_factory()() as s:
@@ -137,3 +141,10 @@ async def test_a_batch_with_every_figure_drawn_makes_no_extra_call() -> None:
     drawn = _q("Find c in the right triangle below.", RIGHT_TRIANGLE)
     items, gen = await _run([[GOOD, drawn]])
     assert gen.await_count == 1 and len(items) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_failed_replacement_call_keeps_the_good_problems() -> None:
+    items, gen = await _run([[GOOD, BROKEN], RuntimeError("upstream 529")])
+    assert gen.await_count == 2
+    assert [i.question for i in items] == [GOOD["text"]]
