@@ -262,3 +262,25 @@ test("a transient refresh failure leaves tokens intact", async () => {
   assert.equal(accessToken(), "access_1");
   assert.equal(refreshToken(), "refresh_1");
 });
+
+test("a refresh with no token doesn't jam later refreshes in this tab", async () => {
+  // The prod root cause. Tokens gone → refresh rejected (correct). The
+  // user signs in again in the same tab; 15 minutes later the access
+  // token lapses and the refresh MUST reach the server.
+  script = { "/auth/me": [{ status: 401 }] };
+  await assert.rejects(() => auth.me());
+
+  saveTokens(TOKENS); // signed in again, no page reload
+  calls = [];
+  script = {
+    "/auth/me": [{ status: 401 }, { status: 200, body: { id: "u1" } }],
+    "/auth/refresh": [{
+      status: 200,
+      body: { access_token: "access_2", refresh_token: "refresh_2", token_type: "bearer" },
+    }],
+  };
+
+  assert.deepEqual(await auth.me(), { id: "u1" });
+  assert.deepEqual(calls, ["GET /auth/me", "POST /auth/refresh", "GET /auth/me"]);
+  assert.equal(accessToken(), "access_2");
+});

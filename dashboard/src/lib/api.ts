@@ -154,9 +154,12 @@ let refreshPromise: Promise<RefreshResult> | null = null;
 
 async function refreshAccessToken(): Promise<RefreshResult> {
   if (refreshPromise) return refreshPromise;
+  // Checked before the promise is shared: an early return inside it
+  // skipped the `finally` reset and cached the rejection for the life
+  // of the tab (same bug as web/src/lib/api.ts, fixed there 2026-10-20).
+  const rt = getRefreshToken();
+  if (!rt) return "auth_rejected";
   refreshPromise = (async () => {
-    const rt = getRefreshToken();
-    if (!rt) return "auth_rejected" as const;
     try {
       const res = await fetch(`${API_BASE}/auth/refresh`, {
         method: "POST",

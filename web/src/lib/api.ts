@@ -475,10 +475,17 @@ let refreshPromise: Promise<RefreshResult> | null = null;
 
 async function refreshAccessToken(): Promise<RefreshResult> {
   if (refreshPromise) return refreshPromise;
+  // Checked before a promise is shared, not inside it: an early return
+  // there skipped the `finally` that resets `refreshPromise`, so the
+  // rejection was cached for the life of the tab. Every later refresh —
+  // even after signing in again — then "failed" without reaching the
+  // server, and the tab signed its user out every 15 minutes until a
+  // full reload (prod, 2026-10-18: no /auth/refresh request in the
+  // whole session, 16 actions failed "Not authenticated").
+  const rt = getRefreshToken();
+  if (!rt) return "auth_rejected";
 
   refreshPromise = (async () => {
-    const rt = getRefreshToken();
-    if (!rt) return "auth_rejected" as const;
     try {
       const res = await fetch(`${BASE_URL}/auth/refresh`, {
         method: "POST",
