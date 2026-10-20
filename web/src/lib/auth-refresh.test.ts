@@ -37,8 +37,17 @@ const store = new Map<string, string>();
   },
 } as Storage;
 (globalThis as unknown as { window: unknown }).window = globalThis;
+// Node has no window events; capture the cross-tab `storage` listener.
+let storageListener: ((e: { key: string | null }) => void) | null = null;
+(globalThis as unknown as { addEventListener: unknown }).addEventListener = (
+  type: string,
+  fn: (e: { key: string | null }) => void,
+) => {
+  if (type === "storage") storageListener = fn;
+};
 
-type Reply = { status: number; body?: unknown };
+/** `during` runs as the request lands — e.g. another tab writing storage. */
+type Reply = { status: number; body?: unknown; during?: () => void };
 
 /** Requests seen by the mock, in order, as "METHOD /path". */
 let calls: string[] = [];
@@ -62,11 +71,17 @@ function reply(status: number, body: unknown = {}): Response {
   const queue = script[path];
   if (!queue || queue.length === 0) return reply(404, { detail: "unscripted" });
   const next = queue.length > 1 ? queue.shift()! : queue[0];
+  next.during?.();
   return reply(next.status, next.body);
 };
 
-const { auth, schoolStudent, saveTokens, isCredentialPath, ApiError } =
+const { auth, schoolStudent, saveTokens, clearTokens, isCredentialPath, onSessionEnded, ApiError } =
   await import("./api.ts");
+
+let sessionEndings = 0;
+onSessionEnded(() => {
+  sessionEndings++;
+});
 
 const TOKENS = {
   access_token: "access_1",
@@ -80,6 +95,7 @@ beforeEach(() => {
   store.clear();
   calls = [];
   script = {};
+  sessionEndings = 0;
 });
 
 // ── Classification ────────────────────────────────────────────────
@@ -261,4 +277,96 @@ test("a transient refresh failure leaves tokens intact", async () => {
 
   assert.equal(accessToken(), "access_1");
   assert.equal(refreshToken(), "refresh_1");
+});
+
+// ── A session that ends mid-use says so ───────────────────────────
+//
+// Prod, 2026-10-18: a teacher's stored tokens were wiped by another tab
+// while the review page stayed open. Every grade save, report and
+// approve after that failed with "Not authenticated" — 16 requests —
+// and nothing told her she had been signed out.
+
+test("a rejected refresh announces the session ended", async () => {
+  saveTokens(TOKENS);
+  script = { "/auth/me": [{ status: 401 }], "/auth/refresh": [{ status: 401 }] };
+
+  await assert.rejects(() => auth.me());
+
+  assert.equal(sessionEndings, 1);
+});
+
+test("tokens wiped elsewhere end the session on the next request", async () => {
+  // The prod case: no token is sent, the 401 can't be refreshed.
+  script = { "/auth/me": [{ status: 401, body: { detail: "Not authenticated" } }] };
+
+  await assert.rejects(() => auth.me());
+
+  assert.deepEqual(calls, ["GET /auth/me"]); // nothing to refresh with
+  assert.equal(sessionEndings, 1);
+});
+
+test("a transient refresh failure does not end the session", async () => {
+  saveTokens(TOKENS);
+  script = { "/auth/me": [{ status: 401 }], "/auth/refresh": [{ status: 503 }] };
+
+  await assert.rejects(() => auth.me());
+
+  assert.equal(sessionEndings, 0);
+});
+
+test("a refresh rejected after another tab signed in keeps the newer session", async () => {
+  // This tab's refresh token is rejected, but while the request was in
+  // flight another tab stored a fresh session. Wiping storage now would
+  // sign that tab out too; replay on the newer token instead.
+  saveTokens(TOKENS);
+  script = {
+    "/auth/me": [{ status: 401 }, { status: 200, body: { id: "u1" } }],
+    "/auth/refresh": [{
+      status: 401,
+      during: () =>
+        saveTokens({ access_token: "access_other", refresh_token: "refresh_other", token_type: "bearer" }),
+    }],
+  };
+
+  const me = await auth.me();
+
+  assert.deepEqual(me, { id: "u1" });
+  assert.equal(accessToken(), "access_other");
+  assert.equal(sessionEndings, 0);
+});
+
+test("signing out in another tab ends the session here", () => {
+  saveTokens(TOKENS);
+  clearTokens(); // what the other tab did; `storage` fires only over here
+  storageListener!({ key: "veradic_access_token" });
+  assert.equal(sessionEndings, 1);
+});
+
+test("another tab rotating the token does not end the session here", () => {
+  saveTokens({ access_token: "access_2", refresh_token: "refresh_2", token_type: "bearer" });
+  storageListener!({ key: "veradic_access_token" });
+  storageListener!({ key: "veradic_refresh_token" });
+  assert.equal(sessionEndings, 0);
+});
+
+test("a refresh with no token doesn't jam later refreshes in this tab", async () => {
+  // The prod root cause. Tokens gone → refresh rejected (correct). The
+  // user signs in again in the same tab; 15 minutes later the access
+  // token lapses and the refresh MUST reach the server.
+  script = { "/auth/me": [{ status: 401 }] };
+  await assert.rejects(() => auth.me());
+
+  saveTokens(TOKENS); // signed in again, no page reload
+  calls = [];
+  script = {
+    "/auth/me": [{ status: 401 }, { status: 200, body: { id: "u1" } }],
+    "/auth/refresh": [{
+      status: 200,
+      body: { access_token: "access_2", refresh_token: "refresh_2", token_type: "bearer" },
+    }],
+  };
+
+  assert.deepEqual(await auth.me(), { id: "u1" });
+  assert.deepEqual(calls, ["GET /auth/me", "POST /auth/refresh", "GET /auth/me"]);
+  assert.equal(accessToken(), "access_2");
 });
