@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
@@ -50,6 +50,13 @@ function LoginPageContent() {
   // in" view doesn't flash between a successful sign-in and the redirect.
   const [signingIn, setSigningIn] = useState(false);
   const alreadySignedIn = !!user && !signingIn && !pendingMfa;
+  // AuthProvider is still checking a stored session: show neither the
+  // form nor the signed-in card until it knows which is true. `mounted`
+  // keeps the server render and the first client render identical (the
+  // store can't be read the same way on both).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const checkingSession = !mounted || (loading && !signingIn && !pendingMfa);
   const toast = useToast();
 
   function redirectAfterLogin() {
@@ -161,7 +168,11 @@ function LoginPageContent() {
         transition={{ duration: 0.18, ease: "easeOut" }}
         className="relative w-full max-w-sm rounded-[--radius-md] border border-border bg-surface p-8"
       >
-        {alreadySignedIn ? (
+        {checkingSession ? (
+          <div className="flex justify-center py-10" aria-label="Checking your session">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
+        ) : alreadySignedIn ? (
           <>
             <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
               You&apos;re signed in.
