@@ -413,7 +413,7 @@ async def chat_with_bank_item(
 
         try:
             solved = await generate_solutions(
-                [{"text": proposal["question"]}],
+                [{"text": proposal["question"], "figure_spec": proposal["figure_spec"]}],
                 subject=course.subject,
                 user_id=str(user_id),
             )

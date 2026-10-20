@@ -194,10 +194,34 @@ class TestQuestionRewriteReSolve:
         assert proposal["solution_steps"][0]["description"] == "2x+4=47 -> x=21.5"
         # The solver was actually invoked on the NEW question.
         solver.assert_awaited_once()
-        assert solver.await_args.args[0] == [{"text": new_q}]
+        assert solver.await_args.args[0] == [{"text": new_q, "figure_spec": None}]
         # The chat's contradictory prose ("118") is replaced with a neutral note.
         assert "118" not in ai_msg["text"]
         assert "re-derived independently" in ai_msg["text"]
+
+    async def test_question_rewrite_solver_sees_its_figure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # "Find c in the triangle below" carries its numbers only in the
+        # figure; solving the text alone fails (prod, 2026-10-18).
+        spec = {"type": "geometry", "shape": "triangle", "vertices": ["A", "B", "C"],
+                "right_angle_at": ["C"], "side_labels": {"AC": "7", "BC": "9", "AB": "c"}}
+        new_q = "Find the hypotenuse c in the right triangle below."
+        monkeypatch.setattr(qbc, "fetch_source_documents", AsyncMock(return_value=[]))
+        monkeypatch.setattr(qbc, "call_claude_json", AsyncMock(return_value={
+            "reply": "Rewrote it.",
+            "proposal": {"question": new_q, "final_answer": "$\\sqrt{130}$",
+                         "solution_steps": None, "figure_spec": spec},
+        }))
+        solver = AsyncMock(return_value=[{"question_text": new_q, "steps": [], "final_answer": "$\\sqrt{130}$"}])
+        monkeypatch.setattr(assignment_generation, "generate_solutions", solver)
+
+        await chat_with_bank_item(
+            self._db(), self._item(), self._course(),
+            teacher_message="use a triangle", user_id=uuid.uuid4(),
+        )
+
+        assert solver.await_args.args[0] == [{"text": new_q, "figure_spec": spec}]
 
     async def test_solution_only_edit_does_not_re_solve(
         self, monkeypatch: pytest.MonkeyPatch

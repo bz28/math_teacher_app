@@ -1,6 +1,7 @@
 """AI-powered assignment generation — create questions and solve them."""
 
 import asyncio
+import json
 import logging
 from typing import Any
 
@@ -393,7 +394,7 @@ async def generate_questions(
 
 
 async def generate_solutions(
-    questions: list[dict[str, str]],
+    questions: list[dict[str, Any]],
     *,
     subject: str = Subject.MATH,
     user_id: str | None = None,
@@ -406,10 +407,21 @@ async def generate_solutions(
     if not questions:
         return []
 
-    async def solve_one(q: dict[str, str]) -> dict[str, Any]:
+    async def solve_one(q: dict[str, Any]) -> dict[str, Any]:
+        problem = q["text"]
+        # A drawn figure is part of the problem — a "find the hypotenuse
+        # in the triangle below" carries its numbers only in the figure,
+        # and text alone can't be solved (prod, 2026-10-18: three failed
+        # attempts, then the "solution failed" sentinel).
+        if isinstance(q.get("figure_spec"), dict):
+            problem += (
+                "\n\nThe figure drawn with this problem, as data — its labels "
+                "and measurements are part of the problem:\n"
+                + json.dumps(q["figure_spec"])
+            )
         try:
             decomp = await decompose_problem(
-                q["text"],
+                problem,
                 user_id=user_id,
                 subject=subject,
                 generation_job_id=generation_job_id,

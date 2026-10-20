@@ -12,6 +12,7 @@ the time the task is awaited.
 
 import asyncio
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -98,6 +99,34 @@ def _resolve_figure(
     """
     svg = render_figure_or_none(raw_spec, context="figure_spec")
     return (raw_spec, svg) if svg else (None, None)
+
+
+# A problem that points at a figure: "in the figure below", "the right
+# triangle below". Deliberately not bare "above"/"below" — a word
+# problem's "300 feet above the ground" points at nothing — nor "the
+# graph" or bare "as shown": "use the graph paper to plot y = 2x" and
+# "as shown in the table" are complete without a drawing.
+_FIGURE_REFERENCE = re.compile(
+    r"\b(?:in|from|use|using|see|on) the (?:figure|diagram|drawing|picture)\b"
+    r"|\b(?:figure|diagram|drawing|picture|triangle|circle|graph|quadrilateral|polygon"
+    r"|rectangle|trapezoid|parallelogram)\s+(?:below|above|shown)\b"
+    r"|\b(?:shown|pictured|drawn) (?:below|above|here)\b",
+    re.IGNORECASE,
+)
+
+
+def _draw_figures(questions: list[dict[str, Any]]) -> None:
+    """Render each question's figure in place. A spec that fails to
+    render is dropped, so a question only ever carries a figure the
+    student will actually see — and the solver is only shown that."""
+    for q in questions:
+        spec, svg = _resolve_figure(q.get("figure_spec"))
+        q["figure_spec"], q["figure_svg"] = spec, svg
+
+
+def _missing_figure(q: dict[str, Any]) -> bool:
+    """Says "the figure below" but has no figure to show."""
+    return not q.get("figure_svg") and bool(_FIGURE_REFERENCE.search(q.get("text") or ""))
 
 
 def schedule_generation_job(job_id: uuid.UUID) -> None:
@@ -419,6 +448,46 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
                 _empty_result_message(len(doc_ids), len(images))
             )
 
+        # A problem that refers to a figure it doesn't have can't be
+        # done. Replace each one once; a replacement with the same flaw
+        # is left out rather than handed to the teacher broken.
+        _draw_figures(question_dicts)
+        missing = sum(map(_missing_figure, question_dicts))
+        if missing:
+            logger.warning("Job %s: replacing %d problem(s) that cite a missing figure", job.id, missing)
+            try:
+                replacements = await generate_questions(
+                    unit_name=unit_name,
+                    count=missing,
+                    course_name=course.name,
+                    subject=course.subject,
+                    user_id=str(job.created_by_id),
+                    images=images or None,
+                    extra_instructions=(
+                        (constraint_text + "\n\n" if constraint_text else "")
+                        + "Every problem must be complete on its own. A problem that refers "
+                        "to a figure must include that figure's figure_spec, with every "
+                        "length it labels also given in side_lengths."
+                    ),
+                    assignment_title=assignment_title,
+                    params=job.params,
+                    call_metadata=doc_metadata,
+                    generation_job_id=str(job.id),
+                )
+            except Exception:
+                # The first batch's complete problems still ship; a failed
+                # cleanup call must not cost the teacher the whole job.
+                logger.exception("Job %s: replacement call failed; keeping the rest", job.id)
+                replacements = []
+            _draw_figures(replacements)
+            question_dicts = [q for q in question_dicts if not _missing_figure(q)] + [
+                q for q in replacements if not _missing_figure(q)
+            ][:missing]
+            if not question_dicts:
+                raise TeacherFacingGenerationError(
+                    "Every generated problem referred to a figure that couldn't be drawn. Try again."
+                )
+
     # 2. Solve each question in parallel (capped concurrency inside)
     solutions = await generate_solutions(
         question_dicts,
@@ -491,7 +560,8 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
         # rather than failing the whole batch over one bad figure.
         # The teacher still sees the question in the workshop and
         # can regenerate or accept-as-text-only.
-        figure_spec, figure_svg = _resolve_figure(q.get("figure_spec"))
+        # Generated figures were drawn above; an upload carries none.
+        figure_spec, figure_svg = q.get("figure_spec"), q.get("figure_svg")
 
         item = QuestionBankItem(
             course_id=job.course_id,
