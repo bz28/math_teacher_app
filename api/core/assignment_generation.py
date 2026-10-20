@@ -29,7 +29,11 @@ AI-flavored filler.
    they want, what they don't, the angle. Lead from this.
 2. The reference materials they've attached — notation, grade level,
    vocabulary, what their students have already seen. Match what's shown.
-3. The unit name — the topic scope.
+3. The assignment's title — the topic, when it names one ("Parallel &
+   Perpendicular Lines", "Exponent Rules"). Every problem stays on it.
+   A title that names no topic ("HW 3", "Unit 1 Review", "test") says
+   nothing; ignore it.
+4. The unit name — the topic scope. Often just a number ("Unit 3").
 
 When a higher-priority source is silent, defer to the next one down.
 When they pull against each other, the higher one wins.
@@ -258,6 +262,7 @@ async def generate_questions(
     user_id: str | None = None,
     images: list[dict[str, str]] | None = None,
     extra_instructions: str | None = None,
+    assignment_title: str | None = None,
     params: dict[str, Any] | None = None,
     call_metadata: dict[str, Any] | None = None,
     generation_job_id: str | None = None,
@@ -272,6 +277,9 @@ async def generate_questions(
         extra_instructions: Optional natural-language brief from the teacher
                 ("only word problems", "no calculator", "skip trig"). This
                 is the priority-1 source of truth — Claude leads from it.
+        assignment_title: The homework or practice set the problems are
+                for. Often the only place the topic is named — units are
+                commonly just "Unit 3" — so it ranks above the unit name.
         params: Optional dict of structured customizations from the
                 Customize section of the generate modal (problem_type /
                 answer_form / difficulty / calculator / format). Each
@@ -305,7 +313,9 @@ async def generate_questions(
     if param_lines:
         bullets = "\n".join(f"- {line}" for line in param_lines)
         user_message_parts.append(f"Constraints:\n{bullets}")
-    user_message_parts.append(f"Topic: {unit_name}")
+    if assignment_title and assignment_title.strip():
+        user_message_parts.append(f"Assignment title: {assignment_title.strip()}")
+    user_message_parts.append(f"Unit: {unit_name}")
     if course_name:
         user_message_parts.append(f"Course: {course_name}")
     user_message_parts.append(f"Number of problems: {count}")

@@ -35,6 +35,7 @@ from api.core.llm_schemas import GENERATE_QUESTIONS_SCHEMA, REGENERATE_QA_SCHEMA
 from api.core.practice import generate_distractors
 from api.core.subjects import get_config
 from api.database import get_session_factory
+from api.models.assignment import Assignment
 from api.models.course import Course
 from api.models.question_bank import (
     FORMAT_FRQ,
@@ -390,6 +391,13 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
                 if job.constraint else seed_block
             )
 
+        # The set's title is often the only place its topic is named
+        # (units are commonly just "Unit 3"). A variation already carries
+        # its topic in the reference question, so it goes without.
+        assignment_title = None if job.parent_question_id else (await db.execute(
+            select(Assignment.title).where(Assignment.id == job.originating_assignment_id)
+        )).scalar_one_or_none()
+
         question_dicts = await generate_questions(
             unit_name=unit_name,
             count=job.requested_count,
@@ -398,6 +406,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             user_id=str(job.created_by_id),
             images=images or None,
             extra_instructions=constraint_text,
+            assignment_title=assignment_title,
             params=job.params,
             call_metadata=doc_metadata,
             generation_job_id=str(job.id),
