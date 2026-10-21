@@ -25,6 +25,9 @@ from tests.test_teacher_review_checkpoint import _seed_hw
     ("about 12 feet per minute", {"ft", "min"}),
     (r"12 \text{ square feet}", {"ft"}),
     (r"5 \text{ ft}, 6 \text{ in}", {"ft", "in"}),
+    (r"15.76\quad\text{ft}", {"ft"}),
+    ("30^o", {"°"}),
+    ("12 sec", {"sec"}),
 ])
 def test_units_after_a_number_are_found(text: str, units: set[str]) -> None:
     assert units_in(text) == units
@@ -33,6 +36,8 @@ def test_units_after_a_number_are_found(text: str, units: set[str]) -> None:
 @pytest.mark.parametrize("text", [
     "x = 3", "3m + 2", "y = 2x - 4", r"\text{min}(a, b)", r"x = 2 \text{ in quadrant II}",
     "15 feet tall", r"\text{The answer is } 5", "(3, 4)", r"2\sin x",
+    # Trig and set notation that spell like units.
+    r"\frac{5\pi}{6}\text{ in }[0,2\pi)", "x = 2 in [0, 2pi)", "y = 2 sec(x)", "3 min(a,b)",
 ])
 def test_variables_and_prose_are_not_units(text: str) -> None:
     assert units_in(text) == set()
@@ -53,6 +58,11 @@ def test_the_readers_prose_does_not_count_as_work() -> None:
     # Prod P3: the narration says "degrees", the transcription doesn't.
     steps = [{"latex": r"\tan^{-1}(0.273) = 15.26", "plain_english": "so the angle is 15.26 degrees"}]
     assert units_not_in_work(r"15.26^\circ", steps) == ["°"]
+
+
+@pytest.mark.parametrize("step", [r"x \text{ ft}", r"\text{height (ft)} = 15.76"])
+def test_a_unit_named_anywhere_in_the_work_counts(step: str) -> None:
+    assert units_not_in_work(r"15.76 \text{ ft}", [{"latex": step}]) == []
 
 
 def test_a_prose_only_step_counts_as_work() -> None:

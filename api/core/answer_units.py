@@ -47,18 +47,24 @@ _SPELLINGS: dict[str, tuple[str, ...]] = {
 }
 _CANONICAL = {spelling: unit for unit, spellings in _SPELLINGS.items() for spelling in spellings}
 
-_DEGREE = re.compile(r"\^\s*\{?\s*\\circ\s*\}?|°|\\degree")
+_DEGREE = re.compile(r"\^\s*\{?\s*(?:\\circ|o)\s*\}?|°|\\degree")
 # A unit follows a number: "15.76 ft", "3\,cm", "48\pi \text{ rad/min}",
 # "12 feet per minute". Words inside \text{} count only in that position —
 # "\text{min}(a, b)" or "\text{the point lies in quadrant II}" are prose.
 _AFTER_NUMBER = re.compile(
-    r"(?:\d|\\pi|\})\s*(?:\\[,;:! ]|~)?\s*"
+    r"(?:\d|\\pi|\})\s*(?:\\(?:[,;:! ]|q?quad)|~)?\s*"
     r"(?:\\(?:text|mathrm|textrm)\s*\{(?P<run>[^{}]*)\}|(?P<bare>[A-Za-z][A-Za-z /]*))",
 )
+_TEXT_RUN = re.compile(r"\\(?:text|mathrm|textrm)\s*\{([^{}]*)\}")
 _WORD = re.compile(r"[A-Za-z]+")
 # Words that can sit between a number and its unit ("12 square feet",
 # "3 feet per minute") without ending it.
 _JOINERS = {"per", "square", "sq", "cubic", "cu"}
+# Spellings that are also math: "x in [0, 2π)", "2 sec(x)", "min(a, b)".
+# In an answer they count only inside a rate ("ft/min") or when nothing
+# that could be math follows them.
+_AMBIGUOUS = {"in", "sec", "min"}
+_MATH_FOLLOWS = re.compile(r"\s*(?:[(\[{\\]|\$?\s*[(\[])")
 
 
 def units_in(text: str, *, in_prose: bool = False) -> set[str]:
@@ -67,15 +73,25 @@ def units_in(text: str, *, in_prose: bool = False) -> set[str]:
     By default a unit followed by ordinary words is read as a sentence
     ("2 in quadrant II") and ignored — right for an answer, where a false
     unit raises a false flag. `in_prose=True` keeps it ("15.76 feet up
-    the wall") — right for the work, where a missed unit does.
+    the wall") and also counts a unit anywhere in a \text{} run ("height
+    (ft)") — right for the work, where a missed unit raises a false flag.
     """
     found: set[str] = set()
     if _DEGREE.search(text):
         found.add("°")
+    if in_prose:
+        for run_text in _TEXT_RUN.findall(text):
+            found |= {_CANONICAL[w.lower()] for w in _WORD.findall(run_text) if w.lower() in _CANONICAL}
     for m in _AFTER_NUMBER.finditer(text):
         run: set[str] = set()
-        for word in _WORD.findall(m["run"] if m["run"] is not None else m["bare"]):
+        words = _WORD.findall(m["run"] if m["run"] is not None else m["bare"])
+        rate = "/" in (m["run"] if m["run"] is not None else m["bare"])
+        math_follows = bool(_MATH_FOLLOWS.match(text, m.end()))
+        for word in words:
             unit = _CANONICAL.get(word.lower())
+            if unit and not in_prose and word.lower() in _AMBIGUOUS and not rate and math_follows:
+                run = set()  # "in [0, 2π)", "sec(x)": math, not a unit
+                break
             if unit:
                 run.add(unit)
             elif word.lower() not in _JOINERS:

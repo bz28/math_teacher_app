@@ -5313,7 +5313,8 @@ function ProblemGradeRow({
               </span>
             )}
           </div>
-          {problem.student_answer && problem.units_not_in_work.length > 0 && (
+          {/* `?? []`: the web can deploy before the API that sends it. */}
+          {problem.student_answer && (problem.units_not_in_work ?? []).length > 0 && (
             <p className="mt-1 text-xs text-[color:var(--color-warning-dark)]">
               {unitsNotInWorkNote(problem.units_not_in_work)}
             </p>
