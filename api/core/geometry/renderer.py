@@ -27,6 +27,7 @@ from api.core.geometry.dsl import (
     PolygonFigure,
     TriangleCircleAnnotation,
     TriangleFigure,
+    point_names,
 )
 from api.core.geometry.solver import (
     Point,
@@ -815,3 +816,8 @@ def _escape(text: str) -> str:
 
 
 __all__ = ["render_figure"]
+
+
+def figure_point_names(spec_dict: Any) -> set[str]:
+    """Every point a renderable spec draws by name."""
+    return point_names(_FIGURE_SPEC_ADAPTER.validate_python(spec_dict))

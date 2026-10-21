@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from api.core.assignment_generation import generate_solutions
 from api.core.auth import hash_password
-from api.core.question_bank_generation import _missing_figure, _run_generation
+from api.core.question_bank_generation import _missing_figure, _named_points, _resolve_figure, _run_generation
 from api.database import get_session_factory
 from api.models.assignment import Assignment
 from api.models.course import Course
@@ -148,3 +148,31 @@ async def test_a_failed_replacement_call_keeps_the_good_problems() -> None:
     items, gen = await _run([[GOOD, BROKEN], RuntimeError("upstream 529")])
     assert gen.await_count == 2
     assert [i.question for i in items] == [GOOD["text"]]
+
+
+@pytest.mark.parametrize(("text", "names"), [
+    (r"In the figure below, $\overline{DE} \parallel \overline{BC}$, where $D$ lies on $\overline{AB}$.",
+     {"D", "E", "B", "C", "A"}),
+    (r"Find $m\angle ADE$ in $\triangle ABC$.", {"A", "D", "E", "B", "C"}),
+    ("Point P is on circle O; find ∠PQR.", {"P", "Q", "R"}),
+    (r"Lines $m \parallel n$ are cut by transversal $t$; find $\angle 1$.", set()),
+    ("Solve 2x + 3 = 11. A ladder leans on a wall.", set()),
+])
+def test_points_a_problem_names(text: str, names: set[str]) -> None:
+    assert _named_points(text) == names
+
+
+TRIANGLE_ABC = {"type": "geometry", "shape": "triangle", "vertices": ["A", "B", "C"],
+                "side_lengths": {"AB": 5, "AC": 5, "BC": 4}}
+
+
+def test_a_figure_missing_a_named_point_is_dropped() -> None:
+    # Prod, 2026-10-21: "DE ∥ BC, D on AB, E on AC" drawn as a bare triangle ABC.
+    text = r"In the figure below, $\overline{DE} \parallel \overline{BC}$, where $D$ lies on $\overline{AB}$."
+    assert _resolve_figure(TRIANGLE_ABC, text) == (None, None)
+    assert _missing_figure({"text": text, "figure_svg": None})
+
+
+def test_a_figure_with_every_named_point_is_kept() -> None:
+    spec, svg = _resolve_figure(TRIANGLE_ABC, r"In $\triangle ABC$ below, find $m\angle A$.")
+    assert spec == TRIANGLE_ABC and svg

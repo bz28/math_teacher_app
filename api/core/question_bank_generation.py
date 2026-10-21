@@ -29,7 +29,7 @@ from api.core.document_vision import (
     fetch_source_documents,
 )
 from api.core.drawing_requirement import combine_requires_drawing
-from api.core.geometry import render_figure_or_none
+from api.core.geometry import figure_point_names, render_figure_or_none
 from api.core.image_utils import to_content_block
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import GENERATE_QUESTIONS_SCHEMA, REGENERATE_QA_SCHEMA
@@ -87,18 +87,46 @@ def _render_step_figures(
     return out
 
 
-def _resolve_figure(
-    raw_spec: Any,
-) -> tuple[dict[str, Any] | None, str | None]:
-    """Validate + render a figure spec emitted by the LLM.
+# Points a problem names: \overline{DE}, \angle ADE, \triangle ABC, ∠B,
+# "point P", "$D$ lies on". Capital letters only — "line m" is a line.
+_NAMED_POINTS = re.compile(
+    r"(?:\\overline|\\overleftrightarrow|\\overrightarrow|\\angle|\\triangle|∠|△)"
+    r"\s*\{?\s*(?P<run>[A-Z]+)(?![a-z])"
+    r"|\bpoints?\s+\$?(?P<point>[A-Z])\b"
+    r"|\$(?P<on>[A-Z])\$\s+(?:lies|is)\s+on\b",
+)
 
-    Returns (spec, svg) — both None if the model didn't emit one or if
+
+def _named_points(text: str) -> set[str]:
+    names: set[str] = set()
+    for m in _NAMED_POINTS.finditer(text):
+        names.update(m["run"] or m["point"] or m["on"])
+    return names
+
+
+def _resolve_figure(
+    raw_spec: Any, text: str,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Validate + render a figure spec emitted by the LLM for the
+    problem `text`.
+
+    Returns (spec, svg) — both None if the model didn't emit one, if
     rendering failed (see `render_figure_or_none` for the degrade
-    contract). The spec is only returned alongside a successful svg so
-    a persisted question never carries a spec without its rendering.
+    contract), or if the figure leaves out a point the problem names.
+    The last is the model squeezing a figure the DSL can't draw into
+    one it can (prod, 2026-10-21: "DE ∥ BC, D on AB, E on AC" drawn as
+    a bare triangle ABC). The spec is only returned alongside a
+    successful svg so a persisted question never carries a spec
+    without its rendering.
     """
     svg = render_figure_or_none(raw_spec, context="figure_spec")
-    return (raw_spec, svg) if svg else (None, None)
+    if not svg:
+        return None, None
+    missing = _named_points(text) - figure_point_names(raw_spec)
+    if missing:
+        logger.warning("figure_spec dropped: problem names %s, which the figure doesn't draw", sorted(missing))
+        return None, None
+    return raw_spec, svg
 
 
 # A problem that points at a figure: "in the figure below", "the right
@@ -120,7 +148,7 @@ def _draw_figures(questions: list[dict[str, Any]]) -> None:
     render is dropped, so a question only ever carries a figure the
     student will actually see — and the solver is only shown that."""
     for q in questions:
-        spec, svg = _resolve_figure(q.get("figure_spec"))
+        spec, svg = _resolve_figure(q.get("figure_spec"), q.get("text") or "")
         q["figure_spec"], q["figure_svg"] = spec, svg
 
 
@@ -737,7 +765,7 @@ async def regenerate_one(
     # clear the stale one — otherwise the diagram on disk would
     # contradict the rewritten prose. If rendering fails we drop both
     # (graceful degradation: teacher reviews + manually retries).
-    new_figure_spec, new_figure_svg = _resolve_figure(result.get("figure_spec"))
+    new_figure_spec, new_figure_svg = _resolve_figure(result.get("figure_spec"), item.question)
     item.figure_spec = new_figure_spec
     item.figure_svg = new_figure_svg
     # Regenerate distractors to match the new question/answer. The old

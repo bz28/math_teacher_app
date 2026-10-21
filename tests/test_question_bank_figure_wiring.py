@@ -27,21 +27,21 @@ def test_resolve_figure_passes_valid_spec_through() -> None:
         "right_angle_at": ["B"],
         "side_labels": {"AB": "3", "BC": "4", "CA": "5"},
     }
-    out_spec, svg = _resolve_figure(spec)
+    out_spec, svg = _resolve_figure(spec, "")
     assert out_spec == spec
     assert svg is not None
     assert svg.startswith("<svg") and svg.endswith("</svg>")
 
 
 def test_resolve_figure_none_when_model_emitted_nothing() -> None:
-    assert _resolve_figure(None) == (None, None)
+    assert _resolve_figure(None, "") == (None, None)
 
 
 def test_resolve_figure_none_when_spec_not_a_dict() -> None:
     """The LLM occasionally returns a stringified JSON; we don't try
     to parse — we just drop. Saner than silently double-parsing."""
-    assert _resolve_figure("not a dict") == (None, None)
-    assert _resolve_figure([]) == (None, None)
+    assert _resolve_figure("not a dict", "") == (None, None)
+    assert _resolve_figure([], "") == (None, None)
 
 
 def test_resolve_figure_swallows_renderer_errors() -> None:
@@ -56,7 +56,7 @@ def test_resolve_figure_swallows_renderer_errors() -> None:
         "vertices": ["A", "B", "C"],
         "side_lengths": {"AB": 1.0, "BC": 1.0, "CA": 5.0},
     }
-    out_spec, svg = _resolve_figure(bad_spec)
+    out_spec, svg = _resolve_figure(bad_spec, "")
     assert out_spec is None
     assert svg is None
 
@@ -69,7 +69,7 @@ def test_resolve_figure_underdetermined_drops_gracefully() -> None:
         "vertices": ["A", "B", "C"],
         "side_lengths": {"AB": 3.0},
     }
-    assert _resolve_figure(spec) == (None, None)
+    assert _resolve_figure(spec, "") == (None, None)
 
 
 # ── _render_step_figures ────────────────────────────────────────────

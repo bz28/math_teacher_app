@@ -1119,7 +1119,7 @@ async def accept_chat_proposal(
     #   3. Proposal touches neither question nor figure_spec → leave
     #      the existing figure alone.
     if proposal.get("figure_spec") is not None:
-        new_figure_spec, new_figure_svg = _resolve_figure(proposal["figure_spec"])
+        new_figure_spec, new_figure_svg = _resolve_figure(proposal["figure_spec"], item.question)
         item.figure_spec = new_figure_spec
         item.figure_svg = new_figure_svg
     elif proposal.get("question") is not None:
