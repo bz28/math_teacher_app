@@ -67,7 +67,7 @@ export default function Reports() {
     setAttempt((n) => n + 1);
   }, []);
 
-  // The inbox order — open, then evidence attached, then newest. The
+  // The inbox order — open, then newest. The
   // table keeps it until a header is clicked.
   const ranked = useMemo(() => [...rows].sort(byPriority), [rows]);
 
@@ -142,8 +142,7 @@ export default function Reports() {
         <h1>Reports</h1>
         <p>
           Problems teachers flagged from inside the product — a wrong grade, a misread page, a
-          broken screen. Open reports with a submission attached come first: those you can
-          diagnose right here. {counts.open} open · {counts.resolved} resolved.
+          broken screen. Open reports come first, newest at the top. {counts.open} open · {counts.resolved} resolved.
         </p>
       </div>
 

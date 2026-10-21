@@ -56,7 +56,11 @@ async def world() -> dict[str, Any]:
             course_id=course.id, teacher_id=teacher.id, title="Solving Systems", type="homework",
             status="published", content={"problem_ids": []}, unit_ids=[unit.id],
         )
-        s.add(assignment)
+        practice = Assignment(
+            course_id=course.id, teacher_id=teacher.id, title="Parallel Lines", type="practice",
+            status="draft", content={"problem_ids": []}, unit_ids=[unit.id],
+        )
+        s.add_all([assignment, practice])
         await s.flush()
         item = QuestionBankItem(
             course_id=course.id, unit_id=unit.id, created_by_id=teacher.id,
@@ -81,6 +85,7 @@ async def world() -> dict[str, Any]:
             "problem_id": str(item.id),
             "course_id": str(course.id),
             "assignment_id": str(assignment.id),
+            "practice_id": str(practice.id),
             "section_id": str(section.id),
         }
 
@@ -297,6 +302,9 @@ async def test_email_context_free_report_links_only_the_report(
         ("/school/teacher/courses/{c}/homework/{h}", "Homework · Solving Systems"),
         ("/school/teacher/courses/{c}/homework/{h}/sections/{s}/review?student=x",
          "Homework review · Solving Systems · Period 3"),
+        # Practice sets live on the homework routes; the console says practice.
+        ("/school/teacher/courses/{c}/homework/{p}/review", "Practice review · Parallel Lines"),
+        ("/school/teacher/courses/{c}/homework/{p}", "Practice · Parallel Lines"),
         ("/school/teacher", "Teacher home"),
         ("/history", "History"),
         # A route we know, pointing at a deleted class: the label stays,
@@ -310,7 +318,7 @@ async def test_sidebar_report_names_the_page_it_came_from(
     """A sidebar report carries only its URL; the console names that page
     the way the teacher saw it instead of printing a path of UUIDs."""
     url = "https://veradicai.com" + path.format(
-        c=world["course_id"], h=world["assignment_id"], s=world["section_id"],
+        c=world["course_id"], h=world["assignment_id"], s=world["section_id"], p=world["practice_id"],
     )
     r = await client.post("/v1/teacher/reports", headers=auth_headers(world["teacher"]),
                           json={"kind": "broken", "page_url": url})
