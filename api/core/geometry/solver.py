@@ -94,10 +94,11 @@ def _effective_side_lengths(spec: TriangleFigure) -> dict[str, float]:
     return known
 
 
-# An angle label that is a plain measurement: "38°", "38", "$38^\\circ$",
-# "38 degrees". "6x − 12°", "x", "θ" name an unknown and are not angles.
+# An angle label that states a measurement: "38°", "$38^\\circ$",
+# "38 degrees". The degree mark is required — a bare "1" or "2" numbers
+# an angle (∠1, ∠2) — and "6x − 12°", "x", "θ" name an unknown.
 _LABEL_ANGLE_RE = re.compile(
-    r"^\s*(?P<deg>\d+(?:\.\d+)?)\s*(?:°|\^\s*\{?\s*\\circ\s*\}?|degrees?)?\s*$",
+    r"^\s*(?P<deg>\d+(?:\.\d+)?)\s*(?:°|\^\s*\{?\s*\\circ\s*\}?|degrees?)\s*$",
 )
 
 
@@ -110,15 +111,20 @@ def _label_angle(text: str) -> float | None:
 def _effective_angles(spec: TriangleFigure) -> dict[str, float]:
     """Known angles by vertex: `angles`, then any angle whose label states
     a measurement. As with side labels, the label is what the student
-    sees, so a figure that draws 38° as 47° must not be drawn. A label
-    never overrides an explicit angle.
+    sees, so a figure that draws 38° as 47° must not be drawn. An explicit
+    angle wins, but a label that contradicts it is an inconsistent spec.
     """
     known: dict[str, float] = {}
     for vertex, text in spec.angle_labels.items():
         deg = _label_angle(text)
         if deg is not None and 0 < deg < 180:
             known[vertex] = deg
-    known.update(spec.angles)
+    for vertex, deg in spec.angles.items():
+        if vertex in known and not math.isclose(known[vertex], deg, abs_tol=_ANGLE_ABS_TOL_DEG):
+            raise FigureSpecError(
+                f"angle at {vertex} is labeled {known[vertex]}° but given as {deg}°",
+            )
+        known[vertex] = deg
     return known
 
 

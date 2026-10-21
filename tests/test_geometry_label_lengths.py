@@ -68,13 +68,14 @@ def test_one_length_and_a_right_angle_is_still_underdetermined() -> None:
 
 
 @pytest.mark.parametrize(("label", "deg"), [
-    ("38°", 38.0), ("38", 38.0), ("$38^\\circ$", 38.0), ("38^{\\circ}", 38.0), ("72.5 degrees", 72.5),
+    ("38°", 38.0), ("$38^\\circ$", 38.0), ("38^{\\circ}", 38.0), ("72.5 degrees", 72.5),
 ])
 def test_a_measurement_angle_label_reads_as_an_angle(label: str, deg: float) -> None:
     assert _label_angle(label) == deg
 
 
-@pytest.mark.parametrize("label", ["6x − 12°", "x", "θ", "?", "(2x+5)°", ""])
+# A bare number numbers an angle (∠1, ∠2); it isn't a measurement.
+@pytest.mark.parametrize("label", ["6x − 12°", "x", "θ", "?", "(2x+5)°", "", "1", "38"])
 def test_an_unknown_angle_label_is_not_an_angle(label: str) -> None:
     assert _label_angle(label) is None
 
@@ -89,4 +90,15 @@ def test_an_angle_label_that_contradicts_the_drawing_is_rejected() -> None:
 def test_an_angle_label_completes_an_underdetermined_triangle() -> None:
     # Two labeled sides and the labeled angle between them fix the triangle (SAS).
     spec = _tri(side_labels={"AB": "8", "AC": "6"}, angle_labels={"A": "50°"})
+    assert render_figure_or_none(spec) is not None
+
+
+def test_an_angle_label_that_contradicts_an_explicit_angle_is_rejected() -> None:
+    with pytest.raises(FigureSpecError, match="labeled 38"):
+        render_figure(_tri(side_lengths={"AB": 5, "AC": 5}, angles={"A": 47.16},
+                           angle_labels={"A": "38°"}))
+
+
+def test_numbered_angles_still_draw() -> None:
+    spec = _tri(side_lengths={"AB": 5, "AC": 5, "BC": 4}, angle_labels={"B": "1", "C": "2"})
     assert render_figure_or_none(spec) is not None

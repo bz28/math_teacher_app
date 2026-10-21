@@ -157,6 +157,8 @@ async def test_a_failed_replacement_call_keeps_the_good_problems() -> None:
     ("Point P is on circle O; find ∠PQR.", {"P", "Q", "R"}),
     (r"Lines $m \parallel n$ are cut by transversal $t$; find $\angle 1$.", set()),
     ("Solve 2x + 3 = 11. A ladder leans on a wall.", set()),
+    (r"$\\triangle A'B'C'$ is the image of $\\triangle ABC$.", {"A'", "B'", "C'", "A", "B", "C"}),
+    ("Points A and B lie on circle O.", {"A", "B"}),
 ])
 def test_points_a_problem_names(text: str, names: set[str]) -> None:
     assert _named_points(text) == names
@@ -176,3 +178,10 @@ def test_a_figure_missing_a_named_point_is_dropped() -> None:
 def test_a_figure_with_every_named_point_is_kept() -> None:
     spec, svg = _resolve_figure(TRIANGLE_ABC, r"In $\triangle ABC$ below, find $m\angle A$.")
     assert spec == TRIANGLE_ABC and svg
+
+
+def test_a_figure_labeled_with_the_problems_names_is_kept() -> None:
+    # Keys A, B, C drawn as P, Q, R: the student reads P, Q, R.
+    spec = {**TRIANGLE_ABC, "vertex_labels": {"A": "P", "B": "Q", "C": "R"}}
+    out, svg = _resolve_figure(spec, r"Find $m\\angle PQR$ in $\\triangle PQR$.")
+    assert out == spec and svg

@@ -488,15 +488,19 @@ FigureSpec = Annotated[
 
 
 def point_names(fig: TriangleFigure | CircleFigure | PolygonFigure) -> set[str]:
-    """Every point the figure draws by name."""
+    """Every point name a student can read on the figure: the keys, and
+    the display labels the renderer draws in their place."""
     if isinstance(fig, TriangleFigure):
-        names = set(fig.vertices)
+        names = set(fig.vertices) | set(fig.vertex_labels.values())
         for circle in (fig.inscribed_circle, fig.circumscribed_circle):
             if circle and circle.show_center:
                 names.add(circle.center_label)
         return names
     if isinstance(fig, CircleFigure):
         # The center is named in prose ("circle O") whether or not it's dotted.
-        return {fig.center_label, *fig.points, *fig.external_points}
+        return {
+            fig.center_label, *fig.points, *fig.point_labels.values(), *fig.external_points,
+            *(p.label for p in fig.external_points.values() if p.label),
+        }
     count = fig.n_sides or len(fig.vertex_positions or [])
     return set(fig.vertex_names or [chr(ord("A") + i) for i in range(count)])

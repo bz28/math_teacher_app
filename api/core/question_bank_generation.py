@@ -87,20 +87,22 @@ def _render_step_figures(
     return out
 
 
-# Points a problem names: \overline{DE}, \angle ADE, \triangle ABC, ∠B,
-# "point P", "$D$ lies on". Capital letters only — "line m" is a line.
+# Points a problem names: \\overline{DE}, \\angle ADE, \\triangle A'B'C', ∠B,
+# "point P", "points A and B", "$D$ lies on". Capital letters (with any
+# primes) only — "line m" is a line.
+_POINT = r"[A-Z]'*"
 _NAMED_POINTS = re.compile(
     r"(?:\\overline|\\overleftrightarrow|\\overrightarrow|\\angle|\\triangle|∠|△)"
-    r"\s*\{?\s*(?P<run>[A-Z]+)(?![a-z])"
-    r"|\bpoints?\s+\$?(?P<point>[A-Z])\b"
-    r"|\$(?P<on>[A-Z])\$\s+(?:lies|is)\s+on\b",
+    rf"\s*\{{?\s*(?P<run>(?:{_POINT})+)(?![a-z])"
+    rf"|\b[Pp]oints?\s+(?P<list>\$?{_POINT}\$?(?:\s*(?:,|and|,\s*and)\s*\$?{_POINT}\$?)*)\b"
+    rf"|\$(?P<on>{_POINT})\$\s+(?:lies|is)\s+on\b",
 )
 
 
 def _named_points(text: str) -> set[str]:
     names: set[str] = set()
     for m in _NAMED_POINTS.finditer(text):
-        names.update(m["run"] or m["point"] or m["on"])
+        names.update(re.findall(_POINT, m["run"] or m["list"] or m["on"]))
     return names
 
 
