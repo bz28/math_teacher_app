@@ -23,7 +23,7 @@ from api.models.assignment import Submission
 from api.models.question_bank import QuestionBankItem
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
-from tests.conftest import TINY_PNG, auth_headers
+from tests.conftest import PAGE_PNG, auth_headers
 
 
 async def _wipe() -> None:
@@ -225,7 +225,7 @@ async def test_the_homework_page_itself_follows_the_seat(
     # And she can't rehearse a turn-in from a period that never got it.
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
-        headers=preview, json={"files": [TINY_PNG]},
+        headers=preview, json={"files": [PAGE_PNG]},
     )
     assert r.status_code == 403
 
@@ -332,7 +332,7 @@ async def test_a_rehearsal_on_an_untargeted_draft_still_lands_somewhere(
 
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
-        headers=preview, json={"files": [TINY_PNG]},
+        headers=preview, json={"files": [PAGE_PNG]},
     )
     assert r.status_code == 200, r.text
 
@@ -492,7 +492,7 @@ async def test_work_made_in_one_seat_survives_a_switch(
 
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
-        headers=preview, json={"files": [TINY_PNG]},
+        headers=preview, json={"files": [PAGE_PNG]},
     )
     assert r.status_code == 200, r.text
     submission_id = uuid.UUID(r.json()["submission_id"])

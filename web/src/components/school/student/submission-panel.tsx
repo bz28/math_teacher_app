@@ -8,6 +8,7 @@ import {
   type SubmitHomeworkResponse,
 } from "@/lib/api";
 import {
+  assertPageReadable,
   blobToDataUrl,
   ImageResizeError,
   orientationCheckCopy,
@@ -233,6 +234,7 @@ export function SubmissionPanel({
       if (blob.size > MAX_IMAGE_BYTES) {
         return done(errorRow(file, "Too large (max 5MB)"));
       }
+      await assertPageReadable(blob);
       const dataUrl = await blobToDataUrl(blob);
       const comma = dataUrl.indexOf(",");
       const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;

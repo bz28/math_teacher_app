@@ -36,7 +36,7 @@ from api.models.assignment import Submission, SubmissionGrade
 from api.models.question_bank import QuestionBankItem
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
-from tests.conftest import TINY_PNG, auth_headers
+from tests.conftest import PAGE_PNG, auth_headers
 
 
 async def _wipe() -> None:
@@ -289,13 +289,13 @@ async def test_preview_can_rehearse_turning_in_repeatedly(
 
     first = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
-        headers=headers, json={"files": [TINY_PNG]},
+        headers=headers, json={"files": [PAGE_PNG]},
     )
     assert first.status_code == 200, first.text
 
     second = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
-        headers=headers, json={"files": [TINY_PNG]},
+        headers=headers, json={"files": [PAGE_PNG]},
     )
     assert second.status_code == 200, second.text
     assert second.json()["submission_id"] != first.json()["submission_id"]
@@ -325,12 +325,12 @@ async def test_real_student_still_gets_one_shot(client: AsyncClient) -> None:
 
     first = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
-        headers=auth_headers(token), json={"files": [TINY_PNG]},
+        headers=auth_headers(token), json={"files": [PAGE_PNG]},
     )
     assert first.status_code == 200, first.text
     second = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
-        headers=auth_headers(token), json={"files": [TINY_PNG]},
+        headers=auth_headers(token), json={"files": [PAGE_PNG]},
     )
     assert second.status_code == 409
     assert second.json()["detail"] == "Already submitted"
@@ -518,7 +518,7 @@ async def test_a_rehearsal_grade_can_be_published_so_she_can_see_it(
 
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
-        headers=headers, json={"files": [TINY_PNG]},
+        headers=headers, json={"files": [PAGE_PNG]},
     )
     assert r.status_code == 200, r.text
     submission_id = uuid.UUID(r.json()["submission_id"])
@@ -575,7 +575,7 @@ async def test_a_rehearsal_stays_out_of_every_teacher_facing_number(
 
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
-        headers=headers, json={"files": [TINY_PNG]},
+        headers=headers, json={"files": [PAGE_PNG]},
     )
     assert r.status_code == 200, r.text
     submission_id = uuid.UUID(r.json()["submission_id"])

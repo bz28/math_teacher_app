@@ -24,7 +24,7 @@ from api.database import get_session_factory
 from api.models.assignment import Submission, SubmissionGrade
 from api.models.user import User
 from api.routes.school_student_practice import drain_integrity_background_tasks
-from tests.conftest import TINY_PNG
+from tests.conftest import PAGE_PNG
 from tests.conftest import auth_headers as _auth
 
 # ── Tests ──
@@ -233,7 +233,7 @@ async def test_submit_homework_happy_path(client: AsyncClient, world: dict[str, 
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG]},
+        json={"files": [PAGE_PNG]},
     )
     assert r.status_code == 200, r.text
     body = r.json()
@@ -264,7 +264,7 @@ async def test_submit_homework_happy_path(client: AsyncClient, world: dict[str, 
 
 
 async def test_submit_homework_409_on_resubmit(client: AsyncClient, world: dict[str, Any]) -> None:
-    body = {"files": [TINY_PNG]}
+    body = {"files": [PAGE_PNG]}
     r1 = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
@@ -337,7 +337,7 @@ async def test_submit_homework_accepts_data_url_png(
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [f"data:image/png;base64,{TINY_PNG}"]},
+        json={"files": [f"data:image/png;base64,{PAGE_PNG}"]},
     )
     assert r.status_code == 200
 
@@ -346,7 +346,7 @@ async def test_submit_homework_403_for_outsider(client: AsyncClient, world: dict
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["outsider_token"]),
-        json={"files": [TINY_PNG]},
+        json={"files": [PAGE_PNG]},
     )
     assert r.status_code == 403
 
@@ -378,7 +378,7 @@ async def test_homework_list_status_reflects_submission(
     await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG]},
+        json={"files": [PAGE_PNG]},
     )
 
     r = await client.get(
@@ -401,7 +401,7 @@ async def test_submit_homework_late_marks_is_late(
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG]},
+        json={"files": [PAGE_PNG]},
     )
     assert r.status_code == 200
     assert r.json()["is_late"] is True
@@ -502,7 +502,7 @@ async def test_teacher_list_submissions_uses_existing_endpoint(
     await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG]},
+        json={"files": [PAGE_PNG]},
     )
     r = await client.get(
         f"/v1/teacher/assignments/{world['assignment_id']}/submissions",
@@ -518,7 +518,7 @@ async def test_teacher_submission_detail(client: AsyncClient, world: dict[str, A
     submit_resp = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG]},
+        json={"files": [PAGE_PNG]},
     )
     submission_id = submit_resp.json()["submission_id"]
 
@@ -552,7 +552,7 @@ async def test_teacher_submission_detail_surfaces_student_edits(
     submit_resp = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG]},
+        json={"files": [PAGE_PNG]},
     )
     submission_id = submit_resp.json()["submission_id"]
     await drain_integrity_background_tasks()
@@ -622,7 +622,7 @@ async def _submit_and_stage_extraction(
     submit_resp = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG] * files},
+        json={"files": [PAGE_PNG] * files},
     )
     submission_id = submit_resp.json()["submission_id"]
     await drain_integrity_background_tasks()
@@ -1373,7 +1373,7 @@ async def test_teacher_submission_detail_403_for_other_teacher(
     submit_resp = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG]},
+        json={"files": [PAGE_PNG]},
     )
     submission_id = submit_resp.json()["submission_id"]
 
@@ -1423,7 +1423,7 @@ async def _submit_and_extract(
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG]},
+        json={"files": [PAGE_PNG]},
     )
     assert r.status_code == 200, r.text
     await drain_integrity_background_tasks()
@@ -1890,7 +1890,7 @@ async def test_teacher_detail_surfaces_whether_the_reading_was_vouched_for(
     submit_resp = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG]},
+        json={"files": [PAGE_PNG]},
     )
     submission_id = submit_resp.json()["submission_id"]
     # Submit kicks off extraction in the background; let it finish before

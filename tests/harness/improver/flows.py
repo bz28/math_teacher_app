@@ -33,10 +33,13 @@ web app talks to).
 
 from __future__ import annotations
 
+import base64
+import io
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import httpx
+from PIL import Image
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from tests.harness.browser import HarnessBrowser
@@ -55,14 +58,17 @@ _TIMEOUT_MS = 30000
 # a genuine hang raises httpx.TimeoutException → run_flows DROPS the flow.
 _HTTP_TIMEOUT_S = 30.0
 
-# A real 1×1 PNG (valid magic bytes) — the submit endpoint validates uploads by
-# magic byte, so this is the smallest payload that passes without shipping a
-# fixture file. Typed-only homework submission isn't supported (the work image
-# is the source of truth), so we submit this stand-in page.
-_TINY_PNG_B64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
-    "+M8AAAQEAYqDX8gAAAAASUVORK5CYII="
-)
+# A blank page PNG — the submit endpoint reads the image and refuses a
+# page under MIN_PAGE_LONG_EDGE, so this is a real 600×450 page rather than a
+# 1×1 stand-in. Typed-only homework submission isn't supported (the work
+# image is the source of truth), so we submit this stand-in page.
+def _blank_page_b64() -> str:
+    buf = io.BytesIO()
+    Image.new("L", (600, 450), 255).save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+_PAGE_PNG_B64 = _blank_page_b64()
 
 
 @dataclass
@@ -234,7 +240,7 @@ async def _submit_homework_flow(
     url = f"{base}/school/student/homework/{seed.assignment_id}/submit"
     async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as client:
         resp = await client.post(
-            url, json={"files": [_TINY_PNG_B64]}, headers=_auth(seed.student_token),
+            url, json={"files": [_PAGE_PNG_B64]}, headers=_auth(seed.student_token),
         )
         if resp.status_code != 200:
             issues.append(
@@ -246,7 +252,7 @@ async def _submit_homework_flow(
             issues.append("submit succeeded but the response carried no submission_id")
 
         again = await client.post(
-            url, json={"files": [_TINY_PNG_B64]}, headers=_auth(seed.student_token),
+            url, json={"files": [_PAGE_PNG_B64]}, headers=_auth(seed.student_token),
         )
         if again.status_code != 409:
             issues.append(
