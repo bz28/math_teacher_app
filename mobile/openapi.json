@@ -5119,6 +5119,14 @@
             },
             "title": "Student Steps",
             "type": "array"
+          },
+          "units_not_in_work": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Units Not In Work",
+            "type": "array"
           }
         },
         "required": [

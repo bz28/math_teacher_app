@@ -4453,6 +4453,16 @@ function StudentStepRow({
   );
 }
 
+// The reader writes the units a question asks for into the answer even
+// when the student wrote none ("15.76" read as "15.76 ft"). A unit that
+// appears nowhere in the work is pointed out so the teacher checks the
+// photo before crediting it.
+function unitsNotInWorkNote(units: string[]): string {
+  const named = units.map((u) => `“${u}”`);
+  const list = named.length > 1 ? `${named.slice(0, -1).join(", ")} and ${named.at(-1)}` : named[0];
+  return `${list} ${units.length > 1 ? "aren’t" : "isn’t"} written anywhere in the student’s work — check the photo.`;
+}
+
 // The body of a drawing the extractor reported but a zoomed second look
 // couldn't find (often a bad location, sometimes nothing drawn). The
 // explanation is visible text, not a hover title, so it reaches touch
@@ -5303,6 +5313,11 @@ function ProblemGradeRow({
               </span>
             )}
           </div>
+          {problem.student_answer && problem.units_not_in_work.length > 0 && (
+            <p className="mt-1 text-xs text-[color:var(--color-warning-dark)]">
+              {unitsNotInWorkNote(problem.units_not_in_work)}
+            </p>
+          )}
         </div>
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">

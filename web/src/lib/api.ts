@@ -2147,6 +2147,10 @@ export interface TeacherSubmissionDetailProblem {
    *  before page labelling — in which case the UI shows no marker rather
    *  than guessing. */
   pages: number[];
+  /** Units in the read answer that appear nowhere in this problem's
+   *  work — most likely added by the reader from the question. A prompt
+   *  to check the photo, not a verdict. */
+  units_not_in_work: string[];
 }
 
 export interface TeacherSubmissionDetail {

@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.answer_units import units_not_in_work
 from api.core.audit_log import record_activity
 from api.core.constants import DEFAULT_HOMEWORK_INSTRUCTIONS, MAX_RUBRIC_FIELD_CHARS
 from api.core.entitlements import Entitlement, check_entitlement
@@ -2537,6 +2538,11 @@ class TeacherSubmissionDetailProblem(BaseModel):
     # the marker rather than guessing, because a wrong page number is
     # worse than none.
     pages: list[int] = []
+    # Units in the read final answer that appear in none of this
+    # problem's steps — most likely added by the reader from the
+    # question ("15.76" read as "15.76 ft"). A pointer to check the
+    # photo, not a verdict; see api/core/answer_units.py.
+    units_not_in_work: list[str] = []
 
 
 class TeacherSubmissionDetail(BaseModel):
@@ -2688,6 +2694,8 @@ async def get_submission_detail(
             seen.append(raw_page)
 
     extraction_finals: dict[int, str] = {}
+    # The same first read, undecorated, for the unit check.
+    extraction_final_text: dict[int, str] = {}
     overlaid = apply_extraction_edits(sub.extraction, sub.extraction_edits)
     # The extraction blob is model output persisted verbatim, so treat its
     # confidence as untrusted input rather than a guaranteed float. The
@@ -2737,6 +2745,8 @@ async def get_submission_detail(
                 extraction_finals[fa_pos] = f"${answer_latex}$"
             elif answer_plain:
                 extraction_finals[fa_pos] = answer_plain
+            if answer_latex or answer_plain:
+                extraction_final_text[fa_pos] = answer_latex or answer_plain
 
     # Group the Vision extraction's per-line steps by problem_position
     # once, so each problem's slice is an O(1) dict lookup below
@@ -3035,6 +3045,10 @@ async def get_submission_detail(
             requires_drawing=bool(item.requires_drawing),
             drawings=drawings_by_position.get(pos, []),
             pages=sorted(pages_by_position.get(pos, [])),
+            units_not_in_work=units_not_in_work(
+                extraction_final_text.get(pos, ""),
+                [s.model_dump() for s in steps_by_position.get(pos, [])],
+            ),
         ))
 
     # Surface ai_breakdown's grades array for the frontend to show
