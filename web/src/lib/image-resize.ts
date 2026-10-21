@@ -96,7 +96,10 @@ export async function assertPageReadable(blob: Blob): Promise<void> {
   try {
     bitmap = await createImageBitmap(blob);
   } catch {
-    throw new ImageResizeError("Couldn't read that image. Try a different photo.");
+    // Older iPads lack createImageBitmap, and a large photo can run iOS
+    // out of memory. Neither means the page is unreadable — the server
+    // measures it at turn-in and has the final say.
+    return;
   }
   const longEdge = Math.max(bitmap.width, bitmap.height);
   bitmap.close?.();

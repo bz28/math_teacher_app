@@ -2018,7 +2018,7 @@ async def submit_homework(
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        f"Page {i + 1} is too small to read ({long_edge}px). "
+                        f"File {i + 1} is too small to read ({long_edge}px). "
                         "Take it again closer up, so the page fills the screen."
                     ),
                 )

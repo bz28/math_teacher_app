@@ -23,8 +23,9 @@ MIN_PAGE_LONG_EDGE = 400
 
 
 def image_long_edge(raw: bytes) -> int:
-    """The long edge of an image in pixels. Reads the header only."""
-    with Image.open(io.BytesIO(raw)) as img:
+    """The long edge of an image in pixels. Reads the header only, and
+    refuses an image past `MAX_UPLOAD_PIXELS` like every other open."""
+    with _open_bounded(raw) as img:
         return max(img.size)
 
 

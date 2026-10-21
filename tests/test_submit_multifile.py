@@ -279,7 +279,7 @@ async def test_submit_refuses_a_page_too_small_to_read(
         json={"files": [PAGE_PNG, _real_jpeg(size)]},
     )
     assert r.status_code == 400
-    assert r.json()["detail"].startswith("Page 2 is too small to read")
+    assert r.json()["detail"].startswith("File 2 is too small to read")
 
 
 async def test_submit_accepts_a_page_at_the_minimum_size(
