@@ -2694,8 +2694,6 @@ async def get_submission_detail(
             seen.append(raw_page)
 
     extraction_finals: dict[int, str] = {}
-    # The same first read, undecorated, for the unit check.
-    extraction_final_text: dict[int, str] = {}
     overlaid = apply_extraction_edits(sub.extraction, sub.extraction_edits)
     # The extraction blob is model output persisted verbatim, so treat its
     # confidence as untrusted input rather than a guaranteed float. The
@@ -2745,8 +2743,6 @@ async def get_submission_detail(
                 extraction_finals[fa_pos] = f"${answer_latex}$"
             elif answer_plain:
                 extraction_finals[fa_pos] = answer_plain
-            if answer_latex or answer_plain:
-                extraction_final_text[fa_pos] = answer_latex or answer_plain
 
     # Group the Vision extraction's per-line steps by problem_position
     # once, so each problem's slice is an O(1) dict lookup below
@@ -3045,8 +3041,10 @@ async def get_submission_detail(
             requires_drawing=bool(item.requires_drawing),
             drawings=drawings_by_position.get(pos, []),
             pages=sorted(pages_by_position.get(pos, [])),
+            # Checked against the answer the teacher is shown, so the note
+            # always names a unit that is on screen.
             units_not_in_work=units_not_in_work(
-                extraction_final_text.get(pos, ""),
+                student_answer or "",
                 [s.model_dump() for s in steps_by_position.get(pos, [])],
             ),
         ))
