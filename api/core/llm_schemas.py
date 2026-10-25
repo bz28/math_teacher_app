@@ -1207,8 +1207,17 @@ AI_GRADING_SCHEMA: ToolSchema = {
                                             "'final answer wrong')."
                                         ),
                                     },
+                                    "rule_id": {
+                                        "type": ["string", "null"],
+                                        "description": (
+                                            "The bracketed id of the class rule "
+                                            "this deduction applies, when it applies "
+                                            "one. Null otherwise, and always null when "
+                                            "the rubric lists no class rules."
+                                        ),
+                                    },
                                 },
-                                "required": ["points_off", "reason", "step_ref"],
+                                "required": ["points_off", "reason", "step_ref", "rule_id"],
                                 "additionalProperties": False,
                             },
                         },

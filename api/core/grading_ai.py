@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.class_rubric import effective_rubric
 from api.core.llm_client import (
     MODEL_REASON,
     LLMMode,
@@ -30,6 +31,7 @@ from api.core.llm_client import (
 )
 from api.core.llm_schemas import AI_GRADING_SCHEMA
 from api.models.assignment import Assignment, Submission, SubmissionGrade
+from api.models.course import Course
 from api.services.bank import load_problems_for_assignment
 
 logger = logging.getLogger(__name__)
@@ -166,8 +168,9 @@ criterion that drove it (e.g. "Partial credit: small execution error — sign \
 flip reading the roots"). Set `step_ref` to the `step_num` of the student's \
 extracted work the deduction is about (so the review UI can highlight that \
 step), or null when it isn't step-specific (e.g. "no work shown", "final \
-answer wrong"). Keep the ledger consistent with `reasoning` — same call, \
-itemized.
+answer wrong"). Set `rule_id` to a class rule's id when that rule is what the \
+deduction applies, else null. Keep the ledger consistent with `reasoning` — same \
+call, itemized.
 
 Student feedback (REQUIRED for every problem — `student_feedback` field):
 For each problem, in addition to `reasoning`, produce a `student_feedback` string \
@@ -232,6 +235,20 @@ _DEFAULT_PARTIAL_CREDIT = (
 )
 
 
+# Rendered only when the class has rules, so a class without any is
+# graded with exactly the prompt it had before rules existed.
+_CLASS_RULES_INTRO = (
+    "\"Class rules\" — this teacher's own grading standards for every homework in "
+    "this class. Apply each one to every problem it covers, judged only from the "
+    "student's extracted work. When the work breaks a rule, take off the points the "
+    "rule names (a rule that names none: size it like a small execution error), "
+    "itemize it as its own deduction, and set that deduction's `rule_id` to the "
+    "rule's bracketed id. A rule never turns a wrong answer into a right one, and "
+    "a problem a rule doesn't cover is graded as if the rule didn't exist. A "
+    "class rule this homework's \"Notes\" contradict does not apply here."
+)
+
+
 def _build_rubric_block(rubric: dict[str, Any] | None) -> str:
     """Format the teacher-authored rubric as labeled fields the model can
     reference by name. Labels match the rubric-application instructions in
@@ -246,10 +263,26 @@ def _build_rubric_block(rubric: dict[str, Any] | None) -> str:
         f'"Full credit": {full_credit}',
         f'"Partial credit": {partial_credit}',
     ]
+    rules = (rubric or {}).get("rules") or []
+    if rules:
+        lines = [_CLASS_RULES_INTRO]
+        for r in rules:
+            cost = (
+                f" (take off {r['points']} points)" if r.get("points") is not None else ""
+            )
+            lines.append(f"[{r['id']}] {r['text']}{cost}")
+        parts.append("\n".join(lines))
     if rubric and rubric.get("common_mistakes"):
         parts.append(f'"Common mistakes": {rubric["common_mistakes"]}')
     if rubric and rubric.get("notes"):
-        parts.append(f'"Notes": {rubric["notes"]}')
+        # Last, and labeled as overriding, when there are class rules to
+        # override: the homework's own word on a rule beats the class's.
+        label = (
+            '"Notes" (this homework only — where these contradict a class rule, '
+            "follow these and do not apply that rule)"
+            if rules else '"Notes"'
+        )
+        parts.append(f"{label}: {rubric['notes']}")
     return "\n".join(parts)
 
 
@@ -612,7 +645,8 @@ async def grade_submission_with_ai(
             and final_answers.
         problems: List of dicts with {position, question, final_answer}
             from the HW's bank items.
-        rubric: Teacher's rubric from Assignment.rubric (optional).
+        rubric: The effective rubric — the homework's own fields plus the
+            class rules it applies (`class_rubric.effective_rubric`). Optional.
         user_id: For cost-tracking attribution.
         submission_id: For LLM-call log correlation across the pipeline.
         reproducible: When True (default, and the production path), grade at
@@ -674,7 +708,37 @@ async def grade_submission_with_ai(
         call_metadata={"phase": "ai_grading"},
     )
     _cap_confidence_for_unconfirmed_drawings(result, extraction, problems)
+    _name_rules_in_text(result, (rubric or {}).get("rules") or [])
     return result
+
+
+def _name_rules_in_text(result: dict[str, Any], rules: list[dict[str, Any]]) -> None:
+    """Swap a class rule's id for its wording wherever the model wrote the
+    id into text a person reads. The id is how the grader cites a rule
+    (`rule_id`); the teacher and student know the rule by what it says, and
+    the model writes "[r1a2b3c4]" into its prose often enough that asking
+    it not to isn't a guarantee. Mutates `result` in place."""
+    if not rules:
+        return
+    swaps = [
+        (re.compile(rf"\[?\b{re.escape(r['id'])}\b\]?"), f"“{r['text']}”") for r in rules
+    ]
+
+    def named(text: Any) -> Any:
+        if not isinstance(text, str):
+            return text
+        for pattern, words in swaps:
+            text = pattern.sub(words, text)
+        return text
+
+    for g in result.get("grades") or []:
+        if not isinstance(g, dict):
+            continue
+        for key in ("reasoning", "student_feedback"):
+            g[key] = named(g.get(key))
+        for d in g.get("deductions") or []:
+            if isinstance(d, dict):
+                d["reason"] = named(d.get("reason"))
 
 
 # A grade that rests on an UNCONFIRMED drawing must land in the review
@@ -744,6 +808,7 @@ def _reconcile_deductions(
     submission_id: str | None,
     problem_id: str,
     step_count: int | None,
+    rule_ids: frozenset[str] = frozenset(),
 ) -> list[dict[str, Any]]:
     """Sanitize the model's deduction ledger and make it reconcile to the
     authoritative `percent` — NEVER the other way around.
@@ -767,6 +832,10 @@ def _reconcile_deductions(
     than none). `points_off` and the score math are untouched. `step_count`
     is None only when the caller can't supply the count (legacy/test path),
     in which case the range check is skipped.
+
+    `rule_id` survives only when it names a class rule the grader was
+    actually given (`rule_ids`) — anything else would tag a deduction
+    with a rule the review page can't show.
     """
     target = 100.0 - percent
     items: list[dict[str, Any]] = []
@@ -792,10 +861,12 @@ def _reconcile_deductions(
             )
             step_ref = None
         reason = d.get("reason")
+        rule_id = d.get("rule_id")
         items.append({
             "points_off": po_int,
             "reason": str(reason) if reason else "",
             "step_ref": step_ref,
+            "rule_id": rule_id if rule_id in rule_ids else None,
         })
         total += po_int
 
@@ -816,6 +887,7 @@ def _reconcile_deductions(
         "points_off": rounded_target,
         "reason": fallback_reason or "Points off (itemization unavailable)",
         "step_ref": None,
+        "rule_id": None,
     }]
 
 
@@ -825,6 +897,7 @@ def _build_breakdown(
     *,
     submission_id: str | None = None,
     pos_to_step_count: dict[Any, int] | None = None,
+    rule_ids: frozenset[str] = frozenset(),
 ) -> tuple[list[dict[str, Any]], float | None]:
     """Turn the model's raw per-problem grades into the actionable
     breakdown the teacher edits, plus the averaged `ai_score`.
@@ -904,6 +977,7 @@ def _build_breakdown(
                     if pos_to_step_count is not None
                     else None
                 ),
+                rule_ids=rule_ids,
             ),
         })
         total_percent += percent
@@ -1014,9 +1088,16 @@ async def run_ai_grading_for_submission(
     if not problems:
         return None
 
+    # The class's rules plus this homework's own rubric — what the grader
+    # applies, and what the grade row freezes below.
+    course_rubric = (await db.execute(
+        select(Course.rubric).where(Course.id == assignment.course_id)
+    )).scalar_one_or_none()
+    rubric = effective_rubric(course_rubric, assignment.rubric)
+
     try:
         result = await grade_submission_with_ai(
-            extraction, problems, assignment.rubric,
+            extraction, problems, rubric,
             user_id=user_id, submission_id=str(submission_id),
         )
     except OutputTruncatedError:
@@ -1051,6 +1132,7 @@ async def run_ai_grading_for_submission(
     breakdown, ai_score = _build_breakdown(
         grades, pos_to_bid, submission_id=str(submission_id),
         pos_to_step_count=pos_to_step_count,
+        rule_ids=frozenset(r["id"] for r in (rubric or {}).get("rules", [])),
     )
 
     # Upsert the grade row (race-safe with teacher manual grading).
@@ -1074,10 +1156,10 @@ async def run_ai_grading_for_submission(
 
     grade.ai_breakdown = result
     grade.ai_score = ai_score
-    # Freeze the rubric we actually graded against so the review page can
-    # diff against Assignment.rubric later and surface a regrade CTA when
-    # the teacher has edited the rubric since this run.
-    grade.rubric_snapshot = assignment.rubric
+    # Freeze the rubric we actually graded against — the homework's own
+    # fields plus the class rules it applied — so the review page can diff
+    # it against the live one and offer a regrade when either has changed.
+    grade.rubric_snapshot = rubric
 
     # The re-check. Teacher grade data here, on the non-force path, can
     # only mean she saved a hand grade while the model was thinking —

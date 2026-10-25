@@ -3145,6 +3145,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/courses/{course_id}/rubric": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Course Rubric
+         * @description The class's grading rules — every homework in it inherits them.
+         */
+        get: operations["get_course_rubric_v1_teacher_courses__course_id__rubric_get"];
+        /**
+         * Update Course Rubric
+         * @description Replace the class's rules. A rule sent with its `id` keeps that id
+         *     (grades that cite it stay linked); one sent without gets a new one.
+         *     Applies to grading from now on — existing grades keep the rules they
+         *     were graded under (`SubmissionGrade.rubric_snapshot`).
+         */
+        put: operations["update_course_rubric_v1_teacher_courses__course_id__rubric_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/courses/{course_id}/sections": {
         parameters: {
             query?: never;
@@ -4295,6 +4322,8 @@ export interface components {
             notes?: string | null;
             /** Partial Credit */
             partial_credit?: string | null;
+            /** Skipped Rule Ids */
+            skipped_rule_ids?: string[] | null;
         };
         /** BreakdownEntry */
         BreakdownEntry: {
@@ -4351,6 +4380,30 @@ export interface components {
         ClaimSectionInviteRequest: {
             /** Token */
             token: string;
+        };
+        /** ClassRubric */
+        ClassRubric: {
+            /** Rules */
+            rules?: components["schemas"]["ClassRubricRule"][];
+        };
+        /** ClassRubricRule */
+        ClassRubricRule: {
+            /** Added At */
+            added_at?: string | null;
+            /** Id */
+            id?: string | null;
+            /** Points */
+            points?: number | null;
+            /**
+             * Source
+             * @default settings
+             * @enum {string}
+             */
+            source: "settings" | "suggestion";
+            /** Source Label */
+            source_label?: string | null;
+            /** Text */
+            text: string;
         };
         /** ClonePracticeRequest */
         ClonePracticeRequest: {
@@ -4637,6 +4690,8 @@ export interface components {
             points_off: number;
             /** Reason */
             reason: string;
+            /** Rule Id */
+            rule_id?: string | null;
             /** Step Ref */
             step_ref?: number | null;
         };
@@ -11992,6 +12047,76 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_course_rubric_v1_teacher_courses__course_id__rubric_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_course_rubric_v1_teacher_courses__course_id__rubric_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClassRubric"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

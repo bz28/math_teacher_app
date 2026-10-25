@@ -10,6 +10,7 @@ from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.class_rubric import ClassRubric, class_rules
 from api.core.integrity_pipeline import ABANDONED_INTERVIEW_DEADLINE
 from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
@@ -650,6 +651,33 @@ async def update_course(
         course.status = body.status
     await db.commit()
     return {"status": "ok"}
+
+
+@router.get("/courses/{course_id}/rubric")
+async def get_course_rubric(
+    course_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """The class's grading rules — every homework in it inherits them."""
+    course = await get_teacher_course(db, course_id, current_user.user_id)
+    return {"rules": class_rules(course.rubric)}
+
+
+@router.put("/courses/{course_id}/rubric")
+async def update_course_rubric(
+    course_id: uuid.UUID, body: ClassRubric,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Replace the class's rules. A rule sent with its `id` keeps that id
+    (grades that cite it stay linked); one sent without gets a new one.
+    Applies to grading from now on — existing grades keep the rules they
+    were graded under (`SubmissionGrade.rubric_snapshot`)."""
+    course = await get_teacher_course(db, course_id, current_user.user_id)
+    course.rubric = body.to_stored(course.rubric)
+    await db.commit()
+    return {"rules": class_rules(course.rubric)}
 
 
 @router.delete("/courses/{course_id}")
