@@ -135,6 +135,7 @@ async def _page_labels(db: AsyncSession, reports: list[TeacherReport]) -> dict[u
     found = {
         "course": await names(Course, Course.name, wanted["course"]),
         "hw": await names(Assignment, Assignment.title, wanted["hw"]),
+        "hw_type": await names(Assignment, Assignment.type, wanted["hw"]),
         "section": await names(Section, Section.name, wanted["section"]),
         "student": await names(User, User.name, wanted["student"]),
     }
@@ -145,6 +146,11 @@ async def _page_labels(db: AsyncSession, reports: list[TeacherReport]) -> dict[u
             labels[r.id] = _generic_label(r.page_url)
             continue
         label, ids, tab = route
+        # Practice, quizzes and tests share the homework routes; name the
+        # page by what the teacher was looking at.
+        kind = found["hw_type"].get(ids["hw"]) if "hw" in ids else None
+        if kind and kind != "homework":
+            label = label.replace("Homework", kind.capitalize())
         # The most specific names first: the homework, then its class.
         order = ("hw", "section") if "hw" in ids else ("course", "section", "student")
         parts = [label, *(found[k][ids[k]] for k in order if k in ids and ids[k] in found[k])]

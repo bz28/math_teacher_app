@@ -68,15 +68,13 @@ export function fmtGap(gap: number): string {
 }
 
 /**
- * The inbox order. Open before resolved; then reports that arrived with
- * a submission attached — those can be diagnosed from the console right
- * now, where a sidebar note usually needs a reply first; then newest.
+ * The inbox order: open before resolved, then newest. A report that came
+ * with no submission (filed from the sidebar) is often about generation
+ * or a broken page — ranking it below every older grade report buried it.
  */
 export function byPriority(a: TeacherReportData, b: TeacherReportData): number {
   const open = Number(b.status === "open") - Number(a.status === "open");
   if (open) return open;
-  const evidence = Number(!!b.submission_id) - Number(!!a.submission_id);
-  if (evidence) return evidence;
   return b.created_at.localeCompare(a.created_at);
 }
 
