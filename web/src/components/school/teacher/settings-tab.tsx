@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { teacher, type TeacherCourse } from "@/lib/api";
 import { Field } from "@/components/school/shared/field";
 import { Select } from "@/components/ui";
+import { ClassRubricSection } from "@/components/school/teacher/_pieces/class-rubric-section";
 
 export function SettingsTab({ course, onChanged }: { course: TeacherCourse; onChanged: () => void }) {
   const router = useRouter();
@@ -128,7 +129,9 @@ export function SettingsTab({ course, onChanged }: { course: TeacherCourse; onCh
         </div>
       </div>
 
-      <div className="mt-6 rounded-[--radius-md] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] p-4">
+      <ClassRubricSection courseId={course.id} courseName={course.name} />
+
+      <div className="mt-8 rounded-[--radius-md] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] p-4">
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--color-error)]">Danger zone</h3>
         <p className="mt-2 text-xs text-[color:var(--color-error)]">
           Permanently delete &ldquo;{course.name}&rdquo; and everything inside it. This affects all
