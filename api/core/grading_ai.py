@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -235,8 +236,9 @@ _DEFAULT_PARTIAL_CREDIT = (
 )
 
 
-# Rendered only when the class has rules, so a class without any is
-# graded with exactly the prompt it had before rules existed.
+# Rendered only when the class has rules, so a class without any sees the
+# same rubric block it did before rules existed. (The tool schema's
+# nullable `rule_id`, and the one ledger sentence about it, are shared.)
 _CLASS_RULES_INTRO = (
     "\"Class rules\" — this teacher's own grading standards for every homework in "
     "this class. Apply each one to every problem it covers, judged only from the "
@@ -712,6 +714,10 @@ async def grade_submission_with_ai(
     return result
 
 
+def _literal(words: str) -> Callable[[re.Match[str]], str]:
+    return lambda _m: words
+
+
 def _name_rules_in_text(result: dict[str, Any], rules: list[dict[str, Any]]) -> None:
     """Swap a class rule's id for its wording wherever the model wrote the
     id into text a person reads. The id is how the grader cites a rule
@@ -728,7 +734,9 @@ def _name_rules_in_text(result: dict[str, Any], rules: list[dict[str, Any]]) -> 
         if not isinstance(text, str):
             return text
         for pattern, words in swaps:
-            text = pattern.sub(words, text)
+            # A function, not a template: rule text is LaTeX-heavy, and a
+            # template would read `\sqrt` as an escape and raise.
+            text = pattern.sub(_literal(words), text)
         return text
 
     for g in result.get("grades") or []:
@@ -862,6 +870,8 @@ def _reconcile_deductions(
             step_ref = None
         reason = d.get("reason")
         rule_id = d.get("rule_id")
+        if not isinstance(rule_id, str):
+            rule_id = None
         items.append({
             "points_off": po_int,
             "reason": str(reason) if reason else "",
@@ -1157,8 +1167,9 @@ async def run_ai_grading_for_submission(
     grade.ai_breakdown = result
     grade.ai_score = ai_score
     # Freeze the rubric we actually graded against — the homework's own
-    # fields plus the class rules it applied — so the review page can diff
-    # it against the live one and offer a regrade when either has changed.
+    # fields plus the class rules it applied — so a grade always records
+    # which rules it was graded under, and can be diffed against the live
+    # rubric to offer a regrade.
     grade.rubric_snapshot = rubric
 
     # The re-check. Teacher grade data here, on the non-force path, can

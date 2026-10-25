@@ -59,6 +59,9 @@ router = APIRouter()
 # ── Request schemas ──
 
 
+_RUBRIC_TEXT_FIELDS = ("full_credit", "partial_credit", "common_mistakes", "notes")
+
+
 class AssignmentRubric(BaseModel):
     """The teacher-authored grading rubric, as the UI actually collects it.
 
@@ -941,11 +944,13 @@ async def list_rubric_sources(
                 "rubric": a.rubric,
                 "created_at": a.created_at.isoformat(),
             }
-            # Guard against rows where rubric is a stored-but-empty dict
-            # ({}): they carry no reusable text, so exclude them from the
-            # picker rather than offering a blank "copy" that does nothing.
+            # Only rubrics with text to copy. A stored-but-empty dict, or one
+            # holding nothing but `skipped_rule_ids` (which name another
+            # class's rules), would show as a blank row whose "copy" clears
+            # the target's rubric.
             for a, course_name in rows
-            if isinstance(a.rubric, dict) and a.rubric
+            if isinstance(a.rubric, dict)
+            and any(a.rubric.get(f) for f in _RUBRIC_TEXT_FIELDS)
         ]
     }
 

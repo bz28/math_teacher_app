@@ -320,3 +320,34 @@ def test_rule_ids_in_the_graders_prose_become_the_rules_words() -> None:
     assert g["deductions"][0]["reason"] == "No unit — “Final answers need units.”"
     # The citation itself is untouched.
     assert g["deductions"][0]["rule_id"] == "r1"
+
+
+def test_rule_text_with_latex_backslashes_is_inserted_literally() -> None:
+    from api.core.grading_ai import _name_rules_in_text
+
+    rule = {"id": "r1", "text": r"Leave answers in \sqrt{} form, not \frac{}{} or \1."}
+    result = {"grades": [{"reasoning": "Breaks [r1].", "deductions": []}]}
+    _name_rules_in_text(result, [rule])
+    assert result["grades"][0]["reasoning"] == f"Breaks “{rule['text']}”."
+
+
+def test_a_non_string_rule_id_is_dropped() -> None:
+    ledger = _reconcile_deductions(
+        [{"points_off": 5, "reason": "x", "step_ref": None, "rule_id": ["r1"]}],
+        95.0, fallback_reason=None, submission_id=None, problem_id="p",
+        step_count=None, rule_ids=frozenset({"r1"}),
+    )
+    assert ledger[0]["rule_id"] is None
+
+
+async def test_a_skips_only_rubric_is_not_offered_as_a_copy_source(client: AsyncClient) -> None:
+    world = await _seed_hw()
+    async with get_session_factory()() as s:
+        a = (await s.execute(
+            select(Assignment).where(Assignment.id == world["assignment_id"])
+        )).scalar_one()
+        a.rubric = {"skipped_rule_ids": ["r1"]}
+        await s.commit()
+    res = await client.get("/v1/teacher/rubric-sources", headers=_auth(world["teacher_token"]))
+    assert res.status_code == 200
+    assert [x["id"] for x in res.json()["sources"]] == []
