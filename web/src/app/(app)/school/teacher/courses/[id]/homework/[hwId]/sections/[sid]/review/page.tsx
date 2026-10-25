@@ -46,6 +46,7 @@ import {
   type TeacherSubmissionRow,
   type TeacherSubmissionStep,
 } from "@/lib/api";
+import { RuleSuggestion } from "@/components/school/teacher/_pieces/rule-suggestion";
 import { effectiveRubric, rubricChanged, rubricFields } from "@/lib/rubric";
 
 type GradeStatus = GradeBreakdownEntry["score_status"];
@@ -4256,6 +4257,7 @@ function SubmissionDetailPanel({
                 drawingsInventoried={detail.drawings_inventoried}
                 reportBase={reportBase}
                 ruleText={ruleText}
+                submissionId={detail.submission_id}
                 rowRef={(el) => {
                   rowRefs.current[i] = el;
                 }}
@@ -4785,6 +4787,7 @@ function ProblemGradeRow({
   onOpenPage,
   reportBase,
   ruleText,
+  submissionId,
 }: {
   problem: TeacherSubmissionDetailProblem;
   entry: GradeBreakdownEntry | null;
@@ -4793,6 +4796,7 @@ function ProblemGradeRow({
   /** Class rule id → its wording, from the grade's rubric snapshot, so a
    *  deduction that applied a rule can name it. */
   ruleText: Record<string, string>;
+  submissionId: string;
   /** This row is the keyboard-focused problem — draws the left accent
    *  bar + ring and receives real DOM focus via `rowRef`. */
   focused: boolean;
@@ -5578,6 +5582,17 @@ function ProblemGradeRow({
           className="mt-1 w-full resize-y rounded-[--radius-sm] border border-border-light bg-surface px-2.5 py-1.5 text-xs leading-relaxed text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted"
         />
       </div>
+
+      {/* Lowered the AI's grade and said why → offer to make the reason
+          a class rule (server decides; never blocks grading). */}
+      <RuleSuggestion
+        submissionId={submissionId}
+        problemId={problem.bank_item_id}
+        aiPercent={aiGrade?.percent ?? null}
+        teacherPercent={entry?.percent ?? null}
+        comment={entry?.feedback ?? ""}
+        aiFeedback={aiGrade?.student_feedback ?? null}
+      />
     </div>
   );
 }

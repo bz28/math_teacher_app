@@ -1145,6 +1145,18 @@ export interface GradedRule {
   points: number | null;
 }
 
+/** An offer to add a teacher's grading reason to the class rubric,
+ *  made after they lowered an AI grade with a comment. */
+export interface RubricSuggestion {
+  id: string;
+  text: string;
+  points: number | null;
+  /** The homework it came from ("HW 5"). */
+  source_label: string | null;
+  status: "pending" | "added" | "added_homework" | "declined";
+  created_at: string | null;
+}
+
 /** A rule as the settings editor sends it: no id = a new rule. */
 export interface ClassRubricRuleInput {
   id?: string;
@@ -1452,6 +1464,30 @@ export const teacher = {
   /** The class's grading rules — every homework in the course inherits them. */
   courseRubric(courseId: string) {
     return apiFetch<{ rules: ClassRubricRule[] }>(`/teacher/courses/${courseId}/rubric`);
+  },
+  /** After lowering an AI grade with a comment: the rule to offer adding
+   *  to the class rubric, or null. Never changes a rubric. */
+  suggestRubricRule(submissionId: string, data: { problem_id: string; teacher_percent: number; comment: string }) {
+    return apiFetch<{ suggestion: RubricSuggestion | null }>(
+      `/teacher/submissions/${submissionId}/rubric-suggestion`,
+      { method: "POST", body: JSON.stringify(data) },
+    );
+  },
+  /** The teacher's answer to an offer. "decline" means it's never offered
+   *  again in this class (it stays listed in settings to undo). */
+  decideRubricSuggestion(
+    suggestionId: string,
+    data: { action: "add_class" | "add_homework" | "decline"; text?: string; points?: number | null },
+  ) {
+    return apiFetch<{ suggestion: RubricSuggestion; rules: ClassRubricRule[] }>(
+      `/teacher/rubric-suggestions/${suggestionId}/decide`,
+      { method: "POST", body: JSON.stringify(data) },
+    );
+  },
+  rubricSuggestions(courseId: string, status: "declined" | "pending" = "declined") {
+    return apiFetch<{ suggestions: RubricSuggestion[] }>(
+      `/teacher/courses/${courseId}/rubric-suggestions?status_filter=${status}`,
+    );
   },
   /** Replace the class's rules. A rule sent with its id keeps it. */
   updateCourseRubric(courseId: string, rules: ClassRubricRuleInput[]) {
