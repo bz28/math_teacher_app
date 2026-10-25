@@ -80,6 +80,7 @@ class LLMMode:
     BANK_EXTRACT = "bank_extract"
     AI_GRADING = "ai_grading"
     CLASSIFY_REQUIRES_DRAWING = "classify_requires_drawing"
+    SUGGEST_RUBRIC_RULE = "suggest_rubric_rule"
 
 _client: anthropic.AsyncAnthropic | None = None
 

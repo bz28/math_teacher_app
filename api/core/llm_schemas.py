@@ -1591,3 +1591,41 @@ REQUIRES_DRAWING_SCHEMA: ToolSchema = {
         "additionalProperties": False,
     },
 }
+
+
+RUBRIC_RULE_SUGGESTION_SCHEMA: ToolSchema = {
+    "name": "return_rubric_rule",
+    "description": "Say whether the teacher's reason is a standing grading rule, and word it.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "kind": {
+                "type": "string",
+                "enum": ["rule", "one_off"],
+                "description": (
+                    "'rule' when the reason is a standard the teacher would apply to "
+                    "any student on any problem it covers (units required, show work, "
+                    "label graphs). 'one_off' when it is about this student's particular "
+                    "mistake, misreading, or this problem only."
+                ),
+            },
+            "rule_text": {
+                "type": ["string", "null"],
+                "description": (
+                    "For 'rule': the standard as a short instruction the AI grader can "
+                    "apply to every homework, in the teacher's terms, under 120 "
+                    "characters, no points. Null for 'one_off'."
+                ),
+            },
+            "same_as": {
+                "type": ["string", "null"],
+                "description": (
+                    "The id of a listed rule that says the same thing (even worded "
+                    "differently or narrower/broader in wording only). Null if none."
+                ),
+            },
+        },
+        "required": ["kind", "rule_text", "same_as"],
+        "additionalProperties": False,
+    },
+}
