@@ -149,17 +149,22 @@ async def suggest_for_edit(
     if not text:
         return None
 
-    match = known.get(str(result.get("same_as") or ""))
-    if match is not None:
-        _, seen = match
-        if seen is None:
-            return None  # the class already has this rule
-        if seen.status == "pending":
-            return seen  # ignored before — offer it again
-        if seen.status == "added_homework" and seen.assignment_id != assignment.id:
-            pass  # kept for one homework; a new homework may want it too
-        else:
-            return None  # added, or declined: never asked again
+    match = known.get(str(result.get("same_as") or "").strip("[]"))
+    if match is not None and match[1] is None:
+        return None  # the class already has this rule
+    # Every past offer of this rule — the matched one and any with the
+    # same wording (it may have been offered more than once). The
+    # strongest answer wins: declined or added means never again.
+    same = [s for s in past if _same_text(s.text, text)]
+    if match is not None and match[1] is not None:
+        same.append(match[1])
+    if any(s.status in ("declined", "added") for s in same):
+        return None
+    if any(s.status == "added_homework" and s.assignment_id == assignment.id for s in same):
+        return None  # already in this homework's extra rules
+    pending = next((s for s in same if s.status == "pending"), None)
+    if pending is not None:
+        return pending  # ignored before — offer it again
 
     offer = RubricSuggestion(
         course_id=course.id,
@@ -211,19 +216,27 @@ async def decide(
         hw = (await db.execute(
             select(Assignment).where(Assignment.id == offer.assignment_id).with_for_update()
         )).scalar_one_or_none()
-        if hw is not None:
-            line = offer.text + (f" Take off {offer.points}." if offer.points else "")
-            rubric = dict(hw.rubric or {})
-            notes = (rubric.get("notes") or "").strip()
-            merged = f"{notes}\n{line}" if notes else line
-            if len(merged) > MAX_RUBRIC_FIELD_CHARS:
-                raise ValueError("This homework's extra rules are full")
-            rubric["notes"] = merged
-            hw.rubric = rubric
+        if hw is None:
+            raise ValueError("That homework no longer exists. Add the rule to the class rubric instead.")
+        line = offer.text + (f" Take off {offer.points}." if offer.points else "")
+        rubric = dict(hw.rubric or {})
+        notes = (rubric.get("notes") or "").strip()
+        merged = f"{notes}\n{line}" if notes else line
+        if len(merged) > MAX_RUBRIC_FIELD_CHARS:
+            raise ValueError("This homework's extra rules are full")
+        rubric["notes"] = merged
+        hw.rubric = rubric
         offer.status = "added_homework"
     else:
         offer.status = "declined"
     offer.decided_at = datetime.now(UTC)
+
+
+def _same_text(a: str, b: str) -> bool:
+    """Same rule wording, ignoring case, spacing and full stops."""
+    def norm(t: str) -> str:
+        return " ".join(t.lower().replace(".", " ").split())
+    return norm(a) == norm(b)
 
 
 def offer_json(offer: RubricSuggestion) -> dict[str, Any]:

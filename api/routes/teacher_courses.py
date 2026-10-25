@@ -10,7 +10,7 @@ from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.class_rubric import ClassRubric, class_rules
+from api.core.class_rubric import ClassRubric, class_rules, rubric_revision
 from api.core.integrity_pipeline import ABANDONED_INTERVIEW_DEADLINE
 from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
@@ -661,7 +661,7 @@ async def get_course_rubric(
 ) -> dict[str, Any]:
     """The class's grading rules — every homework in it inherits them."""
     course = await get_teacher_course(db, course_id, current_user.user_id)
-    return {"rules": class_rules(course.rubric)}
+    return {"rules": class_rules(course.rubric), "rev": rubric_revision(course.rubric)}
 
 
 @router.put("/courses/{course_id}/rubric")
@@ -675,9 +675,15 @@ async def update_course_rubric(
     Applies to grading from now on — existing grades keep the rules they
     were graded under (`SubmissionGrade.rubric_snapshot`)."""
     course = await get_teacher_course(db, course_id, current_user.user_id)
+    await db.refresh(course, with_for_update=True)
+    if body.rev is not None and body.rev != rubric_revision(course.rubric):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="These rules changed somewhere else. We've reloaded them — make your edit again.",
+        )
     course.rubric = body.to_stored(course.rubric)
     await db.commit()
-    return {"rules": class_rules(course.rubric)}
+    return {"rules": class_rules(course.rubric), "rev": rubric_revision(course.rubric)}
 
 
 @router.delete("/courses/{course_id}")

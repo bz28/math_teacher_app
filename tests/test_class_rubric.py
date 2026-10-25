@@ -104,8 +104,8 @@ def test_a_repeated_id_names_only_one_rule() -> None:
     assert first["id"] == "r1" and second["id"] not in ("r1", "")
 
 
-def test_clearing_every_rule_stores_none() -> None:
-    assert ClassRubric(rules=[]).to_stored({"rules": [_UNITS]}) is None
+def test_clearing_every_rule_keeps_the_revision() -> None:
+    assert ClassRubric(rules=[]).to_stored({"rules": [_UNITS], "rev": 3}) == {"rules": [], "rev": 4}
 
 
 def test_rule_limits() -> None:
@@ -170,21 +170,27 @@ async def test_class_rubric_round_trips_and_keeps_ids(client: AsyncClient) -> No
     url = f"/v1/teacher/courses/{course_id}/rubric"
     headers = _auth(world["teacher_token"])
 
-    assert (await client.get(url, headers=headers)).json() == {"rules": []}
+    assert (await client.get(url, headers=headers)).json() == {"rules": [], "rev": 0}
 
-    res = await client.put(url, json={"rules": [{"text": "Answers need units.", "points": 5}]},
+    res = await client.put(url, json={"rules": [{"text": "Answers need units.", "points": 5}], "rev": 0},
                            headers=headers)
     assert res.status_code == 200
     (rule,) = res.json()["rules"]
+    assert res.json()["rev"] == 1
 
-    res = await client.put(url, json={"rules": [{**rule, "text": "Answers need units (ft)."}]},
+    res = await client.put(url, json={"rules": [{**rule, "text": "Answers need units (ft)."}], "rev": 1},
                            headers=headers)
     assert res.json()["rules"][0]["id"] == rule["id"]
     assert (await client.get(url, headers=headers)).json()["rules"][0]["text"] == (
         "Answers need units (ft)."
     )
 
-    assert (await client.put(url, json={"rules": []}, headers=headers)).json() == {"rules": []}
+    # An editor that loaded revision 1 can't overwrite revision 2.
+    stale = await client.put(url, json={"rules": [], "rev": 1}, headers=headers)
+    assert stale.status_code == 409
+    assert (await client.put(url, json={"rules": [], "rev": 2}, headers=headers)).json() == {
+        "rules": [], "rev": 3,
+    }
 
 
 async def test_another_teacher_cannot_read_or_write_the_class_rubric(

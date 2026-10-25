@@ -58,6 +58,9 @@ export function ClassRubricSection({
 }) {
   // null = loading; the list once loaded.
   const [rules, setRules] = useState<ClassRubricRule[] | null>(null);
+  // The revision these rules were loaded at — sent with every save so a
+  // save can't overwrite rules added elsewhere (a review page, a tab).
+  const [rev, setRev] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -72,7 +75,11 @@ export function ClassRubricSection({
     let cancelled = false;
     teacher
       .courseRubric(courseId)
-      .then((res) => !cancelled && setRules(res.rules))
+      .then((res) => {
+        if (cancelled) return;
+        setRules(res.rules);
+        setRev(res.rev);
+      })
       .catch(() => !cancelled && setLoadError(true));
     return () => {
       cancelled = true;
@@ -80,20 +87,27 @@ export function ClassRubricSection({
   }, [courseId]);
 
   const save = (next: ClassRubricRuleInput[]) => {
-    const prev = rules;
     setSaveState("saving");
     setSaveError(null);
     return teacher
-      .updateCourseRubric(courseId, next)
+      .updateCourseRubric(courseId, next, rev)
       .then((res) => {
         setRules(res.rules);
+        setRev(res.rev);
         setSaveState("saved");
         return true;
       })
       .catch((e: unknown) => {
-        setRules(prev);
         setSaveState("error");
         setSaveError(e instanceof Error ? e.message : "Couldn't save");
+        // The rules may have moved on (a 409): show what's there now.
+        teacher
+          .courseRubric(courseId)
+          .then((res) => {
+            setRules(res.rules);
+            setRev(res.rev);
+          })
+          .catch(() => undefined);
         return false;
       });
   };
@@ -293,7 +307,13 @@ export function ClassRubricSection({
       <p className="mt-2 text-xs text-text-muted">
         Changes apply to homework graded from now on. Grades already given don&apos;t change.
       </p>
-      <DeclinedSuggestions courseId={courseId} onAdded={setRules} />
+      <DeclinedSuggestions
+        courseId={courseId}
+        onAdded={(next, nextRev) => {
+          setRules(next);
+          setRev(nextRev);
+        }}
+      />
     </section>
   );
 }
@@ -308,7 +328,7 @@ function DeclinedSuggestions({
   onAdded,
 }: {
   courseId: string;
-  onAdded: (rules: ClassRubricRule[]) => void;
+  onAdded: (rules: ClassRubricRule[], rev: number) => void;
 }) {
   const [items, setItems] = useState<RubricSuggestion[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -332,7 +352,7 @@ function DeclinedSuggestions({
     setError(null);
     try {
       const res = await teacher.decideRubricSuggestion(s.id, { action: "add_class" });
-      onAdded(res.rules);
+      onAdded(res.rules, res.rev);
       setItems((list) => (list ?? []).filter((x) => x.id !== s.id));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't add it. Try again.");

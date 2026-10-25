@@ -8,18 +8,20 @@ teacher's answer, and list what a class declined so a "no" can be undone.
 import uuid
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.class_rubric import MAX_RULE_CHARS, class_rules
+from api.core.class_rubric import MAX_RULE_CHARS, class_rules, rubric_revision
 from api.core.rubric_suggestions import decide, offer_json, suggest_for_edit
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
-from api.models.assignment import Assignment, Submission, SubmissionGrade
+from api.middleware.rate_limit import limiter
+from api.models.assignment import Submission, SubmissionGrade
 from api.models.course import Course
 from api.models.rubric_suggestion import RubricSuggestion
+from api.routes.teacher_assignments import get_teacher_assignment
 from api.routes.teacher_courses import get_teacher_course
 from api.services.bank import load_problems_for_assignment
 
@@ -40,8 +42,12 @@ class DecideRequest(BaseModel):
     points: int | None = Field(default=None, ge=0, le=100)
 
 
+# Each ask is one small paid call; a teacher grading at full speed lowers
+# a few grades a minute, nowhere near this.
 @router.post("/submissions/{submission_id}/rubric-suggestion")
+@limiter.limit("60/minute")
 async def suggest_rubric_rule(
+    request: Request,
     submission_id: uuid.UUID,
     body: SuggestRequest,
     current_user: CurrentUser = Depends(require_teacher),
@@ -52,12 +58,10 @@ async def suggest_rubric_rule(
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
     )).scalar_one_or_none()
-    assignment = (await db.execute(
-        select(Assignment).where(Assignment.id == sub.assignment_id)
-    )).scalar_one_or_none() if sub else None
-    if not sub or not assignment:
+    if not sub:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
-    await get_teacher_course(db, assignment.course_id, current_user.user_id)
+    # The same check as saving the grade: only the homework's teacher.
+    assignment = await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
 
     ai = (await db.execute(
         select(SubmissionGrade.ai_breakdown).where(SubmissionGrade.submission_id == sub.id)
@@ -72,6 +76,10 @@ async def suggest_rubric_rule(
     ai_percent = ai_grade.get("percent") if ai_grade else None
     if problem is None or not isinstance(ai_percent, (int, float)):
         return {"suggestion": None}  # no AI grade to have lowered
+    # The AI's own drafted words aren't the teacher's reason.
+    said = body.comment.strip()
+    if ai_grade and said in {str(ai_grade.get(k) or "").strip() for k in ("student_feedback", "reasoning")}:
+        return {"suggestion": None}
 
     offer = await suggest_for_edit(
         db,
@@ -99,12 +107,23 @@ async def decide_rubric_suggestion(
 ) -> dict[str, Any]:
     """Record the teacher's answer: add to the class rubric, add to this
     homework only, or decline (never offered again)."""
+    # Locked: two surfaces answering the same offer (the review card and
+    # the declined list) must not both add it.
     offer = (await db.execute(
-        select(RubricSuggestion).where(RubricSuggestion.id == suggestion_id)
+        select(RubricSuggestion).where(RubricSuggestion.id == suggestion_id).with_for_update()
     )).scalar_one_or_none()
     if not offer:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Suggestion not found")
     await get_teacher_course(db, offer.course_id, current_user.user_id)
+    if body.action == "add_homework":
+        # Writing a homework's rubric is its teacher's call, as on the
+        # homework page.
+        if offer.assignment_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="That homework no longer exists. Add the rule to the class rubric instead.",
+            )
+        await get_teacher_assignment(db, offer.assignment_id, current_user.user_id)
     if offer.status in ("added", "added_homework"):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Already added")
     try:
@@ -123,7 +142,7 @@ async def decide_rubric_suggestion(
     rubric = (await db.execute(
         select(Course.rubric).where(Course.id == offer.course_id)
     )).scalar_one_or_none()
-    return {"suggestion": offer_json(offer), "rules": class_rules(rubric)}
+    return {"suggestion": offer_json(offer), "rules": class_rules(rubric), "rev": rubric_revision(rubric)}
 
 
 @router.get("/courses/{course_id}/rubric-suggestions")

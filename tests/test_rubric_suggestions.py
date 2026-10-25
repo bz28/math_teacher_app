@@ -182,7 +182,71 @@ async def test_another_teacher_can_neither_ask_nor_answer(client: AsyncClient, w
         json={"problem_id": mine["bank_item_id"], "teacher_percent": 90, "comment": "units"},
         headers=other,
     )
-    assert res.status_code == 404
+    assert res.status_code in (403, 404)
     res = await client.post(f"/v1/teacher/rubric-suggestions/{offer['id']}/decide",
                             json={"action": "decline"}, headers=other)
     assert res.status_code == 404
+
+
+async def test_the_ais_own_feedback_is_not_a_reason(client: AsyncClient) -> None:
+    world = await _world()
+    async with get_session_factory()() as s:
+        g = (await s.execute(
+            select(SubmissionGrade).where(SubmissionGrade.submission_id == world["submission_ids"][0])
+        )).scalar_one()
+        g.ai_breakdown = {"grades": [{**g.ai_breakdown["grades"][0], "student_feedback": "Nice work."}]}
+        await s.commit()
+    offer, stub = await _ask(client, world, comment="Nice work.", classified=_rule())
+    assert offer is None and stub.await_count == 0
+
+
+async def test_declined_wins_over_a_pending_duplicate(client: AsyncClient) -> None:
+    world = await _world()
+    async with get_session_factory()() as s:
+        s.add_all([
+            RubricSuggestion(course_id=world["course_id"], text="Final answers need units.", status="pending"),
+            RubricSuggestion(course_id=world["course_id"], text="final answers need units", status="declined"),
+        ])
+        await s.commit()
+    offer, _ = await _ask(client, world, classified=_rule())
+    assert offer is None
+
+
+async def test_the_same_rule_worded_identically_reuses_the_pending_offer(client: AsyncClient) -> None:
+    world = await _world()
+    first, _ = await _ask(client, world, classified=_rule())
+    again, _ = await _ask(client, world, comment="units!", classified=_rule("Final answers need units"))
+    assert again["id"] == first["id"]
+    assert len(await _offers(world["course_id"])) == 1
+
+
+async def test_adding_to_a_deleted_homework_says_so(client: AsyncClient) -> None:
+    world = await _world()
+    offer, _ = await _ask(client, world, classified=_rule())
+    async with get_session_factory()() as s:
+        row = (await s.execute(
+            select(RubricSuggestion).where(RubricSuggestion.id == uuid.UUID(offer["id"]))
+        )).scalar_one()
+        row.assignment_id = None
+        await s.commit()
+    res = await client.post(f"/v1/teacher/rubric-suggestions/{offer['id']}/decide",
+                            json={"action": "add_homework"}, headers=_auth(world["teacher_token"]))
+    assert res.status_code == 422
+    assert "no longer exists" in res.json()["detail"]
+
+
+async def test_a_co_teacher_can_add_to_the_class_but_not_to_anothers_homework(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    mine = await _world()
+    offer, _ = await _ask(client, mine, classified=_rule())
+    async with get_session_factory()() as s:
+        s.add(CourseTeacher(course_id=mine["course_id"], teacher_id=world["teacher_id"], role="co"))
+        await s.commit()
+    co = _auth(world["teacher_token"])
+    res = await client.post(f"/v1/teacher/rubric-suggestions/{offer['id']}/decide",
+                            json={"action": "add_homework"}, headers=co)
+    assert res.status_code == 403
+    res = await client.post(f"/v1/teacher/rubric-suggestions/{offer['id']}/decide",
+                            json={"action": "add_class"}, headers=co)
+    assert res.status_code == 200

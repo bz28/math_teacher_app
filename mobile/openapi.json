@@ -287,6 +287,17 @@
       "ClassRubric": {
         "additionalProperties": false,
         "properties": {
+          "rev": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rev"
+          },
           "rules": {
             "items": {
               "$ref": "#/components/schemas/ClassRubricRule"

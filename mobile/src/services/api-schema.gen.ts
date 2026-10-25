@@ -4445,6 +4445,8 @@ export interface components {
         };
         /** ClassRubric */
         ClassRubric: {
+            /** Rev */
+            rev?: number | null;
             /** Rules */
             rules?: components["schemas"]["ClassRubricRule"][];
         };

@@ -1463,7 +1463,7 @@ export const teacher = {
   },
   /** The class's grading rules — every homework in the course inherits them. */
   courseRubric(courseId: string) {
-    return apiFetch<{ rules: ClassRubricRule[] }>(`/teacher/courses/${courseId}/rubric`);
+    return apiFetch<{ rules: ClassRubricRule[]; rev: number }>(`/teacher/courses/${courseId}/rubric`);
   },
   /** After lowering an AI grade with a comment: the rule to offer adding
    *  to the class rubric, or null. Never changes a rubric. */
@@ -1479,7 +1479,7 @@ export const teacher = {
     suggestionId: string,
     data: { action: "add_class" | "add_homework" | "decline"; text?: string; points?: number | null },
   ) {
-    return apiFetch<{ suggestion: RubricSuggestion; rules: ClassRubricRule[] }>(
+    return apiFetch<{ suggestion: RubricSuggestion; rules: ClassRubricRule[]; rev: number }>(
       `/teacher/rubric-suggestions/${suggestionId}/decide`,
       { method: "POST", body: JSON.stringify(data) },
     );
@@ -1489,11 +1489,13 @@ export const teacher = {
       `/teacher/courses/${courseId}/rubric-suggestions?status_filter=${status}`,
     );
   },
-  /** Replace the class's rules. A rule sent with its id keeps it. */
-  updateCourseRubric(courseId: string, rules: ClassRubricRuleInput[]) {
-    return apiFetch<{ rules: ClassRubricRule[] }>(`/teacher/courses/${courseId}/rubric`, {
+  /** Replace the class's rules. A rule sent with its id keeps it. `rev`
+   *  is the revision the editor loaded; a 409 means the rules changed
+   *  elsewhere since (reload and redo the edit). */
+  updateCourseRubric(courseId: string, rules: ClassRubricRuleInput[], rev: number) {
+    return apiFetch<{ rules: ClassRubricRule[]; rev: number }>(`/teacher/courses/${courseId}/rubric`, {
       method: "PUT",
-      body: JSON.stringify({ rules }),
+      body: JSON.stringify({ rules, rev }),
     });
   },
   sections(courseId: string) {
