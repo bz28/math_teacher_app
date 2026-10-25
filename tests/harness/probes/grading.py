@@ -115,9 +115,11 @@ def _prob(question: str, answer: str, *, flag: bool | None = None) -> list[dict[
 
 
 # ── The golden set ────────────────────────────────────────────────────────
-# 23 cases, ≥2 per matrix row. Rubric is None throughout, so the grader applies
-# the shipped DEFAULT rubric — i.e. exactly what a teacher who authors no rubric
-# gets. Two cases are physics (a2, b3) per the "a couple physics" ask.
+# 27 cases, ≥2 per matrix row. Rubric is None except in the g-row (class
+# rules), so the grader applies the shipped DEFAULT rubric — i.e. exactly what
+# a teacher who authors no rubric gets. Two cases are physics (a2, b3) per the "a couple physics" ask.
+
+_UNITS_RULE = {"id": "runits1", "text": "Final answers need units (ft, °, rad/min).", "points": 5}
 
 GOLDEN_CASES: list[GradingCase] = [
     # (a) clean correct, standard method → full ----------------------------
@@ -602,6 +604,69 @@ GOLDEN_CASES: list[GradingCase] = [
         accepts={"full"},
         rationale="The drawing is on the page and correct; it was just recorded before the flag.",
     ),
+    # ── g: the teacher's class rules ──────────────────────────────────
+    # A class rule is the teacher's own standard. The grader applies it
+    # when the work breaks it, cites it by id, never invents one, and lets
+    # the homework's own notes override it. Prod (Oct 2026): a teacher who
+    # takes 5 off for a missing unit reported full credit three times.
+    GradingCase(
+        name="g1-class-rule-unit-missing",
+        category="g",
+        extra={"rubric": {"rules": [_UNITS_RULE]}, "requires_rule_id": "runits1",
+               "percent_band": (90, 97)},
+        problems=_prob(
+            "A 16-foot ladder leans against a wall at an 80° angle with the ground. "
+            "How high up the wall does it reach, in feet?", "15.76 ft",
+        ),
+        extraction=_ext([(1, "\\sin 80^\\circ = \\frac{h}{16}"), (2, "h = 16\\sin 80^\\circ"),
+                         (3, "h = 15.76")], "h = 15.76"),
+        expected="partial",
+        accepts={"partial"},
+        rationale="Right value, no unit; the class rule takes 5 off and is cited.",
+    ),
+    GradingCase(
+        name="g2-class-rule-unit-written",
+        category="g",
+        extra={"rubric": {"rules": [_UNITS_RULE]}},
+        problems=_prob(
+            "A 16-foot ladder leans against a wall at an 80° angle with the ground. "
+            "How high up the wall does it reach, in feet?", "15.76 ft",
+        ),
+        extraction=_ext([(1, "\\sin 80^\\circ = \\frac{h}{16}"), (2, "h = 16\\sin 80^\\circ"),
+                         (3, "h = 15.76 \\text{ ft}")], "h = 15.76 \\text{ ft}"),
+        expected="full",
+        accepts={"full"},
+        rationale="The unit is written, so the rule is met.",
+    ),
+    GradingCase(
+        name="g3-no-rule-no-unit-deduction",
+        category="g",
+        extra={"forbids_deduction_mentioning": ["unit"]},
+        problems=_prob(
+            "A 16-foot ladder leans against a wall at an 80° angle with the ground. "
+            "How high up the wall does it reach, in feet?", "15.76 ft",
+        ),
+        extraction=_ext([(1, "\\sin 80^\\circ = \\frac{h}{16}"), (2, "h = 16\\sin 80^\\circ"),
+                         (3, "h = 15.76")], "h = 15.76"),
+        expected="full",
+        accepts={"full"},
+        rationale="Without a units rule the grader must not invent one.",
+    ),
+    GradingCase(
+        name="g4-homework-notes-override-class-rule",
+        category="g",
+        extra={"rubric": {"rules": [_UNITS_RULE],
+                          "notes": "Units are not required on this homework."}},
+        problems=_prob(
+            "A 16-foot ladder leans against a wall at an 80° angle with the ground. "
+            "How high up the wall does it reach, in feet?", "15.76 ft",
+        ),
+        extraction=_ext([(1, "\\sin 80^\\circ = \\frac{h}{16}"), (2, "h = 16\\sin 80^\\circ"),
+                         (3, "h = 15.76")], "h = 15.76"),
+        expected="full",
+        accepts={"full"},
+        rationale="The homework's own notes win over the class rule.",
+    ),
     GradingCase(
         name="e2-blank",
         category="e",
@@ -626,7 +691,7 @@ async def grade_case(
     (reproducible) config, which is what production ships.
     """
     result = await grade_submission_with_ai(
-        case.extraction, case.problems, None, reproducible=reproducible,
+        case.extraction, case.problems, case.extra.get("rubric"), reproducible=reproducible,
     )
     grades = result.get("grades", [])
     status = grades[0].get("score_status") if grades else None
@@ -637,7 +702,7 @@ class GradingProbe(Probe):
     name = "grading"
     needs_browser = False
     default_constraint = (
-        "Grading-quality golden set: 23 hand-labeled submissions spanning "
+        "Grading-quality golden set: 27 hand-labeled submissions spanning "
         "clean-correct, valid-alternative-method, broken-work-right-answer, "
         "arithmetic-slip, plainly-wrong, and required-method/drawing. Asserts the AI grader's "
         "score_status matches the label."
@@ -699,6 +764,9 @@ class GradingProbe(Probe):
                 result.get("grades") or [],
                 pos_to_bid,
                 pos_to_step_count=pos_to_step_count,
+                rule_ids=frozenset(
+                    r["id"] for r in (case.extra.get("rubric") or {}).get("rules", [])
+                ),
             )
             persisted_deductions = [
                 {
@@ -728,6 +796,7 @@ class GradingProbe(Probe):
                         "requires_reasoning_mentioning": case.extra.get("requires_reasoning_mentioning"),
                         "forbids_reasoning_mentioning": case.extra.get("forbids_reasoning_mentioning"),
                         "max_confidence": case.extra.get("max_confidence"),
+                        "requires_rule_id": case.extra.get("requires_rule_id"),
                     },
                 )
             )
@@ -803,6 +872,37 @@ class GradingProbe(Probe):
                     f"no deduction mentions {forbidden}",
                     not hits,
                     "" if not hits else f"deductions: {hits}",
+                )
+            )
+
+        # A class rule the grader applied is cited by id on the persisted
+        # ledger — that id is what the review page shows the teacher.
+        rule_id = item.raw.get("requires_rule_id")
+        if rule_id:
+            cited = any(
+                d.get("rule_id") == rule_id
+                for p in item.raw.get("persisted_deductions") or []
+                for d in p.get("deductions") or []
+            )
+            checks.append(
+                CheckResult(
+                    f"a deduction cites class rule {rule_id!r}",
+                    cited,
+                    "" if cited else f"ledger: {item.raw.get('persisted_deductions')}",
+                )
+            )
+            # The id is plumbing; the teacher reads words.
+            grade = item.raw.get("grade") or {}
+            shown = " ".join(
+                [str(grade.get("reasoning", ""))]
+                + [str(d.get("reason", "")) for d in grade.get("deductions") or []]
+            )
+            hidden = rule_id not in shown
+            checks.append(
+                CheckResult(
+                    "the rule id never shows in teacher-facing text",
+                    hidden,
+                    "" if hidden else f"text: {shown!r}",
                 )
             )
 
