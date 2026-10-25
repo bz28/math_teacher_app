@@ -60,6 +60,7 @@ export function GradingSetupCard({
   onChange,
   copyFromAssignmentId,
   courseId,
+  linkToClassRubric = true,
 }: {
   rubric: TeacherRubric | null;
   saveState: SaveState;
@@ -74,6 +75,8 @@ export function GradingSetupCard({
   /** The homework's course. When set, the card lists the class's grading
    *  rules (which this homework inherits) with a per-homework skip. */
   courseId?: string;
+  /** Show "Edit class rubric" (off where navigating away loses work). */
+  linkToClassRubric?: boolean;
 }) {
   const [drafts, setDrafts] = useState<DraftMap>(INITIAL_DRAFTS);
   const classRules = useClassRules(courseId);
@@ -86,7 +89,7 @@ export function GradingSetupCard({
   // which field most recently triggered a save lets us render the
   // "Saving…" / "✓ Saved" hint next to THAT field's label — closer to
   // the teacher's eye line than a panel-top hint.
-  const [lastEdited, setLastEdited] = useState<RubricFieldName | null>(null);
+  const [lastEdited, setLastEdited] = useState<RubricFieldName | "skipped" | null>(null);
 
   const externalFor = (field: RubricFieldName): string => {
     if (field === "full_credit")
@@ -183,7 +186,16 @@ export function GradingSetupCard({
           courseId={courseId}
           state={classRules}
           skipped={skipped}
-          onSkippedChange={(ids) => onChange({ skipped_rule_ids: ids })}
+          onSkippedChange={(ids) => {
+            setLastEdited("skipped");
+            onChange({ skipped_rule_ids: ids });
+          }}
+          saveHint={
+            lastEdited === "skipped" ? (
+              <InlineSavedHint state={saveState} errorMessage={saveError} />
+            ) : null
+          }
+          showEditLink={linkToClassRubric}
         />
       )}
 
@@ -584,19 +596,21 @@ function OptionalField({
 type ClassRulesState = ClassRubricRule[] | null | "failed";
 
 function useClassRules(courseId: string | undefined): ClassRulesState {
-  const [state, setState] = useState<ClassRulesState>(null);
+  // Keyed by course so a different course never shows the last one's
+  // rules while its own load.
+  const [loaded, setLoaded] = useState<{ courseId: string; value: ClassRulesState } | null>(null);
   useEffect(() => {
     if (!courseId) return;
     let cancelled = false;
     teacher
       .courseRubric(courseId)
-      .then((res) => !cancelled && setState(res.rules))
-      .catch(() => !cancelled && setState("failed"));
+      .then((res) => !cancelled && setLoaded({ courseId, value: res.rules }))
+      .catch(() => !cancelled && setLoaded({ courseId, value: "failed" }));
     return () => {
       cancelled = true;
     };
   }, [courseId]);
-  return state;
+  return loaded && loaded.courseId === courseId ? loaded.value : null;
 }
 
 function ClassRulesList({
@@ -604,11 +618,15 @@ function ClassRulesList({
   state,
   skipped,
   onSkippedChange,
+  saveHint,
+  showEditLink,
 }: {
   courseId: string;
   state: ClassRulesState;
   skipped: string[];
   onSkippedChange: (ids: string[]) => void;
+  saveHint: React.ReactNode;
+  showEditLink: boolean;
 }) {
   const failed = state === "failed";
   const rules = failed ? null : state;
@@ -625,15 +643,18 @@ function ClassRulesList({
   return (
     <div className="mt-4 rounded-[--radius-md] border border-border-light bg-bg-subtle/40 p-3">
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-primary">
+        <h3 className="flex items-baseline gap-2 text-[11px] font-bold uppercase tracking-wider text-text-primary">
           From your class rubric
+          <span className="normal-case tracking-normal">{saveHint}</span>
         </h3>
-        <Link
-          href={settingsHref}
-          className="text-xs font-semibold text-primary hover:underline"
-        >
-          Edit class rubric
-        </Link>
+        {showEditLink && (
+          <Link
+            href={settingsHref}
+            className="inline-flex min-h-10 items-center text-xs font-semibold text-primary hover:underline"
+          >
+            Edit class rubric
+          </Link>
+        )}
       </div>
       {failed && (
         <p className="mt-2 text-xs text-text-secondary">
@@ -653,9 +674,9 @@ function ClassRulesList({
             const isSkipped = skippedSet.has(r.id);
             const boxId = `skip-rule-${r.id}`;
             return (
-              <li key={r.id} className="flex items-center gap-3 py-2">
+              <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
                 <span
-                  className={`min-w-0 flex-1 text-sm leading-snug ${
+                  className={`min-w-[12rem] flex-1 text-sm leading-snug ${
                     isSkipped ? "text-text-muted line-through" : "text-text-primary"
                   }`}
                 >
@@ -673,6 +694,7 @@ function ClassRulesList({
                     type="checkbox"
                     checked={isSkipped}
                     onChange={(e) => toggle(r.id, e.target.checked)}
+                    aria-label={`Skip “${r.text}” for this homework`}
                     className="h-4 w-4 accent-[color:var(--color-primary)]"
                   />
                   Skip for this homework

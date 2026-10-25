@@ -47,7 +47,12 @@ describe("rubricChanged", () => {
     assert.equal(rubricChanged({ notes: "N" }, graded), true);
   });
 
-  it("treats a snapshot from before class rules as having none", () => {
+  it("doesn't flag a grade made without class rules when rules are added", () => {
     assert.equal(rubricChanged({ notes: "N" }, { notes: "N" }), false);
+    assert.equal(rubricChanged({ notes: "N", rules: graded.rules }, { notes: "N" }), false);
+  });
+
+  it("still flags a text change on such a grade", () => {
+    assert.equal(rubricChanged({ notes: "M", rules: graded.rules }, { notes: "N" }), true);
   });
 });

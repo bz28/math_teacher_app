@@ -129,7 +129,7 @@ export function SettingsTab({ course, onChanged }: { course: TeacherCourse; onCh
         </div>
       </div>
 
-      <ClassRubricSection courseId={course.id} courseName={course.name} />
+      <ClassRubricSection key={course.id} courseId={course.id} courseName={course.name} />
 
       <div className="mt-8 rounded-[--radius-md] border border-[color:var(--color-error-border)] bg-[color:var(--color-error-light)] p-4">
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--color-error)]">Danger zone</h3>

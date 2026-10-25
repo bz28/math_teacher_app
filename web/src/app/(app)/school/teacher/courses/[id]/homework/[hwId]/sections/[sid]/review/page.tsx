@@ -39,6 +39,7 @@ import {
   type TeacherIntegrityDetail,
   type TeacherIntegrityTranscriptTurn,
   type TeacherRubric,
+  type ClassRubricRule,
   type TeacherSubmissionDetail,
   type TeacherSubmissionDetailProblem,
   type TeacherSubmissionDrawing,
@@ -273,7 +274,29 @@ function HomeworkSectionReview({
   // the top of the Problems card so the teacher can sanity-check the
   // AI's grades against their own stated criteria. Null when no rubric
   // was authored (all rubric fields empty or the HW predates rubrics).
-  const [rubric, setRubric] = useState<TeacherRubric | null>(null);
+  const [hwRubric, setHwRubric] = useState<TeacherRubric | null>(null);
+  // The class's rules — null until loaded (or if loading failed). Fetched
+  // on their own so a failure only costs the drift check, never the page.
+  const [classRules, setClassRules] = useState<ClassRubricRule[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    teacher
+      .courseRubric(courseId)
+      .then((res) => !cancelled && setClassRules(res.rules))
+      .catch(() => {
+        /* drift banner stays hidden; the homework rubric still shows */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+  // What the grader applies now: this homework's rubric plus the class
+  // rules it hasn't skipped — compared against each grade's snapshot to
+  // offer a regrade. Until the rules are known, only the homework's own.
+  const rubric = useMemo(
+    () => (classRules ? effectiveRubric(classRules, hwRubric) : hwRubric),
+    [classRules, hwRubric],
+  );
   // Rubric visibility is a session preference, not a per-student one.
   // Lifting it here means expanding the rubric on student A keeps it
   // expanded when the teacher hits "Next student" — otherwise
@@ -477,17 +500,13 @@ function HomeworkSectionReview({
       teacher.assignment(assignmentId),
       teacher.section(courseId, sectionId),
       teacher.submissions(assignmentId),
-      teacher.courseRubric(courseId),
     ])
-      .then(([a, s, subs, classRubric]) => {
+      .then(([a, s, subs]) => {
         if (cancelled) return;
         setError(null);
         setHwTitle(a.title);
         setSectionName(s.name);
-        // What the grader applies now: this homework's rubric plus the
-        // class rules it hasn't skipped — compared against each grade's
-        // snapshot to offer a regrade.
-        setRubric(effectiveRubric(classRubric.rules, a.rubric));
+        setHwRubric(a.rubric);
         // Join submissions to roster by student_id. Email would work
         // today but breaks silently if a student ever changes their
         // account email after submitting — the submission still
@@ -1784,6 +1803,7 @@ function HomeworkSectionReview({
                     : null
                 }
                 rubric={rubric}
+                rubricComplete={classRules !== null}
                 rubricOpen={rubricOpen}
                 onToggleRubric={setRubricOpen}
                 row={selectedEntry.submission}
@@ -3103,6 +3123,7 @@ function SubmissionDetailPanel({
   detail,
   integrity,
   rubric,
+  rubricComplete,
   rubricOpen,
   onToggleRubric,
   row,
@@ -3145,6 +3166,9 @@ function SubmissionDetailPanel({
    *  and each grade row extend it with what they're pointing at. */
   reportBase: ReportProblemContext;
   rubric: TeacherRubric | null;
+  /** The class rules are loaded, so `rubric` is the whole effective
+   *  rubric — the drift check is only trustworthy then. */
+  rubricComplete: boolean;
   rubricOpen: boolean;
   onToggleRubric: (open: boolean) => void;
   row: TeacherSubmissionRow | null;
@@ -4072,7 +4096,7 @@ function SubmissionDetailPanel({
           Triggers a regrade confirm dialog managed by the page. Not on
           work the student flagged as misread — the server won't AI-grade
           a disputed reading. */}
-      {!detail.extraction_flagged_at && (
+      {!detail.extraction_flagged_at && rubricComplete && (
         <RubricDriftBanner
           current={rubric}
           snapshot={row?.rubric_snapshot ?? null}

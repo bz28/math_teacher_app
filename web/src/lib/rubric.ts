@@ -36,8 +36,11 @@ export function effectiveRubric(
 }
 
 /** Has the rubric changed since this grade was made? Compares the four
- *  text fields (missing = empty) and the class rules in force (by id,
- *  wording and points). */
+ *  text fields (missing = empty) and — only for a grade that was made
+ *  under class rules — the rules in force (by id, wording and points).
+ *  A grade made with no class rules isn't flagged when rules are added
+ *  later: adding a rule applies from now on, it doesn't put every past
+ *  grade up for a regrade. */
 export function rubricChanged(
   current: TeacherRubric | null,
   snapshot: TeacherRubric | null,
@@ -45,6 +48,7 @@ export function rubricChanged(
   const a = current ?? {};
   const b = snapshot ?? {};
   if (TEXT_FIELDS.some((f) => (a[f] ?? "") !== (b[f] ?? ""))) return true;
+  if (!b.rules) return false;
   const key = (rules: GradedRule[] | undefined) =>
     JSON.stringify((rules ?? []).map((r) => [r.id, r.text, r.points ?? null]));
   return key(a.rules) !== key(b.rules);
@@ -53,6 +57,11 @@ export function rubricChanged(
 /** A rubric as labeled blocks for read-only display (the review page's
  *  rubric panel and the "rubric at grading time" view). Class rules come
  *  first, one per line with their points. */
+/** The homework has text of its own (not just skipped class rules). */
+export function hasRubricText(r: TeacherRubric | null): boolean {
+  return TEXT_FIELDS.some((f) => Boolean(r?.[f]?.trim()));
+}
+
 export function rubricFields(r: TeacherRubric | null): { label: string; text: string }[] {
   if (!r) return [];
   const out: { label: string; text: string }[] = [];

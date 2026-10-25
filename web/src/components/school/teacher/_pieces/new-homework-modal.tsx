@@ -11,7 +11,7 @@ import {
   type TeacherRubric,
   type TeacherUnit,
 } from "@/lib/api";
-import { normalizeRubric } from "@/lib/rubric";
+import { hasRubricText, normalizeRubric } from "@/lib/rubric";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { useDialogDismiss } from "@/hooks/use-dialog-dismiss";
 import { topUnits } from "@/lib/units";
@@ -220,7 +220,8 @@ export function NewHomeworkModal({
     selectedDocs.size > 0 ||
     topicHint.trim().length > 0 ||
     scopeHint.trim().length > 0 ||
-    Object.keys(normalizeRubric(rubric)).length > 0;
+    hasRubricText(rubric) ||
+    Boolean(rubric?.skipped_rule_ids?.length);
 
   // ── Rubric accumulation (mirrors the detail page, but buffered in
   //    memory until the draft exists rather than auto-saved). ──
@@ -643,6 +644,9 @@ export function NewHomeworkModal({
                         saveError={null}
                         onChange={onChangeRubric}
                         courseId={courseId}
+                        // Leaving for settings would discard this unsaved
+                        // wizard — no link out from inside it.
+                        linkToClassRubric={false}
                       />
                     </div>
                   </div>
@@ -659,7 +663,7 @@ export function NewHomeworkModal({
                     mode={mode}
                     count={count}
                     fileCount={validStagedCount}
-                    hasRubric={Object.keys(normalizeRubric(rubric)).length > 0}
+                    hasRubric={hasRubricText(rubric)}
                   />
                 )}
               </motion.div>

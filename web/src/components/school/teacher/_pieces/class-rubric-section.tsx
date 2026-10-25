@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   teacher,
   type ClassRubricRule,
@@ -64,6 +64,8 @@ export function ClassRubricSection({
   const [newText, setNewText] = useState("");
   const [newPoints, setNewPoints] = useState("");
   const [newError, setNewError] = useState<string | null>(null);
+  const editButtons = useRef(new Map<string, HTMLButtonElement>());
+  const newRuleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,13 +121,25 @@ export function ClassRubricSection({
     if (!t) return "A rule needs some text.";
     if (points === "invalid") return "Points must be a whole number from 0 to 100.";
     const ok = await save(asInputs(rules).map((r) => (r.id === id ? { id, text: t, points } : r)));
-    if (ok) setEditingId(null);
+    if (!ok) return "Couldn't save this rule. Try again.";
+    closeEditor(id);
     return null;
   };
 
   const removeRule = async (id: string) => {
     if (!rules) return;
-    if (await save(asInputs(rules).filter((r) => r.id !== id))) setEditingId(null);
+    if (await save(asInputs(rules).filter((r) => r.id !== id))) {
+      setEditingId(null);
+      // The row is gone; put focus somewhere that still exists.
+      newRuleRef.current?.focus();
+    }
+  };
+
+  // Closing the editor returns focus to that rule's Edit button, so a
+  // keyboard user isn't dropped back to the top of the page.
+  const closeEditor = (id: string) => {
+    setEditingId(null);
+    requestAnimationFrame(() => editButtons.current.get(id)?.focus());
   };
 
   const suggestions = COMMON_RULES.filter(
@@ -171,7 +185,7 @@ export function ClassRubricSection({
                   saving={saveState === "saving"}
                   onSave={(text, points) => updateRule(r.id, text, points)}
                   onRemove={() => removeRule(r.id)}
-                  onCancel={() => setEditingId(null)}
+                  onCancel={() => closeEditor(r.id)}
                 />
               ) : (
                 <li key={r.id} className="flex items-center gap-3 py-3">
@@ -191,6 +205,10 @@ export function ClassRubricSection({
                   </span>
                   <button
                     type="button"
+                    ref={(el) => {
+                      if (el) editButtons.current.set(r.id, el);
+                      else editButtons.current.delete(r.id);
+                    }}
                     onClick={() => setEditingId(r.id)}
                     aria-label={`Edit rule: ${r.text}`}
                     className="min-h-10 shrink-0 rounded-[--radius-sm] px-2 text-sm font-semibold text-primary hover:bg-primary-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -215,6 +233,7 @@ export function ClassRubricSection({
               <label htmlFor="new-rule" className="sr-only">New rule</label>
               <input
                 id="new-rule"
+                ref={newRuleRef}
                 type="text"
                 value={newText}
                 maxLength={MAX_RULE_CHARS}
@@ -261,7 +280,7 @@ export function ClassRubricSection({
                   type="button"
                   disabled={saveState === "saving"}
                   onClick={() => void addRule(t, "")}
-                  className="min-h-9 rounded-full border border-primary/25 bg-primary-bg px-3 text-[13px] font-medium text-primary hover:border-primary/50 disabled:opacity-50"
+                  className="min-h-10 rounded-full border border-primary/25 bg-primary-bg px-3 text-[13px] font-medium text-primary hover:border-primary/50 disabled:opacity-50"
                 >
                   + {t}
                 </button>
