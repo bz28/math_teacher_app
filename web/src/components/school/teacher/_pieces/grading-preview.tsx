@@ -14,11 +14,14 @@ export function GradingPreview({
   partialCredit,
   commonMistakes,
   notes,
+  classRules = [],
 }: {
   fullCredit: string;
   partialCredit: string;
   commonMistakes: string;
   notes: string;
+  /** The class rules this homework applies, already worded for display. */
+  classRules?: string[];
 }) {
   const cm = commonMistakes.trim();
   const n = notes.trim();
@@ -33,6 +36,14 @@ export function GradingPreview({
         How the AI will grade this
       </p>
       <div className="mt-3 space-y-3 text-xs leading-relaxed text-text-primary">
+        {classRules.length > 0 && (
+          <PreviewLine
+            icon="§"
+            iconClassName="text-primary"
+            heading="Class rules"
+            body={classRules.join("; ")}
+          />
+        )}
         <PreviewLine
           icon="✓"
           iconClassName="text-[color:var(--color-success)]"
@@ -58,7 +69,7 @@ export function GradingPreview({
           <PreviewLine
             icon="📝"
             iconClassName="text-text-muted"
-            heading="Notes"
+            heading="Extra rules"
             body={n}
             muted
           />

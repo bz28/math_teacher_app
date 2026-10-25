@@ -11,6 +11,7 @@ import {
   type TeacherRubric,
   type TeacherUnit,
 } from "@/lib/api";
+import { normalizeRubric } from "@/lib/rubric";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { useDialogDismiss } from "@/hooks/use-dialog-dismiss";
 import { topUnits } from "@/lib/units";
@@ -87,20 +88,6 @@ interface StagedFile {
   /** Per-row error if validation failed. Kept on a row so the teacher
    *  sees what was rejected, with valid files staged alongside. */
   error?: string;
-}
-
-/** Collapse a partial rubric into a normalized dict, dropping empty /
- *  whitespace-only values. Mirrors normalizeRubric on the HW detail
- *  page so what the teacher authors here stores identically. */
-function normalizeRubric(r: TeacherRubric | null): TeacherRubric {
-  const out: TeacherRubric = {};
-  if (!r) return out;
-  const s = (v: string | undefined) => (v && v.trim() ? v.trim() : undefined);
-  if (s(r.full_credit)) out.full_credit = s(r.full_credit);
-  if (s(r.partial_credit)) out.partial_credit = s(r.partial_credit);
-  if (s(r.common_mistakes)) out.common_mistakes = s(r.common_mistakes);
-  if (s(r.notes)) out.notes = s(r.notes);
-  return out;
 }
 
 export function NewHomeworkModal({
@@ -655,6 +642,7 @@ export function NewHomeworkModal({
                         saveState="idle"
                         saveError={null}
                         onChange={onChangeRubric}
+                        courseId={courseId}
                       />
                     </div>
                   </div>

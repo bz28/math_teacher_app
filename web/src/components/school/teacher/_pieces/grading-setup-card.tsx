@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { teacher, type RubricSource, type TeacherRubric } from "@/lib/api";
+import Link from "next/link";
+import {
+  teacher,
+  type ClassRubricRule,
+  type RubricSource,
+  type TeacherRubric,
+} from "@/lib/api";
 import {
   InlineSavedHint,
   type SaveState,
@@ -25,7 +31,8 @@ export const GRADING_SETUP_DEFAULTS = {
 
 const COMMON_MISTAKES_PLACEHOLDER =
   "e.g. Sign errors when distributing; flipping the inequality direction when multiplying by negatives.";
-const NOTES_PLACEHOLDER = "Anything else the AI grader should know.";
+const NOTES_PLACEHOLDER =
+  "e.g. Problems 2–5: the graph must show two full periods. Take off 10 if it shows one.";
 
 type RubricFieldName =
   | "full_credit"
@@ -52,6 +59,7 @@ export function GradingSetupCard({
   saveError,
   onChange,
   copyFromAssignmentId,
+  courseId,
 }: {
   rubric: TeacherRubric | null;
   saveState: SaveState;
@@ -63,8 +71,13 @@ export function GradingSetupCard({
    *  "copy" a setup onto itself. Omit (the default) to render the card
    *  without the affordance, keeping non-opted-in call sites unchanged. */
   copyFromAssignmentId?: string;
+  /** The homework's course. When set, the card lists the class's grading
+   *  rules (which this homework inherits) with a per-homework skip. */
+  courseId?: string;
 }) {
   const [drafts, setDrafts] = useState<DraftMap>(INITIAL_DRAFTS);
+  const classRules = useClassRules(courseId);
+  const skipped = rubric?.skipped_rule_ids ?? [];
   // Title of the source the teacher most recently copied from. Drives
   // the transient "Copied from {title}" confirmation. Cleared on the
   // next field edit so it doesn't linger as stale praise.
@@ -165,6 +178,15 @@ export function GradingSetupCard({
         <CopiedConfirmation title={copiedFrom} />
       </header>
 
+      {courseId && (
+        <ClassRulesList
+          courseId={courseId}
+          state={classRules}
+          skipped={skipped}
+          onSkippedChange={(ids) => onChange({ skipped_rule_ids: ids })}
+        />
+      )}
+
       <div className="mt-4 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(260px,340px)]">
         <div className="space-y-4">
           <PrimaryField
@@ -204,7 +226,8 @@ export function GradingSetupCard({
             />
             <OptionalField
               id="rubric-notes"
-              label="Notes"
+              label="Extra rules for this homework"
+              help={courseId ? "If one disagrees with a class rule, this one wins." : undefined}
               placeholder={NOTES_PLACEHOLDER}
               value={displayed("notes")}
               onDraftChange={(v) => handleDraftChange("notes", v)}
@@ -218,6 +241,13 @@ export function GradingSetupCard({
           partialCredit={displayed("partial_credit")}
           commonMistakes={displayed("common_mistakes")}
           notes={displayed("notes")}
+          classRules={
+            Array.isArray(classRules)
+              ? classRules
+                  .filter((r) => !skipped.includes(r.id))
+                  .map((r) => `${r.text}${r.points === null ? "" : ` (−${r.points})`}`)
+              : []
+          }
         />
       </div>
     </section>
@@ -483,7 +513,7 @@ function OptionalDetails({
         <span aria-hidden className="text-xs">{open ? "▾" : "▸"}</span>
         Optional details
         <span className="font-normal normal-case tracking-normal text-text-muted/80">
-          · Common mistakes, Notes
+          · Common mistakes, Extra rules
         </span>
       </summary>
       <div className="space-y-4 border-t border-border-light p-3">
@@ -501,6 +531,7 @@ function OptionalDetails({
 function OptionalField({
   id,
   label,
+  help,
   placeholder,
   value,
   onDraftChange,
@@ -509,6 +540,7 @@ function OptionalField({
 }: {
   id: string;
   label: string;
+  help?: string;
   placeholder: string;
   value: string;
   onDraftChange: (text: string) => void;
@@ -526,6 +558,7 @@ function OptionalField({
         </label>
         {rightSlot}
       </div>
+      {help && <p className="mt-0.5 text-xs text-text-muted">{help}</p>}
       <textarea
         id={id}
         value={value}
@@ -535,6 +568,120 @@ function OptionalField({
         rows={2}
         className="mt-1.5 w-full resize-y rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none"
       />
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// The class's grading rules, inherited by this homework. Each can be
+// skipped for this homework only; skips save immediately with the rest
+// of the rubric. Rules themselves are edited in class settings, so this
+// list is read-only apart from the skip.
+// ────────────────────────────────────────────────────────────────────
+
+/** The course's class rules: null while loading, "failed", or the list.
+ *  Idle (null forever) when there's no course to ask about. */
+type ClassRulesState = ClassRubricRule[] | null | "failed";
+
+function useClassRules(courseId: string | undefined): ClassRulesState {
+  const [state, setState] = useState<ClassRulesState>(null);
+  useEffect(() => {
+    if (!courseId) return;
+    let cancelled = false;
+    teacher
+      .courseRubric(courseId)
+      .then((res) => !cancelled && setState(res.rules))
+      .catch(() => !cancelled && setState("failed"));
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+  return state;
+}
+
+function ClassRulesList({
+  courseId,
+  state,
+  skipped,
+  onSkippedChange,
+}: {
+  courseId: string;
+  state: ClassRulesState;
+  skipped: string[];
+  onSkippedChange: (ids: string[]) => void;
+}) {
+  const failed = state === "failed";
+  const rules = failed ? null : state;
+
+  const settingsHref = `/school/teacher/courses/${courseId}?tab=settings`;
+  const skippedSet = new Set(skipped);
+  const toggle = (id: string, skip: boolean) => {
+    const next = new Set(skippedSet);
+    if (skip) next.add(id);
+    else next.delete(id);
+    onSkippedChange([...next].sort());
+  };
+
+  return (
+    <div className="mt-4 rounded-[--radius-md] border border-border-light bg-bg-subtle/40 p-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-primary">
+          From your class rubric
+        </h3>
+        <Link
+          href={settingsHref}
+          className="text-xs font-semibold text-primary hover:underline"
+        >
+          Edit class rubric
+        </Link>
+      </div>
+      {failed && (
+        <p className="mt-2 text-xs text-text-secondary">
+          Couldn&apos;t load your class rules. Refresh to try again.
+        </p>
+      )}
+      {!failed && rules === null && <p className="mt-2 text-xs text-text-muted">Loading…</p>}
+      {rules !== null && rules.length === 0 && (
+        <p className="mt-2 text-xs text-text-secondary">
+          No class rules yet. Rules you add in class settings — like units on final answers —
+          apply to every homework.
+        </p>
+      )}
+      {rules !== null && rules.length > 0 && (
+        <ul className="mt-1 divide-y divide-border-light">
+          {rules.map((r) => {
+            const isSkipped = skippedSet.has(r.id);
+            const boxId = `skip-rule-${r.id}`;
+            return (
+              <li key={r.id} className="flex items-center gap-3 py-2">
+                <span
+                  className={`min-w-0 flex-1 text-sm leading-snug ${
+                    isSkipped ? "text-text-muted line-through" : "text-text-primary"
+                  }`}
+                >
+                  {r.text}
+                </span>
+                <span className="shrink-0 font-mono text-xs font-semibold text-text-secondary">
+                  {r.points === null ? "AI sizes" : `−${r.points}`}
+                </span>
+                <label
+                  htmlFor={boxId}
+                  className="flex min-h-10 shrink-0 cursor-pointer items-center gap-1.5 text-xs text-text-secondary"
+                >
+                  <input
+                    id={boxId}
+                    type="checkbox"
+                    checked={isSkipped}
+                    onChange={(e) => toggle(r.id, e.target.checked)}
+                    className="h-4 w-4 accent-[color:var(--color-primary)]"
+                  />
+                  Skip for this homework
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
