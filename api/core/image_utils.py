@@ -13,6 +13,21 @@ from api.core.constants import MAX_IMAGE_BYTES, MAX_PDF_BYTES
 # the vision-token cost. Matches the harness judge's _MAX_EDGE.
 VISION_MAX_EDGE = 1568
 
+# The smallest homework photo worth reading, by its long edge. Prod,
+# Oct 2026: some devices send 320×240 pages; the reader can't make out
+# the ink at that size, invents a tidy textbook solution instead, and it
+# gets graded full credit. No page in prod between 400 px and a real
+# photo read badly for its size (smaller ones were single-problem crops).
+# Mirrored in web/src/lib/image-resize.ts MIN_PAGE_LONG_EDGE.
+MIN_PAGE_LONG_EDGE = 400
+
+
+def image_long_edge(raw: bytes) -> int:
+    """The long edge of an image in pixels. Reads the header only, and
+    refuses an image past `MAX_UPLOAD_PIXELS` like every other open."""
+    with _open_bounded(raw) as img:
+        return max(img.size)
+
 
 def validate_and_decode_image(image_base64: str) -> tuple[bytes, str]:
     """Validate and decode a base64-encoded image.

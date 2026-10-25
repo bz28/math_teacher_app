@@ -15,19 +15,28 @@ import base64
 import io
 from typing import Any
 
+import pytest
 from httpx import AsyncClient
 from PIL import Image
 from sqlalchemy import text
 
 from api.database import get_session_factory
-from tests.conftest import TINY_PNG
+from tests.conftest import PAGE_PNG
 
 # Magic-byte prefixes for tests that need PDF or JPEG payloads.
 _JPEG_HEADER = b"\xff\xd8\xff\xe0\x00\x10JFIF"
 _PDF_HEADER = b"%PDF-1.4\n%\xc7\xec\x8f\xa2\n"
 
-TINY_JPEG = base64.b64encode(_JPEG_HEADER + b"jpeg-payload").decode("ascii")
 TINY_PDF = base64.b64encode(_PDF_HEADER + b"pdf-payload").decode("ascii")
+
+
+def _real_jpeg(size: tuple[int, int]) -> str:
+    buf = io.BytesIO()
+    Image.new("RGB", size, "white").save(buf, format="JPEG")
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+PAGE_JPEG = _real_jpeg((800, 600))
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -43,7 +52,7 @@ async def test_submit_homework_accepts_mixed_image_and_pdf(
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG, TINY_JPEG, TINY_PDF]},
+        json={"files": [PAGE_PNG, PAGE_JPEG, TINY_PDF]},
     )
     assert r.status_code == 200, r.text
     submission_id = r.json()["submission_id"]
@@ -69,7 +78,7 @@ async def test_submit_homework_rejects_over_ten_files(
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG] * 11},
+        json={"files": [PAGE_PNG] * 11},
     )
     assert r.status_code == 422
 
@@ -95,16 +104,10 @@ async def test_submit_homework_rejects_oversized_image_with_index(
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG, oversized_b64]},
+        json={"files": [PAGE_PNG, oversized_b64]},
     )
     assert r.status_code == 400
     assert "File 2" in r.json()["detail"]
-
-
-def _real_jpeg(size: tuple[int, int]) -> str:
-    buf = io.BytesIO()
-    Image.new("RGB", size, "white").save(buf, format="JPEG")
-    return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 async def test_submit_stores_each_page_the_way_the_student_turned_it(
@@ -113,7 +116,7 @@ async def test_submit_stores_each_page_the_way_the_student_turned_it(
     """A page rotated on the upload screen is saved upright, so the AI
     reader and the teacher's photo view both get it that way. Pages
     with no turn — and PDFs — are stored exactly as sent."""
-    wide = _real_jpeg((40, 20))
+    wide = _real_jpeg((800, 400))
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
@@ -127,7 +130,7 @@ async def test_submit_stores_each_page_the_way_the_student_turned_it(
             {"id": r.json()["submission_id"]},
         )).scalar_one()
     turned = Image.open(io.BytesIO(base64.b64decode(files[0]["data"])))
-    assert turned.size == (20, 40)
+    assert turned.size == (400, 800)
     assert files[1]["data"] == wide
     assert files[2]["data"] == TINY_PDF
 
@@ -154,7 +157,7 @@ async def test_submit_rejects_rotations_that_dont_line_up(
     for rotations in ([90], [45, 0]):
         r = await client.post(
             url, headers=_auth(world["student_token"]),
-            json={"files": [TINY_PNG, TINY_PNG], "rotations": rotations},
+            json={"files": [PAGE_PNG, PAGE_PNG], "rotations": rotations},
         )
         assert r.status_code == 422, rotations
 
@@ -262,3 +265,42 @@ async def test_submit_homework_total_payload_guard_rejects() -> None:
     raise AssertionError("expected total-payload guard to trip")
 
 
+
+
+@pytest.mark.parametrize("size", [(320, 240), (240, 320)])
+async def test_submit_refuses_a_page_too_small_to_read(
+    client: AsyncClient, world: dict[str, Any], size: tuple[int, int],
+) -> None:
+    """Prod, Oct 2026: 320×240 pages were read as tidy textbook solutions
+    the student never wrote. The student is told to retake the page."""
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"files": [PAGE_PNG, _real_jpeg(size)]},
+    )
+    assert r.status_code == 400
+    assert r.json()["detail"].startswith("File 2 is too small to read")
+
+
+async def test_submit_accepts_a_page_at_the_minimum_size(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"files": [_real_jpeg((400, 300))]},
+    )
+    assert r.status_code == 200, r.text
+
+
+async def test_submit_refuses_bytes_that_only_look_like_a_jpeg(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    fake = base64.b64encode(_JPEG_HEADER + b"jpeg-payload").decode("ascii")
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"files": [fake]},
+    )
+    assert r.status_code == 400
+    assert "File 1" in r.json()["detail"]

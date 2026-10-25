@@ -42,7 +42,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.audit_log import record_student_activity
 from api.core.constants import MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
 from api.core.image_utils import (
+    MIN_PAGE_LONG_EDGE,
     PAGE_ROTATIONS,
+    image_long_edge,
     page_looks_sideways,
     rotate_upload,
     validate_and_decode_image,
@@ -2005,6 +2007,21 @@ async def submit_homework(
                 status_code=400,
                 detail=f"File {i + 1}: {e}",
             ) from e
+        if media_type != "application/pdf":
+            try:
+                long_edge = image_long_edge(decoded)
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400, detail=f"File {i + 1}: couldn't read this image",
+                ) from e
+            if long_edge < MIN_PAGE_LONG_EDGE:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"File {i + 1} is too small to read ({long_edge}px). "
+                        "Take it again closer up, so the page fills the screen."
+                    ),
+                )
         rotation = body.rotations[i] if body.rotations else 0
         if rotation:
             try:

@@ -35,7 +35,7 @@ from sqlalchemy import text
 
 from api.core.auth import create_access_token
 from api.database import get_session_factory
-from tests.conftest import TINY_PNG
+from tests.conftest import PAGE_PNG
 
 # Every id/count key the student call sites are allowed to write. A key
 # outside this set is either student content or something nobody vetted
@@ -161,7 +161,7 @@ async def _submit(client: AsyncClient, world: dict[str, Any]) -> str:
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG]},
+        json={"files": [PAGE_PNG]},
     )
     assert r.status_code == 200, r.text
     return str(r.json()["submission_id"])
@@ -488,7 +488,7 @@ async def test_a_logging_failure_never_breaks_the_submission(
         r = await client.post(
             f"/v1/school/student/homework/{world['assignment_id']}/submit",
             headers=_auth(world["student_token"]),
-            json={"files": [TINY_PNG]},
+            json={"files": [PAGE_PNG]},
         )
     assert r.status_code == 200, "logging failure took the submission down"
     assert await _rows("submission.create") == []
@@ -527,7 +527,7 @@ async def test_a_school_lookup_failure_cannot_strand_a_submission(
         r = await client.post(
             f"/v1/school/student/homework/{world['assignment_id']}/submit",
             headers=_auth(world["student_token"]),
-            json={"files": [TINY_PNG]},
+            json={"files": [PAGE_PNG]},
         )
     assert r.status_code == 200, "a failed school lookup took the submission down"
 

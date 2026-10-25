@@ -82,6 +82,34 @@ export async function resizeImageForUpload(file: File): Promise<Blob> {
   }
 }
 
+/** The smallest homework photo worth reading, by its long edge. Mirrors
+ *  MIN_PAGE_LONG_EDGE in api/core/image_utils.py, which refuses smaller
+ *  pages: at 320×240 the reader can't see the ink and invents a tidy
+ *  solution instead. */
+export const MIN_PAGE_LONG_EDGE = 400;
+
+/** Throws `ImageResizeError` when a homework page is too small to read,
+ *  so the student retakes it now instead of the server refusing it at
+ *  turn-in. */
+export async function assertPageReadable(blob: Blob): Promise<void> {
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(blob);
+  } catch {
+    // Older iPads lack createImageBitmap, and a large photo can run iOS
+    // out of memory. Neither means the page is unreadable — the server
+    // measures it at turn-in and has the final say.
+    return;
+  }
+  const longEdge = Math.max(bitmap.width, bitmap.height);
+  bitmap.close?.();
+  if (longEdge < MIN_PAGE_LONG_EDGE) {
+    throw new ImageResizeError(
+      "This photo is too small to read. Take it again closer up, so the page fills the screen.",
+    );
+  }
+}
+
 /**
  * A small copy of a page for the server's "looks sideways?" check —
  * enough pixels to see which way the writing runs, a fraction of the

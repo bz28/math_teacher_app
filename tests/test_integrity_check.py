@@ -27,7 +27,7 @@ from api.models.integrity_check import (
 from api.models.question_bank import QuestionBankItem
 from api.routes.school_student_practice import drain_integrity_background_tasks
 from tests.conftest import (
-    TINY_PNG,
+    PAGE_PNG,
     make_text,
     make_tool_use,
     set_agent_script,
@@ -53,7 +53,7 @@ async def _submit(client: AsyncClient, world: dict[str, Any]) -> Any:
     response = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [TINY_PNG]},
+        json={"files": [PAGE_PNG]},
     )
     if response.status_code != 200:
         return response
@@ -415,7 +415,7 @@ async def test_get_state_returns_extracting_before_pipeline_writes(
                 text("SELECT id FROM sections LIMIT 1"),
             )).scalar_one(),
             status="submitted",
-            files=[{"data": TINY_PNG, "media_type": "image/png"}],
+            files=[{"data": PAGE_PNG, "media_type": "image/png"}],
             final_answers=None,
             is_late=False,
         )

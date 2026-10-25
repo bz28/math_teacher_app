@@ -9,6 +9,8 @@ os.environ.setdefault("SENTRY_DSN", "")
 os.environ.setdefault("JWT_REFRESH_GRACE_PERIOD_SECONDS", "0")
 
 import asyncio
+import base64
+import io
 import uuid
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime
@@ -17,6 +19,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from PIL import Image
 from sqlalchemy import text
 
 from api.core.auth import create_access_token, hash_password
@@ -64,12 +67,15 @@ async def client() -> AsyncIterator[AsyncClient]:
 
 # ── Shared school-student fixtures (used by multiple test files) ──
 
-# A 1×1 transparent PNG for tests that need to send a real-looking
-# image payload to the submit endpoint. Tiny enough to be inline.
-TINY_PNG = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4"
-    "2mP8/x8AAusB9YpO3vQAAAAASUVORK5CYII="
-)
+def _blank_page_png() -> str:
+    buf = io.BytesIO()
+    Image.new("L", (600, 450), 255).save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+# A blank page PNG for tests that send a homework photo to the submit
+# endpoint — real pixels, and above the server's MIN_PAGE_LONG_EDGE.
+PAGE_PNG = _blank_page_png()
 
 
 def auth_headers(token: str) -> dict[str, str]:
